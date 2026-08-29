@@ -6,7 +6,7 @@ import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { PageFilterBar } from '@/components/ui/page-filter-bar';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import { Guitar, Calendar, BarChart3, UserSearch, Link2 } from 'lucide-react';
-import { useConciliacaoRoster } from '@/hooks/useBandas';
+import { useConciliacaoRoster, useTurmasAConfirmar } from '@/hooks/useBandas';
 import { ListaBandasTab } from './ListaBandasTab';
 import { EventosTab } from './EventosTab';
 import { DashboardBandasTab } from './DashboardBandasTab';
@@ -48,8 +48,16 @@ export function BandasPage() {
     setSearchParams(next, { replace: true });
   };
 
-  // Badge com a fila de conciliação pendente (fila da Jéssica)
+  // A aba Conciliação tem duas seções: a fila de batismo (acionável) e os integrantes
+  // fora do roster do Emusys (informativo). O badge conta só o que exige ação.
+  const { turmas, recarregar: recarregarTurmas } = useTurmasAConfirmar(unidadeAtual);
   const { itens: conciliacao, recarregar: recarregarConciliacao } = useConciliacaoRoster(unidadeAtual);
+
+  // Confirmar/descartar muda a lista de bandas oficiais e pode mexer no roster: recarrega os dois.
+  const aoResolverTurma = () => {
+    recarregarTurmas();
+    recarregarConciliacao();
+  };
 
   const tabs: PageTab<TabAtiva>[] = [
     { id: 'dashboard', label: 'Dashboard', shortLabel: 'KPIs', icon: BarChart3 },
@@ -61,7 +69,7 @@ export function BandasPage() {
       label: 'Conciliação',
       shortLabel: 'Concil.',
       icon: Link2,
-      count: conciliacao.length > 0 ? conciliacao.length : undefined,
+      count: turmas.length > 0 ? turmas.length : undefined,
     },
   ];
 
@@ -75,7 +83,12 @@ export function BandasPage() {
       {tabAtiva === 'eventos' && <EventosTab unidadeAtual={unidadeAtual} />}
       {tabAtiva === 'garimpar' && <GarimparTab unidadeAtual={unidadeAtual} />}
       {tabAtiva === 'conciliacao' && (
-        <ConciliacaoTab unidadeAtual={unidadeAtual} itens={conciliacao} onResolvido={recarregarConciliacao} />
+        <ConciliacaoTab
+          unidadeAtual={unidadeAtual}
+          turmas={turmas}
+          itens={conciliacao}
+          onTurmaResolvida={aoResolverTurma}
+        />
       )}
     </div>
   );
