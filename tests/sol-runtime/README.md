@@ -295,3 +295,26 @@ Três correções:
 ⚠️ Artefato de mock aprendido na 1ª rodada: a cena dos irmãos (R$700) não pode
 reusar o OCR da camisa (R$65) — a validação de soma (350+350≠65) recusa
 CORRETAMENTE e o teste acusa regressão falsa. O `ocrFn` do teste é sensível à URL.
+
+## vendedor-nao-e-aluno-e2e.cjs
+Caso Arthur/Barra (29/08 11:27): legenda `Venda camisa LA Music Kids Preta 4 anos /
+Venda: Arthur` produziu card com **ALUNO = Arthur** e *"Resp. financeiro: Joice Pedro
+Palmerini Lomba"* — uma família sem nenhuma relação com a compra. Arthur é o **ADM que
+fez a venda e mandou a mensagem**; o aluno era o Theo de Bem.
+
+⚠️ Pior que card feio: lojinha lançada no aluno errado **polui a carteira de outra
+família**. E o nome veio do **LLM** — `_alunoRotulado` dá `null` nessa legenda (medido),
+então não havia regex a consertar: faltava uma REGRA.
+
+Três guardas, da mais forte para a mais fraca:
+- **V1 — quem ENVIA não é o aluno.** A Sol já identifica o remetente (para carimbar
+  "autorizou"); se o "aluno" bate com quem enviou, é assinatura, não aluno. Vale para
+  o grupo inteiro sem lista de nomes a manter. Exigiu mover `identidadeFn` para **antes**
+  de montar o card (antes rodava depois, só para o carimbo).
+- **V2 — rótulo de vendedor**: `Venda:`, `Vendedor:`, `Vendido por:`, `Atendente:`.
+- **V3 — lojinha sem comprador PERGUNTA** o nome, em vez de esconder a seção (o #232
+  escondia; esconder limpava o card mas deixava a venda sem dono e ninguém reparava).
+
+⚠️ `_mesmaPessoa` usa `_normConf` — o arquivo não tem `normalizarTexto` (a 1ª versão do
+patch quebrou nisso). Casa "Arthur" com "Arthur Ferreira", mas **não** "Maria Silva" com
+"Maria Souza".
