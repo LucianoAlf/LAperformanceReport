@@ -337,3 +337,33 @@ informação não pode piorar o resultado.
 
 FIX: a visão passa a rodar também por `!forma`. ⚠️ **Não** passa a rodar sempre — o
 teste prova que OCR completo (valor + forma) gasta **zero** chamadas de visão.
+
+## rotulo-vence-casamento-fuzzy-e2e.cjs
+Caso Mayra/CG (29/08 14:38-14:40): legenda `PG Parcelas 02/2026 e 05/2026 - Aluna
+Soraia da Silveira Duarte - LA CG - R$976,00` produziu card de **outra pessoa** —
+Laura Sobreira da Silveira, com fatura (09/2026, R$377, Musicalização Infantil) e
+responsável financeiro de outra família. O word_similarity casou
+Silveira~Sobreira~Silveira. E a correção da Mayra ("Sol, a aluna é Soraia...")
+levou "Não entendi essa".
+
+RAIZ: a flag `_alunoVeioDoRotulo` (#230) protegia o rótulo humano **apenas contra o
+bloco do pagador**. Casador fuzzy, canônica e composto sobrescreviam sem checar
+(`if (m.aluno_nome) aluno = m.aluno_nome`). E a correção sem citação exigia card com
+aluno vazio/suspeito — "Laura" era plausível, então caía em `nada` → guarda.
+
+Sete guardas (R1-R7), todas a mesma doutrina — **pessoa diferente no retorno =
+enriquecimento rejeitado por inteiro** (nem nome, nem fatura, nem responsável):
+- R1 casador fuzzy · R2 canônica · R3 composto (fluxo de mídia, exige `_alunoVeioDoRotulo`)
+- R4 correção com **rótulo explícito** + card único corrige **sem citação**
+- R5 citação do nome-tardio aceita qualquer mensagem da Sol (msgIds/origem)
+- R6 pagador **ambíguo** não zera o rótulo (o ramo não-ambíguo já respeitava; o
+  ambíguo fazia `aluno = null` + candidatos — descoberto pelo próprio teste)
+- R7 nome-tardio: canônica/casador/composto não trocam o nome que o humano DITOU
+
+⚠️ Descobertas de teste que viraram doutrina do arquivo:
+- O `if` do composto é idêntico em 3 lugares — âncora de patch precisa da linha
+  vizinha (`faturasMesFn(grp...)`) para não abortar com "achei 3".
+- Mock da canônica precisa do shape `fatura` (o preview lê `canonica.fatura`, não
+  `.parcela`) — shape errado acusou falha falsa na cena 2.
+- `pagadorFn` deve ser mockado — sem isso a cena 1 bate no banco real e o resultado
+  depende do cadastro do dia.
