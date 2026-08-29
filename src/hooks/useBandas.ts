@@ -156,6 +156,20 @@ export interface ConciliacaoItem {
   problema: 'fora do Emusys (adicionado manualmente ou saiu do Emusys)';
 }
 
+/** Turma de banda do Emusys ainda não batizada (banda_turmas_a_confirmar) */
+export interface TurmaAConfirmar {
+  banda_id: number;
+  turma_nome: string;
+  unidade_id: string;
+  unidade_nome: string | null;
+  dia_semana: string | null;
+  horario: string | null;
+  produtor_nome: string | null;
+  integrantes: number;
+  /** Nomes do roster separados por vírgula, já ordenados pela RPC. */
+  roster: string | null;
+}
+
 /** Professor elegível a produtor (banda_professores_da_unidade) */
 export interface ProfessorBanda {
   professor_id: number;
@@ -275,6 +289,29 @@ export function useConciliacaoRoster(unidadeId: string) {
   useEffect(() => { recarregar(); }, [recarregar]);
 
   return { itens, loading, recarregar };
+}
+
+/**
+ * Turmas de banda pendentes de batismo. Só viram banda oficial (e aparecem na aba
+ * Bandas) depois de `banda_confirmar`; `banda_descartar` marca "não é banda".
+ */
+export function useTurmasAConfirmar(unidadeId: string) {
+  const [turmas, setTurmas] = useState<TurmaAConfirmar[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const recarregar = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase.rpc('banda_turmas_a_confirmar', {
+      p_unidade_id: unidadeParam(unidadeId),
+    });
+    if (error) console.error('Erro ao carregar turmas a confirmar:', error);
+    setTurmas((data as TurmaAConfirmar[]) || []);
+    setLoading(false);
+  }, [unidadeId]);
+
+  useEffect(() => { recarregar(); }, [recarregar]);
+
+  return { turmas, loading, recarregar };
 }
 
 /** Detalhe completo da banda: identidade + roster vivo + repertório */
@@ -419,6 +456,16 @@ export async function atualizarBandaAvulsa(bandaId: number, dados: Partial<Banda
     p_valor_mensal_aluno: dados.valorMensalAluno ?? null,
     p_valor_repasse: dados.valorRepasse ?? null,
   });
+}
+
+/** Batiza a turma: vira banda oficial e sai da fila. */
+export async function confirmarBanda(bandaId: number, nome: string) {
+  return supabase.rpc('banda_confirmar', { p_banda_id: bandaId, p_nome: nome });
+}
+
+/** Marca a turma como "não é banda": some da fila e da lista. */
+export async function descartarBanda(bandaId: number) {
+  return supabase.rpc('banda_descartar', { p_banda_id: bandaId });
 }
 
 export async function upsertIntegranteBanda(params: {
