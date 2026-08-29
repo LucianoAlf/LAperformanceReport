@@ -9,6 +9,10 @@ const migrationName = migrations
   .filter((name) => /_agenda_roster_operacional_professor\.sql$/u.test(name))
   .sort()
   .at(-1);
+const presencaHistoricaMigrationName = migrations
+  .filter((name) => /_agenda_presenca_historica_respeita_roster_operacional\.sql$/u.test(name))
+  .sort()
+  .at(-1);
 
 test('ajuste por aula oferece Presente e Ausente como acoes explicitas', () => {
   assert.match(toggle, /async function marcarAula\(aula: AulaAgenda, novoPresente: boolean\)/u);
@@ -31,4 +35,13 @@ test('presenca do professor usa somente aulas regulares com roster operacional',
   assert.ok(migrationName, 'falta migration para a Agenda ignorar vinculo de roster inativo');
   const migration = readFileSync(`supabase/migrations/${migrationName}`, 'utf8');
   assert.match(migration, /from (?:public\.)?aula_alunos_emusys aa[\s\S]*where aa\.ativo_operacional/iu);
+  assert.ok(presencaHistoricaMigrationName, 'falta migration para impedir que historico reative roster inativo');
+  const presencaHistoricaMigration = readFileSync(
+    `supabase/migrations/${presencaHistoricaMigrationName}`,
+    'utf8',
+  );
+  assert.match(
+    presencaHistoricaMigration,
+    /from (?:public\.)?aluno_presenca ap[\s\S]*aa_roster\.ativo_operacional/iu,
+  );
 });

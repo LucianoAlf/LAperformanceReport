@@ -16,6 +16,11 @@ const rosterOperacionalMigrationPath = fs.readdirSync(path.join(root, 'supabase/
   .map((file) => path.join(root, 'supabase/migrations', file))
   .sort()
   .at(-1);
+const presencaHistoricaMigrationPath = fs.readdirSync(path.join(root, 'supabase/migrations'))
+  .filter((file) => file.endsWith('_agenda_presenca_historica_respeita_roster_operacional.sql'))
+  .map((file) => path.join(root, 'supabase/migrations', file))
+  .sort()
+  .at(-1);
 
 function docker(args, input) {
   return spawnSync('docker', args, {
@@ -287,6 +292,13 @@ const fixture = String.raw`
     (105, 501, 'Roster Ativo', 'roster ativo', true),
     (105, 502, 'Roster Inativo', 'roster inativo', false);
 
+  -- Decisao historica nao pode reativar um vinculo que o roster operacional
+  -- inativou explicitamente. A evidencia permanece em aluno_presenca.
+  insert into public.aluno_presenca (
+    aula_emusys_id, aluno_id, status_presenca, respondido_por, emusys_presenca_bruta
+  ) values
+    (105, 502, 'falta', 'agenda_secretaria', null);
+
   create function public.get_agenda_dia(
     p_data date,
     p_unidade_id uuid default null
@@ -399,6 +411,7 @@ const snapshotSql = String.raw`
 test('get_agenda_dia filtra stale antes da agregacao sem ampliar ACL ou RLS', async (t) => {
   assert.ok(migrationPath, 'falta migration get_agenda_dia_oculta_ausente_emusys');
   assert.ok(rosterOperacionalMigrationPath, 'falta migration agenda_roster_operacional_professor');
+  assert.ok(presencaHistoricaMigrationPath, 'falta migration agenda_presenca_historica_respeita_roster_operacional');
 
   if (docker(['info']).status !== 0) {
     t.skip('Docker indisponivel para fixture PostgreSQL');
@@ -432,6 +445,12 @@ test('get_agenda_dia filtra stale antes da agregacao sem ampliar ACL ou RLS', as
     assert.equal(rosterMigrated.status, 0, rosterMigrated.stderr || rosterMigrated.stdout);
     const rosterRemigrated = psql(container, rosterOperacionalMigrationSql);
     assert.equal(rosterRemigrated.status, 0, rosterRemigrated.stderr || rosterRemigrated.stdout);
+
+    const presencaHistoricaMigrationSql = fs.readFileSync(presencaHistoricaMigrationPath, 'utf8');
+    const presencaHistoricaMigrated = psql(container, presencaHistoricaMigrationSql);
+    assert.equal(presencaHistoricaMigrated.status, 0, presencaHistoricaMigrated.stderr || presencaHistoricaMigrated.stdout);
+    const presencaHistoricaRemigrated = psql(container, presencaHistoricaMigrationSql);
+    assert.equal(presencaHistoricaRemigrated.status, 0, presencaHistoricaRemigrated.stderr || presencaHistoricaRemigrated.stdout);
 
     const after = psql(container, snapshotSql);
     assert.equal(after.status, 0, after.stderr || after.stdout);
