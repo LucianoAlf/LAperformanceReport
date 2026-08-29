@@ -203,7 +203,8 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
           ) : (
             <>
               <DialogHeader>
-                <div className="flex items-start gap-4">
+                {/* pr-10: o X de fechar do Dialog é absolute right-4 — sem a folga ele encosta no botão Identidade */}
+                <div className="flex items-start gap-4 pr-10">
                   {detalhe.logo_url ? (
                     <img
                       src={detalhe.logo_url}
