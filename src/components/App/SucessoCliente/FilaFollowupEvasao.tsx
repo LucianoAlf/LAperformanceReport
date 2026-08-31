@@ -44,6 +44,7 @@ import { useRepescagemEvasao } from './hooks/useRepescagemEvasao';
 import {
   rotuloMotivoRecusaRepescagem,
   type PesquisaEvasaoFollowupAcao,
+  type PesquisaEvasaoFollowupEstado,
   type PesquisaEvasaoFollowupFiltro,
   type PesquisaEvasaoFollowupGrupo,
   type PesquisaEvasaoFollowupItem,
@@ -131,6 +132,37 @@ const OPCOES_POR_ABA: Record<
     { valor: 'opt_out', rotulo: 'Opt-out' },
   ],
 };
+
+/**
+ * Por que ESTA pesquisa está no arquivo. Sem esta linha, "Follow-up realizado" ao lado
+ * de duas "Concluída" lê como arquivo errado — foi a primeira coisa que apareceu ao
+ * abrir a aba, e a pergunta é justa: os dois não terminaram do mesmo jeito.
+ *
+ * ⚠️ "Ninguém respondeu" não é suposição: no `case` de
+ * `fn_pesquisa_evasao_followup_estado`, todo status que abre rodada de análise
+ * (`coletando`, `pronta_para_revisao`, `em_revisao`, `revisada`) é capturado ANTES,
+ * e `concluida`/`opt_out` também. Chegar em `followup_realizado`/`followup_dispensado`
+ * só acontece com pesquisa sem resposta nenhuma.
+ *
+ * ⚠️ É por isso que essas duas contam como encerradas em vez de ficarem na fila de
+ * trabalho: registrar desfecho exige análise ([AcoesPesquisaEvasao.tsx:84]), análise
+ * exige resposta, e resposta nunca veio. Na fila em aberto elas ficariam para sempre,
+ * bloqueadas, empurrando para baixo quem de fato espera alguma coisa.
+ */
+function motivoDoArquivamento(estado: PesquisaEvasaoFollowupEstado): string | null {
+  switch (estado) {
+    case 'concluida':
+      return 'Desfecho registrado — a régua fechou por completo.';
+    case 'followup_realizado':
+      return 'Ninguém respondeu à pesquisa, e o follow-up já foi feito. Sem resposta não há análise para classificar, então esta não chega a receber desfecho.';
+    case 'followup_dispensado':
+      return 'Ninguém respondeu à pesquisa, e o follow-up foi dispensado.';
+    case 'opt_out':
+      return 'A pessoa pediu para não receber mais mensagens.';
+    default:
+      return null;
+  }
+}
 
 const ABAS: {
   valor: PesquisaEvasaoFollowupGrupo;
@@ -435,7 +467,7 @@ export function FilaFollowupEvasao({
             <p className="mt-1 max-w-2xl text-sm text-slate-400">
               {aba === 'em_aberto'
                 ? 'Os casos entram aqui exatamente 72 horas após o envio. A Lia reúne os lembretes em um resumo diário às 9h.'
-                : 'Arquivo do que já foi encerrado: desfecho registrado, follow-up feito ou dispensado, e quem pediu para não receber mais. Sai da fila de trabalho e continua consultável.'}
+                : 'Encerrada não é o mesmo que concluída: aqui entra tanto quem fechou com desfecho quanto quem nunca respondeu e já teve o follow-up feito ou dispensado. Cada linha diz por que está no arquivo.'}
             </p>
           </div>
         </div>
@@ -575,6 +607,11 @@ export function FilaFollowupEvasao({
                       <p className="mt-2 text-xs text-slate-500">
                         Registrado em {formatarData(item.acao_registrada_em)} por {item.acao_operador_nome ?? 'operador interno'}
                         {item.acao_canal ? ` · ${item.acao_canal}` : ''}
+                      </p>
+                    )}
+                    {aba === 'encerradas' && motivoDoArquivamento(item.estado_visivel) && (
+                      <p className="mt-2 max-w-2xl border-l-2 border-slate-700 pl-2.5 text-xs text-slate-400">
+                        {motivoDoArquivamento(item.estado_visivel)}
                       </p>
                     )}
                     {(() => {
