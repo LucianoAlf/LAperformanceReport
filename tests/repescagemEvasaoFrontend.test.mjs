@@ -58,8 +58,14 @@ test('botao de reenvio fica desabilitado depois que a repescagem ja saiu', () =>
   // O "Reenviar para todos" conta so quem ainda pode receber -- senao o numero
   // mente sobre quantas mensagens sairiam e a operadora clica para receber
   // recusa `ja_enfileirada`.
-  assert.match(fonte, /Reenviar para todos \(\{pesquisaIdsElegiveis\.length\}\)/);
-  assert.doesNotMatch(fonte, /Reenviar para todos \(\{itens\.length\}\)/);
+  //
+  // ⚠️ A assercao e sobre a CONTAGEM, nao sobre a frase. O rotulo era "Reenviar
+  // para todos" e virou "Reenviar os N desta pagina" quando a pagina caiu de 50
+  // para 8: o botao SEMPRE alcancou so os ids carregados, e com 50 contra 35 casos
+  // isso coincidia com "todos", entao o texto antigo passava por acaso. Travar a
+  // copia fazia o teste reprovar justamente a correcao que tornou o rotulo honesto.
+  assert.match(fonte, /\{pesquisaIdsElegiveis\.length\} desta página/);
+  assert.doesNotMatch(fonte, /Reenviar[^\n]*\{itens\.length\}/);
 
   // ⚠️ Ordem obrigatoria: pesquisaIds e ENTRADA do hook, estadoPorPesquisa e
   // saida. Derivar a lista de elegiveis antes da chamada fecharia um ciclo e
@@ -68,4 +74,41 @@ test('botao de reenvio fica desabilitado depois que a repescagem ja saiu', () =>
   const posElegiveis = fonte.indexOf('const pesquisaIdsElegiveis');
   assert.ok(posHook > 0 && posElegiveis > posHook,
     'pesquisaIdsElegiveis precisa ser derivado DEPOIS de useRepescagemEvasao');
+});
+
+test('arquivo de encerradas: sem reenvio em massa, e cada linha diz por que terminou', () => {
+  // Reenviar em massa a partir de um arquivo de casos encerrados nao faz sentido --
+  // o botao existe so na aba de trabalho.
+  assert.match(tela, /aba === 'em_aberto' && pesquisaIdsElegiveis\.length > 0/);
+
+  // ⚠️ "Follow-up realizado" ao lado de "Concluida" le como arquivo errado, e a
+  // duvida e legitima: os dois nao terminaram do mesmo jeito. Um fechou com
+  // desfecho; o outro nunca teve resposta e por isso NAO PODE receber desfecho
+  // (registrar desfecho exige analise, analise exige resposta). Sem esta linha a
+  // aba parece estar misturando as duas coisas.
+  assert.match(tela, /function motivoDoArquivamento/);
+  for (const estado of ['concluida', 'followup_realizado', 'followup_dispensado', 'opt_out']) {
+    assert.match(tela, new RegExp(`case '${estado}':`),
+      `motivoDoArquivamento precisa explicar o estado ${estado}`);
+  }
+  assert.match(tela, /aba === 'encerradas' && motivoDoArquivamento\(/);
+});
+
+test('a paginacao precisa entrar em acao, e pagina vazia nao pode virar "nenhum caso"', () => {
+  // Pagina de 50 contra uma fila de 35 casos deixava os controles presos em "1/1":
+  // a paginacao existia e nunca funcionava. Qualquer valor que volte a passar do
+  // tamanho da fila reintroduz a rolagem infinita.
+  const hookFollowups = readFileSync(
+    new URL('../src/components/App/SucessoCliente/hooks/useFollowupsEvasao.ts', import.meta.url),
+    'utf8',
+  );
+  const tamanho = hookFollowups.match(/const TAMANHO_PAGINA = (\d+);/);
+  assert.ok(tamanho, 'TAMANHO_PAGINA precisa ser uma constante literal');
+  assert.ok(Number(tamanho[1]) <= 20,
+    `TAMANHO_PAGINA=${tamanho[1]} volta a ser maior que a fila real e a paginacao deixa de existir`);
+
+  // ⚠️ Com pagina pequena, agir no ultimo caso de uma pagina a faz deixar de
+  // existir -- e a tela diria "Nenhum caso neste filtro" com dezenas de casos
+  // vivos. Quem desempata e o contador do GRUPO, que nao passa pela paginacao.
+  assert.match(tela, /itens\.length === 0 && pagina > 1 && totalDoGrupo > 0/);
 });
