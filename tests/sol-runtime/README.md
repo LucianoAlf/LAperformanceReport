@@ -465,3 +465,55 @@ antigas do módulo e não mantidos). A suíte canônica é ESTA (`tests/sol-runt
 espelhada na VPS em `caixa-ingestao/tests-sol-runtime/`. Ao validar patch, medir
 o BASELINE da legada antes de culpar o patch — em 31/08 o delta real era 1
 arquivo (o fixture acima), não 22.
+
+## prosa-e-sim-nao-aprovam-e2e.cjs  (31/08, incidente 16:12)
+🔴 **O resumo da auditoria colado no grupo pelo Luciano virou um lançamento.**
+Cadeia: "vale confirmar" casou `SAIDA_TERMO_RE` (que aceitava "vale" como verbo),
+o primeiro `R$` da prosa virou valor (633) e "dinheiro de evento" virou forma →
+card "Saída de caixa — R$633 dinheiro/despesa". Em seguida, a resposta do Jhon a
+uma pergunta **humana** — "Foi de propósito **sim**, Luciano" — aprovou: o token
+frouxo aceitava `sim`/`ok`/`isso` em **qualquer posição** da frase quando a
+mensagem citava a pendência. Despesa falsa gravada (apagada pelo Jhon 2 min
+depois — e o trigger de `audit_log` do mesmo dia registrou autor e hora, primeiro
+uso real do rastro).
+- **R-e** prosa não é ditado. `_ehDitadoDeCaixa` (≤220 chars, UM valor, sem
+  vocabulário de auditoria/relato) + "vale" só como substantivo com complemento.
+  ⚠️ O gate precisou de **três** pontos, não um: a mesma prosa caiu em seguida no
+  comando de movimento (`apagados`/`excluir` + valor → preview de estorno) e na
+  correção de forma ("foi" + "dinheiro"). Discriminador nesses dois é tamanho
+  (>250 chars), porque vetar o vocabulário mataria o comando legítimo.
+- **R-f** token frouxo agora exige mensagem curta (≤40) **e** afirmação que ABRE
+  a mensagem (`^`). "sim"/"ok"/"pode fazer" secos continuam aprovando.
+
+## reidratacao-e-fallback-llm-e2e.cjs  (31/08 — A3 + fallback, OK do Luciano)
+**A3 — reidratação.** Pendências viviam só na memória do bridge; restart engolia
+preview aberto (caso Arthur 17:58: a correção dele morreu no restart do deploy e
+o "pode" cairia em `pode_sem_pendencia` em silêncio). `reidratarPendencias()` lê
+do ledger V3 os previews `public_preview_sent` sem consumo na janela, casa o chat
+pelo `chat_id_hash` e restaura `preview_json.pending` com `v3PreviewId`/`Hash`.
+- ⚠️ **`await`, não `.then()`**: o handler do caixa é **lazy** (nasce na 1ª
+  mensagem do grupo financeiro), então com `.then()` a própria mensagem que criou
+  o handler seria processada em paralelo com a reidratação — se fosse o "pode",
+  perderia de novo. Custa 3 GETs uma vez por vida do processo.
+- ⚠️ Dedup por `chatId::origem`, ficando o preview **mais recente** (remontagem
+  gera vários previews da mesma origem). Validado contra produção: 5 previews
+  abertos → 2 pendências corretas, 256 ms.
+
+**Fallback LLM.** Mensagem com pendência aberta que a gramática não entendeu vai
+ao classificador de saída restrita `{intencao, aluno_nome, categoria, valor,
+forma, entidade}`; a intenção vira uma frase **canônica** da gramática existente
+e re-passa pelo `handle()`. O LLM **nunca escreve, nunca escolhe fatura e nunca
+aprova dinheiro** — `aprovar` responde pedindo o *pode* explícito. Qualquer falha
+⇒ `null` ⇒ o "Não entendi" de sempre.
+- ⚠️ **timeout 35s, não 20s**: medido em produção, o classificador leva 11-22s; a
+  20s o caso "esquece esse ai" estourava e virava `null`.
+- Medição com o LLM **real** (não mock), 6/6: sem_aluno, corrigir_categoria,
+  corrigir_aluno, descartar, e 2× `nada` (conversa e despedida).
+- ⚠️ `ehConversaSemComando` foi ao `return` do handler: o bridge a chamava desde
+  25/08 e ela **nunca esteve exposta** — o guard de "elogio não leva não-entendi"
+  estava morto por `undefined`.
+
+⚠️ **`\b` dentro de template string do patcher vira BACKSPACE (0x08)**, não word
+boundary — corrompeu o arquivo vivo duas vezes (SINAL_CARTAO em 29/08 e o prefixo
+"Banda" hoje). Construir a barra com `String.fromCharCode(92)` e conferir com
+`cat -A` depois de aplicar.
