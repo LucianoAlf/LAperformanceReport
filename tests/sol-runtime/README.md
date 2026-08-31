@@ -517,3 +517,42 @@ aprova dinheiro** — `aprovar` responde pedindo o *pode* explícito. Qualquer f
 boundary — corrompeu o arquivo vivo duas vezes (SINAL_CARTAO em 29/08 e o prefixo
 "Banda" hoje). Construir a barra com `String.fromCharCode(92)` e conferir com
 `cat -A` depois de aplicar.
+
+## fatura-contestada-e-parcela-solta-e2e.cjs  (31/08, caso Kailane/Barra 16:28)
+🔴 **A Sol repetiu 3× um card com a fatura errada e, ao ser corrigida, piorou.**
+Comprovante de R$ 399 (Taxa de Matrícula = passaporte, vencendo no dia); a aluna
+também tinha Parcela 08/2026 de R$ 460 vencida em 15/08. O card saiu com a
+PARCELA: "Atrasada há 16 dias — hoje R$ 471,65" + "o comprovante difere do valor
+da parcela". Três raízes empilhadas:
+
+- **R-g (banco, migration `20260831210000`)** — `sol_caixa_parcela_canonica`
+  escolhe por cascata e o ramo `atrasada` vem **primeiro, sem olhar `p_valor`**.
+  Provado em produção antes do fix: pedindo R$ 460 para um aluno com duas abertas
+  de valores diferentes, ela devolvia a atrasada de R$ 355. Agora **valor exato
+  manda** (`motivo_escolha = 'valor_exato'`), e só quando o casamento é **único**
+  — com 2+ faturas de mesmo valor (mensalidade se repete) a cascata antiga roda
+  intacta. Impacto medido: 1 em 12 casos da Barra muda de ramo.
+- **R-h** — a condição do bloco "categoria é parcela" tinha `\bparcela\b` como
+  alternativa **solta**: qualquer frase que citasse a palavra virava comando. Foi
+  assim que "A parcela não está vencida" respondeu "Ajustei: a categoria é
+  parcela" **e destruiu a categoria `passaporte`, que estava certa**. Agora exige
+  forma de comando (rótulo, verbo, ou ditado que abre a mensagem).
+  ⚠️ **R-h2**: a categoria da fatura canônica sobrescreve a interpretada (certo
+  quando a fatura está certa), então a pendência passou a guardar
+  `categoriaInterpretada` e restaurá-la quando a fatura é contestada.
+- **R-i** — **contestação de fatura** era gramática inexistente. "não está
+  vencida" / "já foi corrigido no sistema" / "TA ERRADO" agora **soltam** a
+  fatura casada e remontam o card sem atraso/multa/divergência.
+  ⚠️ A Sol **não re-casa sozinha**: fatura contestada vira lançamento **sem
+  vínculo** (`derivarVinculo` zera o `fatura_id`) — vincular errado suja a
+  carteira do aluno, o que é pior que não vincular.
+
+⚠️ **Terceiro caso seguido de "palavra solta virou comando"** em 31/08 (`vale`,
+`parcela`, e o `sim` de aprovação). Ao criar gatilho por vocabulário, exigir
+**forma de comando** — rótulo, verbo, posição — nunca a palavra isolada.
+
+⚠️ **Dado reposto**: o "pode" da Kailane (16:31:51) caiu em `pode_sem_pendencia`
+porque o bridge tinha reiniciado 27 s antes para o deploy — a causa está
+corrigida (reidratação, PR #284), mas esta pendência já tinha expirado a janela.
+Lançado por migration `20260831213000` com rastro, categoria `passaporte`, aluno
+e fatura vinculados (Emusys confirma a fatura 15447 paga em 31/08).
