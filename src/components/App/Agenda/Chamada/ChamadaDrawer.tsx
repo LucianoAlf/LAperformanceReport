@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 import type { AulaAgenda, AlunoAgenda, PresencaEnvelopeAgenda } from '@/hooks/useAgendaDia';
 import { aulaJaOcorreu } from '@/lib/agenda';
 import { adaptarPresencaCanonica, rotuloPresencaFonte, type PresencaCanonicaEstado } from '@/lib/presencaCanonica';
@@ -39,13 +40,16 @@ interface Props {
   onFechar: () => void;
 }
 
+// Espelha as colunas REAIS de aluno_presenca_retificacoes: `id` e uuid (nao number), a data
+// e `created_at` e o autor e uma FK (`autor_usuario_id` -> usuarios). A tabela nunca teve
+// `criada_em` nem `autor_nome` — pedi-las derrubava a query inteira com 42703.
 interface Retificacao {
-  id: number;
+  id: string;
   status_anterior: string | null;
   status_novo: string;
   motivo: string | null;
-  autor_nome: string | null;
-  criada_em: string;
+  created_at: string;
+  autor: { nome: string | null } | null;
 }
 
 /**
@@ -102,29 +106,53 @@ function ConteudoDrawer({
 }) {
   const jaOcorreu = aulaJaOcorreu(data, aula.hora_fim, new Date());
   const vinculados = aula.alunos.filter((a) => a.aluno_id != null);
+  const { isAdmin, unidadesPermitidas } = useAuth();
   const [retificacoes, setRetificacoes] = useState<Retificacao[]>([]);
   const [carregandoRetif, setCarregandoRetif] = useState(false);
+  const [erroRetif, setErroRetif] = useState<string | null>(null);
 
-  // Retificacoes sao por aula_emusys_id. Em turma, cada aluno tem a sua linha,
-  // entao buscamos por todos os IDs do slot. A migration 20260811130200
-  // liberou leitura escopada para o perfil operacional.
+  // A RLS da tabela e `is_admin() OR unidade_id = get_user_unidade_id()` — nao ha ramo de
+  // professor. Quem nao e admin e nao alcanca unidade nenhuma recebe lista VAZIA, sem erro;
+  // sem esta checagem "voce nao pode ver" apareceria como "nao aconteceu". O predicado
+  // espelha a policy: `unidadesPermitidas` cai no mesmo fallback legado que ela le.
+  const semAcessoRetif = !isAdmin && unidadesPermitidas.length === 0;
+
+  // A retificacao aponta para a PRESENCA (aluno_presenca_id), nunca para a aula — por isso o
+  // recorte do slot vai no embed, e nao num filtro direto. Em turma cada aluno tem a sua
+  // linha, e o Emusys emite o mesmo horario em duas aulas (turma + individual), entao o
+  // filtro precisa varrer todos os aula_ids do slot.
   useEffect(() => {
-    if (aula.aula_ids.length === 0) return;
+    if (aula.aula_ids.length === 0 || semAcessoRetif) return;
     let cancelado = false;
     setCarregandoRetif(true);
+    setErroRetif(null);
     (async () => {
       const { data: rows, error } = await supabase
         .from('aluno_presenca_retificacoes')
-        .select('id, status_anterior, status_novo, motivo, autor_nome, criada_em')
-        .in('aula_emusys_id', aula.aula_ids)
-        .order('criada_em', { ascending: false })
+        .select(
+          'id, status_anterior, status_novo, motivo, created_at, ' +
+          'autor:usuarios!autor_usuario_id(nome), ' +
+          'presenca:aluno_presenca!inner(aula_emusys_id)'
+        )
+        .in('presenca.aula_emusys_id', aula.aula_ids)
+        .order('created_at', { ascending: false })
         .limit(50);
       if (cancelado) return;
-      if (!error) setRetificacoes((rows ?? []) as unknown as Retificacao[]);
+      if (error) {
+        console.error('[ChamadaDrawer] falha ao carregar retificacoes', {
+          aula_ids: aula.aula_ids,
+          code: error.code,
+          message: error.message,
+        });
+        setErroRetif(error.message);
+        setRetificacoes([]);
+      } else {
+        setRetificacoes((rows ?? []) as unknown as Retificacao[]);
+      }
       setCarregandoRetif(false);
     })();
     return () => { cancelado = true; };
-  }, [aula.aula_ids]);
+  }, [aula.aula_ids, semAcessoRetif]);
 
   return (
     <div className="flex max-h-[90vh] flex-col">
@@ -243,8 +271,17 @@ function ConteudoDrawer({
             <History className="h-3.5 w-3.5" />
             Histórico de retificações
           </p>
-          {carregandoRetif ? (
+          {semAcessoRetif ? (
+            <p className="text-xs text-slate-600">
+              Seu perfil não tem acesso ao histórico de retificações desta aula.
+            </p>
+          ) : carregandoRetif ? (
             <p className="text-xs text-slate-500">Carregando…</p>
+          ) : erroRetif ? (
+            <p className="flex items-start gap-1.5 text-xs text-amber-400">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>Não foi possível carregar o histórico: {erroRetif}</span>
+            </p>
           ) : retificacoes.length === 0 ? (
             <p className="text-xs text-slate-600">Nenhuma retificação registrada.</p>
           ) : (
@@ -256,11 +293,11 @@ function ConteudoDrawer({
                       {r.status_anterior ?? '—'} → <span className="text-cyan-300">{r.status_novo}</span>
                     </span>
                     <span className="text-[10px] text-slate-500">
-                      {new Date(r.criada_em).toLocaleString('pt-BR')}
+                      {new Date(r.created_at).toLocaleString('pt-BR')}
                     </span>
                   </div>
                   {r.motivo && <p className="mt-0.5 text-slate-400">“{r.motivo}”</p>}
-                  {r.autor_nome && <p className="mt-0.5 text-[10px] text-slate-500">por {r.autor_nome}</p>}
+                  {r.autor?.nome && <p className="mt-0.5 text-[10px] text-slate-500">por {r.autor.nome}</p>}
                 </li>
               ))}
             </ul>
