@@ -125,7 +125,7 @@ const OPCOES_POR_ABA: Record<
     { valor: 'revisada', rotulo: 'Revisada — falta desfecho' },
   ],
   encerradas: [
-    { valor: 'encerradas', rotulo: 'Todas encerradas' },
+    { valor: 'encerradas', rotulo: 'Tudo no arquivo' },
     { valor: 'concluida', rotulo: 'Concluídas — com desfecho' },
     { valor: 'followup_realizado', rotulo: 'Follow-up realizado' },
     { valor: 'followup_dispensado', rotulo: 'Dispensadas' },
@@ -170,7 +170,7 @@ const ABAS: {
   Icone: typeof Inbox;
 }[] = [
   { valor: 'em_aberto', rotulo: 'Em aberto', Icone: Inbox },
-  { valor: 'encerradas', rotulo: 'Encerradas', Icone: Archive },
+  { valor: 'encerradas', rotulo: 'Arquivo', Icone: Archive },
 ];
 
 /**
@@ -467,7 +467,7 @@ export function FilaFollowupEvasao({
             <p className="mt-1 max-w-2xl text-sm text-slate-400">
               {aba === 'em_aberto'
                 ? 'Os casos entram aqui exatamente 72 horas após o envio. A Lia reúne os lembretes em um resumo diário às 9h.'
-                : 'Encerrada não é o mesmo que concluída: aqui entra tanto quem fechou com desfecho quanto quem nunca respondeu e já teve o follow-up feito ou dispensado. Cada linha diz por que está no arquivo.'}
+                : 'O que não pede mais ação sua: quem fechou com desfecho, e também quem nunca respondeu e já teve o follow-up feito ou dispensado. Arquivo não quer dizer concluída — cada linha diz por que está aqui.'}
             </p>
           </div>
         </div>
@@ -570,7 +570,7 @@ export function FilaFollowupEvasao({
             ) : (
               <>
                 <Archive className="mb-2 h-6 w-6 text-slate-500" />
-                <p className="text-sm font-medium text-slate-200">Nada encerrado neste filtro</p>
+                <p className="text-sm font-medium text-slate-200">Nada no arquivo com este filtro</p>
                 <p className="mt-1 max-w-md text-xs text-slate-500">
                   Uma pesquisa chega aqui quando o desfecho é registrado, quando o follow-up é marcado como
                   realizado ou dispensado, ou quando a pessoa pede para não receber mais.
