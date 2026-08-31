@@ -73,6 +73,7 @@ const ROTULOS_ESTADO: Record<string, string> = {
   em_revisao: 'Em revisão',
   nova_rodada: 'Nova rodada',
   revisada: 'Revisada',
+  concluida: 'Concluída',
   opt_out: 'Opt-out',
 };
 
@@ -86,7 +87,13 @@ const CLASSES_ESTADO: Record<string, string> = {
   pronta_para_revisao: 'border-violet-400/30 bg-violet-400/10 text-violet-200',
   em_revisao: 'border-violet-400/30 bg-violet-400/10 text-violet-200',
   nova_rodada: 'border-violet-400/30 bg-violet-400/10 text-violet-200',
-  revisada: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200',
+  // `revisada` NAO e o fim da linha -- ainda falta classificar e registrar desfecho.
+  // Ficava em esmeralda, a mesma cor de quem ja terminou, e verde comunica "pronto":
+  // e parte do motivo de ninguem conseguir dizer o que ainda faltava numa pesquisa.
+  // Etapa intermediaria usa a familia violeta, como as outras etapas de revisao.
+  revisada: 'border-violet-400/30 bg-violet-400/10 text-violet-200',
+  // Terminal: preenchimento mais solido que os estados de passagem.
+  concluida: 'border-emerald-400/40 bg-emerald-500/20 text-emerald-100',
   opt_out: 'border-rose-400/30 bg-rose-400/10 text-rose-200',
 };
 
@@ -371,6 +378,7 @@ export function FilaFollowupEvasao({
               <SelectItem value="followup_realizado">Realizados</SelectItem>
               <SelectItem value="followup_dispensado">Dispensados</SelectItem>
               <SelectItem value="aguardando_resposta">Aguardando resposta</SelectItem>
+              <SelectItem value="concluida">Concluídas</SelectItem>
               <SelectItem value="todos">Todos</SelectItem>
             </SelectContent>
           </Select>

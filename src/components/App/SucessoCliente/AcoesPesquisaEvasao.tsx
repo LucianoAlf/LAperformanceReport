@@ -72,6 +72,24 @@ export function AcoesPesquisaEvasao({
 
   const vigente = Boolean(dados.classificacao_atual && !dados.classificacao_desatualizada);
 
+  /**
+   * Por que os controles estao travados. Ate 31/08/2026 o botao ficava `disabled` e a
+   * unica pista era um aviso dizendo "Reclassifique" -- palavra errada para quem nunca
+   * classificou, e instrucao impossivel para pesquisa que nem analise tem. Botao
+   * desabilitado nao dispara evento nenhum no navegador, entao o clique era silencioso:
+   * foi assim que a operadora registrou 3 desfechos no mesmo aluno procurando resposta.
+   */
+  const motivoBloqueio = (() => {
+    if (vigente) return null;
+    if (!dados.analise_atual) {
+      return 'Esta resposta ainda não foi processada — não há análise para classificar. Avise a equipe técnica.';
+    }
+    if (!dados.classificacao_atual) {
+      return 'Classifique a resposta antes de criar ações ou registrar o desfecho.';
+    }
+    return 'Chegou conteúdo novo depois da última classificação. Reclassifique antes de criar ações ou registrar o desfecho.';
+  })();
+
   useEffect(() => {
     if (tipo !== 'vincular_professor' || professores.length > 0) return;
     void supabase
@@ -152,10 +170,8 @@ export function AcoesPesquisaEvasao({
           <ClipboardPlus className="h-4 w-4 text-blue-300" />
           Ações e resultado
         </h4>
-        {!vigente && (
-          <p className="mt-1 text-xs text-amber-300">
-            Reclassifique a resposta mais recente antes de criar ações ou desfechos.
-          </p>
+        {motivoBloqueio && (
+          <p className="mt-1 text-xs text-amber-300">{motivoBloqueio}</p>
         )}
       </div>
 
@@ -231,14 +247,16 @@ export function AcoesPesquisaEvasao({
           <span>Observação (opcional)</span>
           <input value={observacaoDesfecho} onChange={(event) => setObservacaoDesfecho(event.target.value)} maxLength={1000} disabled={!vigente || processando} className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2" />
         </label>
-        <Button onClick={salvarDesfecho} disabled={!vigente || processando} variant="outline" className="md:w-fit">
+        <Button onClick={salvarDesfecho} disabled={!vigente || processando} variant="outline" className="md:w-fit" title={motivoBloqueio ?? undefined}>
           Registrar desfecho
         </Button>
-        {dados.desfecho_atual && (
-          <p className="self-center text-xs text-slate-400">
-            Atual: {desfechos.find((item) => item.value === dados.desfecho_atual?.desfecho)?.label}
+        {dados.desfecho_atual ? (
+          <p className="self-center text-xs text-emerald-300">
+            Concluída — {desfechos.find((item) => item.value === dados.desfecho_atual?.desfecho)?.label}
           </p>
-        )}
+        ) : motivoBloqueio ? (
+          <p className="self-center text-xs text-amber-300">{motivoBloqueio}</p>
+        ) : null}
       </div>
     </div>
   );
