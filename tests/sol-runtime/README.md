@@ -618,3 +618,25 @@ cobriu 4% de 504 eventos em 7 dias — a evidência da inversão).
   gate determinístico é quem lê o pode).
 - Kill switch: `SOL_CAIXA_V4_SHADOW=0` (a suíte roda com ele desligado).
 - Design completo: `docs/specs/2026-08-31-sol-caixa-v4-agente-na-frente-design.md`.
+
+## reabertura-do-caixa-e2e.cjs  (31/08, caso Arthur/Barra 19:53)
+🔴 **"Pode abrir novamente" morreu em "o banco bloqueou a operação".** A
+ferramenta existia COMPLETA no banco desde a V3 (`sol_caixa_reabrir_caixa_v1`:
+autorização, lock, só dia corrente, snapshot em `caixa_reaberturas_log`,
+auditoria) e **nunca teve o fio ligado ao WhatsApp**: o pedido caiu em `nada`
+no módulo abf e vazou para o agente LLM da Sol, que só tem rota de LEITURA no
+banco. O caixa foi reaberto na mão (com a autorização do Arthur das 19:55
+citada no motivo) e o fio foi ligado:
+- `pedidoReabrir` + `tratarPedidoDiretoReabertura` no abf — comando operacional
+  claro de membro autorizado executa DIRETO via RPC (reabrir não mexe em saldo
+  e a RPC já carrega autorização + rastro). "abre o caixa" seco continua sendo
+  a abertura da manhã; só reabertura EXPLÍCITA (novamente/de novo/reabre).
+- Gancho no bridge ao lado do fechamento direto.
+- **Placar do shadow V4 (primeira entrada real do combinado):** o roteador
+  também disse `nada` (conf .97/.98) nas duas mensagens — a intenção
+  `reabrir_caixa` não existia no mapa dele. **Gap dos dois lados**; o mapa
+  ganhou `reabrir_caixa|abrir_caixa|fechar_caixa` e o shadow aprende junto.
+
+⚠️ Lição: "dar a ferramenta" tem duas metades — a RPC no banco E o fio no
+canal. Ferramenta sem fio é pior que ferramenta nenhuma: a equipe descobre no
+pior momento, com o caixa fechado na cara.
