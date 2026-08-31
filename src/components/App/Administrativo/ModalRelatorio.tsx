@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -330,6 +330,23 @@ export function ModalRelatorio({
   const [erroWhatsApp, setErroWhatsApp] = useState<string | null>(null);
   const [numeroTeste, setNumeroTeste] = useState('');
   const { usuario } = useAuth();
+
+  // Incidente 2026-08-10: relatorio de uma unidade era enviado com o texto ja
+  // gerado, mas a unidade do envio ja tinha mudado por baixo do modal (filtro
+  // do topo). O texto "grudado" nao correspondia mais a unidade selecionada.
+  // Se a unidade mudar enquanto ha texto gerado, forca regerar antes de enviar.
+  const unidadeAnteriorRef = useRef(unidade);
+  useEffect(() => {
+    if (unidadeAnteriorRef.current !== unidade) {
+      unidadeAnteriorRef.current = unidade;
+      if (textoRelatorio) {
+        setTextoRelatorio('');
+        setEnviadoWhatsApp(false);
+        setErroWhatsApp(null);
+        toast.info('A unidade selecionada mudou — gere o relatório novamente antes de enviar.');
+      }
+    }
+  }, [unidade, textoRelatorio]);
 
   const formatarBolsistasIntegrais = (resumoBase: ResumoMes | null = resumo) => {
     const total = resumoBase?.bolsistas_integrais ?? 0;
