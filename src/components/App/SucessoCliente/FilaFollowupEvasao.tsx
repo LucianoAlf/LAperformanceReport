@@ -44,7 +44,6 @@ import { useRepescagemEvasao } from './hooks/useRepescagemEvasao';
 import {
   rotuloMotivoRecusaRepescagem,
   type PesquisaEvasaoFollowupAcao,
-  type PesquisaEvasaoFollowupEstado,
   type PesquisaEvasaoFollowupFiltro,
   type PesquisaEvasaoFollowupGrupo,
   type PesquisaEvasaoFollowupItem,
@@ -134,31 +133,39 @@ const OPCOES_POR_ABA: Record<
 };
 
 /**
- * Por que ESTA pesquisa está no arquivo. Sem esta linha, "Follow-up realizado" ao lado
- * de duas "Concluída" lê como arquivo errado — foi a primeira coisa que apareceu ao
- * abrir a aba, e a pergunta é justa: os dois não terminaram do mesmo jeito.
+ * O QUE colocou esta pesquisa no arquivo — nomeando o ato, o autor e a data.
  *
- * ⚠️ "Ninguém respondeu" não é suposição: no `case` de
+ * ⚠️ A 1a versão explicava a REGRA do sistema ("sem resposta não há análise para
+ * classificar") e não respondia a pergunta que a pessoa faz olhando a tela: "por que
+ * ESTE caso foi parar aqui?". Quem move uma pesquisa para o arquivo é sempre um ato
+ * humano datado — o clique da operadora, ou o desfecho registrado. É isso que a linha
+ * precisa dizer; a regra de fundo vai no comentário, não na tela.
+ *
+ * ⚠️ E a 1a versão afirmava uma coisa FALSA: que a pesquisa "não chega a receber
+ * desfecho". Ela não chega COM OS DADOS DE HOJE. O 2o toque (repescagem) pode não ter
+ * saído — no caso que motivou isto, não tinha saído — e uma resposta nele abre análise,
+ * classificação e desfecho normalmente. Não afirmar impossibilidade onde só há ausência.
+ *
+ * ⚠️ "Ninguém respondeu" continua sendo fato, não suposição: no `case` de
  * `fn_pesquisa_evasao_followup_estado`, todo status que abre rodada de análise
- * (`coletando`, `pronta_para_revisao`, `em_revisao`, `revisada`) é capturado ANTES,
- * e `concluida`/`opt_out` também. Chegar em `followup_realizado`/`followup_dispensado`
+ * (`coletando`, `pronta_para_revisao`, `em_revisao`, `revisada`) é capturado ANTES, e
+ * `concluida`/`opt_out` também. Chegar em `followup_realizado`/`followup_dispensado`
  * só acontece com pesquisa sem resposta nenhuma.
- *
- * ⚠️ É por isso que essas duas contam como encerradas em vez de ficarem na fila de
- * trabalho: registrar desfecho exige análise ([AcoesPesquisaEvasao.tsx:84]), análise
- * exige resposta, e resposta nunca veio. Na fila em aberto elas ficariam para sempre,
- * bloqueadas, empurrando para baixo quem de fato espera alguma coisa.
  */
-function motivoDoArquivamento(estado: PesquisaEvasaoFollowupEstado): string | null {
-  switch (estado) {
+function motivoDoArquivamento(item: PesquisaEvasaoFollowupItem): string | null {
+  const quem = item.acao_operador_nome ?? 'a equipe';
+  const quando = item.acao_registrada_em ? ` em ${formatarData(item.acao_registrada_em)}` : '';
+  const canal = item.acao_canal ? ` (${item.acao_canal})` : '';
+
+  switch (item.estado_visivel) {
     case 'concluida':
-      return 'Desfecho registrado — a régua fechou por completo.';
+      return 'Está aqui porque o desfecho foi registrado: a família respondeu e o motivo da saída ficou documentado.';
     case 'followup_realizado':
-      return 'Ninguém respondeu à pesquisa, e o follow-up já foi feito. Sem resposta não há análise para classificar, então esta não chega a receber desfecho.';
+      return `Está aqui porque ${quem} marcou o follow-up como realizado${quando}${canal}. Ninguém respondeu à pesquisa, então o motivo da saída não chegou a ser capturado.`;
     case 'followup_dispensado':
-      return 'Ninguém respondeu à pesquisa, e o follow-up foi dispensado.';
+      return `Está aqui porque ${quem} dispensou o follow-up${quando}. Ninguém respondeu à pesquisa, e a equipe decidiu não insistir.`;
     case 'opt_out':
-      return 'A pessoa pediu para não receber mais mensagens.';
+      return 'Está aqui porque a pessoa pediu para não receber mais mensagens. Não há novo contato a fazer.';
     default:
       return null;
   }
@@ -609,9 +616,10 @@ export function FilaFollowupEvasao({
                         {item.acao_canal ? ` · ${item.acao_canal}` : ''}
                       </p>
                     )}
-                    {aba === 'encerradas' && motivoDoArquivamento(item.estado_visivel) && (
-                      <p className="mt-2 max-w-2xl border-l-2 border-slate-700 pl-2.5 text-xs text-slate-400">
-                        {motivoDoArquivamento(item.estado_visivel)}
+                    {aba === 'encerradas' && motivoDoArquivamento(item) && (
+                      <p className="mt-2 max-w-2xl border-l-2 border-slate-600 pl-2.5 text-xs text-slate-400">
+                        <span className="font-semibold text-slate-300">Por que está no arquivo: </span>
+                        {motivoDoArquivamento(item)}
                       </p>
                     )}
                     {(() => {

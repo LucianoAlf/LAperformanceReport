@@ -92,6 +92,20 @@ test('arquivo de encerradas: sem reenvio em massa, e cada linha diz por que term
       `motivoDoArquivamento precisa explicar o estado ${estado}`);
   }
   assert.match(tela, /aba === 'encerradas' && motivoDoArquivamento\(/);
+
+  // ⚠️ A justificativa precisa nomear O ATO, o AUTOR e a DATA. A 1a versao explicava
+  // a regra do sistema ("sem resposta nao ha analise para classificar") e nao
+  // respondia o que a pessoa pergunta olhando a tela: por que ESTE caso foi parar
+  // aqui? Quem move uma pesquisa para o arquivo e sempre um ato humano datado.
+  assert.match(tela, /acao_operador_nome/);
+  assert.match(tela, /acao_registrada_em \? ` em \$\{formatarData/);
+  assert.match(tela, /Por que está no arquivo/);
+
+  // ⚠️ E nao pode voltar a AFIRMAR IMPOSSIBILIDADE onde so ha ausencia: dizer que a
+  // pesquisa "nao chega a receber desfecho" era falso -- o 2o toque pode nem ter
+  // saido (no caso que motivou isto, nao tinha), e uma resposta nele abre analise,
+  // classificacao e desfecho normalmente.
+  assert.doesNotMatch(tela, /não chega a receber desfecho/);
 });
 
 test('a paginacao precisa entrar em acao, e pagina vazia nao pode virar "nenhum caso"', () => {
