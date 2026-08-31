@@ -688,7 +688,7 @@ export function PesquisaEvasaoTab({ unidadeAtual, onAbrirConversa }: Props) {
         unidadeAtual={unidadeAtual}
         ano={filtroAno}
         mes={filtroMes}
-        filtroInicial={abrirFollowupPendente ? 'followup_pendente' : 'todos'}
+        filtroInicial={abrirFollowupPendente ? 'followup_pendente' : 'em_aberto'}
         onAlteracao={carregarDados}
         onAbrirConversa={onAbrirConversa}
       />

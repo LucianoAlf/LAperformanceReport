@@ -145,15 +145,26 @@ export type PesquisaEvasaoFollowupEstado =
   | 'em_revisao'
   | 'nova_rodada'
   | 'revisada'
+  /** Desfecho registrado. Faltava aqui desde 31/08 — o banco ja devolvia, o tipo nao previa. */
+  | 'concluida'
   | 'opt_out';
+
+/**
+ * As duas ABAS da fila. Espelham `fn_pesquisa_evasao_followup_encerrada` no banco,
+ * que e a fonte unica da particao — o filtro roda no servidor, aqui e so o rotulo.
+ */
+export type PesquisaEvasaoFollowupGrupo = 'em_aberto' | 'encerradas';
 
 export type PesquisaEvasaoFollowupFiltro =
   | 'todos'
+  | PesquisaEvasaoFollowupGrupo
   | 'followup_pendente'
   | 'followup_avisado'
   | 'followup_realizado'
   | 'followup_dispensado'
   | 'aguardando_resposta'
+  | 'revisada'
+  | 'opt_out'
   | 'concluida';
 
 export type PesquisaEvasaoFollowupAcao = 'realizado' | 'dispensado';

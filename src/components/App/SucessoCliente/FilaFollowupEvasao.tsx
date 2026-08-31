@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import {
+  Archive,
   Ban,
   BellRing,
   CheckCircle2,
@@ -9,6 +10,7 @@ import {
   ChevronRight,
   ChevronUp,
   Clock3,
+  Inbox,
   Loader2,
   MessagesSquare,
   RefreshCw,
@@ -43,6 +45,7 @@ import {
   rotuloMotivoRecusaRepescagem,
   type PesquisaEvasaoFollowupAcao,
   type PesquisaEvasaoFollowupFiltro,
+  type PesquisaEvasaoFollowupGrupo,
   type PesquisaEvasaoFollowupItem,
   type RepescagemEnfileiramentoResultado,
   type RepescagemEstado,
@@ -96,6 +99,67 @@ const CLASSES_ESTADO: Record<string, string> = {
   concluida: 'border-emerald-400/40 bg-emerald-500/20 text-emerald-100',
   opt_out: 'border-rose-400/30 bg-rose-400/10 text-rose-200',
 };
+
+/**
+ * As duas abas da secao. Qual estado pertence a qual grupo e decidido NO BANCO, por
+ * `fn_pesquisa_evasao_followup_encerrada` — o filtro `em_aberto`/`encerradas` roda
+ * no servidor e a paginacao vem de la. Esta lista e so o menu de refino de cada aba:
+ * se um estado for parar no grupo errado, ele aparece sob o rotulo errado e devolve
+ * lista vazia. Visivel, nao silencioso — mas, ao mexer na particao, mexa nos dois.
+ *
+ * `revisada` fica em ABERTO de proposito: a analise foi revisada, mas ainda falta
+ * classificar e registrar o desfecho. `followup_realizado` fica em ENCERRADAS porque
+ * naquele ramo do `case` do banco a pesquisa nao teve resposta nenhuma — o operador
+ * ligou, registrou, e a fila nao tem mais o que pedir dela.
+ */
+const OPCOES_POR_ABA: Record<
+  PesquisaEvasaoFollowupGrupo,
+  { valor: PesquisaEvasaoFollowupFiltro; rotulo: string }[]
+> = {
+  em_aberto: [
+    { valor: 'em_aberto', rotulo: 'Todas em aberto' },
+    { valor: 'followup_pendente', rotulo: 'Follow-up pendente' },
+    { valor: 'followup_avisado', rotulo: 'Follow-up avisado' },
+    { valor: 'aguardando_resposta', rotulo: 'Aguardando resposta' },
+    { valor: 'revisada', rotulo: 'Revisada — falta desfecho' },
+  ],
+  encerradas: [
+    { valor: 'encerradas', rotulo: 'Todas encerradas' },
+    { valor: 'concluida', rotulo: 'Concluídas — com desfecho' },
+    { valor: 'followup_realizado', rotulo: 'Follow-up realizado' },
+    { valor: 'followup_dispensado', rotulo: 'Dispensadas' },
+    { valor: 'opt_out', rotulo: 'Opt-out' },
+  ],
+};
+
+const ABAS: {
+  valor: PesquisaEvasaoFollowupGrupo;
+  rotulo: string;
+  Icone: typeof Inbox;
+}[] = [
+  { valor: 'em_aberto', rotulo: 'Em aberto', Icone: Inbox },
+  { valor: 'encerradas', rotulo: 'Encerradas', Icone: Archive },
+];
+
+/**
+ * Onde um filtro vindo de fora (deep link, prop) deve abrir.
+ *
+ * ⚠️ O `estado` devolvido precisa existir no menu da aba: o Select do Radix com um
+ * `value` fora das opções renderiza o gatilho VAZIO — parece filtro nenhum e a lista
+ * volta recortada. Valor que não está no menu (o legado `'todos'`, por exemplo) cai
+ * para o próprio grupo.
+ */
+function resolverFiltroInicial(filtro: PesquisaEvasaoFollowupFiltro): {
+  aba: PesquisaEvasaoFollowupGrupo;
+  estado: PesquisaEvasaoFollowupFiltro;
+} {
+  const aba: PesquisaEvasaoFollowupGrupo =
+    OPCOES_POR_ABA.encerradas.some((opcao) => opcao.valor === filtro)
+      ? 'encerradas'
+      : 'em_aberto';
+  const noMenu = OPCOES_POR_ABA[aba].some((opcao) => opcao.valor === filtro);
+  return { aba, estado: noMenu ? filtro : aba };
+}
 
 function formatarData(valor: string) {
   const data = new Date(valor);
@@ -189,7 +253,12 @@ export function FilaFollowupEvasao({
   onAbrirConversa,
 }: Props) {
   const toast = useToast();
-  const [estado, setEstado] = useState<PesquisaEvasaoFollowupFiltro>(filtroInicial);
+  const [aba, setAba] = useState<PesquisaEvasaoFollowupGrupo>(
+    () => resolverFiltroInicial(filtroInicial).aba,
+  );
+  const [estado, setEstado] = useState<PesquisaEvasaoFollowupFiltro>(
+    () => resolverFiltroInicial(filtroInicial).estado,
+  );
   const [busca, setBusca] = useState('');
   const [pagina, setPagina] = useState(1);
   const [expandida, setExpandida] = useState<string | null>(null);
@@ -198,7 +267,9 @@ export function FilaFollowupEvasao({
   const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
-    setEstado(filtroInicial);
+    const inicial = resolverFiltroInicial(filtroInicial);
+    setAba(inicial.aba);
+    setEstado(inicial.estado);
     setPagina(1);
   }, [filtroInicial]);
 
@@ -206,9 +277,17 @@ export function FilaFollowupEvasao({
     setPagina(1);
   }, [ano, busca, estado, mes, unidadeAtual]);
 
+  /** Trocar de aba volta ao "todos" daquele grupo — um refino da aba anterior nao sobrevive a ela. */
+  const trocarAba = (proxima: PesquisaEvasaoFollowupGrupo) => {
+    setAba(proxima);
+    setEstado(proxima);
+  };
+
   const {
     itens,
     total,
+    totalEmAberto,
+    totalEncerradas,
     totalPendente,
     loading,
     erro,
@@ -292,6 +371,21 @@ export function FilaFollowupEvasao({
   };
 
   const totalPaginas = Math.max(1, Math.ceil(total / tamanhoPagina));
+
+  /**
+   * Registrar um desfecho no último caso de uma página o tira do grupo — e a página
+   * deixa de existir. A tela mostrava "Nenhum caso neste filtro" com 31 casos vivos,
+   * porque `total` vem das linhas devolvidas e uma página vazia devolve zero.
+   *
+   * ⚠️ Quem desempata é o CONTADOR do grupo, que não passa pela paginação: só ele
+   * distingue "acabou a lista" de "acabou esta página".
+   */
+  const totalDoGrupo = aba === 'em_aberto' ? totalEmAberto : totalEncerradas;
+  useEffect(() => {
+    if (!loading && itens.length === 0 && pagina > 1 && totalDoGrupo > 0) {
+      setPagina(1);
+    }
+  }, [itens.length, loading, pagina, totalDoGrupo]);
   const intervalo = useMemo(() => {
     if (total === 0) return '0 casos';
     const inicio = (pagina - 1) * tamanhoPagina + 1;
@@ -325,37 +419,60 @@ export function FilaFollowupEvasao({
   return (
     <section className="overflow-hidden rounded-2xl border border-amber-400/20 bg-slate-900/55 shadow-lg shadow-black/10">
       <div className="border-b border-slate-700/60 bg-gradient-to-r from-amber-400/[0.09] via-slate-900/30 to-slate-900/20 p-4">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-300/25 bg-amber-400/10">
-              <BellRing className="h-5 w-5 text-amber-300" />
-            </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="font-semibold text-white">Acompanhamento de follow-up</h3>
+        <div className="flex gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-300/25 bg-amber-400/10">
+            <BellRing className="h-5 w-5 text-amber-300" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-semibold text-white">Acompanhamento de follow-up</h3>
+              {totalPendente > 0 && (
                 <span className="rounded-full border border-amber-300/25 bg-amber-300/10 px-2.5 py-0.5 text-xs font-bold text-amber-200">
                   {totalPendente} pendente{totalPendente === 1 ? '' : 's'}
                 </span>
-              </div>
-              <p className="mt-1 max-w-2xl text-sm text-slate-400">
-                Os casos entram aqui exatamente 72 horas após o envio. A Lia reúne os lembretes em um resumo diário às 9h.
-              </p>
+              )}
             </div>
+            <p className="mt-1 max-w-2xl text-sm text-slate-400">
+              {aba === 'em_aberto'
+                ? 'Os casos entram aqui exatamente 72 horas após o envio. A Lia reúne os lembretes em um resumo diário às 9h.'
+                : 'Arquivo do que já foi encerrado: desfecho registrado, follow-up feito ou dispensado, e quem pediu para não receber mais. Sai da fila de trabalho e continua consultável.'}
+            </p>
           </div>
-          {pesquisaIdsElegiveis.length > 0 && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="border-sky-400/30 text-sky-200 hover:bg-sky-400/10"
-              onClick={() => abrirConfirmacaoRepescagem(pesquisaIdsElegiveis)}
-            >
-              <RefreshCw className="mr-1.5 h-4 w-4" />
-              Reenviar para todos ({pesquisaIdsElegiveis.length})
-            </Button>
-          )}
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-[minmax(220px,1fr)_220px]">
+        {/* Abas. A partição vem do banco (`fn_pesquisa_evasao_followup_encerrada`);
+            aqui ficam só o rótulo e a contagem de cada lado. */}
+        <div className="mt-4 inline-flex rounded-xl border border-slate-700/70 bg-slate-950/40 p-1">
+          {ABAS.map(({ valor, rotulo, Icone }) => {
+            const ativa = aba === valor;
+            const contagem = valor === 'em_aberto' ? totalEmAberto : totalEncerradas;
+            return (
+              <button
+                key={valor}
+                type="button"
+                aria-pressed={ativa}
+                onClick={() => trocarAba(valor)}
+                className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                  ativa
+                    ? 'bg-slate-800 text-white shadow-sm shadow-black/20'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Icone className="h-4 w-4" />
+                {rotulo}
+                <span
+                  className={`rounded-full px-1.5 py-0.5 text-[11px] font-bold ${
+                    ativa ? 'bg-slate-700 text-slate-100' : 'bg-slate-800/70 text-slate-400'
+                  }`}
+                >
+                  {contagem}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-3 grid gap-3 md:grid-cols-[minmax(220px,1fr)_260px_auto]">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
             <Input
@@ -373,15 +490,27 @@ export function FilaFollowupEvasao({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="followup_pendente">Pendentes</SelectItem>
-              <SelectItem value="followup_avisado">Avisados</SelectItem>
-              <SelectItem value="followup_realizado">Realizados</SelectItem>
-              <SelectItem value="followup_dispensado">Dispensados</SelectItem>
-              <SelectItem value="aguardando_resposta">Aguardando resposta</SelectItem>
-              <SelectItem value="concluida">Concluídas</SelectItem>
-              <SelectItem value="todos">Todos</SelectItem>
+              {OPCOES_POR_ABA[aba].map((opcao) => (
+                <SelectItem key={opcao.valor} value={opcao.valor}>
+                  {opcao.rotulo}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
+          {/* Só na aba de trabalho, e o rótulo diz "desta página" porque é o que ele
+              sempre alcançou: os ids carregados. Com página de 50 contra 35 casos isso
+              coincidia com "todos" e o texto passava; com 8 por página, não passaria. */}
+          {aba === 'em_aberto' && pesquisaIdsElegiveis.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-10 border-sky-400/30 text-sky-200 hover:bg-sky-400/10"
+              onClick={() => abrirConfirmacaoRepescagem(pesquisaIdsElegiveis)}
+            >
+              <RefreshCw className="mr-1.5 h-4 w-4" />
+              Reenviar os {pesquisaIdsElegiveis.length} desta página
+            </Button>
+          )}
         </div>
       </div>
 
@@ -400,9 +529,22 @@ export function FilaFollowupEvasao({
           </div>
         ) : itens.length === 0 ? (
           <div className="flex min-h-28 flex-col items-center justify-center text-center">
-            <CheckCircle2 className="mb-2 h-6 w-6 text-emerald-400" />
-            <p className="text-sm font-medium text-slate-200">Nenhum caso neste filtro</p>
-            <p className="mt-1 text-xs text-slate-500">A fila é atualizada automaticamente conforme o prazo vence.</p>
+            {aba === 'em_aberto' ? (
+              <>
+                <CheckCircle2 className="mb-2 h-6 w-6 text-emerald-400" />
+                <p className="text-sm font-medium text-slate-200">Nenhum caso neste filtro</p>
+                <p className="mt-1 text-xs text-slate-500">A fila é atualizada automaticamente conforme o prazo vence.</p>
+              </>
+            ) : (
+              <>
+                <Archive className="mb-2 h-6 w-6 text-slate-500" />
+                <p className="text-sm font-medium text-slate-200">Nada encerrado neste filtro</p>
+                <p className="mt-1 max-w-md text-xs text-slate-500">
+                  Uma pesquisa chega aqui quando o desfecho é registrado, quando o follow-up é marcado como
+                  realizado ou dispensado, ou quando a pessoa pede para não receber mais.
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <div className="space-y-2">
