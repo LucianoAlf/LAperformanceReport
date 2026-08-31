@@ -556,3 +556,23 @@ porque o bridge tinha reiniciado 27 s antes para o deploy — a causa está
 corrigida (reidratação, PR #284), mas esta pendência já tinha expirado a janela.
 Lançado por migration `20260831213000` com rastro, categoria `passaporte`, aluno
 e fatura vinculados (Emusys confirma a fatura 15447 paga em 31/08).
+
+## valor-da-legenda-e-correcao-de-valor-e2e.cjs  (31/08, caso Mayra/CG 17:23)
+🔴 **"R$387,00" virou "R$ 38.700,00" no card.** O tesseract perdeu a vírgula do
+comprovante ("387,00" → "38700") e o backfill da legenda-irmã era `if (!valor)`
+— como o OCR já tinha preenchido ERRADO, o R$387,00 escrito pela Mayra na
+legenda não vencia. E a correção dela ("Sol, o valor foi R$387,00", citando o
+card) levou "Não entendi essa": correção de valor não era gramática, e o
+fallback LLM classificou `sem_intencao`.
+- **R-j** — a legenda humana com R$ explícito **vence** o valor do OCR (não só
+  backfill): é a doutrina "rótulo humano vence OCR ruim" aplicada ao valor.
+  Sem legenda, o valor do OCR fica (para o humano corrigir) — sem chute.
+- **R-k** — correção ditada de VALOR: rótulo "valor" + número atualiza a
+  pendência, recalcula `valor_bate` (o aviso "difere do valor da parcela" some
+  sozinho no remonte) e re-registra o preview V3.
+  ⚠️ Mensagem com rótulo de ALUNO junto ("a aluna é X e o valor é Y") continua
+  no caminho do nome — o guard `_alunoRotulado(txt)` impede o roubo da correção
+  composta (travado por regressão no teste).
+- O prompt do classificador ganhou **exemplos** (o caso real voltava
+  `sem_intencao`; com exemplos, `corrigir_valor` valor 387 — validado com o LLM
+  real).
