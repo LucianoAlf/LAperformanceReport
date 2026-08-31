@@ -576,3 +576,29 @@ fallback LLM classificou `sem_intencao`.
 - O prompt do classificador ganhou **exemplos** (o caso real voltava
   `sem_intencao`; com exemplos, `corrigir_valor` valor 387 — validado com o LLM
   real).
+
+## legenda-do-reenvio-nao-e-correcao-e2e.cjs  (31/08, o REENVIO das 17:45)
+🔴 **O card repetiu R$ 38.700,00 MESMO com R-j/R-k no ar** — e o log provou que
+os fixes nunca foram alcançados. Cadeia real: a **reidratação funcionou** e
+ressuscitou a pendência velha (com o 38.700 de antes) → a legenda do reenvio,
+chegando como mensagem separada, foi **sequestrada** pelo caminho de correção de
+nome ("Atualizei a pendencia com o aluno informado") → a mídia processou **sem
+legenda** → valor do OCR de novo → e de brinde "O valor bate com **100
+parcelas** — parece quitação" (38.700 ÷ 387).
+- **L1** — texto do mesmo remetente com mídia consolidando (lote aberto) é a
+  LEGENDA dela: vai para o lote ANTES de qualquer caminho de correção. A guarda
+  já existia **só** no bloco de saída (refrigerante 28/08) — guarda em UM
+  consumidor é contenção; agora está na entrada da seção. "pode"/"não" seguem
+  passando para o gate.
+- **L2** — correção de nome colhe o VALOR do mesmo texto (antes de chamar a
+  canônica — com 387 ela casa a fatura por valor exato). Torna o sequestro
+  tardio (fora da janela do lote) inofensivo. `extrairValor` já existia; nenhuma
+  regex nova.
+- **L3** — "parece quitação" com teto 2..13 parcelas; razão 100× é sinal de
+  valor errado e o aviso certo é a divergência. Quitação real (2×) segue
+  apontada (regressão travada).
+
+⚠️ Lição: **fix novo não protege caminho que não o executa.** R-j morava no
+fluxo da mídia; a mensagem real entrou pelo fluxo de correção. Ao corrigir
+"valor errado", mapear TODOS os pontos onde o valor nasce (mídia-com-legenda,
+legenda-irmã, lote, correção, complemento) — mesma lição dos 3 gates de prosa.
