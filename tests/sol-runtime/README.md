@@ -602,3 +602,19 @@ parcelas** — parece quitação" (38.700 ÷ 387).
 fluxo da mídia; a mensagem real entrou pelo fluxo de correção. Ao corrigir
 "valor errado", mapear TODOS os pontos onde o valor nasce (mídia-com-legenda,
 legenda-irmã, lote, correção, complemento) — mesma lição dos 3 gates de prosa.
+
+## _patch-roteador-v4-shadow.cjs + _patch-bridge-roteador-v4.cjs  (31/08 — V4 F1)
+**Sol Caixa V4, Fase 1 (go do Luciano): o roteador LLM em SHADOW.**
+`rotearMensagemV4` classifica TODA mensagem de texto do grupo financeiro com o
+mapa completo de intenções (aprovar/descartar/corrigir_*/sem_aluno/
+contestar_fatura/saida_dinheiro/lancamento_por_texto/corrigir_lancamento/
+estornar/consulta_caixa/conversa/nada) + campos + confiança. O bridge dispara
+`observarRoteadorV4` **sem await** depois do `handle()` — zero impacto, zero
+escrita — e o log `roteador_v4_shadow` guarda a decisão AO LADO da ação do
+runtime legado, no mesmo trilho da sombra do Alfredo (cujo contrato de 4 regras
+cobriu 4% de 504 eventos em 7 dias — a evidência da inversão).
+- Validado com o LLM real: **9/10** nos casos da semana; o "erro" é o desejado
+  ("pode" seco → `nada`, porque **aprovação de dinheiro nunca vem do LLM** — o
+  gate determinístico é quem lê o pode).
+- Kill switch: `SOL_CAIXA_V4_SHADOW=0` (a suíte roda com ele desligado).
+- Design completo: `docs/specs/2026-08-31-sol-caixa-v4-agente-na-frente-design.md`.
