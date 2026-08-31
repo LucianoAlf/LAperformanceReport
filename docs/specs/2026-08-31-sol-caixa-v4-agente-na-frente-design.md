@@ -1,0 +1,121 @@
+# Sol Caixa V4 — o agente na frente, o cofre na fronteira
+
+**Estado:** Fase 1 (roteador em shadow) EM PRODUÇÃO desde 31/08 ~23h.
+**Go:** Luciano, 31/08 ("trazer o agente para frente… cirúrgico, sem quebrar, sem projeto de um ano").
+**Donos:** Luciano (produto) · Alfredo (V3/ledger) · Claude (implementação).
+**Referência viva:** a Maria (OpenClaw, VPS do Alfredo) — auditada na fonte em 31/08.
+
+---
+
+## 1. Por que (evidência, não opinião)
+
+**A semana de 24–31/08 mediu as duas arquiteturas em produção:**
+
+| medida | valor |
+|---|---|
+| raízes corrigidas no diálogo da Sol em UM dia (31/08) | 11 |
+| destas, regex mordendo ERRADO (falso positivo) | 5 (`vale`→saída R$633 · `parcela`→destruiu categoria · `sim`→aprovou dinheiro · homônimo · "foi" grudado) |
+| eventos observados pela sombra do contrato determinístico (Alfredo, 7 dias) | 504 |
+| classificados pelo contrato de regras | **21 (4%)** |
+| `coverage_gap` (runtime agiu; contrato sem regra) | 105 |
+| roteador LLM (V4) nos 10 casos reais da semana | **9/10** (o "erro" foi recusar aprovar "pode" — que é o comportamento desejado, ver §3) |
+
+Conclusão: regra escrita não escala para diálogo (4% de cobertura, e quando
+"acerta" errado ela **sombreia o LLM** — falso positivo é pior que lacuna).
+Quem escala é o modelo. A fluidez da Maria não é mágica: é LLM roteando com
+contexto e **tools estreitas** executando.
+
+## 2. A Maria, lida na fonte (o que copiamos e o que não)
+
+- **LLM é o roteador**: zero regex no contrato operacional; agents por
+  interlocutor (`maria-rose`, `maria-ana`, `maria-owner`…).
+- **Cada escrita é uma TOOL nomeada e estreita**: `maria_contas_dar_baixa`,
+  `maria_contas_corrigir_valor`, `maria_contas_alterar_vencimento`… — o modelo
+  escolhe A ferramenta; a ferramenta é auditada e limitada.
+- **Determinismo na fronteira**: "a única coisa que ela não faz é mover
+  dinheiro real — esse clique é humano".
+- **Modelo rápido** (deepseek-v4-flash primário, fallbacks grok/sonnet) +
+  memória com embeddings + compaction com flush para arquivos de memória.
+- Ela já tem um cinto de RPCs de **leitura do LA Report** (`maria-lareport-rpc__*`).
+
+O que NÃO copiamos agora: migrar a Sol para OpenClaw (mudança de infra, não de
+arquitetura — fica para depois se fizer sentido). A inversão acontece dentro do
+runtime atual.
+
+## 3. Arquitetura V4
+
+```
+mensagem do grupo
+   │
+   ├── "pode"/"não" (gate DETERMINÍSTICO — dinheiro só com aprovação explícita)
+   │
+   └── ROTEADOR LLM (contexto: pendências abertas, últimos lançamentos,
+       │             citação, histórico curto)
+       │  → {intencao, campos, confianca}
+       │
+       └── EXECUTORES (os caminhos de hoje, já testados 26/26):
+           corrigir_aluno/valor/categoria/forma/competencia · sem_aluno ·
+           contestar_fatura · saida_dinheiro · lancamento_por_texto ·
+           corrigir/estornar_lancamento · consulta_caixa · conversa/nada
+           │
+           └── FRONTEIRA V3 (intacta): preview persistido + hash → "pode"
+               humano → validador (valor/forma/categoria idênticos) →
+               consumo único → RPC auditada
+```
+
+Invariantes (não negociáveis):
+1. **Números nunca são gerados** — valor/fatura/aluno no card vêm das RPCs
+   canônicas (`sol_caixa_parcela_canonica` etc.), o LLM só decide *qual
+   caminho*.
+2. **`aprovar` nunca vem do LLM** — o roteador tratando "pode" como `nada`
+   (medido no teste) é o comportamento certo: o gate determinístico é quem lê
+   aprovação.
+3. **Toda escrita continua atrás da V3** — preview→pode→validador→consumo.
+4. **Fail-safe** — roteador indisponível ⇒ gramática atual segue valendo.
+
+## 4. Fases (cirúrgico, sem big-bang)
+
+- **F1 — SHADOW (no ar desde 31/08):** `rotearMensagemV4` roda em paralelo
+  (fire-and-forget no bridge) para toda mensagem de texto do grupo; o log
+  `roteador_v4_shadow` guarda `{intencao, campos, confianca, legado, ms}` lado
+  a lado. Kill switch: `SOL_CAIXA_V4_SHADOW=0`. Zero impacto, zero escrita.
+- **F2 — ANÁLISE + FLIP DO DIÁLOGO (após 2-3 dias úteis de sombra):** comparar
+  decisão a decisão. Critério de flip: o roteador concorda com o legado nos
+  casos em que o legado acerta E decide certo nos casos em que o legado falhou
+  (os "Não entendi"/falsos positivos). O flip em si é PEQUENO: o roteador passa
+  a decidir primeiro e as intenções invocam os caminhos existentes (o mecanismo
+  já existe — `tratarNaoEntendida` traduz intenção→frase canônica→`handle()`);
+  a gramática vira fallback do roteador (inversão exata dos papéis atuais).
+- **F3 — VOZ:** as respostas deixam de ser template; o modelo redige (tom
+  Maria), com números interpolados de fonte canônica. Os cards de
+  preview/lançamento mantêm formato fixo (são contrato com a equipe e com a V3).
+- **F4 — TOOLS DE CONSULTA:** `consulta_caixa` ganha executor real (resumo do
+  dia, movimentos, fatura de aluno — RPCs de leitura que já existem, padrão
+  `maria-lareport-rpc`).
+
+## 5. Latência (decisão de design pendente)
+
+Medido na F1: 12–40 s por chamada via `hermes_cli chat` (CLI boot + loop).
+Irrelevante em shadow (assíncrono); **inaceitável no flip** (a equipe espera
+resposta). Opções, na ordem de preferência:
+1. Chamada direta ao provedor do pool do hermes (`opencode-go` — o mesmo
+   deepseek-v4-flash da Maria) via HTTPS do runtime: ~1-3 s esperados.
+2. Endpoint do gateway hermes persistente (sem boot de CLI por chamada).
+3. Modelo menor no mesmo caminho atual.
+Resolver ANTES do flip; a F1 não depende disso.
+
+## 6. O que morre no flip
+
+- O "Não entendi essa 🤔" como primeira resposta (vira último recurso real).
+- A necessidade de gramática nova por construção de linguagem inédita
+  (**compromisso vigente desde 31/08: nenhuma regex nova de diálogo**).
+- Os falsos positivos de palavra-solta (o roteador lê a frase inteira).
+
+## 7. Rede de segurança
+
+- 26 testes e2e (cada incidente real da semana travado) — o flip precisa de
+  26/26 com o roteador na frente.
+- Suíte roda com `SOL_CAIXA_V3_LEDGER_FAKE=1` (não toca o ledger) e
+  `SOL_CAIXA_V4_SHADOW=0` (determinística).
+- Ledger V3 + auditorias + reidratação: inalterados.
+- Rollback do flip = um env var (roteador volta a ser sombra).
