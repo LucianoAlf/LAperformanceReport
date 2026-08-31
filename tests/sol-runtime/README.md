@@ -398,3 +398,70 @@ message are required") → fallback do gateway posta o prefixo de erro cru. Dois
 "resp. Rayanne do Nascimento Sobreira" no descritivo. Valor/aluno corretos; só o
 rótulo de responsável está errado. Correção é decisão humana (não mexemos em
 lançamento feito).
+
+## aluno-rotulado-e-nome-tardio-e2e.cjs  (31/08)
+Caso Arthur/Barra 14:02-14:05: "Venda capotraste para o aluno Arthur Vargas" com o
+REMETENTE também chamado Arthur (ADM homônimo). Duas raízes, um cascata:
+- **R-a** — a guarda V1 (`e_quem_enviou`) descartou o aluno DECLARADO na legenda.
+  Rótulo humano explícito de aluno agora imuniza contra a heurística de remetente
+  (ela existe para nome inferido; contra declaração, mente). Regressão coberta: o
+  vendedor rotulado ("Venda: Arthur") continua descartado.
+- **R-b** — a correção "Aluno foi Arthur Vargas Caldas" extraía "**foi** Arthur
+  Vargas Caldas": o prefixo derrubava a guarda de nome-diverge (rejeitava a
+  canônica que casou a pessoa CERTA — log `canonica_tardia_rejeitada_nome_diverge`
+  com ditado="foi Arthur..." casado="Arthur..."), sujava a descrição e matava o
+  vínculo (lançou com `aluno_id null`). `_limparAlunoRotulado` ganhou strip
+  iterativo de lixo verbal (foi/é/e/o/a/do/da/nome/aluno) e o rótulo com
+  dois-pontos ("aluno: Starline") aceita nome de 1 token (ditado deliberado).
+Patch: `_patch-raiz-31ago.cjs`. Dado corrigido: migration `20260831190000`.
+
+## banda-sem-aluno-e-pode-condicional-e2e.cjs  (31/08)
+Caso Ana Paula/CG 14:12-14:26 (evento "Bora Gravar - Julina Rock Fest", bandas
+StarLine R$633 e Pareidolia R$300):
+- **R-c** — "Sol,é de Banda, nome Starline , não tem aluno específico" citando o
+  card levou "Não entendi essa": não existia gramática de SEM ALUNO. Agora
+  `_semAlunoDeclarado` limpa a exigência de aluno, guarda a entidade ("Banda
+  Starline") na descrição e vira categoria venda. O card mostra "Banda Starline —
+  sem aluno específico _(banda/evento)_ ✓". Guarda anti-falso-positivo: "é o
+  adicional de banda do Rafael" NÃO dispara (tem aluno).
+- **R-d** — "pode , mas coloca a categoria como venda" caía em SILÊNCIO (result
+  `nada`, nenhuma resposta) e o "pode" seco de 5 min depois lançava com categoria
+  errada ("outro"). `casarPode` agora extrai a correção de categoria, corta a
+  cláusula e avalia o resto como confirmação; no lançar, a categoria corrigida é
+  aplicada e o preview V3 é **re-registrado** — o validador exige categoria
+  idêntica entre preview e aprovação (`categoria_divergente_v3`), então derrubar
+  `v3PreviewId` e deixar o bloco "completado no pode" re-registrar é o caminho
+  que preserva a invariante. Correção de categoria SEM "pode" também remonta o
+  card (`preview_categoria_corrigida`).
+Regressões travadas: "pode ser" não aprova; "pode" no meio de frase não aprova.
+
+## _patch-v3-fake-ledger.cjs — 🔴 A SUITE ESCREVIA NO LEDGER V3 DE PRODUÇÃO
+Achado da auditoria de 31/08: os testes rodavam com
+`SOL_CAIXA_V3_LEDGER_MODE=production` (para exercitar a fiação V3) sem mockar
+`registrarPreviewV3Fn`/`registrarApprovalV3Fn` — cujo default é a RPC REAL.
+Medido: **499 dos 807 previews de 24-31/08 (62%) eram artefato de teste**
+(`preview_message_id ~ '^MSG\d+$'`, o id do sendFn mockado), com `unidade_id`
+real, mais 13 approvals sintéticos. Fix NA RAIZ (ponto de injeção, não teste a
+teste): `SOL_CAIXA_V3_LEDGER_FAKE=1` troca os dois registradores por fakes em
+memória — fiação V3 100% ativa, banco intacto; teste novo nasce protegido.
+⚠️ Só substitui o DEFAULT: mock explícito do teste (inclusive mock que FALHA,
+gate-regressao caso 2) continua valendo.
+**Rodar a suíte SEMPRE com:**
+```
+SOL_CAIXA_V3_LEDGER_MODE=production SOL_CAIXA_V3_LEDGER_STRICT=0 SOL_CAIXA_V3_LEDGER_FAKE=1 node <teste>
+```
+Prova de estanqueidade em 31/08: contagem do ledger idêntica (958 previews / 86
+approvals) antes e depois da suíte inteira. As linhas sintéticas ficaram no
+ledger (append-only; discriminador documentado) — expurgo é decisão Hugo/Alfredo.
+
+⚠️ Fixture da VPS `v3-ledger-production.test.cjs` usava o nome-mock "Aluno
+Teste" — com o strip de lixo verbal, "Aluno" (rótulo) é removido e sobra 1 token.
+Nome real nunca começa com "Aluno"; o fixture virou "Mariana Teste" (intenção do
+teste — fiação V3 da correção de aluno — preservada).
+
+⚠️ A VPS tem uma suíte LEGADA em `/home/sol/.hermes/profiles/sol/caixa-ingestao/*.test.cjs`
+(34 arquivos, 21 falhas pré-existentes em 31/08 — escritos contra gerações
+antigas do módulo e não mantidos). A suíte canônica é ESTA (`tests/sol-runtime/`),
+espelhada na VPS em `caixa-ingestao/tests-sol-runtime/`. Ao validar patch, medir
+o BASELINE da legada antes de culpar o patch — em 31/08 o delta real era 1
+arquivo (o fixture acima), não 22.
