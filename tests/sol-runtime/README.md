@@ -640,3 +640,36 @@ citada no motivo) e o fio foi ligado:
 ⚠️ Lição: "dar a ferramenta" tem duas metades — a RPC no banco E o fio no
 canal. Ferramenta sem fio é pior que ferramenta nenhuma: a equipe descobre no
 pior momento, com o caixa fechado na cara.
+
+## frase-sobre-aluno-e-guarda-total-e2e.cjs  (31/08 20:18, "Como fala com esse robô")
+🔴 **A 4ª porta do buraco Soraia/Laura — e a varredura que faltava, feita.**
+Rótulo "Aluna Luiza Rodrigues" — nome que NÃO EXISTE (a menina é **Leticia**
+Rodrigues; a consultora errou o nome). A canônica casou Miguel Luís RODRIGUES
+(guarda do runtime rejeitou ✅), mas `sol_caixa_identificar_aluno_novo_v1` fez o
+próprio fuzzy SEM guarda (sim 0.72 ≥ corte 0.62) e devolveu o Miguel por outra
+porta — card com aluno e responsável de outra família.
+- ⚠️ **NÃO é regressão**: o mesmo fluxo funcionou às 17:30 (Théo Benatti, conf 1
+  via experimental). Entrada diferente, mesma porta sem guarda — o buraco existia
+  desde o nascimento da RPC.
+- **Migrations `20260901010000` + complemento**: a guarda `sol_nome_mesma_pessoa_v1`
+  aplicada nas **7 RPCs** que faltavam (canônica, aluno-novo ×3 ramos,
+  resolver/derivar/validar multi, composto, aluno-por-responsável). Sobra SEM
+  guarda só `identificar_por_pagador` — **por design** (família casa por
+  sobrenome; mãe e filho têm primeiros nomes diferentes). É a lição do
+  CLAUDE.md de 27/08 ("corrigir o helper não garante cobertura — varrer os
+  consumidores") que ficou pendente de 29/08.
+- **R-m** — "O aluno está errado" virou ALUNO "está errado" no card: frase SOBRE
+  o aluno (está/tá + errado/incorreto/trocado) entrou na blacklist `_NAO_NOME`.
+- **R-n** — "Aluno é Luiza Rodrigues é responsável financeiro Salomé Cristina
+  Rodrigues" engoliu a frase inteira: o nome agora **corta onde começa o campo
+  seguinte** ("responsável…"), e o responsável **declarado pelo humano é colhido
+  e vence o do cadastro** (log `responsavel_ditado_pelo_humano`).
+- **Fallback UX** — `corrigir_aluno` SEM nome pede o nome ("me diz o certo:
+  *aluno: Nome Completo*") em vez de "Não entendi".
+- **Placar do shadow V4 (+2 vitórias)**: nas duas mensagens da Kailane o
+  roteador acertou onde a gramática errou — `corrigir_aluno` sem nome (conf .99,
+  vs a gramática gravando "está errado" como nome) e `corrigir_aluno` com
+  **"Luiza Rodrigues"** extraído limpo (vs a frase inteira engolida).
+- **Com a guarda, o comportamento para nome inexistente é o certo**: card mantém
+  o rótulo com "não encontrei — confere o nome" — teria exposto o erro de
+  digitação na hora, em vez de entregar outra família.
