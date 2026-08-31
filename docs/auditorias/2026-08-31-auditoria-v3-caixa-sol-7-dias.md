@@ -167,3 +167,54 @@ Deploy: patch `_patch-raiz-31ago.cjs` + `_patch-v3-fake-ledger.cjs`, backups
 `init_erro`, md5 vivo = testado (`b733c2f9ac1d1fb0baeae7485c219d2f`), e o
 primeiro fluxo real pós-deploy (passaporte R$ 400/CG) rodou limpo ponta a ponta
 com vínculo canônico.
+
+
+---
+
+## 5. Adendo (mesma noite): incidente 16:12 e as pendências A3/fallback fechadas
+
+### O incidente que fecha o argumento do §3
+
+O **resumo desta própria auditoria**, colado no grupo FINANCEIRO de CG, virou um
+lançamento: "vale confirmar" casou o termo de saída (que aceitava *vale* como
+verbo), o primeiro `R$` da prosa virou valor e "dinheiro de evento" virou forma →
+card de **Saída R$ 633 dinheiro/despesa**. Em seguida, a resposta do Jhon a uma
+pergunta humana — "Foi de propósito **sim**, Luciano" — aprovou: o token frouxo
+aceitava `sim` em qualquer posição da frase quando a mensagem citava a pendência.
+
+Duas lições, ambas corrigidas:
+- **R-e** prosa/relato não é ditado (`_ehDitadoDeCaixa`) — e o gate precisou de
+  **três** pontos de entrada, não um (saída por texto, comando de movimento,
+  correção de forma). Um único caminho blindado dá falsa sensação de segurança.
+- **R-f** aprovação frouxa exige mensagem curta **e** afirmação que ABRE a
+  mensagem. Dinheiro não se aprova por palavra solta no meio de uma conversa.
+
+⚠️ **O rastro de `audit_log` (A2) provou seu valor em 2 horas**: a despesa falsa
+foi apagada pelo Jhon às 16:15 e o log registra autor (`john@lamusic.com.br`),
+hora e a linha inteira. Antes de hoje, isso teria sumido sem deixar pergunta.
+
+### A3 — reidratação: FECHADA
+
+`reidratarPendencias()` lê do ledger V3 os previews enviados e não consumidos da
+janela, casa o chat pelo `chat_id_hash` e restaura a pendência com o vínculo V3.
+Validado contra produção: 5 previews abertos → 2 pendências corretas em 256 ms
+(dedup por origem, ficando o preview mais recente).
+⚠️ Chamada com **`await`**, não `.then()`: o handler do caixa é *lazy*, então
+`.then()` deixaria a primeira mensagem correr em paralelo com a reidratação — e
+se ela fosse o "pode", o bug continuaria.
+
+### Fallback LLM de diálogo: EM PRODUÇÃO
+
+Arquitetura como proposta no §3: mensagem não entendida **com pendência aberta**
+vai ao classificador de saída restrita; a intenção vira frase canônica da
+gramática existente e re-passa pelo handler. O LLM não escreve, não escolhe
+fatura e **não aprova dinheiro** (`aprovar` ⇒ pede *pode* explícito). Falha em
+qualquer ponto ⇒ o "Não entendi" atual.
+
+Medido com o LLM real (não mock), 6/6 nos casos da semana — inclusive os dois que
+devem dar `nada` (conversa e despedida). Latência 11-22 s ⇒ timeout de 35 s.
+
+**O que isso muda no custo do §3:** a gramática nova continua sendo a solução
+definitiva de cada caso, mas deixa de ser pré-requisito para a equipe ser
+atendida — a construção inédita passa a ser entendida na hora e vira patch depois,
+com calma, em vez de virar lançamento sujo ou "Não entendi" no mesmo dia.
