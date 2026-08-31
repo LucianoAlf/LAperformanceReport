@@ -1,0 +1,1 @@
+atualmente ta muito ruim usar snapshot pra salvar periodo historico, isso gera muita inconsistencia, se um dado tardio for inserido/alterado, o snapshot nao pega. Quero pensar em alguma alternativa a isso, se possivel nao usar mais snapshot, da forma que os periodos passados funcionem corretamente todos via consulta.
