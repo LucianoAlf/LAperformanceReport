@@ -43,6 +43,7 @@ function pesquisa(
     respostaStatus: "sem_resposta",
     enviadoEm: "2026-08-01T15:00:00.000Z",
     primeiraInteracaoEm: null,
+    ultimaSaidaEm: null,
     ...overrides,
   };
 }
@@ -523,4 +524,93 @@ Deno.test("opt-out explícito é conservador e adiamento tem precedência", asyn
     pesquisaId: alvo.id,
     mensagemId: "30000000-0000-4000-8000-000000000001",
   });
+});
+
+// --- Janela de resposta contada do ULTIMO toque (incidente de 31/08/2026) ---
+//
+// O caso que estes testes travam: Heitor, 1o toque em 05/08 10:33, repescagem em
+// 31/08 10:32, resposta da familia em 31/08 10:38 -- 6 minutos depois do 2o toque
+// e 26 dias depois do 1o. Medindo do 1o toque, o motor novo recusava, a mensagem
+// caia no fallback legado e era gravada sem analise; a tela ficava travada.
+
+Deno.test("resposta a repescagem entra: janela conta do ultimo toque", async () => {
+  const repo = new FakeRepository();
+  const alvo = pesquisa({
+    enviadoEm: "2026-08-05T13:33:48.000Z",
+    ultimaSaidaEm: "2026-08-31T13:32:05.000Z",
+  });
+  repo.abertas = [alvo];
+
+  const resolucao = await resolverPesquisa(
+    evento({ recebidoEm: "2026-08-31T13:38:08.000Z" }),
+    repo,
+  );
+
+  assertEquals(resolucao.status, "resolvida");
+  if (resolucao.status === "resolvida") {
+    assertEquals(resolucao.pesquisa.id, alvo.id);
+    assertEquals(resolucao.criterio, "telefone_caixa");
+  }
+});
+
+Deno.test("sem repescagem, a janela continua contando do 1o toque", async () => {
+  const repo = new FakeRepository();
+  // Mesmas datas do caso acima, mas sem 2o toque: 26 dias e fora da janela mesmo.
+  repo.abertas = [pesquisa({ enviadoEm: "2026-08-05T13:33:48.000Z" })];
+
+  const resolucao = await resolverPesquisa(
+    evento({ recebidoEm: "2026-08-31T13:38:08.000Z" }),
+    repo,
+  );
+
+  assertEquals(resolucao.status, "sem_pesquisa");
+});
+
+Deno.test("repescagem nao ressuscita pesquisa parada ha mais de 7 dias dela", async () => {
+  const repo = new FakeRepository();
+  repo.abertas = [pesquisa({
+    enviadoEm: "2026-08-05T13:33:48.000Z",
+    ultimaSaidaEm: "2026-08-10T13:00:00.000Z",
+  })];
+
+  // 21 dias depois da propria repescagem: continua fora.
+  const resolucao = await resolverPesquisa(
+    evento({ recebidoEm: "2026-08-31T13:38:08.000Z" }),
+    repo,
+  );
+
+  assertEquals(resolucao.status, "sem_pesquisa");
+});
+
+Deno.test("mensagem anterior ao ultimo toque nao e adotada como resposta dele", async () => {
+  const repo = new FakeRepository();
+  repo.abertas = [pesquisa({
+    // 1o toque fora da janela; repescagem ainda por vir no instante da mensagem.
+    enviadoEm: "2026-08-01T13:00:00.000Z",
+    ultimaSaidaEm: "2026-08-31T13:32:05.000Z",
+  })];
+
+  const resolucao = await resolverPesquisa(
+    evento({ recebidoEm: "2026-08-20T13:00:00.000Z" }),
+    repo,
+  );
+
+  assertEquals(resolucao.status, "sem_pesquisa");
+});
+
+Deno.test("saida anterior ao envio nao desloca a referencia para tras", async () => {
+  const repo = new FakeRepository();
+  const alvo = pesquisa({
+    enviadoEm: "2026-08-28T13:00:00.000Z",
+    // Cenario de backfill: linha de saida com data anterior ao proprio envio.
+    ultimaSaidaEm: "2026-08-01T13:00:00.000Z",
+  });
+  repo.abertas = [alvo];
+
+  const resolucao = await resolverPesquisa(
+    evento({ recebidoEm: "2026-08-31T13:38:08.000Z" }),
+    repo,
+  );
+
+  assertEquals(resolucao.status, "resolvida");
 });

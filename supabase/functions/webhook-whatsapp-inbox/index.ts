@@ -381,12 +381,33 @@ async function handleRespostaEvasaoLegado(
     // Verificar se a pesquisa ainda está em 'enviado' (não respondida)
     const { data: pesquisa } = await supabase
       .from('pesquisa_evasao')
-      .select('id, status')
+      .select('id, status, resposta_ingestao_versao')
       .eq('id', pesquisaId)
       .eq('status', 'enviado')
       .maybeSingle();
 
     if (!pesquisa) {
+      return { handled: false };
+    }
+
+    // ⚠️ NUNCA gravar por aqui numa pesquisa do motor novo.
+    //
+    // Este caminho faz UPDATE direto em `pesquisa_evasao` e NAO cria analise -- e a
+    // analise e o que a tela de classificacao consome. Uma pesquisa `multipartes_v2`
+    // atendida aqui fica com texto, aparece como "pronta para revisao" e trava: a
+    // operadora clica em registrar desfecho e nada acontece, porque nao ha analise
+    // em que a acao se apoie. Foi exatamente isso em 31/08/2026 (Heitor), quando a
+    // repescagem reabriu a janela de `conversa_estado_whatsapp` e o legado adotou
+    // uma resposta que era do motor novo.
+    //
+    // Recusar aqui deixa a mensagem visivel como orfa -- ruim, mas detectavel --
+    // em vez de virar meia-resposta silenciosa. O silencio foi o que fez o defeito
+    // durar ate alguem reclamar.
+    if (pesquisa.resposta_ingestao_versao === 'multipartes_v2') {
+      console.error(
+        '[evasao-legado] recusando pesquisa multipartes_v2; o motor novo deveria ter resolvido',
+        JSON.stringify({ pesquisa_id: pesquisaId, telefone: phone }),
+      );
       return { handled: false };
     }
 

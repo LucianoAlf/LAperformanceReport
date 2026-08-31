@@ -9,6 +9,7 @@ import {
   listarMensagensComTranscricaoPendente,
   type MensagemDaConversa,
 } from "./contract.ts";
+import { referenciaDaJanela } from "../_shared/pesquisa-evasao-janela.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -102,11 +103,13 @@ serve(async (req: Request) => {
         .limit(1);
       if (saidasError) throw new Error("saidas_indisponiveis");
       const ultimaSaidaEm = saidas?.[0]?.criado_em ?? null;
+      // A escolha da referencia mora em `_shared/pesquisa-evasao-janela.ts`, e e a
+      // MESMA que o webhook usa para reconhecer a resposta. Ate 31/08/2026 a conta
+      // era feita aqui a mao e o webhook tinha a sua -- os dois discordavam, e era
+      // por isso que resposta a repescagem entrava pelo motor legado, sem analise.
       const referenciaEnvio =
-        ultimaSaidaEm && Date.parse(ultimaSaidaEm) >
-            Date.parse(pesquisa.enviado_em)
-          ? ultimaSaidaEm
-          : pesquisa.enviado_em;
+        referenciaDaJanela(pesquisa.enviado_em, ultimaSaidaEm) ??
+          pesquisa.enviado_em;
 
       const analises = analisesResult.data ?? [];
       const rascunhos = analises.filter((item) => item.status === "rascunho");

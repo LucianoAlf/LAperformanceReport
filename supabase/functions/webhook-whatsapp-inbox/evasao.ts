@@ -4,6 +4,10 @@ import {
   classificarSubstantividade,
   type Substantividade,
 } from "../_shared/pesquisa-evasao-substantividade.ts";
+import {
+  dentroDaJanelaDeResposta,
+  referenciaDaJanela,
+} from "../_shared/pesquisa-evasao-janela.ts";
 
 export { classificarSubstantividade };
 export type { Substantividade };
@@ -32,6 +36,12 @@ export interface PesquisaCandidata {
   respostaStatus: string;
   enviadoEm: string;
   primeiraInteracaoEm: string | null;
+  /**
+   * Ultima mensagem NOSSA enviada nesta pesquisa (`direcao='saida'`), quando existe
+   * -- na pratica, a repescagem. E dela que a janela de 7 dias conta; sem isso, toda
+   * resposta a um 2o toque cai fora da janela e vai parar no motor legado.
+   */
+  ultimaSaidaEm: string | null;
 }
 
 export type ResolucaoPesquisa =
@@ -115,7 +125,9 @@ export interface NormalizarEventoContexto {
   recebidoEm?: string;
 }
 
-const JANELA_RESPOSTA_MS = 7 * 24 * 60 * 60 * 1000;
+// JANELA_RESPOSTA_MS saiu daqui: mora em `_shared/pesquisa-evasao-janela.ts`, junto
+// da regra que a usa. Deixar uma copia do numero aqui e como o prazo comecou a
+// divergir entre os dois motores.
 const STATUS_ABERTOS = new Set([
   "sem_resposta",
   "coletando",
@@ -187,10 +199,12 @@ function dentroDaJanela(
   evento: EventoInbound,
 ): boolean {
   if (!STATUS_ABERTOS.has(pesquisa.respostaStatus)) return false;
-  const envio = Date.parse(pesquisa.enviadoEm);
-  const recebimento = Date.parse(evento.recebidoEm);
-  if (!Number.isFinite(envio) || !Number.isFinite(recebimento)) return false;
-  return recebimento >= envio && recebimento - envio <= JANELA_RESPOSTA_MS;
+  // A conta mora em `_shared/pesquisa-evasao-janela.ts` e e a MESMA que a
+  // consolidacao usa. Ver o cabecalho de la para o incidente que exigiu isso.
+  return dentroDaJanelaDeResposta(
+    referenciaDaJanela(pesquisa.enviadoEm, pesquisa.ultimaSaidaEm),
+    evento.recebidoEm,
+  );
 }
 
 export async function resolverPesquisa(
@@ -393,7 +407,54 @@ function mapPesquisa(row: Record<string, any>): PesquisaCandidata {
     respostaStatus: row.resposta_status,
     enviadoEm: row.enviado_em,
     primeiraInteracaoEm: row.primeira_interacao_em,
+    ultimaSaidaEm: null,
   };
+}
+
+/**
+ * Preenche `ultimaSaidaEm` das candidatas com o toque mais recente que saiu.
+ *
+ * ⚠️ Falha aqui NAO derruba a resolucao: sem a ultima saida a janela volta a contar
+ * do 1o toque, que e o comportamento antigo -- pior, porem conhecido. Derrubar
+ * significaria a mensagem nao ser processada de forma alguma, e a assimetria
+ * importa: perder a resposta e irreversivel, contar do 1o toque nao.
+ *
+ * Sao no maximo 3 candidatas (o `limit(3)` de `listarPesquisasAbertas`), entao isso
+ * e uma consulta por mensagem recebida, com `in` sobre chave indexada.
+ */
+async function anexarUltimaSaida(
+  supabase: any,
+  pesquisas: PesquisaCandidata[],
+): Promise<PesquisaCandidata[]> {
+  if (pesquisas.length === 0) return pesquisas;
+  try {
+    const { data, error } = await supabase
+      .from("pesquisa_evasao_mensagens")
+      .select("pesquisa_id,criado_em")
+      .in("pesquisa_id", pesquisas.map((item) => item.id))
+      .eq("direcao", "saida")
+      .order("criado_em", { ascending: false });
+    if (error) throw error;
+    const maisRecentePorPesquisa = new Map<string, string>();
+    for (const linha of data ?? []) {
+      // A consulta ja vem ordenada do mais novo para o mais antigo: a primeira
+      // ocorrencia de cada pesquisa e a que vale.
+      if (!maisRecentePorPesquisa.has(linha.pesquisa_id)) {
+        maisRecentePorPesquisa.set(linha.pesquisa_id, linha.criado_em);
+      }
+    }
+    return pesquisas.map((item) => ({
+      ...item,
+      ultimaSaidaEm: maisRecentePorPesquisa.get(item.id) ?? null,
+    }));
+  } catch (erro) {
+    console.error(
+      "[evasao] falha ao buscar ultima saida das pesquisas",
+      pesquisas.map((item) => item.id).join(","),
+      erro instanceof Error ? erro.message : String(erro),
+    );
+    return pesquisas;
+  }
 }
 
 export function criarRepositorioPesquisaEvasao(
@@ -411,7 +472,9 @@ export function criarRepositorioPesquisaEvasao(
         .limit(1)
         .maybeSingle();
       if (error) throw new Error("falha_resolver_pesquisa_citada");
-      return data ? mapPesquisa(data) : null;
+      if (!data) return null;
+      const [comSaida] = await anexarUltimaSaida(supabase, [mapPesquisa(data)]);
+      return comSaida;
     },
 
     async listarPesquisasAbertas(evento) {
@@ -425,7 +488,7 @@ export function criarRepositorioPesquisaEvasao(
         .order("enviado_em", { ascending: false })
         .limit(3);
       if (error) throw new Error("falha_resolver_pesquisa_telefone_caixa");
-      return (data ?? []).map(mapPesquisa);
+      return await anexarUltimaSaida(supabase, (data ?? []).map(mapPesquisa));
     },
 
     async inserirMensagem(mensagem) {
