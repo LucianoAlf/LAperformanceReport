@@ -153,7 +153,8 @@ export type PesquisaEvasaoFollowupFiltro =
   | 'followup_avisado'
   | 'followup_realizado'
   | 'followup_dispensado'
-  | 'aguardando_resposta';
+  | 'aguardando_resposta'
+  | 'concluida';
 
 export type PesquisaEvasaoFollowupAcao = 'realizado' | 'dispensado';
 export type PesquisaEvasaoFollowupCanal = 'whatsapp' | 'telefone' | 'outro';
