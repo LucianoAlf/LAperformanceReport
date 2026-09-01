@@ -794,16 +794,35 @@ export function AlunosPage() {
 
     if (!error && alunosMesclados.length > 0) {
       const alunoIds = alunosMesclados.map((registro: any) => registro.id).filter(Boolean);
-      const { data: anamnesesLista } = await supabase
-        .from('anamneses')
-        .select('aluno_id, diagnosticos')
-        .in('aluno_id', alunoIds)
-        .eq('status', 'completa')
-        .order('created_at', { ascending: false });
 
-      const diagnosticosPorAluno = new Map<number, string[]>();
+      // A anamnese é da PESSOA: casar por aluno_id deixaria o 2º curso fora do
+      // filtro de diagnóstico. A chave vem da view canônica — remontar o
+      // 'emusys:' aqui criaria uma segunda fonte da mesma regra.
+      const { data: chavesPessoa } = await supabase
+        .from('vw_aluno_pessoa_chave')
+        .select('aluno_id, unidade_id, pessoa_chave')
+        .in('aluno_id', alunoIds);
+
+      const chavePorAluno = new Map<number, string>();
+      const chavesDistintas = new Set<string>();
+      (chavesPessoa || []).forEach((registro: any) => {
+        chavePorAluno.set(registro.aluno_id, `${registro.unidade_id}|${registro.pessoa_chave}`);
+        chavesDistintas.add(registro.pessoa_chave);
+      });
+
+      const { data: anamnesesLista } = chavesDistintas.size
+        ? await supabase
+            .from('anamneses')
+            .select('unidade_id, pessoa_chave, diagnosticos')
+            .in('pessoa_chave', [...chavesDistintas])
+            .eq('status', 'completa')
+            .order('created_at', { ascending: false })
+        : { data: [] as any[] };
+
+      const diagnosticosPorPessoa = new Map<string, string[]>();
       anamnesesLista?.forEach((registro: any) => {
-        if (diagnosticosPorAluno.has(registro.aluno_id)) return;
+        const chave = `${registro.unidade_id}|${registro.pessoa_chave}`;
+        if (diagnosticosPorPessoa.has(chave)) return;   // a mais recente vence
 
         let diagnosticos: string[] = [];
         if (Array.isArray(registro.diagnosticos)) {
@@ -818,7 +837,7 @@ export function AlunosPage() {
           diagnosticos = registro.diagnosticos.split(',').map((item: string) => item.trim()).filter(Boolean);
         }
 
-        diagnosticosPorAluno.set(registro.aluno_id, diagnosticos);
+        diagnosticosPorPessoa.set(chave, diagnosticos);
       });
 
       const turmasMap = new Map(turmasViewData.map((t: any) => [
@@ -850,7 +869,7 @@ export function AlunosPage() {
           tipo_matricula_codigo: a.tipos_matricula?.codigo || null,
           unidade_codigo: a.unidades?.codigo || '',
           forma_pagamento_nome: a.formas_pagamento?.nome || null,
-          anamnese_diagnosticos: diagnosticosPorAluno.get(a.id) || [],
+          anamnese_diagnosticos: diagnosticosPorPessoa.get(chavePorAluno.get(a.id) || '') || [],
           total_alunos_turma: turmaInfo?.total_alunos || 1,
           turma_id: turmaInfo?.id,
           nomes_alunos_turma: turmaInfo?.nomes_alunos || [],

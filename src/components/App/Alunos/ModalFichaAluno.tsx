@@ -267,6 +267,27 @@ interface AnamneseAluno {
   anamnese_respostas_perfil?: AnamneseRespostaPerfil[];
 }
 
+// Em qual matrícula a anamnese foi respondida. A anamnese vale para todos os
+// cursos da pessoa; `e_esta_matricula` distingue a ficha de origem das demais.
+interface AnamneseProcedencia {
+  aluno_id: number;
+  curso_nome: string | null;
+  respondida_em: string;
+  e_esta_matricula: boolean;
+}
+
+interface AnamneseAnterior {
+  id: number;
+  created_at: string;
+  tipo_formulario: string;
+}
+
+interface AnamnesePacote {
+  anamnese: AnamneseAluno | null;
+  procedencia: AnamneseProcedencia | null;
+  anteriores: AnamneseAnterior[];
+}
+
 const TEMPERAMENTO_META: Record<string, { emoji: string; label: string; color: string; soft: string }> = {
   CAZUZA: { emoji: '🔥', label: 'Colérico', color: 'text-red-400', soft: 'bg-red-500/15 border-red-500/30' },
   SLASH: { emoji: '⚡', label: 'Sanguíneo', color: 'text-blue-400', soft: 'bg-blue-500/15 border-blue-500/30' },
@@ -953,6 +974,10 @@ export function ModalFichaAluno({
   // Dados completos do aluno
   const [dadosCompletos, setDadosCompletos] = useState<AlunoCompleto | null>(null);
   const [anamnese, setAnamnese] = useState<AnamneseAluno | null>(null);
+  // A anamnese é da PESSOA, não desta matrícula: `procedencia` diz em qual curso
+  // ela foi respondida, e `anteriores` guarda as que perderam para a mais recente.
+  const [anamneseProcedencia, setAnamneseProcedencia] = useState<AnamneseProcedencia | null>(null);
+  const [anamneseAnteriores, setAnamneseAnteriores] = useState<AnamneseAnterior[]>([]);
   
   // Dados de lookup
   const [canais, setCanais] = useState<{ value: number; label: string }[]>([]);
@@ -1137,14 +1162,11 @@ export function ModalFichaAluno({
           .limit(10),
       ]);
 
-      const { data: anamneseData } = await supabase
-        .from('anamneses')
-        .select('*, anamnese_respostas_perfil(*)')
-        .eq('aluno_id', aluno.id)
-        .eq('status', 'completa')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      // A anamnese é da pessoa: quem resolve isso é a RPC, fonte única também do
+      // link público e do texto de WhatsApp.
+      const { data: anamneseRpc } = await supabase
+        .rpc('get_anamnese_aluno', { p_aluno_id: aluno.id });
+      const pacoteAnamnese = (anamneseRpc || {}) as Partial<AnamnesePacote>;
 
       setMovimentacoes(movRes.data || []);
       setRenovacoes((renRes.data || []).map((m: any) => ({
@@ -1157,7 +1179,9 @@ export function ModalFichaAluno({
           : 0,
       })));
       setAnotacoes(anotRes.data || []);
-      setAnamnese((anamneseData as AnamneseAluno | null) || null);
+      setAnamnese(pacoteAnamnese.anamnese || null);
+      setAnamneseProcedencia(pacoteAnamnese.procedencia || null);
+      setAnamneseAnteriores(pacoteAnamnese.anteriores || []);
 
       // Contato do professor atual (nome + WhatsApp) para o botão "Enviar ao professor" na anamnese
       if (alunoData.professor_atual_id) {
@@ -1580,16 +1604,13 @@ export function ModalFichaAluno({
         toast.success('Anamnese vinculada com sucesso!');
         setModalBuscaAnamnese(false);
         setCandidatosAnamnese([]);
-        // Recarregar anamnese do aluno
-        const { data: anamneseData } = await supabase
-          .from('anamneses')
-          .select('*, anamnese_respostas_perfil(*)')
-          .eq('aluno_id', aluno.id)
-          .eq('status', 'completa')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        setAnamnese((anamneseData as AnamneseAluno | null) || null);
+        // Recarregar pela mesma fonte única da carga inicial
+        const { data: anamneseRpc } = await supabase
+          .rpc('get_anamnese_aluno', { p_aluno_id: aluno.id });
+        const pacote = (anamneseRpc || {}) as Partial<AnamnesePacote>;
+        setAnamnese(pacote.anamnese || null);
+        setAnamneseProcedencia(pacote.procedencia || null);
+        setAnamneseAnteriores(pacote.anteriores || []);
         // Recarregar dados completos do aluno para atualizar temperamento
         carregarDadosCompletos();
       } else {
@@ -1637,7 +1658,12 @@ export function ModalFichaAluno({
 
     const linhas: string[] = [];
     linhas.push(`*Anamnese — ${nome}*`);
-    linhas.push(`_Preenchida em ${formatarDataHora(anamnese.created_at)}${anamnese.entrevistador ? ` por ${anamnese.entrevistador}` : ''}_`);
+    // Procedência entra no texto porque o professor que recebe pode ser o de OUTRO
+    // curso — sem isso, a data sozinha não explica de onde a anamnese veio.
+    const procedencia = anamneseProcedencia && !anamneseProcedencia.e_esta_matricula && anamneseProcedencia.curso_nome
+      ? `, na matrícula de ${anamneseProcedencia.curso_nome}`
+      : '';
+    linhas.push(`_Preenchida em ${formatarDataHora(anamnese.created_at)}${procedencia}${anamnese.entrevistador ? ` por ${anamnese.entrevistador}` : ''}_`);
     linhas.push('');
     linhas.push(`*🧠 Perfil de Temperamento*`);
     linhas.push(`${labelPrimario} + ${labelSecundario}${codinome}`);
@@ -2363,6 +2389,19 @@ export function ModalFichaAluno({
             <TabsContent value="anamnese" className="space-y-4 mt-0">
               {anamnese ? (
                 <>
+                  {anamneseProcedencia && !anamneseProcedencia.e_esta_matricula && (
+                    <div className="rounded-xl border border-sky-800/60 bg-sky-950/40 p-3 text-sm text-sky-200">
+                      <span className="font-medium">Anamnese da pessoa.</span>{' '}
+                      Respondida em {formatarDataHora(anamneseProcedencia.respondida_em)}
+                      {anamneseProcedencia.curso_nome ? `, na matrícula de ${anamneseProcedencia.curso_nome}` : ''}.
+                      {' '}Vale para todos os cursos do aluno.
+                    </div>
+                  )}
+                  {anamneseAnteriores.length > 0 && (
+                    <p className="text-xs text-slate-400">
+                      Há {anamneseAnteriores.length} anamnese(s) anterior(es) desta pessoa — a exibida é a mais recente.
+                    </p>
+                  )}
                   <div className={`rounded-xl border p-4 ${codinomeMeta?.soft || 'bg-slate-800/50 border-slate-700'}`}>
                     <div className="flex items-start justify-between gap-4">
                       <div>
