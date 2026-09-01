@@ -673,3 +673,23 @@ porta — card com aluno e responsável de outra família.
 - **Com a guarda, o comportamento para nome inexistente é o certo**: card mantém
   o rótulo com "não encontrei — confere o nome" — teria exposto o erro de
   digitação na hora, em vez de entregar outra família.
+
+## multi-com-desconto-negociado-e2e.cjs  (01/09, caso Jhon/CG 17:09)
+🔴 **Multi-aluno com desconto negociado ficava em loop eterno.** O Jhon mandou a
+divisão EXATAMENTE no formato pedido ("Nome — R$ valor") e a Sol repetiu "não
+consegui confirmar as faturas oficiais": o resolver exigia que CADA item batesse
+no centavo com fatura canônica — valor negociado (desconto autorizado por
+gestor) não bate nunca. Inconsistência-raiz: no fluxo de UM aluno a mesma
+situação é aviso + lançamento sem vínculo; no multi era bloqueio.
+- Banco (migration `20260901180000`): item com `declarado_pelo_humano` cujo
+  valor não bate com fatura entra SEM vínculo (aluno vinculado, fatura null — o
+  INSERT do lote já tolerava); validador de snapshot pula a revalidação desses
+  itens. Soma × total obrigatória; divisão DERIVADA continua fail-closed.
+  Provado com o caso real: Davi 1.290 sem vínculo + Thuanny 432 casando a
+  Parcela 08/2026 paga no Emusys no mesmo dia via Pix.
+- Runtime: a flag só é setada quando o valor está LITERALMENTE no texto humano
+  (`textoFonte`) — o LLM não "declara" por conta. Card avisa item a item e na
+  seção FATURA ("desconto negociado"). "pode" continua obrigatório.
+- Placar shadow V4: o roteador classificou `lancamento_por_texto` (gap — mapa
+  ganhou `lancamento_multi_aluno`) e teve 2 timeouts de 45s nas mensagens
+  longas: a latência via CLI é bloqueante do flip, já no design doc.
