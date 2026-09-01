@@ -465,17 +465,30 @@ Esperado: retorno `0` (já está sincronizado pelo recálculo) — prova de idem
 
 - [ ] **Step 8: Provar que matrícula nova herda na hora (caso 2 do spec)**
 
+⚠️ **Não usar `RETURNING` para ler o efeito, e não confiar em `begin/rollback` pelo MCP.** `RETURNING` devolve a linha como foi inserida, **antes** de o trigger `AFTER` alterá-la — na primeira tentativa isso devolveu `flag=f` e pareceu bug no código, quando o defeito era a prova. Reler a linha depois do INSERT, e forçar o rollback por exceção, para que a matrícula de teste não possa sobreviver em produção:
+
 ```sql
-begin;
--- clona uma matricula de pessoa que ja tem anamnese, simulando curso novo
-insert into alunos (nome, unidade_id, emusys_student_id, status, classificacao, curso_id, data_matricula)
-select a.nome, a.unidade_id, a.emusys_student_id, 'ativo', a.classificacao, a.curso_id, current_date
-  from alunos a where a.id = 886
-returning id, anamnese_preenchida;
-rollback;
+do $$
+declare
+  v_id integer;
+  v_flag boolean;
+  v_codinome text;
+begin
+  insert into alunos (nome, unidade_id, emusys_student_id, status, classificacao, curso_id, data_matricula)
+  select a.nome, a.unidade_id, a.emusys_student_id, 'ativo', a.classificacao, a.curso_id, current_date
+    from alunos a where a.id = 886
+  returning id into v_id;
+
+  select anamnese_preenchida, temperamento_codinome into v_flag, v_codinome
+    from alunos where id = v_id;
+
+  -- A excecao ABORTA a transacao: a linha nao sobrevive, e o resultado da prova
+  -- viaja na mensagem de erro.
+  raise exception 'PROVA_HERANCA id=% flag=% codinome=% (esperado true)', v_id, v_flag, v_codinome;
+end $$;
 ```
 
-Esperado: a linha nova volta com `anamnese_preenchida = true` **no próprio RETURNING** — o gatilho 2 rodou no INSERT. Se voltar `false` ou `null`, o trigger não está pegando a anamnese da pessoa (provável `pessoa_chave` nula na anamnese de origem).
+Esperado: `flag=t` e o codinome do temperamento preenchido. Depois, confirmar que a linha não sobreviveu: `select count(*) from alunos where id = <id da mensagem>` deve dar **0**.
 
 - [ ] **Step 9: Commit**
 
