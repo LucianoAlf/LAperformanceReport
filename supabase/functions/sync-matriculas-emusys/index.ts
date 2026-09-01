@@ -850,12 +850,26 @@ const TIPOS_ATRIBUTO_POR_ALUNO = new Set([
   'instagram_divergente',
   'contato_divergente',
   'responsavel_divergente',
-  'anamnese_pendente',
   'contrato_assinatura_pendente',
   'data_nascimento_divergente',
 ]);
 
+// A anamnese é da PESSOA (LAPE-19), não da matrícula: cobrar uma vez por curso
+// seria pedir o mesmo formulário N vezes para quem já respondeu.
+const TIPOS_ATRIBUTO_POR_PESSOA = new Set([
+  'anamnese_pendente',
+]);
+
 function chaveAtributo(row: any): string {
+  if (TIPOS_ATRIBUTO_POR_PESSOA.has(row.tipo_divergencia)) {
+    // Identidade é o par (unidade, id do Emusys): o mesmo emusys_student_id
+    // aparece em unidades diferentes com nomes diferentes (91 casos medidos),
+    // então a unidade precisa entrar na chave. Sem id do Emusys não dá para
+    // afirmar que duas linhas são a mesma pessoa — cai no comportamento antigo.
+    const sid = String(row.emusys_student_id ?? '').trim();
+    const pessoa = sid ? `${row.unidade_id ?? ''}|emusys:${sid}` : `aluno:${row.aluno_id ?? -1}`;
+    return `${pessoa}|pessoa|${row.tipo_divergencia}|${row.campo}`;
+  }
   if (TIPOS_ATRIBUTO_POR_ALUNO.has(row.tipo_divergencia)) {
     return `${row.aluno_id ?? -1}|aluno|${row.tipo_divergencia}|${row.campo}`;
   }
