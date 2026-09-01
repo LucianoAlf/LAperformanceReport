@@ -717,3 +717,22 @@ ignorada. Um "pode" ali sumiria com R$ 432.
   do Jhon — o roteador acertou onde o detector-gramática errou. Placar
   acumulado do roteador em incidentes reais: **4 acertos × 0 erros** (2 da
   Kailane + 2 do Jhon), 1 empate-gap (reabertura), 2 timeouts (latência).
+
+## correcao-troca-aluno-limpa-e2e.cjs  (01/09 17:53, ainda o caso Jhon)
+🔴 **Trocar o aluno na correção mantinha a FATURA do aluno anterior.** "Sol,
+falta o valor de R$432,00 referente a aluna Thyfany De Souza" trocou aluno
+(Davi→Thyfany) e valor (1.290→432, a colheita R-k funcionou) — mas o card saiu
+com o **composto de 4 parcelas do Davi** e o responsável dele grudados:
+recebimento de um, fatura de outro. Raiz: `composto || alvoP.composto`
+ressuscitava enriquecimento do aluno trocado quando o novo não tinha.
+- **N1** — aluno MUDOU (`!_mesmaPessoa(antes, depois)`) ⇒ composto, canônica,
+  parcela e responsável do anterior **morrem juntos**; só entra o que foi
+  recomputado para a pessoa nova. Mesma pessoa continua herdando (regressão
+  travada).
+- **N2** — "calma ai"/"pera"/"espera" entram na lista de conversa-sem-comando
+  (o "calma ai" do Luciano levou a parede "Entendi a divisão, mas..." do loop
+  multi). Extensão de lista existente, não gramática nova.
+- **Shadow**: 3º timeout de 45s na mensagem da correção (47,6s) — reforça a
+  latência como bloqueante do flip. Nota: os prints das 17:51-17:53 são
+  ANTERIORES ao deploy de F1-F3 (18:15) — o card de 1.290 não se repete; este
+  teste cobre o defeito NOVO que aqueles prints revelaram.
