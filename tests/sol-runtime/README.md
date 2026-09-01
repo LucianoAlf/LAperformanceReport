@@ -693,3 +693,27 @@ situação é aviso + lançamento sem vínculo; no multi era bloqueio.
 - Placar shadow V4: o roteador classificou `lancamento_por_texto` (gap — mapa
   ganhou `lancamento_multi_aluno`) e teve 2 timeouts de 45s nas mensagens
   longas: a latência via CLI é bloqueante do flip, já no design doc.
+
+## multi-formato-ensinado-e2e.cjs  (01/09 17:51, o reenvio do Jhon com a divisão)
+🔴 **O detector de multi não reconhecia o formato que a PRÓPRIA SOL ensina.**
+O Jhon mandou a legenda exatamente como ela pede ("Davi Guilherme - R$ 1.290,00
+/ Thuanny De Souza - R$ 432,00 / LA CG - R$1.722,00") e o fluxo caiu no SINGLE:
+pegou o primeiro valor (1.290), o composto fechou 4 parcelas do Davi e o card
+disse "soma confere com o comprovante" — com o PIX valendo 1.722 e a Thuanny
+ignorada. Um "pode" ali sumiria com R$ 432.
+- **F1** — detector ganha o sinal "2+ linhas Nome — R$ valor" (o formato
+  ensinado); a linha da unidade ("LA CG - R$...") não conta como pessoa
+  (filtro `_UNIDADE_TAG`). ⚠️ Lição: **toda vez que a Sol ENSINA um formato, o
+  parser tem que reconhecê-lo em TODOS os pontos de entrada** — ela ensinava no
+  texto de revisão e só entendia como correção de pendência, não como legenda.
+- **F2** — aviso de pagamento parcial: valor MAIOR na própria legenda que o do
+  card → "⚠️ A mensagem cita R$X — este card cobre só R$Y". Nunca mais
+  "confere" cobrindo um pedaço.
+- **F3** — o TOTAL do multi é o do COMPROVANTE (max entre valor, maior da
+  legenda e OCR), não o primeiro R$ da legenda — com a divisão na legenda, o
+  primeiro valor é a PARTE do primeiro aluno e a soma nunca fechava. Se a
+  escolha do total estiver errada, a soma não fecha e o fail-closed pergunta.
+- **Placar shadow V4**: `lancamento_multi_aluno` conf 0.99 nas DUAS tentativas
+  do Jhon — o roteador acertou onde o detector-gramática errou. Placar
+  acumulado do roteador em incidentes reais: **4 acertos × 0 erros** (2 da
+  Kailane + 2 do Jhon), 1 empate-gap (reabertura), 2 timeouts (latência).
