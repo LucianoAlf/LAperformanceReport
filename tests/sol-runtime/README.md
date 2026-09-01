@@ -736,3 +736,44 @@ ressuscitava enriquecimento do aluno trocado quando o novo não tinha.
   latência como bloqueante do flip. Nota: os prints das 17:51-17:53 são
   ANTERIORES ao deploy de F1-F3 (18:15) — o card de 1.290 não se repete; este
   teste cobre o defeito NOVO que aqueles prints revelaram.
+
+
+## multi-deterministico-e-comentario-e2e.cjs  (01/09 18:28-18:31, o replay do Jhon)
+🔴 **A divisão COMPLETA no formato ensinado caiu na parede — e o lote aprovado
+gravou 1 de 2 itens.** Dois defeitos independentes no mesmo replay:
+- **D1 (runtime)** — a legenda tinha "Davi - R$ 1.290 / Thuanny - R$ 432 /
+  LA CG - R$1.722" e mesmo assim veio "Manda cada aluno com seu valor": o
+  `interpretarMultiAluno` (LLM, timeout 30s) estourou o tempo e o intent nasceu
+  `intencao_ausente`. **Formato que a Sol ensina é protocolo, não conversa**:
+  `extrairItensNomeValor()` parseia as linhas deterministicamente (linha da
+  unidade = TOTAL declarado) nos DOIS call sites (mídia e completação); a LLM
+  só entra em texto livre. De brinde: `_valorNoTextoHumano` conferia contra
+  texto COM OCR (número só do recibo podia virar "declarado") — agora confere
+  contra o texto humano; e a revisão manual guarda total/forma/categoria
+  conhecidos (sem isso a completação determinística nascia sem categoria).
+- **D2+D3 (runtime)** — o comentário "ai Jhon ta certo esse" (Luciano falando
+  COM o Jhon) virou "nome de aluno" e mutilou o card do lote. Pendência multi
+  (lote/manual-review) saiu do alvo do nome-tardio (tem `.itens`, não "um
+  aluno"); gate de tokens no nome LIVRE (`ta/certo/esse/ai...` — nenhum nome de
+  pessoa carrega isso; rótulo explícito "aluno: X" segue passando); "um
+  instante" entrou na família de conversa.
+- **D4 + migrations (banco)** — 🔴 o "pode" das 18:31 aprovou R$ 1.722 e o
+  banco gravou R$ 432: a migration 20260901180000 fazia o item declarado dar
+  `continue` no validador de snapshot SEM apendar no array devolvido — e é
+  sobre esse array que a RPC do lote insere. Soma fechava, `ok:true`, loop só
+  via a Thuanny, e a mensagem ainda dizia "nenhum item foi lançado
+  parcialmente". Fix em 3 camadas (20260901231000): item declarado ENTRA no
+  snapshot (com aluno resolvido + guarda de primeiro nome); RPC do lote ganhou
+  invariante dura (itens gravados = payload E soma = total, senão RAISE —
+  rollback, parcial impossível por construção); runtime confere o retorno da
+  RPC (`lote_multi_incompleto` + alerta). Reparo do R$ 1.290 do Davi:
+  20260901231500 (mesma autorização do pode, caixa ainda aberto).
+  **Lição: o teste de R-q mockou `lancarLoteFn` e validou o payload do runtime
+  — a costura runtime→snapshot→loop nunca rodou de verdade. Toda feature que
+  atravessa a fronteira runtime/banco precisa de um teste que chame a cadeia
+  real ou de invariante no destino.**
+- **Shadow (combinado)**: mídia 18:27 → `lancamento_multi_aluno` conf .99
+  (5ª vitória); "Um instante" → `conversa` .99 (certo — o legado é que
+  re-disparou a releitura por acidente); "pode" → `nada` .9 (**1ª derrota** —
+  irrelevante pro flip: aprovação nunca virá do LLM); "ai Jhon ta certo esse"
+  → **4º timeout de 45s** (47,8s). Latência segue o bloqueante nº 1 do flip.

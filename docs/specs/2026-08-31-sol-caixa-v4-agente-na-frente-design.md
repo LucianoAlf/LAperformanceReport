@@ -119,3 +119,23 @@ Resolver ANTES do flip; a F1 não depende disso.
   `SOL_CAIXA_V4_SHADOW=0` (determinística).
 - Ledger V3 + auditorias + reidratação: inalterados.
 - Rollback do flip = um env var (roteador volta a ser sombra).
+
+## Placar do shadow (atualizado 01/09 ~23h)
+
+Roteador vs legado nos casos reais (log `roteador_v4_shadow`):
+
+- **6 acertos**: "O aluno está errado"→corrigir_aluno sem nome (.99); "Aluno é
+  Luiza Rodrigues é responsável..."→nome limpo; 2× multi do Jhon (17:09/17:51)
+  →lancamento_multi_aluno (.99); mídia 18:27→lancamento_multi_aluno (.99, com
+  valor 1722 e competência 08/2026 extraídos); "Um instante"→conversa (.99 —
+  correto; o legado re-disparou a releitura da legenda por acidente).
+- **1 derrota**: "pode" (18:31)→nada (.9). Irrelevante para o flip: `aprovar`
+  NUNCA virá do LLM por invariante — mas vai registrado.
+- **4 timeouts de 45s** (11-47,6s de latência via hermes_cli). O 4º foi na
+  correção da Thyfany 17:53 e o replay das 18:28 mostrou o mesmo problema DENTRO
+  do legado: o `interpretarMultiAluno` (30s) estourou e derrubou a divisão
+  completa na parede fail-closed. **Latência não é só bloqueante do flip — já
+  custa produção hoje.** Mitigação aplicada em 01/09: o formato ensinado
+  ("Nome — R$ valor") virou parse determinístico e saiu do caminho da LLM
+  (PR do multi-determinístico); o roteador continua precisando do pool
+  `opencode-go`/endpoint persistente antes do flip.
