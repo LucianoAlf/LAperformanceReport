@@ -91,3 +91,18 @@ test('placar tem RLS ligada, acesso revogado por padrao e leitura restrita a adm
     'a policy de leitura precisa restringir a is_admin()',
   );
 });
+
+const cron = path.join(migracoes, '20260902122500_cron_fechamento_dia1.sql');
+
+test('o cron nasce desligado', () => {
+  const sql = fs.readFileSync(cron, 'utf8');
+  assert.match(sql, /active\s*=>\s*false/u,
+    'cron de escrita mensal nao pode nascer ligado antes do ensaio');
+  assert.match(sql, /'0 12 1 \* \*'/u, 'schedule deve ser 12:00 UTC = 09:00 BRT do dia 1o');
+});
+
+test('desativa o cron antigo das 22h em vez de deletar', () => {
+  const sql = fs.readFileSync(cron, 'utf8');
+  assert.match(sql, /fechamento-mensal-automatico/u);
+  assert.doesNotMatch(sql, /cron\.unschedule/u, 'desativar, nao deletar — rollback de uma linha');
+});
