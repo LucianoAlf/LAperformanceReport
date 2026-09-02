@@ -155,3 +155,12 @@ verify_jwt = false
 # Chamada interna (worker/manual). Autentica no codigo por x-sync-token
 # validado NO BANCO; o gateway nao pode exigir JWT que o cron nao tem.
 verify_jwt = false
+
+[functions.enviar-agradecimento-evasao]
+# Chamada interna: `processar-conversa-evasao` invoca com bearer service_role, e
+# o teste manual usa x-sync-token validado NO BANCO. O gateway nao pode exigir
+# JWT que o caminho de token nao tem -- mesmo desenho do classificador e do
+# worker da repescagem. A autenticacao real acontece no codigo, antes de ler o
+# body. ⚠️ Deploy pelo MCP reseta este flag para `true` e derruba a chamada por
+# token em 401 silencioso: conferir depois de cada deploy.
+verify_jwt = false

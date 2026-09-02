@@ -66,6 +66,8 @@ Levantadas em 02/09/2026 lendo o código de cada uma (`supabase/functions/<nome>
 | `classificar-resposta-evasao` | classificador semântico das respostas |
 | `processar-conversa-evasao` | processa a conversa (`pesquisa_evasao_analises`, `_mensagens`, `_processamento`) |
 | `transcrever-mensagem-evasao` | transcreve áudio da resposta (`pesquisa_evasao_transcricoes`) |
+| `enviar-agradecimento-evasao` | agradece quem respondeu. Única *write action* da cadeia: 4 guardas (kill switch `auto_agradecimento_evasao`, teto 3/dia, janela de 6h desde o fechamento da análise, idempotência por `automacao_log.idempotency_key` reservada **antes** do envio). Lê o veredito que o classificador gravou — não o recalcula — e não confia no chamador. Log de enviados **e** barrados no tópico Logs do Lia Core (thread 347). Nasce desligada. |
+| `processar-fila-repescagem-evasao` | worker do 2º toque (repescagem), claim atômico por `FOR UPDATE SKIP LOCKED` |
 
 ### WhatsApp / Caixa de entrada (UAZAPI)
 | Edge | O que faz |

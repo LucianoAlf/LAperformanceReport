@@ -254,6 +254,41 @@ serve(async (req: Request) => {
               erro: erro instanceof Error ? erro.message : "desconhecido",
             });
           }
+
+          // Agradecimento -- DEPOIS da classificacao, nunca antes.
+          //
+          // A edge de agradecimento le o veredito que o classificador acabou de
+          // gravar em `automacao_log`; invocar as duas em paralelo faria a
+          // segunda ler "sem classificacao" e recusar por fail-closed. Como o
+          // `invoke` acima e aguardado, quando chegamos aqui o log ja existe.
+          //
+          // ⚠️ Nao passamos nenhuma decisao adiante de proposito: a edge le o
+          // kill switch, o veredito, a idade da analise e o teto do dia por
+          // conta propria. Um bug aqui nao consegue induzir envio.
+          //
+          // Fire-and-forget como o classificador: o agradecimento e um extra,
+          // e falhar nele nunca pode derrubar a consolidacao -- a resposta do
+          // ex-aluno ja esta registrada, que e o que de fato importa.
+          try {
+            const { error: erroAgradecimento } = await supabase.functions.invoke(
+              "enviar-agradecimento-evasao",
+              {
+                body: { pesquisa_id: pesquisaId, analise_versao: analise.versao },
+                headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
+              },
+            );
+            if (erroAgradecimento) {
+              console.error("processar-conversa-evasao: agradecimento falhou", {
+                pesquisaId,
+                erro: erroAgradecimento.message,
+              });
+            }
+          } catch (erro) {
+            console.error("processar-conversa-evasao: agradecimento indisponivel", {
+              pesquisaId,
+              erro: erro instanceof Error ? erro.message : "desconhecido",
+            });
+          }
         }
 
         if (analise.versao === ultimaVersao) {
