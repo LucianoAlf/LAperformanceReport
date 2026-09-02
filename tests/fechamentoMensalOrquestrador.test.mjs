@@ -73,6 +73,25 @@ test('revoga execute de anon nominalmente', () => {
   );
 });
 
+test('guarda de acesso: fail-closed mesmo com auth.role() NULL, e sinaliza ACESSO_NEGADO', () => {
+  // O schema public concede EXECUTE a `authenticated` por ALTER DEFAULT
+  // PRIVILEGES; o revoke acima so alcanca anon. Para authenticated, esta
+  // guarda dentro da funcao e a UNICA protecao.
+  const sql = fs.readFileSync(orquestrador, 'utf8');
+  const funcao = sql.slice(sql.indexOf('create or replace function'));
+  assert.match(
+    funcao,
+    /if\s+coalesce\s*\(\s*auth\.role\(\)\s*,\s*''\s*\)\s*<>\s*'service_role'/isu,
+    'sem coalesce, auth.role() NULL faz NULL <> \'service_role\' avaliar NULL — '
+      + 'o if nao dispara e a guarda vira fail-open',
+  );
+  assert.match(
+    funcao,
+    /raise\s+exception\s+'ACESSO_NEGADO_FECHAMENTO_DIA1'/isu,
+    'a guarda precisa recusar com ACESSO_NEGADO_FECHAMENTO_DIA1',
+  );
+});
+
 test('placar tem RLS ligada, acesso revogado por padrao e leitura restrita a admin', () => {
   const sql = fs.readFileSync(tabela, 'utf8');
   assert.match(
@@ -102,17 +121,43 @@ test('o cron nasce desligado', () => {
   // ligado). Recorta so o primeiro bloco "do $$ ... end; $$;", que e o
   // bloco de criacao do cron novo (mesmo padrao do teste "cada unidade
   // roda em bloco protegido" acima, que recorta o laco por causa dos dois
-  // "exception when others").
+  // "exception when others"). O "active => false" mora agora DENTRO do
+  // "if v_jobid is null then ... end if;" (so desliga na criacao, para
+  // reaplicar a migration nao desligar um cron ja ligado por alguem) --
+  // ainda assim fica dentro deste mesmo recorte, porque "end if;" nao
+  // casa com o literal "end;" que o regex procura.
   const match = sql.match(/do\s+\$\$[\s\S]*?end;\s*\$\$;/u);
   assert.ok(match, 'bloco "do $$ ... end; $$;" do cron novo nao encontrado');
   const blocoCronNovo = match[0];
   assert.match(blocoCronNovo, /active\s*=>\s*false/u,
     'cron de escrita mensal nao pode nascer ligado antes do ensaio');
-  assert.match(sql, /'0 12 1 \* \*'/u, 'schedule deve ser 12:00 UTC = 09:00 BRT do dia 1o');
+  assert.match(sql, /'15 12 1 \* \*'/u, 'schedule deve ser 12:15 UTC = 09:15 BRT do dia 1o (margem para o sync de faturas de :07)');
 });
 
 test('desativa o cron antigo das 22h em vez de deletar', () => {
   const sql = fs.readFileSync(cron, 'utf8');
   assert.match(sql, /fechamento-mensal-automatico/u);
   assert.doesNotMatch(sql, /cron\.unschedule/u, 'desativar, nao deletar — rollback de uma linha');
+});
+
+test('so desliga o cron novo no ramo de CRIACAO — reaplicar a migration nao pode desligar um cron ja ligado', () => {
+  const sql = fs.readFileSync(cron, 'utf8');
+  const match = sql.match(/do\s+\$\$[\s\S]*?end;\s*\$\$;/u);
+  assert.ok(match, 'bloco "do $$ ... end; $$;" do cron novo nao encontrado');
+  const blocoCronNovo = match[0];
+
+  const posIfCriacao = blocoCronNovo.search(/if\s+v_jobid\s+is\s+null\s+then/iu);
+  const posAlterJob = blocoCronNovo.search(/perform\s+cron\.alter_job\s*\(\s*v_jobid\s*,\s*active\s*=>\s*false\s*\)/iu);
+  const posEndIf = blocoCronNovo.search(/end\s+if\s*;/iu);
+
+  assert.ok(posIfCriacao > -1, '"if v_jobid is null then" (ramo de criacao) nao encontrado');
+  assert.ok(posAlterJob > -1, 'chamada a cron.alter_job(v_jobid, active => false) nao encontrada');
+  assert.ok(posEndIf > -1, '"end if;" do ramo de criacao nao encontrado');
+
+  assert.ok(
+    posIfCriacao < posAlterJob && posAlterJob < posEndIf,
+    'a chamada que desliga o cron precisa estar DENTRO do "if v_jobid is null then ... end if;" '
+      + '(so na criacao) — fora dele, um replay da migration desligaria em silencio um cron que '
+      + 'ja foi ligado por alguem',
+  );
 });

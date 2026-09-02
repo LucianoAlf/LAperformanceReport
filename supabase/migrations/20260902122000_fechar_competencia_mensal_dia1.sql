@@ -35,13 +35,18 @@ declare
   v_unidade record;
   v_financeiro jsonb;
   v_bloco jsonb;
+  v_passo0_resultado jsonb;
   v_detalhes jsonb := '[]'::jsonb;
   v_ok integer := 0;
   v_erro integer := 0;
   v_passo0_ok boolean := true;
   v_motivo text;
 begin
-  if auth.role() <> 'service_role'
+  -- coalesce(...): auth.role() volta NULL fora de sessao PostgREST/JWT (ex.:
+  -- psql direto), e NULL <> 'service_role' avalia para NULL -- o if inteiro
+  -- nao dispara e a guarda vira fail-open. Mesmo padrao de
+  -- get_financeiro_faturas_emusys neste banco.
+  if coalesce(auth.role(), '') <> 'service_role'
      and session_user not in ('postgres', 'supabase_admin') then
     raise exception 'ACESSO_NEGADO_FECHAMENTO_DIA1';
   end if;
@@ -60,8 +65,35 @@ begin
   -- Passo 0: captura dos 7 dominios. Idempotente (responde ja_fechado).
   -- Falha aqui e' etapa, nao unidade: nao entra em v_erro, mas zera
   -- v_passo0_ok para reprovar a execucao no retorno final.
+  --
+  -- fechar_competencia_mensal_automatico() NAO lanca excecao nos dois
+  -- desfechos no-exception que nao sao sucesso de verdade:
+  --   ignorado=true    -- hoje nao e dia 1o BRT (rerun manual no dia 2,
+  --                        cenario provavel: o alarme e visto no dia
+  --                        seguinte). Sem tratar isto aqui, as unidades
+  --                        falhavam depois com BLOCO_FINANCEIRO_NAO_GARANTIDO:
+  --                        snapshot_ausente -- mensagem que aponta para o
+  --                        lugar errado.
+  --   ja_fechado=true  -- ja existe snapshot aprovado/fechado na competencia.
+  --                        E sucesso genuino, so precisa ficar visivel.
+  -- Por isso o retorno e sempre capturado em v_passo0_resultado e sempre
+  -- gravado em v_detalhes -- antes so acontecia no caminho de excecao.
   begin
-    perform public.fechar_competencia_mensal_automatico();
+    v_passo0_resultado := public.fechar_competencia_mensal_automatico();
+
+    if coalesce((v_passo0_resultado->>'ignorado')::boolean, false) then
+      v_passo0_ok := false;
+      v_detalhes := v_detalhes || jsonb_build_array(jsonb_build_object(
+        'etapa', 'captura_7_dominios', 'ok', false,
+        'erro', coalesce(v_passo0_resultado->>'motivo', 'passo 0 ignorado'),
+        'resultado', v_passo0_resultado
+      ));
+    else
+      v_detalhes := v_detalhes || jsonb_build_array(jsonb_build_object(
+        'etapa', 'captura_7_dominios', 'ok', true,
+        'resultado', v_passo0_resultado
+      ));
+    end if;
   exception when others then
     v_passo0_ok := false;
     v_detalhes := v_detalhes || jsonb_build_array(jsonb_build_object(

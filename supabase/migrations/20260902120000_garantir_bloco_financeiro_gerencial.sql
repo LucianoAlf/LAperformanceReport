@@ -32,7 +32,11 @@ declare
   v_novo_id uuid;
   v_versao integer;
 begin
-  if auth.role() <> 'service_role'
+  -- coalesce(...): auth.role() volta NULL fora de sessao PostgREST/JWT (ex.:
+  -- psql direto), e NULL <> 'service_role' avalia para NULL -- o if inteiro
+  -- nao dispara e a guarda vira fail-open. Mesmo padrao de
+  -- get_financeiro_faturas_emusys neste banco.
+  if coalesce(auth.role(), '') <> 'service_role'
      and session_user not in ('postgres', 'supabase_admin') then
     raise exception 'ACESSO_NEGADO_BLOCO_FINANCEIRO_GERENCIAL: ano=%, mes=%, unidade_id=%',
       p_ano, p_mes, p_unidade_id;

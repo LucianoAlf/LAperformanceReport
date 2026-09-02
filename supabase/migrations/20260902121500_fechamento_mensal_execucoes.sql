@@ -25,6 +25,12 @@ alter table public.fechamento_mensal_execucoes enable row level security;
 revoke all on table public.fechamento_mensal_execucoes from public, anon, authenticated;
 grant select, insert, update on table public.fechamento_mensal_execucoes to service_role;
 
+-- Sem este grant a policy abaixo e letra morta: RLS so restringe quem ja
+-- TEM privilegio de SELECT na tabela, e o revoke acima zerou esse privilegio
+-- para authenticated. O admin levava "permission denied for table" mesmo
+-- passando pela USING (is_admin()).
+grant select on table public.fechamento_mensal_execucoes to authenticated;
+
 create policy fechamento_mensal_execucoes_leitura_admin
   on public.fechamento_mensal_execucoes
   for select

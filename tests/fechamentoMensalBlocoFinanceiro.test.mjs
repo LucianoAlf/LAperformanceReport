@@ -73,6 +73,27 @@ test('nunca sobrescreve bloco ja existente', () => {
   assert.match(sql, /ja_presente/u);
 });
 
+test('guarda de acesso: fail-closed mesmo com auth.role() NULL, e sinaliza ACESSO_NEGADO', () => {
+  // O schema public concede EXECUTE a `anon` E a `authenticated` via
+  // ALTER DEFAULT PRIVILEGES. O revoke nominal (teste acima) tira o anon;
+  // para authenticated a UNICA protecao e esta guarda dentro da funcao.
+  // Recorta so o corpo da funcao (apos o "create or replace function"),
+  // para nao aceitar coalesce/ACESSO_NEGADO vindos de comentario de cabecalho.
+  const corpo = fs.readFileSync(migracao, 'utf8');
+  const funcao = corpo.slice(corpo.indexOf('create or replace function'));
+  assert.match(
+    funcao,
+    /if\s+coalesce\s*\(\s*auth\.role\(\)\s*,\s*''\s*\)\s*<>\s*'service_role'/isu,
+    'auth.role() sem coalesce volta NULL fora de sessao PostgREST/JWT — '
+      + 'NULL <> \'service_role\' e NULL, o if nao dispara e a guarda vira fail-open',
+  );
+  assert.match(
+    funcao,
+    /raise\s+exception\s+'ACESSO_NEGADO_BLOCO_FINANCEIRO_GERENCIAL/isu,
+    'a guarda precisa recusar com ACESSO_NEGADO_BLOCO_FINANCEIRO_GERENCIAL',
+  );
+});
+
 test('revoga execute de anon nominalmente', () => {
   const sql = fs.readFileSync(migracao, 'utf8');
   assert.match(

@@ -57,6 +57,26 @@ test('nao altera a v1', () => {
   );
 });
 
+test('guarda de acesso: fail-closed mesmo com auth.role() NULL, e sinaliza ACESSO_NEGADO', () => {
+  // Mesmo raciocinio do teste analogo em fechamentoMensalBlocoFinanceiro:
+  // o schema public concede EXECUTE a `authenticated` por ALTER DEFAULT
+  // PRIVILEGES, e a guarda dentro da funcao e a UNICA protecao para esse
+  // papel (o revoke nominal so alcanca anon).
+  const corpo = sql();
+  const funcao = corpo.slice(corpo.indexOf('create or replace function'));
+  assert.match(
+    funcao,
+    /if\s+coalesce\s*\(\s*auth\.role\(\)\s*,\s*''\s*\)\s*<>\s*'service_role'/isu,
+    'sem coalesce, auth.role() NULL faz NULL <> \'service_role\' avaliar NULL — '
+      + 'o if nao dispara e a guarda vira fail-open',
+  );
+  assert.match(
+    funcao,
+    /raise\s+exception\s+'ACESSO_NEGADO_FECHAMENTO_RELATORIO_MENSAL/isu,
+    'a guarda precisa recusar com ACESSO_NEGADO_FECHAMENTO_RELATORIO_MENSAL',
+  );
+});
+
 test('revoga execute de anon nominalmente', () => {
   assert.match(
     sql(),
