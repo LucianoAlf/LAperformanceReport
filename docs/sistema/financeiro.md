@@ -39,16 +39,28 @@ RPCs leem o estado **atual** do banco, não o de então.
   `capturar_relatorios_mensais_canonicos_v1` (materializa os dois documentos) →
   `fechar_competencia_mensal_canonica_v1` (fecha competência e snapshots).
   A leitura de tela usa exclusivamente `get_relatorio_mensal_canonico_v1`.
-- **Automação (31/07/2026):** `fechar_competencia_mensal_automatico()` + cron
-  `fechamento-mensal-automatico`. Até então era 100% manual — junho foi gravado à mão em
-  30/06 23:05 e julho em 31/07 21:12.
+- **Automação parcial (31/07/2026, SUPERADA):** `fechar_competencia_mensal_automatico()` +
+  cron `fechamento-mensal-automatico` (jobid 83). Ela só **capturava 7 domínios** como
+  `aprovado` — nunca fechou nada, e não incluía os dois documentos mensais. Junho foi
+  gravado à mão em 30/06 23:05 e julho em 31/07 21:12.
+- **Automação completa (02/09/2026, LAPE-14):** cron **`fechamento-mensal-dia1`**
+  (jobid 189, `15 12 1 * *` = 09:15 BRT) → **`fechar_competencia_mensal_dia1_v1()`**, que
+  por unidade, em bloco protegido: valida a fonte financeira →
+  **`garantir_bloco_financeiro_gerencial_v1`** → `capturar_relatorios_mensais_canonicos_v1`
+  → **`fechar_competencia_mensal_canonica_v2`** (fecha **uma** unidade). Placar em
+  **`fechamento_mensal_execucoes`**; vigia `verifica-fechamento-mensal.py` na la-hq
+  (`0 14 1 * *` = 11h BRT) alarma no tópico Logs via `cron-alerta.py`.
+  O **jobid 83 foi desativado** (não deletado): ele fotografava o mês com 2h por correr,
+  e o orquestrador já o chama como passo 0.
 
 ### ⚠️ Armadilhas confirmadas em produção
 
-1. **O cron é `0 1 1 * *` e isso está CERTO.** O pg_cron roda em UTC; dia 1 às 01:00 UTC
-   = **último dia do mês às 22:00 BRT**, para meses de 31, 30, 28 ou 29 dias. Validado em
-   14 meses seguidos + fev/2028 e fev/2032. Não "corrigir" para `L * *` nem para `0 22`.
-   A função revalida o dia em BRT e aborta se não for o último.
+1. **O cron 83 era `0 1 1 * *` e isso estava CERTO** — pg_cron roda em UTC; dia 1 às
+   01:00 UTC = último dia do mês às 22:00 BRT. Validado em 14 meses seguidos + fev/2028 e
+   fev/2032. **Desde 02/09/2026 ele está desativado** e a guarda de
+   `fechar_competencia_mensal_automatico()` passou a exigir o **dia 1º** (competência = mês
+   anterior): fechar às 22h deixava 2 horas do mês de fora e rodava antes dos syncs
+   noturnos do Emusys. Não reativar o 83 sem antes reverter a guarda.
 2. **Exige `auth.role() = 'service_role'`.** `get_dados_relatorio_gerencial` alcança
    `get_kpis_professor_periodo_canonico_v2`, que **não** aceita `session_user = 'postgres'`
    como escape — só `service_role`. Rodar via MCP/psql sem
@@ -59,7 +71,34 @@ RPCs leem o estado **atual** do banco, não o de então.
    nova versão pelo fluxo formal de retificação.
 4. **O fechamento é explícito.** `fechar_competencia_mensal_canonica_v1` exige os seis
    domínios mínimos de cada unidade, fecha as três competências no mesmo lote e promove
-   todos os snapshots aprovados para `fechado`.
+   todos os snapshots aprovados para `fechado`. Ela é **tudo-ou-nada**: em ago/2026 um
+   único aluno de Campo Grande deixou Barra e Recreio sem relatório. Para fechar **uma**
+   unidade existe a **`_v2`** (02/09/2026), que filtra `escopo='unidade'` no UPDATE —
+   sem esse filtro, fechar uma unidade carimbaria junto os snapshots `consolidado`.
+   ⚠️ Há ainda `fechar_relatorio_mensal_canonico_unidade_v1` (11/08/2026), que exige e
+   carimba **só os 2 domínios mensais** — feita para retificação histórica isolada, e
+   **não** serve ao orquestrador. Ao corrigir bug de fechamento por unidade, checar as três.
+6. **Retificação NÃO conserta o relatório mensal.**
+   `get_relatorio_admin_mensal_rico_base_v1` lê `v_gerencial.payload` **cru** e nunca
+   consulta `fechamento_mensal_retificacoes` — em 01/09/2026 três retificações financeiras
+   ficaram corretas e **inertes**. O que destrava é gravar nova versão do snapshot, que é o
+   que `garantir_bloco_financeiro_gerencial_v1` faz: sem
+   `financeiro_faturas_emusys.totais` em `kpis_gestao[0]`, os indicadores `ticket_medio`,
+   `faturamento_previsto` e `mrr_atual` vêm nulos e a leitura levanta
+   `RELATORIO_ADMIN_MENSAL_INDICADORES_AUSENTES`.
+7. **`capturar_relatorios_mensais_canonicos_v1` contava LINHAS, não domínios distintos**
+   (corrigido em `20260902130000`). Snapshots são versionados: competência já retificada
+   tem 3 linhas mensais por unidade para 2 domínios, e ela abortava com
+   `SNAPSHOT_MENSAL_PARCIAL`. Só aparecia no **rerun sobre mês retificado** — o cenário de
+   quem vê o alarme no dia seguinte. Oito revisões de código não pegaram; o ensaio contra
+   o banco pegou na 1ª execução.
+8. **O passo 0 do orquestrador é tudo-ou-nada.** `preview_fechamento_mensal` levanta
+   exceção com bloqueio em QUALQUER unidade, abortando a captura das três — a promessa
+   "fecha as que passam" vale dos passos 2-4 em diante. Conferir antes com
+   `select preview_fechamento_mensal(ano,mes,null,true)->>'status_geral'`.
+9. **`dados_mensais` fica com a inadimplência "vivo", não a do Emusys** (0,31 × 0,92 em
+   Recreio/ago-2026), porque `atualizar_dados_mensais_por_snapshot` roda no passo 0, antes
+   de o bloco financeiro ser escrito. A divergência nasceu no fechamento manual de 01/09.
 5. **Preview "aprovável" ≠ números auditados.** Os bloqueios cobrem disponibilidade das
    fontes, batimento `admin × canônico` (alunos ativos, matrículas ativas e de banda) e
    LTV/permanência não-zerados. **Não** há cross-check de ticket, evasão, inadimplência
