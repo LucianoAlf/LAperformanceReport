@@ -26,3 +26,22 @@ Disparo de templates Meta (WhatsApp Cloud API) + conversas + agentes IA. `Campan
 - **Hooks:** `useCampanhas`, `useKPIsCampanha`, `useConversasCampanha`, `useContatosCampanha`, `useAgentes`, `useNumerosMeta`, `useTemplatesMeta`, `useCampanhasConfig`
 - **RPCs:** nenhuma
 - **Edge functions:** `enviar-campanha`, `controle-campanha` (pausa/retoma), `enviar-mensagem-meta`, `gerenciar-templates`, `sincronizar-templates`, `gerar-prompt-agente`
+
+## Tráfego Pago (`/app/trafego-pago`)
+
+Atribuição de anúncio Meta Ads. **Não confundir com Campanhas** (WhatsApp Cloud API).
+
+- **Componentes:** `TrafegoPagoPage.tsx`
+- **Hooks:** `usePaginacaoTabela`, `useWidgetOverlapSentinel`, `useSetPageTitle`
+- **Edge functions:** `meta-ads-insights` (proxy read-only da Graph API; gasto, CTR,
+  alcance, funil, tendência diária, por anúncio, por posicionamento, demográfico e região)
+- **Alimentado por:** `registrar-atribuicao-meta-ads` (tempo real, via n8n),
+  `varrer-atribuicao-meta-ads` (rede de segurança, de hora em hora) e
+  `enriquecer-meta-ads` (cron 05:10 BRT, popula `meta_ads_cache`)
+- **Tabelas:** `meta_ads_cache`, `leads.meta_ad_source_id`, `leads.meta_ctwa_clid`
+
+⚠️ **Acesso restrito em 3 camadas**: `TrafegoPagoGuard` em [router.tsx:44](../../src/router.tsx#L44)
+(lista fixa de e-mails), filtro no `AppSidebar` e **gate de e-mail dentro da própria
+edge** — este último protege o custo de mídia contra chamada direta à API.
+
+⚠️ Métricas vivas (gasto) **nunca** são persistidas por lead — sempre consulta na hora.

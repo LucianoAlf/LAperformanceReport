@@ -33,3 +33,19 @@ Formulários de lançamento manual (React Hook Form + Zod). Escrevem direto nas 
 
 ## Histórico (`/app/apresentacoes-2025`)
 `Historico/Apresentacoes2025Page.tsx` — shell de abas que embute Gestão/Comercial/Retenção (apresentações 2025). Sem queries próprias.
+
+## Time (`/app/time`)
+
+Cadastro de colaboradores e ficha de pessoa.
+
+- **Componentes:** `TimePage.tsx`, `FichaColaborador.tsx`, `ModalAdicionarPessoa.tsx`
+- **RPCs:** `criar_ficha_pessoa`
+- **Tabelas:** `colaboradores`, `colaborador_rider`, `colaborador_rider_versoes`,
+  `staff_unidade`
+
+## Planilha editável (componente compartilhado)
+
+`src/components/App/Spreadsheet/` não é rota — é a grade editável (célula, dropdown,
+autocomplete, `useSpreadsheetData`) reusada por **Auditoria de alunos**,
+**Importar alunos**, **Planilha Comercial**, **Planilha de Retenção** e
+**Snapshot diário**. Mexer aqui atinge as cinco telas.

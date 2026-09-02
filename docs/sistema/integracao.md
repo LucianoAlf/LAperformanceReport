@@ -38,3 +38,73 @@ As superfícies governadas são `agenda`, `sol`, `la_teacher`, `lia`, `mila`,
 Escritas de Agenda/professor/Fábio usam comando idempotente e recibo append-only.
 O contrato está validado localmente, mas ainda não foi publicado em produção.
 Ver [`docs/runbooks/presenca-canonica.md`](./runbooks/presenca-canonica.md).
+
+## Edge functions que não apareciam neste mapa
+
+Levantadas em 02/09/2026 lendo o código de cada uma (`supabase/functions/<nome>/index.ts`).
+
+### Lojinha
+| Edge | O que faz |
+|---|---|
+| `lojinha-alerta-estoque` | alerta de estoque baixo por WhatsApp ao responsável |
+| `lojinha-enviar-comprovante` | comprovante de venda por WhatsApp ao cliente |
+| `lojinha-relatorio-professor` | relatório de carteira/Lalitas por WhatsApp ao professor |
+| `lojinha-relatorio-vendas` | monta o relatório de vendas para envio |
+
+### Ficha do colaborador (ponte com o Super Folha)
+| Edge | O que faz |
+|---|---|
+| `ficha-criar-pessoa` | cria pessoa + token na mesma RPC (origem estável torna retry idempotente) |
+| `ficha-emitir-token` | emite token de acesso; lê `colaboradores`, `ficha_tokens`, `usuarios` |
+| `ficha-export` | exporta a ficha (`colaborador_rider`, `professor_perfil_testes`) |
+| `ficha-tecnica` | ficha técnica LA (v2) |
+| `perfil-professor` | teste de perfil (`professor_perfil_respostas`, `professor_perfil_testes`) |
+
+### Pesquisa de evasão
+| Edge | O que faz |
+|---|---|
+| `classificar-resposta-evasao` | classificador semântico das respostas |
+| `processar-conversa-evasao` | processa a conversa (`pesquisa_evasao_analises`, `_mensagens`, `_processamento`) |
+| `transcrever-mensagem-evasao` | transcreve áudio da resposta (`pesquisa_evasao_transcricoes`) |
+
+### WhatsApp / Caixa de entrada (UAZAPI)
+| Edge | O que faz |
+|---|---|
+| `deletar-mensagem-lead` | `/message/delete`; marca como deletada em `crm_mensagens` |
+| `editar-mensagem-lead` | `/message/edit`; atualiza o conteúdo em `crm_mensagens` |
+| `reagir-mensagem` | envia reação (emoji) via `/message/react` |
+| `transcrever-audio` | `/message/download` com `transcribe=true` |
+| `webhook-whatsapp-status` | recebe `messages.update` com status de entrega |
+
+### Demais
+| Edge | O que faz |
+|---|---|
+| `bi-agent-lamusic` | agente BI com tool calling, Text-to-SQL, cache e isolamento por unidade |
+| `caixa-financeiro-whatsapp` | envio manual do fechamento de caixa ao grupo financeiro da unidade |
+| `criar-sessao-feedback` | cria/reutiliza sessão pública de feedback do professor e envia o link |
+| `notificar-anamnese` | notificação de anamnese |
+| `monitor-saude-webhook` | monitor de saúde de webhook |
+| `sync-students-studio` | sincroniza `alunos` com o Studio |
+| `previsualizar-reconciliacao-grade-emusys` | ⚠️ **edge temporária, estritamente somente leitura** — audita a fotografia da grade |
+
+## Crons que não apareciam neste mapa
+
+Horários em **UTC**, como estão no `pg_cron` (BRT = UTC−3).
+
+| Cron | Agenda | O que dispara |
+|---|---|---|
+| `financeiro-sync-atual-15m` | `3,18,33,48 * * * *` | `sync-faturas-emusys` — competência atual |
+| `financeiro-sync-anteriores-60m` | `7 * * * *` | `sync-faturas-emusys` — competências anteriores |
+| `financeiro-sync-backlog-2h` | `11 */2 * * *` | `sync-faturas-emusys` — backlog |
+| `reconciliar-health-score-professor-v3-alertas` | `*/5 * * * *` | `reconciliar_health_score_professor_v3_alertas()` |
+| `la-os-coletar-pg-cron` | `*/15 * * * *` | `monitoramento.coletar_pg_cron()` |
+| `la-os-dead-man` | `*/15 * * * *` | `monitoramento.checar_ausencia()` — dead-man switch |
+| `monitor-saude-fabio` | `5,15,25,35,45,55 * * * *` | edge `monitor-saude-fabio` |
+| `fabio-retomar-audio-experimental` | `3,13,23,33,43,53 * * * *` | `fn_fila_audio_experimental_retomar(20)` |
+| `reconciliar-experimental-aulas` | `12,27,42,57 * * * *` | `fn_reconciliar_experimental_tick(7, 200)` |
+| `promover-periodos-professor-ativos-exatos` | `0 6 * * *` | promove períodos e trocas confirmadas pela jornada |
+| `cleanup-job-run-details` | `0 6 * * 0` | apaga `cron.job_run_details` com mais de 90 dias |
+| `cleanup-reconstrucao-professor-obsoleta` | `0 11 * * 2` | `limpar_manifesto_periodos_obsoletos_v1()` |
+
+> Catálogo completo de crons, funções e consumidores: [`docs/banco/FUNCOES.gerado.md`](../banco/FUNCOES.gerado.md).
+

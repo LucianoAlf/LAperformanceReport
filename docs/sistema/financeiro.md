@@ -106,3 +106,16 @@ há apenas `dados_mensais` (~12 campos).
   período** como evento histórico distinto.
 - **RPCs:** `get_inadimplencia_canonica`, `get_financeiro_faturas_emusys`, `get_resumo_renovacoes_proximas`, `toggle_relatorio_cron`, `get_relatorio_gerencial_canonico_v1`, `get_dados_retencao_ia`, `vincular_alunos_checklist`, `get_historico_rotinas`, `get_checklist_detail`, `marcar_checklist_item`, `get_checklists_farmer`, `criar_checklist_from_template`, `get_rotinas_do_dia`, `get_progresso_rotinas_hoje`, `marcar_rotina_concluida`
 - **Edge functions:** `gemini-relatorio-gerencial`, `relatorio-admin-whatsapp`, `gemini-insights-retencao`, `enviar-pesquisa-pos-primeira-aula`, `buscar-foto-perfil`, `deletar-mensagem-admin`, `editar-mensagem-admin`
+
+## Faturas de alunos (`/app/faturas`)
+
+- **Componentes:** `FaturasAlunosPage.tsx`, `FaturasAlunosFinanceirasPage.tsx`
+- **Libs canônicas:** `@/lib/faturasAlunosFinanceiras`, `@/lib/faturasAlunosReconciliacao`
+- **RPCs:** `get_faturas_alunos_financeiro_v1`, `get_inadimplencia_canonica`,
+  `resolver_reconciliacao_fatura`
+- **Edge functions:** `atualizar-inadimplencia-emusys` (refresh sob demanda)
+- **Tabelas:** `emusys_faturas`, `financeiro_sync_queue`, `sync_runs`,
+  `financeiro_fatura_reconciliacao_decisoes`
+
+⚠️ O espelho `emusys_faturas` cobre apenas as competências sincronizadas (a partir de
+jun/2026) — número de faturas vencidas é **piso, não valor exato**. Ver `CLAUDE.md`.
