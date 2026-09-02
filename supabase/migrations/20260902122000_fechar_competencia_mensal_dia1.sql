@@ -11,6 +11,12 @@
 --
 -- Cada unidade roda em bloco protegido: em agosto/2026 um aluno de Campo Grande
 -- deixou Barra e Recreio sem relatorio.
+--
+-- Fix round 1/5: falha do passo 0 (captura dos 7 dominios) e' etapa, nao
+-- unidade -- por isso NAO soma em v_erro (que so conta unidade com falha).
+-- Mas precisa reprovar a execucao mesmo assim, senao a funcao devolveria
+-- 'ok:true' com os 7 dominios genuinamente nao capturados. v_passo0_ok
+-- carrega esse sinal em separado, e o retorno final combina os dois.
 
 create or replace function public.fechar_competencia_mensal_dia1_v1()
 returns jsonb
@@ -32,6 +38,7 @@ declare
   v_detalhes jsonb := '[]'::jsonb;
   v_ok integer := 0;
   v_erro integer := 0;
+  v_passo0_ok boolean := true;
   v_motivo text;
 begin
   if auth.role() <> 'service_role'
@@ -51,9 +58,12 @@ begin
   perform set_config('request.jwt.claims', '{"role":"service_role"}', true);
 
   -- Passo 0: captura dos 7 dominios. Idempotente (responde ja_fechado).
+  -- Falha aqui e' etapa, nao unidade: nao entra em v_erro, mas zera
+  -- v_passo0_ok para reprovar a execucao no retorno final.
   begin
     perform public.fechar_competencia_mensal_automatico();
   exception when others then
+    v_passo0_ok := false;
     v_detalhes := v_detalhes || jsonb_build_array(jsonb_build_object(
       'etapa', 'captura_7_dominios', 'ok', false,
       'sqlstate', sqlstate, 'erro', sqlerrm
@@ -107,9 +117,10 @@ begin
   where id = v_execucao_id;
 
   return jsonb_build_object(
-    'ok', v_erro = 0, 'ano', v_ano, 'mes', v_mes,
+    'ok', v_erro = 0 and v_passo0_ok, 'ano', v_ano, 'mes', v_mes,
     'execucao_id', v_execucao_id, 'fechamento_lote_id', v_lote_id,
     'unidades_fechadas', v_ok, 'unidades_com_erro', v_erro,
+    'passo0_ok', v_passo0_ok,
     'detalhes', v_detalhes
   );
 end;
@@ -120,4 +131,4 @@ revoke execute on function public.fechar_competencia_mensal_dia1_v1() from anon;
 grant execute on function public.fechar_competencia_mensal_dia1_v1() to service_role;
 
 comment on function public.fechar_competencia_mensal_dia1_v1() is
-  'Fechamento mensal automatico do dia 1o. Por unidade, em bloco protegido: valida fonte financeira, garante bloco financeiro no gerencial, captura os 2 dominios mensais e fecha. Grava placar em fechamento_mensal_execucoes.';
+  'Fechamento mensal automatico do dia 1o. Por unidade, em bloco protegido: valida fonte financeira, garante bloco financeiro no gerencial, captura os 2 dominios mensais e fecha. Grava placar em fechamento_mensal_execucoes. ok=false se o passo 0 (captura dos 7 dominios) OU qualquer unidade falhar.';
