@@ -433,6 +433,13 @@ get_situacao_alunos_v1(p_unidade_id uuid, p_referencia date = hoje, p_apenas_pen
 get_situacao_alunos_resumo_v1(p_unidade_id uuid, p_referencia date = hoje) → jsonb
 ```
 
+**Performance (02/09/2026):** a v1 original pagava ~7–12s por unidade e
+estourava o timeout do PostgREST (~8s) — 95% do tempo era a presença canônica por
+pessoa (399× `get_frequencia_aluno_canonica_v1`, cada uma com EXISTS por linha de
+`aluno_presenca`). Fix: `get_frequencia_unidade_canonica_batch_v1` (MESMA regra,
+set-based; equivalência provada 0/397 divergentes em 6 campos) + um scan só de
+`vw_renovacao_ciclos`. Medido após: Barra 0,6s · Recreio 1,4s · CG 2,0s no banco.
+
 Cobre por pessoa: identidade/cursos, anamnese (flag + registro + órfã candidata),
 cadastro (Instagram, telefone, responsável, contrato, foto — régua editável em
 `config_cadastro_obrigatorio` por unidade × LAMK/EMLA), presença canônica
