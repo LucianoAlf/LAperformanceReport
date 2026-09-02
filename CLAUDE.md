@@ -4,10 +4,11 @@ Sistema de gestão operacional e BI para rede de escolas de música. Pipeline co
 
 > **Referência rápida (consultar PRIMEIRO):**
 > - **[`docs/REGRAS-DE-NEGOCIO.md`](docs/REGRAS-DE-NEGOCIO.md)** — **documento único e consolidado** das regras de negócio de todos os âmbitos (alunos, financeiro, retenção, comercial, professores, relatórios), validado contra o banco de produção em 2026-08-08. Use antes de qualquer decisão sobre "o que este número significa".
-> - **[`docs/MAPA-SISTEMA.md`](docs/MAPA-SISTEMA.md)** — por página: rota, componentes, hooks, RPCs e edge functions. Use antes de mexer numa página.
+> - **[`docs/MAPA-SISTEMA.md`](docs/MAPA-SISTEMA.md)** — **índice** por rota; o conteúdo mora em `docs/sistema/<domínio>.md` (8 domínios: aluno, comercial, professor, financeiro, gestao, operacao, plataforma, integracao). Por página: rota, componentes, hooks, RPCs e edge functions. Use antes de mexer numa página.
+> - **[`docs/banco/README.md`](docs/banco/README.md)** — mapa do banco **gerado do próprio Postgres**: 501 tabelas/views (colunas, FK, RLS, `COMMENT`) e as 1.151 funções com estado (ATIVA/SÓ-INTERNA/ÓRFÃ/LEGADO), segurança e consumidores. Regenerar com **`npm run mapa:banco` depois de toda migration**. Armadilhas curadas em `docs/banco/NOTAS.md` — incluindo as **150 funções executáveis por `anon`**, 33 delas sem nenhum consumidor conhecido.
 > - **[`docs/METRICAS.md`](docs/METRICAS.md)** — detalhamento técnico de **onde** cada métrica é calculada. Use antes de query/KPI/relatório.
 > - **[`docs/MAPA-INTEGRACAO-EMUSYS.md`](docs/MAPA-INTEGRACAO-EMUSYS.md)** — ciclo de integração Emusys.
-> Manter os quatro atualizados no mesmo commit ao mexer em páginas/RPCs/edges/métricas.
+> Manter os quatro atualizados no mesmo commit ao mexer em páginas/RPCs/edges/métricas. O mapa do banco não se escreve à mão: rode `npm run mapa:banco` — ele só reescreve o que mudou, e objeto novo sem domínio vira aviso, nunca sumiço silencioso.
 >
 > ⚠️ **Correções de regra aplicadas em 2026-08-08** (o texto antigo circulava errado em vários docs): trancado **não** é aluno ativo; quem faz **só banda ou só coral não** é aluno ativo; churn = `evasoes / alunos_pagantes`; taxa de renovação **não** inclui aviso prévio; aviso prévio = mês vigente + seguinte (2 meses); segundo curso **eleva** o ticket médio. Tabelas `evasoes` e `renovacoes` **não existem mais**.
 
