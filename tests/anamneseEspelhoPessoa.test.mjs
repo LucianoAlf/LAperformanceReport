@@ -60,3 +60,44 @@ test('a funcao do espelho nao fica executavel por anon', () => {
     /revoke execute on function public\.fn_sincronizar_anamnese_preenchida_pessoa\(uuid, text\) from anon/i,
   );
 });
+
+// --- 20260902150000: gatilhos como definer -----------------------------------
+// A migration acima revoga a funcao do espelho de `authenticated` mas deixou os
+// tres gatilhos como SECURITY INVOKER, entao o proprio gatilho perdeu o EXECUTE
+// e todo INSERT feito pelo app morreu com "permission denied for function
+// fn_sincronizar_anamnese_preenchida_pessoa" (01/09 18h01 -> 02/09 15h,
+// 21h sem nenhuma anamnese salva). Estes testes seguram a regressao.
+//
+// LIMITE CONHECIDO: continuam sendo regex sobre o .sql. O furo que deixou o bug
+// passar -- nao haver teste que grave em anamneses/alunos como `authenticated`
+// -- nao e coberto aqui.
+const fixUrl = new URL(
+  '../supabase/migrations/20260902150000_anamnese_espelho_triggers_definer.sql',
+  import.meta.url,
+);
+const fixSql = () => (existsSync(fixUrl) ? readFileSync(fixUrl, 'utf8') : '');
+
+for (const fn of [
+  'fn_atualizar_aluno_anamnese',
+  'fn_vincular_anamnese_pendente',
+  'fn_alunos_vinculo_emusys_anamnese',
+]) {
+  test(`${fn} e definer com search_path fixo`, () => {
+    const source = fixSql();
+    assert.ok(existsSync(fixUrl), 'migration do fix deve existir');
+    const inicio = source.indexOf(`create or replace function public.${fn}()`);
+    assert.ok(inicio >= 0, `${fn} deve ser redefinida na migration do fix`);
+    const corpo = source.slice(inicio, source.indexOf('$function$;', inicio) + 11);
+    assert.match(corpo, /security definer/i);
+    assert.match(corpo, /set search_path to 'public'/i);
+  });
+}
+
+test('o fix nao afrouxa a ACL da funcao do espelho', () => {
+  // A correcao e do lado do gatilho. Se um dia aparecer um grant para anon ou
+  // authenticated aqui, a funcao volta a ficar exposta em /rpc/.
+  assert.doesNotMatch(
+    fixSql(),
+    /grant execute on function public\.fn_sincronizar_anamnese_preenchida_pessoa[^;]*to[^;]*(anon|authenticated)/i,
+  );
+});
