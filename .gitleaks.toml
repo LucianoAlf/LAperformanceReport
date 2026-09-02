@@ -19,3 +19,21 @@ regexes = [
 paths = [
   '''\.env\.example$''',
 ]
+
+# Nome de indice do Postgres nao e chave de API.
+# O gerador de docs/banco escreve a lista de indices unicos de cada tabela, e
+# todo unique constraint do Postgres termina em '_key' -- o que faz a regra
+# generic-api-key casar por sufixo + entropia do nome truncado (ex.:
+# 'professor_periodos_reconstruc_unidade_id_data_inicio_data_f_key'). Foram 8
+# falsos positivos na primeira geracao, nenhum segredo.
+#
+# O recorte e a LINHA, nao o diretorio: linhas de '**Unicos:**' sao ignoradas,
+# enquanto DEFAULT de coluna e COMMENT continuam sendo varridos -- que sao os
+# lugares onde um segredo de verdade apareceria num doc gerado do banco.
+[[allowlists]]
+description = "Linha de indices unicos nos mapas de banco gerados"
+regexTarget = "line"
+regexes = [
+  '''^\*\*Únicos:\*\* ''',
+]
+
