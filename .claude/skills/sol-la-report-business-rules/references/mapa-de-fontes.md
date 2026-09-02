@@ -447,10 +447,28 @@ Regras-chave embutidas (validadas no brainstorm de 02/09/2026):
 - flag de anamnese é de mão única → a RPC devolve o par
   (`anamnese_preenchida`, `anamnese_em`) e `anamnese_flag_sem_registro`;
 - comunidade WA sem captura fresca (< 2 dias) devolve `null`/`sem_captura`,
-  **nunca** `false` — alimentada pela edge `sincronizar-comunidade-whatsapp`
-  (UAZAPI `/group/info`) nas tabelas `comunidade_wa_grupos`/`_participantes`
-  (telefone normalizado por `fn_normalizar_telefone_br_key`, regra do 9º dígito);
-- risco de evasão fica fora da v1 (modelo roda esporádico — número velho é ruído).
+  **nunca** `false`;
+- risco de evasão fica fora da v1 (modelo roda esporádico — número velho é ruído);
+- "quantos ativos/pagantes/bolsistas/trancados/banda" **não é reimplementado**:
+  o resumo **delega** para `get_kpis_alunos_admin_operacional` (bloco `base`),
+  que é a mesma fonte do relatório diário. Ciclo de renovação (`vencendo_em_30d`,
+  `vencendo_em_60d`, `renovacoes_pendentes_mes`, `proxima_renovacao_em` por pessoa)
+  vem de `vw_renovacao_ciclos`; faturas em aberto de `emusys_faturas` (só `^Parcela`).
+
+**Comunidade WA — detalhe que NINGUÉM sabia antes de medir (02/09/2026):**
+o link de convite resolve o JID da **comunidade** (grupo pai), e o `/group/info`
+do pai só enxerga os **admins** (8–10 números de staff em todas as unidades).
+Os membros moram nos **subgrupos**: a edge `sincronizar-comunidade-whatsapp`
+(cron diário 07:00 BRT, job `sincronizar-comunidade-whatsapp-diario`) descobre os
+subgrupos por `LinkedParentJID` na `/group/list` da caixa e tira a união dos
+participantes. Consequência prática: **a captura só enxerga os subgrupos onde a
+caixa que roda é membro**. Hoje a caixa é a "Lia - Sucesso do Aluno" (padrão
+administrativo) — cobre Recreio (197 capturados, 152/336 na comunidade) e Barra
+(126, 94/246). **Campo Grande está com o grupo `ativo=false` de propósito**: a Lia
+não está nos subgrupos de CG e a captura de 8 admins (só staff) chamaria 400+
+alunos de "fora da comunidade" — ruído. Reativar quando um número nosso entrar
+nos subgrupos de CG. Participantes endereçados por `@lid` são descartados (LID
+não resolve para telefone).
 
 ---
 

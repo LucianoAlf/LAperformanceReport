@@ -1,5 +1,10 @@
 project_id = "ouqwbbermlzqqvtqwlul"
 
+[functions.sincronizar-comunidade-whatsapp]
+# Worker de cron (pg_cron não possui JWT de service_role neste projeto): a função
+# autentica no código por x-sync-token (SYNC_MATRICULAS_ADMIN_TOKEN) antes de ler body.
+verify_jwt = false
+
 [functions.ficha-emitir-token]
 # Chamada somente pelo painel Time com a sessao JWT do usuario logado.
 verify_jwt = true

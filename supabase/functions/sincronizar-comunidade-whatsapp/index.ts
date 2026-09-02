@@ -66,6 +66,38 @@ serve(async (req) => {
   if (bloqueio) return bloqueio;
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+
+  // Cadastro por link de convite: resolve o JID via /group/inviteInfo (nao
+  // exige que a caixa seja membro) e registra o grupo antes do sync.
+  if (body.acao === 'cadastrar') {
+    const inviteCode = String(body.invite_code || '').replace(/^https?:\/\/chat\.whatsapp\.com\//, '').trim();
+    const unidadeId = String(body.unidade_id || '');
+    const nome = String(body.nome || '');
+    if (!inviteCode || !unidadeId || !nome) {
+      return json({ ok: false, erro: 'cadastrar exige invite_code, unidade_id e nome' }, 400);
+    }
+
+    const creds = await getUazapiCredentials(supabase, { funcao: 'administrativo', unidadeId });
+    const resposta = await fetch(`${creds.baseUrl}/group/inviteInfo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', token: creds.token },
+      body: JSON.stringify({ invitecode: inviteCode }),
+    });
+    const info = await resposta.json().catch(() => ({}));
+    const jid = info?.JID || info?.id || info?.jid || info?.data?.JID || info?.data?.jid || info?.group?.JID;
+    if (!resposta.ok || !jid) {
+      const chaves = info && typeof info === 'object' ? Object.keys(info).join(',') : typeof info;
+      return json({ ok: false, erro: `convite nao resolvido (HTTP ${resposta.status}); chaves: ${chaves}; erro: ${info?.error ?? '-'}`, amostra: JSON.stringify(info).slice(0, 400) }, 502);
+    }
+
+    const { error: erroInsert } = await supabase
+      .from('comunidade_wa_grupos')
+      .upsert({ unidade_id: unidadeId, jid, nome }, { onConflict: 'jid' });
+    if (erroInsert) return json({ ok: false, erro: erroInsert.message }, 500);
+
+    return json({ ok: true, grupo: { jid, nome, unidade_id: unidadeId, participantes: info?.Participants?.length ?? null } });
+  }
 
   const { data: grupos, error: erroGrupos } = await supabase
     .from('comunidade_wa_grupos')
@@ -99,16 +131,42 @@ serve(async (req) => {
         continue;
       }
 
-      const participantes: { JID?: string; PhoneNumber?: string; LID?: string }[] =
-        Array.isArray(payload?.Participants) ? payload.Participants : [];
+      // Comunidade (grupo pai): /group/info so mostra os admins do grupo de
+      // avisos. Os membros de verdade moram nos SUBGRUPOS — descobrimos eles
+      // pelo LinkedParentJID na /group/list da mesma instancia.
+      const participantesPorJid = new Map<string, string>(); // telefone_key -> original
 
-      const linhas = participantes
-        .map((p) => {
+      const absorver = (participantes: { JID?: string; PhoneNumber?: string; LID?: string }[] | undefined) => {
+        for (const p of participantes ?? []) {
           const original = p.PhoneNumber || p.JID || '';
+          if (original.endsWith('@lid')) continue; // LID nao resolve pra telefone
           const key = telefoneBrKey(original);
-          return key ? { grupo_id: grupo.id, telefone_key: key, telefone_original: original.split('@')[0], capturado_em: capturadoEm } : null;
-        })
-        .filter((l): l is NonNullable<typeof l> => l !== null);
+          if (key && !participantesPorJid.has(key)) participantesPorJid.set(key, original.split('@')[0]);
+        }
+      };
+      absorver(payload?.Participants);
+
+      const resLista = await fetch(`${creds.baseUrl}/group/list?force=true`, {
+        method: 'GET',
+        headers: { token: creds.token },
+      });
+      const lista = await resLista.json().catch(() => ({}));
+      const subgrupos = (Array.isArray(lista?.groups) ? lista.groups : [])
+        .filter((g: { LinkedParentJID?: string }) => g.LinkedParentJID === grupo.jid);
+
+      for (const sub of subgrupos as { JID?: string; Participants?: { JID?: string; PhoneNumber?: string; LID?: string }[] }[]) {
+        const resSub = await fetch(`${creds.baseUrl}/group/info`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', token: creds.token },
+          body: JSON.stringify({ groupjid: sub.JID, force: false }),
+        });
+        const subInfo = await resSub.json().catch(() => ({}));
+        if (resSub.ok) absorver(subInfo?.Participants ?? sub?.Participants);
+        else absorver(sub?.Participants);
+      }
+
+      const linhas = [...participantesPorJid.entries()]
+        .map(([key, original]) => ({ grupo_id: grupo.id, telefone_key: key, telefone_original: original, capturado_em: capturadoEm }));
 
       // dedup por telefone_key dentro da captura (mesmo numero pode aparecer 2x)
       const vistos = new Map(linhas.map((l) => [l.telefone_key, l]));
