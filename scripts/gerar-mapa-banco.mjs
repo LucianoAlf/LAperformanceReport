@@ -6,6 +6,7 @@ import pg from 'pg';
 import { DOMINIOS, SEM_DOMINIO, classificarDominio } from './mapa-banco/dominios.mjs';
 import { mapearConsumidores } from './mapa-banco/consumidores.mjs';
 import { classificarEstado } from './mapa-banco/estados.mjs';
+import { ehArquivoGerado } from './mapa-banco/fontes.mjs';
 import {
   escreverSeMudou,
   formatarDetalhe,
@@ -93,6 +94,7 @@ function lerFontesDoRepo() {
       if (!entrada.isFile() || !filtro.test(entrada.name)) continue;
       const pai = entrada.parentPath ?? entrada.path;
       const completo = path.join(pai, entrada.name);
+      if (ehArquivoGerado(path.relative(RAIZ, completo))) continue;
       fontes.push({
         fonte,
         origem: path.relative(RAIZ, completo).replaceAll('\\', '/'),

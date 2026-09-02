@@ -398,7 +398,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_texto_relatorio_presenca_consolidado_legado_v1(p_data date)` | SO-INTERNA | DEFINER | funcao:fn_texto_relatorio_presenca_consolidado |
 | `fn_texto_relatorio_presenca_legado_v1(p_unidade_id uuid, p_data date)` | SO-INTERNA | DEFINER | funcao:fn_presenca_fila_proveniencia_rollout_v1, funcao:fn_texto_relatorio_presenca, funcao:fn_texto_relatorio_presenca_consolidado_legado_v1 |
 | `get_analise_pesquisas(p_unidade_id uuid, p_data_inicio date, p_data_fim date)` | ATIVA | INVOKER · 🔓 anon | front:src/components/App/SucessoCliente/hooks/useAnalisePesquisas.ts |
-| `get_comparativo_anos(p_ano_atual integer, p_ano_anterior integer)` | ATIVA | INVOKER · 🔓 anon | front:src/hooks/useSupabase.ts, front:src/types/database.types.ts |
+| `get_comparativo_anos(p_ano_atual integer, p_ano_anterior integer)` | ATIVA | INVOKER · 🔓 anon | front:src/hooks/useSupabase.ts |
 | `get_comparativo_fechamento_mensal_v1(p_unidade_id uuid, p_atual_ano integer, p_atual_mes integer, p_anterior_ano integer, p_anterior_mes integer)` | SO-INTERNA | DEFINER | funcao:get_relatorio_gerencial_canonico_comparativos_final_base_v1, funcao:get_relatorio_gerencial_canonico_metas_kpi_diagnostico_base_v1 |
 | `get_dados_relatorio_gerencial(p_unidade_id uuid, p_ano integer, p_mes integer)` | SO-INTERNA | DEFINER | funcao:gravar_snapshot_fechamento_mensal, funcao:preview_fechamento_mensal |
 | `get_dados_relatorio_gerencial_legacy_p01g(p_unidade_id uuid, p_ano integer, p_mes integer)` | ORFA | DEFINER | sem consumidor conhecido |
@@ -414,7 +414,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `get_dados_relatorio_gerencial_legacy_rankings_p24_20260719(p_unidade_id uuid, p_ano integer, p_mes integer)` | SO-INTERNA | DEFINER | funcao:get_dados_relatorio_gerencial |
 | `get_historico_mensal_matriculador(p_ano integer, p_unidade_id uuid)` | ORFA | INVOKER · 🔓 anon | sem consumidor conhecido |
 | `get_kpis_comercial_canonicos_v2(p_unidade_id uuid, p_ano integer, p_mes integer, p_periodo text, p_data date)` | ATIVA | DEFINER | front:src/hooks/useComercialOperacionalResumoV2.ts, front:src/hooks/useComercialResumoV2.ts, front:src/hooks/useComercialSeriesMensaisV2.ts, front:src/hooks/useCursosData.ts, front:src/hooks/useMatriculadorPrograma.ts, front:src/hooks/useOrigemData.ts, +7 outros |
-| `get_kpis_consolidados(p_ano integer)` | ATIVA | DEFINER | front:src/hooks/useSupabase.ts, front:src/types/database.types.ts |
+| `get_kpis_consolidados(p_ano integer)` | ATIVA | DEFINER | front:src/hooks/useSupabase.ts |
 | `get_kpis_evolucao_mensal(p_unidade_id text, p_meses integer)` | ORFA | DEFINER | sem consumidor conhecido |
 | `get_metas_vs_realizado(p_ano integer)` | ORFA | INVOKER · 🔓 anon | sem consumidor conhecido |
 | `get_relatorio_admin_mensal_rico_base_v1(p_unidade_id uuid, p_ano integer, p_mes integer)` | ATIVA | DEFINER | edge:supabase/functions/relatorio-admin-whatsapp/index.ts, funcao:get_relatorio_admin_mensal_rico_base_v2 |
@@ -657,7 +657,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_usuario_atual_tem_permissao(p_codigo_permissao character varying, p_unidade_id uuid)` | SO-INTERNA | DEFINER | funcao:buscar_alunos_ativos_atuais_canonicos, funcao:fn_aluno_entra_base_ativa_v131, funcao:fn_health_score_professor_v3_ator_gerenciador, funcao:fn_pode_ler_aluno_pedagogico, funcao:get_alunos_ativos_atuais_canonicos, funcao:get_jornada_professor, +4 outros |
 | `fn_usuarios_sincroniza_rbac()` | ATIVA | DEFINER | trigger:usuarios.trg_usuarios_sincroniza_rbac |
 | `get_cron_health()` | ATIVA | DEFINER · 🔓 anon | front:src/hooks/useSaudeCrons.ts |
-| `get_kpis_unidade(p_unidade_codigo character varying, p_ano integer)` | ATIVA | DEFINER | front:src/hooks/useSupabase.ts, front:src/types/database.types.ts |
+| `get_kpis_unidade(p_unidade_codigo character varying, p_ano integer)` | ATIVA | DEFINER | front:src/hooks/useSupabase.ts |
 | `get_saude_cobertura_presenca_v1(p_data date)` | ATIVA | DEFINER | front:src/hooks/useSaudeCrons.ts |
 | `get_saude_syncs_emusys()` | ATIVA | DEFINER | front:src/hooks/useSaudeCrons.ts |
 | `get_unidade_usuario()` | ORFA | DEFINER · 🔓 anon | sem consumidor conhecido |
@@ -1060,8 +1060,8 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `get_health_score_professor_v3_snapshot_modal(p_competencia date, p_unidade_id uuid, p_professor_id integer, p_periodicidade text)` | ATIVA | DEFINER | front:src/hooks/useHealthScoreProfessorV3.ts, funcao:get_health_score_professor_v3_consumidor_pedagogico |
 | `get_health_score_professor_v3_snapshot_ui(p_competencia date, p_unidade_id uuid, p_professor_id integer)` | ORFA | DEFINER | sem consumidor conhecido |
 | `get_health_score_professor_v3_totais_carteira_canonica_v1(p_competencia date, p_unidade_id uuid, p_periodicidade text)` | SO-INTERNA | DEFINER | funcao:get_hs_prof_v3_segmentadas_agregadas_base_20260803, funcao:hs_v3_metricas_segmentadas_pre_cursos_pedagogicos_v1 |
-| `get_heatmap_data(p_ano integer, p_metrica character varying)` | ATIVA | INVOKER · 🔓 anon | front:src/hooks/useSupabase.ts, front:src/types/database.types.ts |
-| `get_heatmap_totais(p_ano integer, p_metrica character varying)` | ATIVA | INVOKER · 🔓 anon | front:src/hooks/useSupabase.ts, front:src/types/database.types.ts |
+| `get_heatmap_data(p_ano integer, p_metrica character varying)` | ATIVA | INVOKER · 🔓 anon | front:src/hooks/useSupabase.ts |
+| `get_heatmap_totais(p_ano integer, p_metrica character varying)` | ATIVA | INVOKER · 🔓 anon | front:src/hooks/useSupabase.ts |
 | `get_historico_aulas_aluno(p_aluno_id integer)` | ATIVA | INVOKER | front:src/components/App/Alunos/ModalFichaAluno.tsx |
 | `get_hs_prof_v3_config_ui_base_20260803(p_competencia date)` | SO-INTERNA | DEFINER | funcao:get_health_score_professor_v3_config_ui |
 | `get_hs_prof_v3_conversao_ciclo_base_20260803(p_competencia date, p_unidade_id uuid)` | SO-INTERNA | DEFINER | funcao:get_health_score_professor_v3_conversao_ciclo |
