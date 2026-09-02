@@ -1969,6 +1969,7 @@ export function AdministrativoPage() {
               onDelete={handleDeleteMovimentacao}
               startDate={startDate}
               endDate={endDate}
+              unidadeId={unidade === 'todos' ? null : unidade}
             />
           )}
           {activeTab === 'cancelamentos' && (

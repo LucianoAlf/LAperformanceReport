@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Pencil, Trash2, Info } from 'lucide-react';
+import { Pencil, Trash2, Info, AlertTriangle } from 'lucide-react';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
+import { TabelaAvisosVencidos } from './TabelaAvisosVencidos';
 import type { MovimentacaoAdmin } from './AdministrativoPage';
 
 interface TabelaAvisosPreviosProps {
@@ -11,11 +12,13 @@ interface TabelaAvisosPreviosProps {
   onDelete: (id: number) => void;
   startDate: string;
   endDate: string;
+  /** null = todas as unidades. Só a aba "Vencidos" usa: ela consulta o banco. */
+  unidadeId?: string | null;
 }
 
-type FiltroAviso = 'todos' | 'registrados' | 'saida';
+type FiltroAviso = 'todos' | 'registrados' | 'saida' | 'vencidos';
 
-export function TabelaAvisosPrevios({ data, onEdit, onDelete, startDate, endDate }: TabelaAvisosPreviosProps) {
+export function TabelaAvisosPrevios({ data, onEdit, onDelete, startDate, endDate, unidadeId = null }: TabelaAvisosPreviosProps) {
   const { usuario } = useAuth();
   const isAdmin = usuario?.perfil === 'admin' && usuario?.unidade_id === null;
   const [filtro, setFiltro] = useState<FiltroAviso>('todos');
@@ -33,6 +36,10 @@ export function TabelaAvisosPrevios({ data, onEdit, onDelete, startDate, endDate
 
   const perdaPotencial = dadosFiltrados.reduce((acc, item) => acc + (item.valor_parcela_novo || item.valor_parcela_anterior || 0), 0);
 
+  // "Vencidos" fica FORA desta lista de propósito: as três acima refiltram o
+  // array do mês, e ela consulta o banco por conta própria — por isso não tem
+  // contagem aqui (ninguém sabe o número antes de perguntar) e é renderizada
+  // por outro componente.
   const filtros: { id: FiltroAviso; label: string; count: number }[] = [
     { id: 'todos', label: 'Todos', count: data.length },
     { id: 'registrados', label: 'Registrados no mês', count: registradosNoMes.length },
@@ -56,8 +63,27 @@ export function TabelaAvisosPrevios({ data, onEdit, onDelete, startDate, endDate
             {f.label} <span className="opacity-60">({f.count})</span>
           </button>
         ))}
+
+        <span className="mx-1 h-4 w-px bg-slate-700" aria-hidden />
+
+        <button
+          onClick={() => setFiltro('vencidos')}
+          title="Avisos já vencidos e não resolvidos, de qualquer mês"
+          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors inline-flex items-center gap-1.5 ${
+            filtro === 'vencidos'
+              ? 'bg-amber-600/80 text-white'
+              : 'text-amber-400/80 hover:text-amber-300 hover:bg-slate-700/50'
+          }`}
+        >
+          <AlertTriangle className="w-3.5 h-3.5" />
+          Vencidos
+        </button>
       </div>
 
+      {/* Consulta própria, fora do período da tela — ver TabelaAvisosVencidos. */}
+      {filtro === 'vencidos' && <TabelaAvisosVencidos unidadeId={unidadeId} />}
+
+      {filtro !== 'vencidos' && (
       <table className="w-full">
         <thead className="bg-slate-800/50">
           <tr className="text-xs text-slate-400 uppercase tracking-wider">
@@ -172,6 +198,7 @@ export function TabelaAvisosPrevios({ data, onEdit, onDelete, startDate, endDate
           </tfoot>
         )}
       </table>
+      )}
     </div>
   );
 }
