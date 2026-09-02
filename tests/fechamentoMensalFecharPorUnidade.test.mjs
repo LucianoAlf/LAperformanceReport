@@ -17,7 +17,14 @@ test('a migration existe', () => {
 
 test('o update de snapshots filtra escopo E unidade', () => {
   const corpo = sql();
-  const update = corpo.slice(corpo.search(/update\s+public\.fechamento_mensal_snapshots/iu));
+  const inicio = corpo.search(/update\s+public\.fechamento_mensal_snapshots/iu);
+  assert.ok(inicio !== -1, 'UPDATE de fechamento_mensal_snapshots nao encontrado');
+  const restante = corpo.slice(inicio);
+  const fimRelativo = restante.search(/returning/iu);
+  assert.ok(fimRelativo !== -1, 'clausula RETURNING do UPDATE nao encontrada');
+  // recorta so o proprio UPDATE (ate o RETURNING) -- nao pode aceitar
+  // escopo/unidade_id aparecendo num INSERT ou comentario mais adiante no arquivo
+  const update = restante.slice(0, fimRelativo);
   assert.match(update, /escopo\s*=\s*'unidade'/u,
     'sem filtro de escopo, fechar uma unidade carimba os 11 snapshots consolidados');
   assert.match(update, /unidade_id\s*=\s*p_unidade_id/u);
@@ -25,11 +32,19 @@ test('o update de snapshots filtra escopo E unidade', () => {
 
 test('exige os 6 dominios da unidade', () => {
   const corpo = sql();
+  const inicio = corpo.search(/from\s*\(\s*values/iu);
+  assert.ok(inicio !== -1, 'bloco VALUES dos dominios esperados nao encontrado');
+  const restante = corpo.slice(inicio);
+  const fimRelativo = restante.search(/\)\s*esperado\s*\(\s*dominio\s*\)/iu);
+  assert.ok(fimRelativo !== -1, 'fechamento "esperado(dominio)" do bloco VALUES nao encontrado');
+  // amarra a checagem ao bloco VALUES que alimenta v_faltantes -- presenca do
+  // literal em qualquer outro lugar do arquivo (ex.: comentario) nao deve contar
+  const valuesBlock = restante.slice(0, fimRelativo);
   for (const dominio of [
     'alunos_admin', 'alunos_executivo', 'comercial',
     'relatorio_gerencial', 'relatorio_admin_mensal', 'relatorio_comercial_mensal',
   ]) {
-    assert.ok(corpo.includes(dominio), `dominio ausente: ${dominio}`);
+    assert.ok(valuesBlock.includes(dominio), `dominio ausente do bloco VALUES: ${dominio}`);
   }
 });
 

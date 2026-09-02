@@ -6,6 +6,18 @@
 -- de Campo Grande. Esta v2 fecha uma unidade por vez.
 --
 -- A v1 fica intacta -- tem consumidores e continua sendo o caminho manual.
+--
+-- Existe uma funcao vizinha quase igual: fechar_relatorio_mensal_canonico_unidade_v1
+-- (uuid, integer, integer, text), criada em 11/08/2026 pela migration
+-- 20260811150004_relatorio_mensal_fechar_unidade_seguro.sql. Ela tambem fecha por
+-- unidade e tambem filtra escopo. Decisao consciente: MANTER AS DUAS, nao alterar,
+-- nao dropar, nao chamar a de agosto daqui. Diferenca que importa: a de agosto exige
+-- e carimba SOMENTE 2 dominios (relatorio_admin_mensal, relatorio_comercial_mensal) --
+-- foi feita para uma retificacao/captura historica isolada. Esta v2 exige e carimba
+-- os 6 dominios do orquestrador; usar a de agosto no lugar desta deixaria
+-- alunos_admin, alunos_executivo, comercial e relatorio_gerencial presos em
+-- 'aprovado' e a competencia nao fecharia de fato. Ao corrigir bug de fechamento por
+-- unidade, checar as DUAS funcoes.
 
 create or replace function public.fechar_competencia_mensal_canonica_v2(
   p_ano integer,
@@ -28,10 +40,11 @@ begin
      and session_user not in ('postgres', 'supabase_admin') then
     raise exception 'ACESSO_NEGADO_FECHAMENTO_RELATORIO_MENSAL';
   end if;
-  if p_ano is null or p_mes not between 1 and 12
+  if p_ano is null or p_mes is null or p_mes not between 1 and 12
      or nullif(btrim(coalesce(p_motivo, '')), '') is null
      or p_unidade_id is null then
-    raise exception 'FECHAMENTO_RELATORIO_MENSAL_PARAMETROS_INVALIDOS';
+    raise exception 'FECHAMENTO_RELATORIO_MENSAL_PARAMETROS_INVALIDOS: ano=%, mes=%, unidade_id=%, motivo_vazio=%',
+      p_ano, p_mes, p_unidade_id, (nullif(btrim(coalesce(p_motivo, '')), '') is null);
   end if;
 
   select u.nome into v_nome
