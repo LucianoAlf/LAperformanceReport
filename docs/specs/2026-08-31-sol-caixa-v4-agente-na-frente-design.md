@@ -139,3 +139,27 @@ Roteador vs legado nos casos reais (log `roteador_v4_shadow`):
   ("Nome — R$ valor") virou parse determinístico e saiu do caminho da LLM
   (PR do multi-determinístico); o roteador continua precisando do pool
   `opencode-go`/endpoint persistente antes do flip.
+
+## Placar do shadow — dia 02/09 (24 decisões no grupo de CG)
+
+- **13 acertos**, incluindo **2 casos em que o roteador ganhou do legado**:
+  `fechar_caixa` .99 às 00:32 (o legado não fez nada e a pessoa teve de repetir
+  2 min depois) e `corrigir_forma` .99 às 19:20 (o legado devolveu
+  `correcao_forma_sem_alvo`). Também acertou os 4 `lancamento_por_texto` (.98/.99),
+  os 3 `lancamento_multi_aluno` (.99) e as 2 saídas (.99).
+- **1 erro real**: `Dinheiro` → `conversa` conf 0.2. 🔴 **A causa foi a mesma do
+  erro do legado**: não havia pendência aberta (`pendencias:0`), então nem o
+  roteador nem a gramática tinham o contexto de que aquilo respondia a uma
+  pergunta da própria Sol. Corrigido na raiz (S1, 02/09) — o mesmo fix que
+  destrava a gramática **também alimenta o roteador**. Ponto de método para o
+  flip: *estado explícito é pré-requisito do agente na frente, não detalhe.*
+- **1 inconsistência**: frases equivalentes (`Sol, foi no dinheiro` /
+  `Sol, foi dinheiro`) receberam `corrigir_forma` .99 e `nada` .75.
+- **7 "pode"** classificados como `conversa`/`nada` — irrelevante por invariante
+  (aprovação nunca vem do LLM), mas note que às 19:53 ele devolveu `aprovar`
+  .95 para um "pode" idêntico: a inconsistência é dele, não do contexto.
+- **1 timeout** em 24 (47,4 s). Latência do dia: 11–47 s.
+
+**Placar acumulado (31/08 → 02/09): 19 acertos · 2 erros · 5 timeouts.** Os dois
+erros são de contexto ausente, não de compreensão. Bloqueante do flip continua
+sendo latência.

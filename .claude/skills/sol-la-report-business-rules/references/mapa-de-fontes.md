@@ -422,6 +422,38 @@ fragilidade em si continua**, e vale uma frente própria. A Sol **não deve** us
 
 ---
 
+## 5b. Situação operacional do aluno, por PESSOA — `get_situacao_alunos_v1` (2026-09-02)
+
+RPC canônica compartilhada entre agentes (TOM, Sol, Lia) e o app. **Uma linha por
+PPESSOA** (dedupe `vw_aluno_pessoa_chave`; base = `entra_base_ativa`). Recreio bate
+336 pessoas = número do painel.
+
+```
+get_situacao_alunos_v1(p_unidade_id uuid, p_referencia date = hoje, p_apenas_pendentes bool = false)
+get_situacao_alunos_resumo_v1(p_unidade_id uuid, p_referencia date = hoje) → jsonb
+```
+
+Cobre por pessoa: identidade/cursos, anamnese (flag + registro + órfã candidata),
+cadastro (Instagram, telefone, responsável, contrato, foto — régua editável em
+`config_cadastro_obrigatorio` por unidade × LAMK/EMLA), presença canônica
+(propagada de `get_frequencia_aluno_canonica_v1` com `confianca`/`regra_versao`),
+`dias_desde_ultima_aula`, `inadimplente` (fatura vencida em aberto,
+`vw_renovacao_ciclos` — propositalmente NÃO a `get_inadimplencia_canonica`, cujo
+guard de JWT negaria `sol_acesso_restrito`), `em_aviso_previo`, comunidade WA e
+`pendencias` (array legível por máquina).
+
+Regras-chave embutidas (validadas no brainstorm de 02/09/2026):
+- completude agrega **todas as matrículas vivas da pessoa** (cadastro é da pessoa);
+- flag de anamnese é de mão única → a RPC devolve o par
+  (`anamnese_preenchida`, `anamnese_em`) e `anamnese_flag_sem_registro`;
+- comunidade WA sem captura fresca (< 2 dias) devolve `null`/`sem_captura`,
+  **nunca** `false` — alimentada pela edge `sincronizar-comunidade-whatsapp`
+  (UAZAPI `/group/info`) nas tabelas `comunidade_wa_grupos`/`_participantes`
+  (telefone normalizado por `fn_normalizar_telefone_br_key`, regra do 9º dígito);
+- risco de evasão fica fora da v1 (modelo roda esporádico — número velho é ruído).
+
+---
+
 ## 6. Regra de conduta
 
 1. Chamar a RPC. Se a RPC negar acesso, **dizer que negou** — nunca substituir por SQL próprio.
