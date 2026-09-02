@@ -777,3 +777,42 @@ gravou 1 de 2 itens.** Dois defeitos independentes no mesmo replay:
   re-disparou a releitura por acidente); "pode" → `nada` .9 (**1ª derrota** —
   irrelevante pro flip: aprovação nunca virá do LLM); "ai Jhon ta certo esse"
   → **4º timeout de 45s** (47,8s). Latência segue o bloqueante nº 1 do flip.
+
+
+## saida-forma-e-diagnostico-e2e.cjs  (auditoria do dia 02/09, CG)
+Varredura do dia inteiro no FINANCEIRO de CG: 24 mensagens, **zero erro
+técnico**, 10 lançamentos corretos no banco — e **três defeitos de
+comportamento**, nenhum deles de gramática.
+
+- **S1 — a pergunta da forma não guardava estado (o pior).** "Sol, pagamento
+  semanal do segurança - R$100,00" abriu a pergunta *"me diz a forma"* e o
+  handler fazia `sendFn` + `return` **sem criar pendência**. Medido: `Dinheiro`
+  caiu em `nada`; `Sol, foi no dinheiro` e `Sol, foi dinheiro` foram parar 2× em
+  `correcao_forma_sem_alvo` — o caminho de corrigir lançamento **já gravado**,
+  que não acha alvo porque não havia lançamento. Só destravou quando o Jhon
+  repetiu a frase inteira com o valor, 2 minutos depois. 🔴 **E o roteador V4
+  ficou cego pela mesma raiz**: `pendencias:0` no log, recebeu `Dinheiro` sem
+  contexto e devolveu `conversa` conf **0.2**. Uma raiz, dois cegos — é o
+  argumento mais forte a favor de estado explícito antes do flip. Fix: a
+  pergunta cria pendência `aguardando_forma_saida` e a resposta **reconstitui a
+  frase completa e re-despacha** (`_sintetico`), reusando o fluxo inline que já
+  existe — nada de segundo caminho de escrita para o mesmo card. Se a remontagem
+  falhar, devolve a pendência e pede a linha completa, em vez de sumir.
+- **S2 — o fail-closed mentia o motivo.** A mesma legenda da Mayra falhou às
+  16:23 e passou às 16:50. A RPC devolveu `alocacao_nao_derivavel`: ela deriva o
+  valor de fatura **paga nos últimos 7 dias**, e às 16:23 o espelho do Emusys
+  ainda tinha as duas faturas **abertas** (sync a cada 15 min; marcou paga entre
+  16:33 e 16:48). O sistema agiu certo — a mensagem é que mandava *"confere
+  aluno, competência e valor de cada um"*, tudo estava certo, e a equipe passou
+  27 minutos procurando erro que não existia. Agora cada um dos motivos **reais**
+  da RPC (conferidos em `pg_get_functiondef`, não inventados) vira frase
+  verdadeira e acionável — inclusive distinguindo `candidatas > 1` (ambiguidade)
+  de `candidatas = 0` (espelho atrasado).
+- **S3 — a confirmação não dizia de quem.** `Lancei no caixa da Campo Grande:
+  Parcela — R$ 357,00 (pix)`. O dado no banco estava **certo** (Raul Fonseca
+  Silva, com fatura), mas pelo grupo ninguém confere — e foi conferindo pelo
+  grupo que o Jhon pegou o lote incompleto de 01/09. A confirmação do lote já
+  listava nomes; a do único não.
+
+⚠️ Regressões travadas no teste: forma solta **sem** pendência aberta continua
+não abrindo nada; `pode`/`não` não são capturados pelo caminho novo.
