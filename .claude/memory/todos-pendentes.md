@@ -363,6 +363,31 @@ Resultado: leads como o "Carlos Yan" (ex: matriculou 15/04, experimental marcada
 
 ## 👀 [OBSERVAR] Observador emusys — ✅ VIRADA FEITA em 12/08/2026
 
+> ### ✅ AFERIÇÃO 2026-08-21 — 2 dos 3 pontos abertos FECHARAM
+>
+> **1. ✅ FECHADO — paridade de webhook (a "recepção incompleta").** Medida por evento × escola
+> desde **04/08** (após o acerto de config): **17 de 18 combinações com diff 0**.
+>
+> | escola | alterada | finalizacao | nova | renovacao | trancamento | aviso_previo |
+> |---|---|---|---|---|---|---|
+> | 316 Barra | 29/29 | 4/4 | 9/9 | 12/12 | 4/4 | 4/**6** ⓘ |
+> | 39 CG | 44/44 | 26/26 | 15/15 | 32/32 | 6/6 | 9/9 |
+> | 40 Recreio | 51/51 | 4/4 | 16/16 | 38/38 | 1/1 | 2/2 |
+>
+> O gap do Recreio em `matricula_alterada` (era 36/31) **era resíduo histórico**: os 5 faltantes
+> são **todos de 03/08**, o próprio dia do conserto. De 04/08 em diante casa 1:1, inclusive hoje.
+> ⓘ O `-2` da Barra é o **inverso** de perda — o observador captou 2 reenvios a mais do mesmo
+> evento; a edge processou e registrou os 2 alunos. Não é buraco.
+>
+> **2. ✅ FECHADO — `matricula_aviso_previo_*` da Barra.** Os dois casos nominais que abriram o
+> alerta estão registrados: **Catarina Perim** (mov `3593`) e **Liv Ribeiro Oliveira** (mov `3594`),
+> ambas `data=13/08`, `data_prevista_saida=2026-10-01`. A Barra acumula 12 eventos do tipo.
+> Mecanismo: o observador repassa o aviso prévio a quem processa (commit `5d608101`, 20/08).
+>
+> **3. ❌ CONTINUA ABERTO — `lead_arquivado`.** Segue sem um único evento com a escrita ligada.
+> O único da história é de **07/08**, ainda em modo sombra (`processado_sombra`). Nada após a
+> virada de 12/08. É o único dos três com UPDATE destrutivo — **mantém este item aberto**.
+
 > ✅ **A decisão descrita abaixo foi TOMADA E EXECUTADA em 12/08/2026.** O observador escreve
 > (`OBSERVADOR_ESCREVE` com os 3 eventos de lead + os 3 de experimental) e a conexão
 > `Webhook1 → tem numero?2` do n8n foi removida pelo Hugo às 13:31 BRT. O n8n segue ligado **de
@@ -513,6 +538,68 @@ Sempre cruzar com os outros consumidores do mesmo produtor antes de concluir "n�
 
 **Arquivos:** `supabase/functions/debug-webhook-emusys-observador/index.ts` (**v18** em 03/08, era v17).
 Detalhes técnicos completos em `.claude/memory/integracao-infra.md` (seção "Observador emusys").
+## 🚨 [ALTA] `movimentacoes_admin`: evasão não grava `emusys_matricula_id`
+
+**Identificado em:** 2026-07-28 · **Revalidado em:** 2026-08-21
+
+**Descrição:** Em `processar-matricula-emusys`, `registrarMovimentacao` grava `emusys_matricula_id` **apenas dentro do bloco `if (tipo === 'renovacao')`** (~linha 1182). Foi adicionado em 2026-07-02 só para deduplicar renovações reenviadas; evasão nunca foi contemplada.
+
+**Medição (revalidada em 21/08):**
+
+| Mês | Evasões | Com `emusys_matricula_id` | Com `telefone_snapshot` |
+|---|---|---|---|
+| jul/2026 | 32 | **0** | 32 ✅ |
+| ago/2026 | 47 | **0** | 44 ✅ |
+
+> ✅ **`telefone_snapshot` foi RESOLVIDO** por outra via em ago/2026: o trigger `trg_capturar_telefone_snapshot_movimentacao_retencao` preenche no INSERT, mais migrations de backfill (`20260801*`, `20260820152938`). A edge continua sem gravar o campo, mas o banco cobre. **Não é mais bloqueador.**
+
+**Impacto restante (só o ID):**
+1. Sem rastreabilidade entre a movimentação e o evento que a originou (obriga join por nome, frágil).
+2. Impede saber **qual matrícula** foi encerrada — crítico em multi-curso: quem cancelou 1 de 2 cursos continua sendo aluno.
+3. Bloqueia a dedup robusta (ver item abaixo).
+
+**Fix:** mover `emusys_matricula_id` para fora do `if`, para o payload base. Backfill possível em camadas: via evento (nome + janela ±45d, candidato único) e via `alunos.emusys_matricula_id` **só quando `status <> 'ativo'`** — medido em 07/2026: aluno ativo diverge em 100% dos casos (o cadastro aponta para a matrícula que ficou viva, não a encerrada).
+
+⚠️ A chave é composta: `(emusys_matricula_id, unidade_id)`. IDs são sequenciais por escola — 116 grupos de ID repetido entre unidades diferentes é comportamento esperado.
+
+---
+
+## 🚨 [ALTA] Dedup de evasão descarta 2ª matrícula do mesmo aluno no mês (multi-curso)
+
+**Identificado em:** 2026-07-28 · **Revalidado em:** 2026-08-21 (ainda ocorrendo)
+
+**Descrição:** A dedup de `registrarMovimentacao` para tipos ≠ renovação usa apenas `aluno_nome` (string exata, **sem normalizar**) + `data >= inicioMes`. Não filtra por curso nem por matrícula. Qualquer segunda evasão do mesmo nome no mês corrente é descartada silenciosamente.
+
+**Casos medidos:**
+
+| Aluno | Mês | Matrículas finalizadas (payload) | Evasões registradas |
+|---|---|---|---|
+| Isis Petrucio Abrantes | jun/26 | Canto Coral + Teatro Musical | 1 (gravou "Harmonia" ⚠️) |
+| Lavinia Barreto Miranda | jun/26 | Garage Band + Bateria | 1 (gravou "Percussion Kids" ⚠️) |
+| Thallyson Victor S. de Aguiar | mai/26 | Canto + Cavaquinho | **0** ⚠️ |
+| Lorenzo Tavares B. de Lima | jul/26 | Bateria + Bateria | 1 |
+| **Thiago Sandes** | **ago/26** | 2 matrículas | **1** ← caso novo, bug ativo |
+
+**Segundo problema na mesma tabela:** o `curso_id` gravado vem de `alunos.curso_id` (cadastro), **não** do curso que consta no payload finalizado — por isso Isis aparece como "Harmonia" e Lavinia como "Percussion Kids".
+
+**Impacto:** subcontagem de evasão nos KPIs e **atribuição da evasão ao professor errado** (contamina o score).
+
+**Fix:** replicar a estratégia já validada na renovação — dedup por `(emusys_matricula_id, unidade_id)` (exige o fix acima) com o critério antigo como rede, e gravar o `curso_id` resolvido do payload.
+
+---
+
+## 📝 [BAIXA] `fiscal-dados.md` documenta evento inexistente `matricula_cancelamento`
+
+**Identificado em:** 2026-07-28 · **Revalidado em:** 2026-08-21 (ainda errado)
+
+**Descrição:** `docs/superpowers/prompts/fiscal-dados.md:80` afirma que a edge recebe `matricula_cancelamento`. **Esse evento não existe no Emusys.** Os 5 eventos realmente configurados são `matricula_nova`, `matricula_renovacao`, `matricula_trancamento`, `matricula_finalizacao` e `matricula_alterada` — confirmado por print do painel de webhooks do Emusys, raw event store (`automacao_log`), doc oficial (changelog) e varredura dos 115 workflows do n8n.
+
+No Emusys, "Finalizar Matrícula" **é** o cancelamento (status vai de "Em Andamento" para "Interrompido"); o que distingue os casos é `finalizacao.motivo`, não o evento. O evento dispara **só por ação manual** da secretaria e chega em média 3-15 dias após a última aula (motivo "Concluído e não vai renovar": 109 dias em média, até 191).
+
+**Fix:** corrigir a linha 80 para `matricula_finalizacao` e acrescentar `matricula_alterada`.
+
+---
+
 
 ---
 
