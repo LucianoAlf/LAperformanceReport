@@ -22,9 +22,11 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** anotacoes_pkey
+**Únicos:**
+- `anotacoes_pkey`
 
-**Triggers:** tr_anotacoes_updated_at → update_updated_at()
+**Triggers:**
+- `tr_anotacoes_updated_at → update_updated_at()`
 
 ## anotacoes_alunos
 
@@ -41,7 +43,8 @@
 | `updated_at` | timestamp with time zone | sim | now() |  |
 | `resolvido` | boolean | sim | false |  |
 
-**Únicos:** anotacoes_alunos_pkey
+**Únicos:**
+- `anotacoes_alunos_pkey`
 
 ## app_audio_preso_no_aparelho
 
@@ -55,7 +58,8 @@
 | `mais_antigo` | timestamp with time zone | sim |  |  |
 | `atualizado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** app_audio_preso_no_aparelho_pkey
+**Únicos:**
+- `app_audio_preso_no_aparelho_pkey`
 
 ## aula_alunos_emusys
 
@@ -80,9 +84,15 @@
 | `inativado_em` | timestamp with time zone | sim |  |  |
 | `inativado_motivo` | text | sim |  |  |
 
-**Únicos:** aula_alunos_emusys_aula_chave_uq, aula_alunos_emusys_pkey
+**Únicos:**
+- `aula_alunos_emusys_aula_chave_uq`
+- `aula_alunos_emusys_pkey`
 
-**Triggers:** trg_aula_alunos_emusys_casar_aluno → fn_aula_alunos_emusys_casar_aluno(), trg_aula_alunos_emusys_reconcilia_chave → fn_aula_alunos_emusys_reconcilia_chave(), trg_experimental_recebe_id_da_aula → fn_experimental_recebe_id_da_aula(), trg_presenca_roster_lock_v2 → fn_presenca_roster_lock_trigger_v2()
+**Triggers:**
+- `trg_aula_alunos_emusys_casar_aluno → fn_aula_alunos_emusys_casar_aluno()`
+- `trg_aula_alunos_emusys_reconcilia_chave → fn_aula_alunos_emusys_reconcilia_chave()`
+- `trg_experimental_recebe_id_da_aula → fn_experimental_recebe_id_da_aula()`
+- `trg_presenca_roster_lock_v2 → fn_presenca_roster_lock_trigger_v2()`
 
 ## aula_registros_fabio_log
 
@@ -99,7 +109,8 @@
 | `modo` | text | sim |  |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** aula_registros_fabio_log_pkey
+**Únicos:**
+- `aula_registros_fabio_log_pkey`
 
 ## aula_roster_sync_estado
 
@@ -115,9 +126,11 @@
 | `sincronizado_em` | timestamp with time zone | não | clock_timestamp() |  |
 | `atualizado_em` | timestamp with time zone | não | clock_timestamp() |  |
 
-**Únicos:** aula_roster_sync_estado_pkey
+**Únicos:**
+- `aula_roster_sync_estado_pkey`
 
-**Triggers:** trg_presenca_estado_roster_lock_v2 → fn_presenca_estado_roster_lock_trigger_v2()
+**Triggers:**
+- `trg_presenca_estado_roster_lock_v2 → fn_presenca_estado_roster_lock_trigger_v2()`
 
 ## aulas_emusys
 
@@ -161,9 +174,15 @@
 | `cancelada_em` | timestamp with time zone | sim |  |  |
 | `professor_presenca_origem` | text | sim |  |  |
 
-**Únicos:** aulas_emusys_emusys_id_unidade_id_key, aulas_emusys_pkey
+**Únicos:**
+- `aulas_emusys_emusys_id_unidade_id_key`
+- `aulas_emusys_pkey`
 
-**Triggers:** trg_presenca_slot_lock_v2 → fn_presenca_slot_lock_trigger_v2(), trg_proteger_anotacoes_fabio → fn_proteger_anotacoes_fabio(), trg_proteger_decisao_humana_aula → fn_proteger_decisao_humana_aula(), trg_reagendamento_limpa_chamada_alunos → fn_reagendamento_limpa_chamada_alunos()
+**Triggers:**
+- `trg_presenca_slot_lock_v2 → fn_presenca_slot_lock_trigger_v2()`
+- `trg_proteger_anotacoes_fabio → fn_proteger_anotacoes_fabio()`
+- `trg_proteger_decisao_humana_aula → fn_proteger_decisao_humana_aula()`
+- `trg_reagendamento_limpa_chamada_alunos → fn_reagendamento_limpa_chamada_alunos()`
 
 ## config_health_score
 
@@ -185,7 +204,9 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** config_health_score_pkey, config_health_score_unidade_unique
+**Únicos:**
+- `config_health_score_pkey`
+- `config_health_score_unidade_unique`
 
 ## config_health_score_aluno
 
@@ -205,7 +226,9 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** config_health_score_aluno_pkey, config_health_score_aluno_unidade_id_key
+**Únicos:**
+- `config_health_score_aluno_pkey`
+- `config_health_score_aluno_unidade_id_key`
 
 ## config_health_score_professor
 
@@ -226,9 +249,13 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** config_health_prof_unidade_unique, config_health_score_professor_pkey
+**Únicos:**
+- `config_health_prof_unidade_unique`
+- `config_health_score_professor_pkey`
 
-**Triggers:** trg_audit → fn_audit_log(), trigger_update_config_health_score_professor → update_config_health_score_professor_updated_at()
+**Triggers:**
+- `trg_audit → fn_audit_log()`
+- `trigger_update_config_health_score_professor → update_config_health_score_professor_updated_at()`
 
 ## disponibilidade_professor_propostas
 
@@ -253,9 +280,13 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** disponibilidade_professor_proposta_ativa_uq, disponibilidade_professor_propostas_pkey, disponibilidade_professor_propostas_versao_uq
+**Únicos:**
+- `disponibilidade_professor_proposta_ativa_uq`
+- `disponibilidade_professor_propostas_pkey`
+- `disponibilidade_professor_propostas_versao_uq`
 
-**Triggers:** set_updated_at_disponibilidade_professor_propostas → set_updated_at()
+**Triggers:**
+- `set_updated_at_disponibilidade_professor_propostas → set_updated_at()`
 
 ## fabio_acao_eventos
 
@@ -271,7 +302,9 @@
 | `resultado` | jsonb | não | '{}'::jsonb |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** fabio_acao_eventos_pkey, fabio_acao_eventos_wa_message_id_key
+**Únicos:**
+- `fabio_acao_eventos_pkey`
+- `fabio_acao_eventos_wa_message_id_key`
 
 ## fabio_acoes_pendentes
 
@@ -300,7 +333,10 @@
 | `atualizado_em` | timestamp with time zone | não | now() |  |
 | `encerrado_em` | timestamp with time zone | sim |  |  |
 
-**Únicos:** fabio_acoes_pendentes_ativa_professor_uq, fabio_acoes_pendentes_pkey, fabio_acoes_pendentes_wa_uq
+**Únicos:**
+- `fabio_acoes_pendentes_ativa_professor_uq`
+- `fabio_acoes_pendentes_pkey`
+- `fabio_acoes_pendentes_wa_uq`
 
 ## fabio_audios_parqueados
 
@@ -320,7 +356,9 @@
 | `descartado_em` | timestamp with time zone | sim |  |  |
 | `descartado_motivo` | text | sim |  |  |
 
-**Únicos:** fabio_audios_parqueados_pkey, uq_fabio_audio_parqueado_mensagem
+**Únicos:**
+- `fabio_audios_parqueados_pkey`
+- `uq_fabio_audio_parqueado_mensagem`
 
 ## fabio_chat_mensagens
 
@@ -345,7 +383,9 @@
 | `identidade_tipo` | text | não | 'professor'::text |  |
 | `usuario_id` | integer | sim |  | usuarios.id |
 
-**Únicos:** fabio_chat_mensagens_pkey, fcm_wa_msg_uq
+**Únicos:**
+- `fabio_chat_mensagens_pkey`
+- `fcm_wa_msg_uq`
 
 ## fabio_correcoes_acoes
 
@@ -364,7 +404,9 @@
 | `criado_em` | timestamp with time zone | não | now() |  |
 | `concluida_em` | timestamp with time zone | sim |  |  |
 
-**Únicos:** fabio_correcoes_acoes_pkey, fabio_correcoes_acoes_tipo_acao_id_key
+**Únicos:**
+- `fabio_correcoes_acoes_pkey`
+- `fabio_correcoes_acoes_tipo_acao_id_key`
 
 ## fabio_devolutiva_edicoes
 
@@ -380,7 +422,8 @@
 | `motivo` | text | não |  |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** fabio_devolutiva_edicoes_pkey
+**Únicos:**
+- `fabio_devolutiva_edicoes_pkey`
 
 ## fabio_devolutivas
 
@@ -418,7 +461,9 @@
 | `criado_em` | timestamp with time zone | não | now() |  |
 | `atualizado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** fabio_devolutivas_pkey, uq_fabio_devolutiva_por_registro
+**Únicos:**
+- `fabio_devolutivas_pkey`
+- `uq_fabio_devolutiva_por_registro`
 
 ## fabio_fila_audios
 
@@ -440,9 +485,13 @@
 | `vinculo_id` | bigint | sim |  | lead_experimental_aulas.id |
 | `erro_tipo` | text | não | 'transitorio'::text |  |
 
-**Únicos:** fabio_fila_audios_pkey, uq_fabio_fila_audio_experimental_path
+**Únicos:**
+- `fabio_fila_audios_pkey`
+- `uq_fabio_fila_audio_experimental_path`
 
-**Triggers:** trg_fabio_audios_upd → fn_set_atualizado_em(), trg_fabio_fila_novo → trg_fabio_fila_dispara()
+**Triggers:**
+- `trg_fabio_audios_upd → fn_set_atualizado_em()`
+- `trg_fabio_fila_novo → trg_fabio_fila_dispara()`
 
 ## fabio_notificacoes
 
@@ -474,7 +523,13 @@
 | `destinatario_whatsapp` | text | sim |  |  |
 | `solicitado_por` | uuid | sim |  |  |
 
-**Únicos:** fabio_notificacoes_feedback_coord_dia_unico, fabio_notificacoes_feedback_prof_dia_unico, fabio_notificacoes_pkey, uq_fabio_notif_por_referencia, uq_fabio_notif_recorrente_diario, uq_fabio_notificacoes_registro_recibo_unico
+**Únicos:**
+- `fabio_notificacoes_feedback_coord_dia_unico`
+- `fabio_notificacoes_feedback_prof_dia_unico`
+- `fabio_notificacoes_pkey`
+- `uq_fabio_notif_por_referencia`
+- `uq_fabio_notif_recorrente_diario`
+- `uq_fabio_notificacoes_registro_recibo_unico`
 
 ## fabio_participacao_ocorrencia_eventos
 
@@ -491,9 +546,11 @@
 | `dados` | jsonb | não | '{}'::jsonb |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** fabio_participacao_ocorrencia_eventos_pkey
+**Únicos:**
+- `fabio_participacao_ocorrencia_eventos_pkey`
 
-**Triggers:** trg_participacao_eventos_append_only → fn_participacao_append_only()
+**Triggers:**
+- `trg_participacao_eventos_append_only → fn_participacao_append_only()`
 
 ## fabio_participacao_ocorrencias
 
@@ -518,9 +575,13 @@
 | `supersede_ocorrencia_id` | uuid | sim |  | fabio_participacao_ocorrencias.id |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** fabio_participacao_ocorrencias_pkey, uq_participacao_msg_vigente
+**Únicos:**
+- `fabio_participacao_ocorrencias_pkey`
+- `uq_participacao_msg_vigente`
 
-**Triggers:** trg_participacao_ocorrencias_append_only → fn_participacao_append_only(), trg_participacao_supersede_coerente → fn_participacao_supersede_coerente()
+**Triggers:**
+- `trg_participacao_ocorrencias_append_only → fn_participacao_append_only()`
+- `trg_participacao_supersede_coerente → fn_participacao_supersede_coerente()`
 
 ## fabio_professor_preferences
 
@@ -539,9 +600,11 @@
 | `updated_at` | timestamp with time zone | não | now() |  |
 | `recebe_domingo` | boolean | não | false |  |
 
-**Únicos:** fabio_professor_preferences_pkey
+**Únicos:**
+- `fabio_professor_preferences_pkey`
 
-**Triggers:** trg_fabio_professor_preferences_touch → fn_touch_updated_at()
+**Triggers:**
+- `trg_fabio_professor_preferences_touch → fn_touch_updated_at()`
 
 ## fabio_protecao_log
 
@@ -555,7 +618,8 @@
 | `tamanho_preservado` | integer | sim |  |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** fabio_protecao_log_pkey
+**Únicos:**
+- `fabio_protecao_log_pkey`
 
 ## fabio_registro_correcoes
 
@@ -571,7 +635,8 @@
 | `motivo` | text | não |  |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** fabio_registro_correcoes_pkey
+**Únicos:**
+- `fabio_registro_correcoes_pkey`
 
 ## fabio_registros_aula
 
@@ -597,9 +662,12 @@
 | `modo_entrada` | text | não | 'audio'::text |  |
 | `versao` | integer | não | 1 |  |
 
-**Únicos:** fabio_registros_aula_pkey, ux_fabio_reg_manual_aberto
+**Únicos:**
+- `fabio_registros_aula_pkey`
+- `ux_fabio_reg_manual_aberto`
 
-**Triggers:** trg_fabio_reg_upd → fn_set_atualizado_em()
+**Triggers:**
+- `trg_fabio_reg_upd → fn_set_atualizado_em()`
 
 ## fabio_skills
 
@@ -614,7 +682,10 @@
 | `criado_em` | timestamp with time zone | não | now() |  |
 | `criado_por` | text | sim |  |  |
 
-**Únicos:** fabio_skills_pkey, uq_fabio_skills_ativa, uq_fabio_skills_nome_versao
+**Únicos:**
+- `fabio_skills_pkey`
+- `uq_fabio_skills_ativa`
+- `uq_fabio_skills_nome_versao`
 
 ## health_score_professor_v3_carteira_politicas_unidade
 
@@ -637,7 +708,9 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `base_horas` | text | não | 'disponibilidade_total'::text |  |
 
-**Únicos:** health_score_professor_v3_carteira_politicas_unidade_pkey, health_score_v3_carteira_politica_versao_uq
+**Únicos:**
+- `health_score_professor_v3_carteira_politicas_unidade_pkey`
+- `health_score_v3_carteira_politica_versao_uq`
 
 ## health_score_professor_v3_ciclos
 
@@ -658,7 +731,9 @@
 | `justificativa_fechamento` | text | sim |  |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** health_score_professor_v3_ciclos_codigo_key, health_score_professor_v3_ciclos_pkey
+**Únicos:**
+- `health_score_professor_v3_ciclos_codigo_key`
+- `health_score_professor_v3_ciclos_pkey`
 
 ## health_score_professor_v3_config_metas_curso_modalidade
 
@@ -679,9 +754,13 @@
 | `criado_em` | timestamp with time zone | não | now() |  |
 | `atualizado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** health_score_professor_v3_con_config_id_unidade_id_curso_id_key, health_score_professor_v3_con_id_unidade_id_curso_id_modali_key, health_score_professor_v3_config_metas_curso_modalidade_pkey
+**Únicos:**
+- `health_score_professor_v3_con_config_id_unidade_id_curso_id_key`
+- `health_score_professor_v3_con_id_unidade_id_curso_id_modali_key`
+- `health_score_professor_v3_config_metas_curso_modalidade_pkey`
 
-**Triggers:** trg_health_score_professor_v3_config_meta_segmentada_imutavel → fn_health_score_professor_v3_bloquear_config_meta_segmentada()
+**Triggers:**
+- `trg_health_score_professor_v3_config_meta_segmentada_imutavel → fn_health_score_professor_v3_bloquear_config_meta_segmentada()`
 
 ## health_score_professor_v3_config_metricas
 
@@ -700,9 +779,12 @@
 | `criado_em` | timestamp with time zone | não | now() |  |
 | `atualizado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** health_score_professor_v3_config_metricas_config_id_metrica_key, health_score_professor_v3_config_metricas_pkey
+**Únicos:**
+- `health_score_professor_v3_config_metricas_config_id_metrica_key`
+- `health_score_professor_v3_config_metricas_pkey`
 
-**Triggers:** trg_health_score_professor_v3_config_metrica_imutavel → fn_health_score_professor_v3_bloquear_config_metrica()
+**Triggers:**
+- `trg_health_score_professor_v3_config_metrica_imutavel → fn_health_score_professor_v3_bloquear_config_metrica()`
 
 ## health_score_professor_v3_config_simulacoes
 
@@ -718,7 +800,8 @@
 | `simulado_por` | integer | sim |  | usuarios.id |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** health_score_professor_v3_config_simulacoes_pkey
+**Únicos:**
+- `health_score_professor_v3_config_simulacoes_pkey`
 
 ## health_score_professor_v3_config_substituicoes
 
@@ -735,9 +818,12 @@
 | `substituido_por` | integer | sim |  | usuarios.id |
 | `substituido_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** health_score_professor_v3_config_substituico_config_nova_id_key, health_score_professor_v3_config_substituicoes_pkey
+**Únicos:**
+- `health_score_professor_v3_config_substituico_config_nova_id_key`
+- `health_score_professor_v3_config_substituicoes_pkey`
 
-**Triggers:** trg_health_score_professor_v3_config_substituicoes_append_only → fn_health_score_v3_bloquear_config_substituicao()
+**Triggers:**
+- `trg_health_score_professor_v3_config_substituicoes_append_only → fn_health_score_v3_bloquear_config_substituicao()`
 
 ## health_score_professor_v3_config_versoes
 
@@ -763,9 +849,14 @@
 | `chave_criacao_governada` | text | sim |  |  |
 | `pilares_minimos` | integer | não | 3 |  |
 
-**Únicos:** health_score_professor_v3_config_versoes_pkey, health_score_professor_v3_config_versoes_versao_key, health_score_v3_config_chave_criacao_governada_uidx
+**Únicos:**
+- `health_score_professor_v3_config_versoes_pkey`
+- `health_score_professor_v3_config_versoes_versao_key`
+- `health_score_v3_config_chave_criacao_governada_uidx`
 
-**Triggers:** trg_health_score_professor_v3_config_versao_imutavel → fn_health_score_professor_v3_bloquear_config_versao(), trg_health_score_professor_v3_exigir_simulacao_atual → fn_health_score_professor_v3_exigir_simulacao_atual()
+**Triggers:**
+- `trg_health_score_professor_v3_config_versao_imutavel → fn_health_score_professor_v3_bloquear_config_versao()`
+- `trg_health_score_professor_v3_exigir_simulacao_atual → fn_health_score_professor_v3_exigir_simulacao_atual()`
 
 ## health_score_professor_v3_materializacao_execucoes
 
@@ -794,7 +885,8 @@
 | `cron_alerta_erro` | text | sim |  |  |
 | `cron_alerta_atualizado_em` | timestamp with time zone | sim |  |  |
 
-**Únicos:** health_score_professor_v3_materializacao_execucoes_pkey
+**Únicos:**
+- `health_score_professor_v3_materializacao_execucoes_pkey`
 
 ## health_score_professor_v3_snapshot_metrica_diagnosticos
 
@@ -815,9 +907,12 @@
 | `detalhes` | jsonb | não | '{}'::jsonb |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** health_score_professor_v3_sna_snapshot_metrica_id_unidade__key1, health_score_professor_v3_snapshot_metrica_diagnosticos_pkey
+**Únicos:**
+- `health_score_professor_v3_sna_snapshot_metrica_id_unidade__key1`
+- `health_score_professor_v3_snapshot_metrica_diagnosticos_pkey`
 
-**Triggers:** trg_health_score_v3_snapshot_segmento_diagnostico_imutavel → fn_health_score_professor_v3_bloquear_snapshot_segmento_fechado()
+**Triggers:**
+- `trg_health_score_v3_snapshot_segmento_diagnostico_imutavel → fn_health_score_professor_v3_bloquear_snapshot_segmento_fechado()`
 
 ## health_score_professor_v3_snapshot_metrica_segmentos
 
@@ -857,9 +952,13 @@
 | `alertas_capacidade` | jsonb | sim |  |  |
 | `divergencias` | jsonb | sim |  |  |
 
-**Únicos:** health_score_professor_v3_sna_snapshot_metrica_id_unidade_i_key, health_score_professor_v3_snapshot_metrica_segmentos_pkey
+**Únicos:**
+- `health_score_professor_v3_sna_snapshot_metrica_id_unidade_i_key`
+- `health_score_professor_v3_snapshot_metrica_segmentos_pkey`
 
-**Triggers:** trg_health_score_professor_v3_snapshot_segmento_imutavel → fn_health_score_professor_v3_bloquear_snapshot_segmento_fechado(), trg_health_score_v3_snapshot_segmento_config_consistente → fn_health_score_professor_v3_validar_snapshot_segmento_config()
+**Triggers:**
+- `trg_health_score_professor_v3_snapshot_segmento_imutavel → fn_health_score_professor_v3_bloquear_snapshot_segmento_fechado()`
+- `trg_health_score_v3_snapshot_segmento_config_consistente → fn_health_score_professor_v3_validar_snapshot_segmento_config()`
 
 ## health_score_professor_v3_snapshot_metricas
 
@@ -889,9 +988,12 @@
 | `codigo_evidencia` | text | sim |  |  |
 | `papel` | text | sim |  |  |
 
-**Únicos:** health_score_professor_v3_snapshot_metr_snapshot_id_metrica_key, health_score_professor_v3_snapshot_metricas_pkey
+**Únicos:**
+- `health_score_professor_v3_snapshot_metr_snapshot_id_metrica_key`
+- `health_score_professor_v3_snapshot_metricas_pkey`
 
-**Triggers:** trg_health_score_professor_v3_snapshot_metrica_imutavel → fn_health_score_professor_v3_bloquear_metrica_fechada()
+**Triggers:**
+- `trg_health_score_professor_v3_snapshot_metrica_imutavel → fn_health_score_professor_v3_bloquear_metrica_fechada()`
 
 ## health_score_professor_v3_snapshots
 
@@ -930,9 +1032,16 @@
 | `score_exibivel` | boolean | não | false |  |
 | `ranking_habilitado` | boolean | não | false |  |
 
-**Únicos:** health_score_professor_v3_snapshots_pkey, ux_health_score_professor_v3_snapshot_consolidado_fechado, ux_health_score_professor_v3_snapshot_consolidado_revisao, ux_health_score_professor_v3_snapshot_unidade_fechado, ux_health_score_professor_v3_snapshot_unidade_revisao
+**Únicos:**
+- `health_score_professor_v3_snapshots_pkey`
+- `ux_health_score_professor_v3_snapshot_consolidado_fechado`
+- `ux_health_score_professor_v3_snapshot_consolidado_revisao`
+- `ux_health_score_professor_v3_snapshot_unidade_fechado`
+- `ux_health_score_professor_v3_snapshot_unidade_revisao`
 
-**Triggers:** trg_health_score_professor_v3_snapshot_imutavel → fn_health_score_professor_v3_bloquear_snapshot_fechado(), trg_health_score_v3_bloquear_sem_disponibilidade → fn_health_score_v3_bloquear_sem_disponibilidade()
+**Triggers:**
+- `trg_health_score_professor_v3_snapshot_imutavel → fn_health_score_professor_v3_bloquear_snapshot_fechado()`
+- `trg_health_score_v3_bloquear_sem_disponibilidade → fn_health_score_v3_bloquear_sem_disponibilidade()`
 
 ## health_score_v3_experimental_lead_conciliacoes
 
@@ -950,7 +1059,9 @@
 | `evidencia` | jsonb | não | '{}'::jsonb |  |
 | `conciliado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** health_score_v3_experimental_lead_c_unidade_id_evento_chave_key, health_score_v3_experimental_lead_conciliacoes_pkey
+**Únicos:**
+- `health_score_v3_experimental_lead_c_unidade_id_evento_chave_key`
+- `health_score_v3_experimental_lead_conciliacoes_pkey`
 
 ## la_teacher_coordenacao
 
@@ -962,7 +1073,8 @@
 | `criado_em` | timestamp with time zone | não | now() |  |
 | `criado_por` | text | sim |  |  |
 
-**Únicos:** la_teacher_coordenacao_pkey
+**Únicos:**
+- `la_teacher_coordenacao_pkey`
 
 ## presenca_acao_eventos
 
@@ -986,9 +1098,12 @@
 | `erro_codigo` | text | sim |  |  |
 | `criado_em` | timestamp with time zone | não | clock_timestamp() |  |
 
-**Únicos:** presenca_acao_eventos_pkey, presenca_acao_eventos_request_id_sequencia_key
+**Únicos:**
+- `presenca_acao_eventos_pkey`
+- `presenca_acao_eventos_request_id_sequencia_key`
 
-**Triggers:** trg_presenca_acao_eventos_append_only → fn_presenca_comando_eventos_append_only()
+**Triggers:**
+- `trg_presenca_acao_eventos_append_only → fn_presenca_comando_eventos_append_only()`
 
 ## presenca_comando_itens
 
@@ -1004,7 +1119,8 @@
 | `motivo_codigo` | text | sim |  |  |
 | `evidencia_path` | text | sim |  |  |
 
-**Únicos:** presenca_comando_itens_pkey
+**Únicos:**
+- `presenca_comando_itens_pkey`
 
 ## presenca_comando_nao_recebidos
 
@@ -1016,7 +1132,8 @@
 | `auth_user_id` | uuid | sim |  |  |
 | `criado_em` | timestamp with time zone | não | clock_timestamp() |  |
 
-**Únicos:** presenca_comando_nao_recebidos_pkey
+**Únicos:**
+- `presenca_comando_nao_recebidos_pkey`
 
 ## presenca_comandos
 
@@ -1043,9 +1160,11 @@
 | `concluido_em` | timestamp with time zone | sim |  |  |
 | `atualizado_em` | timestamp with time zone | não | clock_timestamp() |  |
 
-**Únicos:** presenca_comandos_pkey
+**Únicos:**
+- `presenca_comandos_pkey`
 
-**Triggers:** trg_presenca_comando_arbitrar_insert → fn_presenca_comando_arbitrar_insert()
+**Triggers:**
+- `trg_presenca_comando_arbitrar_insert → fn_presenca_comando_arbitrar_insert()`
 
 ## presenca_politicas_confiabilidade
 
@@ -1066,9 +1185,13 @@
 | `ativa` | boolean | não | true |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** presenca_politicas_confiabili_unidade_id_data_inicio_data_f_key, presenca_politicas_confiabilidade_pkey, uq_presenca_politica_periodo_ativa
+**Únicos:**
+- `presenca_politicas_confiabili_unidade_id_data_inicio_data_f_key`
+- `presenca_politicas_confiabilidade_pkey`
+- `uq_presenca_politica_periodo_ativa`
 
-**Triggers:** trg_presenca_politica_impedir_sobreposicao → fn_presenca_politica_impedir_sobreposicao()
+**Triggers:**
+- `trg_presenca_politica_impedir_sobreposicao → fn_presenca_politica_impedir_sobreposicao()`
 
 ## presenca_rollout_config
 
@@ -1084,7 +1207,8 @@
 | `motivo` | text | não |  |  |
 | `versao` | bigint | não | 1 |  |
 
-**Únicos:** presenca_rollout_config_pkey
+**Únicos:**
+- `presenca_rollout_config_pkey`
 
 ## presenca_rollout_eventos
 
@@ -1103,7 +1227,9 @@
 | `evidencia` | jsonb | não | '{}'::jsonb |  |
 | `criado_em` | timestamp with time zone | não | clock_timestamp() |  |
 
-**Únicos:** presenca_rollout_eventos_pkey, presenca_rollout_eventos_request_id_key
+**Únicos:**
+- `presenca_rollout_eventos_pkey`
+- `presenca_rollout_eventos_request_id_key`
 
 ## presenca_sync_cobertura
 
@@ -1126,7 +1252,8 @@
 | `finalizada_em` | timestamp with time zone | sim |  |  |
 | `atualizada_em` | timestamp with time zone | não | clock_timestamp() |  |
 
-**Únicos:** presenca_sync_cobertura_pkey
+**Únicos:**
+- `presenca_sync_cobertura_pkey`
 
 ## presenca_sync_eventos
 
@@ -1140,7 +1267,8 @@
 | `detalhes` | jsonb | não | '{}'::jsonb |  |
 | `criado_em` | timestamp with time zone | não | clock_timestamp() |  |
 
-**Únicos:** presenca_sync_eventos_pkey
+**Únicos:**
+- `presenca_sync_eventos_pkey`
 
 ## presenca_sync_execucoes
 
@@ -1164,7 +1292,9 @@
 | `heartbeat_em` | timestamp with time zone | sim |  |  |
 | `finalizada_em` | timestamp with time zone | sim |  |  |
 
-**Únicos:** presenca_sync_execucoes_pkey, presenca_sync_execucoes_request_id_unidade_id_modo_data_alv_key
+**Únicos:**
+- `presenca_sync_execucoes_pkey`
+- `presenca_sync_execucoes_request_id_unidade_id_modo_data_alv_key`
 
 ## professor_360_avaliacoes
 
@@ -1198,9 +1328,12 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** professor_360_avaliacoes_pkey, professor_360_avaliacoes_professor_id_unidade_id_competenci_key
+**Únicos:**
+- `professor_360_avaliacoes_pkey`
+- `professor_360_avaliacoes_professor_id_unidade_id_competenci_key`
 
-**Triggers:** trg_audit → fn_audit_log()
+**Triggers:**
+- `trg_audit → fn_audit_log()`
 
 ## professor_360_config
 
@@ -1212,7 +1345,9 @@
 | `descricao` | text | sim |  |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** professor_360_config_chave_key, professor_360_config_pkey
+**Únicos:**
+- `professor_360_config_chave_key`
+- `professor_360_config_pkey`
 
 ## professor_360_criterios
 
@@ -1233,7 +1368,9 @@
 | `updated_at` | timestamp with time zone | sim | now() |  |
 | `limite_minutos_atraso` | integer | sim | 10 |  |
 
-**Únicos:** professor_360_criterios_codigo_key, professor_360_criterios_pkey
+**Únicos:**
+- `professor_360_criterios_codigo_key`
+- `professor_360_criterios_pkey`
 
 ## professor_360_ocorrencias
 
@@ -1260,9 +1397,12 @@
 | `revertido_por_nome` | character varying(255) | sim |  |  |
 | `justificativa_reversao` | text | sim |  |  |
 
-**Únicos:** professor_360_ocorrencias_pkey
+**Únicos:**
+- `professor_360_ocorrencias_pkey`
 
-**Triggers:** trg_audit → fn_audit_log(), trg_log_ocorrencia_criada → fn_log_ocorrencia_criada()
+**Triggers:**
+- `trg_audit → fn_audit_log()`
+- `trg_log_ocorrencia_criada → fn_log_ocorrencia_criada()`
 
 ## professor_360_ocorrencias_log
 
@@ -1278,7 +1418,8 @@
 | `dados_novos` | jsonb | sim |  |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** professor_360_ocorrencias_log_pkey
+**Únicos:**
+- `professor_360_ocorrencias_log_pkey`
 
 ## professor_acesso_codigos
 
@@ -1296,7 +1437,8 @@
 | `criado_em` | timestamp with time zone | não | now() |  |
 | `expira_em` | timestamp with time zone | sim |  |  |
 
-**Únicos:** professor_acesso_codigos_pkey
+**Únicos:**
+- `professor_acesso_codigos_pkey`
 
 ## professor_acoes
 
@@ -1323,9 +1465,11 @@
 | `unidade_acao` | character varying(50) | sim |  |  |
 | `ordem_kanban` | integer | sim | 0 |  |
 
-**Únicos:** professor_acoes_pkey
+**Únicos:**
+- `professor_acoes_pkey`
 
-**Triggers:** trg_audit → fn_audit_log()
+**Triggers:**
+- `trg_audit → fn_audit_log()`
 
 ## professor_acoes_participantes
 
@@ -1337,7 +1481,9 @@
 | `confirmado` | boolean | sim | false |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** professor_acoes_participantes_acao_id_professor_id_key, professor_acoes_participantes_pkey
+**Únicos:**
+- `professor_acoes_participantes_acao_id_professor_id_key`
+- `professor_acoes_participantes_pkey`
 
 ## professor_carteira_mensal_canonica
 
@@ -1356,7 +1502,9 @@
 | `observacoes` | text | sim |  |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** professor_carteira_mensal_canonica_pkey, professor_carteira_mensal_canonica_unique
+**Únicos:**
+- `professor_carteira_mensal_canonica_pkey`
+- `professor_carteira_mensal_canonica_unique`
 
 ## professor_carteira_mensal_detalhe
 
@@ -1372,7 +1520,9 @@
 | `fonte` | text | não | 'sync_matriculas_emusys_fechamento_automatico'::text |  |
 | `capturado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** professor_carteira_mensal_det_competencia_unidade_id_profes_key, professor_carteira_mensal_detalhe_pkey
+**Únicos:**
+- `professor_carteira_mensal_det_competencia_unidade_id_profes_key`
+- `professor_carteira_mensal_detalhe_pkey`
 
 ## professor_checkpoints
 
@@ -1388,7 +1538,9 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `created_by` | uuid | sim |  | users.id |
 
-**Únicos:** professor_checkpoints_pkey, professor_checkpoints_professor_id_unidade_id_competencia_key
+**Únicos:**
+- `professor_checkpoints_pkey`
+- `professor_checkpoints_professor_id_unidade_id_competencia_key`
 
 ## professor_matricula_disciplina_periodos_v1
 
@@ -1431,7 +1583,10 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** professor_matricula_disciplina_periodos_v1_pkey, uq_professor_periodos_identidade_reconstrucao, uq_professor_periodos_um_ativo_por_disciplina
+**Únicos:**
+- `professor_matricula_disciplina_periodos_v1_pkey`
+- `uq_professor_periodos_identidade_reconstrucao`
+- `uq_professor_periodos_um_ativo_por_disciplina`
 
 ## professor_metas
 
@@ -1451,7 +1606,8 @@
 | `updated_at` | timestamp with time zone | sim | now() |  |
 | `created_by` | uuid | sim |  | users.id |
 
-**Únicos:** professor_metas_pkey
+**Únicos:**
+- `professor_metas_pkey`
 
 ## professor_passagem_bastao
 
@@ -1475,7 +1631,9 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `respondido_em` | timestamp with time zone | sim |  |  |
 
-**Únicos:** professor_passagem_bastao_pkey, professor_passagem_bastao_transicao_unique
+**Únicos:**
+- `professor_passagem_bastao_pkey`
+- `professor_passagem_bastao_transicao_unique`
 
 ## professor_perfil_respostas
 
@@ -1491,7 +1649,9 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `bloco` | character(1) | não | 'A'::bpchar |  |
 
-**Únicos:** professor_perfil_respostas_pkey, professor_perfil_respostas_teste_bloco_pergunta_key
+**Únicos:**
+- `professor_perfil_respostas_pkey`
+- `professor_perfil_respostas_teste_bloco_pergunta_key`
 
 ## professor_perfil_testes
 
@@ -1526,7 +1686,9 @@
 | `valores_contagem` | jsonb | sim |  |  |
 | `ficha_token_id` | bigint | sim |  | ficha_tokens.id |
 
-**Únicos:** professor_perfil_testes_pkey, uq_professor_perfil_testes_ficha_token
+**Únicos:**
+- `professor_perfil_testes_pkey`
+- `uq_professor_perfil_testes_ficha_token`
 
 ## professor_periodos_reconstrucao_manifesto_v1
 
@@ -1548,7 +1710,9 @@
 | `aluno_id` | integer | sim |  | alunos.id |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** professor_periodos_reconstruc_unidade_id_data_inicio_data__key2, professor_periodos_reconstrucao_manifesto_v1_pkey
+**Únicos:**
+- `professor_periodos_reconstruc_unidade_id_data_inicio_data__key2`
+- `professor_periodos_reconstrucao_manifesto_v1_pkey`
 
 ## professor_periodos_reconstrucao_particoes_v1
 
@@ -1577,7 +1741,9 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** professor_periodos_reconstruc_unidade_id_data_inicio_data__key1, professor_periodos_reconstrucao_particoes_v1_pkey
+**Únicos:**
+- `professor_periodos_reconstruc_unidade_id_data_inicio_data__key1`
+- `professor_periodos_reconstrucao_particoes_v1_pkey`
 
 ## professor_periodos_reconstrucoes_v1
 
@@ -1605,7 +1771,9 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** professor_periodos_reconstruc_unidade_id_data_inicio_data_f_key, professor_periodos_reconstrucoes_v1_pkey
+**Únicos:**
+- `professor_periodos_reconstruc_unidade_id_data_inicio_data_f_key`
+- `professor_periodos_reconstrucoes_v1_pkey`
 
 ## professor_periodos_revisoes_v1
 
@@ -1630,9 +1798,12 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `origem_revisao` | text | não | 'revisao_humana'::text |  |
 
-**Únicos:** professor_periodos_revisoes_v1_pkey, uq_professor_periodos_revisoes_promocao_automatica
+**Únicos:**
+- `professor_periodos_revisoes_v1_pkey`
+- `uq_professor_periodos_revisoes_promocao_automatica`
 
-**Triggers:** trg_professor_periodos_revisoes_append_only → fn_bloquear_mutacao_professor_periodos_revisoes_v1()
+**Triggers:**
+- `trg_professor_periodos_revisoes_append_only → fn_bloquear_mutacao_professor_periodos_revisoes_v1()`
 
 ## professor_ponto_confirmacoes
 
@@ -1648,9 +1819,12 @@
 | `respondido_em` | timestamp with time zone | não | now() |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** professor_ponto_confirmacoes_pkey, professor_ponto_confirmacoes_prof_aula_uq
+**Únicos:**
+- `professor_ponto_confirmacoes_pkey`
+- `professor_ponto_confirmacoes_prof_aula_uq`
 
-**Triggers:** trg_professor_ponto_canonicalizar_ocorrencia → fn_professor_ponto_canonicalizar_ocorrencia()
+**Triggers:**
+- `trg_professor_ponto_canonicalizar_ocorrencia → fn_professor_ponto_canonicalizar_ocorrencia()`
 
 ## professor_unidade_curso_modalidade
 
@@ -1674,9 +1848,14 @@
 | `criado_em` | timestamp with time zone | não | now() |  |
 | `atualizado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** professor_unidade_curso_modalidade_pkey, uq_professor_curso_modalidade_ativa_aberta, uq_professor_curso_modalidade_id_escopo
+**Únicos:**
+- `professor_unidade_curso_modalidade_pkey`
+- `uq_professor_curso_modalidade_ativa_aberta`
+- `uq_professor_curso_modalidade_id_escopo`
 
-**Triggers:** trg_professor_curso_modalidade_impedir_sobreposicao → fn_professor_curso_modalidade_impedir_sobreposicao_v1(), trg_professor_curso_modalidade_proteger_historico → fn_professor_curso_modalidade_proteger_historico_v1()
+**Triggers:**
+- `trg_professor_curso_modalidade_impedir_sobreposicao → fn_professor_curso_modalidade_impedir_sobreposicao_v1()`
+- `trg_professor_curso_modalidade_proteger_historico → fn_professor_curso_modalidade_proteger_historico_v1()`
 
 ## professor_videos
 
@@ -1692,7 +1871,9 @@
 | `updated_at` | timestamp with time zone | sim | now() |  |
 | `nome_original` | character varying(255) | sim |  |  |
 
-**Únicos:** professor_videos_pkey, professor_videos_professor_id_curso_id_tipo_key
+**Únicos:**
+- `professor_videos_pkey`
+- `professor_videos_professor_id_curso_id_tipo_key`
 
 ## professores
 
@@ -1720,9 +1901,14 @@
 | `temperamento_codinome` | character varying | sim |  |  |
 | `mesclado_em_professor_id` | integer | sim |  | professores.id |
 
-**Únicos:** professores_pkey, uk_professores_nome_normalizado, ux_professores_usuario
+**Únicos:**
+- `professores_pkey`
+- `uk_professores_nome_normalizado`
+- `ux_professores_usuario`
 
-**Triggers:** trg_audit → fn_audit_log(), trg_professores_updated_at → update_updated_at_column()
+**Triggers:**
+- `trg_audit → fn_audit_log()`
+- `trg_professores_updated_at → update_updated_at_column()`
 
 ## professores_cursos
 
@@ -1735,7 +1921,9 @@
 | `curso_id` | integer | não |  | cursos.id |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** professores_cursos_pkey, professores_cursos_professor_id_curso_id_key
+**Únicos:**
+- `professores_cursos_pkey`
+- `professores_cursos_professor_id_curso_id_key`
 
 ## professores_emusys_divergencias
 
@@ -1760,9 +1948,12 @@
 | `detectado_em` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** professores_emusys_divergencias_pendente_uq, professores_emusys_divergencias_pkey
+**Únicos:**
+- `professores_emusys_divergencias_pendente_uq`
+- `professores_emusys_divergencias_pkey`
 
-**Triggers:** set_updated_at_professores_emusys_divergencias → set_updated_at()
+**Triggers:**
+- `set_updated_at_professores_emusys_divergencias → set_updated_at()`
 
 ## professores_performance
 
@@ -1781,7 +1972,9 @@
 | `taxa_renovacao` | numeric(5,1) | sim | 0 |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** professores_performance_pkey, professores_performance_professor_unidade_ano_key
+**Únicos:**
+- `professores_performance_pkey`
+- `professores_performance_professor_unidade_ano_key`
 
 ## professores_sync_log
 
@@ -1798,7 +1991,8 @@
 | `detalhes` | jsonb | sim |  |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** professores_sync_log_pkey
+**Únicos:**
+- `professores_sync_log_pkey`
 
 ## professores_unidades
 
@@ -1825,9 +2019,13 @@
 | `updated_at` | timestamp with time zone | não | now() |  |
 | `identidade_historica_valida` | boolean | não | false |  |
 
-**Únicos:** professores_unidades_pkey, professores_unidades_professor_id_unidade_id_key, professores_unidades_unidade_emusys_id_uq
+**Únicos:**
+- `professores_unidades_pkey`
+- `professores_unidades_professor_id_unidade_id_key`
+- `professores_unidades_unidade_emusys_id_uq`
 
-**Triggers:** set_updated_at_professores_unidades → set_updated_at()
+**Triggers:**
+- `set_updated_at_professores_unidades → set_updated_at()`
 
 ## programa_fideliza_config
 
@@ -1853,7 +2051,9 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** programa_fideliza_config_ano_key, programa_fideliza_config_pkey
+**Únicos:**
+- `programa_fideliza_config_ano_key`
+- `programa_fideliza_config_pkey`
 
 ## programa_fideliza_experiencias
 
@@ -1869,7 +2069,8 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | sim |  |  |
 
-**Únicos:** programa_fideliza_experiencias_pkey
+**Únicos:**
+- `programa_fideliza_experiencias_pkey`
 
 ## programa_fideliza_historico
 
@@ -1898,7 +2099,9 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** programa_fideliza_historico_ano_trimestre_unidade_id_key, programa_fideliza_historico_pkey
+**Únicos:**
+- `programa_fideliza_historico_ano_trimestre_unidade_id_key`
+- `programa_fideliza_historico_pkey`
 
 ## programa_fideliza_penalidades
 
@@ -1916,7 +2119,8 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | sim |  |  |
 
-**Únicos:** programa_fideliza_penalidades_pkey
+**Únicos:**
+- `programa_fideliza_penalidades_pkey`
 
 ## programa_matriculador_config
 
@@ -1953,7 +2157,9 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** programa_matriculador_config_ano_key, programa_matriculador_config_pkey
+**Únicos:**
+- `programa_matriculador_config_ano_key`
+- `programa_matriculador_config_pkey`
 
 ## programa_matriculador_historico
 
@@ -1982,7 +2188,9 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** programa_matriculador_historico_ano_mes_unidade_id_key, programa_matriculador_historico_pkey
+**Únicos:**
+- `programa_matriculador_historico_ano_mes_unidade_id_key`
+- `programa_matriculador_historico_pkey`
 
 ## programa_matriculador_penalidades
 
@@ -1999,7 +2207,8 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** programa_matriculador_penalidades_pkey
+**Únicos:**
+- `programa_matriculador_penalidades_pkey`
 
 ## turmas
 
@@ -2023,7 +2232,9 @@
 | `updated_at` | timestamp with time zone | sim | now() |  |
 | `duracao_minutos` | integer | sim | 60 |  |
 
-**Únicos:** turmas_pkey, turmas_unidade_id_professor_id_dia_semana_horario_inicio_key
+**Únicos:**
+- `turmas_pkey`
+- `turmas_unidade_id_professor_id_dia_semana_horario_inicio_key`
 
 ## turmas_alunos
 
@@ -2036,9 +2247,12 @@
 | `aluno_id` | integer | não |  | alunos.id |
 | `created_at` | timestamp without time zone | sim | now() |  |
 
-**Únicos:** turmas_alunos_pkey, turmas_alunos_turma_id_aluno_id_key
+**Únicos:**
+- `turmas_alunos_pkey`
+- `turmas_alunos_turma_id_aluno_id_key`
 
-**Triggers:** trg_audit → fn_audit_log()
+**Triggers:**
+- `trg_audit → fn_audit_log()`
 
 ## turmas_explicitas
 
@@ -2060,9 +2274,11 @@
 | `created_at` | timestamp without time zone | sim | now() |  |
 | `updated_at` | timestamp without time zone | sim | now() |  |
 
-**Únicos:** turmas_explicitas_pkey
+**Únicos:**
+- `turmas_explicitas_pkey`
 
-**Triggers:** trg_audit → fn_audit_log()
+**Triggers:**
+- `trg_audit → fn_audit_log()`
 
 ## turmas_historico
 
@@ -2081,7 +2297,8 @@
 | `metadata` | jsonb | sim | '{}'::jsonb |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** turmas_historico_pkey
+**Únicos:**
+- `turmas_historico_pkey`
 
 ## vw_aderencia_registro_professor
 

@@ -22,7 +22,8 @@
 | `is_active` | boolean | sim | true |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** bi_agent_config_lamusic_pkey
+**Únicos:**
+- `bi_agent_config_lamusic_pkey`
 
 ## bi_ai_query_playbooks
 
@@ -48,9 +49,12 @@
 | `updated_at` | timestamp with time zone | não | now() |  |
 | `last_used_at` | timestamp with time zone | sim |  |  |
 
-**Únicos:** bi_ai_query_playbooks_intent_key, bi_ai_query_playbooks_pkey
+**Únicos:**
+- `bi_ai_query_playbooks_intent_key`
+- `bi_ai_query_playbooks_pkey`
 
-**Triggers:** trg_bi_ai_query_playbooks_updated_at → set_updated_at()
+**Triggers:**
+- `trg_bi_ai_query_playbooks_updated_at → set_updated_at()`
 
 ## bi_conversations_lamusic
 
@@ -68,9 +72,12 @@
 | `colaborador_id` | integer | sim |  | colaboradores.id |
 | `colaborador_tipo` | text | sim |  |  |
 
-**Únicos:** bi_conversations_lamusic_pkey
+**Únicos:**
+- `bi_conversations_lamusic_pkey`
 
-**Triggers:** trg_bi_conversation_autofill → fn_bi_conversation_autofill(), trg_bi_conversations_updated_at → set_updated_at()
+**Triggers:**
+- `trg_bi_conversation_autofill → fn_bi_conversation_autofill()`
+- `trg_bi_conversations_updated_at → set_updated_at()`
 
 ## bi_messages_lamusic
 
@@ -97,9 +104,11 @@
 | `locked_at` | timestamp with time zone | sim |  |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** bi_messages_lamusic_pkey
+**Únicos:**
+- `bi_messages_lamusic_pkey`
 
-**Triggers:** trg_bi_messages_updated_at → set_updated_at()
+**Triggers:**
+- `trg_bi_messages_updated_at → set_updated_at()`
 
 ## bi_query_cache_lamusic
 
@@ -115,7 +124,9 @@
 | `expires_at` | timestamp with time zone | sim | (now() + '01:00:00'::interval) |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** bi_query_cache_lamusic_pkey, bi_query_cache_lamusic_user_id_query_hash_key
+**Únicos:**
+- `bi_query_cache_lamusic_pkey`
+- `bi_query_cache_lamusic_user_id_query_hash_key`
 
 ## bi_query_templates_lamusic
 
@@ -131,7 +142,8 @@
 | `is_active` | boolean | sim | true |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** bi_query_templates_lamusic_pkey
+**Únicos:**
+- `bi_query_templates_lamusic_pkey`
 
 ## competencias_bloqueios_log
 
@@ -152,7 +164,8 @@
 | `resolvido_por` | text | sim |  |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** competencias_bloqueios_log_pkey
+**Únicos:**
+- `competencias_bloqueios_log_pkey`
 
 ## competencias_mensais
 
@@ -172,7 +185,9 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** competencias_mensais_pkey, competencias_mensais_unidade_ano_mes_key
+**Únicos:**
+- `competencias_mensais_pkey`
+- `competencias_mensais_unidade_ano_mes_key`
 
 ## dados_comerciais_legado
 
@@ -198,7 +213,9 @@
 | `soma_parcelas` | numeric | sim | 0 |  |
 | `qtd_matriculas_parcela` | integer | sim | 0 |  |
 
-**Únicos:** dados_comerciais_competencia_unidade_key, dados_comerciais_pkey
+**Únicos:**
+- `dados_comerciais_competencia_unidade_key`
+- `dados_comerciais_pkey`
 
 ## dados_mensais
 
@@ -230,9 +247,14 @@
 | `bolsistas_integrais` | integer | sim | 0 |  |
 | `bolsistas_parciais` | integer | sim | 0 |  |
 
-**Únicos:** dados_mensais_pkey, dados_mensais_unidade_id_ano_mes_key
+**Únicos:**
+- `dados_mensais_pkey`
+- `dados_mensais_unidade_id_ano_mes_key`
 
-**Triggers:** tr_audit_dados_mensais → audit_dados_mensais(), tr_dados_mensais_updated_at → update_updated_at(), trg_audit → fn_audit_log()
+**Triggers:**
+- `tr_audit_dados_mensais → audit_dados_mensais()`
+- `tr_dados_mensais_updated_at → update_updated_at()`
+- `trg_audit → fn_audit_log()`
 
 ## dados_mensais_retificacoes
 
@@ -258,7 +280,8 @@
 | `aplicada_em` | timestamp with time zone | sim |  |  |
 | `aplicada_por` | text | sim |  |  |
 
-**Únicos:** dados_mensais_retificacoes_pkey
+**Únicos:**
+- `dados_mensais_retificacoes_pkey`
 
 ## dashboard_config
 
@@ -271,9 +294,12 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** dashboard_config_chave_key, dashboard_config_pkey
+**Únicos:**
+- `dashboard_config_chave_key`
+- `dashboard_config_pkey`
 
-**Triggers:** tr_dashboard_config_updated_at → update_updated_at()
+**Triggers:**
+- `tr_dashboard_config_updated_at → update_updated_at()`
 
 ## insights_salvos
 
@@ -290,9 +316,11 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** insights_salvos_pkey
+**Únicos:**
+- `insights_salvos_pkey`
 
-**Triggers:** trigger_update_insights_salvos_timestamp → update_insights_salvos_timestamp()
+**Triggers:**
+- `trigger_update_insights_salvos_timestamp → update_insights_salvos_timestamp()`
 
 ## metas
 
@@ -327,9 +355,13 @@
 | `updated_at` | timestamp with time zone | sim | now() |  |
 | `created_by` | integer | sim |  |  |
 
-**Únicos:** idx_metas_unique, metas_pkey1
+**Únicos:**
+- `idx_metas_unique`
+- `metas_pkey1`
 
-**Triggers:** trg_audit → fn_audit_log(), update_metas_updated_at → update_updated_at_column()
+**Triggers:**
+- `trg_audit → fn_audit_log()`
+- `update_metas_updated_at → update_updated_at_column()`
 
 ## metas_comerciais
 
@@ -348,7 +380,9 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** metas_comerciais_ano_unidade_key, metas_comerciais_pkey
+**Únicos:**
+- `metas_comerciais_ano_unidade_key`
+- `metas_comerciais_pkey`
 
 ## metas_kpi
 
@@ -363,9 +397,12 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** metas_kpi_ano_mes_unidade_id_tipo_key, metas_kpi_pkey
+**Únicos:**
+- `metas_kpi_ano_mes_unidade_id_tipo_key`
+- `metas_kpi_pkey`
 
-**Triggers:** trg_audit → fn_audit_log()
+**Triggers:**
+- `trg_audit → fn_audit_log()`
 
 ## metas_legado
 
@@ -388,9 +425,13 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** metas_pkey, metas_unidade_id_ano_key
+**Únicos:**
+- `metas_pkey`
+- `metas_unidade_id_ano_key`
 
-**Triggers:** tr_audit_metas → audit_metas(), tr_metas_updated_at → update_updated_at()
+**Triggers:**
+- `tr_audit_metas → audit_metas()`
+- `tr_metas_updated_at → update_updated_at()`
 
 ## metas_professor_turma
 
@@ -410,7 +451,9 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** metas_professor_turma_pkey, metas_professor_turma_professor_id_ano_mes_key
+**Únicos:**
+- `metas_professor_turma_pkey`
+- `metas_professor_turma_professor_id_ano_mes_key`
 
 ## projecao_aulas
 
@@ -429,7 +472,9 @@
 | `updated_at` | timestamp with time zone | não | now() |  |
 | `is_provisional` | boolean | não | false |  |
 
-**Únicos:** projecao_aulas_aluno_id_matricula_disciplina_id_sequencia_key, projecao_aulas_pkey
+**Únicos:**
+- `projecao_aulas_aluno_id_matricula_disciplina_id_sequencia_key`
+- `projecao_aulas_pkey`
 
 ## projecao_recaculo_log
 
@@ -444,7 +489,8 @@
 | `detalhes` | jsonb | sim |  |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** projecao_recaculo_log_pkey
+**Únicos:**
+- `projecao_recaculo_log_pkey`
 
 ## relatorios_diarios
 
@@ -490,7 +536,9 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `created_by` | integer | sim |  | usuarios.id |
 
-**Únicos:** idx_relatorios_unique, relatorios_diarios_pkey
+**Únicos:**
+- `idx_relatorios_unique`
+- `relatorios_diarios_pkey`
 
 ## relatorios_pedagogicos
 
@@ -514,9 +562,11 @@
 | `editado_em` | timestamp with time zone | sim |  |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** relatorios_pedagogicos_pkey
+**Únicos:**
+- `relatorios_pedagogicos_pkey`
 
-**Triggers:** trg_relped_updated_at → set_updated_at()
+**Triggers:**
+- `trg_relped_updated_at → set_updated_at()`
 
 ## simulacoes_metas
 
@@ -552,7 +602,9 @@
 | `tipo_meta_financeira` | text | sim | 'mensal'::text |  |
 | `mrr_objetivo` | numeric(12,2) | sim | 0 |  |
 
-**Únicos:** simulacoes_metas_pkey, simulacoes_metas_unidade_id_ano_nome_key
+**Únicos:**
+- `simulacoes_metas_pkey`
+- `simulacoes_metas_unidade_id_ano_nome_key`
 
 ## simulacoes_turma
 
@@ -584,7 +636,8 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** simulacoes_turma_pkey
+**Únicos:**
+- `simulacoes_turma_pkey`
 
 ## vw_alertas
 

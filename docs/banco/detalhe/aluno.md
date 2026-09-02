@@ -31,7 +31,8 @@
 | `concluida_por_auth_user_id` | uuid | sim |  |  |
 | `concluida_em` | timestamp with time zone | sim |  |  |
 
-**Únicos:** aluno_acoes_pkey
+**Únicos:**
+- `aluno_acoes_pkey`
 
 ## aluno_contatos
 
@@ -45,7 +46,8 @@
 | `principal` | boolean | sim | false |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** aluno_contatos_pkey
+**Únicos:**
+- `aluno_contatos_pkey`
 
 ## aluno_feedback_professor
 
@@ -70,7 +72,9 @@
 | `origem` | text | sim |  |  |
 | `atualizado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** aluno_feedback_professor_aluno_id_professor_id_competencia_key, aluno_feedback_professor_pkey
+**Únicos:**
+- `aluno_feedback_professor_aluno_id_professor_id_competencia_key`
+- `aluno_feedback_professor_pkey`
 
 ## aluno_feedback_sessoes
 
@@ -91,7 +95,9 @@
 | `enviado_por` | uuid | sim |  | users.id |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** aluno_feedback_sessoes_pkey, aluno_feedback_sessoes_token_key
+**Únicos:**
+- `aluno_feedback_sessoes_pkey`
+- `aluno_feedback_sessoes_token_key`
 
 ## aluno_jornada_matricula_disciplina
 
@@ -145,9 +151,15 @@
 | `sucedida_por` | bigint | sim |  |  |
 | `sucedida_em` | timestamp with time zone | sim |  |  |
 
-**Únicos:** aluno_jornada_matricula_disciplina_pkey, aluno_jornada_matricula_disciplina_unq
+**Únicos:**
+- `aluno_jornada_matricula_disciplina_pkey`
+- `aluno_jornada_matricula_disciplina_unq`
 
-**Triggers:** trg_aluno_jornada_matricula_disciplina_updated_at → update_updated_at_column(), trg_jornada_ciclo_sucedido → fn_jornada_marca_ciclo_sucedido(), trg_materializar_projecao_jornada → trg_materializar_projecao_jornada(), trg_resolver_jornada_curso_grade_atual_v1 → fn_aplicar_jornada_curso_grade_atual_v1()
+**Triggers:**
+- `trg_aluno_jornada_matricula_disciplina_updated_at → update_updated_at_column()`
+- `trg_jornada_ciclo_sucedido → fn_jornada_marca_ciclo_sucedido()`
+- `trg_materializar_projecao_jornada → trg_materializar_projecao_jornada()`
+- `trg_resolver_jornada_curso_grade_atual_v1 → fn_aplicar_jornada_curso_grade_atual_v1()`
 
 ## aluno_metas
 
@@ -170,7 +182,8 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** aluno_metas_pkey
+**Únicos:**
+- `aluno_metas_pkey`
 
 ## aluno_presenca
 
@@ -201,9 +214,15 @@
 | `emusys_presenca_alterada_em` | timestamp with time zone | sim |  |  |
 | `espelhado_de_presenca_id` | uuid | sim |  | aluno_presenca.id |
 
-**Únicos:** aluno_presenca_pkey, idx_presenca_aluno_data_legacy, uq_presenca_aluno_aula
+**Únicos:**
+- `aluno_presenca_pkey`
+- `idx_presenca_aluno_data_legacy`
+- `uq_presenca_aluno_aula`
 
-**Triggers:** trg_atualiza_projecao_por_presenca → trg_atualiza_projecao_por_presenca(), trg_professor_presente_quando_aluno_presente → trg_professor_presente_quando_aluno_presente(), trg_sincronizar_gemeos_presenca → trg_sincronizar_gemeos_presenca()
+**Triggers:**
+- `trg_atualiza_projecao_por_presenca → trg_atualiza_projecao_por_presenca()`
+- `trg_professor_presente_quando_aluno_presente → trg_professor_presente_quando_aluno_presente()`
+- `trg_sincronizar_gemeos_presenca → trg_sincronizar_gemeos_presenca()`
 
 ## aluno_presenca_administrativo
 
@@ -225,7 +244,9 @@
 | `autor_usuario_id` | integer | sim |  | usuarios.id |
 | `autor_auth_user_id` | uuid | sim |  |  |
 
-**Únicos:** aluno_presenca_administrativo_aluno_aula_uq, aluno_presenca_administrativo_pkey
+**Únicos:**
+- `aluno_presenca_administrativo_aluno_aula_uq`
+- `aluno_presenca_administrativo_pkey`
 
 ## aluno_presenca_conflitos
 
@@ -249,7 +270,9 @@
 | `resolvido_em` | timestamp with time zone | sim |  |  |
 | `resolucao` | text | sim |  |  |
 
-**Únicos:** aluno_presenca_conflitos_abertos_uniq, aluno_presenca_conflitos_pkey
+**Únicos:**
+- `aluno_presenca_conflitos_abertos_uniq`
+- `aluno_presenca_conflitos_pkey`
 
 ## aluno_presenca_retificacoes
 
@@ -269,9 +292,11 @@
 | `respondido_por_anterior` | text | sim |  |  |
 | `respondido_em_anterior` | timestamp with time zone | sim |  |  |
 
-**Únicos:** aluno_presenca_retificacoes_pkey
+**Únicos:**
+- `aluno_presenca_retificacoes_pkey`
 
-**Triggers:** completar_origem_retificacao_presenca → fn_completar_origem_retificacao_presenca()
+**Triggers:**
+- `completar_origem_retificacao_presenca → fn_completar_origem_retificacao_presenca()`
 
 ## aluno_presenca_revisoes_operacionais
 
@@ -292,7 +317,9 @@
 | `revisado_em` | timestamp with time zone | não | now() |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** aluno_presenca_revisoes_operacionais_aluno_presenca_id_key, aluno_presenca_revisoes_operacionais_pkey
+**Únicos:**
+- `aluno_presenca_revisoes_operacionais_aluno_presenca_id_key`
+- `aluno_presenca_revisoes_operacionais_pkey`
 
 ## aluno_professor_transicoes
 
@@ -325,7 +352,9 @@
 | `revisado_em` | timestamp with time zone | sim |  |  |
 | `periodo_origem_id` | uuid | sim |  | professor_matricula_disciplina_periodos_v1.id |
 
-**Únicos:** aluno_professor_transicoes_pkey, uq_aluno_professor_transicoes_evento
+**Únicos:**
+- `aluno_professor_transicoes_pkey`
+- `uq_aluno_professor_transicoes_evento`
 
 ## aluno_reposicoes
 
@@ -349,9 +378,12 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** aluno_reposicoes_pkey, aluno_reposicoes_unica
+**Únicos:**
+- `aluno_reposicoes_pkey`
+- `aluno_reposicoes_unica`
 
-**Triggers:** trg_atualiza_projecao_por_reposicao → trg_atualiza_projecao_por_reposicao()
+**Triggers:**
+- `trg_atualiza_projecao_por_reposicao → trg_atualiza_projecao_por_reposicao()`
 
 ## aluno_transferencias
 
@@ -369,7 +401,9 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** aluno_transferencias_pkey, aluno_transferencias_unica_por_competencia
+**Únicos:**
+- `aluno_transferencias_pkey`
+- `aluno_transferencias_unica_por_competencia`
 
 ## alunos
 
@@ -449,9 +483,23 @@
 | `instagram_nao_possui_marcado_em` | timestamp with time zone | sim |  |  |
 | `instagram_nao_possui_marcado_por` | text | sim |  |  |
 
-**Únicos:** alunos_pkey, idx_alunos_duplicata_matricula_unique
+**Únicos:**
+- `alunos_pkey`
+- `idx_alunos_duplicata_matricula_unique`
 
-**Triggers:** trg_aluno_ativo_sem_data_saida → fn_aluno_ativo_sem_data_saida(), trg_alunos_calcular_campos → calcular_campos_aluno(), trg_alunos_reentrada_historico → fn_alunos_reentrada_historico(), trg_alunos_valor_parcela_comercial_canonico → aplicar_valor_parcela_comercial_canonico(), trg_alunos_valor_parcela_comercial_emusys → fn_alunos_valor_parcela_comercial_emusys(), trg_alunos_vinculo_emusys_anamnese → fn_alunos_vinculo_emusys_anamnese(), trg_audit → fn_audit_log(), trg_costura_vincular_conversa → fn_costura_vincular_conversa_numero(), trg_enqueue_sync_student_studio → enqueue_sync_student_studio(), trg_sync_aluno_contatos → sync_aluno_contatos_from_legacy(), trg_vincular_anamnese_na_matricula → fn_vincular_anamnese_pendente(), trigger_sync_aluno_to_leads → sync_aluno_to_leads()
+**Triggers:**
+- `trg_aluno_ativo_sem_data_saida → fn_aluno_ativo_sem_data_saida()`
+- `trg_alunos_calcular_campos → calcular_campos_aluno()`
+- `trg_alunos_reentrada_historico → fn_alunos_reentrada_historico()`
+- `trg_alunos_valor_parcela_comercial_canonico → aplicar_valor_parcela_comercial_canonico()`
+- `trg_alunos_valor_parcela_comercial_emusys → fn_alunos_valor_parcela_comercial_emusys()`
+- `trg_alunos_vinculo_emusys_anamnese → fn_alunos_vinculo_emusys_anamnese()`
+- `trg_audit → fn_audit_log()`
+- `trg_costura_vincular_conversa → fn_costura_vincular_conversa_numero()`
+- `trg_enqueue_sync_student_studio → enqueue_sync_student_studio()`
+- `trg_sync_aluno_contatos → sync_aluno_contatos_from_legacy()`
+- `trg_vincular_anamnese_na_matricula → fn_vincular_anamnese_pendente()`
+- `trigger_sync_aluno_to_leads → sync_aluno_to_leads()`
 
 ## alunos_arquivados
 
@@ -531,7 +579,8 @@
 | `observacao` | text | sim |  |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** alunos_health_score_historico_pkey
+**Únicos:**
+- `alunos_health_score_historico_pkey`
 
 ## alunos_historico
 
@@ -557,9 +606,12 @@
 | `motivo_saida` | text | sim |  |  |
 | `aluno_ids` | bigint[] | sim |  |  |
 
-**Únicos:** alunos_historico_pkey, idx_alunos_historico_aluno_data_saida_uniq
+**Únicos:**
+- `alunos_historico_pkey`
+- `idx_alunos_historico_aluno_data_saida_uniq`
 
-**Triggers:** update_alunos_historico_updated_at → update_updated_at_column()
+**Triggers:**
+- `update_alunos_historico_updated_at → update_updated_at_column()`
 
 ## alunos_turmas
 
@@ -577,7 +629,9 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** alunos_turmas_aluno_id_turma_id_key, alunos_turmas_pkey
+**Únicos:**
+- `alunos_turmas_aluno_id_turma_id_key`
+- `alunos_turmas_pkey`
 
 ## anamnese_convites
 
@@ -600,7 +654,11 @@
 | `criado_por` | integer | sim |  |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** anamnese_convites_aluno_vivo, anamnese_convites_pkey, anamnese_convites_prematricula_vivo, anamnese_convites_token_key
+**Únicos:**
+- `anamnese_convites_aluno_vivo`
+- `anamnese_convites_pkey`
+- `anamnese_convites_prematricula_vivo`
+- `anamnese_convites_token_key`
 
 ## anamnese_respostas_perfil
 
@@ -614,7 +672,8 @@
 | `resposta_posicao` | integer | sim |  |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** anamnese_respostas_perfil_pkey
+**Únicos:**
+- `anamnese_respostas_perfil_pkey`
 
 ## anamneses
 
@@ -674,9 +733,13 @@
 | `diagnosticos_outro` | text | sim |  |  |
 | `pessoa_chave` | text | sim |  |  |
 
-**Únicos:** anamneses_pkey, anamneses_share_token_unique
+**Únicos:**
+- `anamneses_pkey`
+- `anamneses_share_token_unique`
 
-**Triggers:** trg_anamnese_atualiza_aluno → fn_atualizar_aluno_anamnese(), trg_anamnese_pessoa_chave → fn_anamnese_define_pessoa_chave()
+**Triggers:**
+- `trg_anamnese_atualiza_aluno → fn_atualizar_aluno_anamnese()`
+- `trg_anamnese_pessoa_chave → fn_anamnese_define_pessoa_chave()`
 
 ## aviso_previo_veredito
 
@@ -692,7 +755,8 @@
 | `matricula_status` | text | sim |  |  |
 | `verificado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** aviso_previo_veredito_pkey
+**Únicos:**
+- `aviso_previo_veredito_pkey`
 
 ## banda
 
@@ -727,7 +791,9 @@
 | `confirmada` | boolean | não | false |  |
 | `descartada` | boolean | não | false |  |
 
-**Únicos:** banda_pkey, banda_turma_chave_key
+**Únicos:**
+- `banda_pkey`
+- `banda_turma_chave_key`
 
 ## banda_curso_depara
 
@@ -740,7 +806,8 @@
 | `ativo` | boolean | não | true |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** banda_curso_depara_pkey
+**Únicos:**
+- `banda_curso_depara_pkey`
 
 ## banda_evento
 
@@ -762,7 +829,8 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** banda_evento_pkey
+**Únicos:**
+- `banda_evento_pkey`
 
 ## banda_evento_participante
 
@@ -773,7 +841,9 @@
 | `banda_id` | bigint | não |  | banda.id |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** banda_evento_participante_evento_id_banda_id_key, banda_evento_participante_pkey
+**Únicos:**
+- `banda_evento_participante_evento_id_banda_id_key`
+- `banda_evento_participante_pkey`
 
 ## banda_integrante
 
@@ -793,7 +863,9 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** banda_integrante_banda_id_aluno_id_key, banda_integrante_pkey
+**Únicos:**
+- `banda_integrante_banda_id_aluno_id_key`
+- `banda_integrante_pkey`
 
 ## banda_repertorio
 
@@ -816,7 +888,8 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** banda_repertorio_pkey
+**Únicos:**
+- `banda_repertorio_pkey`
 
 ## cursos_matriculados
 
@@ -829,7 +902,9 @@
 | `quantidade` | integer | sim | 0 |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** cursos_matriculados_competencia_unidade_curso_key, cursos_matriculados_pkey
+**Únicos:**
+- `cursos_matriculados_competencia_unidade_curso_key`
+- `cursos_matriculados_pkey`
 
 ## evasoes_backup_20260215
 
@@ -885,9 +960,12 @@
 | `aluno_nome` | character varying(255) | sim |  |  |
 | `telefone_snapshot` | character varying(20) | sim |  |  |
 
-**Únicos:** evasoes_v2_aluno_curso_unique, evasoes_v2_pkey
+**Únicos:**
+- `evasoes_v2_aluno_curso_unique`
+- `evasoes_v2_pkey`
 
-**Triggers:** set_updated_at_evasoes_v2 → update_updated_at_column()
+**Triggers:**
+- `set_updated_at_evasoes_v2 → update_updated_at_column()`
 
 ## evasoes_v2_backup
 
@@ -927,7 +1005,9 @@
 | `contatado_em` | timestamp with time zone | sim |  |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** farmer_checklist_contatos_pkey, unique_checklist_aluno
+**Únicos:**
+- `farmer_checklist_contatos_pkey`
+- `unique_checklist_aluno`
 
 ## farmer_checklist_items
 
@@ -948,7 +1028,8 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `responsavel_id` | integer | sim |  | usuarios.id |
 
-**Únicos:** farmer_checklist_items_pkey
+**Únicos:**
+- `farmer_checklist_items_pkey`
 
 ## farmer_checklist_templates
 
@@ -966,7 +1047,8 @@
 | `ordem` | integer | sim | 0 |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** farmer_checklist_templates_pkey
+**Únicos:**
+- `farmer_checklist_templates_pkey`
 
 ## farmer_checklists
 
@@ -998,7 +1080,8 @@
 | `filtro_vinculo` | jsonb | sim |  |  |
 | `responsavel_id` | integer | sim |  | usuarios.id |
 
-**Únicos:** farmer_checklists_pkey
+**Únicos:**
+- `farmer_checklists_pkey`
 
 ## farmer_recados
 
@@ -1020,7 +1103,8 @@
 | `lido_em` | timestamp with time zone | sim |  |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** farmer_recados_pkey
+**Únicos:**
+- `farmer_recados_pkey`
 
 ## farmer_recados_campanhas
 
@@ -1043,7 +1127,8 @@
 | `started_at` | timestamp with time zone | sim |  |  |
 | `completed_at` | timestamp with time zone | sim |  |  |
 
-**Únicos:** farmer_recados_campanhas_pkey
+**Únicos:**
+- `farmer_recados_campanhas_pkey`
 
 ## farmer_recados_destinatarios
 
@@ -1059,7 +1144,8 @@
 | `erro_mensagem` | text | sim |  |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** farmer_recados_destinatarios_pkey
+**Únicos:**
+- `farmer_recados_destinatarios_pkey`
 
 ## farmer_rotinas
 
@@ -1080,7 +1166,8 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** farmer_rotinas_pkey
+**Únicos:**
+- `farmer_rotinas_pkey`
 
 ## farmer_rotinas_execucao
 
@@ -1096,7 +1183,9 @@
 | `concluida_em` | timestamp with time zone | sim |  |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** farmer_rotinas_execucao_pkey, farmer_rotinas_execucao_rotina_id_data_execucao_key
+**Únicos:**
+- `farmer_rotinas_execucao_pkey`
+- `farmer_rotinas_execucao_rotina_id_data_execucao_key`
 
 ## farmer_tarefas
 
@@ -1121,7 +1210,8 @@
 | `desfecho` | text | sim |  |  |
 | `origem_alerta` | text | sim |  |  |
 
-**Únicos:** farmer_tarefas_pkey
+**Únicos:**
+- `farmer_tarefas_pkey`
 
 ## farmer_templates
 
@@ -1140,7 +1230,8 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** farmer_templates_pkey
+**Únicos:**
+- `farmer_templates_pkey`
 
 ## jornada_curso_resolucao_log
 
@@ -1161,7 +1252,8 @@
 | `evidencias` | jsonb | não | '{}'::jsonb |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** jornada_curso_resolucao_log_pkey
+**Únicos:**
+- `jornada_curso_resolucao_log_pkey`
 
 ## motivos_arquivamento
 
@@ -1175,7 +1267,8 @@
 | `ativo` | boolean | sim | true |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** motivos_arquivamento_pkey
+**Únicos:**
+- `motivos_arquivamento_pkey`
 
 ## motivos_saida
 
@@ -1191,7 +1284,9 @@
 | `conta_score_professor` | boolean | sim | true |  |
 | `eh_transferencia_interna` | boolean | não | false |  |
 
-**Únicos:** motivos_saida_pkey, uk_motivos_nome_normalizado
+**Únicos:**
+- `motivos_saida_pkey`
+- `uk_motivos_nome_normalizado`
 
 ## motivos_saida_aliases
 
@@ -1207,7 +1302,9 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** motivos_saida_aliases_alias_normalizado_key, motivos_saida_aliases_pkey
+**Únicos:**
+- `motivos_saida_aliases_alias_normalizado_key`
+- `motivos_saida_aliases_pkey`
 
 ## motivos_trancamento
 
@@ -1220,7 +1317,8 @@
 | `ativo` | boolean | sim | true |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** motivos_trancamento_pkey
+**Únicos:**
+- `motivos_trancamento_pkey`
 
 ## movimentacoes
 
@@ -1249,9 +1347,11 @@
 | `updated_at` | timestamp with time zone | sim | now() |  |
 | `created_by` | character varying(100) | sim |  |  |
 
-**Únicos:** movimentacoes_pkey
+**Únicos:**
+- `movimentacoes_pkey`
 
-**Triggers:** update_movimentacoes_updated_at → update_updated_at_column()
+**Triggers:**
+- `update_movimentacoes_updated_at → update_updated_at_column()`
 
 ## movimentacoes_admin
 
@@ -1298,9 +1398,16 @@
 | `anulado_em` | timestamp with time zone | sim |  |  |
 | `anulado_por` | text | sim |  |  |
 
-**Únicos:** movimentacoes_admin_pkey
+**Únicos:**
+- `movimentacoes_admin_pkey`
 
-**Triggers:** trg_audit → fn_audit_log(), trg_bloqueia_delete_movimentacao_admin → fn_bloqueia_delete_movimentacao_admin(), trg_capturar_telefone_snapshot_movimentacao_retencao → capturar_telefone_snapshot_movimentacao_retencao(), trg_preencher_campos_retencao_movimentacoes_admin → preencher_campos_retencao_movimentacoes_admin(), trg_resolver_motivo_saida_movimentacao_admin → fn_resolver_motivo_saida_movimentacao_admin(), trg_sync_evasao_dados_mensais → sync_evasao_to_dados_mensais()
+**Triggers:**
+- `trg_audit → fn_audit_log()`
+- `trg_bloqueia_delete_movimentacao_admin → fn_bloqueia_delete_movimentacao_admin()`
+- `trg_capturar_telefone_snapshot_movimentacao_retencao → capturar_telefone_snapshot_movimentacao_retencao()`
+- `trg_preencher_campos_retencao_movimentacoes_admin → preencher_campos_retencao_movimentacoes_admin()`
+- `trg_resolver_motivo_saida_movimentacao_admin → fn_resolver_motivo_saida_movimentacao_admin()`
+- `trg_sync_evasao_dados_mensais → sync_evasao_to_dados_mensais()`
 
 ## movimentacoes_admin_arquivadas
 
@@ -1350,7 +1457,8 @@
 | `arquivado_por` | text | sim |  |  |
 | `arquivado_motivo` | text | não |  |  |
 
-**Únicos:** movimentacoes_admin_arquivadas_pkey
+**Únicos:**
+- `movimentacoes_admin_arquivadas_pkey`
 
 ## movimentacoes_admin_vigentes
 
@@ -1457,9 +1565,17 @@
 | `payload_hash_original_snapshot` | text | sim |  |  |
 | `payload_hash_snapshot` | text | sim |  |  |
 
-**Únicos:** pesquisa_evasao_aberta_telefone_uidx, pesquisa_evasao_evasao_id_producao_uidx, pesquisa_evasao_idempotency_key_uidx, pesquisa_evasao_pkey, pesquisa_evasao_preview_id_uidx, pesquisa_evasao_teste_slot_ativo_uidx
+**Únicos:**
+- `pesquisa_evasao_aberta_telefone_uidx`
+- `pesquisa_evasao_evasao_id_producao_uidx`
+- `pesquisa_evasao_idempotency_key_uidx`
+- `pesquisa_evasao_pkey`
+- `pesquisa_evasao_preview_id_uidx`
+- `pesquisa_evasao_teste_slot_ativo_uidx`
 
-**Triggers:** tr_updated_at_pesquisa_evasao → update_updated_at_column(), trg_proteger_opt_out_pesquisa_evasao → fn_proteger_opt_out_pesquisa_evasao()
+**Triggers:**
+- `tr_updated_at_pesquisa_evasao → update_updated_at_column()`
+- `trg_proteger_opt_out_pesquisa_evasao → fn_proteger_opt_out_pesquisa_evasao()`
 
 ## pesquisa_evasao_analises
 
@@ -1483,9 +1599,12 @@
 | `revisao_iniciada_por_usuario_id` | integer | sim |  | usuarios.id |
 | `revisao_iniciada_em` | timestamp with time zone | sim |  |  |
 
-**Únicos:** pesquisa_evasao_analises_pesquisa_id_versao_key, pesquisa_evasao_analises_pkey
+**Únicos:**
+- `pesquisa_evasao_analises_pesquisa_id_versao_key`
+- `pesquisa_evasao_analises_pkey`
 
-**Triggers:** trg_proteger_analise_evasao_revisada → fn_proteger_analise_evasao_revisada()
+**Triggers:**
+- `trg_proteger_analise_evasao_revisada → fn_proteger_analise_evasao_revisada()`
 
 ## pesquisa_evasao_assinaturas
 
@@ -1500,7 +1619,9 @@
 | `valido_ate` | timestamp with time zone | sim |  |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** pesquisa_evasao_assinaturas_pkey, pesquisa_evasao_assinaturas_usuario_ativa_uidx
+**Únicos:**
+- `pesquisa_evasao_assinaturas_pkey`
+- `pesquisa_evasao_assinaturas_usuario_ativa_uidx`
 
 ## pesquisa_evasao_classificacao_categorias
 
@@ -1509,9 +1630,11 @@
 | `classificacao_id` | uuid | não |  | pesquisa_evasao_classificacoes.id |
 | `categoria` | text | não |  |  |
 
-**Únicos:** pesquisa_evasao_classificacao_categorias_pkey
+**Únicos:**
+- `pesquisa_evasao_classificacao_categorias_pkey`
 
-**Triggers:** trg_pesquisa_evasao_classificacao_categorias_append_only → fn_pesquisa_evasao_c_append_only()
+**Triggers:**
+- `trg_pesquisa_evasao_classificacao_categorias_append_only → fn_pesquisa_evasao_c_append_only()`
 
 ## pesquisa_evasao_classificacoes
 
@@ -1529,9 +1652,12 @@
 | `revisor_auth_user_id` | uuid | não |  |  |
 | `revisado_em` | timestamp with time zone | não | clock_timestamp() |  |
 
-**Únicos:** pesquisa_evasao_classificacoes_pesquisa_id_versao_key, pesquisa_evasao_classificacoes_pkey
+**Únicos:**
+- `pesquisa_evasao_classificacoes_pesquisa_id_versao_key`
+- `pesquisa_evasao_classificacoes_pkey`
 
-**Triggers:** trg_pesquisa_evasao_classificacoes_append_only → fn_pesquisa_evasao_c_append_only()
+**Triggers:**
+- `trg_pesquisa_evasao_classificacoes_append_only → fn_pesquisa_evasao_c_append_only()`
 
 ## pesquisa_evasao_desfechos
 
@@ -1547,9 +1673,11 @@
 | `registrado_por_auth_user_id` | uuid | não |  |  |
 | `registrado_em` | timestamp with time zone | não | clock_timestamp() |  |
 
-**Únicos:** pesquisa_evasao_desfechos_pkey
+**Únicos:**
+- `pesquisa_evasao_desfechos_pkey`
 
-**Triggers:** trg_pesquisa_evasao_desfechos_append_only → fn_pesquisa_evasao_c_append_only()
+**Triggers:**
+- `trg_pesquisa_evasao_desfechos_append_only → fn_pesquisa_evasao_c_append_only()`
 
 ## pesquisa_evasao_envios_fila
 
@@ -1577,9 +1705,13 @@
 | `criado_em` | timestamp with time zone | não | now() |  |
 | `atualizado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** pesquisa_evasao_envios_fila_pesquisa_id_toque_key, pesquisa_evasao_envios_fila_pkey, pesquisa_evasao_envios_fila_vivo_uidx
+**Únicos:**
+- `pesquisa_evasao_envios_fila_pesquisa_id_toque_key`
+- `pesquisa_evasao_envios_fila_pkey`
+- `pesquisa_evasao_envios_fila_vivo_uidx`
 
-**Triggers:** trg_pesquisa_evasao_envios_fila_touch → fn_pesquisa_evasao_envios_fila_touch()
+**Triggers:**
+- `trg_pesquisa_evasao_envios_fila_touch → fn_pesquisa_evasao_envios_fila_touch()`
 
 ## pesquisa_evasao_followup_acoes
 
@@ -1597,7 +1729,9 @@
 | `registrado_em` | timestamp with time zone | não | clock_timestamp() |  |
 | `criado_em` | timestamp with time zone | não | clock_timestamp() |  |
 
-**Únicos:** pesquisa_evasao_followup_acoes_pesquisa_id_key, pesquisa_evasao_followup_acoes_pkey
+**Únicos:**
+- `pesquisa_evasao_followup_acoes_pesquisa_id_key`
+- `pesquisa_evasao_followup_acoes_pkey`
 
 ## pesquisa_evasao_mensagens
 
@@ -1621,9 +1755,18 @@
 | `criado_em` | timestamp with time zone | não | now() |  |
 | `analise_versao` | integer | sim |  | pesquisa_evasao_analises.versao |
 
-**Únicos:** pesquisa_evasao_mensagens_idempotency_key_key, pesquisa_evasao_mensagens_pkey, pesquisa_evasao_mensagens_provider_uidx
+**Únicos:**
+- `pesquisa_evasao_mensagens_idempotency_key_key`
+- `pesquisa_evasao_mensagens_pkey`
+- `pesquisa_evasao_mensagens_provider_uidx`
 
-**Triggers:** trg_00_registrar_rodada_pesquisa_evasao → fn_registrar_limites_rodada_pesquisa_evasao(), trg_agendar_processamento_pesquisa_evasao → fn_agendar_processamento_pesquisa_evasao(), trg_aplicar_opt_out_pesquisa_evasao → fn_aplicar_opt_out_pesquisa_evasao(), trg_atribuir_rodada_pesquisa_evasao → fn_atribuir_rodada_pesquisa_evasao(), trg_lia_evento_pesquisa_evasao → fn_lia_evento_pesquisa_evasao(), trg_pesquisa_evasao_mensagem_append_only → fn_pesquisa_evasao_mensagem_append_only()
+**Triggers:**
+- `trg_00_registrar_rodada_pesquisa_evasao → fn_registrar_limites_rodada_pesquisa_evasao()`
+- `trg_agendar_processamento_pesquisa_evasao → fn_agendar_processamento_pesquisa_evasao()`
+- `trg_aplicar_opt_out_pesquisa_evasao → fn_aplicar_opt_out_pesquisa_evasao()`
+- `trg_atribuir_rodada_pesquisa_evasao → fn_atribuir_rodada_pesquisa_evasao()`
+- `trg_lia_evento_pesquisa_evasao → fn_lia_evento_pesquisa_evasao()`
+- `trg_pesquisa_evasao_mensagem_append_only → fn_pesquisa_evasao_mensagem_append_only()`
 
 ## pesquisa_evasao_previews
 
@@ -1670,9 +1813,13 @@
 | `editado_em` | timestamp with time zone | sim |  |  |
 | `payload_hash_original` | text | não |  |  |
 
-**Únicos:** pesquisa_evasao_previews_id_idempotency_key_key, pesquisa_evasao_previews_idempotency_key_key, pesquisa_evasao_previews_pkey
+**Únicos:**
+- `pesquisa_evasao_previews_id_idempotency_key_key`
+- `pesquisa_evasao_previews_idempotency_key_key`
+- `pesquisa_evasao_previews_pkey`
 
-**Triggers:** trg_pesquisa_evasao_preview_original_insert → fn_pesquisa_evasao_preview_original_insert()
+**Triggers:**
+- `trg_pesquisa_evasao_preview_original_insert → fn_pesquisa_evasao_preview_original_insert()`
 
 ## pesquisa_evasao_processamento
 
@@ -1689,7 +1836,8 @@
 | `ultimo_erro` | text | sim |  |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** pesquisa_evasao_processamento_pkey
+**Únicos:**
+- `pesquisa_evasao_processamento_pkey`
 
 ## pesquisa_evasao_publicos_internos
 
@@ -1707,7 +1855,8 @@
 | `criado_em` | timestamp with time zone | não | now() |  |
 | `atualizado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** pesquisa_evasao_publicos_internos_pkey
+**Únicos:**
+- `pesquisa_evasao_publicos_internos_pkey`
 
 ## pesquisa_evasao_templates
 
@@ -1722,7 +1871,10 @@
 | `criado_por_usuario_id` | integer | sim |  | usuarios.id |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** pesquisa_evasao_templates_chave_publico_ativo_uidx, pesquisa_evasao_templates_chave_versao_publico_key, pesquisa_evasao_templates_pkey
+**Únicos:**
+- `pesquisa_evasao_templates_chave_publico_ativo_uidx`
+- `pesquisa_evasao_templates_chave_versao_publico_key`
+- `pesquisa_evasao_templates_pkey`
 
 ## pesquisa_evasao_transcricoes
 
@@ -1738,9 +1890,12 @@
 | `criado_em` | timestamp with time zone | não | now() |  |
 | `concluido_em` | timestamp with time zone | sim |  |  |
 
-**Únicos:** pesquisa_evasao_transcricoes_mensagem_id_versao_key, pesquisa_evasao_transcricoes_pkey
+**Únicos:**
+- `pesquisa_evasao_transcricoes_mensagem_id_versao_key`
+- `pesquisa_evasao_transcricoes_pkey`
 
-**Triggers:** trg_reagendar_transcricao_pesquisa_evasao → fn_reagendar_transcricao_pesquisa_evasao()
+**Triggers:**
+- `trg_reagendar_transcricao_pesquisa_evasao → fn_reagendar_transcricao_pesquisa_evasao()`
 
 ## pesquisas_whatsapp
 
@@ -1763,7 +1918,9 @@
 | `status` | text | sim |  |  |
 | `tentativa_envio_em` | timestamp with time zone | sim |  |  |
 
-**Únicos:** pesquisas_whatsapp_aluno_id_tipo_data_matricula_key, pesquisas_whatsapp_pkey
+**Únicos:**
+- `pesquisas_whatsapp_aluno_id_tipo_data_matricula_key`
+- `pesquisas_whatsapp_pkey`
 
 ## radar_config
 
@@ -1776,7 +1933,8 @@
 | `grupo` | text | não |  |  |
 | `ordem` | integer | não |  |  |
 
-**Únicos:** radar_config_pkey
+**Únicos:**
+- `radar_config_pkey`
 
 ## radar_config_historico
 
@@ -1789,7 +1947,8 @@
 | `mudado_por` | uuid | sim |  |  |
 | `mudado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** radar_config_historico_pkey
+**Únicos:**
+- `radar_config_historico_pkey`
 
 ## renovacoes_legado
 
@@ -1816,9 +1975,13 @@
 | `created_by` | integer | sim |  | usuarios.id |
 | `professor_id` | integer | sim |  | professores.id |
 
-**Únicos:** renovacoes_pkey
+**Únicos:**
+- `renovacoes_pkey`
 
-**Triggers:** trg_audit → fn_audit_log(), trigger_calcular_reajuste → calcular_reajuste_renovacao(), update_renovacoes_updated_at → update_updated_at_column()
+**Triggers:**
+- `trg_audit → fn_audit_log()`
+- `trigger_calcular_reajuste → calcular_reajuste_renovacao()`
+- `update_renovacoes_updated_at → update_updated_at_column()`
 
 ## risco_evasao
 
@@ -1834,7 +1997,9 @@
 | `calculado_em` | date | não | CURRENT_DATE |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** risco_evasao_aluno_id_calculado_em_modelo_versao_key, risco_evasao_pkey
+**Únicos:**
+- `risco_evasao_aluno_id_calculado_em_modelo_versao_key`
+- `risco_evasao_pkey`
 
 ## tipos_matricula
 
@@ -1851,7 +2016,9 @@
 | `entra_ltv` | boolean | sim | true |  |
 | `entra_churn` | boolean | sim | true |  |
 
-**Únicos:** tipos_matricula_pkey, uk_tipos_matricula_codigo
+**Únicos:**
+- `tipos_matricula_pkey`
+- `uk_tipos_matricula_codigo`
 
 ## tipos_saida
 
@@ -1864,7 +2031,9 @@
 | `ativo` | boolean | sim | true |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** tipos_saida_pkey, uk_tipos_saida_codigo
+**Únicos:**
+- `tipos_saida_pkey`
+- `uk_tipos_saida_codigo`
 
 ## vw_absenteismo_aluno
 

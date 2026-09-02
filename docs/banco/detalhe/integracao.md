@@ -28,7 +28,11 @@
 | `foto_perfil_url` | text | sim |  |  |
 | `departamento` | text | não | 'administrativo'::text |  |
 
-**Únicos:** admin_conversas_pkey, idx_admin_conversas_aluno_unidade_depto_sem_jid, idx_admin_conversas_externo_unidade_depto, uq_admin_conversas_jid_depto
+**Únicos:**
+- `admin_conversas_pkey`
+- `idx_admin_conversas_aluno_unidade_depto_sem_jid`
+- `idx_admin_conversas_externo_unidade_depto`
+- `uq_admin_conversas_jid_depto`
 
 ## admin_mensagens
 
@@ -54,9 +58,12 @@
 | `deletada` | boolean | não | false |  |
 | `editada` | boolean | não | false |  |
 
-**Únicos:** admin_mensagens_pkey, admin_mensagens_whatsapp_message_id_key
+**Únicos:**
+- `admin_mensagens_pkey`
+- `admin_mensagens_whatsapp_message_id_key`
 
-**Triggers:** trg_normalizar_wa_msg_id → normalizar_whatsapp_message_id()
+**Triggers:**
+- `trg_normalizar_wa_msg_id → normalizar_whatsapp_message_id()`
 
 ## alunos_emusys_atributos_decisoes
 
@@ -76,7 +83,8 @@
 | `metadata` | jsonb | não | '{}'::jsonb |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** alunos_emusys_atributos_decisoes_pkey
+**Únicos:**
+- `alunos_emusys_atributos_decisoes_pkey`
 
 ## alunos_emusys_atributos_divergencias
 
@@ -101,9 +109,12 @@
 | `detectado_em` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** alunos_emusys_atributos_divergencias_pkey, alunos_emusys_atributos_pendente_uq
+**Únicos:**
+- `alunos_emusys_atributos_divergencias_pkey`
+- `alunos_emusys_atributos_pendente_uq`
 
-**Triggers:** set_updated_at_alunos_emusys_atributos_divergencias → set_updated_at()
+**Triggers:**
+- `set_updated_at_alunos_emusys_atributos_divergencias → set_updated_at()`
 
 ## automacao_invariantes
 
@@ -120,7 +131,8 @@
 | `visto_por` | uuid | sim |  |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** automacao_invariantes_pkey
+**Únicos:**
+- `automacao_invariantes_pkey`
 
 ## automacao_log
 
@@ -141,9 +153,12 @@
 | `payload_bruto` | jsonb | sim |  |  |
 | `idempotency_key` | text | sim |  |  |
 
-**Únicos:** automacao_log_idempotency_key_uq, automacao_log_pkey
+**Únicos:**
+- `automacao_log_idempotency_key_uq`
+- `automacao_log_pkey`
 
-**Triggers:** trg_automacao_check_professor → check_automacao_professor_vinculado()
+**Triggers:**
+- `trg_automacao_check_professor → check_automacao_professor_vinculado()`
 
 ## automacoes_config
 
@@ -153,7 +168,8 @@
 | `ativo` | boolean | não | false |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** automacoes_config_pkey
+**Únicos:**
+- `automacoes_config_pkey`
 
 ## base_conhecimento_blocos
 
@@ -171,9 +187,11 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** base_conhecimento_blocos_pkey
+**Únicos:**
+- `base_conhecimento_blocos_pkey`
 
-**Triggers:** trg_base_conhecimento_blocos_updated_at → update_updated_at_column()
+**Triggers:**
+- `trg_base_conhecimento_blocos_updated_at → update_updated_at_column()`
 
 ## boas_vindas_enviadas
 
@@ -191,7 +209,9 @@
 | `enviado_ok` | boolean | sim |  |  |
 | `enviado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** boas_vindas_enviadas_chave_idempotencia_key, boas_vindas_enviadas_pkey
+**Únicos:**
+- `boas_vindas_enviadas_chave_idempotencia_key`
+- `boas_vindas_enviadas_pkey`
 
 ## conversa_estado_whatsapp
 
@@ -205,9 +225,12 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** conversa_estado_whatsapp_pkey, conversa_estado_whatsapp_whatsapp_numero_key
+**Únicos:**
+- `conversa_estado_whatsapp_pkey`
+- `conversa_estado_whatsapp_whatsapp_numero_key`
 
-**Triggers:** tr_updated_at_conversa_estado → update_updated_at_column()
+**Triggers:**
+- `tr_updated_at_conversa_estado → update_updated_at_column()`
 
 ## curso_emusys_depara
 
@@ -222,7 +245,8 @@
 | `atualizado_em` | timestamp with time zone | não | now() |  |
 | `status_mapeamento` | text | não | 'pendente'::text |  |
 
-**Únicos:** curso_emusys_depara_pkey
+**Únicos:**
+- `curso_emusys_depara_pkey`
 
 ## emusys_api_payload
 
@@ -243,7 +267,8 @@
 | `payload` | jsonb | não |  |  |
 | `synced_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** emusys_api_payload_pkey
+**Únicos:**
+- `emusys_api_payload_pkey`
 
 ## emusys_aula_alunos_historico_staging_v1
 
@@ -267,7 +292,9 @@
 | `payload` | jsonb | não |  |  |
 | `coletado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** emusys_aula_alunos_historico_sta_aula_staging_id_linha_hash_key, emusys_aula_alunos_historico_staging_v1_pkey
+**Únicos:**
+- `emusys_aula_alunos_historico_sta_aula_staging_id_linha_hash_key`
+- `emusys_aula_alunos_historico_staging_v1_pkey`
 
 ## emusys_aulas_historico_revisoes_v1
 
@@ -286,7 +313,9 @@
 | `ultima_coleta_em` | timestamp with time zone | não | now() |  |
 | `vezes_observado` | integer | não | 1 |  |
 
-**Únicos:** emusys_aulas_historico_reviso_unidade_id_emusys_aula_id_pay_key, emusys_aulas_historico_revisoes_v1_pkey
+**Únicos:**
+- `emusys_aulas_historico_reviso_unidade_id_emusys_aula_id_pay_key`
+- `emusys_aulas_historico_revisoes_v1_pkey`
 
 ## emusys_aulas_historico_staging_v1
 
@@ -316,7 +345,9 @@
 | `coletado_em` | timestamp with time zone | não | now() |  |
 | `atualizado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** emusys_aulas_historico_staging_v1_pkey, emusys_aulas_historico_staging_v1_unidade_id_emusys_aula_id_key
+**Únicos:**
+- `emusys_aulas_historico_staging_v1_pkey`
+- `emusys_aulas_historico_staging_v1_unidade_id_emusys_aula_id_key`
 
 ## emusys_disciplinas_catalogo
 
@@ -337,7 +368,9 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** emusys_disciplinas_catalogo_pkey, emusys_disciplinas_catalogo_unidade_id_emusys_disciplina_id_key
+**Únicos:**
+- `emusys_disciplinas_catalogo_pkey`
+- `emusys_disciplinas_catalogo_unidade_id_emusys_disciplina_id_key`
 
 ## emusys_experimentais_raw
 
@@ -378,9 +411,14 @@
 | `snapshot_inativado_em` | timestamp with time zone | sim |  |  |
 | `emusys_lead_id_zero` | boolean | não | false |  |
 
-**Únicos:** emusys_experimentais_raw_pkey, emusys_experimentais_raw_raw_key_idx, emusys_experimentais_raw_snapshot_ativo_key_idx
+**Únicos:**
+- `emusys_experimentais_raw_pkey`
+- `emusys_experimentais_raw_raw_key_idx`
+- `emusys_experimentais_raw_snapshot_ativo_key_idx`
 
-**Triggers:** trg_emusys_experimentais_raw_updated_at → update_updated_at_column(), trg_normalizar_payload_emusys_experimental_minimo → normalizar_payload_emusys_experimental_minimo()
+**Triggers:**
+- `trg_emusys_experimentais_raw_updated_at → update_updated_at_column()`
+- `trg_normalizar_payload_emusys_experimental_minimo → normalizar_payload_emusys_experimental_minimo()`
 
 ## emusys_experimentais_refresh_admissoes
 
@@ -403,7 +441,9 @@
 | `atualizado_em` | timestamp with time zone | não | clock_timestamp() |  |
 | `concluido_em` | timestamp with time zone | sim |  |  |
 
-**Únicos:** emusys_experimentais_refresh__unidade_id_data_inicio_data_f_key, emusys_experimentais_refresh_admissoes_pkey
+**Únicos:**
+- `emusys_experimentais_refresh__unidade_id_data_inicio_data_f_key`
+- `emusys_experimentais_refresh_admissoes_pkey`
 
 ## emusys_experimentais_snapshot_execucoes
 
@@ -420,7 +460,8 @@
 | `iniciado_em` | timestamp with time zone | não |  |  |
 | `concluido_em` | timestamp with time zone | não |  |  |
 
-**Únicos:** emusys_experimentais_snapshot_execucoes_pkey
+**Únicos:**
+- `emusys_experimentais_snapshot_execucoes_pkey`
 
 ## emusys_experimentais_snapshot_publicacoes_vigentes
 
@@ -435,7 +476,8 @@
 | `origem` | text | não |  |  |
 | `atualizado_em` | timestamp with time zone | não | clock_timestamp() |  |
 
-**Únicos:** emusys_experimentais_snapshot_publicacoes_vigentes_pkey
+**Únicos:**
+- `emusys_experimentais_snapshot_publicacoes_vigentes_pkey`
 
 ## emusys_fatura_source_events
 
@@ -456,9 +498,11 @@
 | `details` | jsonb | não | '{}'::jsonb |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** emusys_fatura_source_events_pkey
+**Únicos:**
+- `emusys_fatura_source_events_pkey`
 
-**Triggers:** trg_emusys_fatura_source_events_append_only → fn_financeiro_snapshot_append_only()
+**Triggers:**
+- `trg_emusys_fatura_source_events_append_only → fn_financeiro_snapshot_append_only()`
 
 ## emusys_faturas
 
@@ -487,9 +531,12 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** emusys_faturas_pkey, emusys_faturas_unidade_fatura_uniq
+**Únicos:**
+- `emusys_faturas_pkey`
+- `emusys_faturas_unidade_fatura_uniq`
 
-**Triggers:** trg_emusys_faturas_updated_at → touch_emusys_faturas_updated_at()
+**Triggers:**
+- `trg_emusys_faturas_updated_at → touch_emusys_faturas_updated_at()`
 
 ## emusys_historico_backfill_execucoes_v1
 
@@ -518,7 +565,9 @@
 | `criado_por` | integer | sim |  | usuarios.id |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** emusys_historico_backfill_execucoes_v1_pkey, uq_emusys_historico_backfill_execucao_unidade
+**Únicos:**
+- `emusys_historico_backfill_execucoes_v1_pkey`
+- `uq_emusys_historico_backfill_execucao_unidade`
 
 ## emusys_matriculas_estado_atual
 
@@ -550,7 +599,8 @@
 | `sincronizado_em` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** emusys_matriculas_estado_atual_pkey
+**Únicos:**
+- `emusys_matriculas_estado_atual_pkey`
 
 ## emusys_matriculas_sync_execucoes
 
@@ -572,7 +622,9 @@
 | `metadados` | jsonb | não | '{}'::jsonb |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** emusys_matriculas_sync_execucoes_pkey, uq_sync_matriculas_execucao_viva_por_unidade
+**Únicos:**
+- `emusys_matriculas_sync_execucoes_pkey`
+- `uq_sync_matriculas_execucao_viva_por_unidade`
 
 ## emusys_professor_disciplinas
 
@@ -592,7 +644,9 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** emusys_professor_disciplinas_pkey, emusys_professor_disciplinas_unidade_id_emusys_professor_id_key
+**Únicos:**
+- `emusys_professor_disciplinas_pkey`
+- `emusys_professor_disciplinas_unidade_id_emusys_professor_id_key`
 
 ## emusys_professor_disciplinas_sync_execucoes
 
@@ -613,7 +667,9 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** emusys_professor_disciplinas_sync_execucoes_pkey, uq_emusys_professor_disciplinas_sync_unidade_em_andamento
+**Únicos:**
+- `emusys_professor_disciplinas_sync_execucoes_pkey`
+- `uq_emusys_professor_disciplinas_sync_unidade_em_andamento`
 
 ## emusys_sync_log
 
@@ -636,7 +692,8 @@
 | `inativos_count` | integer | sim | 0 |  |
 | `nomes_inativos` | jsonb | sim | '[]'::jsonb |  |
 
-**Únicos:** emusys_sync_log_pkey
+**Únicos:**
+- `emusys_sync_log_pkey`
 
 ## fila_anamnese_sol_hermes
 
@@ -663,7 +720,9 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** fila_anamnese_sol_hermes_pkey, idx_fila_anamnese_sol_hermes_open
+**Únicos:**
+- `fila_anamnese_sol_hermes_pkey`
+- `idx_fila_anamnese_sol_hermes_open`
 
 ## fila_relatorios_sol_hermes
 
@@ -690,9 +749,13 @@
 | `referencia_id` | uuid | sim |  |  |
 | `metadata` | jsonb | não | '{}'::jsonb |  |
 
-**Únicos:** fila_relatorios_sol_hermes_pkey, idx_fila_sol_hermes_dia_tipo
+**Únicos:**
+- `fila_relatorios_sol_hermes_pkey`
+- `idx_fila_sol_hermes_dia_tipo`
 
-**Triggers:** tr_sync_caixa_envio_from_fila_sol_hermes → sync_caixa_envio_from_fila_sol_hermes(), trg_presenca_fila_proveniencia_rollout → fn_presenca_fila_proveniencia_rollout_v1()
+**Triggers:**
+- `tr_sync_caixa_envio_from_fila_sol_hermes → sync_caixa_envio_from_fila_sol_hermes()`
+- `trg_presenca_fila_proveniencia_rollout → fn_presenca_fila_proveniencia_rollout_v1()`
 
 ## fila_relatorios_whatsapp
 
@@ -716,7 +779,9 @@
 | `ultima_tentativa_em` | timestamp with time zone | sim |  |  |
 | `tipo_relatorio` | text | não | 'relatorio_admin'::text |  |
 
-**Únicos:** fila_relatorios_whatsapp_pkey, idx_fila_relatorio_dia_tipo
+**Únicos:**
+- `fila_relatorios_whatsapp_pkey`
+- `idx_fila_relatorio_dia_tipo`
 
 ## hermes_patch_status
 
@@ -730,7 +795,8 @@
 | `detalhe` | text | sim |  |  |
 | `checado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** hermes_patch_status_pkey
+**Únicos:**
+- `hermes_patch_status_pkey`
 
 ## integracao_tokens
 
@@ -744,9 +810,11 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** integracao_tokens_pkey
+**Únicos:**
+- `integracao_tokens_pkey`
 
-**Triggers:** trg_integracao_tokens_updated_at → update_updated_at_column()
+**Triggers:**
+- `trg_integracao_tokens_updated_at → update_updated_at_column()`
 
 ## lia_alertas_configuracao
 
@@ -758,7 +826,8 @@
 | `atualizado_em` | timestamp with time zone | não | now() |  |
 | `followup_72h_liberado` | boolean | não | false |  |
 
-**Únicos:** lia_alertas_configuracao_pkey
+**Únicos:**
+- `lia_alertas_configuracao_pkey`
 
 ## lia_alertas_privados
 
@@ -789,7 +858,10 @@
 | `caixa_id` | integer | não | 3 | whatsapp_caixas.id |
 | `followup_resumo_id` | uuid | sim |  | lia_followup_resumos.id |
 
-**Únicos:** lia_alertas_privados_evento_id_key, lia_alertas_privados_followup_resumo_id_key, lia_alertas_privados_pkey
+**Únicos:**
+- `lia_alertas_privados_evento_id_key`
+- `lia_alertas_privados_followup_resumo_id_key`
+- `lia_alertas_privados_pkey`
 
 ## lia_destinos_privados
 
@@ -807,7 +879,9 @@
 | `criado_em` | timestamp with time zone | não | now() |  |
 | `desativado_em` | timestamp with time zone | sim |  |  |
 
-**Únicos:** lia_destinos_privados_pkey, lia_destinos_privados_usuario_ativo_uidx
+**Únicos:**
+- `lia_destinos_privados_pkey`
+- `lia_destinos_privados_usuario_ativo_uidx`
 
 ## lia_followup_resumo_itens
 
@@ -824,7 +898,9 @@
 | `cancelamento_motivo` | text | sim |  |  |
 | `criado_em` | timestamp with time zone | não | clock_timestamp() |  |
 
-**Únicos:** lia_followup_resumo_itens_pesquisa_id_ambiente_key, lia_followup_resumo_itens_pkey
+**Únicos:**
+- `lia_followup_resumo_itens_pesquisa_id_ambiente_key`
+- `lia_followup_resumo_itens_pkey`
 
 ## lia_followup_resumos
 
@@ -840,7 +916,10 @@
 | `idempotency_key` | text | não |  |  |
 | `criado_em` | timestamp with time zone | não | clock_timestamp() |  |
 
-**Únicos:** lia_followup_resumos_idempotency_key_key, lia_followup_resumos_pkey, lia_followup_resumos_producao_operador_data_uidx
+**Únicos:**
+- `lia_followup_resumos_idempotency_key_key`
+- `lia_followup_resumos_pkey`
+- `lia_followup_resumos_producao_operador_data_uidx`
 
 ## lia_pesquisa_eventos
 
@@ -861,7 +940,11 @@
 | `idempotency_key` | text | não |  |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** lia_pesquisa_eventos_idempotency_key_key, lia_pesquisa_eventos_opt_out_rodada_uidx, lia_pesquisa_eventos_pkey, lia_pesquisa_eventos_resposta_rodada_uidx
+**Únicos:**
+- `lia_pesquisa_eventos_idempotency_key_key`
+- `lia_pesquisa_eventos_opt_out_rodada_uidx`
+- `lia_pesquisa_eventos_pkey`
+- `lia_pesquisa_eventos_resposta_rodada_uidx`
 
 ## matriculas_divergencias
 
@@ -883,7 +966,9 @@
 | `fonte` | text | não | 'sync'::text |  |
 | `analise_sol` | text | sim |  |  |
 
-**Únicos:** matriculas_divergencias_aluno_id_tipo_divergencia_campo_key, matriculas_divergencias_pkey
+**Únicos:**
+- `matriculas_divergencias_aluno_id_tipo_divergencia_campo_key`
+- `matriculas_divergencias_pkey`
 
 ## matriculas_divergencias_decisoes
 
@@ -901,7 +986,9 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** matriculas_divergencias_decisoes_divergencia_id_key, matriculas_divergencias_decisoes_pkey
+**Únicos:**
+- `matriculas_divergencias_decisoes_divergencia_id_key`
+- `matriculas_divergencias_decisoes_pkey`
 
 ## matriculas_emusys_decisoes_canonicas
 
@@ -926,7 +1013,9 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** matriculas_emusys_decisoes_canonicas_pkey, matriculas_emusys_decisoes_canonicas_unique
+**Únicos:**
+- `matriculas_emusys_decisoes_canonicas_pkey`
+- `matriculas_emusys_decisoes_canonicas_unique`
 
 ## notificacao_config
 
@@ -942,9 +1031,12 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** notificacao_config_pkey, notificacao_config_tipo_key
+**Únicos:**
+- `notificacao_config_pkey`
+- `notificacao_config_tipo_key`
 
-**Triggers:** update_notificacao_config_updated_at → update_updated_at_column()
+**Triggers:**
+- `update_notificacao_config_updated_at → update_updated_at_column()`
 
 ## notificacao_destinatarios
 
@@ -957,7 +1049,9 @@
 | `canal` | character varying(20) | não | 'whatsapp'::character varying |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** notificacao_destinatarios_config_id_pessoa_tipo_pessoa_id_key, notificacao_destinatarios_pkey
+**Únicos:**
+- `notificacao_destinatarios_config_id_pessoa_tipo_pessoa_id_key`
+- `notificacao_destinatarios_pkey`
 
 ## notificacao_log
 
@@ -977,7 +1071,8 @@
 | `enviado_at` | timestamp with time zone | sim | now() |  |
 | `lido_at` | timestamp with time zone | sim |  |  |
 
-**Únicos:** notificacao_log_pkey
+**Únicos:**
+- `notificacao_log_pkey`
 
 ## orquestracao_locks_v1
 
@@ -990,7 +1085,8 @@
 | `travado_por` | text | sim |  |  |
 | `atualizado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** orquestracao_locks_v1_pkey
+**Únicos:**
+- `orquestracao_locks_v1_pkey`
 
 ## sync_run_items
 
@@ -1026,9 +1122,12 @@
 | `source_missing_resolved_at` | timestamp with time zone | sim |  |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** sync_run_items_identidade_uniq, sync_run_items_pkey
+**Únicos:**
+- `sync_run_items_identidade_uniq`
+- `sync_run_items_pkey`
 
-**Triggers:** trg_sync_run_items_append_only → fn_financeiro_snapshot_append_only()
+**Triggers:**
+- `trg_sync_run_items_append_only → fn_financeiro_snapshot_append_only()`
 
 ## sync_run_overrides
 
@@ -1045,9 +1144,11 @@
 | `actor_subject` | text | sim |  |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** sync_run_overrides_pkey
+**Únicos:**
+- `sync_run_overrides_pkey`
 
-**Triggers:** trg_sync_run_overrides_append_only → fn_financeiro_snapshot_append_only()
+**Triggers:**
+- `trg_sync_run_overrides_append_only → fn_financeiro_snapshot_append_only()`
 
 ## sync_runs
 
@@ -1076,9 +1177,13 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** sync_runs_baseline_competencia_uniq, sync_runs_global_running_uniq, sync_runs_pkey
+**Únicos:**
+- `sync_runs_baseline_competencia_uniq`
+- `sync_runs_global_running_uniq`
+- `sync_runs_pkey`
 
-**Triggers:** trg_sync_runs_guard → fn_financeiro_sync_run_guard()
+**Triggers:**
+- `trg_sync_runs_guard → fn_financeiro_sync_run_guard()`
 
 ## vcards_unidade
 
@@ -1096,9 +1201,11 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** vcards_unidade_pkey
+**Únicos:**
+- `vcards_unidade_pkey`
 
-**Triggers:** trg_vcards_unidade_updated_at → set_updated_at()
+**Triggers:**
+- `trg_vcards_unidade_updated_at → set_updated_at()`
 
 ## vw_fila_audio_sem_roster
 
@@ -1142,7 +1249,8 @@
 | `payload` | jsonb | sim |  |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** webhook_debug_log_pkey
+**Únicos:**
+- `webhook_debug_log_pkey`
 
 ## whatsapp_caixas
 
@@ -1167,7 +1275,8 @@
 | `waha_api_key` | text | sim |  |  |
 | `departamento` | text | não | 'administrativo'::text |  |
 
-**Únicos:** whatsapp_caixas_pkey
+**Únicos:**
+- `whatsapp_caixas_pkey`
 
 ## whatsapp_caixas_credenciais_auditoria
 
@@ -1181,7 +1290,8 @@
 | `credencial` | text | não |  |  |
 | `rotacionada_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** whatsapp_caixas_credenciais_auditoria_pkey
+**Únicos:**
+- `whatsapp_caixas_credenciais_auditoria_pkey`
 
 ## whatsapp_config
 
@@ -1195,7 +1305,8 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** whatsapp_config_pkey
+**Únicos:**
+- `whatsapp_config_pkey`
 
 ## whatsapp_destinatarios_relatorio
 
@@ -1210,5 +1321,6 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `caixa_id` | integer | sim |  | whatsapp_caixas.id |
 
-**Únicos:** whatsapp_destinatarios_relatorio_pkey
+**Únicos:**
+- `whatsapp_destinatarios_relatorio_pkey`
 

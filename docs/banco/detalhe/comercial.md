@@ -26,9 +26,11 @@
 | `updated_at` | timestamp with time zone | sim | now() |  |
 | `transferido_em` | timestamp with time zone | sim |  |  |
 
-**Únicos:** agente_conversas_pkey
+**Únicos:**
+- `agente_conversas_pkey`
 
-**Triggers:** set_updated_at_agente_conversas → set_updated_at()
+**Triggers:**
+- `set_updated_at_agente_conversas → set_updated_at()`
 
 ## agente_fila_mensagens
 
@@ -43,7 +45,9 @@
 | `processando` | boolean | sim | false |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** agente_fila_mensagens_agente_id_telefone_key, agente_fila_mensagens_pkey
+**Únicos:**
+- `agente_fila_mensagens_agente_id_telefone_key`
+- `agente_fila_mensagens_pkey`
 
 ## agentes
 
@@ -72,9 +76,11 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** agentes_pkey
+**Únicos:**
+- `agentes_pkey`
 
-**Triggers:** set_updated_at_agentes → set_updated_at()
+**Triggers:**
+- `set_updated_at_agentes → set_updated_at()`
 
 ## campanha_contatos
 
@@ -91,7 +97,8 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `respondeu` | boolean | não | false |  |
 
-**Únicos:** campanha_contatos_pkey
+**Únicos:**
+- `campanha_contatos_pkey`
 
 ## campanhas
 
@@ -122,9 +129,11 @@
 | `meta_disparo` | integer | sim |  |  |
 | `custo_moeda` | text | não | 'BRL'::text |  |
 
-**Únicos:** campanhas_pkey
+**Únicos:**
+- `campanhas_pkey`
 
-**Triggers:** set_updated_at_campanhas → set_updated_at()
+**Triggers:**
+- `set_updated_at_campanhas → set_updated_at()`
 
 ## campanhas_config
 
@@ -136,7 +145,8 @@
 | `updated_at` | timestamp with time zone | sim | now() |  |
 | `updated_by` | uuid | sim |  | users.id |
 
-**Únicos:** campanhas_config_pkey
+**Únicos:**
+- `campanhas_config_pkey`
 
 ## canais_origem
 
@@ -148,7 +158,9 @@
 | `ativo` | boolean | sim | true |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** canais_origem_pkey, uk_canais_nome_normalizado
+**Únicos:**
+- `canais_origem_pkey`
+- `uk_canais_nome_normalizado`
 
 ## contatos_bloqueados_campanha
 
@@ -160,7 +172,9 @@
 | `motivo` | text | sim |  |  |
 | `bloqueado_em` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** contatos_bloqueados_campanha_pkey, contatos_bloqueados_campanha_unidade_id_telefone_key
+**Únicos:**
+- `contatos_bloqueados_campanha_pkey`
+- `contatos_bloqueados_campanha_unidade_id_telefone_key`
 
 ## conversas_campanha
 
@@ -177,9 +191,12 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** conversas_campanha_numero_meta_id_telefone_key, conversas_campanha_pkey
+**Únicos:**
+- `conversas_campanha_numero_meta_id_telefone_key`
+- `conversas_campanha_pkey`
 
-**Triggers:** set_updated_at_conversas_campanha → set_updated_at()
+**Triggers:**
+- `set_updated_at_conversas_campanha → set_updated_at()`
 
 ## crm_conversas
 
@@ -202,9 +219,13 @@
 | `updated_at` | timestamp with time zone | sim | now() |  |
 | `caixa_id` | integer | sim |  | whatsapp_caixas.id |
 
-**Únicos:** crm_conversas_lead_id_key, crm_conversas_pkey
+**Únicos:**
+- `crm_conversas_lead_id_key`
+- `crm_conversas_pkey`
 
-**Triggers:** tr_preencher_unidade_conversa → preencher_unidade_conversa(), tr_updated_at_conversas → atualizar_updated_at_conversas()
+**Triggers:**
+- `tr_preencher_unidade_conversa → preencher_unidade_conversa()`
+- `tr_updated_at_conversas → atualizar_updated_at_conversas()`
 
 ## crm_etiquetas
 
@@ -219,7 +240,9 @@
 | `ativo` | boolean | não | true |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** crm_etiquetas_nome_key, crm_etiquetas_pkey
+**Únicos:**
+- `crm_etiquetas_nome_key`
+- `crm_etiquetas_pkey`
 
 ## crm_followups
 
@@ -240,7 +263,8 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** crm_followups_pkey
+**Únicos:**
+- `crm_followups_pkey`
 
 ## crm_lead_etiquetas
 
@@ -252,7 +276,9 @@
 | `adicionada_por` | character varying(100) | sim |  |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** crm_lead_etiquetas_lead_id_etiqueta_id_key, crm_lead_etiquetas_pkey
+**Únicos:**
+- `crm_lead_etiquetas_lead_id_etiqueta_id_key`
+- `crm_lead_etiquetas_pkey`
 
 ## crm_lead_historico
 
@@ -266,7 +292,8 @@
 | `created_by` | integer | sim |  | colaboradores.id |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** crm_lead_historico_pkey
+**Únicos:**
+- `crm_lead_historico_pkey`
 
 ## crm_mensagens
 
@@ -294,9 +321,13 @@
 | `transcricao` | text | sim |  |  |
 | `reacoes` | jsonb | sim | '[]'::jsonb |  |
 
-**Únicos:** crm_mensagens_pkey, crm_mensagens_whatsapp_message_id_key
+**Únicos:**
+- `crm_mensagens_pkey`
+- `crm_mensagens_whatsapp_message_id_key`
 
-**Triggers:** tr_atualizar_conversa_on_mensagem → atualizar_conversa_on_mensagem(), trg_normalizar_wa_msg_id → normalizar_whatsapp_message_id()
+**Triggers:**
+- `tr_atualizar_conversa_on_mensagem → atualizar_conversa_on_mensagem()`
+- `trg_normalizar_wa_msg_id → normalizar_whatsapp_message_id()`
 
 ## crm_mensagens_agendadas
 
@@ -316,7 +347,8 @@
 | `criado_por` | character varying(100) | sim |  |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** crm_mensagens_agendadas_pkey
+**Únicos:**
+- `crm_mensagens_agendadas_pkey`
 
 ## crm_metas_andreza
 
@@ -332,7 +364,9 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** crm_metas_andreza_ano_mes_unidade_id_key, crm_metas_andreza_pkey
+**Únicos:**
+- `crm_metas_andreza_ano_mes_unidade_id_key`
+- `crm_metas_andreza_pkey`
 
 ## crm_motivos_nao_comparecimento
 
@@ -344,7 +378,8 @@
 | `ativo` | boolean | sim | true |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** crm_motivos_nao_comparecimento_pkey
+**Únicos:**
+- `crm_motivos_nao_comparecimento_pkey`
 
 ## crm_pipeline_etapas
 
@@ -359,9 +394,12 @@
 | `ativo` | boolean | sim | true |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** crm_pipeline_etapas_pkey, crm_pipeline_etapas_slug_key
+**Únicos:**
+- `crm_pipeline_etapas_pkey`
+- `crm_pipeline_etapas_slug_key`
 
-**Triggers:** trg_audit → fn_audit_log()
+**Triggers:**
+- `trg_audit → fn_audit_log()`
 
 ## crm_templates_whatsapp
 
@@ -376,7 +414,9 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `contexto` | text | não | 'pre_atendimento'::text |  |
 
-**Únicos:** crm_templates_whatsapp_contexto_slug_key, crm_templates_whatsapp_pkey
+**Únicos:**
+- `crm_templates_whatsapp_contexto_slug_key`
+- `crm_templates_whatsapp_pkey`
 
 ## experimentais_mensal_unidade
 
@@ -390,7 +430,9 @@
 | `total_matriculas` | integer | sim | 0 |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** experimentais_mensal_unidade_pkey, experimentais_mensal_unidade_unidade_id_ano_mes_key
+**Únicos:**
+- `experimentais_mensal_unidade_pkey`
+- `experimentais_mensal_unidade_unidade_id_ano_mes_key`
 
 ## experimentais_professor_mensal
 
@@ -404,7 +446,9 @@
 | `experimentais` | integer | sim | 0 |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** experimentais_professor_mensa_professor_id_unidade_id_ano_m_key, experimentais_professor_mensal_pkey
+**Únicos:**
+- `experimentais_professor_mensa_professor_id_unidade_id_ano_m_key`
+- `experimentais_professor_mensal_pkey`
 
 ## lead_conciliacao_decisoes
 
@@ -421,7 +465,8 @@
 | `metadata` | jsonb | não | '{}'::jsonb |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** lead_conciliacao_decisoes_pkey
+**Únicos:**
+- `lead_conciliacao_decisoes_pkey`
 
 ## lead_experimentais
 
@@ -447,9 +492,15 @@
 | `contexto_ia_em` | timestamp with time zone | sim |  |  |
 | `emusys_agendamento_id` | bigint | sim |  |  |
 
-**Únicos:** lead_experimentais_pkey, uq_lead_exp_aula, uq_lead_exp_legado, uq_lead_exp_negocio_novo
+**Únicos:**
+- `lead_experimentais_pkey`
+- `uq_lead_exp_aula`
+- `uq_lead_exp_legado`
+- `uq_lead_exp_negocio_novo`
 
-**Triggers:** trg_audit → fn_audit_log(), trg_propagar_professor_experimental → fn_propagar_professor_experimental()
+**Triggers:**
+- `trg_audit → fn_audit_log()`
+- `trg_propagar_professor_experimental → fn_propagar_professor_experimental()`
 
 ## lead_experimentais_arquivadas
 
@@ -500,7 +551,9 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** lead_experimentais_decisoes_humanas_pkey, lead_experimentais_decisoes_humanas_unique
+**Únicos:**
+- `lead_experimentais_decisoes_humanas_pkey`
+- `lead_experimentais_decisoes_humanas_unique`
 
 ## lead_experimental_aulas
 
@@ -528,7 +581,10 @@
 | `presenca_respondido_em` | timestamp with time zone | sim |  |  |
 | `presenca_bruta_emusys` | text | sim |  |  |
 
-**Únicos:** lead_experimental_aulas_pkey, uq_lead_exp_aula_ocupada, uq_lead_exp_aula_vigente
+**Únicos:**
+- `lead_experimental_aulas_pkey`
+- `uq_lead_exp_aula_ocupada`
+- `uq_lead_exp_aula_vigente`
 
 ## lead_experimental_aulas_arquivadas
 
@@ -581,7 +637,9 @@
 | `criado_em` | timestamp with time zone | não | now() |  |
 | `atualizado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** lead_experimental_registros_pkey, uq_lead_exp_registro_vigente
+**Únicos:**
+- `lead_experimental_registros_pkey`
+- `uq_lead_exp_registro_vigente`
 
 ## leads
 
@@ -654,9 +712,22 @@
 | `meta_ctwa_clid` | text | sim |  |  |
 | `data_nascimento` | date | sim |  |  |
 
-**Únicos:** idx_leads_emusys_lead_id, idx_leads_nocodb_lead_id, idx_leads_telefone_unidade_unique, leads_chatwoot_conversation_id_key, leads_pkey
+**Únicos:**
+- `idx_leads_emusys_lead_id`
+- `idx_leads_nocodb_lead_id`
+- `idx_leads_telefone_unidade_unique`
+- `leads_chatwoot_conversation_id_key`
+- `leads_pkey`
 
-**Triggers:** tr_normalize_telefone_leads → trigger_normalize_telefone(), tr_sync_etapa_status_on_insert → sync_lead_etapa_status_on_insert(), tr_sync_etapa_to_status → sync_lead_etapa_to_status(), tr_sync_experimentais_professor → sync_experimentais_professor(), tr_sync_experimentais_unidade → sync_experimentais_unidade(), trg_audit → fn_audit_log(), trg_calcular_faixa_etaria_lead → trg_calcular_faixa_etaria_lead(), update_leads_updated_at → update_updated_at_column()
+**Triggers:**
+- `tr_normalize_telefone_leads → trigger_normalize_telefone()`
+- `tr_sync_etapa_status_on_insert → sync_lead_etapa_status_on_insert()`
+- `tr_sync_etapa_to_status → sync_lead_etapa_to_status()`
+- `tr_sync_experimentais_professor → sync_experimentais_professor()`
+- `tr_sync_experimentais_unidade → sync_experimentais_unidade()`
+- `trg_audit → fn_audit_log()`
+- `trg_calcular_faixa_etaria_lead → trg_calcular_faixa_etaria_lead()`
+- `update_leads_updated_at → update_updated_at_column()`
 
 ## leads_automacao_log
 
@@ -674,7 +745,8 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `payload_bruto` | jsonb | sim |  |  |
 
-**Únicos:** leads_automacao_log_pkey
+**Únicos:**
+- `leads_automacao_log_pkey`
 
 ## leads_backup_flags_20260601
 
@@ -701,7 +773,9 @@
 | `campanha_nome` | text | não |  |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** leads_campanhas_lead_id_campanha_slug_key, leads_campanhas_pkey
+**Únicos:**
+- `leads_campanhas_lead_id_campanha_slug_key`
+- `leads_campanhas_pkey`
 
 ## leads_diarios_backup
 
@@ -766,7 +840,8 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `privada` | boolean | sim | false |  |
 
-**Únicos:** mensagens_campanha_pkey
+**Únicos:**
+- `mensagens_campanha_pkey`
 
 ## meta_ads_cache
 
@@ -786,7 +861,8 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** meta_ads_cache_pkey
+**Únicos:**
+- `meta_ads_cache_pkey`
 
 ## mila_config
 
@@ -816,9 +892,12 @@
 | `updated_at` | timestamp with time zone | sim | now() |  |
 | `token_quepasa` | character varying | sim |  |  |
 
-**Únicos:** mila_config_pkey, mila_config_unidade_unique
+**Únicos:**
+- `mila_config_pkey`
+- `mila_config_unidade_unique`
 
-**Triggers:** trigger_mila_config_updated_at → update_mila_config_updated_at()
+**Triggers:**
+- `trigger_mila_config_updated_at → update_mila_config_updated_at()`
 
 ## mila_message_buffer
 
@@ -835,7 +914,8 @@
 | `processado` | boolean | não | false |  |
 | `processado_at` | timestamp with time zone | sim |  |  |
 
-**Únicos:** mila_message_buffer_pkey
+**Únicos:**
+- `mila_message_buffer_pkey`
 
 ## motivos_nao_matricula
 
@@ -846,7 +926,8 @@
 | `ativo` | boolean | sim | true |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** motivos_nao_matricula_pkey
+**Únicos:**
+- `motivos_nao_matricula_pkey`
 
 ## numeros_meta
 
@@ -871,9 +952,11 @@
 | `auto_reply_message` | text | sim |  |  |
 | `numero_telefone` | text | sim |  |  |
 
-**Únicos:** numeros_meta_pkey
+**Únicos:**
+- `numeros_meta_pkey`
 
-**Triggers:** set_updated_at_numeros_meta → set_updated_at()
+**Triggers:**
+- `set_updated_at_numeros_meta → set_updated_at()`
 
 ## origem_leads_legado
 
@@ -889,7 +972,9 @@
 | `quantidade` | integer | sim | 0 |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** origem_leads_competencia_unidade_canal_tipo_key, origem_leads_pkey
+**Únicos:**
+- `origem_leads_competencia_unidade_canal_tipo_key`
+- `origem_leads_pkey`
 
 ## professores_experimentais
 
@@ -902,7 +987,9 @@
 | `quantidade` | integer | sim | 0 |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** professores_experimentais_competencia_unidade_professor_key, professores_experimentais_pkey
+**Únicos:**
+- `professores_experimentais_competencia_unidade_professor_key`
+- `professores_experimentais_pkey`
 
 ## respostas_rapidas_campanha
 
@@ -915,7 +1002,8 @@
 | `categoria` | text | sim |  |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** respostas_rapidas_campanha_pkey
+**Únicos:**
+- `respostas_rapidas_campanha_pkey`
 
 ## templates_meta
 
@@ -938,9 +1026,12 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** templates_meta_meta_template_id_numero_meta_id_key, templates_meta_pkey
+**Únicos:**
+- `templates_meta_meta_template_id_numero_meta_id_key`
+- `templates_meta_pkey`
 
-**Triggers:** set_updated_at_templates_meta → set_updated_at()
+**Triggers:**
+- `set_updated_at_templates_meta → set_updated_at()`
 
 ## transferencias_mila
 
@@ -954,7 +1045,8 @@
 | `consultor_phone` | text | não |  |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** transferencias_mila_pkey
+**Únicos:**
+- `transferencias_mila_pkey`
 
 ## unidade_contato_comercial
 
@@ -968,7 +1060,8 @@
 | `ativo` | boolean | não | true |  |
 | `atualizado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** unidade_contato_comercial_pkey
+**Únicos:**
+- `unidade_contato_comercial_pkey`
 
 ## vw_experimental_faltou_sem_afirmacao
 

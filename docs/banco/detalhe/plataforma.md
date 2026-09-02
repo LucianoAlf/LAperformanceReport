@@ -55,7 +55,8 @@
 | `openai_model` | text | não | 'gpt-4o-mini'::text |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** assistente_ia_config_pkey
+**Únicos:**
+- `assistente_ia_config_pkey`
 
 ## audit_log
 
@@ -73,7 +74,8 @@
 | `origem` | text | sim | 'system'::text |  |
 | `registro_id_text` | text | sim |  |  |
 
-**Únicos:** audit_log_pkey
+**Únicos:**
+- `audit_log_pkey`
 
 ## auditoria_acesso
 
@@ -92,7 +94,8 @@
 | `user_agent` | text | sim |  |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** auditoria_acesso_pkey
+**Únicos:**
+- `auditoria_acesso_pkey`
 
 ## ficha_tokens
 
@@ -109,7 +112,10 @@
 | `usado_em` | timestamp with time zone | sim |  |  |
 | `ativo` | boolean | não | true |  |
 
-**Únicos:** ficha_tokens_pkey, ficha_tokens_token_key, uq_ficha_tokens_colaborador_ativo
+**Únicos:**
+- `ficha_tokens_pkey`
+- `ficha_tokens_token_key`
+- `uq_ficha_tokens_colaborador_ativo`
 
 ## migrations_audit_data_nascimento
 
@@ -123,7 +129,8 @@
 | `valor_novo` | text | sim |  |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** migrations_audit_data_nascimento_pkey
+**Únicos:**
+- `migrations_audit_data_nascimento_pkey`
 
 ## perfil_permissoes
 
@@ -136,7 +143,9 @@
 | `permissao_id` | uuid | não |  | permissoes.id |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** perfil_permissoes_perfil_id_permissao_id_key, perfil_permissoes_pkey
+**Únicos:**
+- `perfil_permissoes_perfil_id_permissao_id_key`
+- `perfil_permissoes_pkey`
 
 ## perfis
 
@@ -155,7 +164,9 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** perfis_nome_key, perfis_pkey
+**Únicos:**
+- `perfis_nome_key`
+- `perfis_pkey`
 
 ## permissoes
 
@@ -173,7 +184,9 @@
 | `ativo` | boolean | sim | true |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** permissoes_codigo_key, permissoes_pkey
+**Únicos:**
+- `permissoes_codigo_key`
+- `permissoes_pkey`
 
 ## rbac_piloto_usuarios
 
@@ -183,7 +196,8 @@
 | `incluido_em` | timestamp with time zone | não | now() |  |
 | `motivo` | text | sim |  |  |
 
-**Únicos:** rbac_piloto_usuarios_pkey
+**Únicos:**
+- `rbac_piloto_usuarios_pkey`
 
 ## sol_permissoes
 
@@ -202,7 +216,10 @@
 | `observacao` | text | sim |  |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** sol_permissoes_colab_uk, sol_permissoes_pkey, sol_permissoes_tel_uk
+**Únicos:**
+- `sol_permissoes_colab_uk`
+- `sol_permissoes_pkey`
+- `sol_permissoes_tel_uk`
 
 ## unidades
 
@@ -229,9 +246,14 @@
 | `relatorio_comercial_diario_cron_ativo` | boolean | não | false |  |
 | `farmers_apelidos` | text[] | sim |  |  |
 
-**Únicos:** unidades_codigo_key, unidades_nome_key, unidades_pkey
+**Únicos:**
+- `unidades_codigo_key`
+- `unidades_nome_key`
+- `unidades_pkey`
 
-**Triggers:** tr_unidades_updated_at → update_updated_at(), trg_audit → fn_audit_log()
+**Triggers:**
+- `tr_unidades_updated_at → update_updated_at()`
+- `trg_audit → fn_audit_log()`
 
 ## unidades_cursos
 
@@ -246,7 +268,9 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** unidades_cursos_pkey, unidades_cursos_unidade_id_curso_id_key
+**Únicos:**
+- `unidades_cursos_pkey`
+- `unidades_cursos_unidade_id_curso_id_key`
 
 ## usuario_onboarding
 
@@ -275,9 +299,12 @@
 | `created_at` | timestamp without time zone | sim | now() |  |
 | `updated_at` | timestamp without time zone | sim | now() |  |
 
-**Únicos:** usuario_onboarding_pkey, usuario_onboarding_usuario_id_key
+**Únicos:**
+- `usuario_onboarding_pkey`
+- `usuario_onboarding_usuario_id_key`
 
-**Triggers:** update_usuario_onboarding_updated_at → update_onboarding_updated_at()
+**Triggers:**
+- `update_usuario_onboarding_updated_at → update_onboarding_updated_at()`
 
 ## usuario_perfis
 
@@ -293,7 +320,10 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** idx_usuario_perfis_unique_with_unidade, idx_usuario_perfis_unique_without_unidade, usuario_perfis_pkey
+**Únicos:**
+- `idx_usuario_perfis_unique_with_unidade`
+- `idx_usuario_perfis_unique_without_unidade`
+- `usuario_perfis_pkey`
 
 ## usuarios
 
@@ -317,9 +347,14 @@
 | `avatar_url` | text | sim |  |  |
 | `apelido` | text | sim |  |  |
 
-**Únicos:** usuarios_auth_user_id_key, usuarios_email_key, usuarios_pkey
+**Únicos:**
+- `usuarios_auth_user_id_key`
+- `usuarios_email_key`
+- `usuarios_pkey`
 
-**Triggers:** trg_usuarios_sincroniza_rbac → fn_usuarios_sincroniza_rbac(), update_usuarios_updated_at → update_updated_at_column()
+**Triggers:**
+- `trg_usuarios_sincroniza_rbac → fn_usuarios_sincroniza_rbac()`
+- `update_usuarios_updated_at → update_updated_at_column()`
 
 ## vw_saude_jornada_ciclos
 

@@ -151,3 +151,21 @@ test('lista longa de consumidores e truncada, mantendo a contagem', () => {
   assert.match(linha, /\+14 outros/);
   assert.ok(linha.length < 400, `linha ainda longa: ${linha.length}`);
 });
+
+// Regressao de 2026-09-02: a lista de indices unicos separada por virgula fazia
+// o gitleaks acusar generic-api-key. A regra casa <palavra-chave>+<separador>+
+// <valor>, e todo unique constraint do Postgres termina em '_key' -- com a
+// virgula logo depois, o nome do indice seguinte virava "o segredo".
+test('indices unicos saem um por linha, sem virgula depois de _key', () => {
+  const comIndices = {
+    ...dados,
+    tabelas: [{
+      ...dados.tabelas[0],
+      indicesUnicos: ['sol_caixa_lotes_v1_idempotency_key_key', 'sol_caixa_lotes_v1_pkey'],
+    }],
+  };
+  const saida = formatarDetalhe('aluno', comIndices);
+  assert.doesNotMatch(saida, /_key,/);
+  assert.match(saida, /- `sol_caixa_lotes_v1_idempotency_key_key`/);
+  assert.match(saida, /- `sol_caixa_lotes_v1_pkey`/);
+});

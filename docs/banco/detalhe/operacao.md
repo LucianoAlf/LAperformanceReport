@@ -22,9 +22,12 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** calendario_escolar_pkey, calendario_escolar_unidade_id_ano_tipo_data_inicio_key
+**Únicos:**
+- `calendario_escolar_pkey`
+- `calendario_escolar_unidade_id_ano_tipo_data_inicio_key`
 
-**Triggers:** trg_marcar_contratos_para_recalculo → trg_marcar_contratos_para_recalculo()
+**Triggers:**
+- `trg_marcar_contratos_para_recalculo → trg_marcar_contratos_para_recalculo()`
 
 ## catalogo_treinamentos
 
@@ -40,7 +43,8 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** catalogo_treinamentos_pkey
+**Únicos:**
+- `catalogo_treinamentos_pkey`
 
 ## colaborador_rider
 
@@ -55,7 +59,9 @@
 | `preenchido_em` | timestamp with time zone | sim |  |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** colaborador_rider_colaborador_id_key, colaborador_rider_pkey
+**Únicos:**
+- `colaborador_rider_colaborador_id_key`
+- `colaborador_rider_pkey`
 
 ## colaborador_rider_versoes
 
@@ -67,7 +73,8 @@
 | `respostas` | jsonb | não |  |  |
 | `registrado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** colaborador_rider_versoes_pkey
+**Únicos:**
+- `colaborador_rider_versoes_pkey`
 
 ## colaboradores
 
@@ -98,9 +105,13 @@
 | `origem_sistema` | character varying(20) | sim |  |  |
 | `origem_ref` | text | sim |  |  |
 
-**Únicos:** colaboradores_pkey, uq_colaboradores_origem, uq_colaboradores_professor
+**Únicos:**
+- `colaboradores_pkey`
+- `uq_colaboradores_origem`
+- `uq_colaboradores_professor`
 
-**Triggers:** update_colaboradores_updated_at → update_updated_at_column()
+**Triggers:**
+- `update_colaboradores_updated_at → update_updated_at_column()`
 
 ## cursos
 
@@ -118,9 +129,13 @@
 | `natureza_operacional` | text | não | 'pedagogica'::text |  |
 | `capacidade_maxima` | integer | sim |  |  |
 
-**Únicos:** cursos_pkey, uk_cursos_nome_normalizado
+**Únicos:**
+- `cursos_pkey`
+- `uk_cursos_nome_normalizado`
 
-**Triggers:** trg_audit → fn_audit_log(), trg_cursos_updated_at → update_updated_at_column()
+**Triggers:**
+- `trg_audit → fn_audit_log()`
+- `trg_cursos_updated_at → update_updated_at_column()`
 
 ## feriados
 
@@ -138,9 +153,12 @@
 | `uf` | text | sim |  |  |
 | `cidade` | text | sim |  |  |
 
-**Únicos:** feriados_data_key, feriados_pkey
+**Únicos:**
+- `feriados_data_key`
+- `feriados_pkey`
 
-**Triggers:** feriados_updated_at → visitas_set_updated_at()
+**Triggers:**
+- `feriados_updated_at → visitas_set_updated_at()`
 
 ## horarios
 
@@ -155,7 +173,8 @@
 | `ativo` | boolean | sim | true |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** horarios_pkey
+**Únicos:**
+- `horarios_pkey`
 
 ## inventario
 
@@ -188,9 +207,13 @@
 | `created_by` | uuid | sim |  | users.id |
 | `ativo` | boolean | sim | true |  |
 
-**Únicos:** inventario_codigo_patrimonio_key, inventario_nome_sala_ativo_uq, inventario_pkey
+**Únicos:**
+- `inventario_codigo_patrimonio_key`
+- `inventario_nome_sala_ativo_uq`
+- `inventario_pkey`
 
-**Triggers:** trigger_inventario_updated_at → update_inventario_updated_at()
+**Triggers:**
+- `trigger_inventario_updated_at → update_inventario_updated_at()`
 
 ## inventario_manutencoes
 
@@ -209,7 +232,8 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `created_by` | uuid | sim |  | users.id |
 
-**Únicos:** inventario_manutencoes_pkey
+**Únicos:**
+- `inventario_manutencoes_pkey`
 
 ## inventario_movimentacoes
 
@@ -224,7 +248,8 @@
 | `data_movimentacao` | timestamp with time zone | sim | now() |  |
 | `usuario_id` | uuid | sim |  | users.id |
 
-**Únicos:** inventario_movimentacoes_pkey
+**Únicos:**
+- `inventario_movimentacoes_pkey`
 
 ## inventario_pendencias
 
@@ -247,9 +272,11 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** inventario_pendencias_pkey
+**Únicos:**
+- `inventario_pendencias_pkey`
 
-**Triggers:** trg_pendencias_updated_at → update_pendencias_updated_at()
+**Triggers:**
+- `trg_pendencias_updated_at → update_pendencias_updated_at()`
 
 ## loja_carteira
 
@@ -264,9 +291,13 @@
 | `moedas_la` | integer | sim | 0 |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** loja_carteira_colaborador_idx, loja_carteira_pkey, loja_carteira_professor_idx
+**Únicos:**
+- `loja_carteira_colaborador_idx`
+- `loja_carteira_pkey`
+- `loja_carteira_professor_idx`
 
-**Triggers:** update_loja_carteira_updated_at → update_updated_at_column()
+**Triggers:**
+- `update_loja_carteira_updated_at → update_updated_at_column()`
 
 ## loja_carteira_movimentacoes
 
@@ -282,7 +313,8 @@
 | `descricao` | text | sim |  |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** loja_carteira_movimentacoes_pkey
+**Únicos:**
+- `loja_carteira_movimentacoes_pkey`
 
 ## loja_categorias
 
@@ -295,7 +327,8 @@
 | `ativo` | boolean | sim | true |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** loja_categorias_pkey
+**Únicos:**
+- `loja_categorias_pkey`
 
 ## loja_configuracoes
 
@@ -307,9 +340,12 @@
 | `descricao` | text | sim |  |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** loja_configuracoes_chave_key, loja_configuracoes_pkey
+**Únicos:**
+- `loja_configuracoes_chave_key`
+- `loja_configuracoes_pkey`
 
-**Triggers:** update_loja_configuracoes_updated_at → update_updated_at_column()
+**Triggers:**
+- `update_loja_configuracoes_updated_at → update_updated_at_column()`
 
 ## loja_estoque
 
@@ -322,9 +358,14 @@
 | `quantidade` | integer | sim | 0 |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** loja_estoque_com_variacao_idx, loja_estoque_pkey, loja_estoque_produto_unidade_variacao_uq, loja_estoque_sem_variacao_idx
+**Únicos:**
+- `loja_estoque_com_variacao_idx`
+- `loja_estoque_pkey`
+- `loja_estoque_produto_unidade_variacao_uq`
+- `loja_estoque_sem_variacao_idx`
 
-**Triggers:** update_loja_estoque_updated_at → update_updated_at_column()
+**Triggers:**
+- `update_loja_estoque_updated_at → update_updated_at_column()`
 
 ## loja_movimentacoes_estoque
 
@@ -342,7 +383,8 @@
 | `observacoes` | text | sim |  |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** loja_movimentacoes_estoque_pkey
+**Únicos:**
+- `loja_movimentacoes_estoque_pkey`
 
 ## loja_optin_novidades
 
@@ -355,7 +397,9 @@
 | `ativo` | boolean | sim | true |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** loja_optin_novidades_aluno_id_unidade_id_key, loja_optin_novidades_pkey
+**Únicos:**
+- `loja_optin_novidades_aluno_id_unidade_id_key`
+- `loja_optin_novidades_pkey`
 
 ## loja_produtos
 
@@ -376,9 +420,13 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** loja_produtos_pkey, loja_produtos_sku_key
+**Únicos:**
+- `loja_produtos_pkey`
+- `loja_produtos_sku_key`
 
-**Triggers:** trg_audit → fn_audit_log(), update_loja_produtos_updated_at → update_updated_at_column()
+**Triggers:**
+- `trg_audit → fn_audit_log()`
+- `update_loja_produtos_updated_at → update_updated_at_column()`
 
 ## loja_reservas
 
@@ -401,7 +449,8 @@
 | `cancelada_em` | timestamp with time zone | sim |  |  |
 | `motivo_cancelamento` | text | sim |  |  |
 
-**Únicos:** loja_reservas_pkey
+**Únicos:**
+- `loja_reservas_pkey`
 
 ## loja_responsaveis_reposicao
 
@@ -414,7 +463,9 @@
 | `ativo` | boolean | sim | true |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** loja_responsaveis_reposicao_pkey, loja_responsaveis_unidade_idx
+**Únicos:**
+- `loja_responsaveis_reposicao_pkey`
+- `loja_responsaveis_unidade_idx`
 
 ## loja_variacoes
 
@@ -428,7 +479,8 @@
 | `ativo` | boolean | sim | true |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** loja_variacoes_pkey
+**Únicos:**
+- `loja_variacoes_pkey`
 
 ## loja_vendas
 
@@ -458,9 +510,11 @@
 | `vendedor_id` | integer | sim |  | colaboradores.id |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** loja_vendas_pkey
+**Únicos:**
+- `loja_vendas_pkey`
 
-**Triggers:** trigger_calcular_comissao_venda → calcular_comissao_venda()
+**Triggers:**
+- `trigger_calcular_comissao_venda → calcular_comissao_venda()`
 
 ## loja_vendas_itens
 
@@ -477,7 +531,8 @@
 | `subtotal` | numeric(10,2) | não |  |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** loja_vendas_itens_pkey
+**Únicos:**
+- `loja_vendas_itens_pkey`
 
 ## planos_acao
 
@@ -503,9 +558,11 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** planos_acao_pkey
+**Únicos:**
+- `planos_acao_pkey`
 
-**Triggers:** trigger_planos_acao_updated_at → update_planos_acao_updated_at()
+**Triggers:**
+- `trigger_planos_acao_updated_at → update_planos_acao_updated_at()`
 
 ## projeto_anexos
 
@@ -524,7 +581,8 @@
 | `uploaded_by_id` | integer | não |  |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** projeto_anexos_pkey
+**Únicos:**
+- `projeto_anexos_pkey`
 
 ## projeto_comentarios
 
@@ -540,9 +598,11 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** projeto_comentarios_pkey
+**Únicos:**
+- `projeto_comentarios_pkey`
 
-**Triggers:** update_comentarios_updated_at → update_updated_at_column()
+**Triggers:**
+- `update_comentarios_updated_at → update_updated_at_column()`
 
 ## projeto_config_permissoes
 
@@ -555,7 +615,9 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** projeto_config_permissoes_chave_key, projeto_config_permissoes_pkey
+**Únicos:**
+- `projeto_config_permissoes_chave_key`
+- `projeto_config_permissoes_pkey`
 
 ## projeto_equipe
 
@@ -570,7 +632,9 @@
 | `papel` | character varying(50) | sim |  |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** projeto_equipe_pkey, projeto_equipe_unique
+**Únicos:**
+- `projeto_equipe_pkey`
+- `projeto_equipe_unique`
 
 ## projeto_equipe_membros
 
@@ -586,7 +650,8 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** projeto_equipe_membros_pkey
+**Únicos:**
+- `projeto_equipe_membros_pkey`
 
 ## projeto_fases
 
@@ -605,9 +670,12 @@
 | `updated_at` | timestamp with time zone | não | now() |  |
 | `template_id` | integer | sim |  |  |
 
-**Únicos:** projeto_fases_pkey
+**Únicos:**
+- `projeto_fases_pkey`
 
-**Triggers:** trigger_projeto_fases_updated_at → update_projeto_fases_updated_at(), update_projeto_fases_updated_at → update_updated_at_column()
+**Triggers:**
+- `trigger_projeto_fases_updated_at → update_projeto_fases_updated_at()`
+- `update_projeto_fases_updated_at → update_updated_at_column()`
 
 ## projeto_log_alteracoes
 
@@ -625,7 +693,8 @@
 | `descricao` | text | sim |  |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** projeto_log_alteracoes_pkey
+**Únicos:**
+- `projeto_log_alteracoes_pkey`
 
 ## projeto_tarefas
 
@@ -651,9 +720,15 @@
 | `updated_at` | timestamp with time zone | não | now() |  |
 | `completed_at` | timestamp with time zone | sim |  |  |
 
-**Únicos:** projeto_tarefas_pkey
+**Únicos:**
+- `projeto_tarefas_pkey`
 
-**Triggers:** trg_audit → fn_audit_log(), trigger_log_tarefa_delete → log_tarefa_alteracao(), trigger_log_tarefa_insert_update → log_tarefa_alteracao(), trigger_projeto_tarefas_updated_at → update_projeto_tarefas_updated_at(), update_projeto_tarefas_updated_at → update_updated_at_column()
+**Triggers:**
+- `trg_audit → fn_audit_log()`
+- `trigger_log_tarefa_delete → log_tarefa_alteracao()`
+- `trigger_log_tarefa_insert_update → log_tarefa_alteracao()`
+- `trigger_projeto_tarefas_updated_at → update_projeto_tarefas_updated_at()`
+- `update_projeto_tarefas_updated_at → update_updated_at_column()`
 
 ## projeto_tipo_fases_template
 
@@ -669,7 +744,8 @@
 | `descricao` | text | sim |  |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** projeto_tipo_fases_template_pkey
+**Únicos:**
+- `projeto_tipo_fases_template_pkey`
 
 ## projeto_tipo_tarefas_template
 
@@ -684,7 +760,8 @@
 | `descricao` | text | sim |  |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** projeto_tipo_tarefas_template_pkey
+**Únicos:**
+- `projeto_tipo_tarefas_template_pkey`
 
 ## projeto_tipos
 
@@ -701,9 +778,12 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** projeto_tipos_pkey
+**Únicos:**
+- `projeto_tipos_pkey`
 
-**Triggers:** trigger_projeto_tipos_updated_at → update_projeto_tipos_updated_at(), update_projeto_tipos_updated_at → update_updated_at_column()
+**Triggers:**
+- `trigger_projeto_tipos_updated_at → update_projeto_tipos_updated_at()`
+- `update_projeto_tipos_updated_at → update_updated_at_column()`
 
 ## projetos
 
@@ -728,9 +808,15 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** projetos_pkey
+**Únicos:**
+- `projetos_pkey`
 
-**Triggers:** trg_audit → fn_audit_log(), trigger_log_projeto_delete → log_projeto_alteracao(), trigger_log_projeto_insert_update → log_projeto_alteracao(), trigger_projetos_updated_at → update_projetos_updated_at(), update_projetos_updated_at → update_updated_at_column()
+**Triggers:**
+- `trg_audit → fn_audit_log()`
+- `trigger_log_projeto_delete → log_projeto_alteracao()`
+- `trigger_log_projeto_insert_update → log_projeto_alteracao()`
+- `trigger_projetos_updated_at → update_projetos_updated_at()`
+- `update_projetos_updated_at → update_updated_at_column()`
 
 ## salas
 
@@ -752,9 +838,12 @@
 | `buffer_operacional` | integer | sim | 10 |  |
 | `sala_coringa` | boolean | sim | false |  |
 
-**Únicos:** salas_pkey, salas_unidade_id_nome_ativo_key
+**Únicos:**
+- `salas_pkey`
+- `salas_unidade_id_nome_ativo_key`
 
-**Triggers:** trg_audit → fn_audit_log()
+**Triggers:**
+- `trg_audit → fn_audit_log()`
 
 ## staff_unidade
 
@@ -772,7 +861,8 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** staff_unidade_pkey
+**Únicos:**
+- `staff_unidade_pkey`
 
 ## templates_cenario
 
@@ -793,7 +883,8 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `updated_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** templates_cenario_pkey
+**Únicos:**
+- `templates_cenario_pkey`
 
 ## templates_cenario_unidade
 
@@ -811,7 +902,9 @@
 | `taxa_exp_mat` | numeric(5,2) | sim |  |  |
 | `mrr_objetivo` | numeric(12,2) | sim |  |  |
 
-**Únicos:** templates_cenario_unidade_pkey, templates_cenario_unidade_template_id_unidade_id_key
+**Únicos:**
+- `templates_cenario_unidade_pkey`
+- `templates_cenario_unidade_template_id_unidade_id_key`
 
 ## visitas
 
@@ -833,9 +926,11 @@
 | `updated_at` | timestamp with time zone | não | now() |  |
 | `lead_id` | integer | sim |  | leads.id |
 
-**Únicos:** visitas_pkey
+**Únicos:**
+- `visitas_pkey`
 
-**Triggers:** visitas_updated_at → visitas_set_updated_at()
+**Triggers:**
+- `visitas_updated_at → visitas_set_updated_at()`
 
 ## visitas_config
 
@@ -858,9 +953,12 @@
 | `atendimento_inicio_sab` | time without time zone | não | '08:00:00'::time without time zone |  |
 | `atendimento_fim_sab` | time without time zone | não | '14:00:00'::time without time zone |  |
 
-**Únicos:** visitas_config_pkey, visitas_config_unidade_id_key
+**Únicos:**
+- `visitas_config_pkey`
+- `visitas_config_unidade_id_key`
 
-**Triggers:** visitas_config_updated_at → visitas_set_updated_at()
+**Triggers:**
+- `visitas_config_updated_at → visitas_set_updated_at()`
 
 ## vw_disciplinas_modalidade
 

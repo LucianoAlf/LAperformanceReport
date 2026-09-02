@@ -22,9 +22,12 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** caixa_categorias_pkey, caixa_categorias_slug_key
+**Únicos:**
+- `caixa_categorias_pkey`
+- `caixa_categorias_slug_key`
 
-**Triggers:** tr_caixa_categorias_updated_at → set_updated_at_caixa()
+**Triggers:**
+- `tr_caixa_categorias_updated_at → set_updated_at_caixa()`
 
 ## caixa_financeiro_grupos_whatsapp
 
@@ -41,9 +44,12 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** caixa_financeiro_grupos_unidade_unique, caixa_financeiro_grupos_whatsapp_pkey
+**Únicos:**
+- `caixa_financeiro_grupos_unidade_unique`
+- `caixa_financeiro_grupos_whatsapp_pkey`
 
-**Triggers:** tr_caixa_financeiro_grupos_updated_at → set_updated_at_caixa()
+**Triggers:**
+- `tr_caixa_financeiro_grupos_updated_at → set_updated_at_caixa()`
 
 ## caixa_movimentacoes
 
@@ -71,9 +77,12 @@
 | `aluno_id` | integer | sim |  | alunos.id |
 | `fatura_id` | uuid | sim |  | emusys_faturas.id |
 
-**Únicos:** caixa_movimentacoes_pkey
+**Únicos:**
+- `caixa_movimentacoes_pkey`
 
-**Triggers:** tr_caixa_movimentacoes_updated_at → set_updated_at_caixa(), trg_audit_caixa_movimentacoes → fn_audit_log()
+**Triggers:**
+- `tr_caixa_movimentacoes_updated_at → set_updated_at_caixa()`
+- `trg_audit_caixa_movimentacoes → fn_audit_log()`
 
 ## caixa_reaberturas_log
 
@@ -97,7 +106,8 @@
 | `movimentacoes_snapshot` | jsonb | não |  |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** caixa_reaberturas_log_pkey
+**Únicos:**
+- `caixa_reaberturas_log_pkey`
 
 ## caixas_diarios
 
@@ -124,9 +134,12 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** caixas_diarios_pkey, caixas_diarios_unidade_data_unique
+**Únicos:**
+- `caixas_diarios_pkey`
+- `caixas_diarios_unidade_data_unique`
 
-**Triggers:** tr_caixas_diarios_updated_at → set_updated_at_caixa()
+**Triggers:**
+- `tr_caixas_diarios_updated_at → set_updated_at_caixa()`
 
 ## fechamento_mensal_auditoria
 
@@ -145,7 +158,8 @@
 | `actor_id` | uuid | sim |  |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** fechamento_mensal_auditoria_pkey
+**Únicos:**
+- `fechamento_mensal_auditoria_pkey`
 
 ## fechamento_mensal_retificacoes
 
@@ -163,9 +177,12 @@
 | `created_by` | uuid | sim |  |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** fechamento_mensal_retificacoe_snapshot_id_payload_corrigido_key, fechamento_mensal_retificacoes_pkey
+**Únicos:**
+- `fechamento_mensal_retificacoe_snapshot_id_payload_corrigido_key`
+- `fechamento_mensal_retificacoes_pkey`
 
-**Triggers:** fechamento_mensal_retificacoes_append_only → bloquear_mutacao_retificacao_mensal_v1()
+**Triggers:**
+- `fechamento_mensal_retificacoes_append_only → bloquear_mutacao_retificacao_mensal_v1()`
 
 ## fechamento_mensal_snapshots
 
@@ -195,9 +212,12 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** fechamento_mensal_snapshots_pkey, ux_fechamento_mensal_snapshots_competencia_dominio
+**Únicos:**
+- `fechamento_mensal_snapshots_pkey`
+- `ux_fechamento_mensal_snapshots_competencia_dominio`
 
-**Triggers:** trg_fechamento_mensal_snapshot_imutavel → proteger_fechamento_mensal_snapshot_imutavel_v1()
+**Triggers:**
+- `trg_fechamento_mensal_snapshot_imutavel → proteger_fechamento_mensal_snapshot_imutavel_v1()`
 
 ## fechamento_snapshots_backup_20260808
 
@@ -246,9 +266,11 @@
 | `decidido_em` | timestamp with time zone | não | now() |  |
 | `metadata` | jsonb | não | '{}'::jsonb |  |
 
-**Únicos:** financeiro_fatura_reconciliacao_decisoes_pkey
+**Únicos:**
+- `financeiro_fatura_reconciliacao_decisoes_pkey`
 
-**Triggers:** financeiro_fatura_reconciliacao_decisao_immutavel → financeiro_fatura_reconciliacao_decisao_immutavel()
+**Triggers:**
+- `financeiro_fatura_reconciliacao_decisao_immutavel → financeiro_fatura_reconciliacao_decisao_immutavel()`
 
 ## financeiro_sync_queue
 
@@ -277,7 +299,10 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 
-**Únicos:** financeiro_sync_queue_competencia_active_uniq, financeiro_sync_queue_one_running_uniq, financeiro_sync_queue_pkey
+**Únicos:**
+- `financeiro_sync_queue_competencia_active_uniq`
+- `financeiro_sync_queue_one_running_uniq`
+- `financeiro_sync_queue_pkey`
 
 ## formas_pagamento
 
@@ -289,7 +314,9 @@
 | `ativo` | boolean | sim | true |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
 
-**Únicos:** formas_pagamento_pkey, uk_formas_nome
+**Únicos:**
+- `formas_pagamento_pkey`
+- `uk_formas_nome`
 
 ## historico_pagamentos
 
@@ -308,7 +335,9 @@
 | `created_at` | timestamp with time zone | sim | now() |  |
 | `created_by` | character varying(255) | sim |  |  |
 
-**Únicos:** historico_pagamentos_aluno_id_ano_mes_key, historico_pagamentos_pkey
+**Únicos:**
+- `historico_pagamentos_aluno_id_ano_mes_key`
+- `historico_pagamentos_pkey`
 
 ## inadimplencia_emusys_cache_legado
 
@@ -323,7 +352,8 @@
 | `forma_pagamento_emusys` | text | sim |  |  |
 | `atualizado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** inadimplencia_emusys_cache_pkey
+**Únicos:**
+- `inadimplencia_emusys_cache_pkey`
 
 ## matriculas_campos_fixados
 
@@ -338,7 +368,9 @@
 | `fixado_por` | text | não |  |  |
 | `fixado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** matriculas_campos_fixados_aluno_id_campo_key, matriculas_campos_fixados_pkey
+**Únicos:**
+- `matriculas_campos_fixados_aluno_id_campo_key`
+- `matriculas_campos_fixados_pkey`
 
 ## sol_caixa_abertura_pendente
 
@@ -355,7 +387,9 @@
 | `resolvido_em` | timestamp with time zone | sim |  |  |
 | `resolvido_por` | text | sim |  |  |
 
-**Únicos:** sol_caixa_abertura_pendente_pkey, sol_caixa_abertura_pendente_unidade_id_data_caixa_tipo_key
+**Únicos:**
+- `sol_caixa_abertura_pendente_pkey`
+- `sol_caixa_abertura_pendente_unidade_id_data_caixa_tipo_key`
 
 ## sol_caixa_autorizados
 
@@ -372,7 +406,9 @@
 | `origem` | text | não | 'manual'::text |  |
 | `atualizado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** sol_caixa_autorizados_pkey, sol_caixa_autorizados_unidade_id_numero_key
+**Únicos:**
+- `sol_caixa_autorizados_pkey`
+- `sol_caixa_autorizados_unidade_id_numero_key`
 
 ## sol_caixa_ingestao_recebimentos
 
@@ -400,7 +436,10 @@
 | `lancado_em` | timestamp with time zone | sim |  |  |
 | `lancado_por` | text | sim |  |  |
 
-**Únicos:** sol_caixa_ingestao_recebimentos_chat_id_message_id_key, sol_caixa_ingestao_recebimentos_idempotency_key_key, sol_caixa_ingestao_recebimentos_pkey
+**Únicos:**
+- `sol_caixa_ingestao_recebimentos_chat_id_message_id_key`
+- `sol_caixa_ingestao_recebimentos_idempotency_key_key`
+- `sol_caixa_ingestao_recebimentos_pkey`
 
 ## sol_caixa_lancamento_auditoria
 
@@ -422,7 +461,8 @@
 | `caixa_diario_id` | uuid | sim |  |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** sol_caixa_lancamento_auditoria_pkey
+**Únicos:**
+- `sol_caixa_lancamento_auditoria_pkey`
 
 ## sol_caixa_lote_itens_v1
 
@@ -441,7 +481,10 @@
 | `item_json` | jsonb | não |  |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** sol_caixa_lote_itens_v1_lote_id_ordem_key, sol_caixa_lote_itens_v1_movimentacao_id_key, sol_caixa_lote_itens_v1_pkey
+**Únicos:**
+- `sol_caixa_lote_itens_v1_lote_id_ordem_key`
+- `sol_caixa_lote_itens_v1_movimentacao_id_key`
+- `sol_caixa_lote_itens_v1_pkey`
 
 ## sol_caixa_lotes_v1
 
@@ -461,7 +504,9 @@
 | `status` | text | não | 'lancado'::text |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** sol_caixa_lotes_v1_idempotency_key_key, sol_caixa_lotes_v1_pkey
+**Únicos:**
+- `sol_caixa_lotes_v1_idempotency_key_key`
+- `sol_caixa_lotes_v1_pkey`
 
 ## sol_caixa_operacoes_auditoria_v1
 
@@ -489,7 +534,9 @@
 | `erro` | text | sim |  |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** sol_caixa_operacoes_auditoria_v1_idem_uniq, sol_caixa_operacoes_auditoria_v1_pkey
+**Únicos:**
+- `sol_caixa_operacoes_auditoria_v1_idem_uniq`
+- `sol_caixa_operacoes_auditoria_v1_pkey`
 
 ## sol_caixa_shadow_approvals_v1
 
@@ -505,7 +552,9 @@
 | `decision_json` | jsonb | não | '{}'::jsonb |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** sol_caixa_shadow_approvals_v1_pkey, sol_caixa_shadow_approvals_v1_preview_id_approval_event_has_key
+**Únicos:**
+- `sol_caixa_shadow_approvals_v1_pkey`
+- `sol_caixa_shadow_approvals_v1_preview_id_approval_event_has_key`
 
 ## sol_caixa_shadow_eventos_v1
 
@@ -529,7 +578,9 @@
 | `criado_em` | timestamp with time zone | não | now() |  |
 | `atualizado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** sol_caixa_shadow_eventos_v1_event_id_hash_key, sol_caixa_shadow_eventos_v1_pkey
+**Únicos:**
+- `sol_caixa_shadow_eventos_v1_event_id_hash_key`
+- `sol_caixa_shadow_eventos_v1_pkey`
 
 ## sol_caixa_shadow_previews_v1
 
@@ -549,7 +600,9 @@
 | `preview_json` | jsonb | não | '{}'::jsonb |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** sol_caixa_shadow_previews_v1_evento_id_preview_hash_key, sol_caixa_shadow_previews_v1_pkey
+**Únicos:**
+- `sol_caixa_shadow_previews_v1_evento_id_preview_hash_key`
+- `sol_caixa_shadow_previews_v1_pkey`
 
 ## sol_caixa_unidade_policy
 
@@ -559,7 +612,8 @@
 | `autoriza_qualquer_membro` | boolean | não | false |  |
 | `atualizado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** sol_caixa_unidade_policy_pkey
+**Únicos:**
+- `sol_caixa_unidade_policy_pkey`
 
 ## sol_caixa_v3_approval_consumos_v1
 
@@ -573,7 +627,8 @@
 | `payload_hash` | text | sim |  |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** sol_caixa_v3_approval_consumos_v1_pkey
+**Únicos:**
+- `sol_caixa_v3_approval_consumos_v1_pkey`
 
 ## sol_caixa_v3_caixa_operacoes_v1
 
@@ -593,7 +648,10 @@
 | `resultado` | jsonb | não | '{}'::jsonb |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
 
-**Únicos:** sol_caixa_v3_caixa_operacoes__unidade_id_data_caixa_operaca_key, sol_caixa_v3_caixa_operacoes_v1_idempotency_key_key, sol_caixa_v3_caixa_operacoes_v1_pkey
+**Únicos:**
+- `sol_caixa_v3_caixa_operacoes__unidade_id_data_caixa_operaca_key`
+- `sol_caixa_v3_caixa_operacoes_v1_idempotency_key_key`
+- `sol_caixa_v3_caixa_operacoes_v1_pkey`
 
 ## vw_contratos_vencendo
 

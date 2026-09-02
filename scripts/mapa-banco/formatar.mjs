@@ -127,8 +127,20 @@ export function formatarDetalhe(dominio, dados) {
       );
     }
     linhas.push('');
-    if (tabela.indicesUnicos.length) linhas.push(`**Únicos:** ${tabela.indicesUnicos.join(', ')}`, '');
-    if (tabela.triggers.length) linhas.push(`**Triggers:** ${tabela.triggers.join(', ')}`, '');
+    // Um por linha, e nao separados por virgula: todo unique constraint do
+    // Postgres termina em '_key', e "key" + virgula + nome seguinte casa a regra
+    // generic-api-key do gitleaks (8 falsos positivos na 1a geracao). Nomes de
+    // indice sao longos, entao a lista tambem le melhor assim.
+    if (tabela.indicesUnicos.length) {
+      linhas.push('**Únicos:**');
+      for (const indice of tabela.indicesUnicos) linhas.push(`- \`${indice}\``);
+      linhas.push('');
+    }
+    if (tabela.triggers.length) {
+      linhas.push('**Triggers:**');
+      for (const gatilho of tabela.triggers) linhas.push(`- \`${gatilho}\``);
+      linhas.push('');
+    }
   }
   return `${linhas.join('\n')}\n`;
 }
