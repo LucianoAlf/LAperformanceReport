@@ -156,12 +156,17 @@ test('lista longa de consumidores e truncada, mantendo a contagem', () => {
 // o gitleaks acusar generic-api-key. A regra casa <palavra-chave>+<separador>+
 // <valor>, e todo unique constraint do Postgres termina em '_key' -- com a
 // virgula logo depois, o nome do indice seguinte virava "o segredo".
+// Os nomes abaixo ficam em linhas separadas pelo mesmo motivo: este arquivo
+// tambem e varrido pelo gitleaks.
 test('indices unicos saem um por linha, sem virgula depois de _key', () => {
   const comIndices = {
     ...dados,
     tabelas: [{
       ...dados.tabelas[0],
-      indicesUnicos: ['sol_caixa_lotes_v1_idempotency_key_key', 'sol_caixa_lotes_v1_pkey'],
+      indicesUnicos: [
+        'sol_caixa_lotes_v1_idempotency_key_key',
+        'sol_caixa_lotes_v1_pkey',
+      ],
     }],
   };
   const saida = formatarDetalhe('aluno', comIndices);
