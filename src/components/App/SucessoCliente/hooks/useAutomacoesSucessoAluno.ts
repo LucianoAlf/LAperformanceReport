@@ -8,6 +8,12 @@ export interface AutomacaoItem {
   descricao: string;
   gatilho: 'manual' | 'automatico';
   editavel: boolean;
+  /**
+   * Slug em `automacoes_config` que liga/desliga a automação. Quando presente,
+   * o card ganha um switch — é o caminho para parar o robô sem deploy e sem
+   * depender de quem escreveu o código.
+   */
+  killSwitchSlug?: string;
 }
 
 // Catálogo das automações do módulo Sucesso do Aluno (Fase 1).
@@ -32,6 +38,15 @@ export const AUTOMACOES_SUCESSO_ALUNO: AutomacaoItem[] = [
     descricao: 'Pesquisa de satisfação (botões de estrela) após a primeira aula. Dois textos: quando falamos com o próprio aluno e quando falamos com o responsável.',
     gatilho: 'manual',
     editavel: true,
+  },
+  {
+    slug: 'agradecimento_evasao',
+    nome: 'Agradecimento pós-resposta da evasão',
+    descricao:
+      'Responde "obrigada" a quem respondeu à pesquisa de evasão. Um classificador de IA lê o texto e só libera quando é resposta de verdade, com confiança alta, sem pergunta e sem pedido de atendimento. Teto de 3 por dia; log de cada envio (e de cada recusa) no tópico Logs do Lia Core.',
+    gatilho: 'automatico',
+    editavel: false,
+    killSwitchSlug: 'auto_agradecimento_evasao',
   },
 ];
 
@@ -62,6 +77,56 @@ export function useAutomacoesSucessoAluno() {
   }, []);
 
   useEffect(() => { carregarTextos(); }, [carregarTextos]);
+
+  // --- Kill switches (tabela automacoes_config) ------------------------------
+  // Estado por slug, não um booleano solto: o catálogo pode ter mais de uma
+  // automação com switch, e um estado único faria uma sobrescrever a outra.
+  const [switches, setSwitches] = useState<Record<string, boolean>>({});
+  const [loadingSwitch, setLoadingSwitch] = useState(false);
+
+  const carregarSwitches = useCallback(async () => {
+    const slugs = AUTOMACOES_SUCESSO_ALUNO
+      .map((a) => a.killSwitchSlug)
+      .filter((s): s is string => Boolean(s));
+    if (slugs.length === 0) return;
+    setLoadingSwitch(true);
+    try {
+      const { data, error } = await supabase
+        .from('automacoes_config').select('slug, ativo').in('slug', slugs);
+      if (error) throw error;
+      const map: Record<string, boolean> = {};
+      for (const linha of data || []) map[linha.slug] = linha.ativo === true;
+      setSwitches(map);
+    } catch (err) {
+      // Falha aqui não pode virar switch "ligado" na tela: o padrão do estado é
+      // false, então uma leitura quebrada mostra desligado — o lado seguro.
+      console.error('[useAutomacoesSucessoAluno] carregarSwitches:', err);
+      toast.error('Erro ao carregar o estado das automações');
+    } finally {
+      setLoadingSwitch(false);
+    }
+  }, []);
+
+  useEffect(() => { carregarSwitches(); }, [carregarSwitches]);
+
+  const alternarSwitch = useCallback(async (slug: string, novo: boolean): Promise<boolean> => {
+    const anterior = switches[slug] === true;
+    setSwitches((prev) => ({ ...prev, [slug]: novo })); // otimista
+    try {
+      const { error } = await supabase
+        .from('automacoes_config')
+        .update({ ativo: novo, updated_at: new Date().toISOString() })
+        .eq('slug', slug);
+      if (error) throw error;
+      toast.success(novo ? 'Automação ligada' : 'Automação desligada');
+      return true;
+    } catch (err) {
+      console.error('[useAutomacoesSucessoAluno] alternarSwitch:', err);
+      setSwitches((prev) => ({ ...prev, [slug]: anterior })); // rollback
+      toast.error('Erro ao alterar a automação');
+      return false;
+    }
+  }, [switches]);
 
   const salvarTexto = useCallback(async (slug: string, novo: string): Promise<boolean> => {
     try {
@@ -106,6 +171,9 @@ export function useAutomacoesSucessoAluno() {
     carregarTextos,
     salvarTexto,
     dispararTeste,
+    switches,
+    loadingSwitch,
+    alternarSwitch,
     // Aliases de compatibilidade (carrossel).
     textoCarrossel: textos['boas_vindas_equipe'] || '',
     salvarTextoCarrossel: (novo: string) => salvarTexto('boas_vindas_equipe', novo),

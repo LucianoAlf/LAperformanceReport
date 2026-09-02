@@ -71,6 +71,7 @@ function EditorTexto({
 export function AutomacoesTab({ unidadeAtual }: { unidadeAtual: UnidadeId }) {
   const {
     automacoes, textos, loadingTexto, salvarTexto, salvarTextoCarrossel, textoCarrossel, dispararTeste,
+    switches, loadingSwitch, alternarSwitch,
   } = useAutomacoesSucessoAluno();
 
   const unidadePadrao = unidadeAtual !== 'todos' ? String(unidadeAtual) : UNIDADES[1].id;
@@ -113,6 +114,39 @@ export function AutomacoesTab({ unidadeAtual }: { unidadeAtual: UnidadeId }) {
                 <p className="text-sm text-slate-400 mt-0.5">{a.descricao}</p>
               </div>
             </div>
+
+            {/* Kill switch. Mesmo padrão visual do auto-disparo da aba Pós-1ª
+                aula. Existe para parar o robô sem deploy: quem vê o problema no
+                log do Lia Core precisa conseguir reagir sozinho. */}
+            {a.killSwitchSlug && (
+              <div
+                className="flex items-center gap-2 shrink-0"
+                title={
+                  switches[a.killSwitchSlug]
+                    ? 'Ligada. Clique para parar os envios imediatamente.'
+                    : 'Desligada. Nenhum envio automático sai enquanto estiver assim.'
+                }
+              >
+                <span className={`text-xs ${switches[a.killSwitchSlug] ? 'text-emerald-300' : 'text-slate-400'}`}>
+                  {switches[a.killSwitchSlug] ? 'Ligada' : 'Desligada'}
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={switches[a.killSwitchSlug] === true}
+                  aria-label={`Ligar ou desligar: ${a.nome}`}
+                  disabled={loadingSwitch}
+                  onClick={() => alternarSwitch(a.killSwitchSlug!, !switches[a.killSwitchSlug])}
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                    switches[a.killSwitchSlug] ? 'bg-violet-500' : 'bg-slate-600'
+                  } disabled:opacity-50`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    switches[a.killSwitchSlug] ? 'translate-x-6' : 'translate-x-1'
+                  }`} />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Carrossel de boas-vindas: editor + disparo de teste */}
