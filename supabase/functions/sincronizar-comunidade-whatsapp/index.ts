@@ -99,6 +99,34 @@ serve(async (req) => {
     return json({ ok: true, grupo: { jid, nome, unidade_id: unidadeId, participantes: info?.Participants?.length ?? null } });
   }
 
+  // Diagnostico temporario: amostra crua dos participantes de um JID
+  // (pra medir quantos vem como @lid sem PhoneNumber)
+  if (body.acao === 'debug_amostra') {
+    const jid = String(body.jid || '');
+    const unidadeId = String(body.unidade_id || '');
+    if (!jid || !unidadeId) return json({ ok: false, erro: 'debug_amostra exige jid e unidade_id' }, 400);
+    const creds = await getUazapiCredentials(supabase, { funcao: 'administrativo', unidadeId });
+    const [info, lista] = await Promise.all([
+      fetch(`${creds.baseUrl}/group/info`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', token: creds.token },
+        body: JSON.stringify({ groupjid: jid, force: true }),
+      }).then((r) => r.json()).catch(() => ({})),
+      fetch(`${creds.baseUrl}/group/list?force=true`, { headers: { token: creds.token } })
+        .then((r) => r.json()).catch(() => ({})),
+    ]);
+    const sub = (Array.isArray(lista?.groups) ? lista.groups : [])
+      .find((g: { JID?: string; LinkedParentJID?: string }) => g.JID === jid ||
+        g.LinkedParentJID === jid);
+    const amostraInfo = (info?.Participants ?? []).slice(0, 3);
+    const amostraLista = (sub?.Participants ?? []).slice(0, 3);
+    const contaLidLista = (sub?.Participants ?? []).filter((p: { JID?: string }) => (p.JID || '').endsWith('@lid')).length;
+    const contaPnLista = (sub?.Participants ?? []).filter((p: { PhoneNumber?: string }) => Boolean(p.PhoneNumber)).length;
+    return json({ ok: true, caixa: creds.caixaNome, sub_nome: sub?.Name, total_lista: (sub?.Participants ?? []).length,
+      lid_na_lista: contaLidLista, phone_na_lista: contaPnLista,
+      addressing_mode: sub?.AddressingMode ?? info?.AddressingMode ?? null,
+      amostra_info: amostraInfo, amostra_lista: amostraLista });
+  }
+
   const { data: grupos, error: erroGrupos } = await supabase
     .from('comunidade_wa_grupos')
     .select('id, unidade_id, jid, nome, caixa_id')
@@ -151,8 +179,26 @@ serve(async (req) => {
         headers: { token: creds.token },
       });
       const lista = await resLista.json().catch(() => ({}));
-      const subgrupos = (Array.isArray(lista?.groups) ? lista.groups : [])
+      const todosGrupos = Array.isArray(lista?.groups) ? lista.groups : [];
+      const subgrupos = todosGrupos
         .filter((g: { LinkedParentJID?: string }) => g.LinkedParentJID === grupo.jid);
+      // diagnostico: quantos grupos a caixa ve e quais parents detectados
+      const linkedParentsVistos = [...new Set(
+        todosGrupos
+          .map((g: { LinkedParentJID?: string }) => g.LinkedParentJID)
+          .filter((p: string | undefined): p is string => Boolean(p) && p !== grupo.jid)
+      )];
+      const diag = {
+        grupos_vistos: todosGrupos.length,
+        subgrupos_encontrados: subgrupos.length,
+        subgrupos_lista: subgrupos.map((s: { Name?: string; IsDefaultSubGroup?: boolean; Participants?: unknown[] }) => ({
+          nome: s.Name ?? null,
+          default_avisos: s.IsDefaultSubGroup ?? false,
+          participantes: Array.isArray(s.Participants) ? s.Participants.length : null,
+        })),
+        default_sub_group_id: payload?.DefaultSubGroupId ?? null,
+        linked_parents_vistos: linkedParentsVistos,
+      };
 
       for (const sub of subgrupos as { JID?: string; Participants?: { JID?: string; PhoneNumber?: string; LID?: string }[] }[]) {
         const resSub = await fetch(`${creds.baseUrl}/group/info`, {
@@ -189,7 +235,7 @@ serve(async (req) => {
         .lt('capturado_em', capturadoEm);
       if (erroPoda) throw new Error(erroPoda.message);
 
-      resultados.push({ grupo: grupo.nome, jid: grupo.jid, ok: true, participantes: vistos.size, caixa: creds.caixaNome });
+      resultados.push({ grupo: grupo.nome, jid: grupo.jid, ok: true, participantes: vistos.size, caixa: creds.caixaNome, diag });
     } catch (e) {
       resultados.push({ grupo: grupo.nome, jid: grupo.jid, ok: false, erro: (e as Error).message });
     }

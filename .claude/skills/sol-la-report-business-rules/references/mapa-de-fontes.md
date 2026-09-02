@@ -464,11 +464,15 @@ subgrupos por `LinkedParentJID` na `/group/list` da caixa e tira a união dos
 participantes. Consequência prática: **a captura só enxerga os subgrupos onde a
 caixa que roda é membro**. Hoje a caixa é a "Lia - Sucesso do Aluno" (padrão
 administrativo) — cobre Recreio (197 capturados, 152/336 na comunidade) e Barra
-(126, 94/246). **Campo Grande está com o grupo `ativo=false` de propósito**: a Lia
-não está nos subgrupos de CG e a captura de 8 admins (só staff) chamaria 400+
-alunos de "fora da comunidade" — ruído. Reativar quando um número nosso entrar
-nos subgrupos de CG. Participantes endereçados por `@lid` são descartados (LID
-não resolve para telefone).
+(126, 94/246). **Campo Grande está com o grupo `ativo=false` de propósito**, mas
+o motivo medido é outro: a comunidade de CG usa **`AddressingMode: lid`** (modo
+anônimo novo do WhatsApp) — os 317 membros aparecem, mas **só os 8 admins trazem
+`PhoneNumber`**; o resto vem como `@lid`, sem telefone, impossível casar com
+`alunos`. Não é a Lia fora do grupo; é o WhatsApp escondendo o número.
+Participantes `@lid` são descartados de propósito. Alternativas para CG:
+(a) tornar a Lia admin da comunidade e re-testar (pode destravar PhoneNumber);
+(b) captura por interação (quem fala no grupo revela o número);
+(c) aceitar CG sem o sinal até a Meta mudar algo.
 
 ---
 
