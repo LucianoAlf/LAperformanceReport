@@ -469,10 +469,11 @@ o motivo medido é outro: a comunidade de CG usa **`AddressingMode: lid`** (modo
 anônimo novo do WhatsApp) — os 317 membros aparecem, mas **só os 8 admins trazem
 `PhoneNumber`**; o resto vem como `@lid`, sem telefone, impossível casar com
 `alunos`. Não é a Lia fora do grupo; é o WhatsApp escondendo o número.
-Participantes `@lid` são descartados de propósito. Alternativas para CG:
-(a) tornar a Lia admin da comunidade e re-testar (pode destravar PhoneNumber);
-(b) captura por interação (quem fala no grupo revela o número);
-(c) aceitar CG sem o sinal até a Meta mudar algo.
+Participantes `@lid` são descartados de propósito. (**destravado em 02/09 à noite**: a Lia virou admin da comunidade de CG e o
+`PhoneNumber` dos membros apareceu — admin vê número mesmo com `lid`. CG capturou
+316 e a RPC passou a responder: 183/397 na comunidade). Regra operacional: **a
+caixa que captura precisa ser ADMIN da comunidade no modo lid**, senão só enxerga
+telefone dos admins.
 
 ---
 
