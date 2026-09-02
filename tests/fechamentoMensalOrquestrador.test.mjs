@@ -96,7 +96,17 @@ const cron = path.join(migracoes, '20260902122500_cron_fechamento_dia1.sql');
 
 test('o cron nasce desligado', () => {
   const sql = fs.readFileSync(cron, 'utf8');
-  assert.match(sql, /active\s*=>\s*false/u,
+  // "active => false" aparece DUAS VEZES no arquivo -- uma para o cron novo,
+  // outra para desativar o antigo. Checar em qualquer lugar do arquivo
+  // passaria mesmo se a do cron novo sumisse (bug: cron novo nasceria
+  // ligado). Recorta so o primeiro bloco "do $$ ... end; $$;", que e o
+  // bloco de criacao do cron novo (mesmo padrao do teste "cada unidade
+  // roda em bloco protegido" acima, que recorta o laco por causa dos dois
+  // "exception when others").
+  const match = sql.match(/do\s+\$\$[\s\S]*?end;\s*\$\$;/u);
+  assert.ok(match, 'bloco "do $$ ... end; $$;" do cron novo nao encontrado');
+  const blocoCronNovo = match[0];
+  assert.match(blocoCronNovo, /active\s*=>\s*false/u,
     'cron de escrita mensal nao pode nascer ligado antes do ensaio');
   assert.match(sql, /'0 12 1 \* \*'/u, 'schedule deve ser 12:00 UTC = 09:00 BRT do dia 1o');
 });
