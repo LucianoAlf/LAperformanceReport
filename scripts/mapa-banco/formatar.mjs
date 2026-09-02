@@ -56,6 +56,20 @@ export function formatarTabelas(dados) {
   return `${linhas.join('\n')}\n`;
 }
 
+// Funcao muito reusada (is_admin tem 30 consumidores) deixaria a linha com 2 mil
+// caracteres e a tabela ilegivel. O que a leitura precisa e do estado e de uma
+// amostra de quem chama; a contagem preserva a nocao de alcance.
+const MAX_CONSUMIDORES_LISTADOS = 6;
+
+function resumirConsumidores(consumidores) {
+  if (consumidores.length <= MAX_CONSUMIDORES_LISTADOS) {
+    return consumidores.map((c) => `${c.fonte}:${c.origem}`).join(', ');
+  }
+  const mostrados = consumidores.slice(0, MAX_CONSUMIDORES_LISTADOS);
+  const restante = consumidores.length - mostrados.length;
+  return `${mostrados.map((c) => `${c.fonte}:${c.origem}`).join(', ')}, +${restante} outros`;
+}
+
 export function formatarFuncoes(dados) {
   const linhas = [
     '# Funções',
@@ -82,7 +96,7 @@ export function formatarFuncoes(dados) {
         funcao.anon ? '🔓 anon' : '',
       ].filter(Boolean).join(' · ');
       const consumidores = funcao.consumidores.length
-        ? funcao.consumidores.map((c) => `${c.fonte}:${c.origem}`).join(', ')
+        ? resumirConsumidores(funcao.consumidores)
         : [funcao.motivo, 'sem consumidor conhecido'].filter(Boolean).join(' — ');
       linhas.push(
         `| \`${funcao.nome}(${celula(funcao.args)})\` | ${funcao.estado} `

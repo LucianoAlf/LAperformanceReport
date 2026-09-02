@@ -138,3 +138,16 @@ test('pipe no comentario nao quebra a tabela markdown', () => {
   const linha = formatarTabelas(comPipe).split('\n').find((l) => l.includes('alunos'));
   assert.match(linha, /usar a \\\| canonica/);
 });
+
+test('lista longa de consumidores e truncada, mantendo a contagem', () => {
+  const muitos = {
+    ...dados,
+    funcoes: [{
+      ...dados.funcoes[1],
+      consumidores: Array.from({ length: 20 }, (_, i) => ({ fonte: 'funcao', origem: `fn_${i}` })),
+    }],
+  };
+  const linha = formatarFuncoes(muitos).split('\n').find((l) => l.includes('get_a'));
+  assert.match(linha, /\+14 outros/);
+  assert.ok(linha.length < 400, `linha ainda longa: ${linha.length}`);
+});

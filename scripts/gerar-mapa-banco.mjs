@@ -17,8 +17,25 @@ import * as Q from './mapa-banco/consultas.mjs';
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SAIDA = path.join(RAIZ, 'docs/banco');
 
+// Em worktree o .env.local nao existe (e gitignored, e assim deve ser). Como o
+// repo trabalha com worktrees por padrao, procurar tambem na copia principal
+// evita ter que duplicar credencial a cada worktree criado.
+function caminhoDoEnv() {
+  const local = path.join(RAIZ, '.env.local');
+  if (fs.existsSync(local)) return local;
+  const marcadorGit = path.join(RAIZ, '.git');
+  if (fs.existsSync(marcadorGit) && fs.statSync(marcadorGit).isFile()) {
+    const gitdir = fs.readFileSync(marcadorGit, 'utf8').replace('gitdir:', '').trim();
+    // .git/worktrees/<nome> -> sobe tres niveis para chegar a raiz principal
+    const principal = path.resolve(gitdir, '..', '..', '..');
+    const candidato = path.join(principal, '.env.local');
+    if (fs.existsSync(candidato)) return candidato;
+  }
+  throw new Error(`.env.local nao encontrado (procurado em ${local})`);
+}
+
 function lerEnv() {
-  const texto = fs.readFileSync(path.join(RAIZ, '.env.local'), 'utf8');
+  const texto = fs.readFileSync(caminhoDoEnv(), 'utf8');
   const pegar = (chave) => (texto.match(new RegExp(`^${chave}=(.*)$`, 'm')) || [, ''])[1].trim();
   return {
     host: pegar('SUPABASE_DB_HOST'),
