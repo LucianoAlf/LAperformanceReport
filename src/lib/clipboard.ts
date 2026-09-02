@@ -13,9 +13,26 @@ export async function copyTextToClipboard(text: string): Promise<ClipboardCopyRe
 
   let copyError: unknown = new Error('Clipboard indisponivel neste contexto');
 
-  // O fallback tradicional precisa acontecer antes do primeiro await. Em browsers
-  // incorporados, uma tentativa assíncrona negada pode consumir a ativação do clique
-  // e impedir que execCommand copie depois.
+  const temClipboardApi =
+    typeof navigator !== 'undefined' && typeof navigator.clipboard?.writeText === 'function';
+
+  // A Clipboard API vem primeiro onde existe: ela não depende de foco nem de
+  // seleção, então atravessa o focus trap dos modais. O caminho antigo, que
+  // depende dos dois, é justamente o que falha dentro de um Dialog do Radix —
+  // o FocusScope devolve o foco durante a cópia e o texto não vai para lugar
+  // nenhum (medido em Chromium, 2026-09-02).
+  if (temClipboardApi) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return { ok: true, method: 'clipboard' };
+    } catch (error) {
+      copyError = error;
+    }
+  }
+
+  // Sem Clipboard API — caso do browser incorporado (WebView) — este é o único
+  // caminho, e nada assíncrono pode ter rodado antes: uma tentativa negada
+  // consome a ativação do clique e impede a cópia síncrona logo depois.
   if (typeof document !== 'undefined') {
     const textarea = document.createElement('textarea');
     const selection = document.getSelection();
@@ -43,6 +60,19 @@ export async function copyTextToClipboard(text: string): Promise<ClipboardCopyRe
       textarea.select();
       textarea.setSelectionRange(0, text.length);
 
+      // Se o foco foi roubado (focus trap de modal), execCommand não copiaria o
+      // textarea — e pior, copiaria a seleção que estivesse ativa na página,
+      // sobrescrevendo a área de transferência do usuário com outra coisa.
+      // Ele devolve `true` nos dois casos, então o retorno não serve de prova.
+      if (document.activeElement !== textarea) {
+        throw new Error('foco perdido antes da copia (focus trap de modal?)');
+      }
+
+      const selecionouTudo = textarea.selectionEnd - textarea.selectionStart === text.length;
+      if (!selecionouTudo) {
+        throw new Error('selecao incompleta antes da copia');
+      }
+
       const ok = document.execCommand('copy');
       if (!ok) {
         throw new Error('execCommand retornou false');
@@ -58,15 +88,6 @@ export async function copyTextToClipboard(text: string): Promise<ClipboardCopyRe
         selection.removeAllRanges();
         selection.addRange(selectedRange);
       }
-    }
-  }
-
-  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return { ok: true, method: 'clipboard' };
-    } catch (error) {
-      copyError = error;
     }
   }
 
