@@ -34,7 +34,8 @@ declare
 begin
   if auth.role() <> 'service_role'
      and session_user not in ('postgres', 'supabase_admin') then
-    raise exception 'ACESSO_NEGADO_BLOCO_FINANCEIRO_GERENCIAL';
+    raise exception 'ACESSO_NEGADO_BLOCO_FINANCEIRO_GERENCIAL: ano=%, mes=%, unidade_id=%',
+      p_ano, p_mes, p_unidade_id;
   end if;
 
   select s.id, s.payload, s.versao, s.capturado_em, s.status
@@ -80,10 +81,41 @@ begin
 
   v_totais := v_financeiro->'totais';
 
+  -- tem_dados=true nao garante totais preenchido -- fail-closed tambem aqui,
+  -- senao gravamos campos numericos nulos e devolvemos sucesso silenciosamente errado.
+  if v_totais is null or jsonb_typeof(v_totais) <> 'object' then
+    return jsonb_build_object(
+      'ok', false, 'acao', 'fonte_indisponivel',
+      'motivo', 'totais ausente ou nao e um objeto jsonb'
+    );
+  end if;
+
+  if v_totais->'ticket_medio' is null then
+    return jsonb_build_object(
+      'ok', false, 'acao', 'fonte_indisponivel',
+      'motivo', 'totais sem o campo ticket_medio'
+    );
+  end if;
+
+  if v_totais->'faturamento_previsto' is null then
+    return jsonb_build_object(
+      'ok', false, 'acao', 'fonte_indisponivel',
+      'motivo', 'totais sem o campo faturamento_previsto'
+    );
+  end if;
+
+  if v_totais->'mrr_atual' is null then
+    return jsonb_build_object(
+      'ok', false, 'acao', 'fonte_indisponivel',
+      'motivo', 'totais sem o campo mrr_atual'
+    );
+  end if;
+
   if jsonb_typeof(v_snapshot.payload->'kpis_gestao') <> 'array'
      or v_snapshot.payload->'kpis_gestao'->0 is null then
     return jsonb_build_object(
       'ok', false, 'acao', 'snapshot_ausente',
+      'snapshot_id', v_snapshot.id,
       'motivo', 'payload sem kpis_gestao[0]'
     );
   end if;
@@ -119,14 +151,16 @@ begin
   insert into public.fechamento_mensal_snapshots (
     ano, mes, escopo, unidade_id, dominio, versao, status,
     fonte, payload, payload_hash, observacao,
-    capturado_em, capturado_por, aprovado_em, aprovado_por
+    capturado_em, capturado_por, aprovado_em, aprovado_por,
+    financeiro_realizado_disponivel
   ) values (
     p_ano, p_mes, 'unidade', p_unidade_id, 'relatorio_gerencial', v_versao,
     'aprovado', 'garantir_bloco_financeiro_gerencial_v1',
     v_payload, public.hash_jsonb_canonico(v_payload),
     format('Bloco financeiro do Emusys embutido na captura (versao anterior: %s)', v_snapshot.versao),
     v_snapshot.capturado_em,  -- corte preservado de proposito
-    auth.uid(), now(), auth.uid()
+    auth.uid(), now(), auth.uid(),
+    true  -- so chega aqui depois das guardas de tem_dados e dos 3 campos obrigatorios de totais
   ) returning id into v_novo_id;
 
   insert into public.fechamento_mensal_auditoria (
