@@ -18,7 +18,7 @@
 - **Migrations:** `supabase/migrations/YYYYMMDDHHMMSS_<nome>.sql`, aplicadas por `mcp__supabase__apply_migration`. Aplicação em produção exige confirmação do Hugo antes.
 - **Nunca validar cron por `cron.job_run_details`** — ele marca `succeeded` só por ter enfileirado o `net.http_post`. Validar sempre pelo efeito.
 - **Autor dos commits:** `Luciano <lucianoalf.la@gmail.com>`.
-- **Unidades de produção (ativas):** Barra `2ec861f6-023f-4d7b-9927-3960ad8c2a92`, Campo Grande `368d47f5-2d88-4475-bc14-ba084a9a348e`, Recreio `95553e96-971b-4590-a6eb-0201d013c14d`.
+- **Unidades de produção — são exatamente 3, todas ativas** (conferido no banco em 02/09/2026): Barra `368d47f5-2d88-4475-bc14-ba084a9a348e`, Campo Grande `2ec861f6-023f-4d7b-9927-3960ad8c2a92`, Recreio `95553e96-971b-4590-a6eb-0201d013c14d`. Não há unidade de teste com `ativo = true` — o orquestrador pode iterar `where u.ativo = true` sem filtro extra.
 
 ---
 
