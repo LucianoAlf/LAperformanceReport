@@ -144,6 +144,24 @@ Nos 60 dias antes da saída (saídas ago-set/26, regra canônica de KPI):
   deve medir quando pergunta/coleta não funciona e sugerir variante — infra de
   A/B já existe: templates + desfechos da repescagem).
 
+### Saídas por unidade/mês (a série que contextualiza tudo)
+| Unidade | jun | jul | ago | set (parcial) |
+|---|---|---|---|---|
+| Barra | 3 | 11 | 6 | 5 |
+| Campo Grande | 12 | 31 | **41** | 15 |
+| Recreio | 17 | 12 | 30 | 1 |
+
+O atendente mais "seco" (Arthur, Barra) está na unidade que MENOS perde —
+secura não previu evasão. E o pico de 41 em CG/ago é a pergunta sem resposta
+que o mapa passa a responder.
+
+### As três versões da mesma história (inteligência da pesquisa)
+Para cada saída, o sistema compara: (1) o que a **ADM marcou** (motivo_saida),
+(2) o que o **cliente declarou** na pesquisa de evasão, (3) o que a **conversa
+mostra** (extração). Divergência entre as três = rótulo errado OU pergunta que
+não funciona → o sistema sugere variante (infra de A/B já existe: templates
+versionados + desfechos da repescagem).
+
 ### Hipótese das bandas (do Luciano) — CONFIRMADA
 - Ativos com projeto de banda: **35 meses de casa** vs **15 meses** sem banda.
 - Saídas jun-set: banda **8/133 (6%)** vs sem banda **174/1.039 (16,7%)** —
@@ -344,3 +362,27 @@ sozinho, sem coleta extra.
 4. Se a taxa de "tarefa dispensada como improcedente" passar de X% (calibrar,
    sugestão 20%), o sinal volta para observação — o sistema se auto-policia
    contra virar a Lia fajuta de novo.
+
+## 10. Regras-semente do motor (v0 — achados que já viram calibração)
+
+Cada regra nasce de MEDIÇÃO desta investigação (nunca de chute), com fonte e
+data. São o estado inicial do motor; o desfecho das tarefas re-calibra.
+
+| # | Regra | Lastro (medido 02-03/09/2026) |
+|---|-------|-------------------------------|
+| R1 | `freq_60d < 50%` → sinal ALTO de evasão | quem saiu: 40,4% vs ativos 79%; <50% = ~9× mais chance (60% dos que saíram vs 7% dos ativos); CG/ago: 77% dos que saíram |
+| R2 | Cancelamento declarado em conversa → alerta IMEDIATO + preenche motivo | caso Théo: 11 dias entre o "Não continuaremos" e o lançamento; pesquisa nunca foi |
+| R3 | Renovação D-45 com sinal aceso → dossiê ANTES da proposta; nunca reajuste padrão | 17 de 64 contratos (27%) sinalizados; piloto vivo no TOM |
+| R4 | `anamnese.interesse_bandas='sim'` sem matrícula de banda → convite (retenção positiva) | 97 alunos nominais; banda = 35 vs 15 meses de casa, saída 2,8× menor |
+| R5 | 2+ matrículas da MESMA família sinalizadas → tratar como FAMÍLIA, não como alunos soltos | Caporali (mãe+filho, ambos freq 0%, vencendo juntos) |
+| R6 | Freq alta + risco IA alto → CONVERSA, não resgate (o modelo vê além da presença) | Antonio Thales: 100% de freq, 60% de risco |
+| R7 | Promessa sem retorno se detecta por LLM, nunca por regex | regra v1 (regex) deu falso positivo; taxa real ~20% |
+| R8 | Extração de conversa FILTRA broadcast por hash do texto | 46% das msgs longas de agente são broadcast — mascara abandono |
+| R9 | Tom/secura NÃO pontua sem desfecho que o sustente | Arthur 51% respostas curtas na unidade com MENOS saídas |
+| R10 | Doença/viagem avisada → pausa réguas de cobrança de presença + agenda reposição | 42 avisos de doença e 74 pedidos de reposição em 30d morrendo na conversa |
+| R11 | Reposição oferecida sem desfecho em 48h → reabrir (oferta única ≠ tratada) | caso Adriana/CG: "amanhã não consigo" e a conversa morreu |
+| R12 | Cliente sem NENHUMA resposta no dia = pior sinal de atendimento (antes de qualquer p90) | 260 turnos sem resposta em 30 dias |
+
+⚠️ Regras entram no motor como CANDIDATAS: alertam via guardiãs, e a taxa de
+improcedência (tarefas cancelled) promove ou rebaixa cada uma. O documento é a
+memória; o desfecho é o juiz.
