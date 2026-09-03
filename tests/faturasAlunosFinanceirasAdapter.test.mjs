@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  calcularTotaisFaturasFinanceiras,
   carregarFaturasAlunosFinanceiras,
+  faturaAtendeSituacao,
   filtrarFaturasFinanceirasLocais,
   normalizarFaturasAlunosFinanceiras,
 } from '../src/lib/faturasAlunosFinanceiras.ts';
@@ -231,4 +233,97 @@ test('adaptador preserva a foto canônica do aluno e o fallback legado', () => {
   assert.equal(state.status, 'ok');
   assert.equal(state.items[0].aluno.foto_url, fotoAtual);
   assert.equal(state.items[0].aluno.photo_url, fotoLegada);
+});
+
+// --- Totais da visao (cards acompanhando os filtros) -----------------------------------
+// A paridade com a RPC e o que sustenta a mudanca: sem filtro local, somar os items no
+// cliente tem que dar exatamente o mesmo que o servidor devolveu em `totais`. La eles saem
+// do CTE itens_normais, que e o conjunto entregue em items quando p_status='todas'.
+
+const parcelaPaga = (id, valor) => item({
+  canonical_fatura_id: `${UNIDADE}:${id}`,
+  emusys_fatura_id: String(id),
+  tipo_fatura: 'parcela',
+  status: 'paga',
+  data_pagamento: '2026-08-05',
+  valores: { ...item().valores, valor_hoje: null, valor_pago: valor },
+  cobranca: { d0: false, d2_elegivel: false, motivo_nao_elegivel: 'paga' },
+});
+
+// Taxa de matricula nao e parcelada: o adaptador recusa numero de parcela em tipo que nao
+// seja 'parcela', e e assim que o Emusys entrega.
+const taxaPaga = (id, valor) => ({
+  ...parcelaPaga(id, valor),
+  tipo_fatura: 'passaporte_taxa_matricula',
+  descricao: 'Taxa de matrícula',
+  numero_parcela: null,
+  total_parcelas_contrato: null,
+});
+
+const abertaAVencer = (id, valor) => item({
+  canonical_fatura_id: `${UNIDADE}:${id}`,
+  emusys_fatura_id: String(id),
+  status: 'aberta',
+  data_vencimento: '2026-08-28',
+  valores: { ...item().valores, valor_hoje: valor, valor_pago: null },
+  cobranca: { d0: false, d2_elegivel: false, motivo_nao_elegivel: 'nao_vencida' },
+});
+
+test('totais da visao batem com os totais da RPC quando nenhum filtro local esta ativo', () => {
+  const items = [parcelaPaga(1, 400), taxaPaga(2, 50), abertaAVencer(3, 417), item()];
+  const state = normalizarFaturasAlunosFinanceiras(payload({
+    items,
+    totais: {
+      todas: { quantidade: 4, valor: 1327.65 },
+      pagas: { quantidade: 2, valor: 450 },
+      em_aberto: { quantidade: 2, valor: 877.65 },
+      em_atraso_d0: { quantidade: 1, valor: 460.65 },
+      a_vencer: { quantidade: 1, valor: 417 },
+      canceladas: { quantidade: 0, valor: 0 },
+      cobranca_d2: { quantidade: 1, valor: 460.65 },
+      visao_atual: { quantidade: 4, valor: 1327.65, status: 'todas' },
+    },
+  }));
+
+  assert.equal(state.status, 'ok', state.error ?? 'sem erro reportado');
+  const totais = calcularTotaisFaturasFinanceiras(state.items);
+  for (const chave of ['todas', 'pagas', 'em_aberto', 'em_atraso_d0', 'a_vencer', 'cobranca_d2']) {
+    assert.deepEqual(totais[chave], state.totals[chave], `divergencia no total de ${chave}`);
+  }
+});
+
+test('filtrar por tipo recorta os totais: parcela deixa a taxa de matricula de fora', () => {
+  const state = normalizarFaturasAlunosFinanceiras(payload({
+    items: [parcelaPaga(1, 400), parcelaPaga(2, 355), taxaPaga(3, 50)],
+  }));
+  const soParcelas = filtrarFaturasFinanceirasLocais(state.items, { tipoFatura: 'parcela' });
+
+  const totais = calcularTotaisFaturasFinanceiras(soParcelas);
+  assert.equal(totais.todas.quantidade, 2);
+  assert.equal(totais.pagas.quantidade, 2);
+  assert.equal(totais.pagas.valor, 755);
+  // O total da competencia continua intacto para virar o baseline do cartao.
+  assert.equal(state.totals.pagas.quantidade, 0);
+});
+
+test('a_vencer e o complemento exato de em_atraso dentro das abertas', () => {
+  const state = normalizarFaturasAlunosFinanceiras(payload({
+    items: [item(), abertaAVencer(2, 417), parcelaPaga(3, 400)],
+  }));
+
+  const abertas = state.items.filter((linha) => faturaAtendeSituacao(linha, 'em_aberto'));
+  const atrasadas = state.items.filter((linha) => faturaAtendeSituacao(linha, 'em_atraso_d0'));
+  const aVencer = state.items.filter((linha) => faturaAtendeSituacao(linha, 'a_vencer'));
+
+  assert.equal(abertas.length, 2);
+  assert.equal(atrasadas.length + aVencer.length, abertas.length);
+  assert.equal(atrasadas.some((linha) => aVencer.includes(linha)), false);
+});
+
+test('soma nao acumula erro de ponto flutuante', () => {
+  const state = normalizarFaturasAlunosFinanceiras(payload({
+    items: [parcelaPaga(1, 0.1), parcelaPaga(2, 0.2)],
+  }));
+
+  assert.equal(calcularTotaisFaturasFinanceiras(state.items).pagas.valor, 0.3);
 });

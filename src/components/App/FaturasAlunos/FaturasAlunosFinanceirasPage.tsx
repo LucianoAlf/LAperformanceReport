@@ -35,10 +35,13 @@ import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import type { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 import { useUnidades } from '@/hooks/useSupabase';
 import {
+  calcularTotaisFaturasFinanceiras,
   carregarFaturasAlunosFinanceiras,
+  faturaAtendeSituacao,
   FATURAS_FINANCEIRAS_LOADING,
   filtrarFaturasFinanceirasLocais,
   normalizarSituacaoFaturasFinanceiras,
+  valorPrincipalDaFatura,
   type FaturaFinanceiraReconciliacaoItem,
   type FaturaFinanceiraItem,
   type FaturaFinanceiraTipo,
@@ -182,6 +185,8 @@ function MetricCard({
   label,
   count,
   value,
+  baselineCount,
+  baselineValue,
   tone,
   active = false,
   disabled = false,
@@ -190,6 +195,9 @@ function MetricCard({
   label: string;
   count: number;
   value: number;
+  // Total da competencia inteira, exibido so quando a visao esta recortada por algum filtro.
+  baselineCount?: number;
+  baselineValue?: number;
   tone: 'cyan' | 'emerald' | 'amber' | 'rose' | 'slate';
   active?: boolean;
   disabled?: boolean;
@@ -202,6 +210,8 @@ function MetricCard({
     rose: 'border-rose-500/20 from-rose-500/[0.13] to-slate-950/40 text-rose-200',
     slate: 'border-slate-700 from-slate-800/75 to-slate-950/40 text-slate-200',
   } as const;
+  const recortado = baselineCount != null && baselineValue != null
+    && (baselineCount !== count || baselineValue !== value);
   const content = (
     <>
       <div className="flex items-start justify-between gap-3">
@@ -209,6 +219,11 @@ function MetricCard({
         <span className="rounded-full bg-slate-950/45 px-2 py-0.5 text-xs font-semibold text-slate-200">{count}</span>
       </div>
       <p className={cn('mt-5 text-xl font-semibold tabular-nums', tones[tone].split(' ').at(-1))}>{moeda(value)}</p>
+      {recortado ? (
+        <p className="mt-1 text-[11px] leading-snug text-slate-500">
+          nesta visão • de <span className="tabular-nums">{moeda(baselineValue ?? 0)}</span> ({baselineCount}) na competência
+        </p>
+      ) : null}
     </>
   );
   if (!onClick) return <div className={cn('rounded-2xl border bg-gradient-to-br p-4 shadow-lg shadow-slate-950/15', tones[tone])}>{content}</div>;
@@ -416,11 +431,15 @@ export function FaturasAlunosFinanceirasPage() {
       ano,
       mes,
       modoPeriodo,
-      situacao,
+      // A situacao deixou de ir ao servidor: com 'todas' o payload traz o CTE itens_normais
+      // inteiro, que e o mesmo conjunto sobre o qual a RPC calcula os totais. Filtrar aqui e
+      // o que permite os cards contarem dentro do recorte de tipo/curso/forma — com p_status
+      // o cliente so recebia a situacao escolhida e nao teria como somar as outras quatro.
+      situacao: 'todas',
       asOfDate: dataCorte,
     });
     setState(next);
-  }, [ano, dataCorte, mes, modoPeriodo, situacao, unidadeConsulta, unidadePronta]);
+  }, [ano, dataCorte, mes, modoPeriodo, unidadeConsulta, unidadePronta]);
 
   useEffect(() => { void carregar(); }, [carregar]);
 
@@ -518,7 +537,10 @@ export function FaturasAlunosFinanceirasPage() {
     () => professores.length > 0 && state.items.some((item) => item.professor == null),
     [professores, state.items],
   );
-  const itemsFiltrados = useMemo(() => filtrarFaturasFinanceirasLocais(state.items, {
+  // Recorte da visao SEM a situacao: e sobre ele que os cards contam, para cada card poder
+  // dizer quanto ha da SUA situacao dentro do filtro atual. Aplicar a situacao aqui zeraria
+  // os outros quatro cards assim que um fosse escolhido.
+  const itemsDaVisao = useMemo(() => filtrarFaturasFinanceirasLocais(state.items, {
     busca,
     curso: curso === 'todos' ? null : curso,
     tipoFatura: tipoFatura === 'todos' ? null : tipoFatura as FaturaFinanceiraTipo,
@@ -527,6 +549,15 @@ export function FaturasAlunosFinanceirasPage() {
     alunoId,
     matriculaId,
   }), [alunoId, busca, curso, matriculaId, pagamento, professor, state.items, tipoFatura]);
+  const itemsFiltrados = useMemo(
+    () => itemsDaVisao.filter((item) => faturaAtendeSituacao(item, situacao)),
+    [itemsDaVisao, situacao],
+  );
+  const totaisDaVisao = useMemo(() => calcularTotaisFaturasFinanceiras(itemsDaVisao), [itemsDaVisao]);
+  // Com filtro ativo os cards falam da visao, entao o total da competencia vira linha
+  // secundaria dentro do card — sem isso alguem tira print de um total filtrado achando que
+  // e a competencia inteira. Sem filtro, os dois numeros sao o mesmo e o baseline some.
+  const visaoRecortada = itemsDaVisao.length !== state.items.length;
   const unidadesPorId = useMemo(() => new Map(unidades.map((unidade) => [unidade.id, unidade.nome])), [unidades]);
 
   const selecionarSituacao = (next: FaturasFinanceirasSituacao) => {
@@ -606,11 +637,11 @@ export function FaturasAlunosFinanceirasPage() {
           <LeituraNotice state={state} />
 
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <MetricCard label="Todas as faturas" count={state.totals.todas.quantidade} value={state.totals.todas.valor} tone="cyan" active={situacao === 'todas'} onClick={() => selecionarSituacao('todas')} />
-            <MetricCard label="Pagas" count={state.totals.pagas.quantidade} value={state.totals.pagas.valor} tone="emerald" active={situacao === 'pagas'} onClick={() => selecionarSituacao('pagas')} />
-            <MetricCard label="Em aberto" count={state.totals.em_aberto.quantidade} value={state.totals.em_aberto.valor} tone="amber" active={situacao === 'em_aberto'} onClick={() => selecionarSituacao('em_aberto')} />
-            <MetricCard label="Em atraso" count={state.totals.em_atraso_d0.quantidade} value={state.totals.em_atraso_d0.valor} tone="rose" active={situacao === 'em_atraso_d0'} onClick={() => selecionarSituacao('em_atraso_d0')} />
-            <MetricCard label="A vencer" count={state.totals.a_vencer.quantidade} value={state.totals.a_vencer.valor} tone="slate" active={situacao === 'a_vencer'} onClick={() => selecionarSituacao('a_vencer')} />
+            <MetricCard label="Todas as faturas" count={totaisDaVisao.todas.quantidade} value={totaisDaVisao.todas.valor} baselineCount={visaoRecortada ? state.totals.todas.quantidade : undefined} baselineValue={visaoRecortada ? state.totals.todas.valor : undefined} tone="cyan" active={situacao === 'todas'} onClick={() => selecionarSituacao('todas')} />
+            <MetricCard label="Pagas" count={totaisDaVisao.pagas.quantidade} value={totaisDaVisao.pagas.valor} baselineCount={visaoRecortada ? state.totals.pagas.quantidade : undefined} baselineValue={visaoRecortada ? state.totals.pagas.valor : undefined} tone="emerald" active={situacao === 'pagas'} onClick={() => selecionarSituacao('pagas')} />
+            <MetricCard label="Em aberto" count={totaisDaVisao.em_aberto.quantidade} value={totaisDaVisao.em_aberto.valor} baselineCount={visaoRecortada ? state.totals.em_aberto.quantidade : undefined} baselineValue={visaoRecortada ? state.totals.em_aberto.valor : undefined} tone="amber" active={situacao === 'em_aberto'} onClick={() => selecionarSituacao('em_aberto')} />
+            <MetricCard label="Em atraso" count={totaisDaVisao.em_atraso_d0.quantidade} value={totaisDaVisao.em_atraso_d0.valor} baselineCount={visaoRecortada ? state.totals.em_atraso_d0.quantidade : undefined} baselineValue={visaoRecortada ? state.totals.em_atraso_d0.valor : undefined} tone="rose" active={situacao === 'em_atraso_d0'} onClick={() => selecionarSituacao('em_atraso_d0')} />
+            <MetricCard label="A vencer" count={totaisDaVisao.a_vencer.quantidade} value={totaisDaVisao.a_vencer.valor} baselineCount={visaoRecortada ? state.totals.a_vencer.quantidade : undefined} baselineValue={visaoRecortada ? state.totals.a_vencer.valor : undefined} tone="slate" active={situacao === 'a_vencer'} onClick={() => selecionarSituacao('a_vencer')} />
           </section>
           <p className="-mt-2 text-xs text-slate-500">Leitura dos valores: faturas pagas usam o valor efetivamente pago; faturas em aberto usam o valor atualizado hoje, sem desconto condicional e com multa/mora do contrato. Por isso o total pode diferir do resumo original do Emusys.</p>
 
@@ -626,7 +657,7 @@ export function FaturasAlunosFinanceirasPage() {
             />
             <OperationalViewButton
               label="Canceladas — histórico"
-              count={state.totals.canceladas.quantidade}
+              count={totaisDaVisao.canceladas.quantidade}
               description="Fora dos totais desta competência"
               Icon={ReceiptText}
               active={situacao === 'canceladas'}
@@ -739,7 +770,7 @@ function InvoicesTable({ items, dataCorte, unidadeNome, onDetail }: {
         <thead className="border-b border-slate-700/70 bg-slate-950/45 text-[11px] uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3 font-medium">Aluno / curso</th><th className="px-3 py-3 font-medium">Tipo da fatura</th><th className="px-3 py-3 font-medium">Situação</th><th className="px-3 py-3 font-medium">Vencimento</th><th className="px-3 py-3 font-medium">Forma de pagamento</th><th className="px-3 py-3 text-right font-medium">Valor base</th><th className="px-3 py-3 text-right font-medium">Sem desconto condicional</th><th className="px-3 py-3 text-right font-medium">Valor atualizado / pago</th><th className="sticky right-0 z-10 bg-slate-950 px-4 py-3 text-right font-medium">Detalhe</th></tr></thead>
         <tbody className="divide-y divide-slate-800">
           {items.map((item) => {
-            const valorPrincipal = item.status === 'paga' ? item.valores.valor_pago : item.valores.valor_hoje;
+            const valorPrincipal = valorPrincipalDaFatura(item);
             const FormaPagamentoIcon = iconeFormaPagamento(item.forma_pagamento.nome);
             const parcela = item.tipo_fatura === 'parcela';
             const fotoAluno = item.aluno.foto_url || item.aluno.photo_url;
@@ -837,7 +868,7 @@ function ReconciliationPanelV2({
                 {item.descricao ? <p className="mt-2 text-[11px] text-slate-400"><span className="text-slate-500">Referência:</span> {item.descricao}</p> : null}
                 <div className="mt-2 flex flex-wrap gap-1.5">{item.motivos.map((motivo) => <span key={motivo} className="rounded-md border border-amber-500/20 bg-amber-500/[0.07] px-2 py-1 text-[11px] text-amber-200">{motivoReconciliacao(motivo)}</span>)}</div>
               </div>
-              <div className="min-w-[170px] text-right text-xs text-slate-400"><p>Original: <span className="font-semibold tabular-nums text-slate-200">{moeda(item.valores.valor_original)}</span></p><p className="mt-1">{item.status === 'paga' ? 'Pago' : 'Atualizado'}: <span className="font-semibold tabular-nums text-cyan-200">{(item.status === 'paga' ? item.valores.valor_pago : item.valores.valor_hoje) == null ? '—' : moeda((item.status === 'paga' ? item.valores.valor_pago : item.valores.valor_hoje) ?? 0)}</span></p></div>
+              <div className="min-w-[170px] text-right text-xs text-slate-400"><p>Original: <span className="font-semibold tabular-nums text-slate-200">{moeda(item.valores.valor_original)}</span></p><p className="mt-1">{item.status === 'paga' ? 'Pago' : 'Atualizado'}: <span className="font-semibold tabular-nums text-cyan-200">{(valorPrincipalDaFatura(item)) == null ? '—' : moeda((valorPrincipalDaFatura(item)) ?? 0)}</span></p></div>
             </div>
             {guidance.kind === 'payment_method' && <div className="mt-4 grid gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.04] p-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
               <div><label className="mb-1.5 block text-xs font-medium text-cyan-100" htmlFor={`forma-${key}`}>Forma usada pelo aluno</label><Select value={formaSelecionada} onValueChange={(value) => setFormas((current) => ({ ...current, [key]: value }))}><SelectTrigger id={`forma-${key}`} className="bg-slate-950/60"><SelectValue placeholder="Selecione a forma de pagamento" /></SelectTrigger><SelectContent>{formasPagamento.map((option) => <SelectItem key={option.id} value={String(option.id)}>{option.nome}{option.sigla ? ` (${option.sigla})` : ''}</SelectItem>)}</SelectContent></Select></div>
@@ -875,9 +906,9 @@ function ReconciliationPanel({ state, unidadeNome }: { state: FaturasFinanceiras
 function FaturaValoresDetalhe({ item }: { item: FaturaFinanceiraItem }) {
   const parcela = item.tipo_fatura === 'parcela';
   if (!parcela) {
-    return <div className="grid gap-3 sm:grid-cols-2"><ValueBox label="Valor da fatura" value={moeda(item.valores.valor_com_desconto)} tone="slate" /><ValueBox label={item.status === 'paga' ? 'Valor pago' : 'Valor atualizado'} value={item.status === 'paga' ? moeda(item.valores.valor_pago ?? 0) : moeda(item.valores.valor_hoje ?? 0)} tone="cyan" /></div>;
+    return <div className="grid gap-3 sm:grid-cols-2"><ValueBox label="Valor da fatura" value={moeda(item.valores.valor_com_desconto)} tone="slate" /><ValueBox label={item.status === 'paga' ? 'Valor pago' : 'Valor atualizado'} value={moeda(valorPrincipalDaFatura(item) ?? 0)} tone="cyan" /></div>;
   }
-  return <div className="grid gap-3 sm:grid-cols-3"><ValueBox label="Valor com desconto" value={moeda(item.valores.valor_com_desconto)} tone="slate" /><ValueBox label="Sem desconto condicional" value={moeda(item.valores.valor_sem_desconto_condicional)} tone="amber" /><ValueBox label={item.status === 'paga' ? 'Valor pago' : 'Valor atualizado'} value={item.status === 'paga' ? moeda(item.valores.valor_pago ?? 0) : moeda(item.valores.valor_hoje ?? 0)} tone="cyan" /></div>;
+  return <div className="grid gap-3 sm:grid-cols-3"><ValueBox label="Valor com desconto" value={moeda(item.valores.valor_com_desconto)} tone="slate" /><ValueBox label="Sem desconto condicional" value={moeda(item.valores.valor_sem_desconto_condicional)} tone="amber" /><ValueBox label={item.status === 'paga' ? 'Valor pago' : 'Valor atualizado'} value={moeda(valorPrincipalDaFatura(item) ?? 0)} tone="cyan" /></div>;
 }
 
 function FaturaDetailDialogV2({ item, dataCorte, unidadeNome, onClose }: { item: FaturaFinanceiraItem | null; dataCorte: string; unidadeNome: string | null; onClose: () => void }) {
@@ -934,7 +965,7 @@ function FaturaDetailDialog({ item, dataCorte, unidadeNome, onClose }: { item: F
   return (
     <Dialog open={Boolean(item)} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto p-0">
-        {item && <><DialogHeader className="border-b border-slate-800 bg-[radial-gradient(circle_at_top_right,rgba(6,182,212,0.16),transparent_48%)] p-6 pr-12"><div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-500/15 text-cyan-200"><ReceiptText className="h-5 w-5" /></div><DialogTitle>{item.aluno.nome}</DialogTitle><DialogDescription>{unidadeNome ?? item.unidade_codigo ?? 'Unidade'} • {item.aluno.curso_nome ?? 'Curso não informado'}</DialogDescription></DialogHeader><div className="space-y-5 p-6"><div className="grid gap-3 sm:grid-cols-3"><ValueBox label="Valor com desconto" value={moeda(item.valores.valor_com_desconto)} tone="slate" /><ValueBox label="Sem desconto condicional" value={moeda(item.valores.valor_sem_desconto_condicional)} tone="amber" /><ValueBox label={item.status === 'paga' ? 'Valor pago' : 'Valor atualizado'} value={item.status === 'paga' ? moeda(item.valores.valor_pago ?? 0) : moeda(item.valores.valor_hoje ?? 0)} tone="cyan" /></div><div className="grid gap-3 sm:grid-cols-2"><DetailGroup title="Fatura" lines={[['Situação', rotuloStatus(item, dataCorte)], ['Competência', formatarCompetencia(item.competencia)], ['Vencimento', formatarData(item.data_vencimento)], ['Pagamento', formatarData(item.data_pagamento)], ['Descrição', item.descricao ?? '—'], ['Forma de pagamento', `${rotuloFormaPagamento(item)}: ${item.forma_pagamento.nome ?? 'não informada'}`]]} /><DetailGroup title="Atualização e cobrança" lines={[['Multa (2%)', moeda(item.valores.multa)], ['Mora pro rata', moeda(item.valores.mora)], ['D+0', item.cobranca.d0 ? 'Em atraso' : 'Não está em atraso'], ['D+2', item.cobranca.d2_elegivel ? 'Elegível para cobrar agora' : item.cobranca.motivo_nao_elegivel ?? 'Não elegível'], ['Último sync', formatarDataHora(item.sync_completed_at)], ['Válido até', formatarDataHora(item.sync_fresh_until)]]} /></div><DetailGroup title="Rastreabilidade" mono lines={[['Fatura canônica', item.canonical_fatura_id], ['Fatura Emusys', item.emusys_fatura_id], ['Matrícula Emusys', item.emusys_matricula_id ?? '—'], ['Contrato Emusys', item.emusys_contrato_id ?? '—'], ['Aluno Emusys', item.emusys_student_id ?? '—']]} /><div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.06] p-4 text-xs text-cyan-100/75"><span className="inline-flex items-center gap-2"><BadgeCheck className="h-4 w-4 text-cyan-300" /> Consulta somente leitura: não altera fatura nem envia cobrança.</span>{item.aluno.id != null && <Link to={`/app/alunos?aluno=${item.aluno.id}`} className="inline-flex items-center gap-1 text-cyan-200 hover:text-cyan-100">Abrir ficha do aluno <ChevronRight className="h-3.5 w-3.5" /></Link>}</div></div></>}
+        {item && <><DialogHeader className="border-b border-slate-800 bg-[radial-gradient(circle_at_top_right,rgba(6,182,212,0.16),transparent_48%)] p-6 pr-12"><div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-500/15 text-cyan-200"><ReceiptText className="h-5 w-5" /></div><DialogTitle>{item.aluno.nome}</DialogTitle><DialogDescription>{unidadeNome ?? item.unidade_codigo ?? 'Unidade'} • {item.aluno.curso_nome ?? 'Curso não informado'}</DialogDescription></DialogHeader><div className="space-y-5 p-6"><div className="grid gap-3 sm:grid-cols-3"><ValueBox label="Valor com desconto" value={moeda(item.valores.valor_com_desconto)} tone="slate" /><ValueBox label="Sem desconto condicional" value={moeda(item.valores.valor_sem_desconto_condicional)} tone="amber" /><ValueBox label={item.status === 'paga' ? 'Valor pago' : 'Valor atualizado'} value={moeda(valorPrincipalDaFatura(item) ?? 0)} tone="cyan" /></div><div className="grid gap-3 sm:grid-cols-2"><DetailGroup title="Fatura" lines={[['Situação', rotuloStatus(item, dataCorte)], ['Competência', formatarCompetencia(item.competencia)], ['Vencimento', formatarData(item.data_vencimento)], ['Pagamento', formatarData(item.data_pagamento)], ['Descrição', item.descricao ?? '—'], ['Forma de pagamento', `${rotuloFormaPagamento(item)}: ${item.forma_pagamento.nome ?? 'não informada'}`]]} /><DetailGroup title="Atualização e cobrança" lines={[['Multa (2%)', moeda(item.valores.multa)], ['Mora pro rata', moeda(item.valores.mora)], ['D+0', item.cobranca.d0 ? 'Em atraso' : 'Não está em atraso'], ['D+2', item.cobranca.d2_elegivel ? 'Elegível para cobrar agora' : item.cobranca.motivo_nao_elegivel ?? 'Não elegível'], ['Último sync', formatarDataHora(item.sync_completed_at)], ['Válido até', formatarDataHora(item.sync_fresh_until)]]} /></div><DetailGroup title="Rastreabilidade" mono lines={[['Fatura canônica', item.canonical_fatura_id], ['Fatura Emusys', item.emusys_fatura_id], ['Matrícula Emusys', item.emusys_matricula_id ?? '—'], ['Contrato Emusys', item.emusys_contrato_id ?? '—'], ['Aluno Emusys', item.emusys_student_id ?? '—']]} /><div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.06] p-4 text-xs text-cyan-100/75"><span className="inline-flex items-center gap-2"><BadgeCheck className="h-4 w-4 text-cyan-300" /> Consulta somente leitura: não altera fatura nem envia cobrança.</span>{item.aluno.id != null && <Link to={`/app/alunos?aluno=${item.aluno.id}`} className="inline-flex items-center gap-1 text-cyan-200 hover:text-cyan-100">Abrir ficha do aluno <ChevronRight className="h-3.5 w-3.5" /></Link>}</div></div></>}
       </DialogContent>
     </Dialog>
   );
