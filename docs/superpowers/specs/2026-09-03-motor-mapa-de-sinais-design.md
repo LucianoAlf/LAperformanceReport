@@ -12,7 +12,74 @@
 
 ---
 
-## 🟡 GOOGLE ADS — fiação pronta, falta UMA credencial (03/09)
+## ✅ GOOGLE ADS NO AR (03/09) — e a conta do Luciano fechou
+
+Developer token recebido (nível *Acesso às Análises*, suficiente para leitura em
+conta de produção). Carga inicial: **R$ 9.160,80 em 90 dias, 259 linhas, 4
+campanhas**. Crons **`google-ads-captura-horaria`** (`35 * * * *`, janela 3d) e
+**`google-ads-captura-recalculo-diario`** (`30 9 * * *`, janela 45d).
+
+### Dois achados de configuração que custariam horas
+
+⚠️ **`login-customer-id` com o MCC era o que quebrava.** A API respondia `403
+USER_PERMISSION_DENIED` com uma mensagem que sugere **exatamente o contrário**
+(*"o customer id do gerenciador DEVE estar no header"*). Medido:
+`listAccessibleCustomers` devolve **só** `customers/7179097170` — o usuário OAuth
+alcança a conta **direto** e **não é membro** do MCC `164-091-0901`. Sem o
+header, `200` na hora. A env ficou opcional, com o porquê no código.
+
+⚠️ **v21, v20 e v19 não existem mais.** O fallback de versão que eu tinha posto
+"por precaução" foi usado na primeira execução. Versões vivas: **v22–v25**.
+Confirma o motivo de ele existir: versão fixa aposentada viraria *"o gasto parou
+de atualizar"*, sintoma que ninguém vê olhando o `pg_cron`.
+
+### 💰 A conta fechou — os "7, 8 mil" existem
+
+Janela 04/08–03/09:
+
+| canal | gasto | leads | custo/lead | matrículas | custo/matrícula | retorno LTV |
+|---|---|---|---|---|---|---|
+| Instagram | R$ 4.957,63 | 514 | **R$ 9,65** | 5 | R$ 991,53 | 4,9× |
+| Google | R$ 3.195,04 | 154 | R$ 20,75 | 4 | **R$ 798,76** | **6,1×** |
+| **total** | **R$ 8.152,67** | | | | | |
+
+**O Google compra lead 2,1× mais caro e matrícula 19% mais barata.** É o mesmo
+padrão do PC6 num nível acima: quem otimiza por custo de lead escolhe errado.
+
+⚠️ Ambos pagam (LTV R$ 4.880). **Não há caso para cortar mídia** — há caso para
+realocar dentro dela.
+
+### 🔴 PC10 — a Barra: R$ 1.215 com 7 leads atribuídos, e NÃO sei de quem é a culpa
+
+As 3 campanhas Google são **uma por unidade** (`[BARRA]`, `[RECREIO]`, `[CG]`) —
+recorte que o Meta não permite (a campanha dele é "Todas as unidades"):
+
+| unidade | gasto | cliques | conv. Google | leads nossos | matrículas | custo/lead |
+|---|---|---|---|---|---|---|
+| Barra | R$ 1.214,91 | 4.008 | 188 | **7** | **0** | **R$ 173,56** |
+| Recreio | R$ 1.176,61 | 3.891 | 226 | 64 | 2 | R$ 18,38 |
+| Campo Grande | R$ 803,52 | 7.295 | 369 | 83 | 2 | R$ 9,68 |
+
+Barra e Recreio têm gasto e cliques quase idênticos e **7 leads contra 64**.
+
+⚠️ **Resisto à conclusão fácil.** Barra tem **63 leads sem origem (35% do total)**
+contra **7 no Recreio (2,6%)**. Se boa parte deles for Google, a campanha está
+sadia e quem está quebrado é a atribuição. **Os dois cenários cabem no dado — não
+dá para escolher ainda.**
+
+O que **é** certo, e importa mais: dos leads sem origem, **58 dos 63 na Barra e
+126 dos 139 em CG têm `emusys_lead_id`** — nasceram do cadastro do Emusys **sem
+canal**. No Recreio isso quase não acontece. **É diferença de PROCESSO entre
+unidades, não defeito de sistema**, e responde direto à pergunta 5 da auditoria
+de atribuição que roda em paralelo.
+
+🔴 **Não pausar a campanha da Barra com este dado.** O teste que decide é
+barato: rastrear onde o clique do P.Max da Barra aterrissa e se aquele caminho
+grava origem.
+
+---
+
+## ~~🟡 GOOGLE ADS — fiação pronta, falta UMA credencial~~ (resolvido no mesmo dia)
 
 O Luciano fechou a parte do Google Cloud: developer token, MCC `164-091-0901`,
 conta `717-909-7170`, projeto + API ativada, client ID/secret, refresh token,
