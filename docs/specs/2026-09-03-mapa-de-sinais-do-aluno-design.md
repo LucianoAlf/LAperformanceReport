@@ -197,9 +197,10 @@ conversa; sugerir variante quando não performa).
 
 1. Destinatários dos alertas (§5.4) — desenho proposto, falta OK formal.
 2. Quem LIGA para os 17 da lista de renovação em risco (o resgate é humano).
-3. `sinais_aluno` mora no projeto LA Report (junto de tudo) ou no da Sol
-   (junto do espelho)? Inclinação: **LA Report** (onde estão aluno, risco,
-   jornada e o painel), com o extrator lendo o espelho de lá.
+3. ~~Acesso ao banco do TOM~~ **RESOLVIDO 03/09** (credencial recebida;
+   contrato de integração definido acima). `sinais_aluno` mora no **LA Report**
+   (decisão: junto de aluno, risco, jornada e painel), extrator lê o espelho da
+   Sol, tarefas nascem no banco do TOM.
 4. Retenção ativa de quem declara cancelamento: qual o playbook humano quando
    o alerta disparar? (proprietário: Luciano + gerentes)
 
@@ -260,13 +261,28 @@ sozinho, sem coleta extra.
   valendo 35 vs 15 meses de casa e ~2,8× menos saída, é a lista de convites de
   retenção/expansão mais barata que existe. "Criar mais bandas" com fila
   nominal de demanda.
-- **LA Organizer/TOM — repo lido** (`LucianoAlf/LA-Organizer`): TOM é agente
-  WhatsApp (UAZAPI) com Supabase próprio (**projeto `cesnbnrynvxvgdhfmaua`**,
-  sa-east-1); cria/atualiza tarefa via marcadores `<<TASK>>`; já tem lembretes
-  e governança. ⚠️ Banco do Organizer NÃO é o mesmo do LA Report — integração
-  do mapa→tarefa será por API/marcador do TOM ou escrita direta no banco dele
-  (**pendente: credencial/token do projeto para eu inspecionar o schema de
-  tarefas** — adicionar ao `.mcp.json` como `supabase-tom`).
+- **LA Organizer/TOM — banco INSPECIONADO (03/09, credencial recebida do
+  Luciano; `.mcp.json` como `supabase-tom`, projeto `cesnbnrynvxvgdhfmaua`).**
+  Sistema de tarefas grande e vivo: `tasks` 3.436 (90d: 1.654 done, 527
+  cancelled, 460 pending — **100% `source='manual'`**), `task_reminders` 2.393,
+  `tasks_audit` 11k, `collaborators` 37 ativos com **phone, unit,
+  supervisor_id e is_ceo** (a cadeia de escalonamento já é nativa).
+  **A equipe JÁ cria à mão as tarefas que o mapa geraria** — amostra real de
+  hoje: "Arthur — falar com a Thaís (mãe do Ithan) sobre reposição", "Lead
+  esperando resposta!" (dono Vitoria/campo_grande). O mapa só automatiza o que
+  eles já fazem no braço.
+
+  **Contrato de integração mapa→tarefa (definido):** INSERT direto em `tasks`
+  com `source='mapa_sinais'` (valor novo; distingue e permite medir), `title`
+  acionável ("Ligar p/ {aluno} — freq 0% e renova em {N}d"), `notes` =
+  evidência do sinal, `assigned_to` resolvido por `collaborators`
+  (unit+função), `governance_owner_id` = `supervisor_id` do dono, `due_date`
+  pela severidade, `priority` mapeada. Dedup do NOSSO lado:
+  `sinais_aluno.tarefa_id` guarda o uuid criado — sinal aberto do mesmo
+  aluno+tipo nunca duplica. Lembrete/cobrança/escalonamento: **zero código
+  novo** — o motor do TOM (`task_reminders` + governança) pega a tarefa como
+  qualquer outra. A taxa de `cancelled` das tasks `source='mapa_sinais'` é o
+  termômetro anti-ruído (regra dos 20%).
 
 ### Regra anti-ruído (doutrina)
 
