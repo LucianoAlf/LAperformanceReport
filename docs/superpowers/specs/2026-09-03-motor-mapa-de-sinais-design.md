@@ -461,3 +461,36 @@ a prática ao Recreio e CG com os números na mesa).
 
 Isso responde ao pedido do Luciano: o 2º andar também aprende com o ACERTO, não
 só com o erro.
+
+## 🔴 O motor roda POR CIMA das regras de negócio (correção de raiz, 03/09)
+
+Exigência do Luciano: *"esse motor tem que rodar por cima das regras de negócio,
+senão a gente comete erros graves e tira a confiança das informações"*. Ele
+estava certo — e eu já tinha cometido o erro.
+
+**O que eu errei:** publiquei churn com **numerador filtrado** (saídas canônicas,
+sem banda/bolsista) e **denominador não filtrado** (1.162 ativos). É o pecado que
+o próprio CLAUDE.md documenta. E o motor herdou o defeito: **24 sinais indevidos**
+de GarageBand, Power Kids, Minha Banda Para Sempre, bolsistas e de um **professor
+matriculado** (Willer Arruda).
+
+**Churn correto** (denominador = pagantes canônicos):
+
+| Unidade | Pagantes | Saídas 3m | Churn 3m | Mensal |
+|---|---|---|---|---|
+| Barra | 264 | 20 | **7,6%** | 2,53% |
+| Recreio | 350 | 59 | **16,9%** | 5,62% |
+| Campo Grande | 393 | 84 | **21,4%** | 7,12% |
+
+A conclusão do benchmark não muda — a magnitude sim: **CG perde quase 3× a
+Barra**, não 2,5×.
+
+**A correção, na raiz:** `radar_aluno_elegivel_v1()` — predicado **único**,
+delegando ao canônico `movimentacao_conta_nos_kpis_v1` (sem reimplementar a
+regra) — mais um **trigger** que descarta no INSERT qualquer sinal de aluno
+inelegível. Assim **regra nova nasce protegida** sem depender de alguém lembrar.
+Os 24 sinais viraram `improcedente`/`falso_positivo` **com nota** (não apagados:
+fica o rastro). Prova após redetectar: **vazamento = 0**.
+
+⚠️ **Lição:** guarda em cada consumidor é contenção; guarda no ponto de entrada
+é raiz. Foi a mesma lição do `sol_nome_mesma_pessoa_v1` no caixa.

@@ -1,0 +1,29 @@
+-- 🔴 MAPA DE SINAIS — O MOTOR PASSA A RODAR POR CIMA DAS REGRAS DE NEGÓCIO
+-- (03/09/2026, correção exigida pelo Luciano)
+-- Aplicado via MCP: radar_regra_de_negocio_elegibilidade_v1_fix,
+--                   radar_p7_churn_corrigido_pagantes
+--
+-- O ERRO: eu publiquei churn com numerador filtrado (saídas canônicas, sem
+-- banda/bolsista) e denominador NÃO filtrado (1.162 ativos). É exatamente o
+-- pecado que o CLAUDE.md documenta: "quando numerador e denominador de uma taxa
+-- vêm de filtros diferentes, um dos dois está errado".
+--
+-- E o motor herdou o mesmo defeito: gerou 24 SINAIS INDEVIDOS de GarageBand,
+-- Power Kids, Minha Banda Para Sempre, bolsistas e até de um PROFESSOR
+-- matriculado (Willer Arruda). Ruído estrutural — o tipo de coisa que faz a
+-- equipe parar de confiar no sistema na primeira semana.
+--
+-- A CORREÇÃO (raiz, não remendo):
+--   radar_aluno_elegivel_v1(bigint) — predicado ÚNICO, delegando ao canônico
+--   movimentacao_conta_nos_kpis_v1 (não reimplementa a regra).
+--   + TRIGGER trg_radar_guarda_elegibilidade: descarta no INSERT qualquer sinal
+--     de aluno inelegível. Regra nova nasce protegida sem precisar lembrar.
+--   + os 24 sinais já gravados viraram 'improcedente'/'falso_positivo' COM NOTA
+--     (não apagados — fica o rastro do erro).
+--   Prova: após redetectar, VAZAMENTO = 0.
+--
+-- CHURN CORRETO (3 meses, denominador de pagantes):
+--   Barra    7,6%  (264 pagantes, 20 saídas)  — 2,53%/mês
+--   Recreio 16,9%  (350, 59)                  — 5,62%/mês
+--   CG      21,4%  (393, 84)                  — 7,12%/mês
+-- A conclusão do benchmark não muda; a magnitude sim: CG perde quase 3x a Barra.
