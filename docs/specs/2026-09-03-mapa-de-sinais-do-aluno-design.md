@@ -230,8 +230,24 @@ conversa; sugerir variante quando não performa).
 
 ## 7. Perguntas em aberto
 
-1. Destinatários dos alertas (§5.4) — desenho proposto, falta OK formal.
-2. Quem LIGA para os 17 da lista de renovação em risco (o resgate é humano).
+1. ~~Destinatários dos alertas~~ **DECIDIDO (Luciano, 03/09): TUDO passa pelas
+   GUARDIÃS primeiro** — Fabi Valdevino e Jessy Viana. Elas já criam tarefas
+   por gerente hoje; são a triagem E o termômetro de validação do sistema.
+   Nada vai direto a gerente ("não vão dar conta"); nada direto ao grupo.
+   A Lia alimenta as guardiãs; as guardiãs acionam.
+2. ~~Quem liga para os da renovação~~ **PILOTO EXECUTADO (03/09):** 16 tarefas
+   criadas no TOM (16 alunos — Júlia Vilardo unificada, 2 contratos), **Fabi=10
+   (Barra+CG), Jéssica=6 (Recreio)**, `created_by` = Alf, prioridade high para
+   quem vence em ≤7d (due 04/09) e medium para o resto (due 06/09 e 10/09).
+   ⚠️ **Contrato ajustado na prática:** a check `tasks_source_check` do TOM não
+   aceita `mapa_sinais` (lista fechada: manual, agent_briefing, agent_closing,
+   checkpoint_decomposition, coordinator_assignment, **system**, mental_dump,
+   retroactive_capture) → piloto usa **`source='system'`** e o discriminador é
+   `description like 'PILOTO Mapa de Sinais%%'` (guarda de idempotência testada
+   — 2 lotes falhos antes foram atômicos, zero resíduo). Adicionar
+   `'mapa_sinais'` à check é migration do REPO DO TOM (F2, não por fora).
+   Medição do piloto = ciclo completo: criação → cobrança do TOM → triagem das
+   guardiãs → delegação → desfecho (done/cancelled) → volta pro mapa.
 3. ~~Acesso ao banco do TOM~~ **RESOLVIDO 03/09** (credencial recebida;
    contrato de integração definido acima). `sinais_aluno` mora no **LA Report**
    (decisão: junto de aluno, risco, jornada e painel), extrator lê o espelho da
