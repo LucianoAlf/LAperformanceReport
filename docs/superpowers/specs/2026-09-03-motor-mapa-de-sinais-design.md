@@ -597,3 +597,56 @@ mão.** Antes de medir qualquer indicador, procurar em `dados_mensais`, nas RPCs
 canônicas e no `docs/METRICAS.md`. Recalcular é como reimplementar regra em dois
 lugares — foi a causa-raiz das duplicatas de renovação, e agora quase virou
 número errado num painel de retenção.
+
+## ✅ FASE 0 CONCLUÍDA — o retrato do que o motor produz
+
+129 sinais abertos, com tudo desligado:
+
+| Regra | Sinais | Críticos | Leitura |
+|---|---|---|---|
+| R1 frequência despencando | 66 | 7 | volume alto — **fica fora do piloto** |
+| R13 aviso prévio | 20 | 20 | janela de reversão, o mais urgente |
+| R3 renovação em risco | 15 | 4 | prazo duro |
+| R6 presente mas em risco | 15 | 0 | observar |
+| R12 semáforo não-verde | 7 | 0 | coorte |
+| R5 família em risco | 6 | 6 | crítico por natureza |
+| **R2, R7, R8, R9, R10** | **0** | 0 | **dependem do extrator de conversas** |
+| R4, R11 | 0 | 0 | revisar regra (deveriam ter casos) |
+
+⚠️ **Cinco regras em zero provam o que já sabíamos: o 1º andar está incompleto
+sem o extrator de conversas.** Cancelamento declarado, promessa não cumprida,
+cliente no vácuo, doença e reposição — nada disso existe no banco, só no chat.
+
+## ✅ FASE 1 PRONTA (aguardando OK) — e o canal mudou pelo que a investigação achou
+
+**Três descobertas mudaram o plano:**
+1. **A Lia nunca enviou nada** — `daLia=0` em todos os grupos; a bridge roda em
+   `--mode self-chat`. Ela só escuta. Mexer nisso agora é risco sem ganho.
+2. **O grupo "Sucesso do aluno" está vivo** (Fabi 88 msgs/90d · Jessica 93 ·
+   Anne 62 · Luciano 94) — e o Luciano acompanha o piloto em tempo real ali.
+3. **O TOM já entrega dado nesse grupo**, com formato consolidado. Chegar em
+   formato diferente do que elas já leem é atrito desnecessário.
+
+→ **Fase 1 entrega NO GRUPO, no tom que elas conhecem.** DM fica para a Fase 3
+(alerta individual de promessa não cumprida ao atendente).
+
+**Recorte anti-ruído:** só **crítico**, só **3 regras** (aviso prévio, renovação,
+família), **teto 5**, **1×/dia às 9h**. As 66 de frequência ficam de fora da
+estreia — viraria enxurrada e queimaria a confiança.
+
+**A mensagem real que sai** (gerada por `radar_mensagem_guardias_v1`):
+
+> **🎯 Mapa de Sinais — 03/09**
+> *Os casos mais urgentes de hoje, em ordem de prazo:*
+>
+> • 📄 **Theo Modesti (Recreio)** — renova em 1 dia. Frequência 33%.
+>   ➜ NÃO enviar proposta padrão com reajuste. Ligar antes.
+>
+> • 👨‍👩‍👧 **Flor, Marcela e Mel Gianni (Barra)** — 3 alunos da mesma família em risco.
+>   ➜ Tratar como UMA conversa de família.
+>
+> *Há mais 25 casos críticos na fila — chegam amanhã.*
+> *Me diga o que não fizer sentido: o que vocês dispensarem ajusta o sistema.*
+
+⚠️ O rodapé é deliberado: **pede o feedback que alimenta a taxa de
+improcedência** — a triagem delas é o que calibra as regras.

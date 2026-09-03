@@ -1,0 +1,28 @@
+-- MAPA DE SINAIS — FASE 0 CONCLUÍDA + FASE 1 PRONTA (03/09/2026)
+-- Aplicado via MCP: radar_fase1_canal_grupo_sucesso_aluno
+--
+-- FASE 0 (medição com tudo desligado) — 129 sinais abertos:
+--   R1  frequência despencando ....... 66 (7 críticos)
+--   R13 aviso prévio ................. 20 (todos críticos)
+--   R3  renovação em risco ........... 15 (4 críticos)
+--   R6  presente mas em risco ........ 15
+--   R12 semáforo não-verde ............ 7
+--   R5  família em risco .............. 6 (todos críticos)
+--   R2,R7,R8,R9,R10 = 0 -> dependem do EXTRATOR DE CONVERSAS (1º andar incompleto)
+--   R4 (quer banda) e R11 (professor parado) = 0 -> revisar regra
+--
+-- INVESTIGAÇÃO DO CANAL (o Luciano mandou olhar antes de ligar):
+--   1) A Lia NUNCA enviou nada: daLia=0 em todos os grupos; a bridge dela roda
+--      em --mode self-chat. Ela só escuta. Não vamos mexer nisso agora.
+--   2) O grupo "Sucesso do aluno" (120363410155889101@g.us) está VIVO: Fabi 88
+--      msgs/90d, Jessica 93, Anne 62, Luciano 94 — e o Luciano acompanha o
+--      piloto em tempo real ali.
+--   3) O TOM JÁ ENTREGA dado nesse grupo com formato consolidado. Chegar em
+--      formato diferente do que elas já leem é atrito à toa.
+--   => FASE 1 entrega NO GRUPO, no tom que elas conhecem. DM fica para a Fase 3
+--      (alerta individual de promessa não cumprida).
+--
+-- RECORTE DA FASE 1 (anti-ruído): só CRÍTICO e só 3 regras — R13 (aviso prévio),
+-- R3 (renovação) e R5 (família). Teto 5, 1x/dia às 9h. R1 (66 casos) fica FORA
+-- do piloto: viraria ruído e queimaria a confiança na estreia.
+-- Nasce ativo=false. Liga com OK explícito do Luciano.
