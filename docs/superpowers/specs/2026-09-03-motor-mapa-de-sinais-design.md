@@ -12,6 +12,52 @@
 
 ---
 
+## 🟡 GOOGLE ADS — fiação pronta, falta UMA credencial (03/09)
+
+O Luciano fechou a parte do Google Cloud: developer token, MCC `164-091-0901`,
+conta `717-909-7170`, projeto + API ativada, client ID/secret, refresh token,
+usuário de teste autorizado.
+
+**Construído e no ar:**
+- **`google_ads_metricas_diarias`** (PK `dia, campanha_id`) — gêmeo do Meta.
+  ⚠️ Grão é **CAMPANHA, não anúncio**, de propósito: Performance Max não expõe
+  anúncio como Search, e campanha atravessa os dois tipos. O equivalente do PC6
+  no Google é **termo de busca**, outra consulta — fora desta rodada.
+  ⚠️ `cost_micros` é convertido **na ingestão** (÷1e6). Micro vazando para
+  consumidor vira gasto um milhão de vezes maior sem ninguém notar a escala.
+- **`vw_ads_gasto_diario_v1`** — fonte **única** do gasto (meta + google).
+  Consumidor novo lê daqui, nunca das tabelas cruas.
+  ⚠️ `conversoes_plataforma` **não é comparável entre plataformas** (no Meta é
+  conversa de WhatsApp, no Google é a ação configurada na conta) — serve para
+  acompanhar cada uma contra ela mesma, nunca para ranquear uma contra a outra.
+- **`capturar-google-ads-diario`** (`verify_jwt=false`, token
+  `google_ads_captura`) — OAuth por refresh token, `searchStream`, foto vazia
+  aborta 422. ⚠️ Tenta as versões da API em ordem (`v21→v18`): o Google sunseta
+  versões, e versão fixa aposentada viraria "o gasto parou de atualizar", que
+  ninguém percebe olhando o `pg_cron`.
+- **`radar_trafego_canal_v1`** já lê o custo do Google pela view.
+
+**Validado:** OAuth responde com escopo `adwords`; a edge passa o portão do
+token e chega até a chamada. Os 5 segredos estão no Supabase.
+
+🔴 **FALTA:** `GOOGLE_ADS_DEVELOPER_TOKEN` — o valor não foi colado. Com ele:
+`npx supabase secrets set GOOGLE_ADS_DEVELOPER_TOKEN=<valor>`, uma chamada de
+carga e os 2 crons (horário janela 3d + diário janela 45d), no molde do Meta.
+⚠️ **Crons NÃO foram agendados de propósito** — cron que falha toda hora vira
+ruído, e o `pg_cron` marca `succeeded` mesmo em erro.
+
+### ⚠️ RESSALVA MEDIDA sobre o PC7: 40% das matrículas não têm canal
+
+Na coorte madura (180d até −35d) são **423 matrículas** e **168 (39,7%) sem
+canal nenhum**. O ranking entre os canais conhecidos continua válido — Indicação
+35,7% × Instagram 2,7% é grande demais para virar por causa do resto — mas
+**dois quintos do resultado são invisíveis**, e nada garante que se distribuam
+igual. Dos 2.643 leads sem canal, **2.132 não têm `emusys_lead_id`**: não
+nasceram do cadastro do Emusys, vieram por outro caminho que não grava origem.
+É exatamente o que a auditoria paralela de atribuição está apurando.
+
+---
+
 ## ⏸️ PAUSA DECLARADA — 03/09 ~19:30 BRT · **RETOMAR EXATAMENTE DAQUI**
 
 O Luciano pediu pausa para um incidente da Sol (resolvido, ver abaixo) e pediu
