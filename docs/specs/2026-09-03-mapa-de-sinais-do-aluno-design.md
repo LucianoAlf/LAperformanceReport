@@ -62,6 +62,41 @@ Secura não previu evasão. Não chutar.
 | 13 | Engajamento do responsável | só existe DENTRO das conversas | **não é dado ainda** | via extração (parcial) |
 | 14 | Sinal contínuo do Fábio | `fabio_registros_aula` (1.106 registros, 271 alunos, desde 13/07) | vivo, parcial | observacional* |
 
+### Coorte LA Teacher (decisão Luciano 03/09): o gate é por PROFESSOR, não por sinal
+
+Em vez de deixar os sinais de professor inteiros como observacionais, os
+professores que JÁ alimentam o LA Teacher formam uma **coorte** em que esses
+sinais são CANÔNICOS para os alunos deles — e a coorte expande conforme a
+adesão. Validado contra o dado em 03/09 (**ninguém fora da lista tem atividade
+relevante** — a lista dos 10 é exatamente o conjunto ativo):
+
+| Professor | Carteira 30d | Semáforo ago+set | Cobertura | Fábio (regs) | Último |
+|---|---|---|---|---|---|
+| Matheus Felipe Lourenço | 22 | 22 | **100%** | 193 | 02/09 |
+| Valdo Delfino | 43 | 40 | **93%** | 202 | 01/09 |
+| Lohana Leopoldo de Araújo | 49 | 44 | **90%** | 54 | 31/08 |
+| Isaque Mendes da Silva | 39 | 33 | **85%** | 177 | 01/09 |
+| Matheus Reis | 18 | 14 | **78%** | 46 | 31/08 |
+| Rodrigo Pinheiro Gomes | 43 | 32 | **74%** | 160 | 02/09 |
+| Leticia de Almeida Palmeira | 56 | 0 | 0% | 80 | **03/09** |
+| Rafael Alves Souza (Akeem) | 68 | 0 | 0% | 96 | ⚠️ 21/08 |
+| Daiana Pacifico da Silva dos Anjos | 25 | 0 | 0% | 76 | 01/09 |
+| Leonardo Castro | 27 | 0 | 0% | 22 | 01/09 |
+
+Regras da coorte:
+1. **Promoção por professor × sinal**: semáforo vira canônico para os 6 com
+   cobertura ≥ ~75%; para os 4 que só alimentam o Fábio, o sinal do Fábio é
+   canônico e o semáforo segue observacional até preencherem. Granular, sem
+   tudo-ou-nada.
+2. **Guarda de frescor**: professor da coorte que para de alimentar por 14+
+   dias → sinal dele volta a observacional automaticamente + tarefa gentil ao
+   coordenador (Akeem está parado desde 21/08 — primeiro caso real). A coorte
+   se auto-cura; nunca pontua com dado velho.
+3. **Expansão**: fechamento do mês sugere promoção de professor novo que
+   cruzar 75% de cobertura; humano confirma (doutrina anti-ruído).
+4. Efeito no MVP: sinais de professor entram JÁ para ~1/3 da base (soma das
+   carteiras ≈ 390 alunos), em vez de esperar adesão total.
+
 \* **Observacional** = aparece no dossiê/painel quando existe, mas **não pontua
 nem dispara alerta** enquanto a cobertura for parcial — padrão já validado na
 casa (Health Score do professor: "número de alunos aparece para o gestor, mas
