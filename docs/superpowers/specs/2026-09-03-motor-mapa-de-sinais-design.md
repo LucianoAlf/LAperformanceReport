@@ -12,6 +12,38 @@
 
 ---
 
+## ⏸️ PAUSA DECLARADA — 03/09 ~19:30 BRT · **RETOMAR EXATAMENTE DAQUI**
+
+O Luciano pediu pausa para um incidente da Sol (resolvido, ver abaixo) e pediu
+que o ponto ficasse gravado. **Retomar por aqui, nesta ordem:**
+
+1. 🔴 **T1 — campanha bot-para-bot** (ALICERCE · tática/estratégica). Virou
+   **pré-requisito de campanha**, não só higiene: 4.571 de 4.978 inbound em 60
+   dias são auto-resposta de outra empresa e `campanha_contatos.respondeu=true`
+   os conta. Enquanto isso não cair, **qualquer newsletter/indicação disparada
+   vai ser medida com número falso**.
+2. 🔴 **T2 — calor do lead** (1º ANDAR · operacional).
+3. **Google Ads — credenciais chegando.** O Luciano criou as credenciais e
+   linkou os anúncios (estava fazendo isso com o Claude Web em paralelo). Falta
+   o equivalente do `capturar-meta-ads-diario` para o Google: hoje temos o
+   RESULTADO do Google (1.178 leads → 43 matrículas, 3,7%, melhor que o
+   Instagram) e **não temos o custo** — por isso "Google ou Instagram" segue em
+   aberto pelo lado do dinheiro. É a peça que fecha o `radar_trafego_canal_v1`.
+   ⚠️ `Site` já está dobrado em `Google` na RPC (regra dele).
+4. **Campanhas de reativação** — desenhadas, **nada disparado**: 368 fizeram
+   experimental e não matricularam, 173 faltaram, 884 famílias ativas
+   (indicação), 397 ex-alunos. ~R$ 0,34/pessoa por template oficial.
+5. **Ideias do Luciano ainda sem régua de decisão:** pausar mídia e fazer
+   sorteio (ele fala em R$ 7-8 mil/mês; eu meço R$ 4.947 no Meta — a diferença
+   deve ser Google), campanha de indicação, "reativar a Mila", newsletter só
+   para lead quente.
+
+⚠️ **Contexto que não pode se perder:** Instagram não passa pelo Chatwoot
+(bridge própria na la-hq); a Mila já é a remetente do relatório comercial nos 3
+grupos desde 03/09; PC5-PC9 estão medidos e versionados.
+
+---
+
 ## 💸 RASPAGEM DO TRÁFEGO PAGO (03/09) — **2º ANDAR · camada ESTRATÉGICA**
 
 Motivada por uma frase do Luciano: *"hoje eu tô muito cego porque o rapaz do
