@@ -95,3 +95,92 @@ arquivo não muda nada sem reiniciar). Conferido: `✅ WhatsApp connected!` e
 ⚠️ A pendência do Lucas seguia aberta (`public_preview_sent`, R$ 417 pix) com
 janela de **30 min desde o último toque** (22:23:45 UTC) — ou seja, expirava por
 volta de 22:53 UTC / 19:53 BRT. Depois disso, reenviar o comprovante.
+
+
+---
+
+# 2º episódio, mesma noite: "Sol, a parcela é 09/2026" → "Não entendi essa"
+
+```
+20:36  Mayra  reenvia o comprovante (o 1º card tinha expirado às 19:53)
+20:37  Sol    card com FATURA "Parcela 10/2026 ... vence 05/10"   ← competência errada
+20:38  Mayra  "Sol, a parcela é 09/2026"
+20:38  Sol    "Não entendi essa 🤔 ... escreve aluno: Nome Completo para eu corrigir"
+```
+
+## Por que a competência saiu errada — NÃO foi regressão do patch anterior
+
+Às 19:22 a fatura 09/2026 estava `aberta` e a Sol escolheu ela, **corretamente**.
+A ADM baixou o pagamento no Emusys e o espelho viu às **20:33:26** — 4 minutos
+antes do card. Nesse instante a 09 já constava `paga` mas **sem `valor_pago`
+propagado**, então não casava em nenhum ramo da cascata de
+`sol_caixa_parcela_canonica` (nem `valor_exato`, nem `atrasada`, nem
+`ja_consta_paga`), e a única com valor 417 era a 10/2026 → ramo `valor_exato` →
+competência do mês seguinte.
+
+Minutos depois a mesma RPC já devolve a 09/2026 com `motivo_escolha:
+valor_exato`. **É uma janela de propagação**, não defeito de código — e o
+conserto de verdade é o humano poder DIZER a competência.
+
+## Causa-raiz do "Não entendi" — duas, somadas
+
+**(a) Assimetria no bloco de correção.** Ele colhe o VALOR declarado no texto
+humano (`extrairValor(txt)`, adicionado em 31/08 pelo caso do OCR de R$ 387) e
+**não colhe a COMPETÊNCIA** — ela só era herdada da pendência
+(`let competencia = alvoP.competencia`). O humano podia corrigir o valor pelo
+texto e não a competência.
+
+**(b) O bloco só roda `if (nomeTardio && alvoP)`** — exige um NOME. *"a parcela
+é 09/2026"* não tem nome, então nem entrava.
+
+**E o fallback LLM também não alcançava:** `classificarCorrecaoPendencia` tinha
+as intenções `corrigir_aluno|categoria|valor|forma|sem_aluno|descartar|aprovar|nada`
+— **não existia `corrigir_competencia`, nem campo `competencia` na saída**. O
+classificador literalmente não tinha como expressar o que a Mayra disse.
+
+## Correção — sem gramática nova de diálogo
+
+1. **`_competenciaDitada`**: o bloco de correção colhe a competência do texto com
+   `extrairCompetenciaTexto`, do mesmo jeito que já colhe o valor. **Declaração
+   humana vence a fatura casada**: se a canônica trouxer outra competência, o
+   vínculo de fatura é **solto** (lançamento sem vínculo, mesma política da
+   contestação) em vez de gravar a fatura errada — sujar a carteira do aluno é
+   pior que não vincular. Log `competencia_ditada_vence_fatura`.
+2. **O classificador ganha `corrigir_competencia` + campo `competencia`**
+   (normalizado por `extrairCompetenciaTexto`, porque o modelo devolve
+   "09/2026", "9/26" ou "setembro").
+3. **A intenção vira frase que a gramática já entende:**
+   `parcela MM/AAAA aluno: <nome do card>`.
+
+⚠️ **A competência vem ANTES do rótulo.** Com `aluno: Nome parcela MM/AAAA` o
+captador de nome devolve **"Lucas Nunes de Salles parcela"** — a classe de
+caracteres dele não aceita dígito, então ele para no "09" e deixa a palavra
+colada. **O teste pegou isso antes de ir para produção.**
+
+Patch: `vps/la-hq/sol/scripts/_patch-corrigir-competencia-03set.py`
+Teste: `tests/sol-runtime/competencia-correcao.test.cjs` — **9/9**.
+⚠️ Ele usa `require` do módulo, não `eval` de função solta: extrair por regex
+arrasta dependência invisível (`_MES_NOME`, `BODY_SINTETICO`, `_UNIDADE_TAG`) e
+o teste quebra por motivo que não é o defeito.
+
+## Shadow V4 — terceiro acerto seguido
+
+| hora (UTC) | intenção | confiança | campos | legado |
+|---|---|---|---|---|
+| 23:38:32 | **`corrigir_competencia`** | **0,99** | `competencia: "09/2026"`, `entidade: "parcela"` | **`nada`** |
+
+O roteador **já tinha a intenção que o legado não tinha**. Três casos em duas
+noites (`corrigir_aluno` ×2 com nome certo, `corrigir_competencia` ×1) em que o
+shadow acerta e o runtime erra. ⚠️ E de novo a mesma lição: **o roteador estava
+certo e o dano veio da execução** — trocar o roteador não conserta o que está a
+jusante dele.
+
+## Pendente, medido e não corrigido
+
+🔴 **A janela de propagação continua aberta.** Fatura recém-baixada no Emusys,
+com `status = paga` e `valor_pago` ainda nulo, **cai fora de todos os ramos** da
+cascata — e a Sol avança para o mês seguinte **sem sinalizar incerteza**. O ramo
+`ja_consta_paga` existe mas exige `valor_pago` casando com o comprovante, que é
+exatamente o campo que ainda não chegou. Não corrigido: exigiria mexer em
+`sol_caixa_parcela_canonica`, que tem consumidores vivos, e o caminho humano
+agora existe.
