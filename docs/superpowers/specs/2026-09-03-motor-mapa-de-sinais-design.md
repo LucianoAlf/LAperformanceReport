@@ -49,48 +49,80 @@ presença — onde o cruzamento acontece). O espelho de conversas fica onde est�
 
 ## Modelo de dados
 
-### `sinais_aluno` (tabela-fato, append-only)
+### Decisão de identidade (corrigida em 03/09 após questionamento do Luciano)
+
+**A identidade canônica é sempre o ID da entidade — nunca o telefone.** O
+telefone é do ADULTO, não do menor, e é ambíguo por natureza. Medido:
+
+- **14% dos telefones apontam para 2+ alunos** (93 telefones com 2 pessoas, 21
+  com 3+) — mãe com dois filhos matriculados. Telefone identifica FAMÍLIA, não
+  aluno.
+- No espelho de conversas, o telefone só está disponível em **18%** dos
+  contatos ativos (`raw→sender→phone_number` nem sempre vem).
+- **O nome do contato do Chatwoot resolve muito melhor: 67%** dos contatos
+  ativos seguem o padrão que a equipe já usa — `"Adalberto RESP Lucas Cseko"`,
+  `"Alberto Aluno Barra"` — ou seja, **o aluno está escrito ali**. Testado
+  contra a base: **97% casam** e **91% com sobrenome confirmado** (similaridade
+  média 0,92), usando `sol_nome_mesma_pessoa_v1` (guarda de primeiro nome).
+- Bônus: o padrão captura FAMÍLIA explicitamente — `"Arthur, Lucas e Daniel
+  Siqueira"`, `"Amanda e Miguel Holanda"` — o que alimenta a regra R5 de graça.
+
+### Tabela `sinais` (polimórfica — sinal não é só de aluno)
+
+A pergunta do Luciano expôs uma limitação: existe sinal de **lead** (comercial),
+de **professor** (Akeem parado desde 21/08) e de **família/responsável**
+(engajamento), não só de aluno. Então:
 
 | coluna | tipo | nota |
 |---|---|---|
 | `id` | uuid pk | |
-| `aluno_id` | int fk alunos | **nullable** — sinal de conversa sem match fica com `pessoa_telefone` |
-| `pessoa_telefone` | text | só dígitos, últimos 8 para casar |
-| `unidade_id` | uuid | sempre preenchido (rota do alerta) |
-| `tipo_sinal` | text | ver catálogo abaixo |
+| `entidade_tipo` | text | `aluno` \| `lead` \| `professor` \| `familia` |
+| `entidade_id` | bigint | **FK lógica para a tabela do tipo** — a chave é sempre o ID |
+| `unidade_id` | uuid | rota do alerta |
+| `tipo_sinal` | text | catálogo abaixo |
 | `severidade` | text | `info` \| `atencao` \| `alto` \| `critico` |
 | `origem` | text | `sql_presenca` \| `sql_renovacao` \| `sql_financeiro` \| `llm_conversa` \| `semaforo` \| `fabio` |
-| `canonico` | bool | **false = observacional** (não alerta, não pontua) |
-| `evidencia` | text | a frase real / o número que originou |
-| `evidencia_ref` | jsonb | `{conversa_id, mensagem_id, data_aula, fatura_id...}` |
-| `detectado_em` | timestamptz | |
-| `competencia` | date | mês de referência |
-| `chave_dedup` | text | **unique** — `tipo\|aluno\|janela` |
+| `canonico` | bool | false = observacional (não alerta, não pontua) |
+| `evidencia` | text | a frase real / o número |
+| `evidencia_ref` | jsonb | `{conversa_id, mensagem_id, data_aula, fatura_id, contato_id...}` |
+| `identificacao` | jsonb | **como chegamos na entidade** — `{metodo, confianca, nome_bruto}`; auditoria do match |
+| `detectado_em` / `competencia` | | |
+| `chave_dedup` | text unique | `tipo\|entidade_tipo\|entidade_id\|janela` |
 | `status` | text | `aberto` \| `triado` \| `em_acao` \| `resolvido` \| `improcedente` \| `expirado` |
 | `triado_por` / `triado_em` | | guardiã |
-| `tarefa_externa_id` | uuid | id no TOM (F5) |
-| `desfecho` | text | `reteve` \| `saiu` \| `sem_acao` \| `falso_positivo` |
-| `desfecho_em` | timestamptz | |
-| `regra_versao` | text | qual versão da regra gerou (auditoria do aprendizado) |
+| `tarefa_externa_id` | uuid | id no TOM (M7) |
+| `desfecho` / `desfecho_em` | | `reteve` \| `saiu` \| `sem_acao` \| `falso_positivo` |
+| `regra_codigo` / `regra_versao` | | auditoria do aprendizado |
 
-Índices: `(aluno_id, status)`, `(unidade_id, detectado_em)`, `(tipo_sinal,
-detectado_em)`, unique em `chave_dedup`.
+⚠️ **Sinal sem entidade resolvida NÃO é gravado como aluno**: vira
+`entidade_tipo='familia'` com o `contato_id` do Chatwoot em `evidencia_ref`.
+Melhor um sinal de família honesto que um sinal no aluno errado.
 
-### `sinais_regras` (o motor é configurável, não hardcoded)
+### `sinais_identidade` (resolução em CASCATA, com o ID como destino)
 
-`codigo` (R1..R12), `descricao`, `origem`, `severidade_padrao`, `canonico`,
-`ativo`, `params jsonb` (limiares), `lastro` (o dado que a fundamentou),
-`criada_em`, `promovida_em`, `taxa_improcedencia` (calculada), `versao`.
+Cache de `contato_id` (Chatwoot) → entidade. Preenchido pela cascata, do mais
+forte ao mais fraco — e **para no primeiro que resolve**:
 
-**Semente = as 12 regras do documento vivo.** Alterar limiar é UPDATE, não
-deploy.
+1. **Vínculo já conhecido** (`admin_conversas.aluno_id`, `leads.chatwoot_*`) —
+   confiança 1.0.
+2. **Nome do contato com padrão RESP/Aluno** + `sol_nome_mesma_pessoa_v1` +
+   **sobrenome confirmado** — confiança 0.9 (medido: 91%).
+3. **Telefone → aluno único** (só quando o telefone aponta para 1 pessoa) —
+   confiança 0.8.
+4. **Telefone → 2+ pessoas** → `entidade_tipo='familia'`, com os alunos
+   candidatos listados. **Nunca escolhe um.** — confiança 0.5.
+5. Nada resolve → sinal fica sem entidade, agregado, fora de tarefa.
 
-### `sinais_pessoa_match` (cache do casamento telefone→aluno)
+Colunas: `contato_id` pk, `entidade_tipo`, `entidade_id`, `confianca`,
+`metodo`, `nome_bruto`, `candidatos jsonb`, `revisado_por` (humano pode
+corrigir e a correção é definitiva), `atualizado_em`.
 
-`telefone8` (pk), `aluno_id`, `pessoa_nome`, `confianca`, `metodo`
-(`telefone_aluno` \| `telefone_responsavel` \| `nome_fuzzy`), `atualizado_em`.
-⚠️ O match por nome usa **`sol_nome_mesma_pessoa_v1`** (guarda de primeiro
-nome) — nunca `word_similarity` cru.
+### `sinais_regras`
+
+`codigo` (R1..R12), `descricao`, `origem`, `entidade_tipo`,
+`severidade_padrao`, `canonico`, `ativo`, `params jsonb` (limiares), `lastro`,
+`versao`, `taxa_improcedencia` (calculada do desfecho).
+**Semente = as 12 regras do documento vivo.** Mudar limiar é UPDATE, não deploy.
 
 ## Catálogo de sinais (v0)
 
@@ -179,7 +211,7 @@ em CG".
 
 | Fase | Entrega | Aceite |
 |---|---|---|
-| **M1** | `sinais_aluno` + `sinais_regras` (12 sementes) + `sinais_pessoa_match` + RPC de match | match ≥90% dos telefones do espelho resolvidos; RLS e grants conferidos (`proacl` sem `anon`) |
+| **M1** | `sinais` (polimórfica) + `sinais_regras` (12 sementes) + `sinais_identidade` + RPC da cascata | ≥90% dos contatos ativos resolvidos com sobrenome confirmado; **zero** contato ambíguo resolvido como aluno único; RLS e grants (`proacl` sem `anon`) |
 | **M2** | D1 (detector SQL) + cron | roda idempotente; **backfill de agosto reproduz a necropsia** (30 de 39 em CG com freq<50%) |
 | **M3** | `vw_mapa_sinais_aluno` | os 16 alunos do piloto aparecem com os mesmos sinais que apurei à mão |
 | **M4** | D2 (extrator LLM) + backfill 30d | encontra o caso Théo (cancelamento declarado 15/08) e ≥80% dos 42 avisos de doença |
