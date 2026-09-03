@@ -425,3 +425,39 @@ quê. Primeira execução: **40 detectados, 5 suprimidos**.
 **Lição de método:** um sinal certo com a orientação errada é pior que não ter
 sinal. Antes de qualquer entrega à equipe, todo sinal precisa passar pela
 pergunta *"esta pessoa já não está em outra situação que muda a conversa?"*.
+
+## ✅ CAMADA DE ENTREGA (03/09) — a saída da inércia
+
+**Divisão por agente (definida pelo Luciano):**
+
+| Agente | Camada | Fala com | Leva |
+|---|---|---|---|
+| **Sol** | operacional | secretarias / ADM | cliente sem resposta, doença avisada, reposição pendente, promessa não cumprida — o dia a dia |
+| **Lia** | estratégica | guardiãs (Fabi, Jessy) | risco, renovação, família, aviso prévio — o que exige decisão |
+| **Mila** | comercial | consultoras | lead esperando (depende do extrator) |
+
+`radar_destinatarios` (quem recebe o quê, canal DM ou grupo, teto por turno) +
+`radar_entregas` (log com idempotência por destinatário+sinal+turno) +
+`radar_pauta_v1(agente)` que monta a mensagem pronta no tom de cada camada.
+
+⚠️ **Nasce tudo `ativo=false`** — nenhum alerta sai sem o Luciano aprovar o texto.
+
+### 🔴 O erro que o primeiro teste pegou
+
+A pauta saiu com **142 casos numa mensagem só** para a Fabi. Isso não é pauta,
+é despejo — e é exatamente o ruído que mata a confiança no primeiro dia (o mesmo
+erro que deixou o Painel Farmer vazio). Corrigido: **teto de 8 por turno**,
+prioridade por severidade → **urgência real em dias** → mais antigo, e rodapé
+dizendo *"mais 134 na fila"*. **Nunca truncar em silêncio.**
+
+### P7 — O benchmark da Barra (aprender com quem acerta)
+
+Churn de 3 meses: **Barra 7,1% · Recreio 14,2% · CG 18,0%**. O Arthur, sozinho,
+perde metade do Recreio. E o atendimento explica parte: ele fez **2 promessas de
+retorno em 30 dias e cumpriu as 2**; a Vitoria fez 38 e deixou 8 sem retorno.
+**Hipótese: resolver no primeiro contato vale mais que prometer voltar depois** —
+e "resposta seca" pode ser eficiência, não frieza. Virou a estratégia E9 (levar
+a prática ao Recreio e CG com os números na mesa).
+
+Isso responde ao pedido do Luciano: o 2º andar também aprende com o ACERTO, não
+só com o erro.

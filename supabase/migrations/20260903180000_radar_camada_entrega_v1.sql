@@ -1,0 +1,30 @@
+-- MAPA DE SINAIS — CAMADA DE ENTREGA (03/09/2026). O que tira da inércia.
+-- Aplicado via MCP: radar_benchmark_barra_p7, radar_camada_entrega_v1,
+-- radar_pauta_rpc_v1, radar_pauta_teto_e_prioridade
+--
+-- DIVISÃO DEFINIDA PELO LUCIANO:
+--   SOL  = OPERACIONAL -> secretarias/ADM (dia a dia: cliente sem resposta,
+--          doença avisada, reposição pendente, promessa não cumprida)
+--   LIA  = ESTRATÉGICA -> guardiãs Fabi e Jessy (risco, renovação, família,
+--          aviso prévio — o que exige decisão e delegação)
+--   MILA = COMERCIAL -> consultoras (lead esperando)
+--
+-- radar_destinatarios: quem recebe o quê, por qual canal (dm|grupo), com teto.
+--   ⚠️ Nasce ativo=false. Nenhum alerta sai sem OK humano no texto.
+-- radar_entregas: log com idempotência por (destinatário, sinal, turno) —
+--   ninguém é cobrado duas vezes do mesmo caso no mesmo turno.
+-- radar_pauta_v1(agente, registrar): monta a mensagem pronta por destinatário.
+--
+-- 🔴 CORREÇÃO DO PRIMEIRO TESTE: a pauta saiu com 142 casos numa mensagem só
+-- para a Fabi. Isso é despejo, não pauta — e é o ruído que mata a confiança no
+-- primeiro dia (mesmo erro que deixou o Painel Farmer vazio). Corrigido com
+-- TETO de 8 por turno + prioridade (severidade > urgência real em dias > mais
+-- antigo) + rodapé dizendo quantos ficaram na fila. Nunca truncar em silêncio.
+--
+-- P7 BENCHMARK (pedido do Luciano — aprender com quem vai BEM):
+--   Churn 3 meses: Barra 7,1% x Recreio 14,2% x CG 18,0%. O Arthur, sozinho,
+--   perde METADE do Recreio. E o dado de atendimento explica parte: ele fez 2
+--   promessas de retorno em 30 dias e cumpriu as 2 (Vitoria fez 38 e deixou 8
+--   sem retorno). Hipótese: RESOLVER NO PRIMEIRO CONTATO vale mais que prometer
+--   voltar depois — e "resposta seca" pode ser eficiência, não frieza.
+--   E9: levar essa prática ao Recreio e a CG, com os números na mesa.
