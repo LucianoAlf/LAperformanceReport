@@ -10,6 +10,59 @@
 > motor não existe; ele não é o produto, é a prova de que a última milha
 > funciona.
 
+## 🔴 AUDITORIA DO BANCO (03/09) — GRANDE PARTE DISSO JÁ EXISTE
+
+O Luciano mandou auditar antes de construir (regra DRY da casa). **Achado: ~60%
+do motor já foi construído — e está abandonado.** O plano muda de "construir"
+para "ligar, completar e alimentar".
+
+### O que existe e está VIVO
+
+| Artefato | Estado | O que já faz |
+|---|---|---|
+| **`vw_radar_aluno_sinais_canonica_v2`** (`radar-aluno-sinais-v2.1`) | **305 alunos, viva** | É o detector SQL que eu ia escrever — e melhor: coorte de professores com login, janela das últimas 10 aulas, absenteísmo %, **faltas consecutivas**, semáforo + prática + evolução + ânimo + observação, **avisou_que_sai** (aviso prévio), e **guarda de frescor** (`estado_publicacao`: só publica número se a presença está sincronizada) — a proteção anti-ruído que eu ia "inventar". Tem `regra_versao` e RLS correta. |
+| **`vw_farmer_renovacoes_proximas`** | 56 linhas | Renovação com dias para vencer + **urgência** + whatsapp + professor. Eu refiz isso na mão ontem. |
+| `vw_farmer_inadimplentes` / `_novos_matriculados` / `_aniversariantes_hoje` / `_resumo_alertas` | 17 / 21 / vivo / 3 | Alertas por unidade já agregados |
+| **`farmer_tarefas`** | tabela **VAZIA** | Colunas: `colaborador_id, unidade_id, descricao, data_prazo, prioridade, aluno_id, contexto, sla_em, **desfecho**, **origem_alerta**, concluida...` — **é exatamente a camada de ação que eu especifiquei**, com desfecho e origem do alerta |
+| **Painel Farmer** (`src/components/App/Administrativo/PainelFarmer/`) | **roteado e no ar** | Dashboard + `useAlertas` + `useTarefas` (CRUD em farmer_tarefas) + `useChecklists` |
+| `app_coordenacao_radar`, `fn_radar_nota(sinais, config)`, `app_radar_config` | funções vivas | Radar com **pesos configuráveis** e nota |
+| `calcular_health_score_aluno` + `_v2_sombra` + `_batch` | funções vivas | Score do aluno |
+| `vw_alertas_inteligentes` | 17 linhas | Alertas de gestão |
+| `lia_alertas_privados` + edge + claim atômico | infra viva, **2 linhas** | Canal de alerta privado |
+
+### Por que não funciona hoje (o gap REAL)
+
+1. **`farmer_tarefas` está vazia** — o painel existe, ninguém usa. Alerta que
+   depende de alguém ABRIR a tela não vira ação. Falta **entrega proativa**.
+2. **O radar não está no front do LA Report** (só no `database.types.ts`) — é
+   motor sem tela e sem consumidor.
+3. **Nada persiste como evento**: o radar é VIEW = foto de agora. Sem histórico,
+   sem desfecho, sem acumular aprendizado. É a peça que falta de verdade.
+4. **Zero sinal de CONVERSA** — nenhum dos artefatos lê WhatsApp. Cancelamento
+   declarado, promessa não cumprida, vácuo, doença e reposição continuam
+   invisíveis (o caso Théo passaria batido por TODO o sistema atual).
+5. **`config_health_score_aluno` e `alunos_health_score_historico` vazias** — o
+   score na tela sai sem motor (Health 0 + badge "Saudável").
+6. **A view canônica do radar estoura o `statement_timeout` de 8s** — não
+   aguenta ser consumida por tela nem por cron sem otimização.
+
+### O plano corrigido (reusar > construir)
+
+- **D1 (detector SQL) ≈ PRONTO**: usar `vw_radar_aluno_sinais_canonica_v2` como
+  fonte, **não** escrever detector novo. Falta: performance + estender para
+  renovação/inadimplência/risco (que já estão nas views farmer).
+- **Camada de ação ≈ PRONTA**: `farmer_tarefas` já tem `desfecho` e
+  `origem_alerta`. **Não criar tabela de tarefa.** O TOM continua sendo M7 para
+  a cobrança, mas o registro do trabalho das guardiãs é aqui.
+- **Tela ≈ PRONTA**: estender o Painel Farmer, não criar outro.
+- **O que é REALMENTE novo:** (a) `sinais` como **evento persistido** com
+  desfecho — o "filme" que o radar (foto) não tem; (b) o **extrator LLM de
+  conversas**; (c) a **entrega proativa** (Sol/Lia empurrando, em vez de tela
+  passiva); (d) o **loop de aprendizado** ligando desfecho → regra.
+
+⚠️ **Lição registrada:** eu ia reescrever detector, tabela de tarefa e view de
+renovação que já existiam. A auditoria do Luciano economizou as três.
+
 ## Problema
 
 Os sinais existem, vivos, em 4 bancos e 6 fontes — e **nenhum se encontra com o
