@@ -69,6 +69,74 @@ da unidade** (a Mila detecta e entrega, não age sozinha); a fatia `historico`
 alimenta primeiro (a) o motivo de saída que morreu na conversa e (b) a necropsia
 mensal.
 
+### ✅ VERTICAL COMERCIAL COMPLETA (03/09, PR #306) — alicerce + 3 andares
+
+Tudo **desligado** (Fase 0). Dono do sinal: **consultora da unidade**.
+
+| andar | o que ficou pronto |
+|---|---|
+| **Alicerce** | `vw_jornada_lead_v1` — entrada → atendimento → experimental → desfecho |
+| **1º** | R15 / R16 / R17 + `radar_detectar_sinais_comercial_v1` (363 sinais) |
+| **2º** | `radar_padroes` PC1-PC4 + `radar_estrategias` EC1-EC4 |
+| **3º** | 3 consultoras em `radar_destinatarios`; `radar_pauta_v1` filtra fatia |
+
+⚠️ **`vw_leads_comercial` NÃO é a jornada.** Tem 50 colunas e todos os marcos,
+mas a última linha é `WHERE l.status <> 'convertido' OR l.status IS NULL` — ela
+**exclui os convertidos por construção**. Medi `converteu = 0` em 2.491 leads de
+90 dias enquanto `leads` mostrava **211 conversões** no mesmo período. É lista de
+trabalho, não jornada.
+
+⚠️ **A etapa é derivada de FATO, nunca de `leads.status`** — o vocabulário
+derivou e quatro valores vivos caem no `ELSE` da view antiga.
+
+⚠️ **`data_primeiro_contato`, `data_ultimo_contato` e `data_passagem_mila` são
+TIMESTAMPTZ**, convertidos em BRT antes de virar `date`.
+⚠️ **`data_passagem_mila` está ZERADA** — campo morto.
+
+**Dimensionamento antes de criar regra** (a disciplina que evita a lista de 142):
+
+| balde | casos | destino |
+|---|---|---|
+| novo sem 1º contato >2d | **0** | regra **descartada**, sem lastro |
+| exp. agendada já passou | 103 | R16 |
+| **exp. REALIZADA sem desfecho >3d** | **179** | **R15** |
+| faltou e ninguém remarcou | 81 | R17 |
+| parado 7-30d | 605 | fora do 1º andar |
+| parado >30d | **2.148** | **fora — cemitério, não lista de trabalho** |
+
+⚠️ **Viés no lastro do R16:** 93 dos 103 são de CG. 90% numa unidade é assinatura
+de **processo** (CG não atualiza status pós-aula), não de oportunidade.
+
+#### O padrão que muda a conversa (PC1)
+
+**A conversão de quem FAZ a aula é igual em todos os canais: 40,8% a 50,5%.**
+O que muda é **chegar até ela**:
+
+| canal | leads | % que chega à experimental | conv. de quem fez a aula |
+|---|---|---|---|
+| Indicação | 168 | **77,4%** | 48,1% |
+| Visita/Placa | 151 | 74,8% | 50,5% |
+| Ex-aluno | 28 | 50,0% | **68,2%** |
+| Google | 1.166 | 13,1% | 45,8% |
+| **Instagram** | **2.998** | **9,6%** | 40,8% |
+| Site | 86 | 1,2% | **0%** |
+
+O professor e a aula estão fazendo o trabalho deles — **o funil vaza antes**.
+PC4: o canal **Site** tem 86 leads e **zero** conversões; não é taxa baixa, é
+ausência, o que aponta defeito e não mercado.
+
+#### Erro meu que o ensaio pegou
+
+Ordenei a pauta comercial por "mais parado primeiro" e a mensagem abriu com
+*"113 dias sem desfecho"*. **Retenção ordena por prazo apertando; comercial
+ordena por FRESCOR** — lead de 113 dias está frio, o de 3 dias é onde está a
+conversão. Corrigido, passou a abrir com 6 e 7 dias.
+
+Outros dois defeitos que a fatia comercial expôs na `radar_pauta_v1`: ela não
+filtrava domínio (um destinatário da Sol com R8 pegaria o R8 comercial) e **não
+resolvia nome de lead** (havia join com `alunos` e `professores`, não com
+`leads`), então todo sinal comercial sairia sem nome.
+
 ### Alicerce
 
 | Passo | Estado | Onde está |
