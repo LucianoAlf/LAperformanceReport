@@ -158,3 +158,21 @@ há apenas `dados_mensais` (~12 campos).
 
 ⚠️ O espelho `emusys_faturas` cobre apenas as competências sincronizadas (a partir de
 jun/2026) — número de faturas vencidas é **piso, não valor exato**. Ver `CLAUDE.md`.
+
+⚠️ **Os cartões do topo contam a VISÃO, não a competência (desde 2026-09-03, LAPE-22).** Eles
+são o seletor de situação — facetas — e passaram a somar `itemsDaVisao`, o recorte de
+tipo/curso/forma/professor/busca **sem** a situação (aplicá-la ali zeraria os outros quatro
+assim que um fosse escolhido). Quando há filtro, o cartão mostra o total da competência como
+linha secundária. Antes eles liam `state.totals` direto e contradiziam a lista: com
+`tipo=parcela` em CG/ago-2026 a tabela dizia "394 faturas nesta visão" e o cartão seguia em
+480 / R$ 166.223,59.
+⚠️ **`p_status` não vai mais ao servidor** (`situacao: 'todas'` fixo). A RPC filtra os `items`
+por ele, então ao escolher "Pagas" o cliente recebia só as pagas e não teria linhas para somar
+as outras quatro situações. Com `'todas'` vem o CTE `itens_normais` inteiro — que é
+exatamente o conjunto sobre o qual a RPC calcula os totais, e é o que garante paridade da soma
+local (medido: 480 / R$ 166.223,59 nos dois). Efeito: trocar de cartão não tem round-trip, e a
+página sempre carrega o payload completo da competência.
+⚠️ **Valor da fatura vem de `valorPrincipalDaFatura()`** (`@/lib/faturasAlunosFinanceiras`) —
+`paga → valor_pago`, senão `valor_hoje`. A regra já esteve copiada em 6 lugares e em dois tipos
+de item (o de reconciliação tem `status` string livre, daí a tipagem estrutural). Consumidor
+novo lê dali: a soma do cartão e a célula da linha têm que sair da mesma fonte.
