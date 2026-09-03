@@ -137,6 +137,52 @@ filtrava domínio (um destinatário da Sol com R8 pegaria o R8 comercial) e **n�
 resolvia nome de lead** (havia join com `alunos` e `professores`, não com
 `leads`), então todo sinal comercial sairia sem nome.
 
+### 🔎 RASPAGEM COMERCIAL (03/09, noite) — o que existe no banco para a Mila
+
+Pedido do Luciano: *"a gente tem mais informações para a Mila que você ainda não
+encontrou; sai à procura e faz uma raspagem do que a gente tem"*. Feito. O que
+existe, o que está vivo e o que está morto:
+
+| fonte | estado | serve para |
+|---|---|---|
+| **Chatwoot Mila (147/148/155) via espelho SOL** | ✅ **vivo desde hoje** — 221 msgs / 60 conversas no 1º dia | calor do lead, tempo até humano, preso no bot |
+| `assignee` no espelho | ✅ 100% preenchido | **distingue bot ("Milla CG") de consultora** — é o discriminador do "preso no bot" |
+| `instagram_sessoes` | ✅ espelhado hoje | interesse, estágio, 50 paradas no funil |
+| `leads` + `vw_jornada_lead_v1` | ✅ | marcos do funil, desfecho |
+| `meta_ads_cache` + `leads.meta_ad_source_id` | ✅ 977 leads com anúncio | qual criativo trouxe o lead |
+| `mensagens_campanha` (11 mil) | ⚠️ **poluído** | ver abaixo |
+| `agente_conversas.session_data` | ⚠️ | `lead_name` guarda a **1ª mensagem**, não o nome (bug do bot) — mas entrega a intenção crua |
+| `crm_lead_historico.desinteresse_frio` | ⚠️ fraco | 41 de 60 são `sem_sinal` (abstenção) |
+| **`leads.temperatura / qtd_mensagens_mila / qtd_tentativas_sem_resposta / qtd_desmarcacoes / chatwoot_conversation_id`** | 🔴 **MORTOS** | 100% default/zero/null nos 2.740 leads de 90d — foram desenhados e nunca alimentados |
+| `leads.etapa_pipeline_id` | 🔴 parcialmente morto | etapa 2 "Mila (SDR Bot)" e 4 "Em Contato" têm **zero** leads — o bot não move o pipeline |
+| **Métricas de Meta Ads (gasto, CTR, custo/conversa)** | 🔴 **NÃO PERSISTIDAS** | a página de Tráfego Pago é 100% ao vivo pela Graph API; só existe quando alguém abre. **Sem histórico = o 2º andar não aprende sobre anúncio** |
+
+🔴 **As "86 respostas / 11%" da campanha de WhatsApp são majoritariamente
+bot-para-bot.** Dos 4.978 textos inbound em 60 dias, **4.571 (92%) são
+auto-resposta de OUTRA empresa** — "Central de Ajuda: serasa.me", "Em 5 minutos
+vamos encerrar esta conversa por inatividade", "Desculpe, aconteceu um problema
+ao processar". O disparo acertou número que é de bot corporativo, o bot
+respondeu, e `campanha_contatos.respondeu = true` contou como resposta. **A
+taxa real de resposta humana é ~8% do que o painel mostra.**
+
+**Calor medido no 1º dia do espelho (60 conversas comerciais em 2 dias):**
+
+| | |
+|---|---|
+| quentes (pediu preço / quer agendar / falou em matrícula) | **10** |
+| quentes **ainda presas no bot** | 3 |
+| quentes com cliente falando por último há **>30 min** | 4 |
+| **intenção de matrícula declarada** | 2 |
+| passaram pelo bot e **nunca chegaram a humano** | **11 de 16** |
+| mediana até o bot responder | 0 min |
+| mediana até um **humano** responder (quem chegou) | **51 min** |
+
+Exemplos reais de hoje (o alerta que vai existir):
+> *"Gostaria de matricular minha filha"* — 139 min, última palavra do cliente, atribuído a **secretária**, não à consultora
+> *"Semana que vem volto aí pra fazer minha matrícula"* — com a Vitória ✓
+> Jullyane, casal, teclado + bateria, 11 mensagens — *"estarei no aguardo do retorno"* há 34 min
+> Tamara, filho de 3 anos, bateria, pediu valor — **ainda com o bot** há 6 min
+
 ### Alicerce
 
 | Passo | Estado | Onde está |

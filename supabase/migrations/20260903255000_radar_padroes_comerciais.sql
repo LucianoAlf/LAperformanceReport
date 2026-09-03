@@ -1,18 +1,17 @@
--- 2o ANDAR da vertical COMERCIAL — padroes MEDIDOS, nenhum chutado.
---
--- Metodo: vw_jornada_lead_v1, leads com entrada entre D-180 e D-14 (a carencia
--- de 14 dias existe para o desfecho maturar), canais com n >= 25.
---
--- O achado central (PC1): a conversao de quem FAZ a aula e parecida em todos os
--- canais (40,8% a 50,5%) e o que muda brutalmente e CHEGAR ate a aula (77,4% na
--- Indicacao contra 9,6% no Instagram). O professor e a aula estao fazendo o
--- trabalho deles; o funil vaza ANTES.
+-- 2o ANDAR da vertical COMERCIAL — padroes MEDIDOS sobre vw_jornada_lead_v1
+-- (leads entre D-180 e D-14, canais com n>=25).
+-- PC1 e o achado central: conversao de quem FAZ a aula e igual em todos os
+-- canais (40,8%-50,5%); o que muda e CHEGAR ate ela (77,4% Indicacao vs 9,6%
+-- Instagram). O funil vaza ANTES da aula.
+-- ⚠️ PC4 CORRIGIDO pelo Luciano (03/09): "Site" e como o time rotula a landing
+-- page do Google — nao e canal, e rotulo. A leitura "Site esta morto" era
+-- artefato. Google unificado: 1.252 leads, 12,3% agendam, 45,4% conv pos-aula.
 insert into public.radar_padroes
   (codigo, titulo, pergunta, aprendizado, amostra_n, taxa_evento, taxa_base, lift, janela_dias, periodo_medido, confianca, metodo, ativo, versao)
 values
 ('PC1', 'O gargalo não é a aula — é chegar até ela', 'A diferença de conversão entre canais está na qualidade da aula experimental ou no caminho até ela?', 'A conversão de quem FAZ a aula é parecida em TODOS os canais: 40,8% a 50,5% (Instagram 40,8 · Google 45,8 · Indicação 48,1 · Visita 50,5). O que muda brutalmente é a taxa de CHEGAR à aula: 77,4% na Indicação contra 9,6% no Instagram. Ou seja, o professor e a aula estão fazendo o trabalho deles; o funil vaza ANTES. Investir em melhorar a experimental muda pouco; investir em levar o lead até ela muda tudo.', 4247, '0.41', '0.51', '0.81', 166, '2026-03-07 a 2026-08-20', 'alta', 'vw_jornada_lead_v1, leads com entrada entre D-180 e D-14 (janela de carencia para o desfecho maturar), canais com n>=25', true, 'v1'),
 ('PC2', 'O Instagram traz 63% do volume e perde 90% antes da aula', 'Onde exatamente o maior canal está vazando?', 'Instagram: 2.998 leads (63% de todo o volume), 287 agendaram experimental (9,6%), 191 realizaram, 78 converteram (2,6% do total). Quem faz a aula converte a 40,8%, quase igual aos outros canais. Traduzindo: de cada 100 leads do Instagram, 90 somem antes de pisar na escola. Um ganho de 5 pontos na taxa de agendamento do Instagram vale mais que qualquer melhoria na aula.', 2998, '0.10', '0.77', '0.12', 166, '2026-03-07 a 2026-08-20', 'alta', 'vw_jornada_lead_v1; taxa_evento = % que chega a experimental no Instagram, taxa_base = mesma taxa na Indicacao (melhor canal)', true, 'v1'),
 ('PC3', 'Ex-aluno é o melhor lead que existe — e ninguém trabalha isso', 'Vale a pena reativar quem já estudou aqui?', 'Ex-aluno converte 68,2% de quem faz a aula, contra 40-50% de todos os outros canais, e 53,6% no geral. É a MAIOR taxa de todas. E o volume é ridículo: 28 leads em 166 dias, contra 2.998 do Instagram. A escola tem uma base de ex-alunos que não é prospectada — e a fatia `historico` do radar existe justamente para saber quem são e por que saíram.', 28, '0.68', '0.41', '1.67', 166, '2026-03-07 a 2026-08-20', 'media', 'vw_jornada_lead_v1, canal_origem = Ex-aluno; confianca MEDIA porque n=28 e pequeno — o efeito e grande mas o intervalo e largo', true, 'v1'),
-('PC4', 'O canal Site está morto', 'O site gera matrícula?', '86 leads em 166 dias, 1 agendou experimental (1,2%), ZERO converteram. Não é taxa baixa: é ausência de conversão. Ou o formulário do site está quebrado, ou o lead que chega por ali não é trabalhado, ou a origem está sendo gravada errada. Qualquer das três é problema de operação, não de mercado — e custa pouco para descobrir qual.', 86, '0.00', '0.03', '0.00', 166, '2026-03-07 a 2026-08-20', 'alta', 'vw_jornada_lead_v1, canal_origem = Site; taxa_base = conversao do Instagram (pior canal com volume)', true, 'v1')
+('PC4', 'Site e Google são o mesmo canal — e juntos sobem para 12,3% de agendamento', 'O canal "Site" gera matrícula? (correção: Site É Google)', 'CORRIGIDO pelo Luciano em 03/09: "Site" é como o time rotula a landing page que roda no Google — não é canal separado, é variante de rótulo. Somando os dois: Google (site + ads) = 1.252 leads, 12,3% chegam à experimental, 45,4% de quem faz a aula converte, 3,5% no geral. Continua valendo o PC1: a conversão pós-aula (45,4%) é parecida com os demais canais; o que separa Google de Indicação (77,4%) é o caminho até a aula. A leitura anterior ("Site está morto, zero conversões") era artefato de rótulo, não de mercado.', 1252, '0.12', '0.77', '0.16', 166, '2026-03-07 a 2026-08-20', 'alta', 'vw_jornada_lead_v1 com canal_origem in (Site, Google) unificados; leads entre D-180 e D-14', true, 'v2')
 on conflict (codigo) do update
   set titulo=excluded.titulo, pergunta=excluded.pergunta, aprendizado=excluded.aprendizado, amostra_n=excluded.amostra_n, taxa_evento=excluded.taxa_evento, taxa_base=excluded.taxa_base, lift=excluded.lift, janela_dias=excluded.janela_dias, periodo_medido=excluded.periodo_medido, confianca=excluded.confianca, metodo=excluded.metodo, versao=excluded.versao, medido_em=now();
