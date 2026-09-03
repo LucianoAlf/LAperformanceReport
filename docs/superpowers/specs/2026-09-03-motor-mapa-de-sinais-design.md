@@ -494,3 +494,69 @@ fica o rastro). Prova após redetectar: **vazamento = 0**.
 
 ⚠️ **Lição:** guarda em cada consumidor é contenção; guarda no ponto de entrada
 é raiz. Foi a mesma lição do `sol_nome_mesma_pessoa_v1` no caixa.
+
+## 3º ANDAR — Ações pró-ativas e execução idempotente (plano operacional)
+
+Conceito trazido pelo Luciano: na camada de execução o sistema deixa de ser
+reflexivo e passa a **disparar efeitos reais**. O risco clássico é o disparo
+repetido (cron rodando 2x, retentativa de rede, reavaliação da mesma condição).
+A **idempotência é a trava arquitetural** desse andar.
+
+### O plano: quando, onde, para quem
+
+| Horário (BRT) | Job | Agente | Canal | Conteúdo | Idempotência |
+|---|---|---|---|---|---|
+| **06:00** | `radar-detectar-sinais-diario` | — | — | detector SQL + aviso prévio | `chave_dedup` única por (regra, entidade, janela) |
+| **07:00** | *(F4)* extrator de conversas | — | — | contexto do WhatsApp | mesma chave + hash da mensagem |
+| **09:00** | `radar-pauta-lia-manha` | **Lia** | DM | até 8 casos estratégicos p/ Fabi e Jessy | `radar_entregas.chave_idem` = destinatário+sinal+turno |
+| **09:30** | *(existente)* presença pendente | **Sol** | grupo | chamada não fechada de ontem | fila `fila_relatorios_sol_hermes` |
+| **11:00** | `radar-pauta-sol-operacional` | **Sol** | grupo | cliente sem resposta, doença, reposição | mesma chave, turno "manhã" |
+| **16:00** | `radar-pauta-lia-tarde` | **Lia** | DM | fila que sobrou + novos críticos | turno "tarde" |
+| **17:00** | `radar-pauta-mila` | **Mila** | DM | lead esperando resposta | turno "tarde" |
+| **1º do mês** | `radar-fechamento-mensal` | **Lia** | DM | o que precedeu as saídas do mês | 1x por competência |
+
+**Três camadas de idempotência (defesa em profundidade):**
+1. **Detecção** — `radar_sinais.chave_dedup` UNIQUE: o mesmo sinal não nasce
+   duas vezes na mesma janela. Provado: 2ª execução do detector = 0 inserções.
+2. **Entrega** — `radar_entregas.chave_idem` = `destinatário|sinal|turno`:
+   ninguém é cobrado do mesmo caso duas vezes no mesmo turno.
+3. **Ação** — quando virar tarefa no TOM, `radar_sinais.tarefa_id` guarda o id:
+   sinal com tarefa aberta não gera outra.
+
+⚠️ Isso importa mais aqui do que em outros projetos: **1 disparo de cron vira
+2-4 execuções** neste ambiente (documentado no CLAUDE.md). Sem as três camadas,
+a Fabi receberia a mesma lista 3x às 9h.
+
+### Rollout — nada sai de uma vez
+
+**Fase 0 (agora, dias 1-3):** tudo `ativo=false`. O detector roda, os sinais
+acumulam, e eu leio a pauta que SERIA enviada. Mede volume real e ruído sem
+tocar em ninguém.
+**Fase 1 (dia 4):** liga só a **Lia para a Fabi**, 1x/dia às 9h, teto 5.
+Observa 3 dias: o que ela trata, o que dispensa.
+**Fase 2:** entra a Jessy, e a Lia passa a 2x/dia.
+**Fase 3:** entra a **Sol operacional** nos grupos — só depois que a taxa de
+improcedência da Lia estiver medida.
+**Fase 4:** Mila comercial e tarefa automática no TOM.
+
+⚠️ A Fase 0 é o que o Luciano pediu: *"não pode sair soltando de uma vez"*.
+
+## 🔴 Os crons da Lia que falhavam há dias (03/09)
+
+Diagnóstico dos erros que chegavam no Telegram e ninguém lia:
+
+| Cron | Erro | Causa real | Status |
+|---|---|---|---|
+| `checkin-15-dias-diario` | `Permission denied` no `.tmp` | diretório de output pertencia ao **root** (criado em 26/06 rodando como root) | ✅ `chown lia:lia` |
+| `health-score-risco-diario` | idem | idem | ✅ corrigido |
+| `alerta-falta-consecutiva-diario` | `permission denied for table aluno_presenca` | a role `lia_acesso_restrito` **nunca recebeu grant de presença** — Sol, Mila e Fábio tinham, a Lia não | ✅ grant na **view canônica** + tabela |
+| `aniversario-matricula-diario` | — | funcionando (Fase 0) | ok |
+| `checkin-7-dias-diario` | — | funcionando (Fase 0) | ok |
+
+⚠️ **Dei acesso à `vw_presenca_slot_canonica_v1`, não só à tabela crua:** o
+Emusys emite cada aula 2x (turma + individual) e 85-91% da grade é duplicada —
+a Lia contando falta na tabela crua alertaria o dobro. Ruído com cara de dado.
+
+⚠️ **Lição de operação:** os 5 crons da Lia estão em **Fase 0 desde junho** e 3
+falhavam em silêncio há meses. Alerta de erro que chega em canal que ninguém lê
+é o mesmo que não existir — vale para a Lia e vale para o mapa de sinais.
