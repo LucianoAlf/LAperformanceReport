@@ -210,3 +210,70 @@ conversa; sugerir variante quando não performa).
 mcp-hugo, 424 tools — ⚠️ token de bot que a REST recusa mas o MCP aceita, com
 ESCRITA; tratar como credencial sensível), `n8n` (119 workflows). Nunca
 commitar credencial; o arquivo está no `.gitignore` (linha 37).
+
+## 9. A camada de AÇÃO e o ecossistema de agentes (brainstorm 03/09, parte 2)
+
+**Princípio do Luciano:** "a gente tem um monte de sinal mas o time não age
+porque não sabe ler". Dashboard sem tarefa com dono é enfeite. E **zero ruído**:
+alerta falso mata a confiança — só sinal canônico dispara ação; sinal
+observacional NUNCA gera tarefa.
+
+### O ciclo completo
+
+SINAL (mapa) → TRIAGEM (Lia + guardiãs do sucesso do aluno) → TAREFA (LA
+Organizer, com dono e prazo) → COBRANÇA (TOM, diária, até fazer) → GOVERNANÇA
+(não fez → escala gerente; gerente não fez → escala Luciano) → **DESFECHO
+(volta pro mapa como rótulo de aprendizado)**. O fechamento da tarefa no
+Organizer É o dado de tratamento que o aprendizado precisa — o loop se fecha
+sozinho, sem coleta extra.
+
+### Papéis dos agentes (quem faz o quê)
+
+| Agente | Papel no mapa |
+|--------|---------------|
+| **Mila** (SDR, n8n) | Entrada: expectativa inicial do lead, origem, contexto comercial |
+| **Sol** (caixa/grupos, la-hq) | Operação do dia a dia: financeiro, presença, relatórios de grupo; futura camada de resposta rápida no atendimento (pós-flip V4) |
+| **Lia** (sucesso do aluno) | Alertas rápidos do dia a dia (cliente no vácuo, follow-up) + **alimenta as guardiãs** com os sinais consolidados |
+| **Guardiãs** (Gabi, Jéssica, Fabi — home office, bastidores) | Olham DE FORA; triam sinais e **criam as tarefas** para gerentes/times agirem |
+| **TOM** (LA Organizer) | Execução: recebe as tarefas, lembra diariamente, cobra até cumprir; governança escala |
+| **Fábio** (LA Teacher) | Jornada pedagógica (ainda amadurecendo; observacional por ora) |
+
+### Achados da investigação (03/09)
+
+- **Lia hoje — confirmado o "fajuto":** a infra de alerta privado existe
+  (`lia_alertas_privados` + edge `processar-alertas-lia` + fila) mas está
+  **vazia** (2 alertas na vida, 5 resumos de follow-up, config zerada). O Hugo
+  montou o esqueleto e parou. Reconstruir EM CIMA do mapa de sinais canônico —
+  não recriar heurística solta.
+- **Health Score do aluno na tela — raiz do ruído:** `config_health_score_aluno`
+  e `alunos_health_score_historico` têm **0 linhas** — a tela mostra aluno com
+  Health 0 e badge "Saudável" ao mesmo tempo. O score exibido não tem motor
+  atrás. Substituir pelo agregado do mapa (F3), não remendar.
+- **Anamnese — o ouro conferido:** 235 anamneses, **210 desde agosto** (o pico
+  de comprometimento da equipe é real). Campos ESTRUTURADOS: `objetivos`
+  (tocar/banda/composição/carreira/hobby/recomendação médica),
+  **`interesse_bandas` (sim/talvez/não)**, **`tempo_para_metas`** (a expectativa
+  de prazo — base do sinal 10: descompasso expectativa × jornada),
+  `temperamento`, saúde/diagnósticos/medicação, exposição a telas, sono (Kids).
+- 🔥 **Cruzamento pronto para virar campanha: 111 alunos ativos declararam
+  interesse em banda na anamnese — 97 NÃO estão em nenhuma banda.** Com banda
+  valendo 35 vs 15 meses de casa e ~2,8× menos saída, é a lista de convites de
+  retenção/expansão mais barata que existe. "Criar mais bandas" com fila
+  nominal de demanda.
+- **LA Organizer/TOM — repo lido** (`LucianoAlf/LA-Organizer`): TOM é agente
+  WhatsApp (UAZAPI) com Supabase próprio (**projeto `cesnbnrynvxvgdhfmaua`**,
+  sa-east-1); cria/atualiza tarefa via marcadores `<<TASK>>`; já tem lembretes
+  e governança. ⚠️ Banco do Organizer NÃO é o mesmo do LA Report — integração
+  do mapa→tarefa será por API/marcador do TOM ou escrita direta no banco dele
+  (**pendente: credencial/token do projeto para eu inspecionar o schema de
+  tarefas** — adicionar ao `.mcp.json` como `supabase-tom`).
+
+### Regra anti-ruído (doutrina)
+
+1. Só sinal **canônico** (fonte na unha) dispara tarefa. Observacional aparece
+   no dossiê, nunca vira cobrança.
+2. Todo alerta nasce com **dono, prazo e ação sugerida** — nunca "fica de olho".
+3. Dedup: mesmo aluno + mesmo tipo de sinal em aberto = NÃO duplica tarefa.
+4. Se a taxa de "tarefa dispensada como improcedente" passar de X% (calibrar,
+   sugestão 20%), o sinal volta para observação — o sistema se auto-policia
+   contra virar a Lia fajuta de novo.
