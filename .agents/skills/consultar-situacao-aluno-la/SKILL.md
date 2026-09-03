@@ -41,6 +41,17 @@ Unidades: Recreio `95553e96-971b-4590-a6eb-0201d013c14d` · Barra
    pessoas da RPC é o `alunos_ativos` do painel — bateram 336 no Recreio.
    Existirão outras definições (carteira professor, denominador de presença) —
    não misture.
+3. **Recorte por período é do CONSUMIDOR.** A linha traz `entrou_em`
+   (`min(data_matricula)` — quando virou aluno da escola) e
+   `matricula_recente_em` (`max` — 2º curso conta). "Alunos matriculados em
+   agosto sem foto" = filtre `entrou_em` entre 01 e 31/08 e olhe o cadastro.
+   Diga qual critério usou. `matriculas_ativas>1` com `entrou_em =
+   matricula_recente_em` é legítimo: matriculou os dois cursos no mesmo dia.
+4. **`responsavel_nome`** = com quem falar (principal de `aluno_contatos`,
+   fallback `alunos.responsavel_nome`; NULL quando não houver — nunca afirme
+   "sem responsável" sem checar `tem_responsavel`). É nome, **não telefone**
+   (decisão LGPD do Alf 02/09). Criança não entra em grupo de WhatsApp: na fila
+   da comunidade, fale com o responsável.
 3. **Cadastro agrega TODAS as matrículas vivas da pessoa.** Se o contrato existe
    no 2º curso, `tem_data_contrato=true`. Não "corrija" isso — é decisão de 02/09/2026.
 4. **A régua de completude é configurável** (`config_cadastro_obrigatorio`, por
@@ -71,6 +82,11 @@ Unidades: Recreio `95553e96-971b-4590-a6eb-0201d013c14d` · Barra
 9. **Ciclo contratual:** `proxima_renovacao_em` = vencimento da última parcela do
    contrato ainda não renovado. `em_aviso_previo` cobre mês vigente + seguinte.
    `contrato_vencido` = ciclo acadêmico encerrado sem sucessão.
+
+10. **`professores[]`** = professores das matrículas base (vários se vários
+    cursos — não é "o professor", é a lista). **`aulas_resumo[]`** =
+    `"Curso — dia HH:MM"` por matrícula base. Para orçamento/valor/formato
+    completo, a ficha continua sendo `maria_lareport_buscar_alunos`.
 
 ## Bloco `base` do resumo — números DELEGADOS
 

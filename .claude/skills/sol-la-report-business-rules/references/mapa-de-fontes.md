@@ -440,14 +440,17 @@ pessoa (399× `get_frequencia_aluno_canonica_v1`, cada uma com EXISTS por linha 
 set-based; equivalência provada 0/397 divergentes em 6 campos) + um scan só de
 `vw_renovacao_ciclos`. Medido após: Barra 0,6s · Recreio 1,4s · CG 2,0s no banco.
 
-Cobre por pessoa: identidade/cursos, anamnese (flag + registro + órfã candidata),
+Cobre por pessoa: identidade/cursos, **`entrou_em`/`matricula_recente_em`**
+(recorte por período é do consumidor — "matriculados em agosto sem foto"),
+`responsavel_nome` (com quem falar na fila da comunidade; **sem telefone** —
+decisão LGPD do Alf 02/09), `professores[]`, `aulas_resumo[]`
+(ex: `"Canto — qua 15:00"`), anamnese (flag + registro + órfã candidata),
 cadastro (Instagram, telefone, responsável, contrato, foto — régua editável em
-`config_cadastro_obrigatorio` por unidade × LAMK/EMLA), presença canônica
-(propagada de `get_frequencia_aluno_canonica_v1` com `confianca`/`regra_versao`),
-`dias_desde_ultima_aula`, `inadimplente` (fatura vencida em aberto,
-`vw_renovacao_ciclos` — propositalmente NÃO a `get_inadimplencia_canonica`, cujo
-guard de JWT negaria `sol_acesso_restrito`), `em_aviso_previo`, comunidade WA e
-`pendencias` (array legível por máquina).
+`config_cadastro_obrigatorio` por unidade × LAMK/EMLA), presença canônica,
+`dias_desde_ultima_aula`, `inadimplente`, `em_aviso_previo`, comunidade WA e
+`pendencias` (array legível por máquina). A inadimplência aqui é fatura vencida
+em aberto (`vw_renovacao_ciclos`) — propositalmente NÃO a
+`get_inadimplencia_canonica`, cujo guard de JWT negaria `sol_acesso_restrito`.
 
 Regras-chave embutidas (validadas no brainstorm de 02/09/2026):
 - completude agrega **todas as matrículas vivas da pessoa** (cadastro é da pessoa);
