@@ -12,6 +12,103 @@
 
 ---
 
+## 💸 RASPAGEM DO TRÁFEGO PAGO (03/09) — **2º ANDAR · camada ESTRATÉGICA**
+
+Motivada por uma frase do Luciano: *"hoje eu tô muito cego porque o rapaz do
+tráfego pago não entrega um relatório e eu também não sei quantos leads chegam.
+Não sei quais são os tipos de criativo que mais estão convertendo."*
+
+Fonte: **`radar_trafego_criativo_v1`**, **`radar_trafego_canal_v1`** e
+**`radar_publico_reativacao_v1`** (migrations `20260903300000` + `20260903310000`).
+São RPC determinística — o número sai daí, o LLM só redige.
+
+⚠️ **Maturidade medida antes de qualquer conclusão:** mediana lead→matrícula
+**4 dias**, p90 **37 dias**, 88% converte em até 30. Por isso as RPCs devolvem
+`cohort_madura`/`dias_maturidade` — para ninguém ler "0 matrículas" onde é só
+falta de tempo.
+
+⚠️ **`Site` foi dobrado em `Google`** (regra do Luciano: é a landing page que
+roda no Google). ⚠️ **Google Ads não é sincronizado** — `gasto` vem NULL com
+`gasto_dias_cobertos = 0`, que quer dizer *não sei*, nunca *de graça*.
+
+### 🔴 PC6 — o criativo que traz lead BARATO é justamente o que não agenda
+
+Janela 04/08–03/09, R$ 4.947 no Meta. Mesmas consultoras, mesmo período, mesmas
+unidades — é experimento natural, a única variável é o criativo:
+
+| criativo | gasto | leads | custo/lead | **agendou** | realizou | matriculou |
+|---|---|---|---|---|---|---|
+| kids bateria | R$ 1.223 | 180 | **R$ 6,79** 🥇 | **1 (0,6%)** | 1 | **0** |
+| Kids canto aula | R$ 1.479 | 106 | R$ 13,95 | **11 (10,4%)** | 7 | **2** |
+| Kids canto | R$ 1.001 | 59 | R$ 16,96 | 3 (5,1%) | 1 | 0 |
+| Kids banda | **R$ 11** | 2 | R$ 5,63 | 1 (50%) | 1 | **1** |
+
+**O lead mais barato da conta é o que menos agenda — 17× menos.** "kids bateria"
+comprou 180 pessoas a R$ 6,79 e conseguiu **um** agendamento; "Kids canto aula"
+pagou o dobro por lead e agendou 11. Custo por **agendamento**: R$ 134 contra
+**R$ 1.222**.
+
+Os 180 leads com zero matrícula não são ruído: à taxa base do Instagram (2,7%)
+seriam esperadas ~4,9 — P(0) ≈ 0,7%.
+
+**Três criativos concentram 75% da verba (R$ 3.701) e entregaram 2 matrículas.**
+
+⚠️ **Não é falha da consultora.** Se fosse funil, os dois criativos cairiam
+juntos — são a mesma equipe, na mesma janela. O que separa é o anúncio.
+
+### 🔴 PC7 — a indicação converte 13× mais e está sub-explorada
+
+Coorte madura (180d até −35d), por canal:
+
+| canal | leads | agendou | matrículas | conversão |
+|---|---|---|---|---|
+| Instagram | 2.791 | 221 (7,9%) | 76 | **2,7%** |
+| Google (+Site) | 1.178 | 101 (8,6%) | 43 | **3,7%** |
+| **Indicação** | **171** | **120 (70%)** | **61** | **35,7%** |
+| Visita/Placa | 143 | 99 (69%) | 43 | 30,1% |
+| Ex-aluno | 26 | 11 | 14 | 53,8% |
+
+**Indicação faz com 171 leads quase o que o Instagram faz com 2.791.** Google
+converte 37% melhor que Instagram por lead (3,7% × 2,7%) — mas **não sabemos o
+custo dele**, então "Google ou Instagram" ainda é pergunta em aberto pelo lado
+do dinheiro.
+
+⚠️ **Meta NÃO é dinheiro jogado fora.** Ticket mediano R$ 400 × 12,2 meses de
+permanência = **LTV ≈ R$ 4.880**. Na janela medida o retorno é 4,9× já no
+recorte imaturo, e ~13× projetando pela taxa madura. **O problema é a alocação
+dentro do Meta, não o Meta.**
+
+### 🔴 PC8 — 100% da verba é criativo "Kids" e 55% da base não é criança
+
+Todos os 20 anúncios ativos começam com "Kids". Alunos ativos: **45,4% até 11
+anos, 29,6% de 12 a 17, 25% adultos.** Teen e adulto somam 55% da escola e
+**zero** criativo. Ressalva honesta: quem decide e paga para a criança é o
+adulto, então "Kids" também fala com pai — mas a ausência de qualquer peça para
+os outros 55% não é escolha declarada, é ponto cego.
+
+### 🎯 PC9 — as bases para reativar já existem e custam ~R$ 0,34 por pessoa
+
+`radar_publico_reativacao_v1()`:
+
+| público | pessoas | temperatura |
+|---|---|---|
+| Fez experimental e **não** matriculou (12m) | **368** | quente |
+| Agendou, faltou e nunca remarcou | **173** | quente |
+| Famílias ativas (campanha de **indicação**) | **884** | quente |
+| Ex-alunos que não voltaram | **397** | morno |
+| Conversou e nunca agendou (12m) | 8.054 | frio |
+
+Template oficial da Meta custa ~US$ 0,0625 ≈ **R$ 0,34**. Os 541 quentes
+(experimental + faltou) custam **R$ 184** para alcançar — 3,7% de um mês de
+mídia. As 884 famílias, **R$ 300**.
+
+⚠️ **Isto NÃO é ordem de disparo.** Quem dispara é o módulo de Campanhas, com
+opt-out e janela. E a **T1 (bot-para-bot) continua travando**: o painel de
+campanha conta auto-resposta de outra empresa como resposta, então medir o
+resultado de qualquer disparo hoje daria número falso.
+
+---
+
 ## 🧱 AS DUAS DIMENSÕES — não confundir (definido pelo Luciano, 03/09)
 
 O sistema tem **dois eixos ortogonais**. Errar isso é o que faz sinal chegar na
