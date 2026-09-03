@@ -169,3 +169,12 @@ verify_jwt = false
 # body. ⚠️ Deploy pelo MCP reseta este flag para `true` e derruba a chamada por
 # token em 401 silencioso: conferir depois de cada deploy.
 verify_jwt = false
+
+[functions.extrair-sinais-conversa]
+# Extrator semantico do Mapa de Sinais (A5). verify_jwt = false porque quem
+# chama e o pg_cron, que nao tem JWT de usuario. A porta e o token
+# `radar_extrator` em `integracao_tokens`, conferido em tempo constante DENTRO
+# da funcao — verify_jwt sozinho nao serviria: a anon key e publica, e
+# `dry_run=1` nao escreve no ledger de idempotencia, entao chamada repetida
+# queimaria credito da OpenAI.
+verify_jwt = false

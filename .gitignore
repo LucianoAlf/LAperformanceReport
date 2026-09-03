@@ -94,3 +94,4 @@ outputs/emusys-matriculas-*.json
 outputs/comparacao-canonica.json
 
 .tmp-edge-source/
+.local/
