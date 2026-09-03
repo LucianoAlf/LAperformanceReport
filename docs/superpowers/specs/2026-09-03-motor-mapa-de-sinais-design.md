@@ -183,6 +183,68 @@ Exemplos reais de hoje (o alerta que vai existir):
 > Jullyane, casal, teclado + bateria, 11 mensagens — *"estarei no aguardo do retorno"* há 34 min
 > Tamara, filho de 3 anos, bateria, pediu valor — **ainda com o bot** há 6 min
 
+### 🚰 O CANO ATÉ O GRUPO JÁ EXISTIA — e a partir de hoje leva AÇÃO (03/09, noite)
+
+Contexto que o Luciano trouxe: os 3 grupos **"RELATÓRIOS DIÁRIOS BR/CG/RC"** já
+recebem o *Relatório Diário Comercial* todo dia às 20:05 BRT — mas **pela Sol**,
+quando deveria ser a Mila, e *"ficam ali, dou uma olhada mas não falam muita
+coisa"*. O cano existe; faltava ação dentro dele e o remetente certo.
+
+**Cadeia real (lida na fonte):** cron `5 23 * * 1-5` do `sol` na la-hq →
+`send-lareport-comercial-hermes.py` → edge `relatorio-admin-whatsapp`
+(`dry_run_comercial` gera o texto) → `send_single_report()` → bridge da Sol.
+JIDs: BR `5521965832009-1625319907@g.us` · CG `…-1600979279@g.us` ·
+RC `5521992426581-1581033423@g.us` (`whatsapp_destinatarios_relatorio`,
+`tipo='relatorio_comercial'`, `caixa_id` NULL nos 3).
+
+**O que entrou hoje (deploy feito, sai HOJE às 20:05 pela Sol):**
+- Seção nova **"🔥 SINAIS DO DIA — AÇÃO"** entre *Próximas experimentais* e
+  *Alertas*, alimentada por **`radar_bloco_comercial_grupo_v1(unidade, 6)`** —
+  mais recente primeiro, teto 6, rodapé *"Mais N na fila"*, texto público.
+  Validado com `--dry-run --unit Barra`: 6 linhas do tipo *"Ana Júlia fez a
+  experimental de Canto e está há 5 dias sem desfecho → Ligar HOJE"*.
+- Falha da RPC **não derruba** o relatório — a seção só não entra.
+
+**Para a Mila ser a remetente (pronto, INERTE):**
+- 🔴 A única caixa "Mila" (id 1, UAZAPI) está **morta** — 401 *Invalid token*.
+  Desativada.
+- A Mila real fala pelas **sessões WAHA do Chatwoot**, todas WORKING no servidor
+  multi-tenant `waha.agenticflowio.com.br` (mesma chave da caixa da Sol). Criadas
+  as caixas **7 Barra / 8 Recreio / 9 CG** (`provedor='waha'`,
+  `departamento='comercial'` — CHECK ampliado), `ativo=false`.
+- `lareport_whatsapp_single.py` ganhou **`_send_via_waha`** e roteia por
+  `provedor`; `send-lareport-comercial-hermes.py` passou a **ler e passar
+  `caixa_id`** (patches idempotentes em `vps/la-hq/sol/scripts/`, aplicados,
+  compilados, comportamento de hoje inalterado porque `caixa_id` é NULL).
+- ⚠️ WAHA atrás de Cloudflare recusa UA não-browser (**Error 1010**) — o
+  remetente manda UA de navegador.
+- 🔴 **BLOQUEIO HUMANO: nenhum número da Mila está em nenhum dos 3 grupos.**
+  Medido pela API do WAHA. Ligar = (1) Luciano adiciona o número da Mila de
+  cada unidade ao grupo da unidade; (2) `update whatsapp_caixas set ativo=true
+  where id in (7,8,9)`; (3) `update whatsapp_destinatarios_relatorio set
+  caixa_id = <7|8|9> where tipo='relatorio_comercial' and unidade_id=…`.
+  Sem (1), o envio falha — e falhar é o certo (não cair na Sol).
+
+**Achados da raspagem que mudam decisões:**
+- 🔴 As **"86 respostas / 11%"** da campanha de WhatsApp são **bot-para-bot**:
+  4.571 de 4.978 inbound (92%) são auto-resposta de outra empresa (Serasa,
+  *"encerrar por inatividade"*). Taxa humana real ≈ 8% do que o painel mostra.
+- 🔴 **Campos de calor em `leads` estão mortos** (temperatura 98% default,
+  `qtd_mensagens_mila`/tentativas/desmarcações/`chatwoot_conversation_id` =
+  zero/null em 100%). O calor vem das **conversas**.
+- 🔴 **Métricas de Meta Ads não são persistidas** — Tráfego Pago é 100% ao vivo.
+- **Site = Google** (correção do Luciano): PC4 corrigido, EC4 desativada.
+- Espelho da Mila no 1º dia: 221 msgs / 60 conversas; **`assignee` distingue bot
+  de consultora** — 10 quentes, 3 presas no bot, **11 de 16 nunca chegaram a
+  humano**, mediana até humano 51 min. Caso: *"Gostaria de matricular minha
+  filha"* há 139 min sem resposta, atribuído a secretária.
+
+**Próximo (1º andar comercial, DM):** prompt comercial do extrator com tipos
+`quer_agendar` / `pediu_preco` / `intencao_matricula` / `preso_no_bot` /
+`esperando_consultora` / `indicacao_embutida` + campo **`proximo_passo`** (a
+pergunta-bumerangue, o desvio do preço, a proposta de horário) → DM da
+consultora na hora, com resumo. A pauta e os destinatários já existem.
+
 ### Alicerce
 
 | Passo | Estado | Onde está |
