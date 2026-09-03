@@ -560,3 +560,40 @@ a Lia contando falta na tabela crua alertaria o dobro. Ruído com cara de dado.
 ⚠️ **Lição de operação:** os 5 crons da Lia estão em **Fase 0 desde junho** e 3
 falhavam em silêncio há meses. Alerta de erro que chega em canal que ninguém lê
 é o mesmo que não existir — vale para a Lia e vale para o mapa de sinais.
+
+## 🔴🔴 Churn: errei DUAS vezes por não ler a fonte canônica (03/09)
+
+O Luciano corrigiu duas vezes seguidas, e a segunda lição é maior que a primeira.
+
+**Erro 1** — numerador filtrado (saídas canônicas) sobre denominador não
+filtrado (1.162 ativos com bolsista e banda).
+**Erro 2** — corrigi o filtro mas mantive a conta errada: **somei 3 meses de
+saídas sobre a base de UM mês**. Isso infla a taxa em ~3×. Churn é **taxa
+mensal**: evasões do mês sobre a base pagante **daquele mês**; para comparar
+períodos, tira-se a **média dos meses**.
+
+**E a raiz dos dois erros é a mesma: eu inventei a conta em vez de ler a fonte
+que já existia.** `dados_mensais` já tem `churn_rate`, `evasoes` e
+`alunos_pagantes` por unidade e por competência — é a fonte canônica da casa,
+e o CLAUDE.md até define a fórmula (`churn = evasoes / alunos_pagantes`).
+
+### Números corretos (fonte canônica, jun-ago/2026)
+
+| Unidade | jun | jul | ago | **média mensal** |
+|---|---|---|---|---|
+| **Barra** | 1,81% | 4,62% | 2,32% | **2,92%** |
+| Campo Grande | 5,32% | 4,43% | 8,14% | **5,96%** |
+| Recreio | 5,26% | 2,14% | **11,01%** | **6,14%** |
+
+**A conclusão do benchmark sobrevive** — a Barra perde ~metade das outras duas.
+Mas o dado mês a mês conta uma história melhor: **o Recreio varia 5× entre meses
+consecutivos** (2,14% em julho → 11,01% em agosto), enquanto a Barra fica entre
+1,81% e 4,62%. **O Recreio não tem um problema constante: tem meses de colapso.**
+Volatilidade é sinal em si — e é exatamente o que o mapa precisa antecipar. E
+agosto foi ruim para Recreio e CG, mas a Barra até melhorou.
+
+⚠️ **Regra que passa a valer no motor: métrica de negócio NUNCA é recalculada à
+mão.** Antes de medir qualquer indicador, procurar em `dados_mensais`, nas RPCs
+canônicas e no `docs/METRICAS.md`. Recalcular é como reimplementar regra em dois
+lugares — foi a causa-raiz das duplicatas de renovação, e agora quase virou
+número errado num painel de retenção.
