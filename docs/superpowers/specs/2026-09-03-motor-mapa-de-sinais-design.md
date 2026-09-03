@@ -330,3 +330,55 @@ sinal de professor vem da **carteira** (onde ele tem mais alunos ativos).
 `radar_ficha_v1(p_unidade_id, p_severidade, p_limite)` devolvendo o cruzamento
 por aluno — contexto + interpretação + orientação prontos para virar mensagem
 das guardiãs e tarefa em `farmer_tarefas`.
+
+## ✅ SEGUNDO ANDAR ENTREGUE (03/09/2026) — padrão → aprendizado → estratégia
+
+O 1º andar responde sobre **o aluno**; o 2º sobre **a rede**. Ambos no ar.
+
+### Padrões medidos (nenhum chutado)
+
+| Cód | Aprendizado | Números | Confiança |
+|---|---|---|---|
+| **P1** | **Evasão em câmera lenta** — o sinal não é sentença, é JANELA | 440 acenderam, 89 saíram (20%); **mediana de 48 dias** entre acender e sair; 80% ficam | alta |
+| **P2** | Banda é âncora | 35 vs 15 meses de casa; saída 6% vs 16,7% (2,8× menos) | média |
+| **P3** | O olhar do professor antecipa | vermelho 25% × verde 1,3% = **~19×** | baixa (n=8) |
+| **P4** | Quem toca em casa não vai embora | **0 de 73** que praticam saíram; 3 de 26 que não praticam | baixa |
+| **P5** | O motivo já estava escrito | 11 dias entre a declaração no WhatsApp e o lançamento | baixa (n=1) |
+
+⚠️ **A confiança é declarada e vem do tamanho da amostra.** P3 e P4 apontam
+direção forte mas com n pequeno — servem para priorizar conversa, não para
+cravar risco. É a regra de ouro aplicada: o número exato virá com o desfecho.
+
+### Estratégias com VIABILIDADE (a pergunta "tenho vaga pra todos?")
+
+7 estratégias catalogadas (E1 ligação de resgate, E2 convite para banda,
+E3 conversa do professor, E4 missão de prática, E5 renovação ajustada,
+E6 leitura da conversa, E7 reposição de verdade), cada uma com responsável,
+custo e **viabilidade**.
+
+🔴 **Achado operacional que a pergunta do Luciano revelou:**
+`cursos.capacidade_maxima` é **NULL em todos os projetos de banda**. A E2 tem
+**97 candidatos** e capacidade desconhecida (hoje: Recreio 52, CG 43, Barra 13
+alunos em projetos). Por isso ela nasce com `viabilidade='desconhecida'` e um
+alerta operacional que viaja junto com a recomendação: *antes de virar campanha,
+alguém precisa informar quantas vagas existem*. **Estratégia sem capacidade é
+desejo, não plano** — e agora o sistema diz isso em voz alta em vez de mandar a
+equipe prometer o que não pode cumprir.
+
+### `radar_ficha_v1(unidade, severidade_min, limite)` — a leitura canônica
+
+Junta os dois andares por entidade e devolve, num JSON só: os sinais (com
+contexto/interpretação/orientação), os **padrões** que os sustentam (com a
+janela de ação) e as **estratégias** aplicáveis com viabilidade. Fonte única
+para Sol, Lia, painel e TOM. É RPC porque a view do radar já estoura o timeout
+de 8s e porque a leitura precisa de parâmetro.
+
+**Exemplo real de saída (Nathan William, CG):** contexto *"0 de 3 aulas em 60
+dias"* → orientação *"ligar antes de qualquer cobrança"* → aprendizado *"20%
+saem, mediana de 48 dias — você tem ~7 semanas"* → estratégias *E1 ligação
+(disponível), E2 banda (⚠️ capacidade não cadastrada), E5 renovação ajustada,
+E7 reposição*.
+
+⚠️ Dois bugs achados no primeiro teste e corrigidos: famílias colapsavam num
+item único (entidade_id é NULL para família → chave passou a usar telefone8) e
+`min(uuid)` não existe no Postgres.

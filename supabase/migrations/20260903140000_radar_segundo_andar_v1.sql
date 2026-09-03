@@ -1,0 +1,34 @@
+-- MAPA DE SINAIS — SEGUNDO ANDAR (03/09/2026): padrão → aprendizado → estratégia
+-- Aplicado em produção via MCP: radar_segundo_andar_padroes_estrategias_v1,
+-- radar_padroes_estrategias_semente_v1, radar_ficha_rpc_v1 (+2 fixes).
+--
+-- 1º andar (já no ar) responde sobre O ALUNO: contexto → interpretação → orientação.
+-- 2º andar responde sobre A REDE: o que aprendemos e o que fazer a respeito.
+--
+-- TABELAS
+--   radar_padroes           padrão medido, com amostra (n), lift, JANELA DE AÇÃO
+--                           e confiança derivada do tamanho da amostra
+--   radar_estrategias       catálogo de ações COM VIABILIDADE (capacidade real)
+--   radar_padrao_estrategia qual estratégia responde a qual padrão
+--   radar_sinais.padrao_codigo  liga o caso individual ao aprendizado da rede
+--
+-- PADRÕES MEDIDOS (nenhum chutado — regra de ouro do Luciano)
+--   P1 evasão em câmera lenta: 440 acenderam, 89 saíram (20%), MEDIANA 48 DIAS
+--      entre o sinal e a saída. 80% ficam — sinal não é sentença, é janela.
+--   P2 banda como âncora: 35 vs 15 meses de casa; saída 6% vs 16,7% (2,8x menos)
+--   P3 olhar do professor: vermelho 25% x verde 1,3% = ~19x (n=8, confiança BAIXA)
+--   P4 pratica em casa: 0 de 73 saíram x 3 de 26 que não praticam (n pequeno)
+--   P5 motivo já escrito: 11 dias entre a declaração no WhatsApp e o lançamento
+--
+-- 🔴 ACHADO OPERACIONAL: cursos.capacidade_maxima é NULL em TODOS os projetos de
+-- banda. A estratégia E2 (convite para banda) tem 97 candidatos e capacidade
+-- DESCONHECIDA — por isso nasce com viabilidade='desconhecida' e um alerta
+-- operacional embutido. Estratégia sem capacidade é desejo, não plano.
+--
+-- RPC radar_ficha_v1(unidade, severidade_min, limite): a leitura canônica que
+-- junta os dois andares por entidade. Fonte única para Sol, Lia, painel e TOM.
+-- ⚠️ Dois bugs achados no primeiro teste e corrigidos: famílias colapsavam num
+-- item só (entidade_id é NULL para família → agrupamento passou a usar chave com
+-- telefone8) e min(uuid) não existe no Postgres.
+--
+-- Ver: docs/superpowers/specs/2026-09-03-motor-mapa-de-sinais-design.md
