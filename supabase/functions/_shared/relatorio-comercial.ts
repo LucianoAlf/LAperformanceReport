@@ -222,6 +222,9 @@ export interface RelatorioComercialDados {
   cursos: Array<{ nome: string; quantidade: number }>;
   proximas: ProximaExperimental[];
   alertas: string[];
+  // Linhas do radar comercial (Mapa de Sinais). Opcional: relatorio antigo
+  // continua valido sem elas.
+  sinais?: string[];
   matriculasDetalhadas: MatriculaDetalhadaRelatorio[];
   snapshot: { atualizadoEm: string; status: string };
 }
@@ -827,6 +830,14 @@ export function formatarRelatorioComercialDiario(
       `• ${textoSeguro(alerta, "Alerta sem descrição")}`
     )
     : ["Nenhum gap operacional identificado"];
+  // 🔥 SINAIS DO DIA — o que o radar comercial pede para fazer HOJE. Vem de
+  // radar_bloco_comercial_grupo_v1 (mais recente primeiro, com teto e rodape
+  // de fila). Sem sinal, a secao inteira some: silencio e melhor que
+  // "nenhum sinal" todo dia.
+  const sinais = (dados.sinais ?? []).map((s) => `• ${textoSeguro(s, "")}`);
+  const secaoSinais = sinais.length > 0
+    ? ["🔥 *SINAIS DO DIA — AÇÃO*", separador, ...sinais, ""]
+    : [];
   const unidadeNome = textoSeguro(dados.unidade.nome, "Unidade")
     .toLocaleUpperCase("pt-BR");
   const hunter = textoSeguro(dados.unidade.hunter, "Comercial");
@@ -907,6 +918,7 @@ export function formatarRelatorioComercialDiario(
     separador,
     ...linhasFuturas,
     "",
+    ...secaoSinais,
     "⚠️ *ALERTAS E CONCILIAÇÃO*",
     separador,
     ...alertas,

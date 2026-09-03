@@ -1923,6 +1923,20 @@ async function gerarRelatorioComercialDiario(
   }
   if (pendencias > 0) alertas.push(`${pendencias} pendência(s) de conciliação em auditoria`);
 
+  // Mapa de Sinais (fatia comercial): as linhas de ACAO do dia para a unidade.
+  // Falha aqui nao derruba o relatorio — o bloco simplesmente nao entra.
+  let sinaisRadar: string[] = [];
+  try {
+    const { data: bloco, error: erroBloco } = await supabase.rpc(
+      'radar_bloco_comercial_grupo_v1',
+      { p_unidade_id: unidadeId, p_limite: 6 },
+    );
+    if (erroBloco) console.warn('[relatorio-comercial] radar_bloco falhou:', erroBloco.message);
+    else if (Array.isArray(bloco)) sinaisRadar = bloco.filter((x) => typeof x === 'string' && x.trim());
+  } catch (e) {
+    console.warn('[relatorio-comercial] radar_bloco excecao:', String(e));
+  }
+
   const dados: RelatorioComercialDados = {
     referencia: {
       data: dataRelatorio,
@@ -1974,6 +1988,7 @@ async function gerarRelatorioComercialDiario(
     cursos: rankingCanonico(dadosKpisDia.cursos_mais_procurados, 'curso'),
     proximas,
     alertas,
+    sinais: sinaisRadar,
     matriculasDetalhadas: matriculasNovas.map((mat) => ({
       data: String(mat.data_matricula || mat.data_contato || ''),
       aluno: String(mat.nome || ''),
