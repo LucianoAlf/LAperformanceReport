@@ -1,0 +1,23 @@
+-- MAPA DE SINAIS — R13 aviso prévio + supressão (03/09/2026)
+-- Aplicado via MCP: radar_aviso_previo_r13_e_supressao, radar_cron_incluir_aviso_previo
+--
+-- 🔴 FURO ACHADO PELO LUCIANO: o motor mandava "ligar para entender a ausência"
+-- para 5 alunos que JÁ ESTAVAM EM AVISO PRÉVIO — quem já disse que vai sair não
+-- pode receber cobrança de falta. Orientação errada destrói a confiança da
+-- equipe no primeiro dia de uso.
+-- E o motor estava CEGO para 35 dos 40 em aviso prévio: a janela de reversão,
+-- que é a mais curta (mês vigente + seguinte) e a mais valiosa, não gerava sinal.
+--
+-- P6 MEDIDO: de 55 avisos prévios (mai-ago/2026), 49 confirmaram saída e apenas
+-- 3 reverteram (5%). A oportunidade existe e está sendo desperdiçada quase
+-- inteira — ninguém tenta reverter de forma sistemática.
+--
+-- R13: aviso prévio ativo = sinal CRÍTICO com orientação de REVERSÃO
+--      (entender o motivo real, oferecer alternativa concreta, registrar o
+--       desfecho mesmo sem reverter — o motivo alimenta o aprendizado).
+-- E8: estratégia de reversão, responsável = gerente, janela dura.
+-- SUPRESSÃO: os demais sinais do aluno em aviso prévio viram observacionais e
+--      ganham nota explicando por quê. O sinal certo substitui o errado.
+--
+-- Primeira execução: 40 avisos detectados, 5 sinais errados suprimidos.
+-- Cron: roda DEPOIS do detector geral (a ordem importa — ele suprime).

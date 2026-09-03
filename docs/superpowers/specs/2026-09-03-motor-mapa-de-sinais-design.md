@@ -91,6 +91,26 @@ Um motor que, diariamente e sem humano no meio:
 - **Não** re-treinar modelo de risco agora (F6, quando houver desfecho).
 - **Não** mexer no schema do TOM por fora — migration é no repo dele.
 
+## A estrutura (corrigida pelo Luciano em 03/09)
+
+```
+ALICERCE   Mapa de Sinais = MOTOR DE DADOS
+           (as fontes: presença, conversas, renovação, financeiro, semáforo,
+            anamnese, aviso prévio — tudo que o negócio produz)
+
+1º ANDAR   CONTEXTO → INTERPRETAÇÃO → ORIENTAÇÃO
+           sobre o ALUNO. ⚠️ O extrator de conversas é CONTEXTO — pertence a
+           este andar, não é andar novo. E contexto não é só raspar: é raspar,
+           interpretar e orientar — das conversas, das faltas, de todos os sinais.
+
+2º ANDAR   PADRÕES → APRENDIZADOS → ESTRATÉGIA
+           sobre a REDE. O que ela ensina e o que fazer a respeito, com
+           viabilidade real.
+```
+
+⚠️ **Erro meu corrigido:** eu havia chamado o extrator de conversas de "próximo
+andar". Ele é fonte de contexto do 1º andar — que está INCOMPLETO sem ele.
+
 ## Arquitetura em uma frase
 
 `fontes → detectores (SQL diário + LLM diário) → sinais_aluno (LA Report) →
@@ -382,3 +402,26 @@ E7 reposição*.
 ⚠️ Dois bugs achados no primeiro teste e corrigidos: famílias colapsavam num
 item único (entidade_id é NULL para família → chave passou a usar telefone8) e
 `min(uuid)` não existe no Postgres.
+
+## 🔴 R13 — aviso prévio (furo achado pelo Luciano, 03/09)
+
+**O motor estava errando dos dois lados:**
+1. Mandava *"ligar para entender a ausência"* para **5 alunos que já estavam em
+   aviso prévio** — quem já avisou que sai não pode receber cobrança de falta.
+   Orientação errada queima a confiança da equipe no primeiro dia.
+2. Estava **cego para 35 dos 40** em aviso prévio: a janela mais curta (mês
+   vigente + seguinte) e mais valiosa não gerava sinal nenhum.
+
+**P6 medido:** de 55 avisos prévios, **49 confirmaram a saída e só 3 reverteram
+(5%)**. A oportunidade que o Luciano descreveu — *"aviso prévio é justamente uma
+oportunidade de reverter, a família ainda está aqui"* — está sendo desperdiçada
+quase inteira, porque ninguém tenta de forma sistemática.
+
+**Corrigido:** R13 (sinal crítico com orientação de REVERSÃO, não de cobrança),
+E8 (estratégia de reversão com janela dura), e **supressão**: os demais sinais
+do aluno em aviso prévio viram observacionais e ganham a nota explicando por
+quê. Primeira execução: **40 detectados, 5 suprimidos**.
+
+**Lição de método:** um sinal certo com a orientação errada é pior que não ter
+sinal. Antes de qualquer entrega à equipe, todo sinal precisa passar pela
+pergunta *"esta pessoa já não está em outra situação que muda a conversa?"*.
