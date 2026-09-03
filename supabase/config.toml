@@ -192,3 +192,9 @@ verify_jwt = false
 # `integracao_tokens`, conferido em tempo constante dentro da funcao. Custo de
 # midia e sensivel: sem o token a funcao nao responde nada.
 verify_jwt = false
+
+[functions.capturar-google-ads-diario]
+# Gemeo do Meta para o Google Ads. verify_jwt = false porque quem chama e o
+# pg_cron (sem JWT de usuario); a porta e o token `google_ads_captura` em
+# integracao_tokens, comparado em tempo constante dentro da funcao.
+verify_jwt = false
