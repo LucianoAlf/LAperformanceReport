@@ -178,3 +178,10 @@ verify_jwt = false
 # `dry_run=1` nao escreve no ledger de idempotencia, entao chamada repetida
 # queimaria credito da OpenAI.
 verify_jwt = false
+
+[functions.ingerir-instagram-sessoes]
+# Porta de entrada do canal Instagram (bridge da la-hq, que nao passa pelo
+# Chatwoot). verify_jwt = false porque quem chama e um cron do VPS, sem JWT de
+# usuario; a porta e o token `instagram_bridge` em `integracao_tokens`,
+# conferido em tempo constante dentro da funcao.
+verify_jwt = false

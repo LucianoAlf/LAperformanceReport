@@ -870,3 +870,109 @@ true derrubaria o cron em 401 silencioso.
 Destravado pelo A2: o elo é `mila_experimentais.lead_id` = `leads.emusys_lead_id`
 (93% de cobertura, medido em 300 ids) — **não** `leads.id`, que casa 59% por
 coincidência de numeração, nem `lead_experimentais.lead_id`, que casa 5%.
+
+---
+
+## ✅ A1 — A FATIA DO INSTAGRAM (03/09/2026)
+
+### O Instagram nunca esteve morto; ele nunca passou pelo Chatwoot
+
+Eu tinha reportado *"Instagram tem 85 conversas em 8 meses, as DMs em maior
+parte não chegam ao Chatwoot"*. A primeira metade estava certa e a segunda era
+tímida demais: **as DMs não chegam ao Chatwoot nunca**, porque o canal real é
+outro.
+
+**A bridge:** `instagram-comments-bridge.js` na la-hq — systemd
+`instagram-comments-bridge.service` (ativo), porta 3212, tunnel Cloudflare em
+`ig-webhook.maestrosdagestao.com.br`. Fluxo Meta → bridge → Graph API, direto,
+com triagem por `gpt-4.1-mini`. A Mila SDR só entra depois, na transferência
+para o WhatsApp.
+
+Provas de que a inbox 209 do Chatwoot não é o canal:
+- soma das 8 inboxes = **19.362** = total exato da conta → não há inbox escondida
+- perfil confirma **uma conta só** (id 5); não existe Chatwoot de Kids/School
+- inbox 209 = 85 conversas na vida inteira, **zero desde 21/07/2026**
+
+E a bridge é movimentada: **516 eventos úteis em agosto/2026**, nas duas contas
+(`@lamusickids` 264, `@lamusicschool` 252), com atividade todo dia.
+
+### O problema: o canal inteiro morava num arquivo
+
+Todo o estado ficava em `/home/mila/.openclaw/workspace/memory/ig_sessions.json`
+— **141 kB soltos num VPS**, sem banco, sem backup, invisíveis para relatório.
+
+Medido nas 104 sessões:
+
+| | |
+|---|---|
+| transferidas para o WhatsApp | **54** |
+| **paradas no meio do funil** | **50** (`ask_name` 23, `ask_phone` 13, `ask_unit` 13) |
+| com telefone | 54 · com interesse declarado | 59 |
+| histórico | mediana de 6 mensagens, máximo 14 |
+| contas | @lamusickids 69 · @lamusicschool 35 |
+
+E no log: **136 leads detectados** pelo classificador (61 em comentário, 75 em
+DM) contra 31 transferências, mais **12 reclamações sem retorno**.
+
+⚠️ Os 174 eventos `account_not_enabled` do `@lamusickids` são todos de **jun/jul**
+— a conta foi habilitada em 27/07 (há backup `.bak-20260727-173056-habilita-lamusickids`)
+e desde então produz normalmente. **Não é um problema aberto.**
+
+### O que foi construído
+
+1. **`instagram_sessoes`** (LA Report) — espelho, PK `(ig_user_id, sender_id)`.
+   `telefone_chave` é coluna **gerada** por `fn_normalizar_telefone_br_key`, que
+   é a junção canônica com `leads`/`alunos`. RLS por unidade; ACL revogada de
+   `anon`/`authenticated` antes do `grant select` (a tabela guarda conversa de
+   pessoa real).
+2. **`vw_instagram_sessoes_resolvidas`** — sessão + quem a pessoa é hoje, pela
+   RPC `radar_resolver_entidade_por_telefone`. Não reimplementar o casamento no
+   consumidor.
+3. **`ingerir-instagram-sessoes`** (edge, `verify_jwt=false` + token
+   `instagram_bridge` em tempo constante) — **só a porta**. Idempotente por
+   upsert na PK. ⚠️ **Foto vazia ABORTA sem escrever** (422): arquivo truncado
+   ou erro de leitura no VPS não pode ser lido como "o Instagram não teve
+   movimento" — mesma guarda de `atualizar-inadimplencia-emusys`.
+   ⚠️ **Não escreve em `leads`**: atribuição de origem tem política própria, e
+   uma porta de ingestão não pode alterar o funil comercial de carona.
+4. **`push-instagram-sessoes.py`** na la-hq, cron **`20 * * * *` do usuário
+   `mila`**. ⚠️ Roda como `mila` e não como `sol` porque `/home/mila` é `700` —
+   o arquivo é 644 mas o diretório barra a travessia, e afrouxar permissão do
+   home de outro usuário para conveniência de cron seria o remendo errado.
+   Secret próprio (`radar-instagram.env`, 600) — **o `instagram.env`, que guarda
+   os tokens da Meta, não foi tocado**.
+   ⚠️ JSON inválido (arquivo sendo reescrito no instante da leitura) sai com
+   erro e **não envia** — meia foto viraria "o Instagram esvaziou".
+   🔴 **Prova de vida:** `select max(capturado_em) from instagram_sessoes`.
+   A `mila` não alcança o `cron-alerta.py` (home do `sol` é 750), então este
+   cron **não** posta no tópico Logs do Telegram — é a lacuna conhecida.
+
+### O funil creditava o canal errado
+
+Cruzando as sessões com `leads` pela chave de telefone: **52 leads vieram do
+Instagram e 28 estavam sem origem nenhuma**. O canal produzia e o dashboard
+mostrava "sem origem".
+
+Corrigido em `20260903210000` com **first-touch**, igual à
+`varrer-atribuicao-meta-ads`: só onde estava vazio. **28 corrigidos, 0
+restantes.** Os outros 24 já tinham origem declarada (Google, Indicação,
+Instagram, Site, Visita/Placa) e **não foram tocados** — três deles converteram
+por "Visita/Placa", e sobrescrever destruiria informação verdadeira: quem
+visitou a escola E mandou DM tem as duas coisas, e o primeiro toque manda.
+Cada linha alterada deixou registro em `leads_automacao_log`
+(`acao='origem_instagram_backfill'`), com a conta de origem — reversível.
+
+### O que fica aberto (de propósito)
+
+- **50 sessões paradas no meio do funil** ainda não viram sinal. É gente que
+  respondeu DM e morreu em `ask_name`/`ask_phone`/`ask_unit`. Vira regra do 1º
+  andar, não da ingestão.
+- **As classificações da bridge são anônimas**: `dm_classification` e
+  `comment_classification` gravam `is_lead`, `motivo` e `reclamacao_sem_retorno`
+  **sem `sender_id` nem conta** — então as 12 reclamações sem retorno não são
+  atribuíveis a ninguém. Só `comment_complaint_alert` (8) e `dm_complaint_alert`
+  (2) trazem identificação. Corrigir isso é mexer na bridge, que é produção da
+  Mila SDR — decisão do Luciano, não minha.
+- **28 das 31 transferências foram para Campo Grande.** Pode ser real ou default
+  do bot quando não descobre a unidade (37 sessões estão sem unidade). Não
+  investigado.
