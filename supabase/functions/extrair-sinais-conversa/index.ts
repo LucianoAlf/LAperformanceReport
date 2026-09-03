@@ -38,7 +38,11 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 const MODELO = "gpt-5.4-mini-2026-03-17";
-const PROMPT_VERSAO = "v2";
+// Formato `<prompt>-d<decisao>`: o prompt e a funcao pura versionam junto, mas
+// mudam por motivos diferentes. Trocar a decisao sem trocar o prompt precisa
+// invalidar o ledger do mesmo jeito — senao a conversa ja classificada nunca
+// reaproveita a regra nova (foi o caso da Graciele em 03/09).
+const PROMPT_VERSAO = "v4-d2";
 const SOL_EXPORT_URL =
   "https://bvltexmlmydsncfjstbr.supabase.co/functions/v1/exportar-candidatos-atendimento";
 const CONCORRENCIA = 8;
@@ -60,7 +64,14 @@ Sua tarefa é dizer O QUE ESTÁ ACONTECENDO, escolhendo UM tipo:
 - dificuldade_financeira: disse que não vai conseguir pagar, pediu prazo,
   parcelamento, desconto, ou avisou que vai atrasar.
 - promessa_sem_desfecho: a ESCOLA prometeu algo (retornar, verificar, enviar,
-  confirmar) e a conversa parou sem isso acontecer.
+  confirmar) e a conversa parou sem isso acontecer. Vale inclusive quando o
+  cliente aceitou de bom grado e ficou esperando: "obrigada, fico no aguardo"
+  depois de "vou verificar com o financeiro" é promessa sem desfecho — quem
+  deve o retorno é a escola.
+  ⚠️ Só use este tipo quando quem prometeu foi a ESCOLA. Se quem ficou de fazer
+  algo foi o CLIENTE (assinar o contrato, mandar o comprovante, escolher o
+  horário, confirmar a presença), a bola está com ele e isto NÃO é
+  promessa_sem_desfecho — é cortesia ou outro.
 - reposicao_pedida: pediu para repor, remarcar ou recuperar uma aula perdida e
   não há confirmação.
 - ausencia_ou_doenca: avisou falta, doença, viagem ou impedimento — inclusive
@@ -71,7 +82,10 @@ Sua tarefa é dizer O QUE ESTÁ ACONTECENDO, escolhendo UM tipo:
 - cortesia: fechamento educado, agradecimento, emoji, "ok", "beleza",
   "combinado". Inclui CONFIRMAÇÃO ou ACEITE de algo que a escola propôs
   ("sim", "pode ser", "confirmado", "ela vai", "tá certo") quando não sobra
-  nada pendente do lado da escola. NÃO espera resposta.
+  nada pendente do lado da escola.
+  ⚠️ Cortesia é o tipo de quem NÃO DEIXOU NADA em aberto. Se a mensagem
+  agradece E TAMBÉM carrega uma pendência, ela não é cortesia — veja a regra
+  de PRECEDÊNCIA abaixo.
 - aviso_operacional: recado de trânsito do dia, sem pendência
   ("estou chegando", "estamos a caminho", "já estou aí").
 - spam: propaganda de outra empresa, operadora de telefonia, cobrança de
@@ -79,6 +93,16 @@ Sua tarefa é dizer O QUE ESTÁ ACONTECENDO, escolhendo UM tipo:
 - outro: nada acima.
 
 REGRAS DE JULGAMENTO:
+- PRECEDÊNCIA: a mesma mensagem pode ter cortesia E um assunto pendente. Quando
+  isso acontece, o PENDENTE VENCE — classifique pelo que ficou em aberto, nunca
+  pelo "obrigada" do final. Exemplos que NÃO são cortesia:
+    "Obrigada, fico no aguardo então" (a escola prometeu retorno)
+      -> promessa_sem_desfecho
+    "Oi, bom dia! Mandei mensagem para a professora e não obtive resposta"
+      -> pergunta_sem_resposta
+    "Ok, a parcela eu pago até o dia 5" -> dificuldade_financeira
+    "Tudo bem, então cancela" -> cancelamento_declarado
+  Só é cortesia quando, tirado o agradecimento, NÃO SOBRA NADA.
 - Julgue pela ÚLTIMA mensagem do cliente, usando as anteriores só como contexto.
 - "Obrigada", "👍", "❤️", "Ok", "Beleza" sozinhos são SEMPRE cortesia, ainda que
   a conversa antes fosse séria.

@@ -42,13 +42,21 @@ const REGRA_POR_TIPO: Record<TipoConversa, string | null> = {
 };
 
 /**
- * Tipos em que o assunto é grave o bastante para valer o sinal mesmo que
- * ninguém esteja "esperando resposta" no sentido literal. Quem escreveu
- * "não continuaremos" não fez pergunta — e é o caso mais importante de todos.
+ * Tipos que dispensam `precisa_resposta`, por dois motivos distintos:
+ *
+ * - GRAVIDADE: quem escreveu "não continuaremos" não fez pergunta, e é o caso
+ *   mais importante de todos. Idem quem avisou que não vai conseguir pagar.
+ * - DEFINIÇÃO: em `promessa_sem_desfecho` a dívida da escola É o tipo — se ela
+ *   prometeu e não voltou, ela deve, e perguntar ao modelo se "precisa
+ *   resposta" é redundante. Isso custou um sinal real em 03/09: a Graciele foi
+ *   classificada certo (`promessa_sem_desfecho`, confiança alta, resumo "a
+ *   escola prometeu cobrar um retorno sobre os valores e a conversa ficou sem
+ *   desfecho") e mesmo assim descartada por `precisa_resposta: false`.
  */
-const GRAVES = new Set<TipoConversa>([
+const ESCOLA_DEVE = new Set<TipoConversa>([
   "cancelamento_declarado",
   "dificuldade_financeira",
+  "promessa_sem_desfecho",
 ]);
 
 export interface DecisaoSinal {
@@ -76,8 +84,8 @@ export function decidirSinal(v: VeredictoConversa): DecisaoSinal {
   // Confiança baixa nunca vira item de lista.
   if (v.confianca === "baixa") return nao("confianca_baixa");
 
-  // Assunto grave dispensa "precisa_resposta"; o resto não.
-  if (!v.precisa_resposta && !GRAVES.has(v.tipo)) {
+  // Tipo em que a escola deve por gravidade ou por definição dispensa o campo.
+  if (!v.precisa_resposta && !ESCOLA_DEVE.has(v.tipo)) {
     return nao("nao_precisa_resposta");
   }
 
