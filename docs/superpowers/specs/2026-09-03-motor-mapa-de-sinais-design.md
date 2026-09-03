@@ -12,6 +12,77 @@
 
 ---
 
+## 🧱 AS DUAS DIMENSÕES — não confundir (definido pelo Luciano, 03/09)
+
+O sistema tem **dois eixos ortogonais**. Errar isso é o que faz sinal chegar na
+pessoa errada.
+
+**Eixo 1 — ANDARES (o que o motor faz com o dado):**
+
+| andar | função |
+|---|---|
+| **Alicerce** | o dado existe, está limpo e é confiável |
+| **1º andar** | contexto → interpretação → orientação **sobre o INDIVÍDUO** |
+| **2º andar** | padrões → aprendizados → estratégia **sobre a REDE** |
+| **3º andar** | ação pró-ativa, entrega idempotente, governança |
+
+**Eixo 2 — CAMADAS DE DECISÃO (para quem a saída é dirigida):**
+
+| camada | quem | pergunta que responde |
+|---|---|---|
+| **operacional** | consultora, secretária, professor | *o que eu faço agora, com esta pessoa?* |
+| **tática** | gerentes | *onde meu funil está vazando este mês?* |
+| **estratégica** | **Luciano** | *em que canal eu invisto? o que a rede está aprendendo?* |
+
+**Como se cruzam:** o 1º andar alimenta sobretudo o **operacional**; o 2º andar
+alimenta **tática e estratégica**; o 3º andar atravessa os três — operacional
+executa, tática cobra, estratégica escala. **Todo entregável novo tem de
+declarar andar E camada.**
+
+⚠️ **A arquitetura é AI-first servida por skills, com número determinístico
+vindo de RPC.** O LLM interpreta e redige; ele **nunca** produz número nem
+decide dinheiro/prioridade. Vale para Mila, Sol, Lia e TOM — é a mesma lição
+que a Sol Caixa V3/V4 já pagou caro.
+
+---
+
+## 🔴 AS TRÊS TRAVAS ANTES DE LIGAR QUALQUER AGENTE (Luciano, 03/09)
+
+Decisão explícita: **não ligar mais nada** (nem a qualificação da Mila) antes
+de resolver as três. Sem elas não existe mapa de calor confiável, e a Mila
+qualifica em cima de dado sujo.
+
+### T1 — Campanha: 92% do inbound é bot-para-bot · **ALICERCE**
+Medido: **4.571 de 4.978** textos inbound em 60 dias são auto-resposta de
+OUTRA empresa (Serasa, *"vamos encerrar esta conversa por inatividade"*,
+*"Central de Ajuda"*). `campanha_contatos.respondeu=true` conta esses como
+resposta → o painel mostra **86 respostas / 11%** quando o real humano é ~8%
+disso. **Contamina qualquer aprendizado de campanha.**
+→ Precisa de um discriminador humano-vs-bot na ingestão + recontagem do
+`respondidos`. Camada: **tática/estratégica** (o número mente para gerente e
+para o Luciano).
+
+### T2 — O calor do lead não existe · **1º ANDAR** (depende do alicerce)
+`leads.temperatura` é 98% "quente" por default; `qtd_mensagens_mila`,
+`qtd_tentativas_sem_resposta`, `qtd_desmarcacoes`, `chatwoot_conversation_id`
+são **zero/null em 100%** dos 2.740 leads de 90 dias. Foram desenhados e nunca
+alimentados. **O calor tem de sair da CONVERSA**, e o espelho já entrega a
+matéria-prima: `assignee` distingue bot de consultora; medido no 1º dia — 10
+quentes em 60 conversas, 3 presas no bot, **11 de 16 nunca chegaram a humano**,
+mediana até humano **51 min**. Camada: **operacional**.
+
+### T3 — Meta Ads não é persistido · **ALICERCE**
+Tráfego Pago é **100% ao vivo** pela Graph API: o dado só existe enquanto
+alguém olha a tela. Sem histórico, o 2º andar **nunca** saberá qual criativo
+traz lead que matricula (hoje só sabe qual traz *conversa*). O Luciano quer
+**real time** — ou seja, fresco E gravado, não um retrato de ontem.
+Ferramenta já existe: edge `meta-ads-insights` (proxy read-only, gate por
+e-mail), edge `enriquecer-meta-ads` + cron `10 8 * * *`, secret
+`META_ADS_TOKEN`. **Falta a tabela e a cadência.** Camada: **estratégica**
+(decisão de investimento) e **tática** (qual criativo pausar).
+
+---
+
 ## 🧭 ESTADO ATUAL — LEIA ISTO PRIMEIRO (atualizado 03/09/2026, fim do dia)
 
 **Bloco de retomada.** Quem abrir esta spec — inclusive eu, numa sessão nova —
@@ -299,6 +370,11 @@ está em produção, vá afinar o prompt.**
 
 ### 🔴 O QUE ESTÁ ABERTO (em ordem de importância)
 
+0. 🔴 **AS TRÊS TRAVAS (T1 campanha bot-para-bot · T2 calor do lead · T3 Meta
+   Ads persistido em tempo real)** — decisão do Luciano em 03/09: **nada mais é
+   ligado antes disso**. Ver a seção "AS TRÊS TRAVAS" acima. O que JÁ está no ar
+   (relatório comercial pela Mila às 20:05) continua; o que não está — DM quente,
+   qualificação, corte do bot — espera.
 1. ~~Recall do A5~~ ✅ **PAGO em 03/09** — prompt **v4-d2**, 18 sinais com ~90%.
    A causa NÃO era a guarda de direção (essa estava certa): a v2 expandiu
    `cortesia` para abraçar "aceite/confirmação" e o balde virou **ímã** — o
