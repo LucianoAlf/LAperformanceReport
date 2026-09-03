@@ -650,3 +650,48 @@ estreia — viraria enxurrada e queimaria a confiança.
 
 ⚠️ O rodapé é deliberado: **pede o feedback que alimenta a taxa de
 improcedência** — a triagem delas é o que calibra as regras.
+
+## 🔴 Correção do canal da Fase 1 — a Lia JÁ manda DM (03/09)
+
+**Meu erro de leitura:** concluí que "a Lia nunca enviou nada" porque
+`lia_mensagens` mostrava `daLia=0`. Mas **aquele espelho só captura GRUPOS e só
+`incoming`** — as DMs dela nunca passaram por lá. Tirei conclusão de uma fonte
+que não cobria o caso. O Luciano corrigiu na hora.
+
+**O caminho real estava no LA Report o tempo todo:**
+
+`whatsapp_destinatarios_relatorio` id=8 → **"Fabi Valdevino (privado)"**,
+jid `5521994696489`, **`caixa_id = 3` (a caixa da Lia)**, ativo, tipo
+`presenca_pendencias_consolidado`, cron **09:00** — e a
+`fila_relatorios_sol_hermes` mostra `status='enviada'` em 30/08, 01/09 e 02/09.
+
+**Ou seja: a Fabi já recebe DM da Lia todo dia às 9h, e o canal funciona.**
+
+**Consequência para a Fase 1 — melhor do que o plano anterior:** não estreia
+canal nem formato. O mapa entra como **segunda mensagem da Lia, no mesmo
+horário, no mesmo visual** que ela já lê (`━━━ / 📋 TÍTULO / 📆 data / ⚠️ SEÇÃO
+(n) / _nota_ / 👤 Nome`). Atrito mínimo.
+
+⚠️ **A Jessy não está cadastrada** em `whatsapp_destinatarios_relatorio` — hoje
+a Fabi recebe o consolidado das 3 unidades sozinha. Cadastrar a Jessy é decisão
+do Luciano.
+
+**A mensagem real da Fase 1** (`radar_mensagem_guardias_v1`), com os 5 casos
+mais urgentes de hoje — todos aviso prévio, todos de Campo Grande, todos ainda
+na escola:
+
+> ━━━━━━━━━━━━━━━━━━━━━━
+> 🎯 **MAPA DE SINAIS — RETENÇÃO** · 📆 03/09/2026
+> ⚠️ **CASOS CRÍTICOS DE HOJE** (5)
+> *em ordem de prazo — aviso prévio primeiro, depois renovação*
+>
+> 👤 **Luiz Eduardo Philippsen** *Campo Grande*
+> avisou em 25/08 que sai em 09/2026 — motivo: Falta de tempo. Ainda está na escola.
+> ➜ Conversa de REVERSÃO, não de cobrança…
+>
+> 📌 Mais 25 casos críticos na fila (chegam amanhã)
+> 💬 *Me diga o que não fizer sentido — o que você dispensar ajusta o sistema.*
+
+⚠️ Note o que a estreia entrega: **5 famílias que declararam saída e ainda estão
+na escola** — a janela de reversão que hoje só 5% aproveita (P6). Não é alerta
+de rotina; é a lista de quem ainda dá para segurar.

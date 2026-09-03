@@ -1,0 +1,27 @@
+-- FASE 1 — CANAL CORRIGIDO (03/09/2026, correção do Luciano: "a Lia manda
+-- mensagem para a Fabi e para a Jessica na DM pessoal delas").
+--
+-- MEU ERRO DE LEITURA: concluí que "a Lia nunca enviou nada" porque
+-- lia_mensagens tinha daLia=0. Mas aquele espelho só captura GRUPOS e só
+-- direcao='incoming' — as DMs dela nunca passaram por ali. Conclusão tirada de
+-- fonte que não cobria o caso.
+--
+-- O CAMINHO REAL estava no LA Report o tempo todo:
+--   whatsapp_destinatarios_relatorio id=8
+--   'Fabi Valdevino (privado)' · jid 5521994696489 · caixa_id=3 (Lia) · ativo=true
+--   tipo 'presenca_pendencias_consolidado' · cron 09:00
+--   fila_relatorios_sol_hermes: status 'enviada' em 30/08, 01/09 e 02/09
+-- => A Fabi JÁ RECEBE DM DA LIA todo dia às 9h, e o canal FUNCIONA.
+--
+-- Formato que ela já lê (relatório de presença):
+--   ━━━ / 📋 *TÍTULO* / 🏢 *UNIDADE* / 📆 data / ⚠️ *SEÇÃO (n)* / _nota_ / 👤 *Nome*
+-- A Fase 1 adota o MESMO visual: entra como segunda mensagem da Lia, no mesmo
+-- horário e no mesmo formato. Zero canal novo, zero formato novo, atrito mínimo.
+--
+-- ⚠️ A JESSY NÃO ESTÁ CADASTRADA em whatsapp_destinatarios_relatorio — hoje a
+-- Fabi recebe o consolidado das 3 unidades sozinha. Cadastrar a Jessy é decisão
+-- do Luciano (não incluído aqui de propósito).
+--
+-- Recorte da estreia: só CRÍTICO, só R13 (aviso prévio) + R3 (renovação) +
+-- R5 (família). Teto 5. R1 (66 casos de frequência) fica fora — viraria
+-- enxurrada na estreia. Nasce ativo=false.
