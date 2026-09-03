@@ -10,6 +10,86 @@
 > motor não existe; ele não é o produto, é a prova de que a última milha
 > funciona.
 
+---
+
+## 🧭 ESTADO ATUAL — LEIA ISTO PRIMEIRO (atualizado 03/09/2026, fim do dia)
+
+**Bloco de retomada.** Quem abrir esta spec — inclusive eu, numa sessão nova —
+deve ler daqui antes de qualquer outra coisa, para não reconstruir o que já
+existe nem esquecer o que ficou pela metade.
+
+### Alicerce
+
+| Passo | Estado | Onde está |
+|---|---|---|
+| **A1** canais | ✅ **feito** | Chatwoot 8/8 inboxes (PR #301) + **Instagram** por bridge própria (PR #302) |
+| **A2** conciliar experimentais | ✅ **feito** | elo é `mila_experimentais.lead_id` = `leads.emusys_lead_id` (93%) |
+| **A5** sinais semânticos | ✅ **NO AR** | edge `extrair-sinais-conversa`, cron **jobid 193** 07:30 BRT |
+| **A3** jornada do lead | ⏸️ a fazer | destravado pelo A2 |
+| **A4** sinais SQL comerciais | ⏸️ a fazer | destravado; agora com Instagram dentro |
+
+🔴 **O A5 NÃO precisa ser construído de novo.** Ele roda. O que está aberto é
+**afinar recall** — ver a seção de dívida abaixo. Se numa sessão futura a
+tentação for "vamos construir o extrator semântico", a resposta é: **já existe,
+está em produção, vá afinar o prompt.**
+
+### Motor
+
+- **14 regras** (`radar_regras`), 6 origens de dado, **139 sinais abertos**
+  (41 críticos) — 10 deles vindos de conversa, fonte que não existia ontem.
+- Guarda de regra de negócio ativa (`radar_aluno_elegivel_v1` + trigger):
+  bolsista e banda **fora** do radar. Vazamento medido: 0.
+- 2º andar: 7 padrões medidos + 9 estratégias com viabilidade.
+- Entrega: `radar_destinatarios` / `radar_pauta_v1` / `radar_mensagem_guardias_v1`.
+
+### 🔴 O QUE ESTÁ ABERTO (em ordem de importância)
+
+1. **Recall do A5.** O prompt v2 (no ar) trocou recall por precisão: v1 dava 17
+   sinais com ~82%, v2 dá 10 com ~90-100% mas **perdeu 4 sinais bons** — entre
+   eles *"tentou falar com a professora e não teve retorno"*, que é exatamente o
+   que precede evasão. Suspeito da guarda de DIREÇÃO ter ido longe demais.
+   Retomar com `?dry_run=1` (não escreve, não passa pela trava de 1h), comparar
+   com o placar de 03/09 e afrouxar **só** essa regra.
+2. **Fase 1 desligada** — nada chega à Fabi/Jessy ainda. Aguarda OK explícito do
+   Luciano. A Jessica (`5521984695110`) **não está cadastrada** em
+   `radar_destinatarios`.
+3. **50 sessões de Instagram paradas** no meio do funil (`ask_name` 23,
+   `ask_phone` 13, `ask_unit` 13) ainda não viram sinal.
+4. **Classificações da bridge de Instagram são anônimas** — `dm_classification`
+   grava `is_lead`/`motivo`/`reclamacao_sem_retorno` **sem `sender_id`**, então
+   as 12 reclamações sem retorno não são atribuíveis. Corrigir é mexer em
+   produção da Mila SDR: decisão do Luciano.
+5. **Loop de desfecho** (`radar_sinais.desfecho`) só fecha depois da Fase 1
+   rodar — sem desfecho não há aprendizado.
+6. **Tarefa no TOM** a partir do sinal (`source='mapa_sinais'` precisa entrar na
+   check do TOM por migration no repo dele).
+
+### Armadilhas medidas — não repetir
+
+- **R8 ingênuo** ("última mensagem é do contato") = 248 casos, **~5% de
+  precisão**: 23 de 25 amostras eram "👍"/"Obrigada". Com regex de cortesia sobe
+  a ~24%. **Só o semântico chega a ~90%.** O `lastro` da regra no banco já traz
+  esses números. Não ressuscitar a versão SQL.
+- **Não procurar Instagram no Chatwoot.** A inbox 209 está morta desde 21/07; o
+  canal é a bridge da la-hq. Provado: a soma das 8 inboxes bate exatamente com o
+  total da conta (19.362), e há **uma conta só**.
+- **Métrica de negócio não se recalcula à mão** — o churn saiu errado 2×. Fonte
+  canônica: `dados_mensais.churn_rate`.
+- **Ledger sempre DEPOIS do efeito.** Gravar antes fez um sinal se perder para
+  sempre quando o INSERT falhou.
+- **Quem registra a falha não pode falhar em silêncio** —
+  `automacao_log.aluno_nome` é NOT NULL e derrubava o próprio log de erro.
+- **Ensaio contra o banco pega o que a revisão de código não pega**: os 3 bugs
+  do A5 apareceram no 1º run real, nenhum na leitura.
+
+### Prova de vida (checar pelo LOG, nunca pelo `pg_cron`)
+
+```sql
+select count(*) from automacao_log where acao = 'extrator_conversa_run';  -- A5
+select max(capturado_em) from instagram_sessoes;                          -- Instagram
+select count(*) from radar_sinais where status = 'aberto';                -- motor
+```
+
 ## 🔴 AUDITORIA DO BANCO (03/09) — GRANDE PARTE DISSO JÁ EXISTE
 
 O Luciano mandou auditar antes de construir (regra DRY da casa). **Achado: ~60%
