@@ -183,6 +183,34 @@ Exemplos reais de hoje (o alerta que vai existir):
 > Jullyane, casal, teclado + bateria, 11 mensagens — *"estarei no aguardo do retorno"* há 34 min
 > Tamara, filho de 3 anos, bateria, pediu valor — **ainda com o bot** há 6 min
 
+### ✅ MILA LIGADA NOS 3 GRUPOS (03/09, ~17h) — o 1º relatório real sai HOJE às 20:05
+
+O Luciano adicionou os números da Mila aos grupos. Verificado pela API do WAHA
+— ⚠️ **precisa de `POST /api/{sessão}/groups/refresh`**: sem o refresh, Barra e
+CG não apareciam (cache), só o Recreio. Depois do refresh, cada sessão enxerga o
+grupo da sua unidade com o **JID exato já cadastrado**.
+
+**Ligado no banco** (`20260903280000`): caixas 7/8/9 `ativo=true`;
+`whatsapp_destinatarios_relatorio.caixa_id` = 7 (BR) / 8 (RC) / 9 (CG) nos 3
+destinatários `relatorio_comercial`. Cron `relatorio_comercial_diario_cron_ativo`
+= true nas 3 unidades.
+
+**Smoke test REAL entregue nos 3 grupos** via `send_single_report(jid, texto,
+caixa_id=)`: transport `waha_caixa_7/8/9`, `message_id` do próprio grupo. A
+mensagem foi a Mila se apresentando ("a partir de hoje o Relatório Diário
+Comercial sai por mim, às 20h05, com uma seção nova: os sinais do dia").
+
+🔴 **Prova de vida do 1º envio real (hoje 20:05):**
+```sql
+select unidade_id, status, transport, erro
+  from fila_relatorios_whatsapp
+ where tipo_relatorio = 'relatorio_comercial' and data_dia = current_date;
+```
+Esperado: 3 linhas `enviada` com `transport = waha_caixa_*`. Se vier `erro`,
+**não há fallback para a Sol** — é por desenho (mesma regra da caixa da Lia).
+O log do cron: `/home/sol/.openclaw/workspace/logs/lareport-comercial-hermes.log`;
+falha do job vai ao tópico Logs do Telegram pelo `cron-alerta.py`.
+
 ### 🚰 O CANO ATÉ O GRUPO JÁ EXISTIA — e a partir de hoje leva AÇÃO (03/09, noite)
 
 Contexto que o Luciano trouxe: os 3 grupos **"RELATÓRIOS DIÁRIOS BR/CG/RC"** já
