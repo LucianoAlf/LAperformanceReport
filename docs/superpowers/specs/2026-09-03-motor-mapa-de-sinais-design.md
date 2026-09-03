@@ -695,3 +695,178 @@ na escola:
 ⚠️ Note o que a estreia entrega: **5 famílias que declararam saída e ainda estão
 na escola** — a janela de reversão que hoje só 5% aproveita (P6). Não é alerta
 de rotina; é a lista de quem ainda dá para segurar.
+
+---
+
+## ✅ ALICERCE A1 + A5 ENTREGUES (03/09/2026) — a conversa virou sinal
+
+Ordem definida pelo Luciano: **A1 (canais) → A5 (semântica) → A3 (jornada)**.
+
+### A1 — o espelho do Chatwoot já existia; faltava a allowlist
+
+Não foi construção, foi **ligar o que estava desligado**. O webhook 10 do
+Chatwoot (`Sol - Escuta Secretaria`) é de **CONTA** (`inboxes: []`), então a edge
+`chatwoot-secretaria-webhook` (projeto SOL) **já recebia evento de todas as
+inboxes** e descartava o que não estivesse em `sol_chatwoot_inboxes`:
+
+```ts
+// allowlist (status ativo) — adicionar/remover inbox sem redeploy
+.from("sol_chatwoot_inboxes").eq("inbox_id", inboxId).eq("status","ativo")
+if (!allowed) return json({ skipped: "inbox_not_allowed", inboxId });
+```
+
+| | antes | depois |
+|---|---|---|
+| inboxes espelhadas | 3 (secretarias) | **8** |
+| conversas cobertas (desde jan/2026) | 4.885 | **13.658** |
+
+Migration `supabase-sol/migrations/20260903143000_*` (diretório **novo** — o
+projeto SOL não era versionado neste repo). Validado ao vivo: Mila_Recreio
+gravou mensagem minutos depois de ligar.
+
+⚠️ **`departamento` na allowlist** (`secretaria`/`comercial`/`financeiro`/`social`).
+Sem ela todo consumidor hardcodaria `inbox_id in (147,148,155)` — o padrão que
+gerou as duplicatas de renovação neste projeto.
+
+🔒 **ACL corrigida junto:** as duas tabelas do espelho estavam com
+`anon=arwdDxtm` (INSERT/UPDATE/DELETE/TRUNCATE). Não era explorável — RLS ligada
+e zero policies para anon nega — mas bastava alguém criar uma policy `using(true)`
+sem declarar role para a anon key, que é **pública**, ganhar escrita sobre
+conversa de aluno. Revogado.
+
+**Dois achados que corrigem o mapa:** o Instagram (inbox 209) tem **85 conversas
+em 8 meses**, não o volume que se supunha — as DMs em maior parte não chegam ao
+Chatwoot; e a inbox 50 (ADM Recreio) está com **zero desde janeiro**. As três da
+Mila somam **8.688** conversas contra 4.885 das secretarias: o canal comercial
+era o maior ponto cego.
+
+### 🔴 O R8 que eu tinha medido estava errado — e o lastro dizia isso
+
+O `lastro` do R8 afirmava *"260 turnos de cliente sem NENHUMA resposta"*. **Era
+falso positivo em massa.** Calibração de 03/09: de **25 amostras aleatórias** do
+grupo "72h+", **23 eram cortesia de fechamento** — "👍", "❤️", "Obrigada", "Ok".
+
+| corte | casos | precisão |
+|---|---|---|
+| última mensagem é do contato | 248 | ~5% |
+| + fora cortesia (regex), janela 4h–14d | 51 | **~24%** (12 reais, contados à mão) |
+| + classificação semântica | **10** | **~90-100%** |
+
+O `lastro` do R8 foi corrigido no banco (migration `20260903180000`), e o R8
+passou a depender do extrator — não mais de SQL de "a última é do contato".
+
+**O que os 51 tinham dentro é o que importa** — não era R8, era R2, parado há
+dias sem ninguém ver:
+
+> *"Não. Para rescindir o contrato"* — 8 dias
+> *"A última aula dela seria 7/08 referente a julho, depois não iríamos mais"* — 8,8 dias
+> *"Eu fiz o pedido pra cancelar. Por enquanto não está fazendo bem pro jammal"* — 12 dias
+> *"esse mês eu ainda não consegui o valor da mensalidade"* — 7 dias
+
+### A5 — o extrator semântico
+
+**Três peças, uma fronteira só.** O extrator mora no **LA Report** (é onde estão
+`alunos`/`leads` para resolver o telefone e a chave da OpenAI); do SOL atravessa
+**apenas o texto**.
+
+1. **`vw_atendimento_candidatos_sinal`** (SOL) — uma linha por conversa em que o
+   cliente falou por último e ninguém respondeu (2h a 14 dias), com o transcript
+   das últimas 8 mensagens. Medido: 176 candidatos, 104 kB, 6,8 msgs/conversa.
+   ⚠️ **Sem filtro de cortesia de propósito**: cortaria 176 → 51 chamadas, mas
+   classificar linguagem por regex é o que se decidiu parar de fazer aqui, e a
+   economia seria de centavos. Quem decide se "❤️" precisa de resposta é o modelo.
+2. **`exportar-candidatos-atendimento`** (edge SOL, `verify_jwt=false`) — só
+   transporte, token conferido em tempo constante. ⚠️ **Por que edge e não a view
+   pelo PostgREST:** exigiria `GRANT SELECT` para `anon`, e a anon key é pública —
+   conversa de aluno ficaria legível por qualquer um. Mesmo motivo da
+   `base-conhecimento`.
+3. **`extrair-sinais-conversa`** (edge LA Report) — classifica, decide, grava.
+
+**Divisão de poder** (padrão de `classificar-resposta-evasao`): o modelo
+**descreve** (tipo, `precisa_resposta`, confiança, resumo, trecho literal);
+`decidirSinal()` — função pura em `contract.ts` — **decide**; severidade e
+orientação vêm de `radar_regras`. **O modelo nunca escolhe prioridade de
+retenção e nunca escreve para o cliente.**
+
+**Resolução de identidade:** RPC **`radar_resolver_entidade_por_telefone`**
+(fonte única — não reimplementar no consumidor). ⚠️ Um telefone pode ser de
+**mais de uma pessoa**: é o do responsável e os irmãos estudam na escola (já
+mordeu — Miguel/Pedro e Heitor/Willian, 05/08). 2+ pessoas vira **`familia`**
+com `entidade_id` nulo, igual ao R5, **nunca** escolha arbitrária por `limit 1`.
+Medido sobre os 173 telefones do dia: 126 aluno (108 pessoa única, **18 família**),
+20 lead, 27 desconhecido, 0 telefone inválido.
+
+**R14 — dificuldade financeira declarada** (regra nova): apareceu no dado real e
+não cabia em nenhuma existente; a ação é **negociar, não fazer discurso de
+retenção**, e o dono é o financeiro, não a guardiã.
+
+### O resultado da primeira rodada real (173 conversas)
+
+| | |
+|---|---|
+| cortesia descartada | **138** |
+| **R2 cancelamento declarado** | **4** (crítico) |
+| R7 promessa sem desfecho | 2 |
+| R8 pergunta sem resposta | 2 |
+| R10 reposição pedida | 1 |
+| R14 dificuldade financeira | 1 |
+| descartado por entidade desconhecida | 3 |
+| erros | **0** |
+
+Auditei os 10 um a um: **9-10 corretos**.
+
+⚠️ **Dívida assumida: troquei recall por precisão.** A v1 do prompt deu 17
+sinais com ~82% de precisão; a v2 dá 10 com ~90-100%. O aperto **custou 4 sinais
+bons** — entre eles *"pede confirmação do contato da professora Lorrane e informa
+que tentou falar sem retorno"*, que é exatamente o que precede evasão. É o certo
+para a primeira lista que chega na Fabi (lista que renasce nunca mais é lida),
+mas é dívida a pagar com tuning, não estado final.
+
+Os dois falsos positivos da v1 e o que cada um ensinou:
+- *"terei q desmarcar a aula do Lucas amanhã"* virou **R2 cancelamento de
+  contrato** — é falta de UMA aula. O prompt agora separa encerrar a matrícula
+  de desmarcar uma aula.
+- *Maria Flor*: o próprio resumo dizia "a escola pediu o comprovante e **aguarda
+  retorno do cliente**". **Direção importa** — quando quem espera é a escola, não
+  é sinal para a guardiã.
+
+### Três bugs que o primeiro run real pegou — e o que cada um ensina
+
+1. 🔴 **`radar_sinais.competencia` é NOT NULL** e eu não preenchia. O sinal não
+   era gravado.
+2. 🔴 **`automacao_log.aluno_nome` é NOT NULL** — então o INSERT do **log de
+   erro** também falhava. O placar dizia `erro_insert_sinal: 1` e **não havia
+   nenhuma linha na tabela dizendo qual era o erro**. *Quem registra a falha não
+   pode ser capaz de falhar em silêncio.*
+3. 🔴 **O ledger era gravado ANTES do sinal.** Insert que falha deixava a
+   conversa marcada como vista e o sinal se perdia **para sempre**. Invertido:
+   reclassificar custa centavos, perder um cancelamento declarado custa um aluno.
+
+Os três só apareceram no **ensaio contra o banco real** — a revisão de código
+não pegou nenhum. Mesmo padrão do `capturar_relatorios_mensais_canonicos_v1`.
+
+### Concorrência e agenda
+
+⚠️ Um disparo de `pg_cron` vira **2-4 execuções** neste ambiente. A trava é o
+UNIQUE parcial de `automacao_log.idempotency_key`, com janela de 1h — quem
+insere primeiro roda. **Validado com 3 chamadas simultâneas: 1 rodou, 2 saíram
+com `ignorado_concorrencia`.** ⚠️ Rerun manual na mesma hora é bloqueado de
+propósito; para ensaiar use `dry_run=1`, que não passa pela trava.
+
+Cron **jobid 193 `radar-extrair-sinais-conversa-diario`**, `30 10 * * *` UTC
+(07:30 BRT) — depois do detector SQL das 06h, antes da entrega das 09h. Manda
+`Authorization` **além** do token, porque um redeploy que vire `verify_jwt` para
+true derrubaria o cron em 401 silencioso.
+🔴 **Prova de vida é o log, não o `pg_cron`:**
+`select count(*) from automacao_log where acao='extrator_conversa_run'`.
+
+### Estado do radar depois do A1+A5
+
+**139 sinais abertos** (41 críticos), de **6 origens** e 11 regras — dos quais
+**10 vêm de conversa**, uma fonte que ontem não existia.
+
+### Próximo: A3 (jornada do lead)
+
+Destravado pelo A2: o elo é `mila_experimentais.lead_id` = `leads.emusys_lead_id`
+(93% de cobertura, medido em 300 ids) — **não** `leads.id`, que casa 59% por
+coincidência de numeração, nem `lead_experimentais.lead_id`, que casa 5%.
