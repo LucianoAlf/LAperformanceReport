@@ -19,7 +19,7 @@ function migrationSource() {
   return readFileSync(path.join(migrationsDir, migrationName), 'utf8');
 }
 
-test('ticket medio usa a parcela contratual, inclusive para inadimplente', () => {
+test('leitura viva usa a parcela contratual sem juros ou multa', () => {
   const sql = migrationSource();
 
   assert.match(sql, /create or replace function public\.aplicar_financeiro_ticket_contratual_v1/i);
@@ -31,6 +31,39 @@ test('ticket medio usa a parcela contratual, inclusive para inadimplente', () =>
     sql,
     /valor_contratual[\s\S]{0,360}juros_e_multa/i,
     'juros e multa nao podem inflar o ticket da competencia',
+  );
+});
+
+function migrationFechamentoInadimplenciaSource() {
+  const migrationName = readdirSync(migrationsDir)
+    .filter((name) => /_ticket_medio_contratual_fechamento_inadimplencia\.sql$/u.test(name))
+    .sort()
+    .at(-1);
+
+  assert.ok(
+    migrationName,
+    'uma migration versionada deve preservar a receita de inadimplentes no fechamento mensal',
+  );
+
+  return readFileSync(path.join(migrationsDir, migrationName), 'utf8');
+}
+
+test('competencia fechada calcula ticket por unidade a partir da receita congelada e dos pagantes fechados', () => {
+  const sql = migrationFechamentoInadimplenciaSource();
+
+  assert.match(sql, /dominio = 'alunos_executivo'/i);
+  assert.match(sql, /s\.status = 'fechado'/i);
+  assert.match(sql, /s\.unidade_id = u\.unidade_id/i);
+  assert.match(sql, /payload->>'mrr'/i);
+  assert.match(sql, /payload->>'alunos_pagantes'/i);
+  assert.match(
+    sql,
+    /round\(f\.faturamento_fechado\s*\/\s*f\.alunos_pagantes_fechados, 2\)/i,
+  );
+  assert.doesNotMatch(
+    sql,
+    /95553e96-971b-4590-a6eb-0201d013c14d/i,
+    'a correcao global nao pode carregar o UUID do Recreio',
   );
 });
 
