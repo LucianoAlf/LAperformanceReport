@@ -754,3 +754,57 @@ export function valorPrincipalDaFatura(item: {
 }): number | null {
   return item.status === 'paga' ? item.valores.valor_pago : item.valores.valor_hoje;
 }
+
+// Situacao de uma fatura, derivada dos campos que a RPC JA entrega resolvidos — nunca
+// recalculada aqui. em_atraso_d0 e cobranca.d0 e cobranca_d2 e cobranca.d2_elegivel, os dois
+// computados no banco com a data de corte da leitura; a_vencer e o complemento exato de
+// em_atraso_d0 dentro de 'aberta' (no banco: aberta e vencimento >= as_of).
+// Espelha o filtro por p_status da get_faturas_alunos_financeiro_v1_canonica_20260817.
+export function faturaAtendeSituacao(
+  item: FaturaFinanceiraItem,
+  situacao: FaturasFinanceirasSituacao,
+): boolean {
+  switch (situacao) {
+    case 'todas': return true;
+    case 'pagas': return item.status === 'paga';
+    case 'em_aberto': return item.status === 'aberta';
+    case 'em_atraso_d0': return item.cobranca.d0;
+    case 'a_vencer': return item.status === 'aberta' && !item.cobranca.d0;
+    case 'canceladas': return item.status === 'cancelada';
+    case 'cobranca_d2': return item.cobranca.d2_elegivel;
+    // A visao de reconciliacao nao se alimenta desta lista: ela le state.reconciliation.
+    case 'reconciliacao': return false;
+  }
+}
+
+const arredondar2 = (valor: number) => Math.round((valor + Number.EPSILON) * 100) / 100;
+
+const somarSituacao = (
+  items: FaturaFinanceiraItem[],
+  situacao: FaturasFinanceirasSituacao,
+): FaturasFinanceirasTotals => {
+  const doGrupo = items.filter((item) => faturaAtendeSituacao(item, situacao));
+  return {
+    quantidade: doGrupo.length,
+    valor: arredondar2(doGrupo.reduce((soma, item) => soma + (valorPrincipalDaFatura(item) ?? 0), 0)),
+  };
+};
+
+// Totais derivados das faturas que estao na tela, para os cards acompanharem os filtros da
+// visao. Paridade com os totais da RPC quando nenhum filtro local esta ativo: la eles saem do
+// CTE itens_normais, que e exatamente o conjunto devolvido em items com p_status='todas'.
+// 'canceladas' fica sem valor de proposito — a RPC tambem so conta quantidade (o valor e
+// preenchido com 0 pela camada de contrato) e cancelada nao tem valor pago nem atualizado.
+export function calcularTotaisFaturasFinanceiras(
+  items: FaturaFinanceiraItem[],
+): Record<Exclude<FaturasFinanceirasSituacao, 'reconciliacao'>, FaturasFinanceirasTotals> {
+  return {
+    todas: somarSituacao(items, 'todas'),
+    pagas: somarSituacao(items, 'pagas'),
+    em_aberto: somarSituacao(items, 'em_aberto'),
+    em_atraso_d0: somarSituacao(items, 'em_atraso_d0'),
+    a_vencer: somarSituacao(items, 'a_vencer'),
+    canceladas: { quantidade: items.filter((item) => item.status === 'cancelada').length, valor: 0 },
+    cobranca_d2: somarSituacao(items, 'cobranca_d2'),
+  };
+}

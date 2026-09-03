@@ -35,7 +35,9 @@ import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import type { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 import { useUnidades } from '@/hooks/useSupabase';
 import {
+  calcularTotaisFaturasFinanceiras,
   carregarFaturasAlunosFinanceiras,
+  faturaAtendeSituacao,
   FATURAS_FINANCEIRAS_LOADING,
   filtrarFaturasFinanceirasLocais,
   normalizarSituacaoFaturasFinanceiras,
@@ -183,6 +185,8 @@ function MetricCard({
   label,
   count,
   value,
+  baselineCount,
+  baselineValue,
   tone,
   active = false,
   disabled = false,
@@ -191,6 +195,9 @@ function MetricCard({
   label: string;
   count: number;
   value: number;
+  // Total da competencia inteira, exibido so quando a visao esta recortada por algum filtro.
+  baselineCount?: number;
+  baselineValue?: number;
   tone: 'cyan' | 'emerald' | 'amber' | 'rose' | 'slate';
   active?: boolean;
   disabled?: boolean;
@@ -203,6 +210,8 @@ function MetricCard({
     rose: 'border-rose-500/20 from-rose-500/[0.13] to-slate-950/40 text-rose-200',
     slate: 'border-slate-700 from-slate-800/75 to-slate-950/40 text-slate-200',
   } as const;
+  const recortado = baselineCount != null && baselineValue != null
+    && (baselineCount !== count || baselineValue !== value);
   const content = (
     <>
       <div className="flex items-start justify-between gap-3">
@@ -210,6 +219,11 @@ function MetricCard({
         <span className="rounded-full bg-slate-950/45 px-2 py-0.5 text-xs font-semibold text-slate-200">{count}</span>
       </div>
       <p className={cn('mt-5 text-xl font-semibold tabular-nums', tones[tone].split(' ').at(-1))}>{moeda(value)}</p>
+      {recortado ? (
+        <p className="mt-1 text-[11px] leading-snug text-slate-500">
+          nesta visão • de <span className="tabular-nums">{moeda(baselineValue ?? 0)}</span> ({baselineCount}) na competência
+        </p>
+      ) : null}
     </>
   );
   if (!onClick) return <div className={cn('rounded-2xl border bg-gradient-to-br p-4 shadow-lg shadow-slate-950/15', tones[tone])}>{content}</div>;
@@ -417,11 +431,15 @@ export function FaturasAlunosFinanceirasPage() {
       ano,
       mes,
       modoPeriodo,
-      situacao,
+      // A situacao deixou de ir ao servidor: com 'todas' o payload traz o CTE itens_normais
+      // inteiro, que e o mesmo conjunto sobre o qual a RPC calcula os totais. Filtrar aqui e
+      // o que permite os cards contarem dentro do recorte de tipo/curso/forma — com p_status
+      // o cliente so recebia a situacao escolhida e nao teria como somar as outras quatro.
+      situacao: 'todas',
       asOfDate: dataCorte,
     });
     setState(next);
-  }, [ano, dataCorte, mes, modoPeriodo, situacao, unidadeConsulta, unidadePronta]);
+  }, [ano, dataCorte, mes, modoPeriodo, unidadeConsulta, unidadePronta]);
 
   useEffect(() => { void carregar(); }, [carregar]);
 
@@ -519,7 +537,10 @@ export function FaturasAlunosFinanceirasPage() {
     () => professores.length > 0 && state.items.some((item) => item.professor == null),
     [professores, state.items],
   );
-  const itemsFiltrados = useMemo(() => filtrarFaturasFinanceirasLocais(state.items, {
+  // Recorte da visao SEM a situacao: e sobre ele que os cards contam, para cada card poder
+  // dizer quanto ha da SUA situacao dentro do filtro atual. Aplicar a situacao aqui zeraria
+  // os outros quatro cards assim que um fosse escolhido.
+  const itemsDaVisao = useMemo(() => filtrarFaturasFinanceirasLocais(state.items, {
     busca,
     curso: curso === 'todos' ? null : curso,
     tipoFatura: tipoFatura === 'todos' ? null : tipoFatura as FaturaFinanceiraTipo,
@@ -528,6 +549,15 @@ export function FaturasAlunosFinanceirasPage() {
     alunoId,
     matriculaId,
   }), [alunoId, busca, curso, matriculaId, pagamento, professor, state.items, tipoFatura]);
+  const itemsFiltrados = useMemo(
+    () => itemsDaVisao.filter((item) => faturaAtendeSituacao(item, situacao)),
+    [itemsDaVisao, situacao],
+  );
+  const totaisDaVisao = useMemo(() => calcularTotaisFaturasFinanceiras(itemsDaVisao), [itemsDaVisao]);
+  // Com filtro ativo os cards falam da visao, entao o total da competencia vira linha
+  // secundaria dentro do card — sem isso alguem tira print de um total filtrado achando que
+  // e a competencia inteira. Sem filtro, os dois numeros sao o mesmo e o baseline some.
+  const visaoRecortada = itemsDaVisao.length !== state.items.length;
   const unidadesPorId = useMemo(() => new Map(unidades.map((unidade) => [unidade.id, unidade.nome])), [unidades]);
 
   const selecionarSituacao = (next: FaturasFinanceirasSituacao) => {
@@ -607,11 +637,11 @@ export function FaturasAlunosFinanceirasPage() {
           <LeituraNotice state={state} />
 
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <MetricCard label="Todas as faturas" count={state.totals.todas.quantidade} value={state.totals.todas.valor} tone="cyan" active={situacao === 'todas'} onClick={() => selecionarSituacao('todas')} />
-            <MetricCard label="Pagas" count={state.totals.pagas.quantidade} value={state.totals.pagas.valor} tone="emerald" active={situacao === 'pagas'} onClick={() => selecionarSituacao('pagas')} />
-            <MetricCard label="Em aberto" count={state.totals.em_aberto.quantidade} value={state.totals.em_aberto.valor} tone="amber" active={situacao === 'em_aberto'} onClick={() => selecionarSituacao('em_aberto')} />
-            <MetricCard label="Em atraso" count={state.totals.em_atraso_d0.quantidade} value={state.totals.em_atraso_d0.valor} tone="rose" active={situacao === 'em_atraso_d0'} onClick={() => selecionarSituacao('em_atraso_d0')} />
-            <MetricCard label="A vencer" count={state.totals.a_vencer.quantidade} value={state.totals.a_vencer.valor} tone="slate" active={situacao === 'a_vencer'} onClick={() => selecionarSituacao('a_vencer')} />
+            <MetricCard label="Todas as faturas" count={totaisDaVisao.todas.quantidade} value={totaisDaVisao.todas.valor} baselineCount={visaoRecortada ? state.totals.todas.quantidade : undefined} baselineValue={visaoRecortada ? state.totals.todas.valor : undefined} tone="cyan" active={situacao === 'todas'} onClick={() => selecionarSituacao('todas')} />
+            <MetricCard label="Pagas" count={totaisDaVisao.pagas.quantidade} value={totaisDaVisao.pagas.valor} baselineCount={visaoRecortada ? state.totals.pagas.quantidade : undefined} baselineValue={visaoRecortada ? state.totals.pagas.valor : undefined} tone="emerald" active={situacao === 'pagas'} onClick={() => selecionarSituacao('pagas')} />
+            <MetricCard label="Em aberto" count={totaisDaVisao.em_aberto.quantidade} value={totaisDaVisao.em_aberto.valor} baselineCount={visaoRecortada ? state.totals.em_aberto.quantidade : undefined} baselineValue={visaoRecortada ? state.totals.em_aberto.valor : undefined} tone="amber" active={situacao === 'em_aberto'} onClick={() => selecionarSituacao('em_aberto')} />
+            <MetricCard label="Em atraso" count={totaisDaVisao.em_atraso_d0.quantidade} value={totaisDaVisao.em_atraso_d0.valor} baselineCount={visaoRecortada ? state.totals.em_atraso_d0.quantidade : undefined} baselineValue={visaoRecortada ? state.totals.em_atraso_d0.valor : undefined} tone="rose" active={situacao === 'em_atraso_d0'} onClick={() => selecionarSituacao('em_atraso_d0')} />
+            <MetricCard label="A vencer" count={totaisDaVisao.a_vencer.quantidade} value={totaisDaVisao.a_vencer.valor} baselineCount={visaoRecortada ? state.totals.a_vencer.quantidade : undefined} baselineValue={visaoRecortada ? state.totals.a_vencer.valor : undefined} tone="slate" active={situacao === 'a_vencer'} onClick={() => selecionarSituacao('a_vencer')} />
           </section>
           <p className="-mt-2 text-xs text-slate-500">Leitura dos valores: faturas pagas usam o valor efetivamente pago; faturas em aberto usam o valor atualizado hoje, sem desconto condicional e com multa/mora do contrato. Por isso o total pode diferir do resumo original do Emusys.</p>
 
@@ -627,7 +657,7 @@ export function FaturasAlunosFinanceirasPage() {
             />
             <OperationalViewButton
               label="Canceladas — histórico"
-              count={state.totals.canceladas.quantidade}
+              count={totaisDaVisao.canceladas.quantidade}
               description="Fora dos totais desta competência"
               Icon={ReceiptText}
               active={situacao === 'canceladas'}

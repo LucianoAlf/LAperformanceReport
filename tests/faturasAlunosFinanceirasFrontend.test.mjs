@@ -46,15 +46,30 @@ test('pagina usa selects do design system e apresenta o ciclo inteiro da fatura'
   assert.doesNotMatch(page, /Valor hoje/i);
 });
 
-test('cartoes de resumo mapeiam quantidade e valor retornados pela leitura canonica', () => {
+test('cartoes de resumo contam a visao filtrada, com o total da competencia como baseline', () => {
   const page = read('src/components/App/FaturasAlunos/FaturasAlunosFinanceirasPage.tsx');
 
   assert.doesNotMatch(page, /<MetricCard[^>]*\{\.\.\.state\.totals\./);
 
+  // Os cinco cartoes saem do recorte da visao, nunca mais direto de state.totals: e o que
+  // faz o cartao concordar com a lista quando ha filtro de tipo/curso/forma (Jhon, 03/09).
+  // Comparacao literal de proposito: com template literal os escapes do regex se perdem e
+  // o assert passa a casar qualquer coisa.
   for (const situacao of ['todas', 'pagas', 'em_aberto', 'em_atraso_d0', 'a_vencer']) {
-    assert.match(page, new RegExp(`count=\\{state\\.totals\\.${situacao}\\.quantidade\\}`));
-    assert.match(page, new RegExp(`value=\\{state\\.totals\\.${situacao}\\.valor\\}`));
+    assert.ok(page.includes(`count={totaisDaVisao.${situacao}.quantidade}`), `cartao ${situacao} deve contar a visao`);
+    assert.ok(page.includes(`value={totaisDaVisao.${situacao}.valor}`), `cartao ${situacao} deve somar a visao`);
+    assert.ok(!page.includes(`count={state.totals.${situacao}.quantidade}`), `cartao ${situacao} nao pode voltar a ler o total da competencia`);
+    assert.ok(
+      page.includes(`baselineValue={visaoRecortada ? state.totals.${situacao}.valor : undefined}`),
+      `cartao ${situacao} deve manter o total da competencia visivel quando filtrado`,
+    );
   }
+
+  // A situacao nao vai mais ao servidor: sem o payload completo, os outros quatro cartoes
+  // ficariam sem linhas para contar assim que um deles fosse escolhido.
+  assert.ok(page.includes("situacao: 'todas'"));
+  assert.ok(page.includes('faturaAtendeSituacao(item, situacao)'));
+  assert.ok(!page.includes('[ano, dataCorte, mes, modoPeriodo, situacao,'));
 });
 
 test('reconciliacao financeira fica na pagina dedicada e D+2 permanece fora desta tela', () => {
