@@ -738,3 +738,19 @@ export function filtrarFaturasFinanceirasLocais(
     ].filter(Boolean).join(' ')).includes(busca);
   });
 }
+
+// Valor que a tela mostra como "o valor daquela fatura": paga usa o que entrou de fato,
+// aberta usa o atualizado para hoje (com multa/mora, sem desconto condicional). Os dois ja
+// vem resolvidos pela RPC — aqui so se escolhe o campo. Cancelada nao tem nenhum dos dois e
+// devolve null, que a UI renderiza como "—".
+// Fonte unica: a soma dos cards e a celula da linha tem que sair daqui, senao o total volta
+// a divergir do detalhe na proxima mudanca (a regra ja esteve copiada em 6 lugares).
+// Tipagem estrutural de proposito: a mesma regra vale para FaturaFinanceiraItem e para
+// FaturaFinanceiraReconciliacaoItem (cujo status e string livre, porque vem de origem ainda
+// nao normalizada). Os dois tinham a copia — casar so um deixaria o outro para tras.
+export function valorPrincipalDaFatura(item: {
+  status: string;
+  valores: { valor_hoje: number | null; valor_pago: number | null };
+}): number | null {
+  return item.status === 'paga' ? item.valores.valor_pago : item.valores.valor_hoje;
+}
