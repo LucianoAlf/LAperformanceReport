@@ -293,3 +293,40 @@ em CG".
 4. Guardiãs recebem lista útil 2×/dia e conseguem marcar improcedente.
 5. Desfecho fecha o ciclo e alimenta `taxa_improcedencia` por regra.
 6. Zero número no alerta que não venha de fonte canônica.
+
+## ✅ M1 + M2 ENTREGUES (03/09/2026) — o motor está rodando
+
+**GO do Luciano:** *"foi eu mesmo que comecei, só que não terminei... vamos
+terminar de construir, já que a fundação tá pronta, vamos construir o prédio."*
+
+Aplicado em produção:
+- **`radar_sinais`** — a memória que faltava. Evento com `contexto`,
+  `interpretacao`, `orientacao`, `evidencia` (jsonb), `identificacao`,
+  `chave_dedup` única, ciclo de vida (`aberto → triado → em_acao → resolvido /
+  improcedente / expirado`) e **`desfecho`** (`reteve|saiu|sem_acao|
+  falso_positivo`). Polimórfica: `aluno | lead | professor | familia`.
+- **`radar_regras`** — 12 regras com `lastro` (a medição que fundamentou) e
+  `orientacao_padrao` (o que fazer). Limiar em `params jsonb`: **mudar régua é
+  UPDATE, não deploy.**
+- **`radar_identidade`** — cascata de resolução (vínculo > nome RESP com
+  sobrenome > telefone único > família com candidatos). Sem acesso a `anon`.
+- **`radar_detectar_sinais_sql_v1(date)`** — o detector. Lê as fontes canônicas
+  E **o radar do Luciano** (R12 usa `vw_radar_aluno_sinais_canonica_v2` — não
+  reescrevi a regra pedagógica dele).
+- **Cron `radar-detectar-sinais-diario`** — 06:00 BRT, SQL direto (sem edge, que
+  já morreu em 401 silencioso neste projeto).
+
+**Primeira execução real:** 133 sinais — R1 frequência baixa **83**, R3
+renovação em risco **17**, R5 família **6**, R6 presente-mas-em-risco **18**,
+R12 semáforo **9**. **Segunda execução: 0 inserções** (idempotência provada).
+
+⚠️ Achado da primeira rodada: o motor encontrou famílias em risco que a
+apuração manual não tinha visto (ex.: Luiza e Pedro Frazão de Souza) — a
+regra R5 cruzando sozinha o que ninguém cruzava.
+⚠️ `professores` não tem `unidade_id` (professor atende várias) — a unidade do
+sinal de professor vem da **carteira** (onde ele tem mais alunos ativos).
+
+### Próximo (M3): a RPC canônica de leitura
+`radar_ficha_v1(p_unidade_id, p_severidade, p_limite)` devolvendo o cruzamento
+por aluno — contexto + interpretação + orientação prontos para virar mensagem
+das guardiãs e tarefa em `farmer_tarefas`.

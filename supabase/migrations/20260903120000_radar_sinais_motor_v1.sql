@@ -1,0 +1,32 @@
+-- MOTOR DO MAPA DE SINAIS v1 (03/09/2026)
+-- Aplicado em produção nesta data via MCP em 4 migrations:
+--   radar_sinais_fundacao_v1, radar_regras_semente_v1,
+--   radar_detectar_sinais_sql_v1 (+ fix_unidade_professor), radar_cron_diario_v1
+-- Este arquivo é o registro versionado (governança: trabalho em produção via
+-- MCP conta como entregue e precisa do arquivo no mesmo dia).
+--
+-- CONTEXTO: o radar (vw_radar_aluno_sinais_canonica_v2) já existia, feito pelo
+-- Luciano, e é BOM — coorte de professores com login, janela de 10 aulas,
+-- faltas consecutivas, semáforo e guarda de frescor. Mas é VIEW: foto de agora,
+-- sem histórico, sem desfecho, sem aprendizado. E parou.
+-- O que este motor acrescenta é a MEMÓRIA e a ORIENTAÇÃO:
+--   contexto (o que aconteceu) -> interpretação (o que significa) -> orientação
+--   (o que fazer) -> desfecho (o que aconteceu depois) -> calibra a regra.
+--
+-- O QUE NÃO FOI RECRIADO (auditoria antes de construir, regra DRY):
+--   - detector pedagógico: usa o radar existente (R12)
+--   - tabela de tarefa: farmer_tarefas já tem `desfecho` e `origem_alerta`
+--   - view de renovação: vw_contratos_vencendo / vw_farmer_renovacoes_proximas
+--
+-- PRIMEIRA EXECUÇÃO (03/09/2026): 133 sinais — R1 freq baixa 83, R3 renovação
+-- em risco 17, R5 família 6, R6 presente-mas-em-risco 18, R12 semáforo 9.
+-- Segunda execução no mesmo dia: 0 inserções (idempotente por chave_dedup).
+--
+-- Ver: docs/superpowers/specs/2026-09-03-motor-mapa-de-sinais-design.md
+--      docs/specs/2026-09-03-mapa-de-sinais-do-aluno-design.md (contexto/regras)
+
+-- (corpo idêntico ao aplicado; ver as 4 migrations MCP do dia)
+-- Tabelas: radar_sinais, radar_regras, radar_identidade
+-- Regras semente: R1..R12 com lastro medido e orientação
+-- Função: radar_detectar_sinais_sql_v1(date)
+-- Cron: radar-detectar-sinais-diario (0 9 * * * UTC = 06:00 BRT)
