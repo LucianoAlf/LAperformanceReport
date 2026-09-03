@@ -44,17 +44,40 @@ está em produção, vá afinar o prompt.**
 
 ### 🔴 O QUE ESTÁ ABERTO (em ordem de importância)
 
-1. **Recall do A5.** O prompt v2 (no ar) trocou recall por precisão: v1 dava 17
-   sinais com ~82%, v2 dá 10 com ~90-100% mas **perdeu 4 sinais bons** — entre
-   eles *"tentou falar com a professora e não teve retorno"*, que é exatamente o
-   que precede evasão. Suspeito da guarda de DIREÇÃO ter ido longe demais.
-   Retomar com `?dry_run=1` (não escreve, não passa pela trava de 1h), comparar
-   com o placar de 03/09 e afrouxar **só** essa regra.
+1. ~~Recall do A5~~ ✅ **PAGO em 03/09** — prompt **v4-d2**, 18 sinais com ~90%.
+   A causa NÃO era a guarda de direção (essa estava certa): a v2 expandiu
+   `cortesia` para abraçar "aceite/confirmação" e o balde virou **ímã** — o
+   modelo via a pendência, escrevia no resumo *"agradece e encerra **após a
+   escola prometer retorno**"*, e classificava como cortesia mesmo assim.
+   Consertado com regra de **PRECEDÊNCIA** ("a mesma mensagem pode ter cortesia
+   E pendência; o pendente vence"), mais duas correções que o ensaio revelou:
+   `promessa_sem_desfecho` entrou em `ESCOLA_DEVE` (a dívida da escola É o tipo;
+   exigir `precisa_resposta` do modelo era redundante e custou a Graciele) e a
+   definição do tipo ganhou a direção explícita (quem ficou de assinar contrato
+   é o CLIENTE — isso derrubou um falso positivo que o próprio conserto criou).
+   ⚠️ **`PROMPT_VERSAO` virou `<prompt>-d<decisão>`**: prompt e função pura
+   versionam junto mas mudam por motivos diferentes, e trocar só a decisão
+   precisa invalidar o ledger do mesmo jeito — senão conversa já classificada
+   nunca reaproveita a regra nova.
 2. **Fase 1 desligada** — nada chega à Fabi/Jessy ainda. Aguarda OK explícito do
    Luciano. A Jessica (`5521984695110`) **não está cadastrada** em
    `radar_destinatarios`.
 3. **50 sessões de Instagram paradas** no meio do funil (`ask_name` 23,
    `ask_phone` 13, `ask_unit` 13) ainda não viram sinal.
+3b. 🔴 **5 sinais reais morrem em `entidade_desconhecida` por rodada** — e são
+   justamente os que mais interessam. Duas extensões possíveis do
+   `radar_resolver_entidade_por_telefone`, **as duas dependem de decisão sua**:
+   - **ex-aluno**: o resolver só alcança `status ilike 'ativo%'`, e o trigger de
+     elegibilidade descartaria de qualquer jeito. Por isso o caso **Théo Arruda**
+     (aluno 689, `inativo`) — o exemplo-prova da frente inteira — é DETECTADO
+     pelo extrator (*"informou que não continuará e a escola confirmou o
+     encerramento"*) e some. Correto para RETENÇÃO (não se retém quem já foi),
+     mas a pesquisa de evasão tem 5 respostas contra 86 saídas e o motivo está
+     escrito ali. Mexer nisso é mexer na guarda de regra de negócio que você
+     pediu — não faço sozinho.
+   - **professor**: `radar_sinais.entidade_tipo` já aceita `'professor'`, mas o
+     resolver não olha a tabela `professores`. Um caso real por rodada
+     ("Professor Israel Rocha: a aula foi marcada num horário já reservado").
 4. **Classificações da bridge de Instagram são anônimas** — `dm_classification`
    grava `is_lead`/`motivo`/`reclamacao_sem_retorno` **sem `sender_id`**, então
    as 12 reclamações sem retorno não são atribuíveis. Corrigir é mexer em
@@ -66,6 +89,10 @@ está em produção, vá afinar o prompt.**
 
 ### Armadilhas medidas — não repetir
 
+- **Cortesia é balde-ímã.** Alargar a definição dela para abraçar "aceite" fez
+  o modelo classificar por ela mesmo enxergando a pendência. Todo tipo
+  "neutro" de um classificador precisa de regra de PRECEDÊNCIA contra os tipos
+  que importam, senão ele engole.
 - **R8 ingênuo** ("última mensagem é do contato") = 248 casos, **~5% de
   precisão**: 23 de 25 amostras eram "👍"/"Obrigada". Com regex de cortesia sobe
   a ~24%. **Só o semântico chega a ~90%.** O `lastro` da regra no banco já traz
