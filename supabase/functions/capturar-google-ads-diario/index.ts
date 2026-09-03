@@ -33,7 +33,7 @@ const DIAS_PADRAO = 7;
 // A API do Google Ads sunseta versões. Tentar em ordem evita que a captura
 // morra em silêncio quando a versão fixada é aposentada — o sintoma seria
 // "gasto parou de atualizar", que ninguém percebe olhando o pg_cron.
-const VERSOES = (Deno.env.get("GOOGLE_ADS_API_VERSIONS") ?? "v21,v20,v19,v18")
+const VERSOES = (Deno.env.get("GOOGLE_ADS_API_VERSIONS") ?? "v25,v24,v23,v22")
   .split(",").map((v) => v.trim()).filter(Boolean);
 
 function json(body: unknown, status = 200) {
@@ -114,6 +114,12 @@ serve(async (req) => {
 
   const dev = Deno.env.get("GOOGLE_ADS_DEVELOPER_TOKEN") ?? "";
   const customer = soDigitos(Deno.env.get("GOOGLE_ADS_CUSTOMER_ID") ?? "");
+  // ⚠️ NAO mandar `login-customer-id` por padrao. Medido em 03/09: o usuario
+  // OAuth alcanca a conta 717-909-7170 DIRETO (`listAccessibleCustomers` devolve
+  // so ela) e NAO e membro do MCC 164-091-0901 — mandar o MCC no header fazia a
+  // API responder 403 USER_PERMISSION_DENIED, com uma mensagem que sugere
+  // exatamente o contrario ("o customer id do gerenciador DEVE estar no header").
+  // Só preencher a env se um dia a conta passar a ser acessada via gerenciadora.
   const loginCustomer = soDigitos(Deno.env.get("GOOGLE_ADS_LOGIN_CUSTOMER_ID") ?? "");
   if (!dev) return json({ error: "GOOGLE_ADS_DEVELOPER_TOKEN nao configurado" }, 500);
   if (!customer) return json({ error: "GOOGLE_ADS_CUSTOMER_ID nao configurado" }, 500);
