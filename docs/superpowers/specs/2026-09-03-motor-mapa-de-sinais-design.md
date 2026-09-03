@@ -18,6 +18,57 @@
 deve ler daqui antes de qualquer outra coisa, para não reconstruir o que já
 existe nem esquecer o que ficou pela metade.
 
+### 🔀 As três fatias (correção de rumo do Luciano, 03/09)
+
+Eu tinha construído o alicerce na horizontal e **os três andares só do lado do
+aluno**. A medição confirmou: das 14 regras ativas, 12 eram de aluno, 1 de
+família, 1 de professor e **zero de comercial**; de 147 sinais, 138 aluno e
+**1 lead**. O defeito aparecia na entrega: **R8 estava listado para
+`mila/consultora` E para `sol/secretaria`** — mesma regra, dois donos, porque a
+regra não sabia de que mundo era.
+
+**Um motor, três fatias** (`radar_sinais.dominio`):
+
+| fatia | dono | do que trata |
+|---|---|---|
+| `comercial` | Mila + **consultora da unidade** | lead → atendimento → experimental → matrícula |
+| `aluno` | Sol, Lia, guardiãs, TOM | presença, renovação, aviso prévio, evasão |
+| `historico` | ninguém age — **mede** | ex-aluno: motivo de saída, necropsia mensal |
+
+**Por que não dois motores:** duplicaria idempotência, guarda de regra de
+negócio, triagem e desfecho — e mataria o 2º andar. O aprendizado que interessa
+ATRAVESSA os mundos: *"esse lead veio do Instagram, demorou 3 dias para ser
+respondido, fez experimental, matriculou e saiu em 4 meses"* é **uma** história.
+Com duas caixas, ninguém conta ela.
+
+**Por que o domínio é do SINAL e não da regra:** nas regras de conversa
+(R2/R7/R8/R9/R10/R14) o mundo depende de quem está do outro lado. Só as regras
+estruturalmente de um mundo (R1, R3, R4, R5, R6, R11, R12, R13) declaram domínio
+fixo. Resolvido por **trigger**, não na edge — lição do `motivo_saida_id`.
+
+⚠️ **A guarda de elegibilidade passou a separar dois "nãos" que eram um só:**
+bolsista/banda seguem DESCARTADOS (decisão do Alf: "não contam em nada, em
+nada"), mas aluno que já saiu vira `historico` em vez de sumir. Era isso que
+matava o caso **Théo Arruda** — o extrator ACHAVA a declaração de saída dele e o
+trigger jogava fora.
+
+⚠️ **Cascata do resolver: ativo → EX-ALUNO → lead.** Medido: **53% dos
+ex-alunos (75 de 141) também existem em `leads`**, porque foram leads antes de
+matricular. Inverter mandaria metade de quem acabou de sair para a consultora
+como "lead parado". Exceção com discriminador: `leads.created_at >
+alunos.data_matricula` = interesse NOVO, e esse volta a ser comercial (o lead
+original nasce ANTES da matrícula).
+
+⚠️ **Nuance observada, não resolvida:** ex-aluno com pedido legítimo (caso real:
+certificado para levar a Portugal) cai em `historico` e portanto **não gera
+cobrança para ninguém**. Talvez R2 de ex-aluno seja medição e R8 de ex-aluno
+ainda mereça resposta. Não inventei uma terceira camada de lógica.
+
+**Decisões do Luciano registradas:** o dono do sinal comercial é a **consultora
+da unidade** (a Mila detecta e entrega, não age sozinha); a fatia `historico`
+alimenta primeiro (a) o motivo de saída que morreu na conversa e (b) a necropsia
+mensal.
+
 ### Alicerce
 
 | Passo | Estado | Onde está |
