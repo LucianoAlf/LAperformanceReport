@@ -71,7 +71,51 @@ matéria-prima: `assignee` distingue bot de consultora; medido no 1º dia — 10
 quentes em 60 conversas, 3 presas no bot, **11 de 16 nunca chegaram a humano**,
 mediana até humano **51 min**. Camada: **operacional**.
 
-### T3 — Meta Ads não é persistido · **ALICERCE**
+### T3 ✅ **RESOLVIDA** (03/09) — Meta Ads persistido, e o ranking se inverteu
+
+**`meta_ads_metricas_diarias`** — uma linha por (dia, anúncio): gasto,
+impressões, cliques, CTR, CPM, alcance, frequência, conversas. Alimentada pela
+edge **`capturar-meta-ads-diario`** (token próprio, foto vazia aborta com 422),
+com **duas cadências** porque a Meta revisa número por 24-72h:
+- **de hora em hora**, janela de 3 dias → o *real time* que interessa
+- **09:20 UTC**, janela de 45 dias → revisão tardia e cura de buraco
+
+Idempotente por PK: reescrever é o comportamento **correto**, não efeito
+colateral. Primeira carga: **231 linhas, 20 anúncios, R$ 4.947, 604 conversas**.
+
+⚠️ **Custo por matrícula NÃO é gravado** — nasce do cruzamento
+`ad_id → leads.meta_ad_source_id → converteu`. Guardar seria congelar um número
+que muda toda vez que um lead antigo converte.
+
+#### 🔴 PC5 — o ranking se INVERTE quando se olha matrícula em vez de conversa
+
+| anúncio | gasto | conversas | custo/conversa | leads | matrículas | custo/matrícula |
+|---|---|---|---|---|---|---|
+| Kids bateria | R$ 1.223 | **272** | **R$ 4,49** 🥇 | 176 | **0** | — |
+| Kids canto aula | R$ 1.479 | 134 | R$ 11,03 | 105 | 2 | R$ 739 |
+| Kids banda ensaio | R$ 143 | 5 | R$ 28,65 🥉 | 5 | **1** | **R$ 143** |
+| LA Session #4 | R$ 70 | 33 | **R$ 2,12** 🥇 | **0** | 0 | — |
+
+O campeão do painel queimou **R$ 1.223 sem matricular ninguém** (176 leads,
+zero — com a taxa base de 2,6% seriam esperadas ~4,6; zero em 176 não é ruído).
+O pior do painel é o melhor da escola. E o de melhor custo por conversa de todos
+não gerou **um único lead**.
+
+**Otimizar por custo/conversa — que é o que a Meta otimiza e o que a tela
+mostra — empurra investimento para o criativo errado.** A régua tem de ser custo
+por **experimental** e por **matrícula**. Confiança **média**: o zero do maior
+gastador é sólido, mas a ORDEM entre os bons ainda é incerta (0-2 matrículas por
+anúncio). Camada: **estratégica** (onde investir) + **tática** (o que pausar).
+
+⚠️ **FURO CORRIGIDO junto:** `radar_detectar_sinais_comercial_v1` tinha sido
+criada **sem cron** — os 363 sinais comerciais vieram de execução manual e
+nenhum nasceria sozinho. Agendada às 09:10 UTC (10 min depois do detector do
+aluno, para não disputarem `radar_sinais` no mesmo minuto).
+
+🔴 **Prova de vida pelo DADO, nunca pelo `pg_cron`:**
+`select max(capturado_em), count(*) from meta_ads_metricas_diarias;`
+
+### ~~T3~~ (original) — Meta Ads não é persistido · **ALICERCE**
 Tráfego Pago é **100% ao vivo** pela Graph API: o dado só existe enquanto
 alguém olha a tela. Sem histórico, o 2º andar **nunca** saberá qual criativo
 traz lead que matricula (hoje só sabe qual traz *conversa*). O Luciano quer

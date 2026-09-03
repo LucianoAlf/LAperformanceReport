@@ -185,3 +185,10 @@ verify_jwt = false
 # usuario; a porta e o token `instagram_bridge` em `integracao_tokens`,
 # conferido em tempo constante dentro da funcao.
 verify_jwt = false
+
+[functions.capturar-meta-ads-diario]
+# T3 — memoria diaria do Meta Ads. verify_jwt = false porque quem chama e o
+# pg_cron (sem JWT de usuario); a porta e o token `meta_ads_captura` em
+# `integracao_tokens`, conferido em tempo constante dentro da funcao. Custo de
+# midia e sensivel: sem o token a funcao nao responde nada.
+verify_jwt = false
