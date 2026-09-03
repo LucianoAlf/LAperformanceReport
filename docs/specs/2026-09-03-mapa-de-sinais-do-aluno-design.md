@@ -4,6 +4,13 @@
 > desta frente. Atualizar A CADA avanço, no mesmo commit da mudança — mesmo
 > padrão do checkpoint vivo da frente Professores.
 >
+> 🔧 **SPEC DE IMPLEMENTAÇÃO DO MOTOR:**
+> [`docs/superpowers/specs/2026-09-03-motor-mapa-de-sinais-design.md`](../superpowers/specs/2026-09-03-motor-mapa-de-sinais-design.md)
+> — modelo de dados, detectores, entregas, fases M1-M7 e critérios de aceite.
+> Este documento aqui é o CONTEXTO (visão, achados, regras-semente); aquele é o
+> PLANO DE CONSTRUÇÃO. ⚠️ Ordem: o motor vem antes das entregas; o TOM é a
+> última camada (M7).
+>
 > **Dono:** Luciano. **Contexto de origem:** conversas de 02-03/09/2026 (sessão
 > Sol/atendimento → monitoramento WhatsApp → Health Score v2 → mapa de sinais).
 > Memória permanente espelhada em `memory/monitoramento-atendimento-whatsapp.md`.
