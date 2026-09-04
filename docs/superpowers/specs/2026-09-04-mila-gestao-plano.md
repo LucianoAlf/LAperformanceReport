@@ -91,6 +91,43 @@ O padrão já foi provado pela Sol no caixa. Copiamos a arquitetura, não o cód
 
 ---
 
+## ✅ Passo 3 — FEITO em 04/09 (fim da tarde) · pronto para o passo 4
+
+| peça | onde | prova |
+|---|---|---|
+| 6 RPCs de escrita + 2 helpers | banco (`mila_registrar_*`, `mila_fechar_sinal_v1`, `mila_anotar_lead_v1`) | guardas: ambíguo→candidatos, canal já preenchido→recusa, fora do escopo→recusa, desconhecido→recusa; 3 escritas no lead de teste com trilha |
+| MCP `mila-gestao-tools` (7 leitura + 6 escrita) | `/home/mila/.openclaw/workspace/scripts/mila-gestao-tools-mcp.{mjs,sh}` | 13 tools listadas com o carimbo do Luciano; estrelas, ficha e escrita ok |
+| carimbo do solicitante | `secrets/mila-gestao-tools.env` → `MILA_SOLICITANTE_TELEFONE=5521981278047` | quem pede vem da env, nunca do modelo |
+| skill `mila-gestao` + `references/programa-matriculador.md` | `/home/mila/.hermes/skills/mila-gestao/` (perfil RAIZ) | instalada |
+| SOUL de parceira | `/home/mila/.hermes/SOUL.md` (backup `.bak-20260904T174702Z-pre-gestao`) | trocada |
+| fiação no `config.yaml` raiz + restart | `hermes-gateway-mila.service` | gateway `active` 17:47:05Z; `mila-gestao-tools-mcp.mjs` vivo como filho (pid 1500770); Telegram reconectou |
+
+**Arquitetura, como o Luciano pediu — agent-first, não regex-first:** zero
+regex de diálogo. A skill diz *o que fazer com cada pedido*; a alma diz *como
+falar*; as tools são estreitas e nomeadas; o número vem de RPC; a escrita tem
+trilha; nada deleta. Tráfego só aparece para diretoria/líder/marketing (o MCP
+resolve `mila_quem_sou_v1` no start e omite as tools).
+
+⚠️ **O carimbo é por instância.** Hoje é o Luciano (passo 4). Para dar acesso a
+uma consultora: (1) ela já está em `governanca.agente_usuarios`; (2) a instância
+que a atende precisa de `MILA_SOLICITANTE_TELEFONE` com o telefone dela. O
+gateway do Hermes não entrega o remetente às tools — por isso carimbo, não
+argumento. **É a garantia de "não vaza outra unidade": no banco e no MCP, não
+no prompt.**
+
+⚠️ **O que mudou no Telegram do Luciano:** a alma (era SDR), o MCP novo, a
+skill. Os MCPs antigos (lareport read-only, n8n, governança, chatwoot)
+continuam. O SELECT livre do lareport read-only **continua lendo zero** por RLS
+— esperado; o dado vem pelas RPCs.
+
+### Passo 4 — teste na DM do Luciano (próximo, com ele)
+
+Roteiro que exercita tudo: *"como tá o programa esse mês?"* → *"o que tenho pra
+hoje no Recreio?"* → *"como tá a Jullyane?"* → *"o curso dela é guitarra"* →
+*"tem pendência cadastral em CG?"* → *"quanto gastei em mídia esse mês?"* →
+*"anota na Jullyane que a mãe decide"* → *"esse item da pauta já resolvi, ela
+não quer"*.
+
 ## ✅ Passos 1 e 2 — FEITOS em 04/09 (tarde)
 
 | entrega | prova |
