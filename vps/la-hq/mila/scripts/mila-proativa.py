@@ -168,31 +168,139 @@ def enviar(telefone, unidade_nome, texto):
     return {"conversation_id": cid, "message_id": r.get("id")}
 
 
+MOLDE_MANHA = """\
+☀️ *BOM DIA, {apelido}* — {unidade}
+_{dia_semana}, {data}_
+━━━━━━━━━━━━━━━━━━━━━
+
+🎯 *HOJE* · 3 experimentais · 1 visita
+
+  ⏰ *09:00* — Flávia
+     📍 _visita_
+
+  ⏰ *10:00* — *Luci Machado Viegas*
+     🎵 Canto · 👩‍🏫 Daiana Pacifico
+
+━━━━━━━━━━━━━━━━━━━━━
+
+🔥 *QUENTES AGORA* · 2
+
+  • *Jullyane* — 15h só com o bot
+    _entra na conversa e continua dali_
+
+  • *Hetiene* — 12h só com o bot
+    _entra na conversa e continua dali_
+
+━━━━━━━━━━━━━━━━━━━━━
+
+📌 *DE ONTEM* · 2 sem desfecho
+
+  • *Luis Arthur* — Violão
+  • *Anna Luisa* — Canto
+
+━━━━━━━━━━━━━━━━━━━━━
+
+⭐ *MATRICULADOR + LA*
+  _Ticket Premiado_ — faltam *R$ 3* no ticket médio
+
+━━━━━━━━━━━━━━━━━━━━━
+
+_Quer que eu priorize os 2 quentes agora?_"""
+
+MOLDE_FIM = """\
+🌙 *FECHAMENTO — {apelido}* · {unidade}
+_{dia_semana}, {data}_
+━━━━━━━━━━━━━━━━━━━━━
+
+📊 *O DIA* · 5 marcadas
+  ✅ *4* aconteceram
+  ❌ *1* falta
+  🎓 *0* matrículas
+
+━━━━━━━━━━━━━━━━━━━━━
+
+✅ *ACONTECERAM*
+
+  ⏰ 14:00 — *Luis Arthur*
+     🎵 Violão · 👩‍🏫 Erick Cosme
+     _sem desfecho ainda — normal no mesmo dia_
+
+━━━━━━━━━━━━━━━━━━━━━
+
+❌ *FALTOU*
+
+  • *Sofia Mena* — Canto, 09:00
+    _não remarcada · 2ª tentativa de 3_
+
+━━━━━━━━━━━━━━━━━━━━━
+
+📌 *FICA PRA AMANHÃ* · 3 sem desfecho
+
+  • *Antonella Celino* — Canto
+  • *Helena Guedes* — Canto
+
+━━━━━━━━━━━━━━━━━━━━━
+
+🗓️ *AMANHÃ* · 3 experimentais
+
+  ⏰ 09:00 — *Thomás Matta Torres* · Teclado
+  ⏰ 09:30 — *Laura Ribeiro* · Musicalização
+
+━━━━━━━━━━━━━━━━━━━━━
+
+⭐ _Ticket Premiado_ — faltam *R$ 17,50*
+
+━━━━━━━━━━━━━━━━━━━━━
+
+_Quer que eu já deixe os 3 na mira cedo?_"""
+
+# dow do Postgres: 0 = domingo
+DIAS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"]
+
+
 def envelope(tipo, dados, c):
+    """O molde vai LITERAL no prompt.
+
+    Instrução abstrata ("formato de WhatsApp, curto") produzia TEXTO CORRIDO, e o
+    Luciano cortou em 04/09: "no fim de um dia cansativo a galera nem lê isso".
+    Modelo segue exemplo muito melhor do que segue regra — então a régua é um
+    exemplo pronto, com hierarquia, separadores e uma informação por linha.
+    """
     rotulo = "manhã" if tipo == "manha" else "fim do dia"
-    cab = f"[MILA PROATIVA · {rotulo} · {dados['data']}]"
+    dia_semana = DIAS[int(dados.get("dow", 0)) % 7]
+    molde = (MOLDE_MANHA if tipo == "manha" else MOLDE_FIM).format(
+        apelido=c["apelido"].upper(), unidade=c["unidade_nome"],
+        dia_semana=dia_semana, data=dados["data"][:5])
     if tipo == "manha":
-        pedido = (f"É de manhã. Escreva a mensagem que VOCÊ vai mandar agora no WhatsApp da {c['apelido']} "
-                  f"({c['nome']}, {c['unidade_nome']}) com o dia dela: experimentais e visitas de hoje (hora, aluno, curso, professor), "
-                  f"quem ficou de ontem sem desfecho ou faltou e ainda dá para remarcar, quem está quente agora, "
-                  f"e a estrela mais perto do MATRICULADOR + LA.")
+        pedido = ("É de manhã. Escreva a mensagem que VOCÊ vai mandar agora no WhatsApp dela com o dia: "
+                  "experimentais e visitas de hoje (hora, aluno, curso, professor), quem está quente agora, "
+                  "quem ficou de ontem sem desfecho ou faltou e ainda dá para remarcar, e a estrela mais perto. "
+                  "Se vier `reagendadas_para_outro_dia`, diga em uma linha para onde foram.")
     else:
-        pedido = (f"É fim do dia. Escreva a mensagem que VOCÊ vai mandar agora no WhatsApp da {c['apelido']} "
-                  f"({c['nome']}, {c['unidade_nome']}) fechando o dia. Comece pelo TOTAL do dia e como terminou: some realizadas + faltas + "
-                  f"canceladas e diga assim — 'hoje tinham 3: 1 aconteceu, 2 faltaram'. NUNCA escreva '0 experimentais' quando houve falta ou "
-                  f"cancelamento: falta é experimental que não aconteceu, não experimental que não existiu. Sem desfecho no MESMO dia "
-                  f"é normal, não cobre. Nas faltas diga se foram remarcadas; se `teto_atingido`, é para parar de insistir. Matrículas de hoje, "
-                  f"quem é de DIAS ANTERIORES e ainda está sem desfecho (`fica_para_amanha`), `pendencias_de_hoje` (curso/canal vazio que ela "
-                  f"resolve comigo em uma linha) e o que já está marcado para amanhã.")
-    regras = (f"Regras: chame pelo nome ({c['apelido']}); use SÓ os números e nomes deste envelope — nada de inventar; "
-              "curto (até ~10 linhas), direto, tom de parceira; formato de WhatsApp (*negrito*, quebras de linha, sem tabelas, sem markdown de título); "
-              "cada nome aparece UMA vez (não repita a mesma pessoa em dois blocos); lista com ATÉ 5 itens vai inteira; só acima de 5 vira contagem + 3 exemplos; experimentais e visitas de hoje SEMPRE com hora, curso e professor (é a agenda dela); "
-              "`quentes_agora` NUNCA vira só um número: é nome (`quem`) + `o_que_houve` + o que fazer, um por linha — é a parte mais urgente da mensagem; "
-              "bloco vazio simplesmente não aparece (nada de 'Pendências: nenhuma'); a estrela diz em quê faltam, em português natural ('faltam R$ 3 no ticket médio', 'faltam 2 matrículas'), sem decimal inútil; negrito de WhatsApp é UM asterisco (*assim*), nunca dois; "
-              "termine com UMA pergunta ou UM próximo passo, nunca uma lista de cobranças. "
-              "Se `nada_para_hoje` for true, responda exatamente [SEM ENVIO] e nada mais. "
-              "Responda SOMENTE com o texto da mensagem, sem comentário antes ou depois.")
-    return f"{cab}\n{pedido}\n{regras}\n\nDADOS CANÔNICOS (json):\n{json.dumps(dados, ensure_ascii=False)}"
+        pedido = ("É fim do dia. Comece pelo TOTAL do dia (realizadas + faltas + canceladas) e a decomposição. "
+                  "NUNCA escreva '0 experimentais' quando houve falta ou cancelamento: falta é experimental que "
+                  "não aconteceu, não experimental que não existiu. Sem desfecho no mesmo dia é normal, não cobre. "
+                  "Depois: quem faltou (remarcada? se `teto_atingido`, é para parar de insistir), matrículas de hoje, "
+                  "quem é de dias anteriores e segue sem desfecho, e o que já está marcado para amanhã.")
+    regras = (
+        "FORMATO — siga este molde, ele é a régua da mensagem:\n"
+        "<molde>\n" + molde + "\n</molde>\n"
+        "Regras do molde: bloco sem conteúdo NÃO APARECE (nada de 'Pendências: nenhuma'); "
+        "no máximo 4 itens por bloco, acima disso feche com `_+N_`; "
+        "*negrito* com UM asterisco e _itálico_ com underscore (é WhatsApp, não markdown); "
+        "nome de pessoa em negrito; o detalhe vai na linha de baixo, indentado; "
+        "uma informação por linha, sem parágrafo corrido; "
+        "campo sem valor SOME da linha — nunca escreva travessão nem `null` no lugar do curso ou do professor; "
+        "o número do cabeçalho tem que ser o número de itens que você listou embaixo dele — na manhã conte o que AINDA VAI acontecer "
+        "(`n_experimentais_ainda_agendadas`), e ponha cancelada/faltou como linha marcada, nunca dentro da contagem de \"tenho hoje\"; "
+        "termine com UMA pergunta em itálico.\n"
+        "CONTEÚDO: chame de " + c["apelido"] + "; use SÓ os nomes e números deste envelope, nunca invente; "
+        "cada pessoa aparece uma vez só; a estrela diz em quê faltam (R$ 3 não é 3 matrículas), sem decimal inútil. "
+        "Se `nada_para_hoje` for true, responda exatamente [SEM ENVIO] e nada mais. "
+        "Responda SOMENTE com o texto da mensagem."
+    )
+    cab = "[MILA PROATIVA · " + rotulo + " · " + dados["data"] + "]"
+    return cab + "\n" + pedido + "\n" + regras + "\n\nDADOS CANÔNICOS (json):\n" + json.dumps(dados, ensure_ascii=False)
 
 
 def main():
