@@ -60,8 +60,17 @@ Deno.serve(async (req) => {
   );
   const departamento = url.searchParams.get("departamento");
 
+  // `fonte=calor` (T2, 04/09) devolve os FATOS estruturais da conversa
+  // (chegou a humano? quanto demorou? preso no bot?) em vez dos candidatos a
+  // leitura semantica. Mesmo token, mesmo formato de envelope — o consumidor
+  // troca so o parametro. Nao virou edge nova de proposito: seria um 2o
+  // transporte com a mesma porta e a mesma auth para manter em dois lugares.
+  const fonte = url.searchParams.get("fonte") === "calor"
+    ? "vw_atendimento_calor_conversa"
+    : "vw_atendimento_candidatos_sinal";
+
   let q = supabase
-    .from("vw_atendimento_candidatos_sinal")
+    .from(fonte)
     .select("*")
     .order("ultima_msg_em", { ascending: false })
     .limit(limite);
@@ -75,6 +84,7 @@ Deno.serve(async (req) => {
   return json({
     ok: true,
     gerado_em: new Date().toISOString(),
+    fonte,
     total: data?.length ?? 0,
     truncado: (data?.length ?? 0) >= limite,
     candidatos: data ?? [],

@@ -125,6 +125,106 @@ nasceram do cadastro do Emusys, vieram por outro caminho que não grava origem.
 
 ---
 
+## ✅ T1 e T2 CONCLUÍDAS (04/09) — e a T1 não era o que eu disse
+
+### 🔴 CORREÇÃO: a T1 que eu descrevi estava ERRADA
+
+Eu afirmei que *"4.571 de 4.978 mensagens são auto-resposta de outra empresa e
+`campanha_contatos.respondeu` as conta — o painel mostra 11% quando o humano é
+~8% disso"*. **A segunda metade é falsa.** Inferi a inflação do volume de
+mensagens sem checar se aqueles telefones estavam em campanha.
+
+Medido em 04/09: o número que gerou o ruído (`5511995752096`) **nunca esteve em
+`campanha_contatos`** — zero linhas. Dos 187 telefones marcados `respondeu=true`,
+**nenhum** tem volume ou vocabulário de robô (0 com frase de autoatendimento, 1
+com repetição, que é humano mandando "oi" duas vezes). **O contador de campanha
+está limpo e não havia o que recontar.**
+
+### ✅ T1 — o problema real: loop bot-contra-bot, e ele custou dinheiro
+
+De **06 a 11/08/2026** a Mila entrou em ping-pong com o bot da **Serasa**:
+
+| | |
+|---|---|
+| mensagens deles | **4.577** (85% de todo o inbound de 60 dias) |
+| mensagens **nossas** | **1.620** |
+| textos distintos | **8**, repetidos até 798× |
+| duração | **5 dias**, ninguém percebeu |
+
+Cada volta foi mensagem cobrada na Meta e chamada de LLM.
+
+**Correção: disjuntor por VOLUME em `meta-webhook-campanhas`.** Se já enviamos
+**20 mensagens** para o mesmo telefone em **24h rolantes**, a resposta automática
+para — agente e autoreply, os dois. A mensagem recebida continua sendo gravada
+(auditoria); o que morre é a resposta.
+
+⚠️ **Não é classificador de bot, de propósito.** Detectar "é robô" pelo texto
+erra em conversa real; contar quantas vezes já respondemos não erra. Se um humano
+bater no teto, parar de responder automaticamente também é a decisão certa.
+
+⚠️ **Calibrado com 90 dias, não por chute:** mediana **1** mensagem nossa por
+telefone/dia, p90 **2**, p99 **7**, e só **5 pares telefone-dia acima de 20** —
+os 5 do loop da Serasa. Não há nada entre 20 e 40: a separação é limpa.
+
+⚠️ `mensagens_campanha.enviado_por_agente` está **NULL nas 1.620** do loop —
+não serve de discriminador. Por isso o disjuntor conta todo outbound.
+
+### ✅ T2 — o calor sai da conversa, e são FATOS, não score
+
+| peça | onde |
+|---|---|
+| `vw_atendimento_calor_conversa` | projeto **SOL** — fatos da conversa viva |
+| `exportar-candidatos-atendimento?fonte=calor` | transporte (a mesma edge, param novo) |
+| `atendimento_conversa_estado` | LA Report — espelho, PK `conversa_id` |
+| `radar_detectar_calor_atendimento_v1` | emite a **R18** |
+| cron `calor-atendimento-horario` (`5 * * * *`) | ingere + detecta na mesma invocação |
+
+**O que a view responde:** chegou a humano? quanto demorou? quantas mensagens o
+contato mandou? quantas o bot? **Não pontua** — score sem evidência de que prediz
+algo seria número inventado, e a arquitetura aqui é o oposto.
+
+⚠️ **"Humano" = agente que não é Mila.** `autor_nome` sozinho não serve:
+`WhatsApp Device` (2.633 msgs, 689 conversas) **não é pessoa nem bot** — é a
+atribuição "enviado pelo celular" e carrega os dois.
+
+⚠️ **`minutos_ate_humano` negativo não é erro** — é a assinatura de conversa que
+**nós** iniciamos (campanha, follow-up).
+
+#### 🔴 R18 — "lead preso no bot"
+
+**Medido nos 2 primeiros dias do espelho comercial: 117 conversas, 58 (50%)
+nunca tiveram um agente humano.** A mediana até o primeiro humano é **−5 min**,
+ou seja: quase toda conversa que teve humano foi **iniciada por nós**. Quem chega
+sozinho tende a ficar só com o bot.
+
+Dois casos reais na primeira execução, ambos em CG e ambos **atribuídos à Vitória
+Santos** — têm dono e ninguém entrou:
+
+- **Jullyane** — 11 mensagens dela, 8 do bot, **15h** sem humano
+- **Hetiene** — 6 mensagens dela, 2 do bot, **12h** sem humano
+
+⚠️ **Uma regra só, de propósito.** "Lead esperando resposta" já é coberto pelo
+extrator semântico. Duas regras para o mesmo fato viram dois avisos para a mesma
+pessoa, e canal que repete ensina a ignorar. O que **só** a R18 enxerga é o lead
+que nunca chegou a um humano.
+
+⚠️ **Base curta:** o departamento comercial só entrou no espelho em 03/09. A
+régua enche com o tempo — vazio nas próximas semanas é esperado, não defeito.
+
+#### ⚠️ Dois defeitos meus na 1ª versão do detector, e o 2º escondeu o 1º
+
+`radar_resolver_entidade_por_telefone` tem **um** argumento e eu chamei com dois;
+o `exception when others then v_ent := null` engoliu o `42883` e gravou
+`metodo: telefone_sem_match`. **O sinal afirmava que o telefone não casava quando
+a função nem tinha rodado** — o mesmo telefone, com a assinatura certa, resolve
+para o lead 13928 com confiança 0,9. Os 2 sinais errados foram apagados e
+regerados.
+
+**Handler que transforma erro em "não achei" é pior que erro: mente com cara de
+fato.** Hoje a falha vai para o próprio sinal (`resolver_falhou` + a mensagem).
+
+---
+
 ## ⏸️ PAUSA DECLARADA — 03/09 ~19:30 BRT · **RETOMAR EXATAMENTE DAQUI**
 
 O Luciano pediu pausa para um incidente da Sol (resolvido, ver abaixo) e pediu
