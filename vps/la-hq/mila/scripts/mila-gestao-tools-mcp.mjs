@@ -161,6 +161,14 @@ const ESCRITA = [
                     destino: { type: 'string', description: 'nome, telefone ou id' },
                     texto: { type: 'string', description: 'a mensagem pronta, ja assinada por mim (Mila), como ela vai chegar' },
                     assunto: { type: 'string', description: 'o que a consultora pediu, em poucas palavras (fica na trilha)' } } } },
+  { name: 'revisar_recado',
+    description: 'TROCA o texto de um recado que ainda esta PROPOSTO, quando ela diz "nao fala isso", "troca X por Y", "poe assim". Mantem o MESMO recado_id — nao proponha outro por cima, senao ela pode aprovar o errado. Renova os 30 min. Depois de enviado nao da para trocar: ai e um recado novo corrigindo.',
+    inputSchema: { type: 'object', required: ['recado_id', 'novo_texto'],
+      properties: { recado_id: { type: 'string' }, novo_texto: { type: 'string' },
+                    motivo: { type: 'string', description: 'o que ela pediu para mudar, em poucas palavras' } } } },
+  { name: 'recado_pendente',
+    description: 'Qual proposta de recado esta em aberto com esta consultora agora. Use quando ela disser "troca isso", "manda entao", "pode" e voce NAO tiver o recado_id a mao (reinicio de sessao, rajada de mensagens). Se nao houver pendente, PERGUNTE de que recado ela fala — nao adivinhe.',
+    inputSchema: { type: 'object', properties: {} } },
   { name: 'enviar_recado',
     description: 'ENVIA o recado que ela ACABOU de aprovar. So chame depois de um "pode", "manda", "isso mesmo" — nunca por conta propria, nunca no mesmo turno em que voce propos. Use o recado_id que veio de propor_recado.',
     inputSchema: { type: 'object', required: ['recado_id'], properties: { recado_id: { type: 'string' } } } },
@@ -230,7 +238,18 @@ async function callTool(name, a) {
     case 'propor_recado':
       return j(await rpc('mila_propor_recado_v1', { p_solicitante_telefone: tel, p_destino_tipo: a.destino_tipo,
         p_destino_ref: String(a.destino), p_texto: a.texto, p_assunto: a.assunto || null }));
+    case 'revisar_recado':
+      return j(await rpc('mila_revisar_recado_v1', { p_solicitante_telefone: tel, p_recado_id: a.recado_id,
+        p_novo_texto: a.novo_texto, p_motivo: a.motivo || null }));
+    case 'recado_pendente':
+      return j(await rpc('mila_recado_pendente_v1', { p_solicitante_telefone: tel }));
     case 'enviar_recado': {
+      // 🔴 DRY_RUN TEM QUE COBRIR O ENVIO. Esta tool nao passa pelo helper `w`
+      // das escritas — em modo sombra ela mandaria WhatsApp de verdade para um
+      // cliente ou professor. E a mesma armadilha do incidente da Sol
+      // (registrador com default de producao dentro de teste).
+      if (DRY) return j({ dry_run: true, enviaria: true, recado_id: a.recado_id,
+                          nota: 'modo sombra: nada foi enviado e o recado segue proposto' });
       // 1) o banco valida e APROVA (so quem pediu, so na unidade dela, so dentro dos 30 min)
       const ap = await rpc('mila_aprovar_recado_v1', { p_solicitante_telefone: tel, p_recado_id: a.recado_id });
       if (!ap?.ok) return j(ap);

@@ -230,6 +230,43 @@ de uma unidade (o Erick Cosme atende Barra e Recreio).
 consultora quando o professor responde algo acionável. A Mila leva e traz o
 recado; ela não conversa com o professor.
 
+### Modo sombra e o incidente que ele causou (04/09, noite)
+
+`mila-shadow.py` conversa com a Mila como se fosse cada consultora, no caminho
+real, e confere a resposta. Nove cenários: pauta, agenda, mês fechado, mês
+corrente, isolamento, ranking, ficha, recado e **troca de texto no meio**.
+
+🔴 **O primeiro teste mandou WhatsApp de verdade** para o professor Erick Cosme
+e para a lead Jullyane, às 18:56. Causa: o Hermes **não propaga env para o MCP**,
+e o modo sombra ia por env. É a mesma armadilha documentada horas antes (o
+carimbo). Por baixo havia uma segunda: o `mila-gestao-tools.env` define
+`MILA_GESTAO_DRY_RUN=0` e o `source` do wrapper sobrescrevia o valor do perfil.
+
+**Correção estrutural:** perfil `mila-shadow` com `MILA_GESTAO_DRY_RUN: "1"` no
+bloco `env:` do config — a única via que chega ao MCP — e o wrapper preservando
+o valor pedido pelo perfil. Provado nos dois sentidos: no perfil de teste
+`enviar_recado` devolve `dry_run:true` e nada sai; no perfil real das consultoras
+o ajuste não existe, então produção envia.
+
+### Revisar a proposta — o jeito da Maria
+
+O padrão do bridge da Maria (`maria-uazapi/bridge.js`, no servidor alfredo): a
+proposta vira uma **pendência gravada com prazo** (`pending_codigo_mes_action`:
+`expires_at`, `chat_id`, `idempotency_key`); a pessoa responde **citando** a
+mensagem; o bridge acha a pendência pela citação, confere que é do mesmo grupo e
+só então grava — *"a proposta citada não pertence a este grupo. Não registrei
+nada."*
+
+A Mila já tinha a pendência e a trava de dono. Faltava o meio da conversa:
+quando a consultora diz *"não fala isso, troca por aquilo"*, ela criava uma
+proposta NOVA e a antiga ficava pendurada — dava para aprovar a errada. Agora
+`revisar_recado` troca o texto do **mesmo** recado, guarda a versão anterior e
+renova os 30 min. E `recado_pendente` a resgata se ela perder o fio.
+
+Provado em sombra (Dai → professora Leticia): propôs "vai faltar", ela mandou
+trocar por "vai chegar 15 minutos atrasada", a Mila ajustou e reapresentou.
+No banco: **1 recado, 1 revisão**, com a versão anterior guardada — não dois.
+
 ### O que fica de fora, e por quê
 
 - **Segundo andar (gerentes) e terceiro (diretoria)** — não construídos.

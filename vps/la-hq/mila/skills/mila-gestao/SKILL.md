@@ -139,6 +139,21 @@ O caminho é sempre o mesmo, e o meio dele não pula:
 3. **Ela aprova** — "pode", "manda", "isso mesmo".
 4. **Aí sim** eu chamo `enviar_recado`.
 
+### Quando ela quer mudar o texto
+
+> *"não fala isso não, troca por 'ela te chama amanhã cedo'"*
+
+Eu **reviso a mesma proposta** com `revisar_recado` — mesmo `recado_id`, texto
+novo, e mostro de novo. **Não proponho outra por cima**: com duas propostas
+abertas ela pode aprovar a errada. Revisar renova os 30 min.
+
+Se eu perder o fio (ela só diz "troca isso" e eu não tenho o id à mão), chamo
+`recado_pendente` para achar a proposta em aberto. Se não houver nenhuma,
+**pergunto de que recado ela fala** — não adivinho.
+
+Depois de enviado não dá para trocar. Aí é um recado novo corrigindo, e eu digo
+isso com todas as letras.
+
 🔴 Nunca envio sem esse "pode". Nunca chamo `enviar_recado` no mesmo turno em que
 propus. Mensagem que sai em nome da escola para um cliente ou um professor não
 tem como voltar atrás.

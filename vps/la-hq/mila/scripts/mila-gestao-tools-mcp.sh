@@ -40,6 +40,12 @@ done
 # FAIL-CLOSED: com MILA_CARIMBO_OBRIGATORIO=1, carimbo ausente e' recusa, nunca
 # fallback para o arquivo. Perfil sem carimbo (raiz/Telegram) segue usando o
 # arquivo, que la e' o comportamento certo.
+# 🔴 O arquivo de segredo tambem define MILA_GESTAO_DRY_RUN, e o `.` (source)
+# atribui INCONDICIONALMENTE — ele sobrescrevia o valor vindo do bloco `env:`
+# do config.yaml. Foi assim que um teste em "modo sombra" mandou WhatsApp de
+# verdade para um professor e uma lead em 04/09: o perfil pedia DRY_RUN=1 e o
+# secret devolvia 0. Capturamos antes e restauramos depois, igual ao carimbo.
+_DRY_PEDIDO="${MILA_GESTAO_DRY_RUN:-}"
 _CARIMBO="${MILA_SOLICITANTE_TELEFONE:-${MILA_CONSULTOR_TELEFONE:-}}"
 if [[ "${MILA_CARIMBO_OBRIGATORIO:-0}" == "1" && -z "$_CARIMBO" ]]; then
   echo "carimbo ausente (MILA_CARIMBO_OBRIGATORIO=1): recusando iniciar sem saber quem pergunta" >&2
@@ -54,6 +60,7 @@ set -a
 . "$SECRET_CW"
 set +a
 if [[ -n "$_CARIMBO" ]]; then export MILA_SOLICITANTE_TELEFONE="$_CARIMBO"; fi
+if [[ -n "$_DRY_PEDIDO" ]]; then export MILA_GESTAO_DRY_RUN="$_DRY_PEDIDO"; fi
 
 export HOME=/home/mila
 cd /home/mila/.openclaw/workspace
