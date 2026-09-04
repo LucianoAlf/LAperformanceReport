@@ -178,8 +178,10 @@ def envelope(tipo, dados, c):
                   f"e a estrela mais perto do MATRICULADOR + LA.")
     else:
         pedido = (f"É fim do dia. Escreva a mensagem que VOCÊ vai mandar agora no WhatsApp da {c['apelido']} "
-                  f"({c['nome']}, {c['unidade_nome']}) fechando o dia: quem fez experimental hoje (quantos e quem — sem desfecho no MESMO dia "
-                  f"é normal, não cobre), faltas de hoje (remarcada ou não; se `teto_atingido`, é para parar de insistir), matrículas de hoje, "
+                  f"({c['nome']}, {c['unidade_nome']}) fechando o dia. Comece pelo TOTAL do dia e como terminou: some realizadas + faltas + "
+                  f"canceladas e diga assim — 'hoje tinham 3: 1 aconteceu, 2 faltaram'. NUNCA escreva '0 experimentais' quando houve falta ou "
+                  f"cancelamento: falta é experimental que não aconteceu, não experimental que não existiu. Sem desfecho no MESMO dia "
+                  f"é normal, não cobre. Nas faltas diga se foram remarcadas; se `teto_atingido`, é para parar de insistir. Matrículas de hoje, "
                   f"quem é de DIAS ANTERIORES e ainda está sem desfecho (`fica_para_amanha`), `pendencias_de_hoje` (curso/canal vazio que ela "
                   f"resolve comigo em uma linha) e o que já está marcado para amanhã.")
     regras = (f"Regras: chame pelo nome ({c['apelido']}); use SÓ os números e nomes deste envelope — nada de inventar; "
