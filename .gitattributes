@@ -1,0 +1,2 @@
+# scripts que rodam na VPS (linux): CRLF do Windows quebra o bash ($'do\r') — LF sempre
+vps/** text eol=lf
