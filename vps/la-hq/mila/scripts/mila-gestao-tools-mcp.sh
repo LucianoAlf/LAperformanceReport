@@ -24,7 +24,26 @@ done
 #      env a cada spawn no modo consultor (telefone do remetente, fora do
 #      alcance do modelo). Zero mudanca no bridge, zero risco no caminho de lead.
 #   3) o arquivo de segredo (fallback: perfil raiz / teste do Luciano)
+#
+# 🔴 O HERMES NAO PROPAGA O ENV DO PROCESSO PARA O MCP (medido em 04/09/2026:
+# chegam 12 variaveis, e MILA_CONSULTOR_TELEFONE nao esta entre elas). Por isso
+# o carimbo TEM que vir do bloco `env:` do mcp_servers no config.yaml do perfil,
+# que aceita interpolacao:
+#     env:
+#       MILA_SOLICITANTE_TELEFONE: ${MILA_CONSULTOR_TELEFONE}
+#       MILA_CARIMBO_OBRIGATORIO: "1"
+# Sem isso o wrapper caia no telefone do arquivo de segredo (Luciano, diretoria,
+# unidade NULL) e a Mila respondia a consultora com escopo de DIRETORIA -- foi o
+# que fez ela contar para a Vitoria o desempenho da Daiana e da Kailane.
+#
+# FAIL-CLOSED: com MILA_CARIMBO_OBRIGATORIO=1, carimbo ausente e' recusa, nunca
+# fallback para o arquivo. Perfil sem carimbo (raiz/Telegram) segue usando o
+# arquivo, que la e' o comportamento certo.
 _CARIMBO="${MILA_SOLICITANTE_TELEFONE:-${MILA_CONSULTOR_TELEFONE:-}}"
+if [[ "${MILA_CARIMBO_OBRIGATORIO:-0}" == "1" && -z "$_CARIMBO" ]]; then
+  echo "carimbo ausente (MILA_CARIMBO_OBRIGATORIO=1): recusando iniciar sem saber quem pergunta" >&2
+  exit 1
+fi
 set -a
 # shellcheck source=/dev/null
 . "$SECRET_SDR"

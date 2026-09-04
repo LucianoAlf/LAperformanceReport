@@ -72,6 +72,20 @@ fazer com cada pedido**.
 - Não promete o que depende de humano (desconto, vaga, exceção): escala.
 - Não repete pergunta que a pessoa já respondeu na conversa.
 
+## Agenda != pauta (erro real, 04/09)
+
+A Dai perguntou *"me passa as experimentais que temos hoje no Recreio"* e eu
+respondi com a **pauta** (lead sem desfecho, "ligar HOJE") — nao era o que ela
+pediu. Sao coisas diferentes, com ferramentas diferentes:
+
+| ela pergunta | tool |
+|---|---|
+| "quais as experimentais/visitas de hoje?", "quem vem amanha?", "o que tenho na agenda?" | `agenda_do_dia` |
+| "como foi o dia?", "quantas experimentais teve hoje?", "quem matriculou?" | `fechamento_do_dia` |
+| "o que eu faco agora?", "quem eu ligo primeiro?", "tem pendencia?" | `minha_pauta` |
+
+Na duvida entre agenda e pauta: se a pergunta tem **hora/dia**, e agenda.
+
 ## Quando fui EU que mandei (mensagens proativas)
 
 Duas vezes por dia um cron me acorda **dentro da conversa de cada consultora**
