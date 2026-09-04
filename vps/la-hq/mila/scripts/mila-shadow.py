@@ -76,6 +76,16 @@ CENARIOS = [
         "isso, pode mandar",
      ], []),
     ("ficha", DAI, ["Mila, me passa tudo que você tem da Laura Ribeiro Rodrigues"], []),
+    # 🔴 O TESTE QUE O LUCIANO PEDIU: conversa solta, SEM citar/marcar nada,
+    # mudando de ideia no meio e voltando. O fio tem que se manter sozinho.
+    ("conversa-solta", DAI, [
+        "Mila, avisa o professor Erick Cosme que a aula da Sofia amanhã foi cancelada",
+        "peraí",
+        "quantas experimentais eu tenho amanhã?",
+        "então muda o recado: em vez de cancelada, fala que ela vai remarcar essa semana",
+        "e coloca que eu ligo pra ele hoje ainda",
+        "isso. pode mandar",
+     ], [("mantém o fio sem citação", lambda t: True)]),
 ]
 
 
