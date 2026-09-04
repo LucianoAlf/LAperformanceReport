@@ -70,6 +70,12 @@ const LEITURA = [
   { name: 'ficha_lead',
     description: 'Tudo sobre UM contato numa chamada: etapa, dias parado, experimentais (feitas/faltou/canceladas), professor, canal, anúncio, calor da conversa (chegou a humano? quantas mensagens?), sinais abertos e o que já foi registrado. Busque por telefone OU nome OU lead_id. Se voltar `ambiguo`, PERGUNTE qual — nunca escolha. Só devolve lead da unidade de quem pergunta.',
     inputSchema: { type: 'object', properties: { telefone: { type: 'string' }, nome: { type: 'string' }, lead_id: { type: 'integer' } } } },
+  { name: 'agenda_do_dia',
+    description: 'A AGENDA da unidade de quem pergunta num dia: TODAS as experimentais do dia com a situacao de cada uma (agendada/realizada/faltou/cancelada) + visitas (hora, aluno, curso, professor, telefone), o que ficou de ontem sem desfecho, quem faltou e ainda da pra remarcar, quem esta quente agora e a estrela mais perto. Use para "quais as experimentais de hoje?", "o que tenho na agenda?", "quem vem amanha?" — NAO use minha_pauta para isso: pauta e o que precisa de acao, agenda e quem tem aula marcada. `data` YYYY-MM-DD (padrao hoje).',
+    inputSchema: { type: 'object', properties: { data: { type: 'string', description: 'YYYY-MM-DD (padrao: hoje).' } } } },
+  { name: 'fechamento_do_dia',
+    description: 'Como FOI o dia na unidade de quem pergunta: experimentais realizadas e o desfecho de cada uma, faltas (remarcada? teto de 3 tentativas?), matriculas do dia, quem e de dias anteriores e segue sem desfecho, e o que ja esta marcado para o proximo dia util. Use para "como foi o dia?", "quantas experimentais teve hoje?", "quem matriculou hoje?". `data` YYYY-MM-DD (padrao hoje).',
+    inputSchema: { type: 'object', properties: { data: { type: 'string', description: 'YYYY-MM-DD (padrao: hoje).' } } } },
   { name: 'pendencias_comerciais',
     description: 'As 5 pendências cadastrais da unidade: matriculado sem anamnese, experimental realizada sem ficha, lead sem canal de origem, lead sem curso de interesse, experimental feita sem desfecho — com total, amostra e a ação. Use para "tem pendência cadastral?", "quem está sem anamnese?". Cada uma delas você pode RESOLVER com as tools de registrar_*.',
     inputSchema: { type: 'object', properties: { amostra: { type: 'integer', description: 'Itens por bucket (padrão 8).' } } } },
@@ -141,6 +147,10 @@ async function callTool(name, a) {
       return j(await rpc('get_estrelas_matriculador_v1', { p_solicitante_telefone: tel, ...(a.ano ? { p_ano: a.ano } : {}), ...(a.mes ? { p_mes: a.mes } : {}) }));
     case 'ficha_lead':
       return j(await rpc('get_situacao_lead_v1', { p_solicitante_telefone: tel, p_telefone_lead: a.telefone || null, p_nome_lead: a.nome || null, p_lead_id: a.lead_id || null }));
+    case 'agenda_do_dia':
+      return j(await rpc('mila_briefing_manha_v1', { p_solicitante_telefone: tel, ...(a.data ? { p_data: a.data } : {}) }));
+    case 'fechamento_do_dia':
+      return j(await rpc('mila_fechamento_dia_v1', { p_solicitante_telefone: tel, ...(a.data ? { p_data: a.data } : {}) }));
     case 'pendencias_comerciais':
       return j(await rpc('radar_pendencias_comerciais_v1', { p_solicitante_telefone: tel, p_amostra: a.amostra || 8 }));
     case 'trafego_por_canal': gate();

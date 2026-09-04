@@ -30,12 +30,16 @@ import urllib.request
 
 SECRETS = [
     "/home/mila/.openclaw/secrets/mila-sdr-tools.env",  # SUPABASE_LAREPORT_URL / _SERVICE_KEY
-    "/home/mila/.openclaw/secrets/waha.env",            # WAHA_BASE_URL / WAHA_API_KEY / WAHA_SESSION_*
+    "/home/mila/.openclaw/secrets/chatwoot.env",        # CHATWOOT_BASE_URL / _ACCOUNT_ID / _BOT_TOKEN
 ]
 HERMES_PY = "/home/mila/.hermes/hermes-agent/venv/bin/python"
 HERMES_HOME = "/home/mila/.hermes/profiles/mila-consultor-readonly"  # o perfil das consultoras
 LOG = "/home/mila/.openclaw/logs/mila-proativa.log"
-WAHA_SESSAO_POR_UNIDADE = {"Campo Grande": "WAHA_SESSION_CG", "Recreio": "WAHA_SESSION_RECREIO", "Barra": "WAHA_SESSION_BARRA"}
+# A caixa da Mila de cada unidade no Chatwoot. Enviar PELO CHATWOOT (e nao pela
+# WAHA direto) e o que o proprio bridge faz: a mensagem entra na conversa, fica
+# no historico e a consultora ve tudo num fio so. WAHA direto devolve 403 aqui —
+# a chave do WAHA nesta VPS so serve para presence (typing).
+INBOX_POR_UNIDADE = {"Barra": 147, "Recreio": 148, "Campo Grande": 155}
 BRT = dt.timezone(dt.timedelta(hours=-3))
 
 
@@ -123,13 +127,45 @@ def hermes(prompt, sessao, env_extra):
     return "\n".join(l for l in out.splitlines() if not l.startswith("session_id:")).strip()
 
 
-def waha_enviar(sessao_waha, telefone, texto):
-    base = os.environ["WAHA_BASE_URL"].rstrip("/")
-    req = urllib.request.Request(base + "/api/sendText",
-                                 data=json.dumps({"session": sessao_waha, "chatId": f"{telefone}@c.us", "text": texto}).encode(),
-                                 headers={"X-Api-Key": os.environ["WAHA_API_KEY"], "Content-Type": "application/json"}, method="POST")
+def _cw(method, path, body=None):
+    base = os.environ["CHATWOOT_BASE_URL"].rstrip("/")
+    url = f"{base}/api/v1/accounts/{os.environ['CHATWOOT_ACCOUNT_ID']}{path}"
+    req = urllib.request.Request(url, data=(json.dumps(body).encode() if body is not None else None),
+                                 headers={"api_access_token": os.environ["CHATWOOT_BOT_TOKEN"],
+                                          "Content-Type": "application/json",
+                                          # ⚠️ o proxy na frente do Chatwoot devolve 403 para o
+                                          # User-Agent padrao do urllib (`Python-urllib/3.x`).
+                                          # Medido em 04/09: mesma URL e mesmo token dao 200 no
+                                          # curl e 403 no python — o que despista completamente,
+                                          # porque parece problema de permissao do token.
+                                          "User-Agent": "mila-proativa/1.0"}, method=method)
     with urllib.request.urlopen(req, timeout=60) as r:
-        return json.loads(r.read().decode() or "{}")
+        t = r.read().decode()
+        return json.loads(t) if t else {}
+
+
+def conversa_da_consultora(telefone, unidade_nome):
+    """A conversa dela na caixa da Mila DA UNIDADE dela. Nunca cria conversa: se
+    não existe, a pessoa nunca escreveu para aquela Mila e mandar do nada seria
+    abrir conversa por conta própria."""
+    inbox = INBOX_POR_UNIDADE[unidade_nome]
+    achadas = []
+    for c in (_cw("GET", f"/contacts/search?q={telefone}").get("payload") or []):
+        if "".join(ch for ch in str(c.get("phone_number") or "") if ch.isdigit()) != telefone:
+            continue
+        for cv in (_cw("GET", f"/contacts/{c['id']}/conversations").get("payload") or []):
+            if cv.get("inbox_id") == inbox:
+                achadas.append(cv)
+    if not achadas:
+        raise RuntimeError(f"sem conversa na caixa {inbox} ({unidade_nome}) para {telefone}")
+    return max(achadas, key=lambda cv: cv.get("last_activity_at") or 0)["id"]
+
+
+def enviar(telefone, unidade_nome, texto):
+    cid = conversa_da_consultora(telefone, unidade_nome)
+    r = _cw("POST", f"/conversations/{cid}/messages",
+            {"content": texto, "message_type": "outgoing", "private": False})
+    return {"conversation_id": cid, "message_id": r.get("id")}
 
 
 def envelope(tipo, dados, c):
@@ -204,8 +240,8 @@ def main():
             if a.dry_run:
                 log(f"--- {c['apelido']} ({c['unidade_nome']}) [DRY-RUN — nada enviado] ---\n{texto}\n")
                 continue
-            r = waha_enviar(os.environ[WAHA_SESSAO_POR_UNIDADE[c["unidade_nome"]]], c["telefone"], texto)
-            concluir(log_id, "ok", {"fase": "enviado", "texto": texto, "waha": str(r)[:200], "dados": dados})
+            r = enviar(c["telefone"], c["unidade_nome"], texto)
+            concluir(log_id, "ok", {"fase": "enviado", "texto": texto, "chatwoot": r, "dados": dados})
             log(f"{c['apelido']}: enviado ({len(texto)} chars)")
         except Exception as e:  # noqa: BLE001 — uma consultora não derruba as outras
             falhas += 1
