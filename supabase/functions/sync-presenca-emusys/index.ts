@@ -1590,6 +1590,33 @@ async function confirmarExperimentais(
       continue;
     }
 
+    // ⚠️ A aula EXISTIR na grade e nao estar cancelada NAO quer dizer que ela
+    // aconteceu. Ate 04/09/2026 este bloco marcava 'experimental_realizada' so
+    // por isso, e como os crons `sync-presenca-dia-*` rodam 00:43 BRT, o dia
+    // inteiro nascia "realizado": em 04/09 as experimentais das 18h, 19h e 20h
+    // do Recreio ja estavam realizadas as 16h, SEM NENHUMA presenca lancada
+    // (provado: `aluno_presenca` vazia para essas aulas). A Daiana viu isso na
+    // mensagem da Mila e reclamou — com razao.
+    //
+    // Isso tambem produzia o segundo sintoma que ela relatou: aula reagendada
+    // para outro dia ficava "realizada" no dia velho. O reagendamento so chega a
+    // `aulas_emusys` quando a grade sincroniza; ate la a aula ainda aparece na
+    // data antiga e este bloco a confirmava. Com o guard, a janela deixa de
+    // existir — se ainda nao ocorreu, nao ha o que confirmar.
+    const inicioAula = aulaFinal.data_hora_inicio ? new Date(aulaFinal.data_hora_inicio) : null;
+    if (inicioAula && inicioAula.getTime() > Date.now()) {
+      logs.push({
+        lead_id: exp.lead_id,
+        lead_nome: exp.nome_aluno || 'Sem nome',
+        unidade: unidadeNome,
+        data: exp.data_experimental,
+        professor: String(exp.professor_experimental_id),
+        status: 'ainda_nao_ocorreu',
+        motivo: `Aula marcada para ${inicioAula.toISOString()} — ainda nao aconteceu, nao confirmo`
+      });
+      continue;
+    }
+
     // Atualizar na lead_experimentais
     const { error: expError } = await supabase
       .from('lead_experimentais')
