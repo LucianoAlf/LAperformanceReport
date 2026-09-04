@@ -91,6 +91,71 @@ O padrão já foi provado pela Sol no caixa. Copiamos a arquitetura, não o cód
 
 ---
 
+## ✅ Passo 5 — a Mila MANDA (manhã e fim do dia) · construído em 04/09 (noite)
+
+**Exigência do Luciano que decidiu o desenho:** *"ela tem que saber o que ela
+enviou"* — se a consultora responder "não é nada disso", a Mila tem que saber do
+quê. Então o cron **não dispara texto por fora**: ele sobe o Hermes **na mesma
+sessão que o bridge usa com cada consultora** (`chatwoot-consultor-v2-<telefone>`,
+perfil `mila-consultor-readonly`, carimbo por env — o spawn é cópia do
+`runHermesMeta` do bridge), entrega um envelope `[MILA PROATIVA · manhã|fim do
+dia · DD/MM]` com os dados canônicos, e o que a Mila escreve vai para o WhatsApp
+dela pela WAHA da unidade. A próxima mensagem dela cai na mesma sessão. Contexto
+intacto, sem tabela nova de "o que eu mandei".
+
+| peça | onde | o que faz |
+|---|---|---|
+| `mila_briefing_manha_v1(tel, data)` | migrations `20260904150000` + `151000` | experimentais e visitas de HOJE (hora/aluno/curso/professor), ONTEM (último dia útil; segunda olha sábado): fez e está sem desfecho · faltou sem remarcar **e abaixo do teto de 3 tentativas**, QUENTES agora (só R18, 24h), pendências **só dos leads de hoje** (curso/canal vazio), estrela mais perto (`mila_estrela_mais_perto_v1`: menor `faltam/meta`), `nada_para_hoje` |
+| `mila_fechamento_dia_v1(tel, data)` | idem | fez hoje (desfecho de cada uma), faltou hoje (remarcada? teto?), matrículas de hoje, **de dias anteriores** ainda sem desfecho (3 dias, sem repetir os de hoje), pendências só de hoje, amanhã (próximo dia útil; sábado → segunda) |
+| `mila_consultoras_ativas_v1()` | idem | as 3 (governança: comercial + colaborador + unidade) com apelido (`Dai` sai do parêntese) |
+| `mila-proativa.py` | `vps/la-hq/mila/scripts/` → `/home/mila/.openclaw/workspace/scripts/` | `--tipo manha|fim_do_dia [--dry-run] [--so tel] [--data]`; **reserva `automacao_log.idempotency_key` ANTES** de rodar (`mila_proativa|tipo|tel|dia` — cron vira 2-4 execuções); `nada_para_hoje` ou `[SEM ENVIO]` = não manda; DRY-RUN roda numa sessão de ensaio, **nunca na real** |
+| skill `mila-gestao` | seção "Quando fui EU que mandei" | como tratar "não é nada disso", correção vira tool na hora, chama pelo nome, silêncio > ruído |
+
+**ACL:** `service_role` + `mila_acesso_restrito`, nunca anon/authenticated (conferido `proacl`).
+
+**O que o 1º ensaio real (Dai, fim do dia 04/09) mostrou e foi corrigido na
+fonte:** a v1 puxava o backlog GLOBAL de pendências ("250 sem anamnese", "64 sem
+ficha") — exatamente a "coisa antiga" que o Luciano mandou tirar — e repetia os
+10 nomes de hoje em dois blocos. Agora pendências = só dos leads que ela tocou
+hoje; `fica_para_amanha` = só dias anteriores. **R16 (lead parado) não entra na
+DM** — não é uma das 5 situações aprovadas e foi o ruído do relatório de 03/09.
+
+**Textos de ensaio (dry-run, nada enviado):**
+
+> *Dai, hoje foram 10 experimentais: Bento Lima, Sophie Figueiredo Soriano e
+> Beatriz Lombardi; as outras 7 ficaram sem desfecho no dia, normal. Teve 1
+> falta: Sofia Mena, Canto, 09:00 — não remarcada, 2 tentativas. Matrículas
+> hoje: 0. De dias anteriores e ainda sem desfecho: 5 (…). Amanhã já tem 3
+> experimentais: Thomás, Laura e Vincenzo. Quer que eu te deixe esses 5 antigos
+> no radar cedo?*
+
+> *Vitória, teu dia tá assim: 3 experimentais — Canto com Daiana Pacifico:
+> 10:00 Luci Machado Viegas e 12:00 Simone Lima Alves; 11:00 Pedro Sandes,
+> Musicalização para Bebês, Adriana. Ontem zerou. 2 quentes agora. Ticket
+> Premiado é a estrela mais perto: faltam R$ 3 (387 → 390). Quer que eu
+> priorize os 3 de hoje?*
+
+**Cron INSTALADO em 04/09 às 15:56 BRT (user `mila`, VPS em UTC):** `30 11 * * 1-6`
+manhã (08:30 BRT) · `30 21 * * 1-6` fim do dia (18:30 BRT). **1ª execução real:
+04/09 18:30 BRT (fim do dia, para as 3).** Log `logs/mila-proativa.log` +
+`logs/mila-proativa.cron.log`; rastro por envio em `automacao_log`
+(`evento='mila_proativa'`, texto + dados no `detalhes`). Desligar = comentar as 2
+linhas no `crontab -u mila -e`.
+
+🔴 **Achado grave do ensaio — o perfil das consultoras estava MORTO.**
+`mila-consultor-readonly` respondia `Primary auth failed` (xai-oauth) e caía em
+`HTTP 401` — qualquer consultora que escrevesse "Mila" teria erro, e nada acusou
+porque **nenhuma tinha escrito ainda** (0 sessões). `auth.json` era cópia idêntica
+do da raiz, sem `refresh_token`; só o `mila-sdr` tinha o par completo. Trocado
+para `openai-api / gpt-5.4-mini` (API key já no `.env` do perfil; sem OAuth,
+sem rotação). Backup `config.yaml.bak-20260904T184827Z-pre-openai-api`.
+**Regra nova:** antes de liberar perfil Hermes para gente, `hermes chat -q ok`
+naquele `HERMES_HOME` com `rc=0` e sem aviso de fallback.
+
+**Fora deste passo (próximo):** cutucada de hora em hora (R18 em tempo real,
+"uma vez por pessoa"), e a situação "escola prometeu retorno em 24h", que ainda
+não tem sinal.
+
 ## 🟢 LIBERADO PARA O TIME (04/09, 18h30) — pode mandar testar
 
 **Como falar com ela:** no WhatsApp da **Mila da própria unidade** (privado ou
@@ -117,9 +182,8 @@ contexto e não responde (regra de 24/08, `consultor-gatilho.js`).
 ficha de lead, pendências cadastrais, e **registrar** curso, motivo de perda,
 canal, quem atendeu, anotação, e **fechar item da pauta**. Só a própria unidade.
 
-**O que AINDA NÃO existe (próximo, passo 5):** a Mila **tomar a iniciativa** —
-a DM com as 5 situações aprovadas, o mini-relatório do dia por consultora e o
-cron de hora em hora cutucando pendência. Hoje ela **responde**; não **manda**.
+**Passo 5 (a Mila MANDA) construído na mesma noite — ver seção acima.** O que
+segue fora: a cutucada de hora em hora e o sinal "escola prometeu 24h".
 
 ⚠️ Lição registrada: a prioridade era o time e eu instalei primeiro no canal do
 Luciano. Corrigido no mesmo dia, mas custou uma tarde de confusão.
