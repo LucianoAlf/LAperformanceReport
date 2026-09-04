@@ -91,6 +91,39 @@ O padrão já foi provado pela Sol no caixa. Copiamos a arquitetura, não o cód
 
 ---
 
+## 🟢 LIBERADO PARA O TIME (04/09, 18h30) — pode mandar testar
+
+**Como falar com ela:** no WhatsApp da **Mila da própria unidade** (privado ou
+no grupo), com **"Mila"** na mensagem. Depois do primeiro "Mila", ela fica 30
+min na conversa sem precisar do nome. Mensagem sem "Mila" ela guarda como
+contexto e não responde (regra de 24/08, `consultor-gatilho.js`).
+
+**Verificado antes de liberar:**
+
+| consultora | contato no Chatwoot | telefone | governança | inbox da Mila |
+|---|---|---|---|---|
+| Vitória (CG) | **"Vick"** | `553171422022` (DDD 31 — é o número dela mesmo) | id 23, CG, comercial | 155 ✅ |
+| Daiana (Recreio) | "Daiana" | `5521968060404` | id 7, Recreio, comercial | 148 ✅ |
+| Kailane (Barra) | "Kailane" | `5521984690143` | id 12, Barra, comercial | 147 ✅ |
+
+- O bridge decide modo consultor **só pela governança** (`consultor_permitido`);
+  o `custom_attribute consultor=true` do Chatwoot não é exigido (só log).
+- O extrator tira o `+` e tudo que não é dígito → bate exato com a governança
+  (provado: `+5521…` falha no banco, `5521…` passa; o bridge manda `5521…`).
+- Grupo cai no mesmo caminho (consultor autorizado), e **grupo nunca vira lead**.
+- Carimbo por mensagem = `MILA_CONSULTOR_TELEFONE` que o bridge já exporta.
+
+**O que o time consegue hoje:** pauta do dia, situação no MATRICULADOR + LA,
+ficha de lead, pendências cadastrais, e **registrar** curso, motivo de perda,
+canal, quem atendeu, anotação, e **fechar item da pauta**. Só a própria unidade.
+
+**O que AINDA NÃO existe (próximo, passo 5):** a Mila **tomar a iniciativa** —
+a DM com as 5 situações aprovadas, o mini-relatório do dia por consultora e o
+cron de hora em hora cutucando pendência. Hoje ela **responde**; não **manda**.
+
+⚠️ Lição registrada: a prioridade era o time e eu instalei primeiro no canal do
+Luciano. Corrigido no mesmo dia, mas custou uma tarde de confusão.
+
 ## ✅ CORREÇÃO DE PRIORIDADE (04/09, 18h) — o pacote está no perfil das CONSULTORAS
 
 **Erro meu, apontado pelo Luciano:** instalei o pacote primeiro no perfil raiz
