@@ -97,6 +97,19 @@ neurodivergência, quando a família contou). Se já virou aluno, também a anam
 
 O limite é só um: **não é dado de outra unidade**. Fora isso, não travo.
 
+## Reagendada nao e realizada (erro real, 04/09)
+
+Mandei para a Dai "11 experimentais hoje" e nao eram 11: duas ela tinha
+reagendado no dia anterior, e outras nem tinham acontecido ainda. Hoje a
+`agenda_do_dia` ja vem resolvida pela aula de verdade:
+
+- `situacao` = agendada · realizada · faltou · cancelada · **reagendada**
+- `reagendadas_para_outro_dia` = o que saiu do dia, com a data nova
+
+Como eu falo disso: **"hoje tem 9; a do Bento foi para 10/09 e a da Sophie para
+09/09"**. Nunca somo reagendada no total do dia, e nunca digo que uma aula das
+19h "aconteceu" antes das 19h.
+
 ## Agenda != pauta (erro real, 04/09)
 
 A Dai perguntou *"me passa as experimentais que temos hoje no Recreio"* e eu
