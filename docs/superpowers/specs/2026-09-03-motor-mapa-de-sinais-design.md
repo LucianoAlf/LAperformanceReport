@@ -125,6 +125,67 @@ nasceram do cadastro do Emusys, vieram por outro caminho que não grava origem.
 
 ---
 
+## 📍 ONDE ESTAMOS — 04/09, fim do dia · **LER ISTO PRIMEIRO**
+
+### Feito e no ar
+
+| | estado |
+|---|---|
+| Meta Ads persistido (histórico + 2 crons) | ✅ |
+| **Google Ads persistido** (2 crons, R$ 9.160/90d) | ✅ |
+| `radar_trafego_canal_v1` · `_criativo_v1` · `_publico_reativacao_v1` | ✅ gate `is_admin()` |
+| Handoff do front para o Hugo | ✅ `docs/hugo/2026-09-03-...` |
+| **T1** disjuntor anti-loop bot-contra-bot (20/24h) | ✅ |
+| **T2** calor da conversa + R18 "preso no bot" | ✅ cron horário |
+| Relatório comercial pela Mila nos 3 grupos, 20h05 | ✅ desde 03/09 |
+| Falsos positivos da pauta (4 causas) | ✅ corrigidos |
+| **Teto de 3 tentativas + janela de 30 dias** | ✅ 244 sinais expirados |
+
+Fila por unidade depois da limpeza: **Barra 14 · CG 48 · Recreio 32**
+(era 16 / 115 / 45, e antes 163 em CG).
+
+### 🔴 O bloqueio: falta a VOLTA
+
+O 3º andar comercial está **pela metade**. A entrega funciona; **o consultor não
+tem como responder ao sistema**. A Vitória perguntou literalmente *"eu tenho que
+sinalizar de alguma forma quando já dei o retorno?"* — hoje **sim, e não há
+como**. Por isso Cauã e Leandro voltam todo dia, corretamente.
+
+**Não ligar a DM antes disso** — sem a volta, a DM repete o que a consultora já
+resolveu, e aí eles pedem para desligar.
+
+### 🎯 O que o Luciano aprovou e pediu agora (04/09)
+
+A DM da Mila (5 situações, tetos, "entrega contexto, não cobra") está
+**aprovada**. Mas antes de ligar, ele quer a **camada conversacional**:
+
+> *"O time vai querer falar com a Mila. Vão dizer 'Mila, responde pra ele que eu
+> tô almoçando', 'chama em 10 minutos'. Tem que ver se está liberado, se existem
+> as RPCs para o time perguntar coisas e a Mila levar informação útil."*
+
+**Princípio dado por ele, e é a régua da arquitetura:**
+
+| tipo | exemplo | quem responde |
+|---|---|---|
+| **determinístico** | "esse lead é quente ou frio?" | **RPC** — já definido em código |
+| **contexto** | "o que ele te perguntou?" "responde que eu tô almoçando" | **skill + LLM** com contexto carregado |
+
+*"AI first. A galera conversa com a Mila através de LLM+skill. A Mila tem que
+ter CONTEXTO — das conversas, do que o cliente quer — e SKILL para tratar disso.
+Algumas coisas são determinísticas e outras são de contexto. Isso não pode dar
+mal."*
+
+### Próximo passo, nesta ordem
+
+1. **Auditar a estrutura conversacional** — o time consegue falar com a Mila
+   hoje? Que runtime atende DM? Existe allowlist? Que RPCs determinísticas já
+   existem para ela consultar?
+2. Construir a **volta** (consultor responde → sinal fecha)
+3. Só então ligar a DM
+4. Voltar para Sol e Lia
+
+---
+
 ## ✅ T1 e T2 CONCLUÍDAS (04/09) — e a T1 não era o que eu disse
 
 ### 🔴 CORREÇÃO: a T1 que eu descrevi estava ERRADA
