@@ -91,6 +91,32 @@ O padrão já foi provado pela Sol no caixa. Copiamos a arquitetura, não o cód
 
 ---
 
+## ✅ Passos 1 e 2 — FEITOS em 04/09 (tarde)
+
+| entrega | prova |
+|---|---|
+| `get_estrelas_matriculador_v1` — as 5 estrelas do PDF, com "faltam X" | Luciano vê 3 unidades; Daiana só Recreio; desconhecido recusado |
+| `get_situacao_lead_v1` — a ficha | Daiana vê Jullyane; **nem descobre** a Hetiene (CG); "Graciele" → 3 candidatas |
+| `radar_pendencias_comerciais_v1` — 5 buckets | Vitória/CG: 376 · 39 · 33 · 12 · 21 |
+| tráfego liberado para a role da Mila | 10 linhas pelo MCP real dela |
+| **consultor 0 → 100%** (`unidade_contato_comercial`, trigger) | 9.802 leads, 0 sem consultor |
+| **curso pela experimental** (trigger + backfill) | 5.407 → 5.342; porta fechada pra frente |
+
+**A prova que importa:** pelo MCP real da Mila (sem JWT, role restrita),
+`select count(*) from alunos` continua devolvendo **0** — e as quatro RPCs
+devolvem dado. É a régua funcionando: **número vem de RPC.**
+
+⚠️ **Descoberto no caminho:** o programa no banco (`programa_matriculador_config`,
+pontos, nota 80) é a versão ANTERIOR e nunca foi usada — histórico vazio. O que
+vale é o PDF (estrelas). Modelado em `programa_matriculador_estrelas_config`.
+
+⚠️ **Isolação por unidade = `governanca.quem_eh(telefone)`.** Toda RPC nova
+recebe `p_solicitante_telefone`; unidade nula (diretoria) vê tudo. A Vitória de
+CG está com DDD 31 na governança — conferir com ela.
+
+**Próximo: passo 3** — o MCP de tools de gestão (leitura + as escritas W1–W5,
+W7) e a skill/SOUL de parceira. Depois o **passo 4**: teste na DM do Luciano.
+
 ## O plano, em 6 passos
 
 ### Passo 1 — Destravar o que já existe *(hoje)*
