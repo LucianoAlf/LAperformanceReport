@@ -432,6 +432,20 @@ serve(async (req) => {
       severidade: regra?.severidade_padrao ?? "atencao",
       canonico: true,
       origem: "llm_conversa",
+      // 04/09: quem PROMETEU e quem tem de cumprir. A Graciele gerou um sinal de
+      // promessa feita na `LA_Secretaria_CG` (atribuida a Gabriela Leal) que caiu
+      // no relatorio COMERCIAL — a Vitoria recebeu a cobranca de uma conversa que
+      // nao era dela e respondeu, com razao, "eu ja atendi isso".
+      // O dominio vinha da ENTIDADE (lead -> comercial) e ignorava o departamento
+      // da conversa. Com origem `llm_conversa` o departamento manda: a conversa
+      // tem dono, e o dono e quem prometeu.
+      // ⚠️ Só decide quando o departamento e conhecido; fora disso deixa `null` e
+      //    o trigger `radar_guarda_elegibilidade` resolve como antes.
+      dominio: c.departamento === "comercial"
+        ? "comercial"
+        : c.departamento === "secretaria"
+        ? (entidadeTipo === "ex_aluno" ? "historico" : "aluno")
+        : undefined,
       contexto,
       interpretacao: regra?.lastro ?? null,
       orientacao: regra?.orientacao_padrao ?? null,
