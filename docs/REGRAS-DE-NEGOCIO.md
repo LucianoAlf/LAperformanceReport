@@ -8,6 +8,45 @@
 
 ---
 
+## Matrícula do COMERCIAL (programa MATRICULADOR + LA) — 04/09/2026
+
+**Não é o mesmo número de "matrículas" dos KPIs de aluno.** Para efeito de
+comercial e do programa de bonificação, matrícula é a **entrada nova que pagou a
+taxa**. Fonte única: **`matriculas_comerciais_v1(unidade, de, ate)`**, que devolve
+todas as linhas do período com `conta` e `motivo_fora`.
+
+Não entram:
+
+| fora | por quê |
+|---|---|
+| **2º curso** (`is_segundo_curso`) | é 2º curso, não matrícula nova. Comissão e contagem próprias. |
+| **bolsista** integral ou parcial | não paga passaporte (`tipos_matricula.conta_como_pagante = false`). |
+| **banda, coral, Power Kids, atividade extra** | coberto por `movimentacao_conta_nos_kpis_v1`. |
+| **sem passaporte pago** | matrícula do comercial é quem pagou a **taxa de matrícula / passaporte** (`emusys_faturas` com descrição `taxa de matr` ou `passaporte` e `data_pagamento` preenchida). |
+
+Validação em ago/2026, Campo Grande, contra o número que a consultora tinha na
+mão (24): 37 linhas → −7 segundo curso → 30 → −5 bolsista/extra → 25 → −1 sem
+passaporte → **24**. Nas outras: Recreio 26 → 21, Barra 22 → 17.
+
+⚠️ **Fail-safe:** `emusys_faturas` só cobre jun/2026 em diante. Sem nenhuma fatura
+de taxa/passaporte no período, o filtro do passaporte é **desligado** — senão um
+mês não sincronizado zeraria o comercial inteiro.
+
+⚠️ **No mesmo dia** o passaporte quase sempre ainda não foi pago/sincronizado
+(o sync roda 3×/dia). Relatório diário deve mostrar `aguardando_passaporte`, não
+esconder a matrícula.
+
+### Show-up do programa = experimentais **+ visitas**
+
+A meta de show-up (`programa_matriculador_estrelas_config.meta_showup`: CG 55,
+Recreio 40, Barra 40) soma **experimentais realizadas** e **visitas**. Contar só
+experimental subdeclara: CG/ago tinha 42 experimentais e 28 visitas = 70.
+
+⚠️ **Visita não tem confirmação de comparecimento**: 100% das linhas de `visitas`
+ficam em `agendada` (são criadas pela Mila e ninguém marca quem veio). O número é
+o total agendado no mês, e quem consome precisa dizer isso. Hoje só Campo Grande
+registra visitas.
+
 ## Índice
 
 1. [Como usar este documento](#1-como-usar-este-documento)
