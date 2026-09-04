@@ -250,7 +250,7 @@ _{dia_semana}, {data}_
 
 📈 *O MÊS* _(parcial)_
   🧲 Leads *29* / 160
-  🎯 Experimentais *6* / 38
+  🎯 Experimentais realizadas *6* / 38
   🎓 Matrículas *2* / 21
   💵 Ticket *R$ 407* / 435
 
@@ -293,7 +293,9 @@ def envelope(tipo, dados, c):
                   "Depois: quem faltou (remarcada? se `teto_atingido`, é para parar de insistir), matrículas de hoje, "
                   "quem é de dias anteriores e segue sem desfecho, o que já está marcado para amanhã, e o bloco `mes_ate_agora` "
                   "com leads/experimentais/matrículas/ticket contra a meta e o funil. Se `mes_ate_agora.fechado` for true, "
-                  "diga que é o fechamento oficial; se for false, escreva _(parcial)_ ao lado do título do mês.")
+                  "diga que é o fechamento oficial; se for false, escreva _(parcial)_ ao lado do título do mês. "
+                  "A linha de experimentais do mês é `experimentais_realizadas` contra `meta_experimentais` — "
+                  "NUNCA use `experimentais_agendadas` ali: agendada não é realizada, e o relatório da equipe mostra a realizada.")
     regras = (
         "FORMATO — siga este molde, ele é a régua da mensagem:\n"
         "<molde>\n" + molde + "\n</molde>\n"
