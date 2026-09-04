@@ -91,6 +91,44 @@ O padrão já foi provado pela Sol no caixa. Copiamos a arquitetura, não o cód
 
 ---
 
+## ✅ CORREÇÃO DE PRIORIDADE (04/09, 18h) — o pacote está no perfil das CONSULTORAS
+
+**Erro meu, apontado pelo Luciano:** instalei o pacote primeiro no perfil raiz
+(o canal dele, Telegram) em vez do perfil que atende a Vitória, a Daiana e a
+Kailane. A prioridade sempre foi o time. Corrigido:
+
+| | perfil | quem cai nele (bridge `pickHermesProfile`) | estado |
+|---|---|---|---|
+| **consultoras** | `mila-consultor-readonly` | `pode_editar=false` → Vitória, Daiana, Kailane | ✅ MCP + skill + alma **instalados e provados** |
+| diretoria | raiz `/home/mila/.hermes` | `pode_editar=true` → Luciano, Hugo, Anne Susan (+ Telegram) | ✅ já estava |
+
+**Como a Mila sabe quem é a consultora, sem ninguém digitar:** o
+`chatwoot-mila-bridge.js` sobe **um processo por mensagem** e já exporta
+`MILA_CONSULTOR_TELEFONE=<telefone do remetente>` a cada spawn (fora do alcance
+do modelo). O wrapper do MCP passou a usar esse env como carimbo, com
+precedência sobre o arquivo de segredo. **Zero mudança no bridge, zero risco no
+caminho de lead.**
+
+**Prova, exatamente como o bridge chama** (`MILA_CONSULTOR_TELEFONE=5521968060404`, Daiana):
+
+| chamada | resultado |
+|---|---|
+| carimbo resolvido | `Daiana (Dai)`, escopo `unidade` |
+| `tools/list` | **10 tools — tráfego não aparece** |
+| `ficha_lead` Jullyane (Recreio) | ✅ |
+| `ficha_lead` Hetiene (CG) | `nao_encontrado_no_escopo` — **nem descobre que existe** |
+| `anotar_lead` em lead de CG | `fora_do_escopo` |
+| `estrelas_matriculador` | só Recreio |
+
+⚠️ **CRLF:** o wrapper `.sh` editado no Windows subiu com `\r\n` e o bash
+recusou (`$'do\r'`) — a instalação passou, a prova não rodou até o
+`sed 's/\r$//'`. `.gitattributes` agora força LF em `vps/**`.
+
+⚠️ **Nenhuma das três consultoras aparece ainda como remetente nas caixas da
+Mila** (espelho da Sol, inboxes 147/148/155) — bate com o log "nenhum consultor
+conversou". O formato do telefone da Vitória (DDD 31 na governança) só se
+confirma quando ela escrever; se cair `nao_autorizado`, é isso.
+
 ## ✅ Passo 3 — FEITO em 04/09 (fim da tarde) · pronto para o passo 4
 
 | peça | onde | prova |
