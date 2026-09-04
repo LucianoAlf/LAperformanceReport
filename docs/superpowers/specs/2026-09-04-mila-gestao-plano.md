@@ -156,6 +156,58 @@ naquele `HERMES_HOME` com `rc=0` e sem aviso de fallback.
 "uma vez por pessoa"), e a situação "escola prometeu retorno em 24h", que ainda
 não tem sinal.
 
+## ✅ MILA DE GESTÃO — CONCLUÍDA (04/09, noite)
+
+Tudo que o time toca vem da **mesma fonte que monta o relatório comercial**.
+Provado contra o relatório de agosto que a equipe recebeu:
+
+| | relatório | Mila |
+|---|---|---|
+| matrículas CG · REC · BAR | 24 · 23 · 19 | **idêntico** |
+| leads / experimentais / faltas (REC ago) | 278 / 51 / 17 | **idêntico** (lê o snapshot) |
+| ticket parcela · passaporte | 404,13 · 402,17 | **idêntico** |
+
+⚠️ **Mês fechado vem do SNAPSHOT, não do vivo.** O cálculo ao vivo dava 279
+leads e 61 experimentais em ago/Recreio — o relatório é uma foto de 01/09 15:53
+e o banco continuou andando. A consultora recebeu 51; se a Mila disser 61, ela
+desconfia dos dois. Mês corrente vem ao vivo e é anunciado como parcial.
+
+### As 13 ferramentas
+
+**Leitura** — `minha_pauta`, `agenda_do_dia`, `fechamento_do_dia`,
+`numeros_do_mes`, `estrelas_matriculador`, `ficha_lead`, `pendencias_comerciais`.
+**Escrita** — `registrar_curso_interesse`, `registrar_motivo_perda`,
+`registrar_canal_origem`, `registrar_consultor`, `anotar_lead`, `fechar_sinal`.
+
+### Os 4 crons
+
+| quando | o quê |
+|---|---|
+| **08:30** seg-sáb | briefing do dia: experimentais, visitas, quentes, o que ficou de ontem, estrela mais perto |
+| **de hora em hora** 09h-19h | cutucada: **só** preso no bot (R18) e promessa sem retorno (R7). Teto 5/dia, 1× por pessoa |
+| **18:30** seg-sáb | fechamento: o dia + **o mês contra a meta** + o funil + amanhã |
+| **a cada 5 min** | vigia: avisa no tópico Logs quando a Mila falha ou cala com alguém |
+
+⚠️ **R7 "promessa de retorno não cumprida" já existia** e estava ativa desde
+03/09, detectada por LLM na conversa, com 7 sinais abertos e **nenhum
+consumidor**. Era a 5ª situação aprovada; não precisou ser criada, só ligada.
+
+### Formato: molde, não instrução
+
+A instrução abstrata ("formato de WhatsApp, curto") produzia parágrafo corrido.
+Hoje o envelope leva o **molde literal** — cabeçalho, separadores, blocos com
+emoji e contagem, uma informação por linha, nome em negrito, detalhe indentado,
+uma pergunta no fim. Bloco vazio não aparece; campo sem valor some da linha; o
+número do cabeçalho tem que bater com o que está listado embaixo.
+
+### O que fica de fora, e por quê
+
+- **Segundo andar (gerentes) e terceiro (diretoria)** — não construídos.
+- **Visita não tem confirmação de comparecimento**: toda linha fica `agendada` e
+  só CG registra visita. O número vai com ressalva explícita.
+- **Sinal com `emusys_aula_id` de EVENTO** não cruza com a grade e cai no status
+  gravado — dívida antiga do webhook de experimental.
+
 ## 🟢 LIBERADO PARA O TIME (04/09, 18h30) — pode mandar testar
 
 **Como falar com ela:** no WhatsApp da **Mila da própria unidade** (privado ou

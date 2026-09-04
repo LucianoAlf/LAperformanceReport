@@ -248,6 +248,16 @@ _{dia_semana}, {data}_
 
 ━━━━━━━━━━━━━━━━━━━━━
 
+📈 *O MÊS* _(parcial)_
+  🧲 Leads *29* / 160
+  🎯 Experimentais *6* / 38
+  🎓 Matrículas *2* / 21
+  💵 Ticket *R$ 407* / 435
+
+  _funil:_ lead→exp *20,7%* · exp→mat *0%*
+
+━━━━━━━━━━━━━━━━━━━━━
+
 ⭐ _Ticket Premiado_ — faltam *R$ 17,50*
 
 ━━━━━━━━━━━━━━━━━━━━━
@@ -281,7 +291,9 @@ def envelope(tipo, dados, c):
                   "NUNCA escreva '0 experimentais' quando houve falta ou cancelamento: falta é experimental que "
                   "não aconteceu, não experimental que não existiu. Sem desfecho no mesmo dia é normal, não cobre. "
                   "Depois: quem faltou (remarcada? se `teto_atingido`, é para parar de insistir), matrículas de hoje, "
-                  "quem é de dias anteriores e segue sem desfecho, e o que já está marcado para amanhã.")
+                  "quem é de dias anteriores e segue sem desfecho, o que já está marcado para amanhã, e o bloco `mes_ate_agora` "
+                  "com leads/experimentais/matrículas/ticket contra a meta e o funil. Se `mes_ate_agora.fechado` for true, "
+                  "diga que é o fechamento oficial; se for false, escreva _(parcial)_ ao lado do título do mês.")
     regras = (
         "FORMATO — siga este molde, ele é a régua da mensagem:\n"
         "<molde>\n" + molde + "\n</molde>\n"

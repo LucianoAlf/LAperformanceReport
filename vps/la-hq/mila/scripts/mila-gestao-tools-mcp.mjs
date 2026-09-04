@@ -76,6 +76,9 @@ const LEITURA = [
   { name: 'fechamento_do_dia',
     description: 'Como FOI o dia na unidade de quem pergunta: experimentais realizadas e o desfecho de cada uma, faltas (remarcada? teto de 3 tentativas?), matriculas do dia, quem e de dias anteriores e segue sem desfecho, e o que ja esta marcado para o proximo dia util. Use para "como foi o dia?", "quantas experimentais teve hoje?", "quem matriculou hoje?". `data` YYYY-MM-DD (padrao hoje).',
     inputSchema: { type: 'object', properties: { data: { type: 'string', description: 'YYYY-MM-DD (padrao: hoje).' } } } },
+  { name: 'numeros_do_mes',
+    description: 'Os numeros do MES da unidade de quem pergunta, da MESMA fonte do relatorio comercial que a equipe recebe: leads, experimentais realizadas, faltas, visitas, matriculas, ticket medio da parcela e do passaporte, total de passaportes, o funil (lead->experimental->matricula) com as METAS de cada um, e os canais e cursos mais procurados. Use para "como esta o mes?", "quantos leads eu tive?", "qual meu funil?", "bati a meta?". ⚠️ Mes JA FECHADO vem do fechamento oficial (`fechado: true`) — e o mesmo numero do relatorio, nao recalcule nem compare com o vivo. Mes corrente vem ao vivo e ainda muda: diga isso.',
+    inputSchema: { type: 'object', properties: { ano: { type: 'integer' }, mes: { type: 'integer' } } } },
   { name: 'pendencias_comerciais',
     description: 'As 5 pendências cadastrais da unidade: matriculado sem anamnese, experimental realizada sem ficha, lead sem canal de origem, lead sem curso de interesse, experimental feita sem desfecho — com total, amostra e a ação. Use para "tem pendência cadastral?", "quem está sem anamnese?". Cada uma delas você pode RESOLVER com as tools de registrar_*.',
     inputSchema: { type: 'object', properties: { amostra: { type: 'integer', description: 'Itens por bucket (padrão 8).' } } } },
@@ -151,6 +154,8 @@ async function callTool(name, a) {
       return j(await rpc('mila_briefing_manha_v1', { p_solicitante_telefone: tel, ...(a.data ? { p_data: a.data } : {}) }));
     case 'fechamento_do_dia':
       return j(await rpc('mila_fechamento_dia_v1', { p_solicitante_telefone: tel, ...(a.data ? { p_data: a.data } : {}) }));
+    case 'numeros_do_mes':
+      return j(await rpc('mila_numeros_do_mes_v1', { p_solicitante_telefone: tel, ...(a.ano ? { p_ano: a.ano } : {}), ...(a.mes ? { p_mes: a.mes } : {}) }));
     case 'pendencias_comerciais':
       return j(await rpc('radar_pendencias_comerciais_v1', { p_solicitante_telefone: tel, p_amostra: a.amostra || 8 }));
     case 'trafego_por_canal': gate();
