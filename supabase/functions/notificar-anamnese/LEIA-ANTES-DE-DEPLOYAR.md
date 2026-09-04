@@ -24,10 +24,20 @@ deploy daqui falha em vez de sobrescrever.
 Monta a mensagem inteira e grava em `fila_anamnese_sol_hermes.mensagem`. A Sol
 apenas transporta — ela não compõe nada.
 
-A fronteira de privacidade: o professor recebe **como apoiar**, nunca o nome do
-diagnóstico, da condição médica ou do medicamento. Não é o prompt que garante
-isso (medido: 1 em 3 briefings repetia o rótulo mesmo com a regra escrita) — é
-uma varredura determinística na saída, que descarta o briefing se ele vazar.
+⚠️ **Este parágrafo estava errado até 04/09/2026** e vale registrar o que ele dizia:
+que o professor recebia "como apoiar", nunca o nome do diagnóstico, protegido por uma
+varredura determinística na saída. Essa era a política da manhã de 05/08/2026 — o Alf
+a reverteu no mesmo dia, com razão: se a família relatou, ela espera que o professor
+saiba, e "Anafilaxia a formiga" é segurança física, não etiqueta.
+
+**O que vale hoje:** a saúde informada pela família VAI para o professor, na estrutura
+da mensagem (bloco ⚠️ *Saúde e necessidades*), e o briefing da IA complementa dizendo
+o que FAZER com aquilo na aula. A varredura foi removida junto. O que continua fora é
+filiação e situação conjugal dos pais — e não por varredura: `sanitizeForAI`
+simplesmente não passa esses campos para a IA, que não pode citar o que nunca recebeu.
+
+Quem lesse este arquivo até aqui acreditaria que o diagnóstico não sai daqui. Sai —
+e é assim de propósito.
 
 ## Se precisar mexer
 

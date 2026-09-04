@@ -1,0 +1,161 @@
+agendada_para_utc,dia,anamnese_id,aluno,professor,unidade,tem_saude,anamnese_criada_em
+2026-09-08T12:00:00.000Z,2026-09-08,258,"Jimmy Cordeiro de Lima","Vicente Pinheiro Neto","Recreio",sim,2026-08-31
+2026-09-08T12:10:00.000Z,2026-09-08,257,"Henrique Torres Lima Trombine","Gabriel Santos Teixeira da Silva","Campo Grande",sim,2026-08-31
+2026-09-08T12:20:00.000Z,2026-09-08,256,"Lucca Felipe Rebelo Azevedo","Ana Beatriz Paz de Almeida","Recreio",sim,2026-08-31
+2026-09-08T12:30:00.000Z,2026-09-08,251,"Maximiliam Travaglia Veloso Borges","Caio Tenório de Araújo","Campo Grande",sim,2026-08-31
+2026-09-08T12:40:00.000Z,2026-09-08,250,"Miguel Menezes Merçon dos Santos","Israel Rocha da Silva","Recreio",sim,2026-08-31
+2026-09-08T12:50:00.000Z,2026-09-08,249,"Daniel Castor Kuhlmann Silva","Rafael Alves Souza (Akeem)","Recreio",sim,2026-08-31
+2026-09-08T13:00:00.000Z,2026-09-08,246,"Thiago Julio Borges","Daiana Pacifico da Silva dos Anjos","Campo Grande",sim,2026-08-29
+2026-09-08T13:10:00.000Z,2026-09-08,241,"Sabrina Maria Gomes Santos","Valdo Delfino","Campo Grande",sim,2026-08-29
+2026-09-08T13:20:00.000Z,2026-09-08,238,"Lívia Mesquita Rodrigues","Matheus Lana da Silva","Recreio",sim,2026-08-29
+2026-09-08T13:30:00.000Z,2026-09-08,231,"Kailane Marcos Barbosa","Lohana Leopoldo de Araújo","Barra",sim,2026-08-28
+2026-09-08T13:40:00.000Z,2026-09-08,225,"Jeremias Ou Yuan Ma","Isaque Mendes da Silva","Barra",sim,2026-08-28
+2026-09-08T13:50:00.000Z,2026-09-08,223,"Giovanna Oliveira da Cunha","Larissa Bheattriz Barbosa Santos","Recreio",sim,2026-08-28
+2026-09-08T14:00:00.000Z,2026-09-08,215,"Lhays Marinho de Lima","Matheus Reis","Barra",sim,2026-08-27
+2026-09-08T14:10:00.000Z,2026-09-08,210,"Raquel de Cássia Silva de Carvalho","Willer Arruda Machado","Barra",sim,2026-08-26
+2026-09-08T14:20:00.000Z,2026-09-08,208,"Gabriel Corrêa Pena","Leonardo Castro","Barra",sim,2026-08-25
+2026-09-08T14:30:00.000Z,2026-09-08,203,"Davi Camargo Caetano Sardinha","Willian De Andrade Da Silva","Barra",sim,2026-08-25
+2026-09-08T14:40:00.000Z,2026-09-08,202,"Lucas Nunes de Salles","Kaio Felipe Rodrigues Cabral","Campo Grande",sim,2026-08-25
+2026-09-08T14:50:00.000Z,2026-09-08,201,"Daniel Mynssem Mendes","Jordan Barbosa do Rêgo","Campo Grande",sim,2026-08-24
+2026-09-08T15:00:00.000Z,2026-09-08,198,"Natan Pereira Calvo Demidoff","Peterson Biancamano","Barra",sim,2026-08-22
+2026-09-08T15:10:00.000Z,2026-09-08,197,"João Guilherme Corrêa Sá Vianna de Almeida","Ramon Pina Morais","Recreio",sim,2026-08-22
+2026-09-08T15:20:00.000Z,2026-09-08,186,"Hugo Sobrinho Carmo","Marcos Delfino Serafim","Campo Grande",sim,2026-08-21
+2026-09-08T15:30:00.000Z,2026-09-08,180,"Maria Fernanda Fontenelle Gavazzi","Leticia de Almeida Palmeira","Recreio",sim,2026-08-19
+2026-09-08T15:40:00.000Z,2026-09-08,169,"Jammal Rodrigues Braga","Pedro Sérgio Figueiredo da Glória","Campo Grande",sim,2026-08-18
+2026-09-08T15:50:00.000Z,2026-09-08,150,"Maria Luiza Cortes Sant'Anna","Erick Cosme da Silva","Recreio",sim,2026-08-14
+2026-09-08T16:00:00.000Z,2026-09-08,138,"Luiz Guilherme Teles de Melo Câmara","Gabriel Antony Alves de Araújo","Barra",sim,2026-08-13
+2026-09-08T16:10:00.000Z,2026-09-08,105,"Ana Clara da Silva Santos","Alexandre de Sá Ritta do Espirito Santo","Recreio",sim,2026-08-11
+2026-09-08T16:20:00.000Z,2026-09-08,95,"Luca Pessurno Rodrigues Torres","Matheus dos Santos Silva de Oliveira","Recreio",sim,2026-08-10
+2026-09-08T16:30:00.000Z,2026-09-08,253,"Mathias Amaral de Castro da Motta Alexandre","Lucas da Silva Guimarães","Recreio",nao,2026-08-31
+2026-09-08T16:40:00.000Z,2026-09-08,252,"Amanda Ozório de Barros","Matheus Felipe Lourenço","Recreio",nao,2026-08-31
+2026-09-08T16:50:00.000Z,2026-09-08,236,"Isabela Vitoria Galdino Moreira","Antonio Marcos Angelo Dantas Filho","Campo Grande",nao,2026-08-28
+2026-09-08T17:00:00.000Z,2026-09-08,199,"Pedro Morais de Oliveira","Jeyson Gaia Ramos","Barra",nao,2026-08-24
+2026-09-08T17:10:00.000Z,2026-09-08,195,"Milena Americo Paiva","Joel de Salles Gouveia Filho","Campo Grande",nao,2026-08-22
+2026-09-08T17:20:00.000Z,2026-09-08,163,"Lucas Alves Vasconcelos","Gabriel Barbosa Rufino Otávio","Campo Grande",nao,2026-08-18
+2026-09-08T17:30:00.000Z,2026-09-08,17,"Guilherme Rodriguez Machado","Renan Amorim Guimarães","Recreio",nao,2026-07-08
+2026-09-08T17:40:00.000Z,2026-09-08,102,"Luciana Lai Fon Dang","Vicente Pinheiro Neto","Recreio",sim,2026-08-10
+2026-09-08T17:50:00.000Z,2026-09-08,226,"Manuela Correa Pinto","Gabriel Santos Teixeira da Silva","Barra",nao,2026-08-28
+2026-09-08T18:00:00.000Z,2026-09-08,214,"Levi marinho ferreira de Lima","Ana Beatriz Paz de Almeida","Barra",sim,2026-08-27
+2026-09-08T18:10:00.000Z,2026-09-08,170,"Ana Cecília de Carvalho Okamota","Caio Tenório de Araújo","Campo Grande",nao,2026-08-18
+2026-09-08T18:20:00.000Z,2026-09-08,221,"Marcos Gabriel Fonseca Santo","Israel Rocha da Silva","Campo Grande",sim,2026-08-27
+2026-09-08T18:30:00.000Z,2026-09-08,158,"Benjamin Felipe Roca Ribeiro","Rafael Alves Souza (Akeem)","Recreio",sim,2026-08-15
+2026-09-08T18:40:00.000Z,2026-09-08,123,"Eduardo Coriolano de Oliveira","Daiana Pacifico da Silva dos Anjos","Barra",sim,2026-08-12
+2026-09-08T18:50:00.000Z,2026-09-08,166,"Heitor Seixas da Rocha","Valdo Delfino","Campo Grande",sim,2026-08-18
+2026-09-08T19:00:00.000Z,2026-09-08,220,"Bruno Ricardo da Silva","Matheus Lana da Silva","Barra",sim,2026-08-27
+2026-09-08T19:10:00.000Z,2026-09-08,230,"Gabriela Dornas","Lohana Leopoldo de Araújo","Barra",sim,2026-08-28
+2026-09-08T19:20:00.000Z,2026-09-08,234,"Clarissa Menezes de Carvalho","Isaque Mendes da Silva","Barra",nao,2026-08-28
+2026-09-08T19:30:00.000Z,2026-09-08,28,"Ana Paula dos Santos Lima de Oliveira","Larissa Bheattriz Barbosa Santos","Barra",sim,2026-08-04
+2026-09-08T19:40:00.000Z,2026-09-08,212,"Eric Santa Cruz","Matheus Reis","Barra",sim,2026-08-27
+2026-09-08T19:50:00.000Z,2026-09-08,107,"Arthur Monteiro de Castro Landim","Willer Arruda Machado","Recreio",sim,2026-08-11
+2026-09-08T20:00:00.000Z,2026-09-08,8,"Karina Melo Vasconcellos de Medeiros","Leonardo Castro","Barra",sim,2026-06-24
+2026-09-08T20:10:00.000Z,2026-09-08,156,"Leticia Bacci de Oliveira","Willian De Andrade Da Silva","Recreio",sim,2026-08-14
+2026-09-09T12:00:00.000Z,2026-09-09,173,"Jorge Santos de Souza","Kaio Felipe Rodrigues Cabral","Campo Grande",sim,2026-08-19
+2026-09-09T12:10:00.000Z,2026-09-09,254,"Pedro Gonçalves Serafim","Jordan Barbosa do Rêgo","Campo Grande",nao,2026-08-31
+2026-09-09T12:20:00.000Z,2026-09-09,182,"Juan Vinicius Ribeiro de Almeida","Peterson Biancamano","Campo Grande",sim,2026-08-19
+2026-09-09T12:30:00.000Z,2026-09-09,108,"Beatriz Affonso de Araujo Ferraz","Marcos Delfino Serafim","Recreio",sim,2026-08-11
+2026-09-09T12:40:00.000Z,2026-09-09,159,"Blenda Wilson Santana Mendes.","Leticia de Almeida Palmeira","Recreio",sim,2026-08-15
+2026-09-09T12:50:00.000Z,2026-09-09,118,"Erik Edson Chalegre Erdmann","Erick Cosme da Silva","Recreio",sim,2026-08-12
+2026-09-09T13:00:00.000Z,2026-09-09,126,"Liv Ribeiro Oliveira","Gabriel Antony Alves de Araújo","Barra",sim,2026-08-13
+2026-09-09T13:10:00.000Z,2026-09-09,174,"Milena Melo Lima Correa","Alexandre de Sá Ritta do Espirito Santo","Recreio",nao,2026-08-19
+2026-09-09T13:20:00.000Z,2026-09-09,113,"Christiano Lopes Silva","Matheus dos Santos Silva de Oliveira","Recreio",nao,2026-08-11
+2026-09-09T13:30:00.000Z,2026-09-09,98,"Márcio Sant'Anna","Lucas da Silva Guimarães","Recreio",nao,2026-08-10
+2026-09-09T13:40:00.000Z,2026-09-09,165,"Júlia Céspedes de Oliveira","Matheus Felipe Lourenço","Campo Grande",nao,2026-08-18
+2026-09-09T13:50:00.000Z,2026-09-09,121,"Marcela Isolani Tavares","Jeyson Gaia Ramos","Barra",nao,2026-08-12
+2026-09-09T14:00:00.000Z,2026-09-09,194,"Melissa Duarte Paiva","Joel de Salles Gouveia Filho","Campo Grande",nao,2026-08-22
+2026-09-09T14:10:00.000Z,2026-09-09,217,"Clarice Braga Soares de Mello","Gabriel Santos Teixeira da Silva","Barra",nao,2026-08-27
+2026-09-09T14:20:00.000Z,2026-09-09,122,"Manuela Isolani Tavares Estanho Flávio","Ana Beatriz Paz de Almeida","Barra",sim,2026-08-12
+2026-09-09T14:30:00.000Z,2026-09-09,151,"Matheus Lopes de Medeiros","Caio Tenório de Araújo","Recreio",nao,2026-08-14
+2026-09-09T14:40:00.000Z,2026-09-09,167,"Felipe Pessôa Machado","Israel Rocha da Silva","Campo Grande",sim,2026-08-18
+2026-09-09T14:50:00.000Z,2026-09-09,116,"Henrique de Andrade Leôncio","Rafael Alves Souza (Akeem)","Recreio",sim,2026-08-12
+2026-09-09T15:00:00.000Z,2026-09-09,232,"Ana Beatriz Paz de Almeida","Daiana Pacifico da Silva dos Anjos","Campo Grande",nao,2026-08-28
+2026-09-09T15:10:00.000Z,2026-09-09,137,"Nicolas Gimenes Santos","Valdo Delfino","Recreio",sim,2026-08-13
+2026-09-09T15:20:00.000Z,2026-09-09,148,"Felipe Cassiano de Almeira Imperial","Matheus Lana da Silva","Barra",sim,2026-08-14
+2026-09-09T15:30:00.000Z,2026-09-09,106,"Julliana Carmo Bantim","Lohana Leopoldo de Araújo","Recreio",sim,2026-08-11
+2026-09-09T15:40:00.000Z,2026-09-09,224,"Juliana Mei Jin Ma","Isaque Mendes da Silva","Barra",nao,2026-08-28
+2026-09-09T15:50:00.000Z,2026-09-09,255,"Thiago Fernandes Rios","Larissa Bheattriz Barbosa Santos","Barra",nao,2026-08-31
+2026-09-09T16:00:00.000Z,2026-09-09,22,"Carlos Eduardo Ferreira","Willer Arruda Machado","Recreio",sim,2026-07-16
+2026-09-09T16:10:00.000Z,2026-09-09,211,"Davi Nakashima","Leonardo Castro","Barra",nao,2026-08-27
+2026-09-09T16:20:00.000Z,2026-09-09,5,"Miguel Ribeiro","Willian De Andrade Da Silva","Barra",sim,2026-06-22
+2026-09-09T16:30:00.000Z,2026-09-09,240,"Gabriel Dias da Silva Araújo","Kaio Felipe Rodrigues Cabral","Campo Grande",nao,2026-08-29
+2026-09-09T16:40:00.000Z,2026-09-09,248,"João Pedro Costa","Peterson Biancamano","Barra",nao,2026-08-29
+2026-09-09T16:50:00.000Z,2026-09-09,193,"Pedro Luiz de Almeida Piancó","Marcos Delfino Serafim","Campo Grande",nao,2026-08-22
+2026-09-09T17:00:00.000Z,2026-09-09,117,"Júlia Barroso Gonçalves Leite","Leticia de Almeida Palmeira","Recreio",sim,2026-08-12
+2026-09-09T17:10:00.000Z,2026-09-09,171,"Lara Verdan Barbosa","Erick Cosme da Silva","Recreio",nao,2026-08-19
+2026-09-09T17:20:00.000Z,2026-09-09,245,"Bernardo Dumont de Pinho Paiva","Gabriel Antony Alves de Araújo","Barra",nao,2026-08-29
+2026-09-09T17:30:00.000Z,2026-09-09,104,"Alice Cagnin Alves da Silva","Alexandre de Sá Ritta do Espirito Santo","Recreio",nao,2026-08-10
+2026-09-09T17:40:00.000Z,2026-09-09,112,"Lúcia Lai Fon Dang Silva","Matheus dos Santos Silva de Oliveira","Recreio",nao,2026-08-11
+2026-09-09T17:50:00.000Z,2026-09-09,93,"Lucas Bezerra Siqueira","Lucas da Silva Guimarães","Recreio",nao,2026-08-10
+2026-09-09T18:00:00.000Z,2026-09-09,97,"Maria Isabel Madureira Gouvêa","Matheus Felipe Lourenço","Recreio",nao,2026-08-10
+2026-09-09T18:10:00.000Z,2026-09-09,7,"Alexandre Vasconcellos de Medeiros","Jeyson Gaia Ramos","Barra",nao,2026-06-24
+2026-09-09T18:20:00.000Z,2026-09-09,178,"Maria Luiza Areda da Silva Ferreira","Joel de Salles Gouveia Filho","Barra",nao,2026-08-19
+2026-09-09T18:30:00.000Z,2026-09-09,216,"Maria Luiza Izidoro de Vasconcelos","Gabriel Santos Teixeira da Silva","Barra",nao,2026-08-27
+2026-09-09T18:40:00.000Z,2026-09-09,94,"Gabriel Quintella de Macedo Mayer","Ana Beatriz Paz de Almeida","Recreio",sim,2026-08-10
+2026-09-09T18:50:00.000Z,2026-09-09,149,"Gabriel Balestieri","Caio Tenório de Araújo","Recreio",nao,2026-08-14
+2026-09-09T19:00:00.000Z,2026-09-09,222,"Rafael Magalhães Barbosa","Israel Rocha da Silva","Campo Grande",nao,2026-08-27
+2026-09-09T19:10:00.000Z,2026-09-09,200,"Theo Cury Alvarenga","Rafael Alves Souza (Akeem)","Recreio",nao,2026-08-24
+2026-09-09T19:20:00.000Z,2026-09-09,179,"Isabella Villar Koialainski","Daiana Pacifico da Silva dos Anjos","Barra",nao,2026-08-19
+2026-09-09T19:30:00.000Z,2026-09-09,242,"Diogo Gomes Santos Caffonso de Moraes","Valdo Delfino","Campo Grande",nao,2026-08-29
+2026-09-09T19:40:00.000Z,2026-09-09,239,"Marcelo Dornellas Machado","Matheus Lana da Silva","Recreio",nao,2026-08-29
+2026-09-09T19:50:00.000Z,2026-09-09,185,"Esther Araújo Marques França","Lohana Leopoldo de Araújo","Barra",nao,2026-08-21
+2026-09-09T20:00:00.000Z,2026-09-09,219,"Pedro Henrique de Heredia Donadio","Isaque Mendes da Silva","Barra",nao,2026-08-27
+2026-09-09T20:10:00.000Z,2026-09-09,206,"Laura Vieira Mesmer","Larissa Bheattriz Barbosa Santos","Barra",nao,2026-08-25
+2026-09-10T12:00:00.000Z,2026-09-10,114,"Maitê Gomes Pereira","Willer Arruda Machado","Recreio",nao,2026-08-11
+2026-09-10T12:10:00.000Z,2026-09-10,209,"Theo do Nascimento Barros Peres","Leonardo Castro","Barra",nao,2026-08-26
+2026-09-10T12:20:00.000Z,2026-09-10,155,"Maria Eduarda Santiago de Aguiar","Willian De Andrade Da Silva","Recreio",nao,2026-08-14
+2026-09-10T12:30:00.000Z,2026-09-10,237,"Felippe dos Santos Alvarez Lopez","Kaio Felipe Rodrigues Cabral","Campo Grande",nao,2026-08-28
+2026-09-10T12:40:00.000Z,2026-09-10,164,"Eduardo De Araújo Teixeira","Peterson Biancamano","Campo Grande",nao,2026-08-18
+2026-09-10T12:50:00.000Z,2026-09-10,235,"Fábio Bastos Soares","Leticia de Almeida Palmeira","Campo Grande",nao,2026-08-28
+2026-09-10T13:00:00.000Z,2026-09-10,160,"Manuela Dantas De Carvalho","Erick Cosme da Silva","Barra",nao,2026-08-17
+2026-09-10T13:10:00.000Z,2026-09-10,233,"Helena Menezes de Carvalho","Gabriel Antony Alves de Araújo","Barra",nao,2026-08-28
+2026-09-10T13:20:00.000Z,2026-09-10,154,"Catarina Westin","Joel de Salles Gouveia Filho","Recreio",nao,2026-08-14
+2026-09-10T13:30:00.000Z,2026-09-10,196,"Isabela Corrêa Pena","Gabriel Santos Teixeira da Silva","Barra",nao,2026-08-22
+2026-09-10T13:40:00.000Z,2026-09-10,247,"Miguel Luís Rodrigues Alves da Rocha Pinto","Ana Beatriz Paz de Almeida","Barra",nao,2026-08-29
+2026-09-10T13:50:00.000Z,2026-09-10,14,"Samuel Bilatt de Oliveira","Caio Tenório de Araújo","Campo Grande",nao,2026-07-07
+2026-09-10T14:00:00.000Z,2026-09-10,109,"Diogo Ribeiro Galhardo","Rafael Alves Souza (Akeem)","Recreio",nao,2026-08-11
+2026-09-10T14:10:00.000Z,2026-09-10,192,"Emily Vivian de Lima Bezerra","Valdo Delfino","Campo Grande",nao,2026-08-22
+2026-09-10T14:20:00.000Z,2026-09-10,172,"Beatriz von Glehn Herkenhoff","Matheus Lana da Silva","Barra",nao,2026-08-19
+2026-09-10T14:30:00.000Z,2026-09-10,139,"Larissa Bheattriz Barbosa Santos","Lohana Leopoldo de Araújo","Recreio",nao,2026-08-13
+2026-09-10T14:40:00.000Z,2026-09-10,101,"Helena Jorge Favacho Paiva","Isaque Mendes da Silva","Barra",nao,2026-08-10
+2026-09-10T14:50:00.000Z,2026-09-10,176,"Laura Vasconcellos Framback","Larissa Bheattriz Barbosa Santos","Recreio",nao,2026-08-19
+2026-09-10T15:00:00.000Z,2026-09-10,27,"Lucas Baptestini de Figueiredo","Leonardo Castro","Barra",nao,2026-08-04
+2026-09-10T15:10:00.000Z,2026-09-10,140,"Francesco de Souza Novello","Willian De Andrade Da Silva","Recreio",nao,2026-08-14
+2026-09-10T15:20:00.000Z,2026-09-10,168,"Manuela Dias Alves Cunha","Kaio Felipe Rodrigues Cabral","Campo Grande",nao,2026-08-18
+2026-09-10T15:30:00.000Z,2026-09-10,227,"Vinicius da Silva Marins","Leticia de Almeida Palmeira","Campo Grande",nao,2026-08-28
+2026-09-10T15:40:00.000Z,2026-09-10,152,"Luna Balbi Fabregas Surigue","Erick Cosme da Silva","Recreio",nao,2026-08-14
+2026-09-10T15:50:00.000Z,2026-09-10,218,"Mônica Braga Soares","Gabriel Antony Alves de Araújo","Barra",nao,2026-08-27
+2026-09-10T16:00:00.000Z,2026-09-10,125,"Luíza P Caruso","Gabriel Santos Teixeira da Silva","Barra",nao,2026-08-13
+2026-09-10T16:10:00.000Z,2026-09-10,244,"Isabela Leal de Meirelles Bolzani","Ana Beatriz Paz de Almeida","Barra",nao,2026-08-29
+2026-09-10T16:20:00.000Z,2026-09-10,10,"Larissa do Nascimento Lima","Caio Tenório de Araújo","Campo Grande",nao,2026-06-30
+2026-09-10T16:30:00.000Z,2026-09-10,191,"Victor Hugo Santos Dias","Valdo Delfino","Campo Grande",nao,2026-08-22
+2026-09-10T16:40:00.000Z,2026-09-10,25,"Samuel Ferreira Costa","Matheus Lana da Silva","Recreio",nao,2026-07-29
+2026-09-10T16:50:00.000Z,2026-09-10,110,"Rafaella Tavares Bottrel Souza","Lohana Leopoldo de Araújo","Recreio",nao,2026-08-11
+2026-09-10T17:00:00.000Z,2026-09-10,161,"Helena Rodrigues Coelho","Larissa Bheattriz Barbosa Santos","Barra",nao,2026-08-17
+2026-09-10T17:10:00.000Z,2026-09-10,184,"Yuri Gomes Pereira","Leticia de Almeida Palmeira","Campo Grande",nao,2026-08-21
+2026-09-10T17:20:00.000Z,2026-09-10,142,"Alice Maldonado Batista","Erick Cosme da Silva","Recreio",nao,2026-08-14
+2026-09-10T17:30:00.000Z,2026-09-10,207,"Daniel Sampaio Senna Lattari","Gabriel Antony Alves de Araújo","Barra",nao,2026-08-25
+2026-09-10T17:40:00.000Z,2026-09-10,20,"Aline Corrêa Reis Freire","Gabriel Santos Teixeira da Silva","Campo Grande",nao,2026-07-15
+2026-09-10T17:50:00.000Z,2026-09-10,243,"Bernardo Leal de Meirelles Bolzani","Ana Beatriz Paz de Almeida","Barra",nao,2026-08-29
+2026-09-10T18:00:00.000Z,2026-09-10,175,"Pérola Teixeira da Cruz","Valdo Delfino","Campo Grande",nao,2026-08-19
+2026-09-10T18:10:00.000Z,2026-09-10,15,"Rafael Moura Fernandes","Matheus Lana da Silva","Barra",nao,2026-07-07
+2026-09-10T18:20:00.000Z,2026-09-10,141,"Sofia Brito Collaço","Larissa Bheattriz Barbosa Santos","Recreio",nao,2026-08-14
+2026-09-11T12:00:00.000Z,2026-09-11,157,"Manoela Aurilio Matos","Leticia de Almeida Palmeira","Recreio",nao,2026-08-15
+2026-09-11T12:10:00.000Z,2026-09-11,26,"Sofia Martins Guerreiro","Erick Cosme da Silva","Barra",nao,2026-08-04
+2026-09-11T12:20:00.000Z,2026-09-11,205,"Lucas Bianchi","Gabriel Antony Alves de Araújo","Barra",nao,2026-08-25
+2026-09-11T12:30:00.000Z,2026-09-11,213,"Maria Cecília Carvalho Bernardini","Ana Beatriz Paz de Almeida","Barra",nao,2026-08-27
+2026-09-11T12:40:00.000Z,2026-09-11,162,"Renato Borges da Silva","Valdo Delfino","Campo Grande",nao,2026-08-17
+2026-09-11T12:50:00.000Z,2026-09-11,12,"Arthur Pontes Rodriguez","Matheus Lana da Silva","Recreio",nao,2026-07-04
+2026-09-11T13:00:00.000Z,2026-09-11,124,"Rafael Alberigi Capello Montillo","Larissa Bheattriz Barbosa Santos","Recreio",nao,2026-08-12
+2026-09-11T13:10:00.000Z,2026-09-11,136,"Pedro Dias Meliande","Leticia de Almeida Palmeira","Recreio",nao,2026-08-13
+2026-09-11T13:20:00.000Z,2026-09-11,16,"Davi Machado de Andrade","Erick Cosme da Silva","Barra",nao,2026-07-07
+2026-09-11T13:30:00.000Z,2026-09-11,181,"Pietro Matola Abreu","Gabriel Antony Alves de Araújo","Barra",nao,2026-08-19
+2026-09-11T13:40:00.000Z,2026-09-11,204,"Luigi Rodrigues Pereira","Ana Beatriz Paz de Almeida","Barra",nao,2026-08-25
+2026-09-11T13:50:00.000Z,2026-09-11,21,"Maria Helena Machado Dias de Paiva Alves","Larissa Bheattriz Barbosa Santos","Recreio",nao,2026-07-16
+2026-09-11T14:00:00.000Z,2026-09-11,103,"Manuela de Menezes Lopes","Leticia de Almeida Palmeira","Recreio",nao,2026-08-10
+2026-09-11T14:10:00.000Z,2026-09-11,120,"Davi Isolani Tavares Estanho Flavio","Gabriel Antony Alves de Araújo","Barra",nao,2026-08-12
+2026-09-11T14:20:00.000Z,2026-09-11,188,"Gabriel Lopes Muniz","Ana Beatriz Paz de Almeida","Campo Grande",nao,2026-08-21
+2026-09-14T12:00:00.000Z,2026-09-14,96,"Cárita Pessurno Rodrigues Torres","Leticia de Almeida Palmeira","Recreio",nao,2026-08-10
+2026-09-14T12:10:00.000Z,2026-09-14,119,"Denys Estanho","Gabriel Antony Alves de Araújo","Barra",nao,2026-08-12
+2026-09-14T12:20:00.000Z,2026-09-14,187,"Guilherme Lopes Muniz","Ana Beatriz Paz de Almeida","Campo Grande",nao,2026-08-21
+2026-09-14T12:30:00.000Z,2026-09-14,100,"Rebeca Teixeira Soares de Barros","Ana Beatriz Paz de Almeida","Recreio",nao,2026-08-10
+2026-09-14T12:40:00.000Z,2026-09-14,99,"Gabriel Fernandes Matrangolo Gonçalves","Ana Beatriz Paz de Almeida","Recreio",nao,2026-08-10
+2026-09-15T12:00:00.000Z,2026-09-15,13,"Theo de Bem Felgueiras Ferreira","Ana Beatriz Paz de Almeida","Barra",nao,2026-07-04
