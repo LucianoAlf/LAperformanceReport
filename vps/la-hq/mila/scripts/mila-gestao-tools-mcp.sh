@@ -15,7 +15,8 @@ set -euo pipefail
 
 SECRET_SDR="/home/mila/.openclaw/secrets/mila-sdr-tools.env"     # SUPABASE_LAREPORT_URL / _SERVICE_KEY
 SECRET_GESTAO="/home/mila/.openclaw/secrets/mila-gestao-tools.env" # MILA_SOLICITANTE_TELEFONE (+ MILA_GESTAO_DRY_RUN)
-for f in "$SECRET_SDR" "$SECRET_GESTAO"; do
+SECRET_CW="/home/mila/.openclaw/secrets/chatwoot.env"          # CHATWOOT_* — so para ENVIAR recado aprovado
+for f in "$SECRET_SDR" "$SECRET_GESTAO" "$SECRET_CW"; do
   if [[ ! -r "$f" ]]; then echo "Missing secret file: $f" >&2; exit 1; fi
 done
 # Prioridade do CARIMBO (quem esta falando):
@@ -49,6 +50,8 @@ set -a
 . "$SECRET_SDR"
 # shellcheck source=/dev/null
 . "$SECRET_GESTAO"
+# shellcheck source=/dev/null
+. "$SECRET_CW"
 set +a
 if [[ -n "$_CARIMBO" ]]; then export MILA_SOLICITANTE_TELEFONE="$_CARIMBO"; fi
 

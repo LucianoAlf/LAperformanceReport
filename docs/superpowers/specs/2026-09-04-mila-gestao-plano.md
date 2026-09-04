@@ -200,6 +200,36 @@ emoji e contagem, uma informação por linha, nome em negrito, detalhe indentado
 uma pergunta no fim. Bloco vazio não aparece; campo sem valor some da linha; o
 número do cabeçalho tem que bater com o que está listado embaixo.
 
+### Recado com aprovação (04/09, noite)
+
+A consultora pede, a Mila escreve, **mostra**, e só manda com o "pode" dela.
+Dois destinos: **lead/cliente** e **professor**.
+
+| passo | o quê |
+|---|---|
+| 1 | `propor_recado` — a Mila redige, assinada por ela, e grava a proposta |
+| 2 | ela mostra: *"vou mandar assim, pode?"* |
+| 3 | a consultora aprova |
+| 4 | `enviar_recado` — o banco valida e o MCP envia pelo Chatwoot |
+
+🔴 **Nada sai sem aprovação.** Mesmo padrão da Sol V3, pelo mesmo motivo:
+mensagem em nome da escola para cliente ou professor é irreversível.
+
+Guardas provadas (nenhuma mensagem saiu no teste): outra consultora tentando
+aprovar dá `nao_e_seu_recado`; aprovar duas vezes dá `ja_tratado`; proposta com
+mais de 30 min dá `expirou` e manda remontar com o dado de agora; dois leads com
+o mesmo nome dá `ambiguo` com até 6 candidatos.
+
+⚠️ **Não inventamos conversa**: se a pessoa nunca falou com a Mila daquela
+unidade, não há conversa aberta e a Mila diz isso em vez de abrir do nada.
+
+⚠️ **Professor multi-unidade não é vazamento**: 29 dos 44 ativos dão aula em mais
+de uma unidade (o Erick Cosme atende Barra e Recreio).
+
+⚠️ **O caminho de volta já existia**: `chatwoot-mila-bridge-professor.js` avisa a
+consultora quando o professor responde algo acionável. A Mila leva e traz o
+recado; ela não conversa com o professor.
+
 ### O que fica de fora, e por quê
 
 - **Segundo andar (gerentes) e terceiro (diretoria)** — não construídos.

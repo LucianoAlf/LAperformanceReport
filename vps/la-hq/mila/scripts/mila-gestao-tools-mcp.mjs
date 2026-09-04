@@ -59,6 +59,49 @@ async function resolverQuem() {
 }
 const veTudo = () => !!QUEM && (QUEM.escopo === 'todas' || ['diretoria', 'lider', 'marketing'].includes(String(QUEM.departamento || '').toLowerCase()));
 
+// ── envio pelo Chatwoot: MESMO caminho do bridge (a mensagem entra na conversa
+// e fica no historico dela). ⚠️ o proxy do Chatwoot devolve 403 sem User-Agent
+// explicito — medido em 04/09: mesma URL e token dao 200 no curl e 403 no
+// cliente HTTP sem UA.
+const INBOX_POR_UNIDADE = { 'Barra': 147, 'Recreio': 148, 'Campo Grande': 155 };
+
+async function cw(method, path, body) {
+  const base = (process.env.CHATWOOT_BASE_URL || '').replace(/\/$/, '');
+  const acc = process.env.CHATWOOT_ACCOUNT_ID;
+  const tok = process.env.CHATWOOT_BOT_TOKEN;
+  if (!base || !acc || !tok) throw new Error('chatwoot_nao_configurado');
+  const res = await fetch(`${base}/api/v1/accounts/${acc}${path}`, {
+    method,
+    headers: { 'api_access_token': tok, 'Content-Type': 'application/json', 'User-Agent': 'mila-gestao-tools/1.0' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error(`chatwoot_${res.status}: ${(await res.text()).slice(0, 200)}`);
+  return res.json();
+}
+
+async function enviarWhatsApp(telefone, unidadeNome, texto) {
+  const inbox = INBOX_POR_UNIDADE[unidadeNome];
+  if (!inbox) throw new Error(`sem caixa da Mila para ${unidadeNome}`);
+  const digitos = String(telefone).replace(/\D/g, '');
+  const busca = await cw('GET', `/contacts/search?q=${digitos}`);
+  let convId = null;
+  for (const c of (busca?.payload || [])) {
+    if (String(c.phone_number || '').replace(/\D/g, '') !== digitos) continue;
+    const convs = await cw('GET', `/contacts/${c.id}/conversations`);
+    const daUnidade = (convs?.payload || []).filter((cv) => cv.inbox_id === inbox);
+    if (daUnidade.length) {
+      convId = daUnidade.sort((x, y) => (y.last_activity_at || 0) - (x.last_activity_at || 0))[0].id;
+      break;
+    }
+  }
+  // Nao inventamos conversa: se a pessoa nunca falou com a Mila daquela unidade,
+  // abrir do nada seria mandar mensagem de um numero desconhecido. Diga a ela.
+  if (!convId) throw new Error('essa pessoa nunca falou com a Mila desta unidade — nao tenho conversa aberta para mandar');
+  const msg = await cw('POST', `/conversations/${convId}/messages`,
+    { content: texto, message_type: 'outgoing', private: false });
+  return { conversation_id: convId, message_id: msg?.id };
+}
+
 // ── tools de LEITURA ─────────────────────────────────────────────────────────
 const LEITURA = [
   { name: 'minha_pauta',
@@ -111,6 +154,16 @@ const ESCRITA = [
   { name: 'registrar_consultor',
     description: 'ESCREVE. Atribui o lead a outro colaborador DA MESMA UNIDADE ("hoje quem atendeu foi o Jhon"). Por padrão o consultor é o responsável da unidade; isto é o override.',
     inputSchema: { type: 'object', required: ['lead_id', 'consultor'], properties: { lead_id: { type: 'integer' }, consultor: { type: 'string' } } } },
+  { name: 'propor_recado',
+    description: 'PROPOE (nao envia) uma mensagem que EU vou mandar em nome da consultora — para um LEAD/cliente ou para um PROFESSOR da unidade dela. Ex.: "avisa a Jaqueline que eu retorno amanha a tarde", "avisa o professor que o Caio vai faltar". Eu escrevo o texto, MOSTRO para ela e SO ENVIO depois que ela aprovar com enviar_recado. Se voltar `ambiguo`, PERGUNTE qual — nunca escolha. A proposta vence em 30 min.',
+    inputSchema: { type: 'object', required: ['destino_tipo', 'destino', 'texto'],
+      properties: { destino_tipo: { type: 'string', enum: ['lead','professor'] },
+                    destino: { type: 'string', description: 'nome, telefone ou id' },
+                    texto: { type: 'string', description: 'a mensagem pronta, ja assinada por mim (Mila), como ela vai chegar' },
+                    assunto: { type: 'string', description: 'o que a consultora pediu, em poucas palavras (fica na trilha)' } } } },
+  { name: 'enviar_recado',
+    description: 'ENVIA o recado que ela ACABOU de aprovar. So chame depois de um "pode", "manda", "isso mesmo" — nunca por conta propria, nunca no mesmo turno em que voce propos. Use o recado_id que veio de propor_recado.',
+    inputSchema: { type: 'object', required: ['recado_id'], properties: { recado_id: { type: 'string' } } } },
   { name: 'anotar_lead',
     description: 'ESCREVE. Anota uma informação no lead (contexto que hoje se perde: "prefere manhã", "mãe decide", "vem com o irmão"). Faz APPEND com data e autor — nunca substitui o que já estava.',
     inputSchema: { type: 'object', required: ['lead_id', 'texto'], properties: { lead_id: { type: 'integer' }, texto: { type: 'string' } } } },
@@ -174,6 +227,25 @@ async function callTool(name, a) {
       return escrita('mila_fechar_sinal_v1', { p_solicitante_telefone: tel, p_sinal_id: a.sinal_id, p_desfecho: a.desfecho, p_nota: a.nota || null });
     case 'registrar_consultor':
       return escrita('mila_registrar_consultor_v1', { p_solicitante_telefone: tel, p_lead_id: a.lead_id, p_consultor: a.consultor });
+    case 'propor_recado':
+      return j(await rpc('mila_propor_recado_v1', { p_solicitante_telefone: tel, p_destino_tipo: a.destino_tipo,
+        p_destino_ref: String(a.destino), p_texto: a.texto, p_assunto: a.assunto || null }));
+    case 'enviar_recado': {
+      // 1) o banco valida e APROVA (so quem pediu, so na unidade dela, so dentro dos 30 min)
+      const ap = await rpc('mila_aprovar_recado_v1', { p_solicitante_telefone: tel, p_recado_id: a.recado_id });
+      if (!ap?.ok) return j(ap);
+      // 2) o envio e daqui: o cracha (service key + token do Chatwoot) nunca passa pelo modelo
+      try {
+        const r = await enviarWhatsApp(ap.destino.telefone, ap.unidade, ap.texto);
+        await rpc('mila_confirmar_recado_v1', { p_recado_id: a.recado_id,
+          p_conversation_id: r.conversation_id, p_message_id: r.message_id });
+        return j({ ok: true, enviado: true, para: ap.destino.nome, conversa: r.conversation_id });
+      } catch (e) {
+        await rpc('mila_confirmar_recado_v1', { p_recado_id: a.recado_id, p_erro: String(e.message || e) });
+        return j({ ok: false, enviado: false, motivo: String(e.message || e),
+                   nota: 'nao saiu — diga isso a ela, nao finja que mandou' });
+      }
+    }
     case 'anotar_lead':
       return escrita('mila_anotar_lead_v1', { p_solicitante_telefone: tel, p_lead_id: a.lead_id, p_texto: a.texto });
     default: throw new Error(`tool_desconhecida: ${name}`);
