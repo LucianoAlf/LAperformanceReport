@@ -185,6 +185,61 @@ async function processarMensagem(supabase: any, phoneNumberId: string, msg: any,
     created_at: timestamp ? new Date(parseInt(timestamp) * 1000).toISOString() : new Date().toISOString(),
   })
 
+  // 5a-bis. 🔌 DISJUNTOR ANTI-LOOP BOT-CONTRA-BOT (T1, 04/09/2026)
+  //
+  // Em 06-11/08/2026 a nossa Mila entrou em ping-pong com o bot da SERASA
+  // (`5511995752096`): 4.577 mensagens deles, 1.620 nossas, 5 dias, texto
+  // repetido 572× ("Desculpe, aconteceu um problema ao processar...", "Central
+  // de Ajuda: serasa.me/chat-central"). Ninguém percebeu — cada volta custou
+  // mensagem cobrada na Meta e chamada de LLM.
+  //
+  // ⚠️ NÃO é classificador de bot. É disjuntor por VOLUME, e de propósito:
+  // detectar "é robô" pelo texto erra em conversa real; contar quantas vezes já
+  // respondemos o mesmo número não erra. Se um dia um humano de verdade bater no
+  // teto, parar de responder automaticamente também é a decisão certa.
+  //
+  // ⚠️ Calibrado com 90 dias de dado, não por chute: mediana 1 mensagem nossa
+  // por telefone/dia, p90 = 2, p99 = 7, e SÓ 5 pares telefone-dia acima de 20 —
+  // os 5 do loop da Serasa. Não há nada entre 20 e 40: a separação é limpa.
+  //
+  // ⚠️ Conta TODO outbound, não só o do agente: `mensagens_campanha
+  // .enviado_por_agente` está NULL nas 1.620 do loop, ou seja, não serve de
+  // marcador. E o corte é janela ROLANTE de 24h, não dia-calendário — bot não
+  // respeita meia-noite e o servidor roda em UTC.
+  //
+  // ⚠️ A mensagem recebida CONTINUA sendo gravada (auditoria). O que para é a
+  // RESPOSTA automática — o agente e o autoreply, os dois.
+  const TETO_RESPOSTAS_24H = 20
+  try {
+    const desde24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    const { count: enviadas24h } = await supabase
+      .from('mensagens_campanha')
+      .select('id', { count: 'exact', head: true })
+      .eq('telefone', telefone)
+      .eq('direcao', 'outbound')
+      .gte('created_at', desde24h)
+
+    if ((enviadas24h ?? 0) >= TETO_RESPOSTAS_24H) {
+      // Silêncio aqui seria repetir o incidente: o loop durou 5 dias porque nada
+      // reclamava. `automacao_log.aluno_nome` e `status` são NOT NULL — e
+      // `status` só aceita ok|warn|erro (o CHECK já derrubou log em silêncio
+      // antes neste projeto).
+      await supabase.from('automacao_log').insert({
+        aluno_nome: `telefone ${telefone}`,
+        evento: 'meta_webhook_campanhas',
+        acao: 'disjuntor_loop_bot',
+        status: 'warn',
+        detalhes: { telefone, enviadas_24h: enviadas24h, teto: TETO_RESPOSTAS_24H, unidade_id: unidadeId },
+      }).select('id').maybeSingle()
+      console.warn(`[disjuntor] ${telefone}: ${enviadas24h} respostas em 24h, teto ${TETO_RESPOSTAS_24H} — nao respondo mais`)
+      return
+    }
+  } catch (err) {
+    // Falha do disjuntor não pode derrubar o webhook — mas também não pode
+    // passar em silêncio, senão volta a ser o incidente de agosto.
+    console.error('[disjuntor] falhou, seguindo sem trava:', (err as Error).message)
+  }
+
   // 5b. Contabilizar a 1ª resposta do lead na(s) campanha(s) a que ele pertence.
   // Idempotente: campanha_contatos.respondeu (guard de corrida no .eq('respondeu', false))
   // + incremento atômico em campanhas.respondidos via RPC. Só conta contatos que de fato

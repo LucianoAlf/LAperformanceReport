@@ -198,3 +198,9 @@ verify_jwt = false
 # pg_cron (sem JWT de usuario); a porta e o token `google_ads_captura` em
 # integracao_tokens, comparado em tempo constante dentro da funcao.
 verify_jwt = false
+
+[functions.ingerir-calor-atendimento]
+# T2 — ponte do calor da conversa (projeto SOL -> LA Report). verify_jwt = false
+# porque quem chama e o pg_cron (sem JWT de usuario); a porta e o token
+# `radar_extrator` em integracao_tokens, conferido em tempo constante.
+verify_jwt = false
