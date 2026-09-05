@@ -35,9 +35,17 @@ export function useBaseConhecimento() {
   const carregar = useCallback(async () => {
     setLoading(true);
     try {
+      // 🔴 Esta tela é a da Mila SDR — o preview dela é "Ver como a Mila vê", e
+      // a Mila em questão é o bot que fala com o LEAD. Desde 06/09/2026 a mesma
+      // tabela guarda também a base COMERCIAL (consultor e liderança), que tem
+      // outro público, outro decisor e outro ciclo de vida. Sem este filtro a
+      // subaba passaria de 4 para 15 blocos, misturando script de bot com
+      // material de liderança — e deixando qualquer um editar os dois no mesmo
+      // lugar. A base comercial é lida pela Mila de gestão, não editada aqui.
       const { data, error } = await supabase
         .from('base_conhecimento_blocos')
         .select('id, titulo, conteudo, unidade_id, ordem, ativo, updated_at')
+        .eq('publico', 'lead')
         .order('ordem')
         .order('titulo');
 
