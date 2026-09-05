@@ -155,22 +155,77 @@ fizeram; quando não der para isolar, dizer que não dá.
   esbuild). Ensaio contra produção achou a 1ª retomada real na primeira
   execução: *"Semana que vem volto aí pra fazer minha matrícula."*
 
-## O que falta
+## 🔴 ONDE PARAMOS — 05/09/2026, fim da tarde
 
-1. **Remedir os padrões.** Todo `medido_em` é 03/09 e não existe cron que
-   recalcule. Mitigado — não resolvido — por `mila_padroes_v1` devolver
-   `idade_dias` e `envelhecido` (>45 dias), e a SKILL manda dizer.
-   ⚠️ Não é trivial: PC1 e PC3 dependem da jornada por lead, que
-   `radar_trafego_canal_v1` não entrega no mesmo recorte. Reescrever a prosa
-   automaticamente **redefiniria o padrão em silêncio** — o caminho é conferir e
-   avisar, não sobrescrever.
-3. **`minha_pauta` não carrega o aprendizado** — `radar_bloco_comercial_grupo_v1`
-   devolve `text[]` e tem outros consumidores; a cutucada carrega, a pauta não.
-4. **Google Ads por campanha → matrícula**: há gasto diário por campanha, mas a
-   atribuição forte lead→anúncio só existe no Meta. Custo por matrícula do Google
-   é da **plataforma**, não da campanha.
-5. **Qualidade do atendimento** (o conteúdo, não o tempo) — exige ler a conversa;
-   o motor semântico faz isso para aluno, não para lead.
+**As quatro camadas estão de pé nos DOIS agentes.** O que falta não é camada: é
+conteúdo (base de conhecimento), decisão sua, e os 7 itens de construção abaixo.
+
+### 12 PRs mergeados em 05/09
+
+| PR | o quê |
+|---|---|
+| #331 | matrícula do comercial replica o predicado do relatório (CG 24 · REC 23 · BAR 19) |
+| #332 | **2º andar do comercial** — padrões → aprendizados → estratégia |
+| #333 | mapa do banco regenerado |
+| #334 | **recado da líder + o recado ganha volta** |
+| #335 | metodologia das 4 camadas + base de conhecimento (handoff) |
+| #336 | **agenda de retomada (bumerangue)** |
+| #337 | o bumerangue passa a nascer da conversa |
+| #338 | amostra pareada + estudo do atendimento |
+| #339 | o estudo derrubou o sinal S1 — não reconstruir |
+| #340 | **pesquisa do atendimento no WhatsApp** — 3 estudos + 1 achado grave |
+| #341 | marcar o lead sintético e devolver sentido ao indicador |
+| #342 | corrige a explicação do lead sintético |
+
+### Estado dos crons (conferido 13:34 BRT de 05/09)
+
+- 08:30 briefing — saiu para as três; a Dai respondeu e a Mila respondeu de volta
+- 09h–18h cutucada — rodou; "nada novo, tudo já cutucado hoje"
+- 18:30 fechamento · 19:10 snapshot de atendimento (2º ponto da série)
+- vigia a cada 5 min — "nada a reportar" o dia inteiro
+
+### Decisões que são do Luciano — não construir sem ele
+
+1. **Base de conhecimento** — ele está curando. Bloco 1 (bumerangue) pronto e bom;
+   faltam os outros 7 da lista do §5.3 do handoff de metodologia.
+2. **Denominador do funil** — tirar ou não o lead sintético de `leads_novos`.
+   A view `vw_leads_sinteticos_por_mes` mede; o peso caiu de 10,3% (jun) para
+   1,1% (ago). **Recomendação: esperar mais um mês.**
+3. **Horários dos crons** — 8:30 / 9-18h / 18:30 são escolha minha, não da equipe.
+4. **Cadastro da Kriss** — governança diz `lider` sem unidade (as três); o Luciano
+   se refere a ela como **gerente da Barra**. Resolver antes da call.
+5. **Experimento do bot** — uma unidade, um mês, humano entrando em toda conversa
+   que o bot não converteu em 24h. É a ÚNICA forma de responder "manter a Mila SDR".
+
+### Os 7 itens de construção, na ordem que eu faria
+
+1. **Provocação de início de mês com a Krissya** — campanha, corridinha, condição
+   financeira, ação de indicação. ⏰ **É a única com prazo correndo**: setembro já
+   está no dia 5 sem nada definido.
+2. **Cashback de indicação** — R$ 50 por indicação matriculada e o banco não guarda
+   quem indicou (~R$ 4.000 em 6 meses sem rastro). Conecta com o PC1.
+3. **Professor na experimental** — quem converte mais e menos, com denominador honesto.
+4. **Criativo e mídia falando sozinhos com a Krissya** — dados prontos, falta a voz.
+5. **Remedir os padrões** — todos de 03/09, sem cron que recalcule. Mitigado pelo
+   aviso de idade (`envelhecido` > 45 dias).
+6. **`minha_pauta` citar o aprendizado** — a cutucada cita, a pauta não.
+7. **Elo estratégia→ação** — hoje diz "74 pessoas na Barra" e não emenda "quer que
+   eu monte a lista?".
+
+### 🚫 Descartado hoje — não ressuscitar
+
+- **O avaliador de atendimento com a régua S1.** Medido em amostra pareada:
+  **inverte**. Ver [[sinal-bumerangue-s1-nao-separa]].
+- **Raspar YouTube/blog para a base de conhecimento.** Curadoria, não volume.
+
+### Onde estão os materiais
+
+| | |
+|---|---|
+| pesquisa do atendimento (para a call) | `docs/handoffs/2026-09-05-pesquisa-atendimento-comercial-whatsapp.md` |
+| metodologia + base de conhecimento | `docs/handoffs/2026-09-05-mila-comercial-metodologia-e-base-de-conhecimento.md` |
+| 4 conversas reais (transcrição) | `.local/conversas-comerciais-para-base-de-conhecimento.md` |
+| planilhas dos 3 estudos | `.local/estudos/` (cada uma com cópia `SEM-PII`) |
 
 ---
 
