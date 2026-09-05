@@ -386,3 +386,83 @@ Consequência para a decisão, e ela é limpa:
 **O flip continua não sendo hoje** — e agora por um motivo diferente e melhor
 medido: não é mais o `hermes_cli`, é a estabilidade do provedor. O que decide é
 uma semana de sombra com a régua nova, lendo `ms` e `modelo` direto do log.
+
+---
+
+# Adendo 2 — o catálogo real, e duas medições minhas que estavam erradas
+
+O Luciano mandou eu ir buscar os nomes na API em vez de deduzir. Certo — e a
+lista derrubou boa parte do adendo anterior.
+
+## O erro de método que abriu isso
+
+Eu tinha testado `GET /zen/v1/models`, levado **403**, e concluído "o endpoint
+não expõe o catálogo". **O 403 era falta do `User-Agent`** — a mesma armadilha
+que eu já tinha documentado dez linhas acima, no próprio adendo. Com o header, o
+endpoint responde: **18 modelos**.
+
+## O que a conta alcança de verdade
+
+| grupo | resultado |
+|---|---|
+| `deepseek-v4-pro`, `deepseek-v4-flash`, `deepseek-v4-flash-vision-exp`, `glm-5.3-flash`, `glm-5.3`, `minimax-m3`, `ling-3.0-flash-fin-free` | **funcionam** |
+| `claude-*`, `gemini-3.8-flash`, `gemini-3.7-flash`, `gpt-6-astra`, `gpt-5.6-terra`, `gpt-5.6-luna`, `muse-spark-*` | **500 em ~0,5 s** — instantâneo demais para ser inferência; é entitlement |
+| `grok-4.5` | 503 `Upstream request failed` |
+
+🔴 **Muse Spark: o nome certo é `muse-spark-1.3-contributor-free`** (não
+`muse-spark-1.3-contributor`) — mas dá **500 instantâneo** com o id certo, sem
+detalhe no corpo. O site marca "(regiões limitadas)" e este servidor está em
+**São Paulo/BR**. Testados também `muse-spark-1.3` e `muse-spark-1.2-contributor-free`.
+
+🔴 **Qwen não existe no catálogo da API.** Nenhuma variante. O site lista Qwen3.8
+Flash porque aquela página é do produto **Go/CLI**; o Zen, nesta chave, não o tem.
+
+## 🔴 O erro que invalidou meu próprio resultado: `max_tokens: 300`
+
+Estes modelos emitem **`reasoning_content` antes do `content`, e o raciocínio
+consome o mesmo orçamento**. Com 300, três deles terminavam em
+`finish_reason: length` com o **`content` vazio** — e eu os tinha reprovado por
+um teto que era meu, não deles:
+
+| modelo | `max_tokens=300` | `max_tokens=2000` |
+|---|---|---|
+| glm-5.3-flash | `length`, **vazio** | 4,8 s, resposta certa |
+| deepseek-v4-pro | `length`, **vazio** | 8,7 s, resposta certa |
+| ling-3.0-flash-fin-free | `length`, **vazio** | 1,7 s, resposta certa |
+
+O "glm não devolve JSON" do adendo 1 media o **teto de tokens**, não o modelo:
+com o orçamento certo ele foi de 9-11/25 para **24/25**. Corrigido para 2000, e
+`response_format` **saiu** (não acelera de forma confiável e zera o `content` de
+quem raciocina; o `_parseVisionJson` já acha o último bloco `{…}` na prosa).
+
+Isso também explica parte do que eu tinha chamado de "variância do provedor": o
+`deepseek-v4-flash` gasta **1.800–2.100 tokens de raciocínio** neste prompt. A
+variância existe, mas era menor do que eu disse.
+
+## Placar final — 25 casos rotulados, prompt de produção
+
+| modelo | acerto | mediana | **p90** | falhas |
+|---|---|---|---|---|
+| deepseek-v4-pro | 24/25 | 4,4 s | 13,9 s | 1 |
+| glm-5.3-flash | 24/25 | 4,7 s | 12,3 s | 1 |
+| deepseek-v4-flash | 24/25 | 5,6 s | 16,7 s | 1 |
+| **minimax-m3** ⭐ | 23/25 | **1,9 s** | **3,2 s** | **0** |
+| ling-3.0-flash-fin-free | 18/25 | 1,8 s | 5,4 s | 6 (cota) |
+
+**`minimax-m3` é o novo padrão** (`SOL_CAIXA_V4_MODELO` troca sem redeploy).
+A escolha é pela **cauda**: p90 de **3,2 s contra os 44,5 s de hoje** — 14× — e é
+a única cauda do conjunto compatível com um dia ficar **na frente** do usuário.
+A diferença de acerto para o topo é de **um caso**.
+
+E os dois erros dele caem para o **lado seguro**: "esquece esse aí" virou
+`conversa` (não descarta) e a prosa com R$ 633 virou `consulta_caixa` (não lança
+nem dá saída). Num sistema de dinheiro, **onde o erro cai importa mais que
+quantos são** — foi exatamente essa prosa que abriu uma saída de R$ 633 em 31/08.
+
+## O ajuste de prompt que a bancada encontrou
+
+`corrigir_competencia` era errado por **4 dos 5 modelos**: "é a parcela de 08/26 e
+09/26 juntas" virava `contestar_fatura` — e com razão, porque a descrição de
+contestação cobria literalmente o caso. A fronteira que faltava:
+**quem diz qual é a certa está corrigindo; quem só diz que está errada está
+contestando.** Com ela, glm foi 23→24 e ling 13→18.
