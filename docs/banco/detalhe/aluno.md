@@ -1761,7 +1761,7 @@
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
 | `id` | uuid | não | gen_random_uuid() |  |
-| `pesquisa_id` | uuid | sim |  | pesquisa_evasao_analises.pesquisa_id |
+| `pesquisa_id` | uuid | sim |  | pesquisa_evasao.id |
 | `caixa_id` | integer | não |  | whatsapp_caixas.id |
 | `direcao` | text | não |  |  |
 | `provider_message_id` | text | sim |  |  |

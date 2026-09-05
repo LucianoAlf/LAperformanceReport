@@ -226,6 +226,16 @@ A edge faz `switch(evento)`:
   grade para os registros presentes; inferência de ausência fica restrita ao
   escopo completo. Assim telefone, foto, pagamento, valores ou status jamais
   voltam a aparecer como “Sync grade”.
+- **Assinatura de contrato:** a Edge `sync-contratos-assinatura-emusys` faz uma
+  fotografia separada de `status=ativa` antes da pauta do TOM. Desde 05/09/2026,
+  `contrato_atual.contrato_assinado=true` cobre assinatura manual e eletrônica;
+  a API não expõe modo, data nem a etapa “aguardando o aluno”. O lote fica em
+  `aluno_contratos_emusys`, e toda rodada deixa rastro em
+  `contrato_assinatura_sync_execucoes`.
+- **Frescura e reexecução:** o cron mantém `skipped_fresh` depois do primeiro
+  sucesso do dia BRT. Uma reconciliação extraordinária usa `?force=1` e exige
+  `x-sync-token`; bearer sem esse cabeçalho não libera o bypass. O force usa a
+  mesma trilha e o mesmo lote atômico, sem escrita no Emusys.
 
 #### Identidade e reconciliação usadas pelo relatório gerencial
 

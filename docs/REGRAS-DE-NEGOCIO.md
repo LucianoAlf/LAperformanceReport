@@ -168,6 +168,16 @@ A chave de identidade é sempre `unidade_id + emusys_matricula_id`; nome, telefo
 - Ao informar a forma de pagamento no LA Report, a decisão fica fixada e auditada. Um sync posterior incompleto do Emusys não a sobrescreve nem reabre a pendência.
 - Reclassificações preservam o payload original e a decisão em auditoria; a plataforma não apaga histórico para “limpar” a fila.
 
+### 3.1.2 Assinatura do contrato no Emusys 📋
+
+- Fonte exclusiva: `contrato_atual.contrato_assinado` do `GET /v1/matriculas`, reconciliado por `unidade_id + emusys_matricula_id + contrato_emusys_id`. O LA Report nunca escreve no Emusys.
+- Desde 05/09/2026, `true` confirma assinatura manual ou eletrônica. A API não informa modo nem data; `contrato_status_observado_em` é somente quando o LA Report observou o booleano.
+- `false` vira `nao_assinado`, mas não distingue “nunca enviado” de “a escola assinou e aguarda o aluno”. A cobrança pode dizer “Não assinado”; não pode atribuir causa ou culpa.
+- A pessoa só fica `assinado` quando **todas** as matrículas acadêmicas ativas relevantes estão em `true`. Matrícula com `cursos.is_projeto_banda=true` é explicitamente dispensada.
+- Sem execução `succeeded` no dia BRT ou sem identidade/observação completa, `contrato_dado_fresco=false`: o TOM informa que não conferiu e não cobra.
+
+Contrato operacional completo: [`docs/operacao/contrato-assinado-tom.md`](operacao/contrato-assinado-tom.md).
+
 ### 3.2 Aluno ativo ✅
 
 **Pessoa** com pelo menos uma matrícula que satisfaça, ao mesmo tempo:

@@ -186,6 +186,13 @@
 | `atualizado_por` | uuid | sim |  |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
+| `publico` | text | não | 'lead'::text |  |
+| `estado` | text | não | 'aprovado'::text |  |
+| `versao` | text | sim |  |  |
+| `revisar_em` | date | sim |  |  |
+| `aprovado_por` | text | sim |  |  |
+| `aprovado_em` | date | sim |  |  |
+| `substitui_id` | uuid | sim |  | base_conhecimento_blocos.id |
 
 **Únicos:**
 - `base_conhecimento_blocos_pkey`

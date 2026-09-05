@@ -1,44 +1,81 @@
-# Assinatura eletrônica de contrato — contrato de leitura do TOM
+# Contrato assinado — contrato de leitura do TOM
 
 ## Estado do rollout
 
-**BLOQUEADO PARA COBRANÇA / somente observação.** A persistência, a reconciliação, a RPC e a Ficha do Aluno permanecem ativas, mas o TOM não deve cobrar contrato. O `false` da API também representa contrato assinado manualmente e renovação automática sem nova assinatura eletrônica; portanto, nenhum corte de legado consegue separar pendência real.
+**LIBERADO PARA RELIGAR O TOM.** Desde a medição de 05/09/2026 às 17:11–17:15 BRT, o `GET /matriculas` do Emusys passou a retornar `contrato_atual.contrato_assinado=true` tanto para assinatura manual quanto para assinatura eletrônica. O formato do payload não mudou.
 
-O recorte antigo baseado em `tem_data_contrato` continua existindo por compatibilidade, mas não comprova assinatura e não deve ser usado para reativar a cobrança.
+A liberação pressupõe que o TOM leia `contrato_assinatura_status` e `contrato_dado_fresco`. O recorte antigo `tem_data_contrato` continua existindo por compatibilidade, mas representa o período de aulas e não comprova assinatura.
+
+O LA Report apenas lê o Emusys. Nada deste ciclo escreve no fornecedor.
 
 ## Fonte e limites
 
-A fonte é exclusivamente `GET https://api.emusys.com.br/v1/matriculas?status=ativa`, autenticado com `?token=`. O LA Report nunca escreve no Emusys.
+Fonte canônica: `GET https://api.emusys.com.br/v1/matriculas?status=ativa`, paginado e autenticado por `?token=`.
 
-O Emusys expõe `contrato_atual.contrato_assinado:boolean`. Não expõe:
+O booleano `contrato_atual.contrato_assinado` significa agora:
 
+- `true`: o contrato atual está assinado no Emusys, por modo manual ou eletrônico;
+- `false`: a assinatura do contrato atual ainda não foi concluída no Emusys.
+
+A API ainda **não expõe**:
+
+- modo da assinatura;
 - data real da assinatura;
-- modo eletrônico ou manual;
 - data de assinatura manual;
 - data em que a assinatura foi solicitada;
 - assinatura da escola;
-- estado “aguardando assinatura do aluno”.
+- estado intermediário “aguardando a assinatura do aluno”.
 
-Contraprova tela a tela no Recreio, confrontada com a reconciliação da API das 05:10 de 05/09/2026 (`origem='api_reconciliacao'`):
+Portanto, `false` autoriza o produto a dizer **“Não assinado”** e colocar o contrato na pauta. Não autoriza dizer “nunca enviamos”, “o responsável não respondeu” ou atribuir a pendência a alguém: a API não distingue essas etapas.
 
-| Matrícula | Aluno | API `contrato_assinado` | Tela do Emusys |
-|---:|---|:---:|---|
-| 32 | Beatriz Souto Machado | `false` | Assinado · modo manual · 23/05/2026 |
-| 78 | Josué Salazar N. G. Poças | `false` | Assinado · modo manual · 07/08/2026 |
-| 169 | Nathan Leggett de Moura | `false` | Assinado · modo manual · 28/05/2026 |
-| 328 | Lucas Cseko e Silva | `false` | Assinado · modo manual · 02/07/2026 |
-| 394 | Catarina Petrolongo Pinto Abreu | `false` | Assinado · modo manual · 23/06/2026 |
-| 409 | Manuela Chermont (Garage Band) | `false` | Assinado · modo manual · 17/06/2026 |
-| 167 | Bruna Silva de Sá Vale | `true` | Assinado eletronicamente |
-| 416 | Yuri de Souza Ribeiro | `true` | Assinado eletronicamente |
+Caso-limite confirmado: Giovanna Oliveira da Cunha, matrícula 1558 do Recreio, aparecia na tela como solicitação enviada em 04/09, escola já assinou e aguardando o aluno; a API continuou `false` às 17:11. Esse caso deve aparecer como `nao_assinado`, sem inventar a etapa.
 
-Resultado observado: seis de seis assinaturas manuais retornaram `false`; duas de duas assinaturas eletrônicas retornaram `true`. Assim, `true` é evidência positiva confiável de assinatura eletrônica. `false` significa apenas **sem assinatura eletrônica informada pela API**: pode haver assinatura manual e não é pendência. `contrato_status_observado_em` é quando o LA Report viu o estado; não é data jurídica da assinatura.
+`contrato_status_observado_em` registra quando o LA Report viu o estado. Não é data jurídica da assinatura.
 
-Renovações são automáticas no Emusys: quem assinou uma vez não necessariamente assina outra vez na renovação. Logo, uma renovação com `false` também não pode ser cobrada como contrato pendente.
+## Contraprova da mudança do fornecedor
+
+Matrículas do Recreio confrontadas com a tela e relidas no payload cru em 05/09/2026:
+
+| Matrícula | Aluno | 05:10 BRT | 17:11 BRT | Tela do Emusys |
+|---:|---|:---:|:---:|---|
+| 32 | Beatriz Souto Machado | `false` | `true` | Manual · 23/05/2026 |
+| 78 | Josué Salazar N. G. Poças | `false` | `true` | Manual · 07/08/2026 |
+| 169 | Nathan Leggett de Moura | `false` | `true` | Manual · 28/05/2026 |
+| 328 | Lucas Cseko e Silva | `false` | `true` | Manual · 02/07/2026 |
+| 394 | Catarina Petrolongo Pinto Abreu | `false` | `true` | Manual · 23/06/2026 |
+| 409 | Manuela Chermont (Garage Band) | `false` | `true` | Manual · 17/06/2026 |
+| 167 | Bruna Silva de Sá Vale | `true` | `true` | Eletrônica |
+| 416 | Yuri de Souza Ribeiro | `true` | `true` | Eletrônica |
+
+As seis assinaturas manuais viraram `true`; as duas eletrônicas permaneceram `true`. Esse conjunto é o canário de regressão em `scripts/verificar-regressao-contratos-emusys.mjs`.
+
+Retrato das matrículas ativas na mesma medição:
+
+| Unidade | 05:10 BRT — assinadas / não assinadas | 17:11–17:15 BRT — assinadas / não assinadas |
+|---|---:|---:|
+| Recreio | 105 / 312 | 411 / 7 |
+| Campo Grande | 11 / 458 | 365 / 105 |
+| Barra | 22 / 260 | 157 / 126 |
+| **Total** | **138 / 1.030** | **933 / 238** |
+
+### Validação pós-publicação
+
+Uma reconciliação forçada e autenticada foi executada em produção nas três unidades em 05/09/2026, entre 18:49 e 18:51 BRT. As três execuções terminaram em `succeeded`, sem erro:
+
+| Unidade | Páginas | Matrículas ativas | Assinadas | Não assinadas |
+|---|---:|---:|---:|---:|
+| Recreio | 9 | 418 | 411 | 7 |
+| Campo Grande | 10 | 470 | 365 | 105 |
+| Barra | 6 | 283 | 157 | 126 |
+| **Total** | **25** | **1.171** | **933** | **238** |
+
+A RPC publicou zero ocorrências do estado antigo. Duas pessoas permaneceram corretamente em `nao_verificado`, uma em Campo Grande e outra no Recreio, porque cada uma possui uma matrícula acadêmica local sem `emusys_matricula_id`. O TOM deve ignorar essas linhas enquanto `contrato_dado_fresco=false`; ausência de identidade nunca vira cobrança.
+
+O canário confirmou as oito matrículas em `true`, e Giovanna Oliveira da Cunha, matrícula 1558, permaneceu em `false`, como esperado para o estado intermediário que a API não detalha.
 
 ## Persistência
 
-Tabela `public.aluno_contratos_emusys`, grão `(unidade_id, emusys_matricula_id, contrato_emusys_id)`:
+Tabela `public.aluno_contratos_emusys`, no grão `(unidade_id, emusys_matricula_id, contrato_emusys_id)`:
 
 | Campo | Tipo | Significado |
 |---|---|---|
@@ -46,17 +83,15 @@ Tabela `public.aluno_contratos_emusys`, grão `(unidade_id, emusys_matricula_id,
 | `emusys_matricula_id` | `text` | ID da matrícula dentro da unidade. |
 | `emusys_aluno_id` | `text nullable` | ID do aluno dentro da unidade, para rastreio. |
 | `aluno_id` | `integer nullable` | Vínculo local, quando encontrado. |
-| `contrato_emusys_id` | `text nullable` | ID do contrato atual; nulo é a linha sentinela “matrícula observada sem contrato”. |
-| `contrato_assinado` | `boolean nullable` | Booleano cru do fluxo eletrônico do Emusys; `false` não exclui assinatura manual. Nulo somente quando não existe contrato atual. |
-| `contrato_status_observado_em` | `timestamptz` | Quando o LA Report observou o estado. Não é data de assinatura. |
+| `contrato_emusys_id` | `text nullable` | ID do contrato atual; nulo representa matrícula observada sem `contrato_atual`. |
+| `contrato_assinado` | `boolean nullable` | Booleano cru do Emusys; manual + eletrônica. Nulo somente sem contrato atual. |
+| `contrato_status_observado_em` | `timestamptz` | Quando o LA Report observou o estado; não é data da assinatura. |
 | `origem` | `text` | `snapshot_backfill` ou `api_reconciliacao`. |
 | `payload_hash` | `text nullable` | Rastro técnico sem duplicar o payload pessoal. |
 
-Execuções ficam em `public.contrato_assinatura_sync_execucoes`. O TOM não lê sucesso de `pg_cron`; lê a conclusão real `status='succeeded'` dessa tabela, exposta pela RPC. `running` é rodada aberta e `failed` contém `erro` e `completed_at`.
+Execuções ficam em `public.contrato_assinatura_sync_execucoes`. `running`, `succeeded` e `failed` representam a execução real; toda falha aberta grava `erro` e `completed_at`.
 
-## RPC do TOM
-
-Continuar chamando:
+## RPC que o TOM deve ler
 
 ```text
 get_situacao_alunos_v1(
@@ -66,70 +101,73 @@ get_situacao_alunos_v1(
 )
 ```
 
-Os campos existentes permanecem com a mesma semântica. Em especial, `tem_data_contrato:boolean` continua dizendo apenas se existe data de início do período contratual.
-
-Campos novos por pessoa:
+Campos por pessoa:
 
 | Campo | Tipo | Uso |
 |---|---|---|
-| `contrato_assinatura_status` | `text` | Estado canônico descrito abaixo. |
-| `contratos_assinados_todos` | `boolean nullable` | `true` somente se todas as matrículas relevantes vieram com evidência positiva de assinatura eletrônica; `false` não significa contrato pendente. Nulo se não verificado ou dispensado. |
+| `contrato_assinatura_status` | `text` | Estado canônico: `assinado`, `nao_assinado`, `sem_contrato`, `nao_verificado` ou `dispensado`. |
+| `contratos_assinados_todos` | `boolean nullable` | `true` quando todas as matrículas relevantes estão assinadas; `false` quando alguma não está; nulo se não verificado ou dispensado. |
 | `contratos_relevantes` | `integer` | Matrículas acadêmicas ativas exigidas. |
-| `contratos_assinados` | `integer` | Relevantes observadas com `true`, isto é, assinatura eletrônica confirmada. |
-| `contratos_nao_assinados` | `integer` | Nome técnico legado: conta relevantes observadas com `false`; não significa contrato não assinado nem pendência. |
+| `contratos_assinados` | `integer` | Relevantes observadas com `true`. |
+| `contratos_nao_assinados` | `integer` | Relevantes observadas com `false`. |
 | `contratos_sem_contrato` | `integer` | Relevantes observadas sem `contrato_atual`. |
 | `contratos_nao_verificados` | `integer` | Relevantes sem ID seguro ou sem observação. |
 | `contrato_status_observado_em` | `timestamptz nullable` | Observação mais antiga entre as matrículas relevantes; não é assinatura. |
-| `contrato_reconciliado_em` | `timestamptz nullable` | Conclusão da última rodada válida no dia BRT da referência. |
-| `contrato_dado_fresco` | `boolean` | `true` somente com rodada do dia e sem matrícula relevante não verificada. |
+| `contrato_reconciliado_em` | `timestamptz nullable` | Conclusão da rodada válida no dia BRT da referência. |
+| `contrato_dado_fresco` | `boolean` | `true` somente com rodada do dia e todas as matrículas relevantes observadas. |
 
-Enquanto o fornecedor não expuser modo e data de assinatura, chamar com `p_apenas_pendentes=false` apenas para observação. O status `sem_assinatura_eletronica` nunca entra na pauta como pendência. Nem frescura nem corte por data tornam `false` seguro para cobrança.
+`tem_data_contrato:boolean` não mudou: continua significando apenas que existe data de início do período contratual.
 
-Se `contrato_dado_fresco=false` ou o status for `nao_verificado`, o TOM deve dizer “não conferi contratos hoje” e não cobrar ninguém.
+### Regra de consumo do TOM
 
-## Estados
+- `contrato_dado_fresco=false` ou `nao_verificado`: dizer “não conferi contratos hoje” e não cobrar.
+- `nao_assinado`: incluir na pauta como contrato não assinado.
+- `sem_contrato`: incluir na pauta como matrícula sem contrato atual no Emusys.
+- `assinado` ou `dispensado`: não incluir na pauta de contrato.
 
-- `assinado`: todas as matrículas acadêmicas ativas relevantes vieram com `contrato_assinado=true`; significa assinatura eletrônica confirmada. Não informa a data real da assinatura.
-- `sem_assinatura_eletronica`: ao menos uma matrícula relevante veio com `false`. Pode estar assinada manualmente e não significa pendência.
+O TOM deve buscar o conjunto com `p_apenas_pendentes=false` e aplicar esse recorte; `p_apenas_pendentes` também cobre outras pendências e não deve redefinir a semântica do contrato.
+
+## Significado dos estados
+
+- `assinado`: todas as matrículas acadêmicas ativas relevantes vieram com `contrato_assinado=true`. Confirma assinatura, mas não informa modo nem data.
+- `nao_assinado`: ao menos uma matrícula relevante veio com `false`. É pendência de assinatura, mas não informa se nunca foi enviada ou se aguarda o aluno.
 - `sem_contrato`: ao menos uma matrícula relevante foi observada sem `contrato_atual`. Não significa matrícula inativa.
-- `nao_verificado`: falta rodada fresca, ID seguro ou observação completa. Não autoriza afirmar assinado ou pendente.
-- `dispensado`: não existe matrícula acadêmica relevante porque todas estão explicitamente dispensadas. Não significa contrato assinado.
+- `nao_verificado`: falta rodada fresca, ID seguro ou observação completa. Não autoriza afirmar assinado nem pendente.
+- `dispensado`: não há matrícula acadêmica relevante porque todas estão explicitamente dispensadas. Não significa contrato assinado.
 
 ## Regra por pessoa
 
-A pessoa fica `assinado` somente quando **todas** as matrículas acadêmicas ativas relevantes têm evidência positiva de assinatura eletrônica. Um aluno de dois cursos não fica verde com apenas um `true`. Esse estado é confirmação positiva; qualquer outro estado é inconclusivo para cobrança.
+A pessoa fica `assinado` somente quando **todas** as matrículas acadêmicas ativas relevantes estão com `contrato_assinado=true`. Um aluno de dois cursos não fica verde com apenas um contrato assinado.
 
-A precedência é: `dispensado` → `nao_verificado` → `sem_contrato` → `sem_assinatura_eletronica` → `assinado`. Nenhum dos quatro primeiros estados autoriza cobrança automática.
+Precedência: `dispensado` → `nao_verificado` → `sem_contrato` → `nao_assinado` → `assinado`.
 
 ## Dispensa de banda, coral e atividades extras
 
-Uma matrícula é dispensada somente quando seu curso possui `cursos.is_projeto_banda=true`. Não há inferência por nome no cálculo. No catálogo verificado durante a implementação, essa flag cobre Canto Coral, Circuito de Férias 1 e 2, GarageBand, Minha Banda Para Sempre, Percussion Kids, Power Kids e Teoria Musical.
+Uma matrícula é dispensada somente quando seu curso possui `cursos.is_projeto_banda=true`. Não há inferência por nome. A flag cobre o catálogo de projetos, bandas, coral e atividades extras; uma pessoa com curso acadêmico e banda continua obrigada apenas pelo curso acadêmico.
 
-Se uma nova atividade precisar de dispensa, a classificação do curso deve ser corrigida explicitamente; o TOM não deve manter uma lista paralela.
+Se uma nova atividade precisar de dispensa, corrija o cadastro do curso. O TOM não mantém lista paralela.
 
-## Frequência e frescura
+## Frequência, frescura e force
 
-Horários diários em `America/Sao_Paulo`:
+Horários diários em `America/Sao_Paulo`, sem alteração:
 
 - principal: Campo Grande 05:00, Recreio 05:10, Barra 05:20;
-- retry condicional: Campo Grande 05:30, Recreio 05:40, Barra 05:50.
+- retry: Campo Grande 05:30, Recreio 05:40, Barra 05:50.
 
-O retry responde `skipped_fresh` quando a rodada principal já concluiu. Cada rodada pagina com limite 50 até `tem_mais=false`, respeita 60 requisições/minuto e só publica o lote depois de validar todas as páginas.
+Sem `force`, uma segunda chamada no mesmo dia responde `skipped_fresh`. Para uma reconciliação extraordinária, use `?force=1` **junto do `x-sync-token` válido**. Um bearer de serviço sem esse cabeçalho não autoriza o bypass. A rodada forçada usa a mesma trilha `running` → `succeeded|failed` e não muda o cálculo de frescura.
 
-Qualquer falha após a abertura da rodada grava `failed`. Sem `succeeded` no dia BRT, `contrato_reconciliado_em` fica nulo, `contrato_dado_fresco=false` e a leitura pública falha para `nao_verificado`.
+Cada rodada pagina com limite 50 até `tem_mais=false`, respeita 60 requisições/minuto e publica o lote apenas depois de validar todas as páginas. Sem `succeeded` no dia BRT, a RPC devolve dado não fresco.
 
-## Backfill e legado
+## Backfill, legado e canário
 
-O backfill inicial usa apenas `emusys_matriculas_estado_atual.payload_snapshot`; não chama a API e não altera `alunos`. Snapshot com contrato malformado ou sem booleano não vira “sem contrato”: fica sem observação confiável.
+O backfill inicial continua preservado e não é reexecutado. A atualização do fornecedor resolveu a assinatura manual no próprio booleano; não há migration de dados nem corte arbitrário de legado.
 
-Nas três unidades há 1.030 matrículas com `false`, incluindo contratos assinados manualmente. O recorte de contrato **não pode ser ativado enquanto o Emusys não expuser modo e data de assinatura** no `contrato_atual`. Não é uma questão de definir corte de legado: o dado atual não distingue assinado manualmente de não assinado.
+Após reconciliação forçada, rode o canário somente leitura:
 
-Antes de mudar este documento para `ATIVO` e religar o TOM:
+```powershell
+node --env-file=.env.local scripts/verificar-regressao-contratos-emusys.mjs
+```
 
-1. aguardar o fornecedor expor `modo_assinatura` e `data_assinatura` dentro de `contrato_atual` no `GET /matriculas`;
-2. reconferir as mesmas oito matrículas da tabela acima;
-3. confirmar que as seis assinaturas manuais aparecem como assinadas e preservam modo/data;
-4. definir a nova regra por pessoa usando os campos efetivamente entregues;
-5. manter o recorte de contrato bloqueado para cobrança enquanto modo e data de assinatura não forem expostos.
+Ele exige as oito matrículas da contraprova em `true` e falha se o fornecedor voltar a devolvê-las como `false` ou removê-las da fotografia.
 
-O pedido ao fornecedor já foi feito. A persistência atual deve ser mantida: ela preserva a série observada e permitirá comparar o campo novo quando a API passar a expô-lo.
+**Conclusão operacional:** o contrato do LA Report está liberado para o TOM. A ativação do booleano `CONTRATO_NA_PAUTA` pertence ao repositório do TOM e só deve ocorrer depois desta versão estar em produção e de uma execução `succeeded` no dia para cada unidade. A decisão de cobrar continua sendo por linha: qualquer pessoa com `contrato_dado_fresco=false` fica fora da cobrança.

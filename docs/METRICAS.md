@@ -59,6 +59,18 @@ atual `ativa|trancada`, pois o trancamento temporário mantém a parcela do mês
 Trancamentos no período continuam vindo de `movimentacoes_admin` e não são o
 mesmo indicador que **Trancados agora**.
 
+### Estado de assinatura do contrato
+
+O estado é calculado por pessoa em `get_situacao_alunos_v1` e detalhado por matrícula em `get_contrato_assinatura_aluno_v1`:
+
+- `assinado`: todas as matrículas acadêmicas ativas relevantes têm `contrato_assinado=true` no Emusys;
+- `nao_assinado`: pelo menos uma relevante tem `false`;
+- `sem_contrato`: pelo menos uma relevante veio sem `contrato_atual`;
+- `nao_verificado`: falta identidade, observação completa ou reconciliação fresca;
+- `dispensado`: não existe matrícula acadêmica relevante após excluir cursos com `is_projeto_banda=true`.
+
+`contrato_dado_fresco` só é `true` com execução `succeeded` no dia BRT e cobertura completa. O booleano do Emusys cobre assinatura manual e eletrônica, mas não informa modo, data nem a etapa intermediária. `tem_data_contrato` continua sendo período de aulas e não prova assinatura. Detalhes: [`docs/operacao/contrato-assinado-tom.md`](operacao/contrato-assinado-tom.md).
+
 ### Aluno pagante
 `entra_financeiro_ativo = true` **E** `conta_como_pagante = true` **E**
 `is_segundo_curso != true`.

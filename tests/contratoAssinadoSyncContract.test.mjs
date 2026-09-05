@@ -47,6 +47,19 @@ test('retry pula somente quando ja existe sucesso fresco no dia BRT', () => {
   assert.match(edge, /skipped_fresh/i);
 });
 
+test('force=1 exige x-sync-token e ignora somente a guarda de frescor', () => {
+  assert.match(edge, /searchParams\.get\(['"]force['"]\)\s*===\s*['"]1['"]/i);
+  assert.match(edge, /function\s+tokenSyncValido\s*\([^)]*Request[^)]*\)\s*:\s*boolean/i);
+  assert.match(edge, /tokenSyncValido[\s\S]*x-sync-token[\s\S]*SYNC_ADMIN_TOKEN/i);
+  assert.match(edge, /if\s*\(force\s*&&\s*!tokenSyncValido\(req\)\)/i);
+  assert.match(edge, /force_requer_x_sync_token/i);
+  assert.match(edge, /if\s*\(!force\s*&&[\s\S]{0,220}skipped_fresh/i);
+
+  const forceGuard = edge.indexOf('force_requer_x_sync_token');
+  const executionInsert = edge.indexOf(".from('contrato_assinatura_sync_execucoes')", forceGuard);
+  assert.ok(forceGuard >= 0 && executionInsert > forceGuard, 'force autorizado deve usar a execucao auditavel normal');
+});
+
 test('config declara verify_jwt true para a nova Edge tecnica', () => {
   assert.match(
     config,
