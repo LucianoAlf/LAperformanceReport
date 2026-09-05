@@ -43,6 +43,13 @@ const aclMigrationUrl = new URL(
   import.meta.url,
 );
 const aclMigration = existsSync(aclMigrationUrl) ? readFileSync(aclMigrationUrl, 'utf8') : '';
+const hardeningMigrationUrl = new URL(
+  '../supabase/migrations/20260905203015_remove_fallback_pagantes_admin_ticket.sql',
+  import.meta.url,
+);
+const hardeningMigration = existsSync(hardeningMigrationUrl)
+  ? readFileSync(hardeningMigrationUrl, 'utf8')
+  : '';
 
 async function importarHelperTicket() {
   assert.notEqual(ticketHelper, '', 'falta o helper puro do ticket medio canonico');
@@ -72,13 +79,7 @@ test('ticket fechado usa denominador financeiro explicito, nunca alunos ativos o
   const denominadorExplicito = leitor.indexOf(
     "financeiro_ticket_contratual,ticket_denominador_pagantes",
   );
-  const fallbackAdministrativo = leitor.indexOf("payload->>'alunos_pagantes'");
-
   assert.ok(denominadorExplicito >= 0, 'falta o denominador financeiro explicito');
-  assert.ok(
-    fallbackAdministrativo > denominadorExplicito,
-    'o fallback administrativo so pode vir depois do denominador financeiro',
-  );
   assert.match(leitor, /faturamento_fechado\s*\/\s*f\.ticket_denominador_pagantes/iu);
   assert.doesNotMatch(leitor, /faturamento_fechado\s*\/\s*f\.alunos_pagantes/iu);
 });
@@ -202,6 +203,21 @@ test('comparativos e modal mensal nunca recompõem ticket pela contagem administ
   );
   assert.match(tabGestao, /calcularTicketMedioCanonico/iu);
   assert.match(modalRelatorio, /calcularTicketMedioCanonico/iu);
+  assert.doesNotMatch(
+    modalRelatorio,
+    /ticket_medio:\s*financeiro\.ticket_medio/iu,
+    'a leitura auxiliar de faturas nao pode sobrescrever o ticket canonico',
+  );
+  assert.doesNotMatch(
+    modalRelatorio,
+    /ticket_denominador_pagantes:\s*financeiro\.ticket_denominador_pagantes/iu,
+    'a leitura auxiliar de faturas nao pode sobrescrever o denominador canonico',
+  );
+  assert.doesNotMatch(
+    modalRelatorio,
+    /mrr_atual:\s*financeiro\.mrr_atual/iu,
+    'valor recebido na leitura de faturas nao pode sobrescrever o MRR contratual',
+  );
 });
 
 test('RPC canonica publica pagantes administrativos e denominador financeiro sem sobrescrever um pelo outro', () => {
@@ -232,6 +248,25 @@ test('RPC publica preserva o acesso direto da Sol e a base renomeada fica intern
     /revoke\s+all[\s\S]*get_kpis_alunos_canonicos_base_ticket_denominador_v1\([\s\S]*from\s+public,\s*anon,\s*authenticated,\s*sol_acesso_restrito/iu,
   );
   assert.match(aclMigration, /has_function_privilege/iu);
+});
+
+test('leitor financeiro efetivo nunca aceita pagantes administrativos como denominador', () => {
+  assert.notEqual(hardeningMigration, '', 'falta a migration que remove o fallback administrativo');
+  const inicio = hardeningMigration.indexOf(
+    'create or replace function public.aplicar_financeiro_ticket_contratual_v4',
+  );
+  const fim = hardeningMigration.indexOf('\n$function$;', inicio);
+  assert.ok(inicio >= 0 && fim > inicio, 'funcao v4 ausente');
+  const leitor = hardeningMigration.slice(inicio, fim);
+
+  assert.doesNotMatch(leitor, /payload[^\n]*->>\s*'alunos_pagantes'/iu);
+  assert.doesNotMatch(leitor, /alunos_admin/iu);
+  assert.match(leitor, /ticket_denominador_pagantes/iu);
+  assert.match(leitor, /indisponivel_sem_denominador_financeiro_explicito/iu);
+  assert.match(
+    hardeningMigration,
+    /return\s+public\.aplicar_financeiro_ticket_contratual_v4/iu,
+  );
 });
 
 test('backfill financeiro de agosto versiona snapshots das tres unidades', () => {

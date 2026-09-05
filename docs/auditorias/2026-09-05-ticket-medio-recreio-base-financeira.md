@@ -55,6 +55,10 @@ Depois das migrations
 `20260905195222_separa_pagantes_admin_denominador_ticket_rpc`. A migration
 `20260905200225_restaura_acl_sol_kpis_ticket` preserva o acesso direto da Sol à
 RPC pública e mantém a implementação-base restrita ao `service_role`.
+A migration `20260905203015_remove_fallback_pagantes_admin_ticket` remove o
+último fallback efetivo que ainda aceitava `alunos_pagantes` ou a cobertura
+incidental de faturas como divisor. Ela não regrava dados: apenas substitui a
+função de leitura.
 
 | Unidade | Pagantes administrativos | MRR contratual | Denominador financeiro | Ticket médio |
 | --- | ---: | ---: | ---: | ---: |
@@ -80,3 +84,26 @@ compatibilidade. Os leitores novos priorizam
 `ticket_denominador_pagantes`, `mrr_contratual` e
 `ticket_medio_contratual`, impedindo que uma alteração futura na contagem
 administrativa recalcule o ticket financeiro.
+
+## Regra fail-closed
+
+Para competência fechada, o leitor financeiro aceita somente
+`financeiro_ticket_contratual.ticket_denominador_pagantes` ou
+`ticket_denominador_pagantes` no snapshot `alunos_executivo`. Ele nunca usa
+`alunos_pagantes`, `alunos_pagantes_canonicos`, alunos ativos ou quantidade de
+pessoas encontradas nas faturas como substituto.
+
+Se um fechamento legado não tiver o denominador financeiro explícito, os
+campos de ticket e denominador retornam `null`, com a fonte
+`indisponivel_sem_denominador_financeiro_explicito`. No consolidado, a ausência
+em uma unidade torna o ticket total indisponível; não se publica uma média
+parcial como se representasse as três unidades.
+
+Para competência aberta, a origem é
+`get_kpis_alunos_financeiro_vivo_canonico`: ela conta pessoas elegíveis com MRR
+contratual, incluindo pagas e inadimplentes. O KPI administrativo de pagantes
+continua publicado separadamente e não participa dessa divisão.
+
+O relatório mensal também preserva essa fronteira: a RPC de faturas pode
+enriquecer o valor efetivamente recebido, mas não sobrescreve MRR contratual,
+denominador financeiro nem ticket vindos de `get_kpis_alunos_canonicos`.

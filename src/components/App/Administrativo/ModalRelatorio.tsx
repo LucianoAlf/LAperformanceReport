@@ -111,10 +111,6 @@ async function fetchKPIsAlunosAdminOperacionalRelatorio({
 type FinanceiroFaturasRelatorio = {
   unidade_id: string;
   mrr_atual: number;
-  faturamento_previsto: number;
-  ticket_medio: number;
-  ticket_medio_previsto: number;
-  ticket_denominador_pagantes: number;
   faturas_parcela: number;
   faturas_parcela_pagas: number;
   faturas_parcela_abertas: number;
@@ -198,12 +194,6 @@ async function fetchFinanceiroFaturasEmusysRelatorio({
       {
         unidade_id: String(row.unidade_id),
         mrr_atual: n(row.mrr_atual),
-        faturamento_previsto: n(row.faturamento_previsto),
-        ticket_medio: n(row.ticket_medio),
-        ticket_medio_previsto: n(row.ticket_medio_previsto),
-        ticket_denominador_pagantes: n(
-          row.ticket_denominador_pagantes ?? row.alunos_pagantes_canonicos
-        ),
         faturas_parcela: n(row.faturas_parcela),
         faturas_parcela_pagas: n(row.faturas_parcela_pagas),
         faturas_parcela_abertas: n(row.faturas_parcela_abertas),
@@ -651,12 +641,6 @@ export function ModalRelatorio({
 
         return {
           ...row,
-          ticket_medio: financeiro.ticket_medio || row.ticket_medio || 0,
-          ticket_denominador_pagantes: financeiro.ticket_denominador_pagantes
-            || row.ticket_denominador_pagantes
-            || null,
-          mrr_atual: financeiro.mrr_atual || row.mrr_atual || row.faturamento_previsto || 0,
-          faturamento_previsto: financeiro.faturamento_previsto || row.faturamento_previsto || 0,
           faturamento_realizado: financeiro.mrr_atual || row.faturamento_realizado || row.faturamento_previsto || 0,
           _financeiro_faturas_emusys: financeiro,
         };
