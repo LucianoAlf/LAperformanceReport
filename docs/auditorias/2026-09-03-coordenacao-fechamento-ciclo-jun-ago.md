@@ -66,6 +66,30 @@ empilhadas, medidas uma de cada vez:
 - Tela sai de "auditoria" para o que é oficial; relatório gerencial deixa de dizer "sem dados"
   nos próximos envios (os já enviados não mudam retroativamente).
 
+## Rodada 2 (03/09) — relatório "não fica 100%" para o coordenador
+
+Segunda leva (relato do Quintela após a 1ª rodada): a tela gerava, mas o texto
+vinha com jargão de banco, a lista era "aleatória" e faltavam rankings por
+indicador. Correções (todas no build do texto, nenhuma nos dados):
+
+1. **Ordenação por desempenho:** `em_maturacao` ordenava por cobertura/pilares
+   (invisível pro humano) — agora ordena por desempenho observado, tanto na edge
+   `gemini-relatorio-coordenacao` quanto em `relatorioCoordenacaoCanonico.ts`.
+2. **Jargão fora:** motivos crus do banco ("nenhuma evidencia canonica emitida…",
+   "sem base operacional — sem_pilares_validos", "métrica sem linha…") agora
+   passam por `normalizarMotivo()` → linguagem humana ("sem registros elegíveis
+   no período", "cadastro de agenda do professor pendente", …).
+3. **Destaque por indicador:** nova seção no relatório de coordenação E no
+   ranking da tela: top-5 por carteira, média/turma, permanência, retenção,
+   presença e conversão — com amostra e o aviso "não é premiação; premiação só
+   sai do ciclo oficial fechado".
+4. **Ranking oficial aparecia vazio mesmo com ciclo fechado** (medido): a
+   cascata tinha dois filtros extras além do oficial — `comparavel` no montador e
+   `ranking_habilitado` vindo do pipeline como false pros oficiais. Correção
+   cirúrgica em `montar_relatorio_coordenacao_payload_v3` (via replace no texto
+   vivo com prova de fragmento — aborta se não achar): oficial + score basta.
+   Resultado medido: Recreio → Kaio 79,06 / Isaque 76,46; CG → 6 nomes.
+
 ## O que NÃO é mais plomagem — é régua (decisão do Alf pendente)
 
 Só **12 snapshots** rede inteira viraram oficiais no fechamento (Recreio: 2 de 24 — Isaque 76,5 e

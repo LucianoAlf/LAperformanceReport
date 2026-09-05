@@ -146,6 +146,25 @@ const rotulosMetricas: Record<string, string> = {
   presenca: "Presença dos alunos",
 };
 
+// Motivos crus que vazam do banco → linguagem de coordenador.
+// Regra: coordenador não sabe o que é "canônico", "evidência", "pilar".
+function normalizarMotivo(motivo: string): string {
+  const m = motivo.toLowerCase();
+  if (m.includes("nenhuma evidencia canonica emitida")) return "sem registros elegíveis no período";
+  if (m.includes("unidade em auditoria")) return "indicador pausado neste período (auditoria da unidade)";
+  if (m.includes("cobertura semantica inferior") || m.includes("cobertura de presença insuficiente")) return "cobertura de presença abaixo do mínimo exigido";
+  if (m.includes("disponibilidade canonica ausente") || m.includes("disponibilidade canônica ausente")) return "cadastro de agenda do professor pendente (dias/horários)";
+  if (m.includes("amostra minima de 3 experimentais")) return "poucas aulas experimentais no período (mínimo: 3)";
+  if (m.includes("nenhuma experimental confirmada")) return "nenhuma aula experimental confirmada no período";
+  if (m.includes("base minima de 10 vinculos")) return "carteira pequena para medir (mínimo: 10 vínculos)";
+  if (m.includes("nenhum vinculo encerrado elegivel")) return "sem alunos saindo no período para medir retenção";
+  if (m.includes("metrica sem linha")) return "sem registros elegíveis no período";
+  if (m.includes("vinculo professor-unidade com menos de seis meses")) return "vínculo recente com a unidade (menos de 6 meses)";
+  if (m.includes("carteira canonica zerada")) return "sem alunos na carteira no período";
+  if (m.includes("nenhum evento confiavel")) return "sem aulas registradas no período";
+  return motivo;
+}
+
 const rotulosEvidencia: Record<string, string> = {
   avaliacao_oficial: "avaliação oficial do ciclo",
   avaliacao_parcial: "simulação parcial, ainda não oficial",
@@ -340,8 +359,8 @@ function descreverMetrica(chave: string, metrica: MetricaProfessor | undefined):
   const rotulo = rotulosMetricas[chave] || chave;
   if (!metrica || metrica.valor === null || metrica.valor === undefined) {
     const motivo = rotulosEvidencia[metrica?.codigo_evidencia || ""]
-      || metrica?.motivo
-      || "evidência pendente";
+      || (metrica?.motivo ? normalizarMotivo(metrica.motivo) : undefined)
+      || "sem registros elegíveis no período";
     return `${rotulo}: ${motivo}`;
   }
 
@@ -350,9 +369,53 @@ function descreverMetrica(chave: string, metrica: MetricaProfessor | undefined):
     ? ` | Amostra: ${inteiro(metrica.amostra)}`
     : "";
   const peso = metrica.papel === "nota" && metrica.peso_efetivo !== null && metrica.peso_efetivo !== undefined
-    ? ` | Peso efetivo: ${numero(metrica.peso_efetivo, 1)}%`
+    ? ` | Peso na nota: ${numero(metrica.peso_efetivo, 1)}%`
     : "";
   return `${rotulo}: ${numero(metrica.valor, 1)}${unidade}${amostra}${peso}`;
+}
+
+// 2026-09-03 (Quintela): o coordenador quer ver quem lidera CADA indicador,
+// não só o Health Score. Leitura por indicador com amostra à vista — e a placa
+// deixa claro que não é premiação (essa só sai do ciclo oficial fechado).
+interface IndicadorRanking {
+  chave: string;
+  rotulo: string;
+  detalhe: (valor: number, amostra: number | null) => string;
+}
+
+const indicadoresRanking: IndicadorRanking[] = [
+  { chave: "numero_alunos", rotulo: "👥 MAIOR CARTEIRA", detalhe: (v) => `${inteiro(v)} alunos na carteira` },
+  { chave: "media_turma", rotulo: "🎸 MÉDIA DE ALUNOS POR TURMA", detalhe: (v, a) => `${numero(v, 1)} alunos/turma${a ? ` (${inteiro(a)} turmas)` : ""}` },
+  { chave: "permanencia", rotulo: "🕰 PERMANÊNCIA DOS ALUNOS", detalhe: (v, a) => `${numero(v, 1)} meses${a ? ` (${inteiro(a)} vínculos)` : ""}` },
+  { chave: "retencao", rotulo: "🔄 RETENÇÃO DE ALUNOS", detalhe: (v, a) => `${percentual(v)}${a ? ` (${inteiro(a)} vínculos)` : ""}` },
+  { chave: "presenca", rotulo: "📅 PRESENÇA DOS ALUNOS", detalhe: (v, a) => `${percentual(v)}${a ? ` (${inteiro(a)} chamadas)` : ""}` },
+  { chave: "conversao", rotulo: "🎯 CONVERSÃO DE EXPERIMENTAIS", detalhe: (v, a) => `${percentual(v)}${a ? ` (${inteiro(a)} experimentais)` : ""}` },
+];
+
+function renderizarRankingsPorIndicador(professores: ProfessorContrato[]): string[] {
+  const linhas: string[] = [];
+  for (const indicador of indicadoresRanking) {
+    const ranqueados = professores
+      .map((p) => ({
+        nome: p.nome,
+        valor: p.metricas?.[indicador.chave]?.valor,
+        amostra: p.metricas?.[indicador.chave]?.amostra ?? null,
+      }))
+      .filter((p) => p.valor !== null && p.valor !== undefined)
+      .sort((a, b) => Number(b.valor) - Number(a.valor) || a.nome.localeCompare(b.nome, "pt-BR"))
+      .slice(0, 5);
+
+    if (!ranqueados.length) {
+      linhas.push(`${indicador.rotulo}: sem registros elegíveis no período.`);
+      continue;
+    }
+    linhas.push(`${indicador.rotulo}`);
+    for (const [indice, item] of ranqueados.entries()) {
+      linhas.push(`${indice + 1}. ${item.nome} — ${indicador.detalhe(Number(item.valor), item.amostra)}`);
+    }
+    linhas.push("");
+  }
+  return linhas;
 }
 
 function renderizarRelatorio(
@@ -394,8 +457,9 @@ function renderizarRelatorio(
         || a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" });
     }
     if (a.comparabilidade_estado === "em_maturacao") {
-      return Number(b.cobertura || 0) - Number(a.cobertura || 0)
-        || Number(b.pilares_validos || 0) - Number(a.pilares_validos || 0)
+      // 2026-09-03: coordenador lê pelo desempenho observado — ordenar por ele.
+      return Number(b.score_observado || 0) - Number(a.score_observado || 0)
+        || Number(b.cobertura || 0) - Number(a.cobertura || 0)
         || a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" });
     }
     return a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" });
@@ -414,8 +478,8 @@ function renderizarRelatorio(
     const pilares = metricasOrdenadas.map((metrica) => `   • ${descreverMetrica(metrica, professor.metricas?.[metrica])}`);
     const carteira = professor.metricas?.numero_alunos?.valor;
     const carteiraLinha = carteira === null || carteira === undefined
-      ? "   • Carteira: evidência pendente (não altera a nota)"
-      : `   • Carteira: ${inteiro(carteira)} aluno(s) (diagnóstico; não altera a nota)`;
+      ? "   • Carteira: sem alunos atribuídos no período (informativo)"
+      : `   • Carteira: ${inteiro(carteira)} aluno(s) — informativo, não pesa na nota`;
     return [
       `${indice + 1}) *${professor.nome}*`,
       `   • ${score}`,
@@ -482,6 +546,11 @@ function renderizarRelatorio(
     "👥 *PROFESSORES DA EQUIPE*",
     "───────────────────────",
     ...professores,
+    "🏅 *DESTAQUE POR INDICADOR*",
+    "───────────────────────",
+    "_Leitura interna por indicador (não é premiação — premiações seguem o ciclo oficial fechado)._",
+    "",
+    ...renderizarRankingsPorIndicador(dados.professores),
     "🔄 *RETENÇÃO E PERMANÊNCIA*",
     "───────────────────────",
     `• Professores com retenção observável: *${inteiro(dados.retencao_permanencia.professores_com_retencao)}*`,

@@ -266,10 +266,12 @@ function professoresComparaveis(contrato: RelatorioCoordenacaoCanonicoV2) {
 }
 
 function professoresEmMaturacao(contrato: RelatorioCoordenacaoCanonicoV2) {
+  // 2026-09-03 (Quintela): coordenador lê pelo desempenho observado.
   return contrato.professores
     .filter((professor) => professor.comparabilidade_estado === 'em_maturacao')
     .sort((a, b) =>
-      Number(b.cobertura || 0) - Number(a.cobertura || 0)
+      Number(b.score_observado || 0) - Number(a.score_observado || 0)
+      || Number(b.cobertura || 0) - Number(a.cobertura || 0)
       || Number(b.pilares_validos || 0) - Number(a.pilares_validos || 0)
       || a.nome.localeCompare(b.nome, 'pt-BR')
     );
@@ -279,6 +281,49 @@ function professoresSemBase(contrato: RelatorioCoordenacaoCanonicoV2) {
   return contrato.professores
     .filter((professor) => professor.comparabilidade_estado === 'sem_base_operacional')
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+// 2026-09-03 (Quintela/prêmios): em maturação ordena por desempenho observado —
+// coordenador lê pelo número, não pela cobertura.
+interface IndicadorRanking {
+  chave: string;
+  rotulo: string;
+  detalhe: (valor: number, amostra: number | null) => string;
+}
+
+const indicadoresRanking: IndicadorRanking[] = [
+  { chave: 'numero_alunos', rotulo: '👥 MAIOR CARTEIRA', detalhe: (v) => `${numeroInteiro(v)} alunos na carteira` },
+  { chave: 'media_turma', rotulo: '🎸 MÉDIA DE ALUNOS POR TURMA', detalhe: (v, a) => `${numero(v, 1)} alunos/turma${a ? ` (${numeroInteiro(a)} turmas)` : ''}` },
+  { chave: 'permanencia', rotulo: '🕰 PERMANÊNCIA DOS ALUNOS', detalhe: (v, a) => `${numero(v, 1)} meses${a ? ` (${numeroInteiro(a)} vínculos)` : ''}` },
+  { chave: 'retencao', rotulo: '🔄 RETENÇÃO DE ALUNOS', detalhe: (v, a) => `${numero(v, 1)}%${a ? ` (${numeroInteiro(a)} vínculos)` : ''}` },
+  { chave: 'presenca', rotulo: '📅 PRESENÇA DOS ALUNOS', detalhe: (v, a) => `${numero(v, 1)}%${a ? ` (${numeroInteiro(a)} chamadas)` : ''}` },
+  { chave: 'conversao', rotulo: '🎯 CONVERSÃO DE EXPERIMENTAIS', detalhe: (v, a) => `${numero(v, 1)}%${a ? ` (${numeroInteiro(a)} experimentais)` : ''}` },
+];
+
+function linhasRankingPorIndicador(contrato: RelatorioCoordenacaoCanonicoV2): string[] {
+  const linhas: string[] = [];
+  for (const indicador of indicadoresRanking) {
+    const ranqueados = contrato.professores
+      .map((professor) => ({
+        nome: professor.nome,
+        valor: valorMetrica(professor, indicador.chave),
+        amostra: professor.metricas?.[indicador.chave]?.amostra ?? null,
+      }))
+      .filter((item) => item.valor !== null)
+      .sort((a, b) => Number(b.valor) - Number(a.valor) || a.nome.localeCompare(b.nome, 'pt-BR'))
+      .slice(0, 5);
+
+    if (!ranqueados.length) {
+      linhas.push(`${indicador.rotulo}: sem registros elegíveis no período.`);
+      continue;
+    }
+    linhas.push(`${indicador.rotulo}`);
+    for (const [indice, item] of ranqueados.entries()) {
+      linhas.push(`${indice + 1}. ${item.nome} — ${indicador.detalhe(Number(item.valor), item.amostra)}`);
+    }
+    linhas.push('');
+  }
+  return linhas;
 }
 
 function gerarRanking(params: GerarRelatorioCoordenacaoCanonicoParams): string {
@@ -308,7 +353,7 @@ function gerarRanking(params: GerarRelatorioCoordenacaoCanonicoParams): string {
     return `• ${professor.nome} — ${desempenho} | Cobertura: ${numero(professor.cobertura, 1)}% | ${numeroInteiro(professor.pilares_validos)}/${numeroInteiro(professor.pilares_esperados)} pilares${referencia}`;
   });
   const linhasSemBase = semBase.map((professor) =>
-    `• ${professor.nome} — Sem base operacional (${professor.comparabilidade_motivo || 'nenhum pilar válido'})`
+    `• ${professor.nome} — Sem dados suficientes neste período`
   );
 
   return [
@@ -333,9 +378,15 @@ function gerarRanking(params: GerarRelatorioCoordenacaoCanonicoParams): string {
     '━━━━━━━━━━━━━━━━━━━━━━',
     ...(linhasMaturacao.length > 0 ? linhasMaturacao : ['• Nenhum professor em maturação.']),
     '',
-    '⏳ *SEM BASE OPERACIONAL*',
+    '⏳ *SEM DADOS SUFICIENTES NO PERÍODO*',
     '━━━━━━━━━━━━━━━━━━━━━━',
-    ...(linhasSemBase.length > 0 ? linhasSemBase : ['• Nenhum professor sem base operacional.']),
+    ...(linhasSemBase.length > 0 ? linhasSemBase : ['• Nenhum professor sem dados suficientes.']),
+    '',
+    '🏅 *DESTAQUE POR INDICADOR*',
+    '━━━━━━━━━━━━━━━━━━━━━━',
+    '_Leitura interna por indicador (não é premiação — premiações seguem o ciclo oficial fechado)._',
+    '',
+    ...linhasRankingPorIndicador(contrato),
     ...rodape(params.dataGeracao),
   ].join('\n');
 }
