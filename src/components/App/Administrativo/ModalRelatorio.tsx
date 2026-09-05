@@ -43,6 +43,7 @@ import {
   transferenciaRecebidaNaUnidade,
 } from '@/lib/administrativoTransferencias';
 import { isCompetenciaNoPeriodo } from '@/lib/renovacoesAntecipadas';
+import { calcularTicketMedioCanonico } from '@/lib/ticketMedioCanonico';
 
 const tipoEvasaoLabels: Record<string, string> = {
   interrompido: 'Interrompido',
@@ -110,9 +111,6 @@ async function fetchKPIsAlunosAdminOperacionalRelatorio({
 type FinanceiroFaturasRelatorio = {
   unidade_id: string;
   mrr_atual: number;
-  faturamento_previsto: number;
-  ticket_medio: number;
-  ticket_medio_previsto: number;
   faturas_parcela: number;
   faturas_parcela_pagas: number;
   faturas_parcela_abertas: number;
@@ -196,9 +194,6 @@ async function fetchFinanceiroFaturasEmusysRelatorio({
       {
         unidade_id: String(row.unidade_id),
         mrr_atual: n(row.mrr_atual),
-        faturamento_previsto: n(row.faturamento_previsto),
-        ticket_medio: n(row.ticket_medio),
-        ticket_medio_previsto: n(row.ticket_medio_previsto),
         faturas_parcela: n(row.faturas_parcela),
         faturas_parcela_pagas: n(row.faturas_parcela_pagas),
         faturas_parcela_abertas: n(row.faturas_parcela_abertas),
@@ -573,6 +568,8 @@ export function ModalRelatorio({
           return {
             ...row,
             ticket_medio: canonico.ticketMedio,
+            ticket_denominador_pagantes: canonico.ticketDenominadorPagantes,
+            mrr_atual: canonico.mrr,
             faturamento_previsto: canonico.faturamentoPrevisto,
             faturamento_realizado: canonico.faturamentoRealizado,
             churn_rate: canonico.churnRate,
@@ -597,6 +594,8 @@ export function ModalRelatorio({
         total_bolsistas_integrais_segundo_curso: row.bolsistasIntegraisSegundoCurso,
         total_bolsistas_parciais: row.bolsistasParciais,
         ticket_medio: row.ticketMedio,
+        ticket_denominador_pagantes: row.ticketDenominadorPagantes,
+        mrr_atual: row.mrr,
         faturamento_previsto: row.faturamentoPrevisto,
         faturamento_realizado: row.faturamentoRealizado,
         churn_rate: row.churnRate,
@@ -642,8 +641,6 @@ export function ModalRelatorio({
 
         return {
           ...row,
-          ticket_medio: financeiro.ticket_medio || row.ticket_medio || 0,
-          faturamento_previsto: financeiro.faturamento_previsto || row.faturamento_previsto || 0,
           faturamento_realizado: financeiro.mrr_atual || row.faturamento_realizado || row.faturamento_previsto || 0,
           _financeiro_faturas_emusys: financeiro,
         };
@@ -681,6 +678,12 @@ export function ModalRelatorio({
       (k: any) => k._matriculas_2_curso_extras
     );
 
+    const ticketMedioCanonico = calcularTicketMedioCanonico(kpisData.map((k: any) => ({
+      mrr: Number(k.mrr_atual ?? k.faturamento_previsto) || 0,
+      ticketMedio: Number(k.ticket_medio) || 0,
+      ticketDenominadorPagantes: k.ticket_denominador_pagantes ?? null,
+    })));
+
     const kpis = kpisData.reduce((acc, k) => ({
       alunos_ativos: (acc.alunos_ativos || 0) + (k.total_alunos_ativos || 0),
       alunos_pagantes: (acc.alunos_pagantes || 0) + (k.total_alunos_pagantes || 0),
@@ -698,7 +701,7 @@ export function ModalRelatorio({
       alunos_coral: alunosCoral,
       faturamento: (acc.faturamento || 0) + (Number(k.faturamento_realizado ?? k.faturamento_previsto) || 0),
       faturamento_previsto: (acc.faturamento_previsto || 0) + (Number(k.faturamento_previsto) || 0),
-      mrr_atual: (acc.mrr_atual || 0) + (Number(k.faturamento_realizado ?? k.faturamento_previsto) || 0),
+      mrr_atual: (acc.mrr_atual || 0) + (Number(k.mrr_atual ?? k.faturamento_previsto) || 0),
       ticket_denominador_faturas: (acc.ticket_denominador_faturas || 0)
         + (Number(k._financeiro_faturas_emusys?.alunos_locais_com_parcela_paga)
           || Number(k._financeiro_faturas_emusys?.alunos_emusys_com_parcela_paga)
@@ -715,11 +718,7 @@ export function ModalRelatorio({
       kpis.ltv_meses = tempoPermanenciaCanonico;
     }
 
-    kpis.ticket_medio = kpis.ticket_denominador_faturas > 0
-      ? kpis.mrr_atual / kpis.ticket_denominador_faturas
-      : kpis.alunos_pagantes > 0
-        ? kpis.faturamento / kpis.alunos_pagantes
-      : 0;
+    kpis.ticket_medio = ticketMedioCanonico;
 
     const profMap = new Map((profsResult.data || []).map((p: any) => [p.id, p.nome]));
     const fpMap = new Map((fpResult.data || []).map((f: any) => [f.id, { nome: f.nome, sigla: f.sigla }]));

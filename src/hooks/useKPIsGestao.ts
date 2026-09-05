@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { fetchKPIsAlunosCanonicos, type FonteKPIAlunos } from '@/hooks/useKPIsAlunosCanonicos';
+import { calcularTicketMedioCanonico } from '@/lib/ticketMedioCanonico';
 
 export interface KPIsGestao {
   unidade_id: string;
@@ -154,7 +155,12 @@ export function useKPIsGestao(
         } : null);
       } else if (dadosAnteriores && dadosAnteriores.length > 0) {
         const totalPagantes = dadosAnteriores.reduce((acc, d) => acc + (Number(d.alunos_pagantes) || 0), 0);
-        const mrr = dadosAnteriores.reduce((acc, d) => acc + (Number(d.faturamento_estimado) || 0), 0);
+        const linhasTicket = dadosAnteriores.map(d => ({
+          mrr: Number(d.mrr_contratual ?? d.faturamento_estimado) || 0,
+          ticketMedio: Number(d.ticket_medio_contratual ?? d.ticket_medio) || 0,
+          ticketDenominadorPagantes: d.ticket_denominador_pagantes ?? null,
+        }));
+        const mrr = linhasTicket.reduce((total, linha) => total + linha.mrr, 0);
         const count = dadosAnteriores.length || 1;
 
         setData(prev => prev ? {
@@ -162,7 +168,7 @@ export function useKPIsGestao(
           anterior: {
             total_alunos_ativos: dadosAnteriores.reduce((acc, d) => acc + (Number(d.alunos_ativos) || 0), 0),
             total_alunos_pagantes: totalPagantes,
-            ticket_medio: totalPagantes > 0 ? mrr / totalPagantes : 0,
+            ticket_medio: calcularTicketMedioCanonico(linhasTicket),
             mrr,
             churn_rate: dadosAnteriores.reduce((acc, d) => acc + (Number(d.churn_rate) || 0), 0) / count,
           },

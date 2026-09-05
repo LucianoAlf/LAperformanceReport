@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { fetchKPIsAlunosVivosCanonicos } from '@/lib/kpisAlunosVivosCanonicos';
+import { calcularTicketMedioCanonico } from '@/lib/ticketMedioCanonico';
 
 export type FonteKPIAlunos = 'snapshot' | 'dados_mensais' | 'vivo' | 'preliminar' | 'indisponivel';
 
@@ -13,6 +14,7 @@ export interface KPIsAlunosCanonicosPorUnidade {
   alunosPagantes: number;
   ticketMedio: number;
   ticketMedioPrevisto?: number;
+  ticketDenominadorPagantes?: number | null;
   ticketDenominadorFaturas?: number;
   ticketDenominadorFaturasPrevisto?: number;
   financeiroFaturasEmusys?: boolean;
@@ -62,6 +64,7 @@ export interface KPIsAlunosCanonicos {
   alunosPagantes: number;
   ticketMedio: number;
   ticketMedioPrevisto?: number;
+  ticketDenominadorPagantes?: number | null;
   ticketDenominadorFaturas?: number;
   ticketDenominadorFaturasPrevisto?: number;
   financeiroFaturasEmusys?: boolean;
@@ -129,6 +132,7 @@ const ZERO_KPIS = {
   alunosPagantes: 0,
   ticketMedio: 0,
   ticketMedioPrevisto: 0,
+  ticketDenominadorPagantes: null,
   ticketDenominadorFaturas: 0,
   ticketDenominadorFaturasPrevisto: 0,
   financeiroFaturasEmusys: false,
@@ -196,8 +200,17 @@ function fonteLabel(fonte: FonteKPIAlunos): string {
 
 function mapSnapshotAlunosExecutivo(snapshot: SnapshotAlunosExecutivoRow): KPIsAlunosCanonicosPorUnidade {
   const payload = snapshot.payload || {};
+  const financeiroTicket = payload.financeiro_ticket_contratual;
+  const financeiroTicketPayload = financeiroTicket && typeof financeiroTicket === 'object' && !Array.isArray(financeiroTicket)
+    ? financeiroTicket as Record<string, unknown>
+    : {};
   const mrr = n(payload.mrr);
   const ticketMedio = n(payload.ticket_medio);
+  const ticketDenominadorPagantes = nNullable(
+    payload.ticket_denominador_pagantes
+      ?? financeiroTicketPayload.ticket_denominador_pagantes
+      ?? financeiroTicketPayload.alunos_pagantes_canonicos
+  );
   const tempoPermanencia = n(payload.tempo_permanencia_medio ?? payload.tempo_permanencia);
 
   return {
@@ -209,6 +222,7 @@ function mapSnapshotAlunosExecutivo(snapshot: SnapshotAlunosExecutivoRow): KPIsA
     alunosPagantes: n(payload.alunos_pagantes ?? payload.total_alunos_pagantes),
     ticketMedio,
     ticketMedioPrevisto: ticketMedio,
+    ticketDenominadorPagantes,
     ticketDenominadorFaturas: 0,
     ticketDenominadorFaturasPrevisto: 0,
     financeiroFaturasEmusys: false,
@@ -341,8 +355,12 @@ function montarKPIsDeSnapshots(
 }
 
 function mapDadosMensais(row: any): KPIsAlunosCanonicosPorUnidade {
-  const mrr = n(row.faturamento_estimado);
-  const ticketMedio = n(row.ticket_medio);
+  // `dados_mensais` e apenas o fallback legado. Quando o fechamento financeiro
+  // explicito existir, ele nao pode ser recomposto por alunos_pagantes: esse
+  // campo representa o KPI administrativo e pode ter outro universo.
+  const mrr = n(row.mrr_contratual ?? row.faturamento_estimado);
+  const ticketMedio = n(row.ticket_medio_contratual ?? row.ticket_medio);
+  const ticketDenominadorPagantes = nNullable(row.ticket_denominador_pagantes);
   const tempoPermanencia = n(row.tempo_permanencia);
   const matriculasAtivas = n(row.matriculas_ativas);
   const matriculasBanda = n(row.matriculas_banda);
@@ -357,6 +375,7 @@ function mapDadosMensais(row: any): KPIsAlunosCanonicosPorUnidade {
     alunosPagantes: n(row.alunos_pagantes),
     ticketMedio,
     ticketMedioPrevisto: ticketMedio,
+    ticketDenominadorPagantes,
     ticketDenominadorFaturas: 0,
     ticketDenominadorFaturasPrevisto: 0,
     financeiroFaturasEmusys: false,
@@ -399,6 +418,10 @@ export function consolidarKPIsAlunosCanonicos(
   const totalPagantes = rows.reduce((acc, row) => acc + row.alunosPagantes, 0);
   const totalMrr = rows.reduce((acc, row) => acc + row.mrr, 0);
   const totalFaturamentoPrevisto = rows.reduce((acc, row) => acc + row.faturamentoPrevisto, 0);
+  const totalTicketDenominadorPagantes = somarCampoCompleto(
+    rows,
+    row => row.ticketDenominadorPagantes ?? null
+  );
   const totalTicketDenominador = rows.reduce((acc, row) => acc + (row.ticketDenominadorFaturas || 0), 0);
   const totalTicketDenominadorPrevisto = rows.reduce((acc, row) => acc + (row.ticketDenominadorFaturasPrevisto || 0), 0);
   const totalAtivos = rows.reduce((acc, row) => acc + row.alunosAtivos, 0);
@@ -406,9 +429,7 @@ export function consolidarKPIsAlunosCanonicos(
   const totalReajustesValidos = somarCampoCompleto(rows, row => row.reajustesValidos);
   const count = rows.length || 1;
   const financeiroFaturasEmusys = rows.some(row => row.financeiroFaturasEmusys);
-  const ticketMedio = totalTicketDenominador > 0
-    ? totalMrr / totalTicketDenominador
-    : totalPagantes > 0 ? totalMrr / totalPagantes : 0;
+  const ticketMedio = calcularTicketMedioCanonico(rows);
   const ticketMedioPrevisto = totalTicketDenominadorPrevisto > 0
     ? totalFaturamentoPrevisto / totalTicketDenominadorPrevisto
     : ticketMedio;
@@ -429,6 +450,7 @@ export function consolidarKPIsAlunosCanonicos(
     alunosPagantes: totalPagantes,
     ticketMedio,
     ticketMedioPrevisto,
+    ticketDenominadorPagantes: totalTicketDenominadorPagantes,
     ticketDenominadorFaturas: totalTicketDenominador,
     ticketDenominadorFaturasPrevisto: totalTicketDenominadorPrevisto,
     financeiroFaturasEmusys,

@@ -12922,12 +12922,15 @@ export type Database = {
           matriculas_ativas: number | null
           matriculas_banda: number | null
           mes: number
+          mrr_contratual: number | null
           novas_matriculas: number | null
           reajuste_parcelas: number | null
           saldo_liquido: number | null
           taxa_renovacao: number | null
           tempo_permanencia: number | null
+          ticket_denominador_pagantes: number | null
           ticket_medio: number | null
+          ticket_medio_contratual: number | null
           ticket_medio_passaporte: number | null
           unidade_id: string | null
           updated_at: string | null
@@ -12949,12 +12952,15 @@ export type Database = {
           matriculas_ativas?: number | null
           matriculas_banda?: number | null
           mes: number
+          mrr_contratual?: number | null
           novas_matriculas?: number | null
           reajuste_parcelas?: number | null
           saldo_liquido?: number | null
           taxa_renovacao?: number | null
           tempo_permanencia?: number | null
+          ticket_denominador_pagantes?: number | null
           ticket_medio?: number | null
+          ticket_medio_contratual?: number | null
           ticket_medio_passaporte?: number | null
           unidade_id?: string | null
           updated_at?: string | null
@@ -12976,12 +12982,15 @@ export type Database = {
           matriculas_ativas?: number | null
           matriculas_banda?: number | null
           mes?: number
+          mrr_contratual?: number | null
           novas_matriculas?: number | null
           reajuste_parcelas?: number | null
           saldo_liquido?: number | null
           taxa_renovacao?: number | null
           tempo_permanencia?: number | null
+          ticket_denominador_pagantes?: number | null
           ticket_medio?: number | null
+          ticket_medio_contratual?: number | null
           ticket_medio_passaporte?: number | null
           unidade_id?: string | null
           updated_at?: string | null

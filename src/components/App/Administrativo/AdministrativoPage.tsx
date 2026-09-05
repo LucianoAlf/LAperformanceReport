@@ -514,6 +514,7 @@ export function AdministrativoPage() {
             return {
               ...row,
               ticket_medio: canonico.ticketMedio,
+              ticket_denominador_pagantes: canonico.ticketDenominadorPagantes,
               mrr_atual: canonico.mrr,
               faturamento_previsto: canonico.faturamentoPrevisto,
               churn_rate: canonico.churnRate,
@@ -539,6 +540,7 @@ export function AdministrativoPage() {
             total_bolsistas_integrais_segundo_curso: row.bolsistasIntegraisSegundoCurso,
             total_bolsistas_parciais: row.bolsistasParciais,
             ticket_medio: row.ticketMedio,
+            ticket_denominador_pagantes: row.ticketDenominadorPagantes,
             mrr_atual: row.mrr,
             faturamento_previsto: row.faturamentoPrevisto,
             churn_rate: row.churnRate,
@@ -625,9 +627,10 @@ export function AdministrativoPage() {
         kpis.faturamento = Number(kpisUnidadeCanonica?.mrr) || kpis.faturamento || 0;
         kpis.mrr_atual = kpis.faturamento;
       } else {
-        kpis.ticket_medio = kpis.alunos_pagantes > 0
-          ? kpis.faturamento / kpis.alunos_pagantes
-          : 0;
+        const ticketInformado = kpisData.find(
+          (row: any) => Number(row.ticket_medio) > 0
+        )?.ticket_medio;
+        kpis.ticket_medio = Number(ticketInformado) || 0;
       }
 
       // Contar movimentações por tipo
