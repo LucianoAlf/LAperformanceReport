@@ -366,7 +366,8 @@
     "curso_emusys_depara": "integracao",
     "tipos_matricula": "aluno",
     "tipos_saida": "aluno",
-    "movimentacoes": "aluno"
+    "movimentacoes": "aluno",
+    "atendimento_consultor_diario": "comercial"
   },
   "tokens": {
     "kpis": "gestao"
