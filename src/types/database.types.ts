@@ -9341,6 +9341,13 @@ export type Database = {
       }
       base_conhecimento_blocos: {
         Row: {
+          aprovado_em: string | null
+          aprovado_por: string | null
+          estado: string
+          publico: string
+          revisar_em: string | null
+          substitui_id: string | null
+          versao: string | null
           ativo: boolean
           atualizado_por: string | null
           conteudo: string
@@ -9352,6 +9359,13 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          aprovado_em?: string | null
+          aprovado_por?: string | null
+          estado?: string
+          publico?: string
+          revisar_em?: string | null
+          substitui_id?: string | null
+          versao?: string | null
           ativo?: boolean
           atualizado_por?: string | null
           conteudo: string
@@ -9363,6 +9377,13 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          aprovado_em?: string | null
+          aprovado_por?: string | null
+          estado?: string
+          publico?: string
+          revisar_em?: string | null
+          substitui_id?: string | null
+          versao?: string | null
           ativo?: boolean
           atualizado_por?: string | null
           conteudo?: string
