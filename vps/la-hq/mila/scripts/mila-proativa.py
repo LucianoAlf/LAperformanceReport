@@ -193,6 +193,14 @@ _{dia_semana}, {data}_
 
 ━━━━━━━━━━━━━━━━━━━━━
 
+🔄 *RETOMAR HOJE* · 1
+
+  • *Juliana Prado* — há 92 dias
+    _"adorei a escola mas agora tá apertado, meu filho
+    tá em prova, me chama em janeiro"_
+
+━━━━━━━━━━━━━━━━━━━━━
+
 📌 *DE ONTEM* · 2 sem desfecho
 
   • *Luis Arthur* — Violão
@@ -278,6 +286,9 @@ def envelope(tipo, dados, c):
     """
     rotulo = "manhã" if tipo == "manha" else "fim do dia"
     dia_semana = DIAS[int(dados.get("dow", 0)) % 7]
+    # 🔴 O bloco RETOMAR HOJE so existe se `retomar_hoje` vier preenchido, e a
+    # frase da pessoa (`ele_disse`) e OBRIGATORIA nele: lembrete sem a frase a
+    # consultora ignora, e em duas semanas para de ler o briefing inteiro.
     molde = (MOLDE_MANHA if tipo == "manha" else MOLDE_FIM).format(
         apelido=c["apelido"].upper(), unidade=c["unidade_nome"],
         dia_semana=dia_semana, data=dados["data"][:5])
