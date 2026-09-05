@@ -1419,6 +1419,7 @@
 | `anulado_motivo` | text | sim |  |  |
 | `anulado_em` | timestamp with time zone | sim |  |  |
 | `anulado_por` | text | sim |  |  |
+| `origem_registro` | text | não | 'manual'::text |  |
 
 **Únicos:**
 - `movimentacoes_admin_pkey`

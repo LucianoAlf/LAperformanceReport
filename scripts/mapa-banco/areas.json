@@ -352,6 +352,7 @@
     "seguranca": "plataforma"
   },
   "excecoes": {
+    "reconciliar_saida_automatica_cancelada_v1": "aluno",
     "professores_experimentais": "comercial",
     "alunos_emusys_atributos_decisoes": "integracao",
     "alunos_emusys_atributos_divergencias": "integracao",

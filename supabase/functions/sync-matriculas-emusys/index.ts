@@ -635,6 +635,83 @@ async function sincronizarAtributosCadastraisEmusys(
   return atualizados;
 }
 
+async function reconciliarSaidasAutomaticasCanceladas(
+  supabase: any,
+  unidade: { id: string; nome: string },
+  alunos: any[],
+  porId: Map<number, any>,
+  logs: any[],
+) {
+  const resultado = { candidatas: 0, reconciliadas: 0, ignoradas: 0, erros: 0 };
+  const observadoEm = new Date().toISOString();
+
+  for (const aluno of alunos || []) {
+    const statusLocal = String(aluno.status ?? '').trim().toLowerCase();
+    if (!['evadido', 'inativo'].includes(statusLocal)) continue;
+
+    const matriculaId = numeroFinitoOuNull(aluno.emusys_matricula_id);
+    if (matriculaId == null) continue;
+    const matricula = porId.get(matriculaId);
+    if (String(matricula?.status ?? '').trim().toLowerCase() !== 'ativa') continue;
+
+    resultado.candidatas++;
+    try {
+      const { data, error } = await supabase.rpc(
+        'reconciliar_saida_automatica_cancelada_v1',
+        {
+          p_unidade_id: unidade.id,
+          p_emusys_matricula_id: String(matriculaId),
+          p_status_emusys: matricula.status,
+          p_observado_em: observadoEm,
+        },
+      );
+      if (error) throw error;
+
+      if (data?.reconciliada === true) {
+        resultado.reconciliadas++;
+        // As fases seguintes usam o mesmo objeto carregado no início do lote.
+        // Refletir a compensação evita que a guarda operacional o pule até amanhã.
+        aluno.status = 'ativo';
+        aluno.data_saida = null;
+        logs.push({
+          aluno_nome: aluno.nome,
+          aluno_id: aluno.id,
+          unidade_nome: unidade.nome,
+          evento: 'sync_matricula_reconciliacao',
+          acao: 'saida_automatica_cancelada_na_fonte',
+          detalhes: {
+            unidade_id: unidade.id,
+            emusys_matricula_id: matriculaId,
+            movimentacao_anulada_id: data.movimentacao_anulada_id,
+          },
+          workflow_id: 'sync-matriculas-emusys',
+          execution_id: observadoEm,
+        });
+      } else {
+        resultado.ignoradas++;
+      }
+    } catch (erro) {
+      resultado.erros++;
+      logs.push({
+        aluno_nome: aluno.nome,
+        aluno_id: aluno.id,
+        unidade_nome: unidade.nome,
+        evento: 'sync_matricula_reconciliacao',
+        acao: 'falha_reconciliar_saida_automatica',
+        detalhes: {
+          unidade_id: unidade.id,
+          emusys_matricula_id: matriculaId,
+          erro: descreverErroSync(erro),
+        },
+        workflow_id: 'sync-matriculas-emusys',
+        execution_id: observadoEm,
+      });
+    }
+  }
+
+  return resultado;
+}
+
 const TIPOS_DECISAO_IGNORA_SYNC = new Set([
   'ignorar_matricula_api',
   'responsavel_nao_aluno',
@@ -1835,6 +1912,13 @@ serve(async (req) => {
     // auditável para ela não voltar à fila operacional.
     // Cadastro atual vem diretamente da matricula Emusys. Esta etapa fica
     // antes do retorno operacional porque e esse escopo que roda diariamente.
+    resumo.saidas_automaticas_canceladas = await reconciliarSaidasAutomaticasCanceladas(
+      supabase,
+      u,
+      alunos || [],
+      porId,
+      logs,
+    );
     const atributosSincronizados = await sincronizarAtributosCadastraisEmusys(
       supabase,
       u,

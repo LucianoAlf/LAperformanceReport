@@ -529,6 +529,12 @@ Movimentações de **atividade extra** (banda, canto coral, power kids, minha ba
 ⚠️ **Fail-open:** sem `aluno_id` ou com tipo desconhecido, a saída **conta**.
 **Transferência interna entre unidades não é evasão nem churn global.**
 ⚠️ **Aviso prévio** cobre o mês vigente do aviso + o seguinte (2 meses); a evasão entra na competência da **saída real**.
+- **Temporalidade automática:** webhooks de finalização usam
+  `(unidade_id, emusys_matricula_id)` e `origem_registro='webhook_emusys'`.
+  Reprocessamento posterior da mesma matrícula substitui a ocorrência automática
+  anterior em até 60 dias; retorno confirmado a `ativa` compensa somente saída
+  automática recente cuja data ainda coincide com `alunos.data_saida`. Registros
+  manuais nunca entram nessa compensação.
 - `DashboardPage.tsx:238`, `TabGestao.tsx:842`, `TabProfessoresNew.tsx:284` (MRR perdido = soma `valor_parcela`).
 
 ### Taxa de renovação
@@ -690,6 +696,12 @@ O detalhamento completo e as fronteiras do relatório da Coordenação estão em
 Para impedir que a virada de mês recalcule/altere competências já fechadas, o fechamento passou a ser **canônico e auditável**:
 
 - **`dados_mensais` deixou de ser fonte de verdade** — virou camada de **compatibilidade** (telas antigas). A fonte do retrato fechado é o snapshot.
+- Em retificação de mês fechado, receita contratual e denominador são versionados
+  em snapshots append-only. `get_financeiro_faturas_emusys` lê o denominador do
+  último `alunos_executivo` fechado; portanto esse snapshot precisa ser publicado
+  antes da validação financeira final. `dados_mensais.faturamento_estimado` é
+  gerado por `alunos_pagantes × ticket_medio` com ticket em centavos e pode diferir
+  alguns centavos do MRR congelado — não usar esse produto como MRR.
 - **Fluxo oficial de fechamento** (só após o último sync/movimento do mês, com confirmação explícita):
   1. `preview_fechamento_mensal(ano, mes, unidade?, payloads?)` — **read-only**, junta domínios, aponta bloqueios/alertas. Não grava.
   2. `gravar_snapshot_fechamento_mensal(...)` — grava o retrato com **hash + auditoria**; só `service_role`; bloqueia se houver bloqueios; exige confirmação se houver alertas; não sobrescreve snapshot fechado.
