@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — professor
 
-136 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+142 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## anotacoes
 
@@ -404,6 +404,27 @@
 - `fabio_chat_mensagens_pkey`
 - `fcm_wa_msg_uq`
 
+## fabio_correcao
+
+> O que foi CONSERTADO, no formato do TOM: codigo, a fala literal de quem sofreu, o mecanismo em uma frase, a prova e a referencia. Sem a fala e o mecanismo, "corrigi o gate" e frase que ninguem pode conferir.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `dia` | date | não | ((now() AT TIME ZONE 'America/Sao_Paulo'::text))::date |  |
+| `codigo` | text | não |  |  |
+| `titulo` | text | não |  |  |
+| `quem_sofreu` | text | sim |  |  |
+| `quando` | text | sim |  |  |
+| `citacao` | text | sim |  |  |
+| `mecanismo` | text | não |  |  |
+| `prova` | text | não |  |  |
+| `referencia` | text | não |  |  |
+| `criada_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `fabio_correcao_pkey`
+
 ## fabio_correcoes_acoes
 
 > Ledger idempotente das correcoes finais por tipo e p_acao_id; sem acesso direto do bridge.
@@ -585,18 +606,24 @@
 - `trg_fabio_audios_upd → fn_set_atualizado_em()`
 - `trg_fabio_fila_novo → trg_fabio_fila_dispara()`
 
-## fabio_identidade_antes_do_portao_20260905
+## fabio_known_issue
+
+> Limite ja discutido e decidido. NAO silencia o achado -- separa. `ate` da validade: problema conhecido sem prazo vira tapete, e a decisao de conviver vira esquecimento.
 
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
-| `professor_id` | integer | sim |  |  |
-| `repertorio` | text[] | sim |  |  |
-| `vocabulario_tecnico` | text[] | sim |  |  |
-| `faixa_etaria` | jsonb | sim |  |  |
-| `assinatura` | text[] | sim |  |  |
-| `correcoes` | jsonb | sim |  |  |
-| `fichas_consideradas` | integer | sim |  |  |
-| `apurado_em` | timestamp with time zone | sim |  |  |
+| `id` | uuid | não | gen_random_uuid() |  |
+| `assinatura` | text | não |  |  |
+| `titulo` | text | não |  |  |
+| `porque` | text | não |  |  |
+| `decidido_por` | text | não |  |  |
+| `decidido_em` | timestamp with time zone | não | now() |  |
+| `ate` | date | sim |  |  |
+| `ativo` | boolean | não | true |  |
+
+**Únicos:**
+- `fabio_known_issue_pkey`
+- `ux_known_issue_assinatura`
 
 ## fabio_laudo
 
@@ -612,6 +639,25 @@
 
 **Únicos:**
 - `fabio_laudo_pkey`
+
+## fabio_licao
+
+> Licao versionada. Trocar uma licao e criar versao nova apontando `supersedes` para a anterior -- nunca `update`. Saber que a regra MUDOU vale tanto quanto saber qual e a regra.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `nome` | text | não |  |  |
+| `versao` | integer | não | 1 |  |
+| `texto` | text | não |  |  |
+| `porque` | text | sim |  |  |
+| `supersedes` | uuid | sim |  | fabio_licao.id |
+| `criada_por` | text | não |  |  |
+| `criada_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `fabio_licao_pkey`
+- `ux_licao_nome_versao`
 
 ## fabio_mineracao_janela
 
@@ -868,6 +914,59 @@
 - `uq_fabio_skills_ativa`
 - `uq_fabio_skills_nome_versao`
 
+## fabio_sonda
+
+> Pergunta CONGELADA. Mudar o texto exige `versao` nova -- reescrever a pergunta quando a resposta piora e parar de medir o agente e passar a medir a propria paciencia.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `nome` | text | não |  |  |
+| `versao` | integer | não | 1 |  |
+| `pergunta` | text | não |  |  |
+| `professor_id` | integer | não |  |  |
+| `espera` | text | não |  |  |
+| `ativa` | boolean | não | true |  |
+| `criada_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `fabio_sonda_pkey`
+
+## fabio_sonda_execucao
+
+> Uma linha por TENTATIVA, nao por sonda. `passou` nulo e falha de INSTRUMENTO (o Fabio nao respondeu), que nunca pode ser somada com falha do agente.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `nome` | text | não |  |  |
+| `versao` | integer | não |  |  |
+| `k` | integer | não |  |  |
+| `rodou_em` | timestamp with time zone | não | now() |  |
+| `resposta` | text | sim |  |  |
+| `esperado` | jsonb | não | '{}'::jsonb |  |
+| `passou` | boolean | sim |  |  |
+| `motivo` | text | sim |  |  |
+| `duracao_ms` | integer | sim |  |  |
+
+**Únicos:**
+- `fabio_sonda_execucao_pkey`
+
+## fabio_transcricao_contraponto
+
+> A MESMA gravacao lida por OUTRO motor de STT. Existe porque a alucinacao do Gemini medida em 05/09 e ESTAVEL (3/3 identico): repetir o mesmo motor nao pega, e a transcricao primaria nao pode ser gabarito de si mesma. Regra da casa: quem confere nao pode ser o mesmo modelo que produziu.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `audio_id` | uuid | não |  |  |
+| `motor` | text | não |  |  |
+| `texto` | text | sim |  |  |
+| `erro` | text | sim |  |  |
+| `rodado_em` | timestamp with time zone | não | now() |  |
+| `rodado_por` | text | não | 'claude'::text |  |
+
+**Únicos:**
+- `fabio_transcricao_contraponto_pkey`
+
 ## health_score_professor_v3_carteira_politicas_unidade
 
 > Politica temporal do pilar numero_alunos: meta total proporcional a disponibilidade canonica salva no LA Report.
@@ -1104,8 +1203,8 @@
 | `id` | uuid | não | gen_random_uuid() |  |
 | `snapshot_metrica_id` | uuid | não |  | health_score_professor_v3_snapshot_metricas.id |
 | `config_meta_segmento_id` | uuid | sim |  | health_score_professor_v3_config_metas_curso_modalidade.id |
-| `unidade_id` | uuid | não |  | unidades.id |
-| `curso_id` | integer | não |  | health_score_professor_v3_config_metas_curso_modalidade.curso_id |
+| `unidade_id` | uuid | não |  | health_score_professor_v3_config_metas_curso_modalidade.unidade_id |
+| `curso_id` | integer | não |  | professor_unidade_curso_modalidade.curso_id |
 | `modalidade` | text | não |  | professor_unidade_curso_modalidade.modalidade |
 | `pessoas_unicas` | integer | não | 0 |  |
 | `vinculos_ativos` | integer | não | 0 |  |
@@ -2710,6 +2809,19 @@
 | `curso` | text | sim |  |  |
 | `aluno_id` | integer | sim |  |  |
 | `contexto` | jsonb | sim |  |  |
+
+## vw_fabio_licao_vigente
+
+> So a versao mais nova de cada licao. A historia inteira fica em fabio_licao.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `nome` | text | sim |  |  |
+| `versao` | integer | sim |  |  |
+| `texto` | text | sim |  |  |
+| `porque` | text | sim |  |  |
+| `criada_por` | text | sim |  |  |
+| `criada_em` | timestamp with time zone | sim |  |  |
 
 ## vw_fabio_participacao_ocorrencia_estado
 

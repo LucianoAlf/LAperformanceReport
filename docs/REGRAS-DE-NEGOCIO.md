@@ -472,6 +472,17 @@ Evasão = movimentacoes_admin.tipo IN ('evasao', 'nao_renovacao')
 - **Trancamento NÃO é evasão.**
 - **Transferência interna entre unidades NÃO é evasão nem churn global da LA Music.** Para análise por unidade pode aparecer como saída da origem e entrada no destino, mas separada de evasão.
 - **Deduplicação:** `DISTINCT ON (lower(trim(aluno_nome)), unidade_id, ano, mês)`.
+- **Saída automática do Emusys é por matrícula, não por nome/mês:** o writer usa
+  `(unidade_id, emusys_matricula_id)` e grava `origem_registro='webhook_emusys'`.
+  Uma finalização posterior da mesma matrícula, em até 60 dias, substitui a
+  ocorrência automática anterior por anulação auditável; evento mais antigo que
+  o vigente é ignorado. Lançamento manual permanece `origem_registro='manual'` e
+  nunca é desfeito pelo sync.
+- **Cancelamento na fonte:** se a matrícula exata voltar a `ativa`, webhook e
+  `sync-matriculas-emusys` só reativam o aluno quando a saída vigente é automática,
+  tem no máximo 90 dias e `alunos.data_saida` ainda coincide com a data dessa
+  movimentação. Movimento e passagem são anulados, nunca apagados, e a ação fica
+  em `automacao_log`. Ambiguidade ou divergência de data falha fechada.
 - Movimentações de **atividade extra** (banda/coral) são excluídas via `is_movimentacao_admin_retencao_valida`.
 - **Bolsista e matrícula de banda também não contam** (§3.6: `BOLSISTA_INT`, `BOLSISTA_PARC` e `BANDA` têm "Churn ✘"; §3.7). Não é regra nova — mas até 27/08/2026 nenhuma implementação a aplicava, porque todas filtravam só por **curso** e bolsista em curso regular passava batido. O churn ficava aritmeticamente incoerente: `evasoes / alunos_pagantes`, com bolsista no numerador e fora do denominador por definição (`conta_como_pagante = false`).
   - Predicado canônico: **`movimentacao_conta_no_churn_v1(curso_id, tipo_matricula_id)`** (banco) e `contaNoChurn`/`filtrarMovimentacoesRetencaoKpi` em `src/lib/atividadesExtras.ts` (front). Mudou num, muda no outro.
@@ -886,6 +897,14 @@ As RPCs operacionais leem o estado **atual** do banco — recalcular uma compet�
 
 - **`dados_mensais` deixou de ser fonte de verdade** — virou camada de compatibilidade para telas antigas.
 - Matrícula lançada depois do corte só entra em competência fechada por **retificação append-only**, com aluno, matrícula Emusys, data de negócio e hash validados. O snapshot permanece intacto.
+- **Recreio, agosto/2026:** nove finalizações preliminares observadas em agosto
+  tiveram a saída efetiva em setembro. A retificação append-only preservou as
+  nove saídas de setembro, anulou oito movimentos e seis passagens preliminares
+  e publicou `344` ativos, `334` pagantes, `422` matrículas e churn `8,38%`.
+  O MRR contratual congelado permaneceu `R$ 144.749,17`; o ticket passou a
+  `R$ 433,38` (`MRR / 334`). Em `dados_mensais`, `faturamento_estimado` é coluna
+  gerada por `pagantes × ticket` e fica `R$ 144.748,92` por arredondamento; não é
+  a fonte do MRR.
 - O nome do gerente é responsabilidade operacional vigente e vem do cadastro atual — não reescreve o fechamento histórico.
 
 ### 10.2 Fluxo oficial de fechamento ✅

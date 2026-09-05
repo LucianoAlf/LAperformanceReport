@@ -506,17 +506,13 @@ test('v3 libera somente faturas confirmadas quando a reconciliacao parcial e fre
 });
 
 test('patch operacional exclui trancado e repara aluno por matricula unica', { timeout: 90_000 }, async (t) => {
-  await withCanonicalFixture(t, async (container, asOfDate) => {
-    // ⚠️ `asOfDate` e `month` vêm do fixture (data real de hoje), como nos outros
-    // 10 testes deste arquivo. Este era o único que fixava `asOfDate = '2026-08-16'`
-    // e `month = date '2026-08-01'` enquanto o vencimento padrão de `invoice()`
-    // continuava relativo (`current_date - 3`) — as duas pontas se afastavam a cada
-    // dia e o teste quebrou SOZINHO em 19/08/2026, sem ninguém tocar no código:
-    // `current_date - 3` virou 16/08, e a regra de vencimento é estrita
-    // (`data_vencimento < p_as_of_date`), então 16/08 < 16/08 é falso e a fatura
-    // saía do resultado. Manter ancorado no fixture — nunca misturar data de corte
-    // fixa com vencimento relativo.
-    const month = `date_trunc('month', date '${asOfDate}')::date`;
+  await withCanonicalFixture(t, async (container) => {
+    // Esta migration foi um backfill historico restrito a jun-ago/2026. A fixture
+    // precisa permanecer dentro dessa janela e usar vencimento absoluto anterior
+    // ao corte; atrelar qualquer uma das pontas a current_date torna o teste falso
+    // quando o calendario avanca.
+    const asOfDate = '2026-08-20';
+    const month = "date '2026-08-01'";
     insertAluno(container, 701, UNIT_A, '2701', { student: null, status: 'ativo' });
     insertOperationalState(container, UNIT_A, '2701', 701, 'ativo', 'ativa');
     insertAluno(container, 702, UNIT_A, '2702', { status: 'trancado' });
@@ -526,8 +522,8 @@ test('patch operacional exclui trancado e repara aluno por matricula unica', { t
     const lockedInvoice = '70000000-0000-0000-0000-000000000702';
     seedRun(container, run, month);
     insertInvoices(container, [
-      invoice(activeInvoice, UNIT_A, run, month, 2701, { student: 9701, value: 100 }),
-      invoice(lockedInvoice, UNIT_A, run, month, 2702, { value: 200 }),
+      invoice(activeInvoice, UNIT_A, run, month, 2701, { student: 9701, value: 100, due: "date '2026-08-17'" }),
+      invoice(lockedInvoice, UNIT_A, run, month, 2702, { value: 200, due: "date '2026-08-17'" }),
     ], 'patch de estado financeiro ativo');
 
     for (const migration of POLICY_PATCH_MIGRATIONS) {

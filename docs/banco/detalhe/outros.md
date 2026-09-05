@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — outros
 
-5 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+6 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## comunidade_wa_grupos
 
@@ -102,4 +102,17 @@
 | `cliques` | bigint | sim |  |  |
 | `conversoes_plataforma` | numeric | sim |  |  |
 | `moeda` | text | sim |  |  |
+
+## vw_retomada_eficacia_v1
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `retomadas_fechadas` | bigint | sim |  |  |
+| `matriculou` | bigint | sim |  |  |
+| `matriculou_no_prazo` | bigint | sim |  |  |
+| `fechadas_no_prazo` | bigint | sim |  |  |
+| `aguardando` | bigint | sim |  |  |
+| `sem_data` | bigint | sim |  |  |
+| `veio_da_conversa` | bigint | sim |  |  |
+| `veio_da_consultora` | bigint | sim |  |  |
 

@@ -144,11 +144,23 @@ A edge faz `switch(evento)`:
 | `matricula_nova` | Insere aluno em `alunos`, resolve professor/curso/pagamento, converte o lead (`leads.aluno_id` + `alunos.lead_origem_id`). |
 | `matricula_renovacao` | Atualiza contrato/valor + `movimentacoes_admin` (renovação). |
 | `matricula_trancamento` | Trancamento + `movimentacoes_admin`. |
-| `matricula_finalizacao` | Resolve o motivo: `inativa` + `interrompida` gera evasão; `inativa` + `concluida` gera não renovação/contrato concluído. Valor ausente ou ambíguo vai para auditoria e não altera o estado local automaticamente. |
+| `matricula_finalizacao` | Resolve o motivo: `inativa` + `interrompida` gera evasão; `inativa` + `concluida` gera não renovação/contrato concluído. Valor ausente ou ambíguo vai para auditoria e não altera o estado local automaticamente. A saída é registrada pela RPC `registrar_saida_automatica_emusys_v1`, por unidade + matrícula Emusys. |
 
 - A pesquisa pós-saída consome o `movimentacoes_admin.id` criado nesse ciclo; não volta a depender de `evasoes_v2`.
+- **Finalização reenviada:** a chave antiga por nome + competência permitia duas
+  saídas vigentes e confundia segundo curso/banda. Agora
+  `movimentacoes_admin.emusys_matricula_id` identifica o vínculo e
+  `origem_registro` separa automação de lançamento humano. Dentro de 60 dias,
+  uma data posterior substitui somente a ocorrência automática da mesma
+  matrícula por soft-delete; uma entrega fora de ordem não regride a data local.
+- **Matrícula voltou a ativa:** `matricula_alterada` consulta a matrícula exata na
+  API e o pull diário faz a mesma compensação pela RPC
+  `reconciliar_saida_automatica_cancelada_v1`. A reativação exige origem
+  `webhook_emusys`, identidade única, saída recente e igualdade entre
+  `alunos.data_saida` e a movimentação. Saída manual não é tocada; sucesso e
+  falha deixam rastro.
 
-- Idempotência por evento; saúde via `_shared/invariantes.ts` (`automacao_log`/`automacao_invariantes`). `verify_jwt: false` é comportamento preexistente do webhook e a proteção por segredo/assinatura permanece pendência de segurança separada, atribuída ao responsável pela integração Emusys.
+- Idempotência por evento; saúde via `_shared/invariantes.ts` (`automacao_log`/`automacao_invariantes`). `verify_jwt: true`: o Emusys chega pelo n8n, que envia o JWT; a função não é um webhook público direto.
 
 ### 1.4 Webhook NÃO consumido
 `aula_cancelada` (aula regular) — sem receptor dedicado; o estado da aula é reconciliado pelo sync de `/aulas/`.
@@ -195,6 +207,11 @@ A edge faz `switch(evento)`:
 - **Segurança temporal:** o GET reconcilia estado atual e jornada, mas não
   inventa a data histórica de evasão, conclusão ou trancamento. Movimentos
   históricos só nascem de evento com data real.
+- **Compensação de falso terminal:** se o GET trouxer `ativa` para uma matrícula
+  cujo aluno local está terminal, a RPC de reconciliação pode desfazer somente a
+  saída automática recente e exatamente compatível. Ela anula movimento e
+  passagem, reativa o aluno e audita; não usa nome, não cruza unidades e não
+  alcança lançamentos manuais.
 - **Cadastro e grade:** pelo mesmo par de identidade, o sync atualiza
   diretamente telefone, e-mail, responsável, telefone do responsável, foto e
   Instagram no cadastro canônico, respeitando `matriculas_campos_fixados`.

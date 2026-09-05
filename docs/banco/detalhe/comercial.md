@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — comercial
 
-65 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+67 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## agente_conversas
 
@@ -724,6 +724,35 @@
 - `lead_experimental_registros_pkey`
 - `uq_lead_exp_registro_vigente`
 
+## lead_retomada
+
+> Agenda de retomada ("bumerangue"): quando o lead pediu para voltar a falar, POR QUE, e a frase original. Dorme ate o dia. Desfecho fecha o laco 3o->2o andar.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `lead_id` | bigint | não |  | leads.id |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `prometido_em` | date | não |  |  |
+| `prazo_texto` | text | sim |  |  |
+| `retomar_em` | date | sim |  |  |
+| `frase` | text | não |  |  |
+| `motivo` | text | sim |  |  |
+| `origem` | text | não | 'consultora'::text |  |
+| `conversation_id` | bigint | sim |  |  |
+| `status` | text | não | 'aguardando'::text |  |
+| `lembrado_em` | timestamp with time zone | sim |  |  |
+| `desfecho` | text | sim |  |  |
+| `desfecho_em` | timestamp with time zone | sim |  |  |
+| `desfecho_nota` | text | sim |  |  |
+| `criado_por` | text | sim |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `lead_retomada_pkey`
+- `lead_retomada_viva_uidx`
+
 ## leads
 
 > Leads comerciais - do primeiro contato até a conversão ou arquivamento
@@ -794,6 +823,7 @@
 | `meta_ad_source_id` | text | sim |  |  |
 | `meta_ctwa_clid` | text | sim |  |  |
 | `data_nascimento` | date | sim |  |  |
+| `origem_registro` | text | não | 'funil'::text |  |
 
 **Únicos:**
 - `idx_leads_emusys_lead_id`
@@ -1052,6 +1082,11 @@
 | `message_id` | bigint | sim |  |  |
 | `erro` | text | sim |  |  |
 | `versoes` | jsonb | não | '[]'::jsonb |  |
+| `aguarda_resposta` | boolean | não | false |  |
+| `resposta` | text | sim |  |  |
+| `respondido_em` | timestamp with time zone | sim |  |  |
+| `retorno_entregue_em` | timestamp with time zone | sim |  |  |
+| `retorno_conversation_id` | bigint | sim |  |  |
 
 **Únicos:**
 - `mila_recados_pkey`
@@ -1420,6 +1455,21 @@
 | `total_leads` | bigint | sim |  |  |
 | `matriculas` | bigint | sim |  |  |
 | `taxa_conversao` | numeric | sim |  |  |
+
+## vw_leads_sinteticos_por_mes
+
+> Tamanho do lead sintetico (criado pelo gatilho a partir da matricula) por mes e unidade, com a taxa de conversao COM e SEM ele. Insumo da decisao sobre o denominador do funil.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `competencia` | date | sim |  |  |
+| `unidade` | character varying(100) | sim |  |  |
+| `leads_no_mes` | integer | sim |  |  |
+| `sinteticos` | integer | sim |  |  |
+| `pct_sintetico` | numeric | sim |  |  |
+| `converteu` | integer | sim |  |  |
+| `conv_com_sinteticos` | numeric | sim |  |  |
+| `conv_so_funil` | numeric | sim |  |  |
 
 ## vw_matriculas_por_canal
 

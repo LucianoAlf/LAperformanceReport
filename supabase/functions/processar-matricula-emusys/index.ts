@@ -1092,10 +1092,52 @@ async function registrarMovimentacao(
     agenteComercial?: string | null;
     dataMovimento?: string | null;
   } = {},
-): Promise<boolean> {
+): Promise<boolean | Record<string, unknown>> {
   const dataMovimento = dateOnlyISO(valores.dataMovimento) ?? hojeISOBRT();
   const inicioMes = inicioMesISO(dataMovimento);
   const competenciaReferencia = valores.competenciaReferencia ?? inicioMes;
+
+  let motivoSaidaId: number | null = null;
+  if (motivo && !motivo.startsWith('Via Emusys') && !motivo.startsWith('Renovação automática')) {
+    const { data: motivoMatch } = await supabase
+      .from('motivos_saida')
+      .select('id')
+      .ilike('nome', motivo)
+      .eq('ativo', true)
+      .limit(1)
+      .maybeSingle();
+    motivoSaidaId = motivoMatch?.id || null;
+  }
+
+  // Saída automática tem identidade própria. A chave antiga (nome + mês)
+  // confundia banda/segundo curso e mantinha duas competências quando o
+  // Emusys reenviava a finalização alguns dias depois.
+  if (
+    (tipo === 'evasao' || tipo === 'nao_renovacao')
+    && p.matriculaIdEmusys
+    && alunoId
+  ) {
+    const { data, error } = await supabase.rpc('registrar_saida_automatica_emusys_v1', {
+      p_unidade_id: p.unidadeId,
+      p_aluno_id: alunoId,
+      p_aluno_nome: p.nomeAluno,
+      p_professor_id: professorId,
+      p_curso_id: cursoId,
+      p_tipo: tipo,
+      p_data: dataMovimento,
+      p_motivo: motivo,
+      p_motivo_saida_id: motivoSaidaId,
+      p_competencia_referencia: competenciaReferencia,
+      p_emusys_matricula_id: p.matriculaIdEmusys,
+      p_valor_parcela_evasao: valores.valorParcelaEvasao ?? valores.valorParcelaAnterior ?? null,
+    });
+    if (error) throw error;
+    return data ?? {
+      ok: false,
+      movimentacao_registrada: false,
+      erro: 'registrar_saida_automatica_sem_retorno',
+    };
+  }
 
   let existingQuery = supabase.from('movimentacoes_admin')
     .select('id')
@@ -1146,18 +1188,6 @@ async function registrarMovimentacao(
 
   if (existing?.length) return false;
 
-  let motivoSaidaId: number | null = null;
-  if (motivo && !motivo.startsWith('Via Emusys') && !motivo.startsWith('Renovação automática')) {
-    const { data: motivoMatch } = await supabase
-      .from('motivos_saida')
-      .select('id')
-      .ilike('nome', motivo)
-      .eq('ativo', true)
-      .limit(1)
-      .maybeSingle();
-    motivoSaidaId = motivoMatch?.id || null;
-  }
-
   const payload: any = {
     unidade_id: p.unidadeId,
     data: dataMovimento,
@@ -1169,6 +1199,8 @@ async function registrarMovimentacao(
     motivo,
     motivo_saida_id: motivoSaidaId,
     competencia_referencia: competenciaReferencia,
+    emusys_matricula_id: p.matriculaIdEmusys ?? null,
+    origem_registro: 'webhook_emusys',
     created_at: new Date().toISOString(),
   };
 
@@ -1180,7 +1212,6 @@ async function registrarMovimentacao(
     payload.renovacao_status = valores.renovacaoStatus ?? 'pendente_validacao';
     payload.forma_pagamento_id = valores.formaPagamentoId ?? null;
     payload.agente_comercial = valores.agenteComercial ?? null;
-    payload.emusys_matricula_id = p.matriculaIdEmusys ?? null;
   }
 
   if (tipo === 'evasao' || tipo === 'nao_renovacao') {
@@ -2207,16 +2238,6 @@ async function handleSaidaFinalizada(
     const aluno = found.aluno;
     await backfillMatriculaId(supabase, aluno.id, p.matriculaIdEmusys, aluno.emusys_matricula_id);
 
-    const saidaUpdate: any = {
-      status: config.statusLocal,
-      data_saida: p.dataEvento,
-      updated_at: new Date().toISOString(),
-    };
-    if (p.fotoAlunoUrl) saidaUpdate.foto_url = p.fotoAlunoUrl;
-    if (p.instagram) saidaUpdate.instagram = p.instagram;
-
-    await supabase.from('alunos').update(saidaUpdate).eq('id', aluno.id);
-
     const motivo = p.finalizacaoMotivo
       || (config.movimento === 'nao_renovacao'
         ? 'Contrato concluído no Emusys (automação)'
@@ -2232,20 +2253,48 @@ async function handleSaidaFinalizada(
       { dataMovimento: p.dataEvento },
     );
 
-    const passagem = await registrarPassagemFinalizada(
-      supabase,
-      { id: aluno.id, nome: aluno.nome },
-      p,
-      config.categoriaSaida,
-    );
+    const eventoAntigoIgnorado = typeof movRegistrada === 'object'
+      && movRegistrada !== null
+      && movRegistrada.evento_antigo_ignorado === true;
+    const movimentacaoRegistrada = typeof movRegistrada === 'object'
+      && movRegistrada !== null
+      ? movRegistrada.movimentacao_registrada === true
+      : movRegistrada === true;
+
+    let passagem: any = {
+      gravou_historico: false,
+      motivo: 'evento_antigo_ignorado',
+    };
+
+    // Um webhook antigo pode chegar depois de uma finalização mais nova. Ele
+    // fica auditado, mas não volta a data_saida nem reabre a competência velha.
+    if (!eventoAntigoIgnorado) {
+      const saidaUpdate: any = {
+        status: config.statusLocal,
+        data_saida: p.dataEvento,
+        updated_at: new Date().toISOString(),
+      };
+      if (p.fotoAlunoUrl) saidaUpdate.foto_url = p.fotoAlunoUrl;
+      if (p.instagram) saidaUpdate.instagram = p.instagram;
+
+      await supabase.from('alunos').update(saidaUpdate).eq('id', aluno.id);
+
+      passagem = await registrarPassagemFinalizada(
+        supabase,
+        { id: aluno.id, nome: aluno.nome },
+        p,
+        config.categoriaSaida,
+      );
+    }
 
     const result = {
-      action: config.action,
+      action: eventoAntigoIgnorado ? 'finalizacao_antiga_ignorada' : config.action,
       aluno_id: aluno.id,
       matched_via: found.fonte,
       motivo,
       observacoes: p.finalizacaoObservacoes,
-      movimentacao_registrada: movRegistrada,
+      movimentacao_registrada: movimentacaoRegistrada,
+      movimentacao: movRegistrada,
       passagem,
     };
 
@@ -2523,12 +2572,55 @@ async function aplicarAlteracaoNoCadastro(supabase: any, p: Payload) {
   }
 }
 
+async function reconciliarSaidaAutomaticaCanceladaWebhook(supabase: any, p: Payload) {
+  if (!p.matriculaIdEmusys || !p.unidadeId) {
+    return { reconciliada: false, motivo: 'sem_matricula_ou_unidade' };
+  }
+
+  try {
+    const matriculaId = Number(p.matriculaIdEmusys);
+    if (!Number.isFinite(matriculaId)) {
+      return { reconciliada: false, motivo: 'matricula_invalida' };
+    }
+
+    const estadoAtual = await buscarMatriculaApiPorId(
+      p.escolaId,
+      matriculaId,
+      p.alunoEmusysId,
+    );
+    if (String(estadoAtual?.status ?? '').trim().toLowerCase() !== 'ativa') {
+      return {
+        reconciliada: false,
+        motivo: estadoAtual ? 'fonte_nao_ativa' : 'fonte_indisponivel',
+      };
+    }
+
+    const { data, error } = await supabase.rpc(
+      'reconciliar_saida_automatica_cancelada_v1',
+      {
+        p_unidade_id: p.unidadeId,
+        p_emusys_matricula_id: p.matriculaIdEmusys,
+        p_status_emusys: estadoAtual.status,
+        p_observado_em: new Date().toISOString(),
+      },
+    );
+    if (error) throw error;
+    return data ?? { reconciliada: false, motivo: 'rpc_sem_retorno' };
+  } catch (erro: any) {
+    const mensagem = erro?.message ?? String(erro);
+    console.error(`[${VERSAO}] reconciliar saída automática cancelada falhou:`, mensagem);
+    return { reconciliada: false, motivo: 'erro', erro: mensagem };
+  }
+}
+
 async function handleMatriculaAlterada(supabase: any, p: Payload) {
+  const compensacaoSaida = await reconciliarSaidaAutomaticaCanceladaWebhook(supabase, p);
   const cadastro = await aplicarAlteracaoNoCadastro(supabase, p);
 
   const result = {
     action: 'jornada_matricula_alterada_recebida',
     emusys_matricula_id: p.matriculaIdEmusys,
+    compensacao_saida: compensacaoSaida,
     cadastro,
   };
 

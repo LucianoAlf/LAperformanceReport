@@ -28,6 +28,14 @@
   professor, dia e horário. Forma/status de pagamento seguem a fila financeira
   de atributos; valor e contrato seguem seus tipos próprios. Decisões manuais
   permanecem auditadas e forma de pagamento escolhida no LA Report é fixada.
+- **Saída automática por matrícula (05/09/2026):**
+  `processar-matricula-emusys` delega evasão/não renovação à RPC privada
+  `registrar_saida_automatica_emusys_v1`, usando unidade + matrícula Emusys e
+  `origem_registro='webhook_emusys'`. Reentrega posterior substitui somente a
+  ocorrência automática recente; entrega antiga não volta a data. Tanto
+  `matricula_alterada` quanto `sync-matriculas-emusys` chamam
+  `reconciliar_saida_automatica_cancelada_v1` quando a matrícula exata reaparece
+  ativa. A compensação falha fechada e nunca reverte saída manual.
 - **Edge functions:** `gerar-relatorio-pedagogico` (Gemini 3 Flash; gera o relatório pedagógico a partir das anotações e persiste em `relatorios_pedagogicos`). Auditoria IA usa `execute_bi_query_lamusic` via RPC.
 - **Tabelas:** `relatorios_pedagogicos` (histórico de relatórios pedagógicos gerados por IA; RLS por unidade padrão `metas`).
 

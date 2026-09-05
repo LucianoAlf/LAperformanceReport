@@ -30996,6 +30996,7 @@ export type Database = {
           motivo_saida_id: number | null
           motivo_trancamento_id: number | null
           observacoes: string | null
+          origem_registro: string
           previsao_retorno: string | null
           professor_id: number | null
           renovacao_antecipada: boolean
@@ -31036,6 +31037,7 @@ export type Database = {
           motivo_saida_id?: number | null
           motivo_trancamento_id?: number | null
           observacoes?: string | null
+          origem_registro?: string
           previsao_retorno?: string | null
           professor_id?: number | null
           renovacao_antecipada?: boolean
@@ -31076,6 +31078,7 @@ export type Database = {
           motivo_saida_id?: number | null
           motivo_trancamento_id?: number | null
           observacoes?: string | null
+          origem_registro?: string
           previsao_retorno?: string | null
           professor_id?: number | null
           renovacao_antecipada?: boolean
