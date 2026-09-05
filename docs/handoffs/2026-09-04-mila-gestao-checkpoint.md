@@ -285,3 +285,70 @@ pessoa (`chatwoot-consultor-v2-<telefone>`), então o histórico já é o fio.
 A citação é característica da **Maria**, que trabalha em grupo com várias
 propostas abertas ao mesmo tempo. `recado_pendente` só entra quando o fio se
 perde de verdade.
+
+---
+
+## 06/09/2026 — base de conhecimento comercial v1 chegou (PR #348, **draft**)
+
+O Alf entregou o pacote curado: **11 blocos**, índice com plano de carga em 6
+passos, uma seção de SKILL e uma estratégia candidata. Fontes versionadas em
+`docs/base-conhecimento-comercial/`.
+
+**Passos 1 e 2 escritos e NÃO aplicados** — o combinado é ele revisar o diff
+antes do `apply_migration`. PR em draft por isso.
+
+### Conflitos entre os blocos e o que existe hoje
+
+| citado no bloco | estado real |
+|---|---|
+| `leads.indicado_por` (bloco 2) | 🔴 **não existe** — já está na tabela de alicerce do índice |
+| `lead_retomada` "em construção" (bloco 5) | ✅ **já existe** desde 05/09 (PR #336) — o índice está defasado; o bloco 5 pode rodar hoje |
+| `matriculas_comerciais_v1`, `mila_atendimento_serie_v1`, `radar_publico_reativacao_v1` | ✅ existem |
+| tools `onde_focar`, `trafego_por_criativo` | ✅ existem (das 29 do MCP) |
+| `origem_registro='sync_aluno'` (blocos 6, 7, 11) | ✅ existe (PR #341) |
+| `radar_estrategias.evidencia_eficacia` (o laço de medir) | ⚠️ coluna existe e está **vazia nas 14 estratégias** |
+| PC1 "4.247 leads" | ✅ confere (`radar_padroes.amostra_n` = 4247), medido 03/09 |
+| checkpoint em `docs/superpowers/specs/…` | ⚠️ o arquivo real é `docs/handoffs/2026-09-04-mila-gestao-checkpoint.md` |
+
+**Conflito que a carga criaria e foi fechado no mesmo PR:** a subaba Conhecimento
+lista a tabela inteira sem filtro — 4 blocos virariam 15, misturando script de
+bot com material de liderança no mesmo editor. Passou a filtrar `publico='lead'`.
+⚠️ Deploy: **migration antes do front**.
+
+### Pendências do índice que o banco respondeu
+
+**#4 — corridinha de agosto: RESPONDIDA pelo Alf.** Era **por consultora**, e a
+meta era **31**. Agosto fechou, na medida canônica (`matriculas_comerciais_v1`):
+**Barra 19 · Recreio 23 · Campo Grande 24**. **Ninguém bateu.** Fim.
+
+⚠️ **Cicatriz de método, minha, em 06/09:** ao ver que nenhuma unidade chegava a
+31, saí procurando uma contagem alternativa que produzisse 31 — e achei uma (CG
+canônico + segundo curso = 31), tratando a coincidência como explicação. Isso é
+**ajustar a régua ao resultado**. O Alf cortou na hora: a medida canônica está
+certa e ninguém ganhou. Quando um número esperado não aparece, a primeira
+hipótese é que **ele não aconteceu**, não que a métrica é outra.
+
+**#5 — janela de maturação da coorte de mídia.** Convertidos dos últimos 6 meses,
+dias entre lead e matrícula: **Instagram (n=65) mediana 10 dias, 84,6% em 30 dias**,
+89,2% em 45, 92,3% em 60 · Google (n=48) 85,4% em 30 · Indicação (n=56) 76,8% em
+30, e é a mais lenta na cauda (p90 = 63 dias). **Os 30 dias provisórios seguram
+~85% da coorte**; 45 dias levaria a 89% ao custo de uma leitura mais lenta.
+⚠️ Só os atribuídos a anúncio Meta (`meta_ad_source_id`) são **n=16** — pequeno
+demais para decidir sozinho; por isso a leitura é por canal.
+
+**#9 — as conversas de uma mensagem.** Remedidas do zero (o CSV de 05/09 saiu
+anonimizado da extração, então o telefone não existia mais para cruzar):
+**215 conversas em 900, e 1 converteu (0,5%)**.
+🔴 **Elas não são perguntas que o bot não soube responder — são cliques.**
+**90 (42%)** são exatamente *"Olá! Posso ter mais informações sobre isso?"*, o
+texto que o **Click-to-WhatsApp da Meta preenche sozinho**; outras **45 (21%)**
+são *"Quero informações das aulas de música na LA Music Kids &lt;unidade&gt;"*, outro
+texto pré-preenchido. **~63% do que a equipe vê como "conversa morta" é template
+automático, não alguém digitando.** Bate com o resto: Instagram é 43,7% delas, e
+**21,4% chegaram entre meia-noite e 8h**. Por unidade: **Recreio 48,8%**, Barra
+27,0%, CG 24,2%. Amostra (sem telefone, sem nome) em
+`.local/estudos/conversas-uma-mensagem-SEM-PII.csv`.
+
+### Continua com o Alf e a Krissya
+LA Talent em vigor · validade do valor de fechamento · quem escreve a devolutiva
+· Krissya líder das 3 ou gerente da Barra · e o passo 0 (a Krissya ler os 11).
