@@ -66,10 +66,19 @@ def tem_pergunta(t: str) -> bool:
     return bool(INTERROGATIVA.search(t or ""))
 
 
-def avaliar(msgs):
-    """Recebe as mensagens em ordem e devolve os dois sinais + contexto."""
+def avaliar(msgs, corte_ts=None):
+    """Recebe as mensagens em ordem e devolve os dois sinais + contexto.
+
+    🔴 `corte_ts` descarta tudo a partir da matricula. Sem esse corte a medicao
+    se contamina: DEPOIS da venda a escola manda confirmacao de pagamento,
+    checklist de dados e lembrete da 1a aula — mensagens sem pergunta que so
+    existem em quem converteu. Na 1a rodada isso inverteu o resultado (S1
+    aparecia em 57,6% de quem fechou contra 36,5% de quem nao fechou).
+    """
     falas = []
     for m in msgs:
+        if corte_ts and (m.get("created_at") or 0) > corte_ts:
+            continue
         if m.get("message_type") == 2:          # evento de sistema
             continue
         txt = (m.get("content") or "").strip()
@@ -163,7 +172,14 @@ def main():
         if not achado:
             sem_conversa += 1
             continue
-        v = avaliar(achado[1])
+        corte = None
+        if r.get("data_conversao"):
+            # fim do DIA da matricula, em BRT: a confirmacao costuma vir horas
+            # depois do fechamento, e cortar no zero hora perderia a conversa toda
+            import datetime as _dt
+            d = _dt.date.fromisoformat(r["data_conversao"])
+            corte = int(_dt.datetime(d.year, d.month, d.day, 23, 59, 59).timestamp()) + 3 * 3600
+        v = avaliar(achado[1], corte)
         if not v:
             sem_conversa += 1
             continue
