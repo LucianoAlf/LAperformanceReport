@@ -91,6 +91,35 @@ async function cw(method, path, body) {
   return res.json();
 }
 
+// 🔴 Colaborador nao mora numa caixa. A Anne Krissya lidera as tres unidades e
+// conversa comigo pela caixa da BARRA; um recado dela para a Vitoria (CG) volta
+// com "unidade = Campo Grande" e, se eu procurasse so ali, o retorno morreria em
+// "essa pessoa nunca falou com a Mila desta unidade". A pessoa e uma so; a caixa
+// e acidente de historico. Entao: tenta a caixa da unidade e, se nao houver
+// conversa, aceita QUALQUER caixa da Mila em que ela ja tenha falado.
+async function enviarParaPessoa(telefone, unidadeNome, texto) {
+  const digitos = String(telefone).replace(/\D/g, '');
+  const preferida = INBOX_POR_UNIDADE[unidadeNome];
+  const caixas = Object.values(INBOX_POR_UNIDADE);
+  const busca = await cw('GET', `/contacts/search?q=${digitos}`);
+  const candidatas = [];
+  for (const c of (busca?.payload || [])) {
+    if (String(c.phone_number || '').replace(/\D/g, '') !== digitos) continue;
+    const convs = await cw('GET', `/contacts/${c.id}/conversations`);
+    for (const cv of (convs?.payload || [])) {
+      if (caixas.includes(cv.inbox_id)) candidatas.push(cv);
+    }
+  }
+  if (!candidatas.length) throw new Error('essa pessoa nunca falou comigo em nenhuma unidade — nao tenho conversa aberta');
+  candidatas.sort((x, y) =>
+    (y.inbox_id === preferida ? 1 : 0) - (x.inbox_id === preferida ? 1 : 0)
+    || (y.last_activity_at || 0) - (x.last_activity_at || 0));
+  const convId = candidatas[0].id;
+  const msg = await cw('POST', `/conversations/${convId}/messages`,
+    { content: texto, message_type: 'outgoing', private: false });
+  return { conversation_id: convId, message_id: msg?.id };
+}
+
 async function enviarWhatsApp(telefone, unidadeNome, texto) {
   const inbox = INBOX_POR_UNIDADE[unidadeNome];
   if (!inbox) throw new Error(`sem caixa da Mila para ${unidadeNome}`);
@@ -176,9 +205,9 @@ const ESCRITA = [
     description: 'ESCREVE. Atribui o lead a outro colaborador DA MESMA UNIDADE ("hoje quem atendeu foi o Jhon"). Por padrão o consultor é o responsável da unidade; isto é o override.',
     inputSchema: { type: 'object', required: ['lead_id', 'consultor'], properties: { lead_id: { type: 'integer' }, consultor: { type: 'string' } } } },
   { name: 'propor_recado',
-    description: 'PROPOE (nao envia) uma mensagem que EU vou mandar em nome da consultora — para um LEAD/cliente ou para um PROFESSOR da unidade dela. Ex.: "avisa a Jaqueline que eu retorno amanha a tarde", "avisa o professor que o Caio vai faltar". Eu escrevo o texto, MOSTRO para ela e SO ENVIO depois que ela aprovar com enviar_recado. Se voltar `ambiguo`, PERGUNTE qual — nunca escolha. A proposta vence em 30 min.',
+    description: 'PROPOE (nao envia) uma mensagem que EU vou mandar em nome de quem pediu — para um LEAD/cliente, para um PROFESSOR, ou para um COLABORADOR da equipe (consultora, lider). Recado para colaborador ESPERA RESPOSTA: eu aviso a pessoa, ela me responde, e eu levo a resposta de volta a quem pediu. Ex.: "avisa a Jaqueline que eu retorno amanha a tarde", "avisa o professor que o Caio vai faltar". Eu escrevo o texto, MOSTRO para ela e SO ENVIO depois que ela aprovar com enviar_recado. Se voltar `ambiguo`, PERGUNTE qual — nunca escolha. A proposta vence em 30 min.',
     inputSchema: { type: 'object', required: ['destino_tipo', 'destino', 'texto'],
-      properties: { destino_tipo: { type: 'string', enum: ['lead','professor'] },
+      properties: { destino_tipo: { type: 'string', enum: ['lead','professor','colaborador'] },
                     destino: { type: 'string', description: 'nome, telefone ou id' },
                     texto: { type: 'string', description: 'a mensagem pronta, ja assinada por mim (Mila), como ela vai chegar' },
                     assunto: { type: 'string', description: 'o que a consultora pediu, em poucas palavras (fica na trilha)' } } } },
@@ -190,6 +219,17 @@ const ESCRITA = [
   { name: 'recado_pendente',
     description: 'Qual proposta de recado esta em aberto com esta consultora agora. Use quando ela disser "troca isso", "manda entao", "pode" e voce NAO tiver o recado_id a mao (reinicio de sessao, rajada de mensagens). Se nao houver pendente, PERGUNTE de que recado ela fala — nao adivinhe.',
     inputSchema: { type: 'object', properties: {} } },
+  { name: 'recado_para_mim',
+    description: 'O que ALGUEM DA EQUIPE pediu para eu avisar a esta pessoa e ainda esta sem resposta. Chame quando ela responder algo que parece retorno de um recado ("pode falar pra Anne que ja fiz", "diz pra ela que...") ou quando ela perguntar se tem recado. Se houver mais de um, PERGUNTE de qual ela fala.',
+    inputSchema: { type: 'object', properties: {} } },
+  { name: 'responder_recado',
+    description: 'Registra a RESPOSTA dela a um recado e me devolve para quem levar. Depois de chamar, escreva o retorno para quem pediu (citando o pedido e a resposta) e mande com enviar_retorno_recado. Nunca invente a resposta: use o que ela disse.',
+    inputSchema: { type: 'object', required: ['recado_id', 'resposta'],
+      properties: { recado_id: { type: 'string' }, resposta: { type: 'string', description: 'O que ela respondeu, nas palavras dela.' } } } },
+  { name: 'enviar_retorno_recado',
+    description: 'LEVA a resposta de volta a quem pediu o recado. So depois de responder_recado. O texto e voce que escreve, com o pedido original e a resposta dela.',
+    inputSchema: { type: 'object', required: ['recado_id', 'texto'],
+      properties: { recado_id: { type: 'string' }, texto: { type: 'string' } } } },
   { name: 'enviar_recado',
     description: 'ENVIA o recado que ela ACABOU de aprovar. So chame depois de um "pode", "manda", "isso mesmo" — nunca por conta propria, nunca no mesmo turno em que voce propos. Use o recado_id que veio de propor_recado.',
     inputSchema: { type: 'object', required: ['recado_id'], properties: { recado_id: { type: 'string' } } } },
@@ -282,14 +322,51 @@ async function callTool(name, a) {
       if (!ap?.ok) return j(ap);
       // 2) o envio e daqui: o cracha (service key + token do Chatwoot) nunca passa pelo modelo
       try {
-        const r = await enviarWhatsApp(ap.destino.telefone, ap.unidade, ap.texto);
+        // Colaborador nao mora numa caixa: procura a pessoa em qualquer uma (ver
+        // enviarParaPessoa). Lead e professor seguem presos a unidade, que e o certo.
+        const corpo = ap.destino.tipo === 'colaborador'
+          ? `${ap.texto}
+
+_${ap.de} me pediu para te avisar. Pode me responder por aqui que eu levo a resposta._`
+          : ap.texto;
+        const r = ap.destino.tipo === 'colaborador'
+          ? await enviarParaPessoa(ap.destino.telefone, ap.unidade, corpo)
+          : await enviarWhatsApp(ap.destino.telefone, ap.unidade, corpo);
         await rpc('mila_confirmar_recado_v1', { p_recado_id: a.recado_id,
           p_conversation_id: r.conversation_id, p_message_id: r.message_id });
-        return j({ ok: true, enviado: true, para: ap.destino.nome, conversa: r.conversation_id });
+        return j({ ok: true, enviado: true, para: ap.destino.nome, conversa: r.conversation_id,
+                   aguarda_resposta: !!ap.aguarda_resposta });
       } catch (e) {
         await rpc('mila_confirmar_recado_v1', { p_recado_id: a.recado_id, p_erro: String(e.message || e) });
         return j({ ok: false, enviado: false, motivo: String(e.message || e),
                    nota: 'nao saiu — diga isso a ela, nao finja que mandou' });
+      }
+    }
+    case 'recado_para_mim':
+      return j(await rpc('mila_recado_para_mim_v1', { p_telefone: tel }));
+    case 'responder_recado':
+      return j(await rpc('mila_responder_recado_v1', { p_telefone: tel,
+        p_recado_id: a.recado_id, p_resposta: a.resposta }));
+    case 'enviar_retorno_recado': {
+      // A VOLTA. Mesma disciplina do envio: em sombra nao sai nada.
+      if (DRY) return j({ dry_run: true, levaria: true, recado_id: a.recado_id,
+                          nota: 'modo sombra: o retorno nao foi entregue' });
+      // 🔴 LEITURA, nao re-resposta. A 1a versao chamava responder_recado de novo
+      // so para descobrir o destino, e isso SOBRESCREVERIA a resposta real com
+      // um texto de servico.
+      const pend = await rpc('mila_retorno_pendente_v1', { p_telefone: tel, p_recado_id: a.recado_id });
+      if (!pend?.ok) return j(pend);
+      const destino = pend.levar_para;
+      try {
+        const r = await enviarParaPessoa(destino.telefone, destino.unidade, a.texto);
+        await rpc('mila_confirmar_retorno_recado_v1', { p_recado_id: a.recado_id,
+          p_conversation_id: r.conversation_id });
+        return j({ ok: true, entregue: true, para: destino.nome, conversa: r.conversation_id });
+      } catch (e) {
+        await rpc('mila_confirmar_retorno_recado_v1', { p_recado_id: a.recado_id,
+          p_erro: String(e.message || e) });
+        return j({ ok: false, entregue: false, motivo: String(e.message || e),
+                   nota: 'o retorno nao saiu — diga isso, nao finja que levou' });
       }
     }
     case 'anotar_lead':
