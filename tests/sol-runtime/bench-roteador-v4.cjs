@@ -25,12 +25,18 @@ const RUNTIME = process.env.SOL_CAIXA_RUNTIME
   || '/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs';
 const M = require(RUNTIME);
 
+// Os que a API ACEITA nesta conta. Lista real puxada de GET /zen/v1/models
+// (⚠️ o endpoint tambem exige o User-Agent; sem ele da 403).
+// Fora da bancada porque a conta nao alcanca: claude-*, gemini-*, gpt-*,
+// grok-4.5, muse-spark-* (500/503 instantaneo, ~0,5s — assinatura de
+// entitlement, nao de inferencia). ⚠️ `qwen` NAO EXISTE no catalogo da API,
+// apesar de aparecer no site: o site lista o produto Go/CLI, nao o Zen.
 const MODELOS = process.argv[2] ? [process.argv[2]] : [
-  'deepseek-v4-flash',
+  'ling-3.0-flash-fin-free',
+  'minimax-m3',
   'glm-5.3-flash',
-  // ⚠️ `quen-3.8-flash` e `muse-spark-1.3-contributor` NAO existem nesta conta:
-  // a API responde 401 `Model X is not supported` (testadas tambem as grafias
-  // qwen-3.8-flash / qwen3.8-flash / muse-spark-1.3). Ficam fora da bancada.
+  'deepseek-v4-flash',
+  'deepseek-v4-pro',
 ];
 
 // ── os casos, todos vindos dos grupos ───────────────────────────────────────
