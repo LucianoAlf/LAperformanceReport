@@ -283,3 +283,106 @@ rollback por env var.
   para atribuí-los à unidade sem cruzar com o banco. Observabilidade barata de
   arrumar.
 - **`parcela-recreio-vitoria.test.cjs`** falhando 2/4 desde antes de hoje (§3).
+
+---
+
+# Adendo — 05/09/2026, noite: os três pré-requisitos, feitos
+
+Autorizados pelo Luciano na sequência da auditoria. Patch:
+`tests/sol-runtime/_patch-roteador-v4-direto-05set.cjs` (8 âncoras, todas 1×).
+
+## 0. A bridge recarregou
+
+`✅ WhatsApp connected!`, zero `init falhou`. **As quatro correções da §2 estão no
+ar desde 18:21 UTC (15:21 BRT).**
+
+## 1. O roteador saiu do `hermes_cli`
+
+Passa a ser **HTTPS direto** para a API do OpenCode Zen (compatível com OpenAI),
+com o modelo escolhido por `SOL_CAIXA_V4_MODELO` — troca sem redeploy. Chave em
+arquivo **600 fora do repo** (`caixa-ingestao/.secrets/zen.env`). Sem chave, cai
+de volta no `hermes_cli`: a sombra nunca fica muda por falta de arquivo.
+
+⚠️ **O `User-Agent` não é enfeite.** Sem ele o Cloudflare do `opencode.ai`
+devolve `403 · error code: 1010` **antes** de a requisição chegar ao modelo — foi
+o que fez as três primeiras tentativas de endpoint parecerem "URL errada".
+
+## 2. O contexto passou a ser fotografado ANTES do `handle()`
+
+É o conserto da medição descrita em §4.1. `handle()` tira a foto na entrada; o
+observador usa a foto. O log ganhou `contexto_de` (`foto_pre_handle` |
+`pos_handle`) — sem isso a próxima leitura do placar não saberia se está
+comparando com a régua velha ou com a nova.
+
+⚠️ **A foto é chaveada por `messageId`, não por `chatId`.** O bridge não
+serializa o `handle` (em 05/09 às 16:36:35 chegaram 3 mensagens no mesmo
+segundo); chavear por chat faria a foto de B sobrescrever a de A antes de o
+observador de A ler — trocaria um defeito de medição por outro.
+
+## 3. O prompt: a lacuna era pior que a medida
+
+`saida_dinheiro` ganhou exemplos do jeito que a equipe escreve ("comprei água
+45"). Mas a bancada achou uma lacuna **maior e invisível no shadow**:
+🔴 **`lancamento_por_texto` estava no enum e não tinha uma linha de descrição.**
+"PG parcela 09/26 / Aluno: X / LA CG - R$377,00" — o formato que a equipe usa o
+dia inteiro — virava `aprovar` com confiança **0,95**. E `aprovar` dizia "SÓ
+quando mandam lançar explicitamente", o que exclui justamente o **"pode"** que a
+própria Sol ensina. Os dois foram reescritos.
+
+## 4. Bônus: o shadow passou a guardar o texto
+
+🔴 **Não dá para reprocessar a sombra do passado.** Nem `caixa.log`, nem
+`bridge.log`, nem `sol_caixa_lancamento_auditoria` guardam o corpo da mensagem, e
+`sol_caixa_ingestao_recebimentos.raw_text` parou de ser escrita em **15/08**. O
+texto não existe em lugar nenhum — o replay histórico é impossível, não é questão
+de esforço. A partir de agora o shadow grava `texto` (300 chars), `modelo` e
+`contexto_de`: **o replay de verdade passa a existir daqui pra frente.**
+
+No lugar do replay, uma **bancada rotulada** (`tests/sol-runtime/bench-roteador-v4.cjs`)
+com 25 casos tirados dos grupos — inclusive os que a gramática errou. Conjunto
+rotulado mede **acerto**; replay só mede concordância. A bancada chama
+`rotearMensagemV4` **do runtime de produção**, não uma cópia do prompt.
+
+## 5. Os quatro modelos pedidos
+
+| modelo | acerto | mediana | falhas |
+|---|---|---|---|
+| **deepseek-v4-flash** | **22–23/25** | 5–8 s | 0–2 |
+| glm-5.3-flash | 9–11/25 | 4,0 s | 14–15 — **não devolve JSON** |
+| quen-3.8-flash | — | — | **401 `Model not supported`** |
+| muse-spark-1.3-contributor | — | — | **401 `Model not supported`** |
+
+🔴 **Dois dos quatro não existem nesta conta.** A API responde
+`{"type":"ModelError","message":"Model quen-3.8-flash is not supported"}`.
+Testadas também as grafias `qwen-3.8-flash`, `qwen3.8-flash`, `qwen-3-8-flash`,
+`muse-spark-1.3` (esta dá 500) e `musespark-1.3-contributor`. Não é erro de
+digitação nosso — o catálogo não os tem.
+
+`glm-5.3-flash` é rápido e **não obedece a instrução de JSON**: embrulha em prosa.
+Com `response_format: json_object` fica pior — devolve conteúdo **vazio**.
+
+**`deepseek-v4-flash` é o escolhido** e é o default do `_v4Modelo()`.
+`response_format: json_object` foi ligado: medido, derruba a chamada isolada para
+**1,2 s** e elimina o embrulho em markdown.
+
+## 6. 🔴 O que a medição derrubou: não é o prompt, é o provedor
+
+Levantei a hipótese de que a lentidão vinha do tamanho do prompt. **Os dados
+derrubaram.** A *mesma* requisição ao `deepseek-v4-flash` levou, em quatro
+tentativas seguidas: **1,1 s · 13,8 s · 20,5 s · 45,3 s**. Comprimir o prompt de
+1.900 para 1.171 caracteres não mudou o quadro, e separar em `system`+`user`
+**piorou** (27–45 s). É fila do lado do provedor.
+
+Consequência para a decisão, e ela é limpa:
+
+- **Mediana** melhora de verdade: **21,8 s → 5–8 s**, sem um único processo Python
+  por mensagem. Para a sombra, isso já vale sozinho.
+- **A cauda é o que decide o flip.** Em sombra, um p99 gordo custa uma observação
+  perdida. Na frente, **congela o grupo**. Por isso o timeout do roteador ficou em
+  30 s **enquanto ele observa** — e, quando for para a frente, a regra tem de se
+  inverter: timeout curto com queda para o caminho determinístico, para provedor
+  lento degradar no comportamento de hoje em vez de travar.
+
+**O flip continua não sendo hoje** — e agora por um motivo diferente e melhor
+medido: não é mais o `hermes_cli`, é a estabilidade do provedor. O que decide é
+uma semana de sombra com a régua nova, lendo `ms` e `modelo` direto do log.
