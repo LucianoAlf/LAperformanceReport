@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
 const migrationPath = 'supabase/migrations/20260905000151_contrato_assinado_canonico.sql';
+const authMigrationPath = 'supabase/migrations/20260905002258_contrato_assinado_autorizacao.sql';
 
 function docker(args, input) {
   return spawnSync('docker', args, {
@@ -61,7 +62,9 @@ test('PostgreSQL prova lote atomico, identidade por unidade e regra conservadora
   try {
     await waitForPostgres(container);
     const fullMigration = readFileSync(migrationPath, 'utf8');
-    const migration = fullMigration.slice(0, fullMigration.indexOf('-- Duas janelas:')) + '\ncommit;';
+    const authMigration = readFileSync(authMigrationPath, 'utf8');
+    const migration = fullMigration.slice(0, fullMigration.indexOf('-- Duas janelas:'))
+      + '\ncommit;\n' + authMigration;
     const UA = '10000000-0000-4000-8000-000000000001';
     const UB = '20000000-0000-4000-8000-000000000002';
 
@@ -71,7 +74,12 @@ test('PostgreSQL prova lote atomico, identidade por unidade e regra conservadora
       create role service_role nologin bypassrls;
       create role sol_acesso_restrito nologin;
       create schema auth;
-      create function auth.role() returns text language sql stable as $$ select current_user::text $$;
+      create function auth.role() returns text language sql stable as $$
+        select nullif(current_setting('request.jwt.claim.role', true), '')
+      $$;
+      create function auth.uid() returns uuid language sql stable as $$
+        select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
+      $$;
 
       create table public.unidades (id uuid primary key, codigo text);
       create table public.cursos (id integer primary key, nome text, is_projeto_banda boolean default false);
@@ -99,7 +107,7 @@ test('PostgreSQL prova lote atomico, identidade por unidade e regra conservadora
         entra_base_ativa boolean not null
       );
       create function public.fn_usuario_atual_tem_permissao(text, uuid)
-      returns boolean language sql stable as $$ select true $$;
+      returns boolean language sql stable as $$ select $2 = '${UA}'::uuid $$;
 
       create table public.situacao_fixture (
         pessoa_chave text primary key,
@@ -147,7 +155,8 @@ test('PostgreSQL prova lote atomico, identidade por unidade e regra conservadora
         ('p-nao-assinado', 3, array[3], 'Nao assinado', '${UA}'),
         ('p-sem-contrato', 4, array[4], 'Sem contrato', '${UA}'),
         ('p-nao-verificado', 5, array[5], 'Nao verificado', '${UA}'),
-        ('p-dispensado', 6, array[6], 'Dispensado', '${UA}');
+        ('p-dispensado', 6, array[6], 'Dispensado', '${UA}'),
+        ('p-proibido', 7, array[7], 'Proibido', '${UB}');
 
       insert into public.contrato_assinatura_sync_execucoes (id, unidade_id, unidade_slug)
       values ('30000000-0000-4000-8000-000000000001', '${UA}', 'a');
@@ -217,6 +226,17 @@ test('PostgreSQL prova lote atomico, identidade por unidade e regra conservadora
     `);
     assert.notEqual(invalid.status, 0, 'lote sem booleano deveria falhar fechado');
     assert.equal(Number(psql(container, "select count(*) from public.aluno_contratos_emusys where emusys_matricula_id='999';")), 0);
+
+    const forbidden = docker([
+      'exec', '-i', container, 'psql', '-v', 'ON_ERROR_STOP=1',
+      '-h', '127.0.0.1', '-U', 'postgres', '-d', 'postgres', '-At',
+    ], String.raw`
+      set role authenticated;
+      set request.jwt.claim.role = 'authenticated';
+      set request.jwt.claim.sub = '90000000-0000-4000-8000-000000000009';
+      select count(*) from public.get_situacao_alunos_v1('${UB}', '2026-09-04', false);
+    `);
+    assert.notEqual(forbidden.status, 0, 'authenticated sem permissao da unidade nao pode consultar contrato');
   } finally {
     docker(['rm', '-f', container]);
   }

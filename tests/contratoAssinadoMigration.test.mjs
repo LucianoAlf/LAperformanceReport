@@ -7,6 +7,11 @@ const migrationName = readdirSync('supabase/migrations')
 const sql = migrationName
   ? readFileSync(`supabase/migrations/${migrationName}`, 'utf8')
   : '';
+const authorizationName = readdirSync('supabase/migrations')
+  .find((name) => name.includes('contrato_assinado_autorizacao'));
+const authorizationSql = authorizationName
+  ? readFileSync(`supabase/migrations/${authorizationName}`, 'utf8')
+  : '';
 
 test('migration cria persistencia por unidade, matricula e contrato com RLS fechado', () => {
   assert.ok(migrationName, 'migration contrato_assinado_canonico ainda nao existe');
@@ -67,4 +72,15 @@ test('cron roda antes do TOM e possui segunda tentativa sem segredo incorporado'
   assert.match(sql, /0\s+8\s+\*\s+\*\s+\*/i);
   assert.match(sql, /50\s+8\s+\*\s+\*\s+\*/i);
   assert.doesNotMatch(sql, /EMUSYS_TOKEN_[A-Z]+\s*=/i);
+});
+
+test('RPCs SECURITY DEFINER autorizam por claim e permissao, nao pelo current_user do dono', () => {
+  assert.ok(authorizationName, 'migration de autorizacao ainda nao existe');
+  assert.match(authorizationSql, /auth\.role\(\)/i);
+  assert.match(authorizationSql, /auth\.uid\(\)/i);
+  assert.match(authorizationSql, /fn_usuario_atual_tem_permissao\(['"]alunos\.ver['"]/i);
+  assert.match(authorizationSql, /fn_contrato_assinatura_pode_ler_v1/i);
+  assert.doesNotMatch(authorizationSql, /current_user\s+in\s*\([^)]*postgres/i);
+  assert.match(authorizationSql, /get_situacao_alunos_sem_contrato_assinado_core_v1/i);
+  assert.match(authorizationSql, /revoke all on function public\.get_situacao_alunos_sem_contrato_assinado_core_v1/i);
 });
