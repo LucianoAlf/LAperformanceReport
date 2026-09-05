@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-02 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-05 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — financeiro
 
-29 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+31 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## caixa_categorias
 
@@ -141,6 +141,28 @@
 **Triggers:**
 - `tr_caixas_diarios_updated_at → set_updated_at_caixa()`
 
+## contrato_assinatura_sync_execucoes
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `unidade_slug` | text | não |  |  |
+| `status` | text | não | 'running'::text |  |
+| `paginas` | integer | não | 0 |  |
+| `matriculas_recebidas` | integer | não | 0 |  |
+| `com_contrato` | integer | não | 0 |  |
+| `assinadas` | integer | não | 0 |  |
+| `nao_assinadas` | integer | não | 0 |  |
+| `sem_contrato` | integer | não | 0 |  |
+| `erro` | text | sim |  |  |
+| `started_at` | timestamp with time zone | não | now() |  |
+| `completed_at` | timestamp with time zone | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `contrato_assinatura_sync_execucoes_pkey`
+
 ## fechamento_mensal_auditoria
 
 > Auditoria das acoes de preview, aprovacao, fechamento, retificacao e compatibilidade mensal.
@@ -160,6 +182,26 @@
 
 **Únicos:**
 - `fechamento_mensal_auditoria_pkey`
+
+## fechamento_mensal_execucoes
+
+> Placar do fechamento mensal automatico. Alimenta o vigia da la-hq, que le daqui o motivo da falha por unidade.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `ano` | integer | não |  |  |
+| `mes` | integer | não |  |  |
+| `origem` | text | não | 'cron_dia1'::text |  |
+| `iniciado_em` | timestamp with time zone | não | now() |  |
+| `concluido_em` | timestamp with time zone | sim |  |  |
+| `unidades_fechadas` | integer | não | 0 |  |
+| `unidades_com_erro` | integer | não | 0 |  |
+| `detalhes` | jsonb | não | '[]'::jsonb |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `fechamento_mensal_execucoes_pkey`
 
 ## fechamento_mensal_retificacoes
 

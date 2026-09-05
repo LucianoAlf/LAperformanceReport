@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-02 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-05 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — professor
 
-126 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+136 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## anotacoes
 
@@ -360,6 +360,23 @@
 - `fabio_audios_parqueados_pkey`
 - `uq_fabio_audio_parqueado_mensagem`
 
+## fabio_canario_execucao
+
+> Prova periodica de que um caminho de ESCRITA ainda funciona. Cada linha e uma corrida que escreveu de verdade e LEU DE VOLTA. `passou=false` e defeito; ausencia de linha e o canario que parou -- os dois sao alarme.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `nome` | text | não |  |  |
+| `rodou_em` | timestamp with time zone | não | now() |  |
+| `passou` | boolean | não |  |  |
+| `detalhe` | text | sim |  |  |
+| `duracao_ms` | integer | sim |  |  |
+| `evidencia` | jsonb | não | '{}'::jsonb |  |
+
+**Únicos:**
+- `fabio_canario_execucao_pkey`
+
 ## fabio_chat_mensagens
 
 > Chat 1:1 professor<->Fabio, dual channel (app+whatsapp), mesma conversa. Espelha o padrao ja provado em producao no LA Organizer (Tom / group_chat_messages). App insere direto (RLS); Hermes (service_role) faz polling em fabio_seen_at IS NULL e escreve as respostas.
@@ -465,6 +482,81 @@
 - `fabio_devolutivas_pkey`
 - `uq_fabio_devolutiva_por_registro`
 
+## fabio_diario_ciclo
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `ciclo_em` | timestamp with time zone | não | now() |  |
+| `dia_alvo` | date | não |  |  |
+| `ocorrencias_novas` | integer | não | 0 |  |
+| `ocorrencias_abertas` | integer | não | 0 |  |
+| `silencio_suspeito` | boolean | não | false |  |
+| `encerrou_bem` | boolean | não | true |  |
+| `erro` | text | sim |  |  |
+| `duracao_ms` | integer | sim |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `tipos_medidos` | text[] | não | '{}'::text[] |  |
+
+**Únicos:**
+- `fabio_diario_ciclo_pkey`
+
+## fabio_diario_mensagem
+
+> Fala capturada do grupo/DM para o diário do Fábio. Escuta, não responde. Grupo avisado em 04/09.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `dia` | date | não | ((now() AT TIME ZONE 'America/Sao_Paulo'::text))::date |  |
+| `origem` | text | não |  |  |
+| `canal_ref` | text | sim |  |  |
+| `autor_nome` | text | sim |  |  |
+| `professor_id` | integer | sim |  | professores.id |
+| `texto` | text | sim |  |  |
+| `kind` | text | não | 'text'::text |  |
+| `wa_message_id` | text | sim |  |  |
+| `bruto` | jsonb | sim |  |  |
+| `capturado_em` | timestamp with time zone | não | now() |  |
+| `autor_telefone_hash` | text | sim |  |  |
+| `autor_telefone_last4` | text | sim |  |  |
+
+**Únicos:**
+- `fabio_diario_mensagem_pkey`
+- `fabio_diario_mensagem_wa_message_id_key`
+
+## fabio_diario_ocorrencia
+
+> Diário do Fábio: o que deu errado no dia, de onde veio e POR QUE. Quadrado do Fábio — não confundir com o schema monitoramento, que é da Maria/Tom.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `dia` | date | não | ((now() AT TIME ZONE 'America/Sao_Paulo'::text))::date |  |
+| `origem` | text | não |  |  |
+| `tipo` | text | não |  |  |
+| `professor_id` | integer | sim |  | professores.id |
+| `aula_id` | bigint | sim |  |  |
+| `referencia` | text | não |  |  |
+| `o_que` | text | não |  |  |
+| `porque` | text | sim |  |  |
+| `gravidade` | text | não |  |  |
+| `detectado_por` | text | não |  |  |
+| `resolvido_em` | timestamp with time zone | sim |  |  |
+| `resolvido_por` | text | sim |  |  |
+| `resolvido_porque` | text | sim |  |  |
+| `bruto` | jsonb | sim |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `veredito_humano` | text | sim |  |  |
+| `veredito_humano_por` | text | sim |  |  |
+| `veredito_humano_em` | timestamp with time zone | sim |  |  |
+| `veredito_humano_nota` | text | sim |  |  |
+| `assinatura` | text | sim | ('fabio:'::text \|\| tipo) |  |
+
+**Únicos:**
+- `fabio_diario_ocorrencia_idempotente`
+- `fabio_diario_ocorrencia_pkey`
+
 ## fabio_fila_audios
 
 | Coluna | Tipo | Nulo | Default | Referência |
@@ -492,6 +584,50 @@
 **Triggers:**
 - `trg_fabio_audios_upd → fn_set_atualizado_em()`
 - `trg_fabio_fila_novo → trg_fabio_fila_dispara()`
+
+## fabio_identidade_antes_do_portao_20260905
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `professor_id` | integer | sim |  |  |
+| `repertorio` | text[] | sim |  |  |
+| `vocabulario_tecnico` | text[] | sim |  |  |
+| `faixa_etaria` | jsonb | sim |  |  |
+| `assinatura` | text[] | sim |  |  |
+| `correcoes` | jsonb | sim |  |  |
+| `fichas_consideradas` | integer | sim |  |  |
+| `apurado_em` | timestamp with time zone | sim |  |  |
+
+## fabio_laudo
+
+> O retrato do dia, em texto que uma pessoa le. Declara custo, limite e NOMEIA quem precisa agir -- relatorio sem nome proprio nao move nada.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `dia` | date | não |  |  |
+| `gerado_em` | timestamp with time zone | não | now() |  |
+| `texto` | text | não |  |  |
+| `numeros` | jsonb | não | '{}'::jsonb |  |
+
+**Únicos:**
+- `fabio_laudo_pkey`
+
+## fabio_mineracao_janela
+
+> Que janelas ja foram lidas. Linha ausente = nao minerado; `propostas = 0` = minerado e nao achou nada. As duas coisas sao diferentes e nao podem virar o mesmo zero.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `origem` | text | não |  |  |
+| `professor_id` | integer | sim |  |  |
+| `janela_dia` | date | não |  |  |
+| `minerado_em` | timestamp with time zone | não | now() |  |
+| `mensagens` | integer | não | 0 |  |
+| `propostas` | integer | não | 0 |  |
+
+**Únicos:**
+- `ux_mineracao_janela`
 
 ## fabio_notificacoes
 
@@ -583,6 +719,25 @@
 - `trg_participacao_ocorrencias_append_only → fn_participacao_append_only()`
 - `trg_participacao_supersede_coerente → fn_participacao_supersede_coerente()`
 
+## fabio_professor_identidade
+
+> Identidade pedagógica MINERADA do professor (repertório, vocabulário, faixa etária, assinatura, correções). Alimenta a dica de STT e a devolutiva. Não confundir com professores.bio, que é declarada.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `professor_id` | integer | não |  | professores.id |
+| `repertorio` | text[] | não | '{}'::text[] |  |
+| `vocabulario_tecnico` | text[] | não | '{}'::text[] |  |
+| `faixa_etaria` | jsonb | não | '{}'::jsonb |  |
+| `assinatura` | text[] | não | '{}'::text[] |  |
+| `correcoes` | jsonb | não | '[]'::jsonb |  |
+| `fichas_consideradas` | integer | não | 0 |  |
+| `apurado_em` | timestamp with time zone | não | now() |  |
+| `repertorio_descartado` | jsonb | não | '[]'::jsonb |  |
+
+**Únicos:**
+- `fabio_professor_identidade_pkey`
+
 ## fabio_professor_preferences
 
 | Coluna | Tipo | Nulo | Default | Referência |
@@ -668,6 +823,32 @@
 
 **Triggers:**
 - `trg_fabio_reg_upd → fn_set_atualizado_em()`
+
+## fabio_relato_proposto
+
+> Proposta de achado vinda de conversa, e o julgamento dela. O minerador PROPOE e nunca grava achado -- auditor nao e corretor. `citacao_confere=false` e modelo inventando, e fica registrado como taxa de erro do instrumento, separado de defeito do sistema.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `origem` | text | não |  |  |
+| `professor_id` | integer | sim |  |  |
+| `janela_dia` | date | não |  |  |
+| `mensagens` | integer | não | 0 |  |
+| `proposto_por` | text | não |  |  |
+| `tipo_de_atrito` | text | sim |  |  |
+| `o_que` | text | sim |  |  |
+| `citacao` | text | sim |  |  |
+| `gravidade` | text | sim |  |  |
+| `citacao_confere` | boolean | sim |  |  |
+| `verificado_por` | text | sim |  |  |
+| `veredito` | text | sim |  |  |
+| `veredito_porque` | text | sim |  |  |
+| `virou_ocorrencia` | uuid | sim |  | fabio_diario_ocorrencia.id |
+| `criado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `fabio_relato_proposto_pkey`
 
 ## fabio_skills
 
@@ -923,9 +1104,9 @@
 | `id` | uuid | não | gen_random_uuid() |  |
 | `snapshot_metrica_id` | uuid | não |  | health_score_professor_v3_snapshot_metricas.id |
 | `config_meta_segmento_id` | uuid | sim |  | health_score_professor_v3_config_metas_curso_modalidade.id |
-| `unidade_id` | uuid | não |  | professor_unidade_curso_modalidade.unidade_id |
+| `unidade_id` | uuid | não |  | unidades.id |
 | `curso_id` | integer | não |  | health_score_professor_v3_config_metas_curso_modalidade.curso_id |
-| `modalidade` | text | não |  | health_score_professor_v3_config_metas_curso_modalidade.modalidade |
+| `modalidade` | text | não |  | professor_unidade_curso_modalidade.modalidade |
 | `pessoas_unicas` | integer | não | 0 |  |
 | `vinculos_ativos` | integer | não | 0 |  |
 | `turmas_elegiveis` | integer | não | 0 |  |
@@ -2160,6 +2341,24 @@
 **Únicos:**
 - `programa_matriculador_config_ano_key`
 - `programa_matriculador_config_pkey`
+
+## programa_matriculador_estrelas_config
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `ano` | integer | não |  |  |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `meta_matriculas` | integer | não |  |  |
+| `meta_showup` | integer | não |  |  |
+| `ticket_referencia` | numeric(10,2) | não |  |  |
+| `ticket_bonus` | numeric(10,2) | não | 10 |  |
+| `meta_indicacao` | integer | não | 5 |  |
+| `mes_inicio` | integer | não | 8 |  |
+| `mes_fim` | integer | não | 11 |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `programa_matriculador_estrelas_config_pkey`
 
 ## programa_matriculador_historico
 

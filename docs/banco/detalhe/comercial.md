@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-02 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-05 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — comercial
 
-58 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+65 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## agente_conversas
 
@@ -81,6 +81,63 @@
 
 **Triggers:**
 - `set_updated_at_agentes → set_updated_at()`
+
+## atendimento_consultor_diario
+
+> Instantâneo diário (19:10 BRT) de atendimento_conversa_estado por pessoa. ESTOQUE do que ficou pendurado, não velocidade de resposta — velocidade é do chatwoot-atendimento-insights, ao vivo.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `dia` | date | não |  |  |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `unidade_nome` | text | sim |  |  |
+| `assignee_nome` | text | não |  |  |
+| `e_bot` | boolean | não | false |  |
+| `conversas` | integer | não | 0 |  |
+| `abertas` | integer | não | 0 |  |
+| `esperando_cliente` | integer | não | 0 |  |
+| `esperando_4h` | integer | não | 0 |  |
+| `esperando_24h` | integer | não | 0 |  |
+| `horas_max_espera` | numeric | sim |  |  |
+| `so_falou_com_bot` | integer | não | 0 |  |
+| `novas_no_dia` | integer | não | 0 |  |
+| `min_ate_humano_p50` | numeric | sim |  |  |
+| `capturado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `atendimento_consultor_diario_pkey`
+
+## atendimento_conversa_estado
+
+> T2/1o andar/operacional. Espelho dos FATOS da conversa do Chatwoot (projeto SOL), ingerido pela edge `ingerir-calor-atendimento`. ⚠️ "humano" = agente que nao e Mila. ⚠️ minutos_ate_humano NEGATIVO = nos iniciamos a conversa. ⚠️ departamento comercial so existe desde 03/09/2026.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `conversa_id` | bigint | não |  |  |
+| `inbox_id` | bigint | sim |  |  |
+| `inbox_nome` | text | sim |  |  |
+| `unidade_texto` | text | sim |  |  |
+| `unidade_id` | uuid | sim |  |  |
+| `departamento` | text | sim |  |  |
+| `telefone` | text | sim |  |  |
+| `telefone_key` | text | sim |  |  |
+| `contato_nome` | text | sim |  |  |
+| `assignee_nome` | text | sim |  |  |
+| `conversa_status` | text | sim |  |  |
+| `ultima_msg_em` | timestamp with time zone | sim |  |  |
+| `ultimo_autor` | text | sim |  |  |
+| `horas_desde_ultima` | integer | sim |  |  |
+| `primeiro_contato_em` | timestamp with time zone | sim |  |  |
+| `primeiro_humano_em` | timestamp with time zone | sim |  |  |
+| `houve_humano` | boolean | não | false |  |
+| `so_falou_com_bot` | boolean | não | false |  |
+| `minutos_ate_humano` | integer | sim |  |  |
+| `msgs_do_contato` | integer | não | 0 |  |
+| `msgs_do_bot` | integer | não | 0 |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `atendimento_conversa_estado_pkey`
 
 ## campanha_contatos
 
@@ -450,6 +507,31 @@
 - `experimentais_professor_mensa_professor_id_unidade_id_ano_m_key`
 - `experimentais_professor_mensal_pkey`
 
+## instagram_sessoes
+
+> Espelho das sessões da bridge de Instagram (la-hq, instagram-comments-bridge.js). Uma linha por (conta, pessoa). Alimentado pela edge ingerir-instagram-sessoes; a bridge segue sendo a fonte de verdade viva — isto é foto para leitura, relatório e Mapa de Sinais.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `ig_user_id` | text | não |  |  |
+| `sender_id` | text | não |  |  |
+| `conta` | text | não |  |  |
+| `sender_name` | text | sim |  |  |
+| `interesse` | text | sim |  |  |
+| `estagio` | text | não |  |  |
+| `unidade_nome` | text | sim |  |  |
+| `unidade_id` | uuid | sim |  | unidades.id |
+| `telefone` | text | sim |  |  |
+| `telefone_chave` | text | sim | fn_normalizar_telefone_br_key(telefone) |  |
+| `transferido` | boolean | não | false |  |
+| `iniciada_em` | timestamp with time zone | não |  |  |
+| `ultima_atividade_em` | timestamp with time zone | não |  |  |
+| `historico` | jsonb | não | '[]'::jsonb |  |
+| `capturado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `instagram_sessoes_pkey`
+
 ## lead_conciliacao_decisoes
 
 | Coluna | Tipo | Nulo | Default | Referência |
@@ -500,6 +582,7 @@
 
 **Triggers:**
 - `trg_audit → fn_audit_log()`
+- `trg_experimental_preenche_curso → trg_experimental_preenche_curso_do_lead()`
 - `trg_propagar_professor_experimental → fn_propagar_professor_experimental()`
 
 ## lead_experimentais_arquivadas
@@ -727,6 +810,7 @@
 - `tr_sync_experimentais_unidade → sync_experimentais_unidade()`
 - `trg_audit → fn_audit_log()`
 - `trg_calcular_faixa_etaria_lead → trg_calcular_faixa_etaria_lead()`
+- `trg_lead_herda_consultor → trg_lead_herda_consultor_da_unidade()`
 - `update_leads_updated_at → update_updated_at_column()`
 
 ## leads_automacao_log
@@ -864,6 +948,34 @@
 **Únicos:**
 - `meta_ads_cache_pkey`
 
+## meta_ads_metricas_diarias
+
+> Memoria diaria por anuncio do Meta Ads. Existe porque o Trafego Pago e 100% ao vivo e sem historico o 2o andar nunca sabe qual criativo traz lead que MATRICULA. Nao substitui a leitura ao vivo. `conversas` = onsite_conversion.messaging_conversation_started_7d, a mesma acao da edge meta-ads-insights.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `dia` | date | não |  |  |
+| `ad_id` | text | não |  |  |
+| `ad_name` | text | sim |  |  |
+| `campaign_id` | text | sim |  |  |
+| `campaign_name` | text | sim |  |  |
+| `adset_id` | text | sim |  |  |
+| `adset_name` | text | sim |  |  |
+| `gasto` | numeric(12,2) | não | 0 |  |
+| `impressoes` | bigint | não | 0 |  |
+| `cliques` | bigint | não | 0 |  |
+| `ctr` | numeric(8,4) | sim |  |  |
+| `cpm` | numeric(12,4) | sim |  |  |
+| `alcance` | bigint | sim |  |  |
+| `frequencia` | numeric(8,4) | sim |  |  |
+| `conversas` | integer | não | 0 |  |
+| `custo_por_conversa` | numeric(12,4) | sim | CASE     WHEN (conversas > 0) THEN (gasto / (conversas)::numeric)     ELSE NULL::numeric END |  |
+| `moeda` | text | não | 'BRL'::text |  |
+| `capturado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `meta_ads_metricas_diarias_pkey`
+
 ## mila_config
 
 > Configuração do agente Mila por unidade
@@ -916,6 +1028,33 @@
 
 **Únicos:**
 - `mila_message_buffer_pkey`
+
+## mila_recados
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `solicitante_telefone` | text | não |  |  |
+| `solicitante_nome` | text | não |  |  |
+| `destino_tipo` | text | não |  |  |
+| `destino_ref` | text | sim |  |  |
+| `destino_nome` | text | não |  |  |
+| `destino_telefone` | text | não |  |  |
+| `assunto` | text | sim |  |  |
+| `texto` | text | não |  |  |
+| `status` | text | não | 'proposto'::text |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `expira_em` | timestamp with time zone | não | (now() + '00:30:00'::interval) |  |
+| `aprovado_em` | timestamp with time zone | sim |  |  |
+| `enviado_em` | timestamp with time zone | sim |  |  |
+| `conversation_id` | bigint | sim |  |  |
+| `message_id` | bigint | sim |  |  |
+| `erro` | text | sim |  |  |
+| `versoes` | jsonb | não | '[]'::jsonb |  |
+
+**Únicos:**
+- `mila_recados_pkey`
 
 ## motivos_nao_matricula
 
@@ -1147,6 +1286,31 @@
 | `status` | text | sim |  |  |
 | `criado_em` | timestamp with time zone | sim |  |  |
 
+## vw_experimental_situacao_v1
+
+> Situacao REAL da experimental resolvida pela aula (aulas_emusys), nao pelo status gravado: pega reagendamento (linha fica com a data velha) e aula que ainda nao ocorreu (o sync marca realizada as 00:43). Use para dizer "o que tem hoje". Criada em 04/09/2026 a partir do relato da Daiana.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | integer | sim |  |  |
+| `lead_id` | integer | sim |  |  |
+| `unidade_id` | uuid | sim |  |  |
+| `nome_aluno` | text | sim |  |  |
+| `curso_interesse_id` | integer | sim |  |  |
+| `professor_experimental_id` | integer | sim |  |  |
+| `aluno_id` | integer | sim |  |  |
+| `emusys_aula_id` | integer | sim |  |  |
+| `data_experimental` | date | sim |  |  |
+| `horario_experimental` | time without time zone | sim |  |  |
+| `status_gravado` | character varying | sim |  |  |
+| `aula_em` | timestamp with time zone | sim |  |  |
+| `aula_data` | date | sim |  |  |
+| `aula_cancelada` | boolean | sim |  |  |
+| `data_efetiva` | date | sim |  |  |
+| `situacao` | character varying | sim |  |  |
+| `reagendada_para` | date | sim |  |  |
+| `aula_ja_ocorreu` | boolean | sim |  |  |
+
 ## vw_funil_conversao_mensal
 
 | Coluna | Tipo | Nulo | Default | Referência |
@@ -1164,6 +1328,30 @@
 | `taxa_lead_experimental` | numeric | sim |  |  |
 | `taxa_experimental_matricula` | numeric | sim |  |  |
 | `taxa_lead_matricula` | numeric | sim |  |  |
+
+## vw_instagram_sessoes_resolvidas
+
+> Sessão do Instagram + quem é a pessoa hoje (aluno/família/lead/desconhecido), pela RPC canônica. Não reimplementar o casamento de telefone no consumidor.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `ig_user_id` | text | sim |  |  |
+| `sender_id` | text | sim |  |  |
+| `conta` | text | sim |  |  |
+| `sender_name` | text | sim |  |  |
+| `interesse` | text | sim |  |  |
+| `estagio` | text | sim |  |  |
+| `unidade_nome` | text | sim |  |  |
+| `unidade_id` | uuid | sim |  |  |
+| `telefone` | text | sim |  |  |
+| `telefone_chave` | text | sim |  |  |
+| `transferido` | boolean | sim |  |  |
+| `iniciada_em` | timestamp with time zone | sim |  |  |
+| `ultima_atividade_em` | timestamp with time zone | sim |  |  |
+| `historico` | jsonb | sim |  |  |
+| `capturado_em` | timestamp with time zone | sim |  |  |
+| `entidade` | jsonb | sim |  |  |
+| `dias_parada` | integer | sim |  |  |
 
 ## vw_leads_comercial
 

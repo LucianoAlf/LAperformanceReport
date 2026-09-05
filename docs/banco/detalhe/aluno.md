@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-02 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-05 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — aluno
 
-126 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+136 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## aluno_acoes
 
@@ -48,6 +48,28 @@
 
 **Únicos:**
 - `aluno_contatos_pkey`
+
+## aluno_contratos_emusys
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `emusys_matricula_id` | text | não |  |  |
+| `emusys_aluno_id` | text | sim |  |  |
+| `aluno_id` | integer | sim |  | alunos.id |
+| `contrato_emusys_id` | text | sim |  |  |
+| `contrato_assinado` | boolean | sim |  |  |
+| `contrato_status_observado_em` | timestamp with time zone | não |  |  |
+| `origem` | text | não |  |  |
+| `payload_hash` | text | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `aluno_contratos_emusys_contrato_uidx`
+- `aluno_contratos_emusys_pkey`
+- `aluno_contratos_emusys_sem_contrato_uidx`
 
 ## aluno_feedback_professor
 
@@ -1950,6 +1972,210 @@
 **Únicos:**
 - `radar_config_historico_pkey`
 
+## radar_destinatarios
+
+> Quem recebe o que, por qual agente e canal. Nasce ativo=false: nenhum alerta sai sem OK explicito.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `agente` | text | não |  |  |
+| `camada` | text | não |  |  |
+| `nome` | text | não |  |  |
+| `papel` | text | não |  |  |
+| `canal` | text | não |  |  |
+| `destino` | text | sim |  |  |
+| `unidade_id` | uuid | sim |  | unidades.id |
+| `regras` | text[] | não | '{}'::text[] |  |
+| `severidade_min` | text | não | 'alto'::text |  |
+| `horarios` | text[] | não | '{09:00,16:00}'::text[] |  |
+| `ativo` | boolean | não | false |  |
+| `observacao` | text | sim |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `teto_por_turno` | integer | não | 8 |  |
+| `dominio` | text | não | 'aluno'::text |  |
+
+**Únicos:**
+- `radar_destinatarios_pkey`
+
+## radar_entregas
+
+> Log de entrega com idempotencia: o mesmo sinal nao e cobrado duas vezes da mesma pessoa no mesmo turno.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `destinatario_id` | uuid | não |  | radar_destinatarios.id |
+| `sinal_id` | uuid | sim |  | radar_sinais.id |
+| `agente` | text | não |  |  |
+| `canal` | text | não |  |  |
+| `chave_idem` | text | não |  |  |
+| `mensagem` | text | sim |  |  |
+| `status` | text | não | 'pendente'::text |  |
+| `erro` | text | sim |  |  |
+| `enviado_em` | timestamp with time zone | sim |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `radar_entregas_chave_idem_key`
+- `radar_entregas_pkey`
+
+## radar_estrategias
+
+> Catalogo de acoes possiveis COM VIABILIDADE. Estrategia sem capacidade conhecida e desejo — por isso viabilidade default e "desconhecida".
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `codigo` | text | não |  |  |
+| `titulo` | text | não |  |  |
+| `descricao` | text | não |  |  |
+| `tipo` | text | não |  |  |
+| `responsavel_papel` | text | não |  |  |
+| `capacidade_conhecida` | boolean | não | false |  |
+| `capacidade_total` | integer | sim |  |  |
+| `capacidade_usada` | integer | sim |  |  |
+| `demanda_estimada` | integer | sim |  |  |
+| `viabilidade` | text | não | 'desconhecida'::text |  |
+| `custo_relativo` | text | sim |  |  |
+| `evidencia_eficacia` | text | sim |  |  |
+| `ativo` | boolean | não | true |  |
+| `observacao_operacional` | text | sim |  |  |
+| `atualizada_em` | timestamp with time zone | não | now() |  |
+| `publico_codigo` | text | sim |  |  |
+
+**Únicos:**
+- `radar_estrategias_pkey`
+
+## radar_identidade
+
+> Resolucao conversa->entidade em cascata: vinculo conhecido (1.0) > nome RESP com sobrenome confirmado (0.9) > telefone unico (0.8) > telefone ambiguo vira FAMILIA com candidatos (0.5). Revisao humana e definitiva.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `contato_id` | bigint | não |  |  |
+| `entidade_tipo` | text | não |  |  |
+| `entidade_id` | bigint | sim |  |  |
+| `confianca` | numeric(3,2) | não |  |  |
+| `metodo` | text | não |  |  |
+| `nome_bruto` | text | sim |  |  |
+| `telefone8` | text | sim |  |  |
+| `candidatos` | jsonb | sim |  |  |
+| `revisado_por` | text | sim |  |  |
+| `revisado_em` | timestamp with time zone | sim |  |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `radar_identidade_pkey`
+
+## radar_padrao_estrategia
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `padrao_codigo` | text | não |  | radar_padroes.codigo |
+| `estrategia_codigo` | text | não |  | radar_estrategias.codigo |
+| `prioridade` | integer | não | 1 |  |
+| `condicao` | text | sim |  |  |
+
+**Únicos:**
+- `radar_padrao_estrategia_pkey`
+
+## radar_padroes
+
+> O que a REDE ensinou: padrão medido com amostra, lift e JANELA DE AÇÃO. Recalculado periodicamente — aprendizado vivo, não número cravado.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `codigo` | text | não |  |  |
+| `titulo` | text | não |  |  |
+| `pergunta` | text | não |  |  |
+| `aprendizado` | text | não |  |  |
+| `amostra_n` | integer | sim |  |  |
+| `taxa_evento` | numeric(5,2) | sim |  |  |
+| `taxa_base` | numeric(5,2) | sim |  |  |
+| `lift` | numeric(6,2) | sim |  |  |
+| `janela_dias` | integer | sim |  |  |
+| `periodo_medido` | text | sim |  |  |
+| `confianca` | text | não | 'baixa'::text |  |
+| `metodo` | text | sim |  |  |
+| `ativo` | boolean | não | true |  |
+| `medido_em` | timestamp with time zone | não | now() |  |
+| `versao` | text | não | 'v1'::text |  |
+| `dominio` | text | não | 'aluno'::text |  |
+| `visibilidade` | text | não | 'rede'::text |  |
+
+**Únicos:**
+- `radar_padroes_pkey`
+
+## radar_regras
+
+> Regras do radar com o LASTRO que as fundamentou (nunca peso chutado). Regra com muita improcedencia e rebaixada a observacional.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `codigo` | text | não |  |  |
+| `titulo` | text | não |  |  |
+| `descricao` | text | não |  |  |
+| `entidade_tipo` | text | não | 'aluno'::text |  |
+| `origem` | text | não |  |  |
+| `severidade_padrao` | text | não |  |  |
+| `canonico` | boolean | não | true |  |
+| `ativo` | boolean | não | true |  |
+| `params` | jsonb | não | '{}'::jsonb |  |
+| `lastro` | text | sim |  |  |
+| `orientacao_padrao` | text | sim |  |  |
+| `versao` | text | não | 'v1'::text |  |
+| `criada_em` | timestamp with time zone | não | now() |  |
+| `atualizada_em` | timestamp with time zone | não | now() |  |
+| `dominio` | text | sim |  |  |
+| `padrao_codigo` | text | sim |  | radar_padroes.codigo |
+
+**Únicos:**
+- `radar_regras_pkey`
+
+## radar_sinais
+
+> Mapa de Sinais: cada detecção vira evento com evidência, orientação e desfecho. View=foto, esta tabela=filme.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `entidade_tipo` | text | não |  |  |
+| `entidade_id` | bigint | sim |  |  |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `regra_codigo` | text | não |  |  |
+| `tipo_sinal` | text | não |  |  |
+| `severidade` | text | não |  |  |
+| `canonico` | boolean | não | true |  |
+| `origem` | text | não |  |  |
+| `contexto` | text | não |  |  |
+| `interpretacao` | text | sim |  |  |
+| `orientacao` | text | sim |  |  |
+| `evidencia` | jsonb | não | '{}'::jsonb |  |
+| `identificacao` | jsonb | sim |  |  |
+| `detectado_em` | timestamp with time zone | não | now() |  |
+| `competencia` | date | não |  |  |
+| `expira_em` | timestamp with time zone | sim |  |  |
+| `chave_dedup` | text | não |  |  |
+| `status` | text | não | 'aberto'::text |  |
+| `triado_por` | text | sim |  |  |
+| `triado_em` | timestamp with time zone | sim |  |  |
+| `tarefa_id` | uuid | sim |  |  |
+| `desfecho` | text | sim |  |  |
+| `desfecho_em` | timestamp with time zone | sim |  |  |
+| `desfecho_nota` | text | sim |  |  |
+| `regra_versao` | text | não | 'v1'::text |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+| `padrao_codigo` | text | sim |  |  |
+| `dominio` | text | sim |  |  |
+
+**Únicos:**
+- `radar_sinais_dedup_uidx`
+- `radar_sinais_pkey`
+
+**Triggers:**
+- `trg_radar_guarda_elegibilidade → radar_guarda_elegibilidade()`
+
 ## renovacoes_legado
 
 > ARQUIVO read-only. Aposentada em 2026-07-01: a fonte de verdade de renovacoes passou a ser movimentacoes_admin. NAO usar em codigo novo. Contem historico legado (incl. ~44 renovacoes que so existiam aqui).
@@ -2791,6 +3017,56 @@
 | `aulas_com_presenca_registrada` | integer | sim |  |  |
 | `percentual_presenca_contrato` | numeric | sim |  |  |
 | `ultima_aula_registrada` | date | sim |  |  |
+
+## vw_jornada_lead_v1
+
+> Jornada do lead. ⚠️ `etapa`: a FONTE CANONICA (lead_experimentais) manda quando existe linha; os flags de `leads` so resgatam quem nao tem nenhuma. Corrigido em 04/09 apos falso positivo reportado pela Daiana: o Marcelo tinha aula `cancelada` na fonte canonica e `experimental_realizada=true` no flag, e o R15 dizia que ele fez a experimental. 10 leads tinham os dois flags contraditorios.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `lead_id` | integer | sim |  |  |
+| `nome` | character varying(255) | sim |  |  |
+| `telefone` | character varying(20) | sim |  |  |
+| `telefone_chave` | text | sim |  |  |
+| `unidade_id` | uuid | sim |  |  |
+| `unidade_nome` | character varying(100) | sim |  |  |
+| `curso_interesse_id` | integer | sim |  |  |
+| `curso_interesse` | character varying(100) | sim |  |  |
+| `canal_origem` | character varying(50) | sim |  |  |
+| `meta_ad_source_id` | text | sim |  |  |
+| `anuncio` | text | sim |  |  |
+| `campanha_meta` | text | sim |  |  |
+| `campanhas_whatsapp` | text | sim |  |  |
+| `instagram_conta` | text | sim |  |  |
+| `instagram_interesse` | text | sim |  |  |
+| `instagram_estagio` | text | sim |  |  |
+| `instagram_transferido` | boolean | sim |  |  |
+| `entrou_em` | date | sim |  |  |
+| `primeiro_contato_em` | timestamp with time zone | sim |  |  |
+| `passagem_mila_em` | timestamp with time zone | sim |  |  |
+| `experimental_agendada_para` | date | sim |  |  |
+| `experimental_real_em` | date | sim |  |  |
+| `convertido_em` | date | sim |  |  |
+| `arquivado_em` | date | sim |  |  |
+| `ultimo_contato_em` | timestamp with time zone | sim |  |  |
+| `etapa` | text | sim |  |  |
+| `dias_ate_primeiro_contato` | integer | sim |  |  |
+| `dias_parado` | integer | sim |  |  |
+| `dias_no_funil` | integer | sim |  |  |
+| `aulas_experimentais` | bigint | sim |  |  |
+| `experimentais_realizadas` | bigint | sim |  |  |
+| `experimentais_faltou` | bigint | sim |  |  |
+| `professor_experimental` | character varying(100) | sim |  |  |
+| `converteu` | boolean | sim |  |  |
+| `aluno_id` | integer | sim |  |  |
+| `motivo_nao_matricula` | text | sim |  |  |
+| `temperatura` | character varying(10) | sim |  |  |
+| `agente_comercial` | character varying(100) | sim |  |  |
+| `status_bruto` | character varying(50) | sim |  |  |
+| `created_at` | timestamp with time zone | sim |  |  |
+| `experimentais_canceladas` | bigint | sim |  |  |
+| `experimentais_agendadas` | bigint | sim |  |  |
+| `ultima_experimental_em` | date | sim |  |  |
 
 ## vw_jornada_marcos
 
