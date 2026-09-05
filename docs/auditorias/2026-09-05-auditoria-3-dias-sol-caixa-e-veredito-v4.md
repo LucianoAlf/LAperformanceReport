@@ -1,0 +1,285 @@
+# Auditoria dos 3 grupos financeiros — 03 a 05/09/2026 — e o veredito da V4
+
+**Escopo:** tudo que a equipe escreveu, tudo que a Sol respondeu, o que ela leu de
+cada imagem e PDF, nos grupos **Campo Grande**, **Recreio** e **Barra**.
+**Fontes:** `caixa.log` da la-hq (1,6 MB, 204 mensagens de texto no período),
+`caixa_movimentacoes`, `caixas_diarios` e o código vivo do runtime.
+**Pedido do Luciano:** achar os erros, **corrigir cada um**, e decidir se vale
+continuar depurando a gramática ou virar a chave para a V4 (AI-first, no formato
+da Maria).
+
+---
+
+## 1. O tamanho do problema, em número
+
+| | 03/09 | 04/09 | 05/09 |
+|---|---|---|---|
+| cards enviados | 11 | 6 | **40** |
+| lançados | 7 | 4 | 33 |
+| **correções que a equipe teve de digitar** | 3 | 1 | **19** |
+
+Em 05/09 a equipe corrigiu **19 de 40 cards — quase metade**. E o que a Sol não
+conseguiu virou trabalho manual no app:
+
+| lançados à mão (fora da Sol) | valor |
+|---|---|
+| 03/09 · CG | R$ 417,00 |
+| 04/09 · CG | **R$ 3.685,00** (5 dos 7 lançamentos do dia) |
+| 05/09 · CG | R$ 2.119,00 |
+| 05/09 · Recreio | R$ 1.248,16 |
+| **total em 3 dias** | **R$ 7.469,16 · 12 lançamentos** |
+
+Esses 12 entram no caixa **sem `aluno_id` e sem `fatura_id`** — o dinheiro fecha,
+mas a conciliação com a fatura do aluno se perde. É o custo real, e não aparece em
+lugar nenhum da tela.
+
+A Barra foi o grupo silencioso: 3 cards em 3 dias, zero correção. Todo o problema
+está em CG e Recreio, que são os que têm volume.
+
+---
+
+## 2. As quatro raízes — todas medidas, todas corrigidas
+
+Nenhuma das quatro cria gramática nova de diálogo (compromisso vigente). As quatro
+consertam **leitura de dado**.
+
+### F1 · A Sol escrevia "cartão débito" em comprovante de Pix
+
+**6 de 6 correções de forma em 3 dias foram "foi pix"** — Moisés 13:32, Luiz
+Eduardo 13:54, Manuela 13:57, e mais três. Nunca o contrário.
+
+A raiz não é o OCR nem o LLM. `extrairForma` **já lia certo** (ela testa `/pix/`
+primeiro, de propósito). O que acontecia depois:
+
+```js
+if (!forma) { const ff = extrairForma(ocrText, null); if (ff) forma = ff; }
+const cc = extrairCartao(ocrText);
+if (cc) { forma = 'cartao'; ... }        // ← sobrescreve SEM condicao nenhuma
+```
+
+E `SINAL_CARTAO` aceita a palavra **`débito` sozinha** — que aparece em *todo*
+comprovante de Pix de banco, na linha **"Débito em conta"**. Ou seja: a evidência
+mais forte que existe (o comprovante escrito "Pix") perdia para uma palavra solta.
+
+**Correção:** "Débito/crédito em conta" sai do texto antes de qualquer teste, e
+**pix explícito vence** — salvo sinal FORTE de maquininha (bandeira, NSU,
+adquirente, "venda débito", "cartão de débito"), que cupom tem e comprovante de
+Pix não. Feita em `extrairCartao`, então vale nos 4 lugares que a chamam, não só
+no ramo do OCR.
+
+### F2 · O lote de 3 alunos que derrubou o Recreio
+
+12:41 — a Vitória manda o PDF com a legenda:
+
+```
+parcelas dos alunos:
+Márcio Sant'Anna R$395,00
+Valentina Cortes Santanna R$468,16
+Maria Luiza Cortes Sant'Anna R$385,00
+
+total: R$1.248,16 - pix
+```
+
+A Sol respondeu com **um card de R$ 395** e o aviso "a mensagem cita R$ 1.248,16".
+12:43, a Vitória repete no formato que a Sol pediu, com hífen: **"Não entendi
+essa 😅"**. 12:45, ela explica com todas as letras — e a Sol grava o nome do aluno
+como **`"diferente mas o valor esta unificado."`**. 12:46: *"@Luciano Alf me
+ajudaaa"*. As 3 parcelas foram lançadas à mão.
+
+Duas causas somadas, nas **duas cópias** da mesma regra (detector e parser):
+
+1. **O traço era obrigatório.** A equipe escreve `Nome R$395,00`. A Sol ensina
+   `Nome — R$ valor`, com um travessão que **não existe no teclado do celular**.
+2. **Apóstrofo não entrava no nome.** `Sant'Anna` — e **2 dos 3 alunos** do lote
+   são Sant'Anna. Mesmo na segunda tentativa, com hífen, só 1 das 3 linhas casava.
+
+**Correção:** a linha `Nome — R$ valor` passa a ter **uma regra só**
+(`_linhaNomeValorSol`), usada pelo detector e pelo parser — duas cópias da mesma
+regra é o padrão que gerou as duplicatas de renovação. Apóstrofo e ponto entram no
+nome (Sant'Anna, D'Angelo, Jr.); **o traço vira opcional quando o valor traz
+`R$`** — sem traço o `R$` é obrigatório, é ele que marca a fronteira. Rótulo de
+operação no começo da linha (`Parcela`, `Passaporte`, `Total`…) nunca vira nome.
+
+Com a correção, a legenda das 12:41 é reconhecida como multi-aluno **na primeira
+tentativa**, os 3 alunos saem e a soma fecha em R$ 1.248,16.
+
+### F3 · Frase virando nome de aluno
+
+Três vezes em 3 dias a Sol gravou um pedaço de frase no campo ALUNO:
+
+| quando | o que ficou gravado |
+|---|---|
+| 03/09 Recreio | `São dois curso teclado e` |
+| 05/09 CG | `Maria Luzia Marinho da Silva Delgado e a parcela é` |
+| 05/09 Recreio | `diferente mas o valor esta unificado.` |
+
+`_alunoRotulado` casava `\balun[oa]s?\b` — **aceitando o plural** — e o rótulo
+(`:`, `-`, `é`, `foi`) era **opcional**. Então `alunos` + qualquer prosa virava
+nome. É a mesma lição já registrada no `CLAUDE.md`: *palavra solta nunca é
+comando*. "alunos" no plural significa **mais de um** — é o oposto de uma etiqueta
+para um nome.
+
+**Correção:** só o **singular** rotula (`\balun[oa]\b`); o corte do rabo da frase
+ganhou os campos que faltavam (`e a parcela`, `e a competência`, …); e o que
+**sobra depois da limpeza** passa por um vocabulário de operação — se ainda tem
+"parcela", "valor", "forma", "competência", não era nome nenhum.
+
+⚠️ A ordem importa e custou uma iteração: julgar a captura **crua** rejeitava
+também o caso bom (`aluna Maria Luzia … e a parcela é de setembro`), porque o rabo
+da frase está dentro dela. O corte roda primeiro; o vocabulário julga o que sobrou.
+
+### F4 · O mesmo nome oferecido três vezes
+
+Card da Kamilly (CG 13:51): *"Não identifiquei — o pagamento veio de Michele
+Azevedo de Souza. É de qual aluno? – Kamilly Azevedo da Silva – Kamilly Azevedo da
+Silva – Kamilly Azevedo da Silva"*. São **3 matrículas da mesma pessoa** e a lista
+não deduplicava. Perguntar oferecendo o mesmo nome 3× não é pergunta, é ruído.
+Uma linha: `[...new Set(...)]`.
+
+---
+
+## 3. Validação
+
+Patch com **guarda de âncora declarando o número esperado** (10 âncoras, todas
+bateram 1×): `tests/sol-runtime/_patch-forma-pix-e-nome-05set.cjs`.
+
+- **`forma-e-nome-05set.test.cjs`** (novo, 22 casos com os **textos reais** dos
+  grupos): **10 falhas antes → 0 depois**. Metade dos casos são "não regride":
+  cupom PagBank continua cartão débito, `( cartão de débito)` continua cartão,
+  uma linha só nunca vira multi, duas linhas de *produto* não viram dois alunos.
+- **`detector-multi-aluno.test.cjs`** (18 legendas reais): **18/18 antes e depois**.
+- **Suíte local completa, 34 arquivos:** 33 ok.
+  ⚠️ `parcela-recreio-vitoria.test.cjs` dá 2/4 — **falha idêntica no backup
+  pré-patch**, conferido rodando o teste contra a cópia antiga. Não é regressão;
+  é dívida anterior (o teste supõe "fonte financeira indisponível" e hoje a fonte
+  está fresca).
+
+🔴 **PENDENTE — a bridge ainda não recarregou.** O arquivo em produção está
+corrigido e validado, mas `whatsapp-bridge/bridge.js` faz `require` do módulo
+**no start**: só passa a valer depois de reiniciar. O comando (`kill` do pid da
+bridge, com o `hermes-gateway-sol.service` respawnando em ~5s) **foi bloqueado
+pelo classificador de permissão** desta sessão. Precisa do seu OK.
+Os crons de abrir/fechar são processos novos a cada execução e **já pegam o
+código novo** — por isso a suíte inteira foi rodada antes de deixar o arquivo em
+pé. Reverter, se precisar:
+`caixa-financeiro.cjs.bak-20260905T175000Z-before-forma-pix-e-nome`.
+
+---
+
+## 4. A V4 em sombra — e o veredito
+
+### 4.1 🔴 O shadow está sendo medido errado, e isso subestima o roteador
+
+`observarRoteadorV4(event, acaoLegada)` é chamado **depois** do `handle()`. Quando
+o humano escreve "Pode", o runtime lança e **consome a pendência**; só então o
+roteador recebe a mensagem — com o contexto **já vazio**.
+
+Medido: das **44 mensagens que fizeram o runtime lançar, 33 (75%) chegaram ao
+roteador com `pendencias: 0`**. Ele viu a palavra "Pode" sozinha, sem card
+nenhum, e respondeu `nada`/`conversa` — que é a resposta certa para "aprovar o
+quê?". Nas 11 que ainda tinham card visível, ele disse `aprovar` em 6.
+
+Ou seja: o placar bruto ("o roteador só pegou 6 de 44 aprovações, 13,6%") é
+**artefato de instrumentação**. Qualquer decisão de flip tomada em cima da tabela
+crua estaria em cima de uma medição quebrada.
+
+### 4.2 O placar honesto — 204 mensagens, 3 dias
+
+| | |
+|---|---|
+| os dois agiram | 41 |
+| **só o V4 viu intenção (legado mudo)** | **35** |
+| só o legado agiu | 68 — mas **40 com o contexto já consumido** |
+| os dois em silêncio | 60 |
+
+**Os 35 ganhos** são momentos em que a equipe falou e a Sol ficou parada:
+`lancamento_por_texto` 11 · `aprovar` 7 · `corrigir_competencia` 5 · `descartar` 4
+· `lancamento_multi_aluno` 3 · e mais 5 avulsos.
+
+**As perdas reais** (legado agiu, V4 calado, com contexto visível) são **28** — e
+**12 delas são `intencao: null`**, ou seja, o roteador **não respondeu a tempo**.
+Não é erro de julgamento, é o cano. Das 16 que responderam, **6 são o mesmo buraco
+nomeável**: `saida_texto_sem_forma` / `preview_tipo_corrigido_saida` — saída de
+dinheiro ditada por texto, que o legado lê e o roteador chamou de `nada`, apesar
+de ter `saida_dinheiro` no enum dele. É ajuste de prompt, não de arquitetura.
+
+### 4.3 Nos dois casos que doeram hoje, o roteador acertou e a gramática errou
+
+| momento | equipe escreveu | legado | V4 |
+|---|---|---|---|
+| Recreio 12:43 | "são pagamentos de 3 parcelas juntas, Márcio…" | `nada` → *"Não entendi essa"* | **`lancamento_multi_aluno` 0.99** ✅ |
+| Recreio 12:45 | "são 3 parcelas de alunos diferente mas…" | gravou o nome errado | **`lancamento_multi_aluno` 0.99, valor 1.248,16, pix** ✅ |
+| CG 04/09 14:52 | (com 3 pendências abertas) | `nada` | **`aprovar` 0.97** ✅ |
+| CG 05/09 13:26 | correção de competência | `nada` (só o fallback LLM salvou) | **`corrigir_competencia` 0.98** ✅ |
+
+E no mesmo instante do 12:43 o **fallback LLM do próprio legado** devolveu
+`fallback_llm_sem_intencao`. O roteador acertou onde as duas camadas atuais
+falharam.
+
+### 4.4 🔴 O bloqueio do flip é latência — e é do cano, não do cérebro
+
+Medido no log: **mediana 21,8 s · p90 44,5 s · máximo 48,8 s. 53% acima de 20 s,
+10% sem resposta nenhuma.**
+
+Cronometrado na VPS, a causa:
+
+| o que | tempo |
+|---|---|
+| roteador como está hoje (`hermes_cli chat`, prompt trivial) | **10–13 s** |
+| o mesmo, trocando para `openai-api/gpt-5.4-mini` | **10,5 s** |
+| o mesmo, com `anthropic/claude-haiku-4-5` | 23 s — e devolveu prosa, não JSON |
+
+**Trocar o modelo não resolve.** O piso de ~10 s é o próprio `hermes_cli`: subir o
+venv Python, inicializar o agente e ir ao gateway, **um processo por mensagem**. O
+perfil da Sol roda `gpt-5.6-luna` via `openai-codex` — um modelo de raciocínio
+atrás de um CLI, para uma tarefa de classificação que pede o contrário.
+
+Com a V4 na frente, **cada mensagem do grupo esperaria 20–45 s** antes de qualquer
+resposta. Inviável.
+
+### 4.5 Veredito
+
+**Vale virar a chave. Não vale virar hoje, e não com este cano.**
+
+O cérebro está pronto: 35 ganhos contra ~16 perdas de julgamento, confiança 0,98–0,99
+nos casos difíceis, e acerto exatamente onde a gramática mais custou dinheiro esta
+semana. Continuar só depurando regex tem retorno decrescente — as quatro raízes de
+hoje são a quinta rodada do mesmo tipo de conserto.
+
+Mas a V4 na frente **hoje** trocaria erro por espera, e espera de 40 s num grupo
+onde a ADM lança 30 comprovantes por tarde é pior que o erro.
+
+**Três pré-requisitos, nesta ordem, antes do flip:**
+
+1. **Tirar o roteador do `hermes_cli`.** Chamada HTTP direta à API do modelo, como
+   as edges já fazem — alvo de 1–3 s. É o item que decide tudo; sem ele os outros
+   dois não importam.
+2. **Consertar a medição do shadow:** capturar o contexto **antes** do `handle()`.
+   Enquanto o roteador for medido depois do consumo da pendência, o placar mente
+   contra ele — e mentiria a favor dele depois do flip, quando ele estiver na
+   frente.
+3. **Fechar o buraco de `saida_dinheiro`** no prompt (6 das 16 perdas reais).
+
+Com isso feito, uma semana de sombra **remedida** decide o flip com número limpo.
+Os invariantes não mudam: número só de RPC canônica, o "pode" continua
+determinístico (aprovação de dinheiro nunca sai do LLM), escrita atrás da V3,
+rollback por env var.
+
+---
+
+## 5. O que fica aberto
+
+- 🔴 **Reiniciar a bridge** — sem isso as 4 correções não estão no ar (§3).
+- **Pendência fantasma:** Heiton/CG 13:36 gerou **dois cards de R$ 387** com 26 s
+  de diferença; o "Pode" lançou um e o outro virou o pin *"Ainda aguardando"*.
+  O dinheiro está certo (**lançado uma vez só**, conferido em
+  `caixa_movimentacoes`), mas o card órfão depois disparou um falso alarme de
+  duplicata contra o próprio lançamento da Sol. Não corrigido — precisa de guarda
+  de "já existe card vivo para este mesmo comprovante".
+- **Lançamento sem `aluno_id`:** a Kamilly (R$ 734) entrou com o nome correto no
+  card e **`aluno_id` nulo** no banco. Mais 8 casos em 3 dias. O vínculo falha em
+  silêncio — não há log de `vinculo_lancamento` nesses.
+- **`lancado` não registra `chatId`** no log: dá para contar lançamentos, não dá
+  para atribuí-los à unidade sem cruzar com o banco. Observabilidade barata de
+  arrumar.
+- **`parcela-recreio-vitoria.test.cjs`** falhando 2/4 desde antes de hoje (§3).
