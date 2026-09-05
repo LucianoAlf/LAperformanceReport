@@ -8,6 +8,7 @@ export type TipoConversa =
   | "reposicao_pedida"
   | "ausencia_ou_doenca"
   | "pergunta_sem_resposta"
+  | "retomar_depois"
   | "cortesia"
   | "aviso_operacional"
   | "spam"
@@ -21,6 +22,14 @@ export interface VeredictoConversa {
   confianca: Confianca;
   resumo: string;
   trecho_chave: string;
+  /**
+   * A expressao de tempo LITERAL que a pessoa usou ("em janeiro", "daqui a 3
+   * meses"). Vazio quando ela nao deu prazo. 🔴 O modelo NAO converte para
+   * data: quem converte e `fn_resolver_prazo_retomada`, no banco. Modelo
+   * fazendo aritmetica de calendario erra em silencio, e lembrete no mes
+   * errado e pior que lembrete nenhum.
+   */
+  prazo_texto?: string;
 }
 
 /**
@@ -35,6 +44,10 @@ const REGRA_POR_TIPO: Record<TipoConversa, string | null> = {
   reposicao_pedida: "R10",
   ausencia_ou_doenca: "R9",
   pergunta_sem_resposta: "R8",
+  // ⚠️ NAO vira sinal: sinal do radar significa "aja AGORA", e uma retomada
+  // marcada para janeiro ficaria meses ocupando a pauta. Vai para
+  // `lead_retomada` por `decidirRetomada`, abaixo.
+  retomar_depois: null,
   cortesia: null,
   aviso_operacional: null,
   spam: null,
@@ -90,6 +103,38 @@ export function decidirSinal(v: VeredictoConversa): DecisaoSinal {
   }
 
   return { emitir: true, regra_codigo: regra, motivo_descarte: null };
+}
+
+export interface DecisaoRetomada {
+  registrar: boolean;
+  motivo_descarte: string | null;
+}
+
+/**
+ * O BUMERANGUE. Mesma disciplina do `decidirSinal`: o modelo descreve, isto
+ * decide.
+ *
+ * ⚠️ SÓ VALE PARA LEAD. Aluno dizendo "me chama mês que vem" é assunto de
+ * retenção (dificuldade financeira, reposição), não de agenda comercial —
+ * tratar como retomada tiraria o caso da fila de quem cuida de retenção.
+ *
+ * ⚠️ CONFIANÇA BAIXA NÃO ENTRA. Um lembrete errado daqui a 3 meses é pior que
+ * lembrete nenhum: a consultora não terá contexto para desconfiar dele.
+ *
+ * ⚠️ SEM FRASE NÃO REGISTRA. `trecho_chave` é o que vai aparecer para ela no
+ * dia; sem isso o lembrete é "retomar contato com fulano", que ela ignora.
+ * A coluna é NOT NULL no banco, então isto é a primeira das duas guardas.
+ */
+export function decidirRetomada(
+  v: VeredictoConversa,
+  entidadeTipo: string | null,
+): DecisaoRetomada {
+  const nao = (motivo: string): DecisaoRetomada => ({ registrar: false, motivo_descarte: motivo });
+  if (v.tipo !== "retomar_depois") return nao(`tipo_nao_e_retomada:${v.tipo}`);
+  if (entidadeTipo !== "lead") return nao(`retomada_so_para_lead:${entidadeTipo ?? "desconhecido"}`);
+  if (v.confianca === "baixa") return nao("confianca_baixa");
+  if (!v.trecho_chave || v.trecho_chave.trim().length < 10) return nao("sem_frase");
+  return { registrar: true, motivo_descarte: null };
 }
 
 /**
