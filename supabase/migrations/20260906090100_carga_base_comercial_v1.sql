@@ -11,6 +11,13 @@
 -- recebe hoje** — a prova está no bloco DO ao fim.
 --
 -- Idempotente por `titulo`: rodar de novo não duplica.
+--
+-- ⚠️ HISTORICO HONESTO: a aplicacao de 06/09 rodou a partir de um checkout
+--    Windows e os 11 blocos entraram com CRLF; foi preciso um UPDATE de
+--    limpeza (replace do carriage return) logo depois. O texto era o mesmo — o
+--    md5 dos 11 confere com os arquivos-fonte depois de normalizar, 11 de 11.
+--    O gerador passou a normalizar CRLF->LF, entao ESTE arquivo ja e a versao
+--    correta: rodado de novo, produz o resultado limpo direto.
 
 -- ── bloco-01-atendimento-bumerangue.md ──
 insert into public.base_conhecimento_blocos
