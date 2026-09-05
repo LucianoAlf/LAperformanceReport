@@ -70,11 +70,20 @@ alguém contar.
 
 🔴 **CORREÇÃO (medida depois de aplicar a marcação):** eu havia escrito aqui que
 "18 das 66 matrículas de agosto (27%) tiveram lead fabricado". **Estava errado.**
-Aquele 18 era *leads sintéticos criados em agosto que converteram* — coisa
-diferente de *matrículas de agosto cujo único lead é sintético*. A maioria dos
-alunos com lead sintético **também tem um lead real** (o sintético nasceu de um
-segundo curso ou de uma duplicata). Com o indicador corrigido, o número real de
-agosto é:
+Aquele 18 era *leads sintéticos criados em agosto* — coisa diferente de
+*matrículas comerciais de agosto sem lead real*. Dos 18: **9 pertencem a
+matrícula de outro mês** (o aluno matriculou antes e o lead nasceu depois),
+**7 são de tipo que não conta como matrícula comercial** (segundo curso, banda,
+bolsista) e 1 é banda/coral. Sobram **3** que são matrícula comercial de agosto.
+
+⚠️ Uma segunda explicação minha também estava errada: eu disse que "a maioria dos
+alunos com lead sintético também tem lead real". **Falso** — desde junho, de 27
+alunos com lead sintético, apenas **3** têm também um lead real. O motivo do
+número pequeno é outro, e é o de cima: o gatilho dispara para **toda** linha de
+`alunos`, inclusive segundo curso, banda e bolsista, que ficam fora da conta
+comercial.
+
+Com o indicador corrigido, o número real de agosto é:
 
 | unidade | matrículas | conversões de lead | **sem lead real** |
 |---|---|---|---|
