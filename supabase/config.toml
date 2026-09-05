@@ -115,6 +115,11 @@ verify_jwt = true
 # Declarado para que um deploy futuro nao altere a protecao vigente por omissao.
 verify_jwt = true
 
+[functions.sync-contratos-assinatura-emusys]
+# Cron envia JWT anon valido mais x-sync-token; a funcao valida o segredo antes
+# de abrir execucao. TRUE impede chamadas sem JWT de chegarem ao codigo.
+verify_jwt = true
+
 [functions.sync-professor-disciplinas-emusys]
 # Cron usa segredo dedicado; navegador valida JWT e permissao dentro da funcao.
 verify_jwt = false

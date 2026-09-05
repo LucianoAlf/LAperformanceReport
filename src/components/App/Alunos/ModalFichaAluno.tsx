@@ -34,6 +34,9 @@ import { toast } from 'sonner';
 import type { Aluno } from './AlunosPage';
 import { ContatosAluno } from './ContatosAluno';
 import { TimelinePesquisasAluno } from '../SucessoCliente/TimelinePesquisasAluno';
+import { ContratoAssinaturaBadge } from './ContratoAssinaturaBadge';
+import { useContratoAssinaturaAluno } from '@/hooks/useContratoAssinaturaAluno';
+import { formatarObservacaoContrato } from '@/lib/contratoAssinatura';
 import {
   analisarMudancaParaSemParcela,
   buscarContextosStatusPagamento,
@@ -967,6 +970,10 @@ export function ModalFichaAluno({
   onAbrirOutroCurso,
 }: ModalFichaAlunoProps) {
   const { user, usuario, perfis } = useAuth();
+  const {
+    data: contratoAssinatura,
+    loading: loadingContratoAssinatura,
+  } = useContratoAssinaturaAluno(aluno.id);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('pessoal');
@@ -1800,6 +1807,12 @@ export function ModalFichaAluno({
                     Aguardando renovacao
                   </span>
                 )}
+                <ContratoAssinaturaBadge
+                  status={contratoAssinatura.contrato_assinatura_status}
+                  contrato_dado_fresco={contratoAssinatura.contrato_dado_fresco}
+                  observadoEm={contratoAssinatura.contrato_status_observado_em}
+                  loading={loadingContratoAssinatura}
+                />
               </div>
             </div>
           </DialogTitle>
@@ -2045,6 +2058,18 @@ export function ModalFichaAluno({
 
               <div className="border-t border-slate-700 pt-4">
                 <Label className="mb-3 block text-slate-400">Contrato</Label>
+                <div className="mb-3 rounded-lg border border-slate-700/70 bg-slate-900/40 p-3">
+                  <ContratoAssinaturaBadge
+                    status={contratoAssinatura.matricula_contrato_status}
+                    contrato_dado_fresco={contratoAssinatura.contrato_dado_fresco}
+                    observadoEm={contratoAssinatura.matricula_status_observado_em}
+                    loading={loadingContratoAssinatura}
+                  />
+                  <p className="mt-2 text-xs text-slate-400">
+                    Observado pelo LA Report em {formatarObservacaoContrato(contratoAssinatura.matricula_status_observado_em)}.
+                    A origem é exclusivamente o Emusys e este estado não pode ser editado aqui.
+                  </p>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="mb-2 block text-sm">Início do Contrato</Label>
@@ -2063,6 +2088,9 @@ export function ModalFichaAluno({
                     />
                   </div>
                 </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  Início e fim representam o período das aulas; não comprovam assinatura.
+                </p>
               </div>
 
               {/* Outros cursos do aluno */}
