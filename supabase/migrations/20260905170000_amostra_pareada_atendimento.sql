@@ -23,15 +23,18 @@
 --
 -- ⚠️ ISTO PRODUZ CORRELAÇÃO. Conversa boa pode ser consequência de lead bom, e
 --    não causa da matrícula. O resultado diz se vale investigar.
+-- ⚠️ DROP antes: mudar o RETURNS TABLE nao e substituivel por CREATE OR REPLACE.
+drop function if exists public.amostra_pareada_atendimento_v1(integer,integer);
 create or replace function public.amostra_pareada_atendimento_v1(
   p_pares integer default 120, p_meses integer default 6
 ) returns table (par_id int, lead_id bigint, telefone text, converteu boolean,
-                 unidade text, canal text, mes date)
+                 unidade text, canal text, mes date, data_conversao date)
 language sql stable security definer set search_path to 'public' as $function$
   with base as (
     select l.id, u.nome un, coalesce(c.nome,'(sem canal)') cn,
            date_trunc('month', l.created_at)::date ms,
            coalesce(l.converteu,false) conv,
+           l.data_conversao::date dconv,
            regexp_replace(coalesce(l.telefone,''), '\D','','g') tel
     from leads l
     join unidades u on u.id = l.unidade_id
@@ -44,7 +47,7 @@ language sql stable security definer set search_path to 'public' as $function$
     from base
   ),
   pares as (
-    select a.un, a.cn, a.ms, a.rn, a.id id_conv, a.tel tel_conv,
+    select a.un, a.cn, a.ms, a.rn, a.id id_conv, a.tel tel_conv, a.dconv,
            b.id id_nao, b.tel tel_nao
     from num a
     join num b on b.un=a.un and b.cn=a.cn and b.ms=a.ms and not b.conv and b.rn=a.rn
@@ -54,9 +57,13 @@ language sql stable security definer set search_path to 'public' as $function$
     select *, row_number() over (order by rn, un, ms, cn)::int pid from pares
   ),
   cortado as (select * from numerado where pid <= p_pares)
-  select pid, id_conv, tel_conv, true,  un, cn, ms from cortado
+  -- ⚠️ `data_conversao` vai junto para o estudo poder CORTAR a conversa no
+  -- momento da matricula: depois da venda a escola manda confirmacao, checklist
+  -- de dados e lembrete de 1a aula — mensagens sem pergunta que existem SO em
+  -- quem converteu e inflam qualquer contagem de "mensagem sem pergunta".
+  select pid, id_conv, tel_conv, true,  un, cn, ms, dconv from cortado
   union all
-  select pid, id_nao,  tel_nao,  false, un, cn, ms from cortado
+  select pid, id_nao,  tel_nao,  false, un, cn, ms, null::date from cortado
   order by 1, 4 desc
 $function$;
 
