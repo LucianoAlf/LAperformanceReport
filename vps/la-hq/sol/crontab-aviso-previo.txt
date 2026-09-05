@@ -1,0 +1,8 @@
+# Fonte versionada dos jobs SOL_AVISO_PREVIO.
+# Horarios em UTC: 08:05 Recreio, 09:05 Barra, 10:05 Campo Grande (BRT).
+# No sabado as tres unidades abrem juntas; uma unica execucao percorre as tres
+# em serie para respeitar o rate limit compartilhado do Emusys.
+5 11 * * 1-5 /usr/bin/flock -n /tmp/sol-aviso-previo-global.lock /home/sol/.openclaw/workspace/scripts/cron-alerta.py aviso-previo-recreio /home/sol/.openclaw/workspace/scripts/send-aviso-previo-sol.py --send --unidade Recreio >> /home/sol/.openclaw/workspace/logs/aviso-previo.log 2>&1
+5 12 * * 1-5 /usr/bin/flock -n /tmp/sol-aviso-previo-global.lock /home/sol/.openclaw/workspace/scripts/cron-alerta.py aviso-previo-barra /home/sol/.openclaw/workspace/scripts/send-aviso-previo-sol.py --send --unidade Barra >> /home/sol/.openclaw/workspace/logs/aviso-previo.log 2>&1
+5 13 * * 1-5 /usr/bin/flock -n /tmp/sol-aviso-previo-global.lock /home/sol/.openclaw/workspace/scripts/cron-alerta.py aviso-previo-campo-grande /home/sol/.openclaw/workspace/scripts/send-aviso-previo-sol.py --send --unidade "Campo Grande" >> /home/sol/.openclaw/workspace/logs/aviso-previo.log 2>&1
+5 11 * * 6 /usr/bin/flock -n /tmp/sol-aviso-previo-global.lock /home/sol/.openclaw/workspace/scripts/cron-alerta.py aviso-previo-todas /home/sol/.openclaw/workspace/scripts/send-aviso-previo-sol.py --send >> /home/sol/.openclaw/workspace/logs/aviso-previo.log 2>&1

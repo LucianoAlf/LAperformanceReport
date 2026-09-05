@@ -139,6 +139,7 @@ import {
   derivarCamposCadastro,
   montarPatchCadastro,
 } from '../_shared/emusys-cadastro-canonico.ts';
+import { validarDataPrevistaAviso } from '../_shared/aviso-previo.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -1892,9 +1893,14 @@ async function handleTrancamento(supabase: any, p: Payload) {
 // Dedup/idempotencia por emusys_aviso_previo_id (o id do aviso no Emusys e estavel entre
 // adicionado/editado/removido; aluno+mes_saida muda a cada edicao e nao serve de chave).
 async function handleAvisoPrevio(supabase: any, p: Payload) {
-  const idempotency_key = await computarHash(
-    `${p.evento}:${p.avisoPrevioId ?? ''}:${p.unidadeId}`
-  );
+  const idempotency_key = await computarHash([
+    p.evento,
+    p.avisoPrevioId ?? '',
+    p.unidadeId,
+    p.rawPayload?.id ?? '',
+    p.avisoPrevioDataAviso ?? '',
+    p.avisoPrevioDataPrevistaCancelamento ?? '',
+  ].join(':'));
 
   const logBase = {
     evento: p.evento,
@@ -1947,7 +1953,10 @@ async function handleAvisoPrevio(supabase: any, p: Payload) {
     }
 
     const dataAviso = p.avisoPrevioDataAviso ?? p.dataEvento;
-    const mesSaida = p.avisoPrevioDataPrevistaCancelamento ? inicioMesISO(p.avisoPrevioDataPrevistaCancelamento) : null;
+    const dataPrevistaFonte = p.avisoPrevioDataPrevistaCancelamento;
+    const dataValidada = validarDataPrevistaAviso(dataAviso, dataPrevistaFonte);
+    const dataPrevista = dataValidada.dataPrevista;
+    const mesSaida = dataPrevista ? inicioMesISO(dataPrevista) : null;
     const motivo = p.avisoPrevioMotivo || 'Via Emusys (automação)';
     const observacoes = [p.avisoPrevioObservacoes, p.avisoPrevioAutorNome ? `Registrado por: ${p.avisoPrevioAutorNome} (Emusys)` : null]
       .filter(Boolean).join(' | ') || null;
@@ -1966,19 +1975,29 @@ async function handleAvisoPrevio(supabase: any, p: Payload) {
 
     const camposAviso: any = {
       data: dataAviso,
-      mes_saida: mesSaida,
-      data_prevista_saida: p.avisoPrevioDataPrevistaCancelamento,
       motivo,
       motivo_saida_id: motivoSaidaId,
       observacoes,
       competencia_referencia: inicioMesISO(dataAviso),
       updated_at: new Date().toISOString(),
     };
+    // Em edição/reentrega, uma data impossível na fonte não apaga uma data
+    // válida que já tenha sido corrigida. Em inserção nova, fica sem vencimento
+    // até a fonte ser corrigida; o payload bruto e a invariante deixam rastro.
+    if (!dataValidada.fonteInvalida) {
+      camposAviso.mes_saida = mesSaida;
+      camposAviso.data_prevista_saida = dataPrevista;
+    }
+    const invariantesData = dataValidada.fonteInvalida ? [{
+      regra: 'aviso_previo_data_prevista_anterior_ao_aviso',
+      severidade: 'critico' as const,
+      mensagem: `data_prevista_cancelamento=${dataPrevistaFonte} anterior a data_aviso=${dataAviso}`,
+    }] : [];
 
     if (existente?.id) {
       await supabase.from('movimentacoes_admin').update(camposAviso).eq('id', existente.id);
       const result = { action: 'aviso_previo_atualizado', aluno_id: aluno.id, movimentacao_id: existente.id, matched_via: found.fonte, mes_saida: mesSaida };
-      await gravarLog(supabase, { ...logBase, acao: result.action, aluno_id: aluno.id, invariantes: [], detalhes: { ...result, version: VERSAO, emusys_matricula_id: p.matriculaIdEmusys } });
+      await gravarLog(supabase, { ...logBase, acao: result.action, aluno_id: aluno.id, invariantes: invariantesData, detalhes: { ...result, version: VERSAO, emusys_matricula_id: p.matriculaIdEmusys, data_prevista_fonte: dataPrevistaFonte, data_prevista_aceita: dataPrevista } });
       return result;
     }
 
@@ -2002,7 +2021,7 @@ async function handleAvisoPrevio(supabase: any, p: Payload) {
         .update({ ...camposAviso, emusys_aviso_previo_id: p.avisoPrevioId })
         .eq('id', adotavel.id);
       const result = { action: 'aviso_previo_adotado', aluno_id: aluno.id, movimentacao_id: adotavel.id, matched_via: found.fonte, mes_saida: mesSaida };
-      await gravarLog(supabase, { ...logBase, acao: result.action, aluno_id: aluno.id, invariantes: [], detalhes: { ...result, version: VERSAO, emusys_matricula_id: p.matriculaIdEmusys } });
+      await gravarLog(supabase, { ...logBase, acao: result.action, aluno_id: aluno.id, invariantes: invariantesData, detalhes: { ...result, version: VERSAO, emusys_matricula_id: p.matriculaIdEmusys, data_prevista_fonte: dataPrevistaFonte, data_prevista_aceita: dataPrevista } });
       return result;
     }
 
@@ -2022,7 +2041,7 @@ async function handleAvisoPrevio(supabase: any, p: Payload) {
     await supabase.from('movimentacoes_admin').insert(insertPayload);
 
     const result = { action: 'aviso_previo_registrado', aluno_id: aluno.id, matched_via: found.fonte, mes_saida: mesSaida, motivo };
-    await gravarLog(supabase, { ...logBase, acao: result.action, aluno_id: aluno.id, invariantes: [], detalhes: { ...result, version: VERSAO, emusys_matricula_id: p.matriculaIdEmusys } });
+    await gravarLog(supabase, { ...logBase, acao: result.action, aluno_id: aluno.id, invariantes: invariantesData, detalhes: { ...result, version: VERSAO, emusys_matricula_id: p.matriculaIdEmusys, data_prevista_fonte: dataPrevistaFonte, data_prevista_aceita: dataPrevista } });
     return result;
   } catch (e: any) {
     await gravarLog(supabase, {
