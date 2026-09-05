@@ -66,16 +66,37 @@ justamente para medir quem fecha sem passar pelo funil. Medido em agosto:
 
 **O relatório diz que 100% das matrículas vieram de lead, nas três unidades.**
 O indicador está permanentemente zerado porque o gatilho fabrica o lead antes de
-alguém contar. Só em agosto, **18 das 66 matrículas comerciais (27%)** tiveram
-lead fabricado.
+alguém contar.
 
-E a taxa de conversão do funil sai inflada:
+🔴 **CORREÇÃO (medida depois de aplicar a marcação):** eu havia escrito aqui que
+"18 das 66 matrículas de agosto (27%) tiveram lead fabricado". **Estava errado.**
+Aquele 18 era *leads sintéticos criados em agosto que converteram* — coisa
+diferente de *matrículas de agosto cujo único lead é sintético*. A maioria dos
+alunos com lead sintético **também tem um lead real** (o sintético nasceu de um
+segundo curso ou de uma duplicata). Com o indicador corrigido, o número real de
+agosto é:
 
-| | com sintéticos | sem sintéticos |
-|---|---|---|
-| Recreio jun/26 | 15,8% | **6,1%** |
-| Campo Grande jun/26 | 8,4% | **3,1%** |
-| Barra ago/26 | 11,4% | **8,4%** |
+| unidade | matrículas | conversões de lead | **sem lead real** |
+|---|---|---|---|
+| Barra | 19 | 15 | **4** |
+| Campo Grande | 24 | 23 | **1** |
+| Recreio | 23 | 23 | **0** |
+
+**5 de 66 (7,6%)**, não 27%. O defeito era real — o indicador estava morto — mas
+o tamanho é bem menor do que eu afirmei.
+
+A taxa de conversão do funil, essa, sai inflada de verdade — e o efeito é maior
+em junho, quando o volume de sintéticos foi maior (`vw_leads_sinteticos_por_mes`):
+
+| | sintéticos no mês | conversão com | conversão só funil |
+|---|---|---|---|
+| Recreio jun/26 | 28 de 273 (10,3%) | 15,8% | **6,1%** |
+| Campo Grande jun/26 | 26 de 476 (5,5%) | 8,4% | **3,1%** |
+| Barra jun/26 | 9 de 174 (5,2%) | 12,6% | **7,9%** |
+| Barra ago/26 | 6 de 185 (3,2%) | 11,9% | **8,9%** |
+
+⚠️ O peso **caiu muito** de junho para agosto (10,3% → 1,1% no Recreio). Vale
+acompanhar antes de decidir mexer no denominador.
 
 Nenhuma das quatro funções canônicas (`get_kpis_comercial_canonicos_v2`,
 `montar_relatorio_comercial_mensal_payload_sem_pagantes_v1`,
@@ -304,7 +325,10 @@ ganha fechando esse buraco, não que o buraco seja inofensivo.
 
 ## Os quatro números
 
-1. **27% das matrículas de agosto não tinham lead** — e o relatório diz 0%.
+1. **5 matrículas de agosto não tinham lead real** — e o relatório dizia 0, nas
+   três unidades, porque o indicador estava morto por construção. Corrigido.
+   ⚠️ Em junho o efeito na taxa de conversão era grande (Recreio 15,8% → 6,1%);
+   em agosto já é pequeno.
 2. **45% das conversas nunca chegam a um humano.** No Recreio, 57%.
 3. **62% de quem fecha passou pelo WhatsApp** — 73–83% entre os canais digitais.
 4. **3 pessoas em 900 pediram para falar com gente.** O problema não é rejeição
