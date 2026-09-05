@@ -1,96 +1,61 @@
-# Assinatura eletrônica de contrato no LA Report — desenho corrigido
+# Contrato assinado no LA Report — desenho vigente
 
 ## Objetivo
 
-Fazer o LA Report refletir, sem escrita no Emusys e sem inferência jurídica, a evidência positiva de assinatura eletrônica do contrato atual de cada matrícula. A Ficha do Aluno mostra a verdade limitada da API e `get_situacao_alunos_v1` entrega o estado observado e sua frescura. O TOM permanece bloqueado para cobrança de contrato enquanto o Emusys não expuser modo e data de assinatura.
+Fazer o LA Report refletir, sem escrita no Emusys, o estado de assinatura do contrato atual de cada matrícula. A Ficha do Aluno mostra o estado somente leitura e `get_situacao_alunos_v1` entrega a consolidação por pessoa com frescura suficiente para o TOM.
 
-## Limite comprovado da fonte
+## Fonte e limite comprovado
 
-O `GET /matriculas?status=ativa` expõe apenas `contrato_atual.contrato_assinado:boolean` sobre assinatura. Uma varredura dos nomes de campos em 1.168 matrículas ativas das três unidades não encontrou modo eletrônico/manual, data da assinatura manual, data de solicitação, assinatura da escola ou estado aguardando aluno. O OpenAPI expõe somente `/matriculas` para contrato.
+Desde 05/09/2026, `GET /matriculas?status=ativa` devolve `contrato_atual.contrato_assinado=true` para assinatura manual e eletrônica. O payload não ganhou `modo_assinatura` nem `data_assinatura`; o normalizador continua lendo o mesmo booleano.
 
-Consequências:
+- `true` confirma que o contrato atual está assinado, sem informar modo ou data;
+- `false` significa que a assinatura ainda não foi concluída;
+- `false` não distingue contrato nunca enviado de escola já assinada aguardando o aluno;
+- o LA Report registra `contrato_status_observado_em`, nunca uma data de assinatura inventada.
 
-- `true` significa assinatura confirmada pelo fluxo eletrônico do Emusys;
-- `false` também ocorre em contrato assinado manualmente e em renovação automática sem nova assinatura; não significa pendência;
-- o LA Report registra `contrato_status_observado_em`, nunca `contrato_assinado_em`;
-- não são modelados modo, data manual ou estágio intermediário.
+## Persistência e reconciliação
 
-## Persistência e granularidade
+`aluno_contratos_emusys` preserva o grão `(unidade_id, emusys_matricula_id, contrato_emusys_id)`. IDs do Emusys nunca são usados sem a unidade. `contrato_assinatura_sync_execucoes` registra todas as rodadas como `running`, `succeeded` ou `failed`.
 
-A tabela `aluno_contratos_emusys` tem grão `(unidade_id, emusys_matricula_id, contrato_emusys_id)`. `contrato_emusys_id` pode ser nulo exclusivamente para representar uma matrícula ativa observada sem `contrato_atual`. O vínculo local `aluno_id` é opcional para que órfãos da integração não sejam descartados.
-
-Campos de negócio:
-
-- `contrato_assinado boolean`: obrigatório quando existe contrato e nulo quando não existe;
-- `contrato_status_observado_em timestamptz`: última vez em que aquele estado foi visto;
-- `origem text`: `snapshot_backfill` ou `api_reconciliacao`;
-- `payload_hash text`: trilha técnica sem duplicar dados pessoais.
-
-A tabela é fechada para clientes. Somente `service_role` escreve; leitura operacional ocorre por RPC autorizada.
-
-As execuções ficam em `contrato_assinatura_sync_execucoes`, com estados `running`, `succeeded` e `failed`, contagens, páginas, erro e timestamps. Falha deixa registro; ausência de sucesso fresco também é tratada como estado não verificado.
-
-## Reconciliação e frescura
-
-A Edge Function `sync-contratos-assinatura-emusys`:
-
-1. aceita somente chamada técnica autorizada;
-2. seleciona uma unidade por slug;
-3. chama `GET /matriculas?status=ativa&limite=50&token=...`;
-4. segue o cursor até `tem_mais=false`;
-5. faz upsert pelo grão completo, sempre incluindo a unidade;
-6. registra sucesso ou falha de forma durável.
-
-Cada unidade é executada separadamente antes das 06:00 BRT. O dado é fresco somente quando existe execução `succeeded` concluída na data civil de referência em `America/Sao_Paulo`. Não haver sucesso hoje prevalece sobre o último booleano armazenado: o estado público vira `nao_verificado`.
-
-## Backfill
-
-A migration preenche `aluno_contratos_emusys` a partir de `emusys_matriculas_estado_atual.payload_snapshot`, sem consultar nem escrever no Emusys. Só entram snapshots cujo campo `contrato_atual.contrato_assinado` seja booleano; matrículas observadas sem `contrato_atual` recebem a linha sentinela de contrato nulo. O backfill não altera `alunos`.
+A Edge `sync-contratos-assinatura-emusys` pagina `status=ativa&limite=50&token=...`, valida o lote completo e publica por RPC transacional. O cron mantém a guarda `skipped_fresh`. Uma chamada extraordinária pode usar `force=1`, mas somente com `x-sync-token` válido; o bypass não altera horários, persistência, logging nem cálculo de frescura.
 
 ## Regra por pessoa
 
-São relevantes todas as linhas operacionais ativas cujo curso não tenha `cursos.is_projeto_banda=true`. Esse indicador é a dispensa explícita já usada para banda, coral e atividades extras; o catálogo atual dispensado deve ser documentado.
+São relevantes todas as matrículas acadêmicas ativas cujo curso não possua `cursos.is_projeto_banda=true`.
 
-Precedência conservadora do estado por pessoa:
+Precedência:
 
 1. `dispensado`: nenhuma matrícula acadêmica relevante;
-2. `nao_verificado`: rodada da unidade não está fresca, matrícula sem ID seguro ou matrícula sem observação;
-3. `sem_contrato`: ao menos uma matrícula relevante foi observada sem `contrato_atual`;
-4. `sem_assinatura_eletronica`: todas foram verificadas, todas têm contrato, e ao menos uma possui `contrato_assinado=false`; pode haver assinatura manual;
-5. `assinado`: todas as matrículas relevantes possuem evidência positiva de assinatura eletrônica (`contrato_assinado=true`).
+2. `nao_verificado`: rodada não fresca, matrícula sem ID seguro ou sem observação;
+3. `sem_contrato`: ao menos uma relevante sem `contrato_atual`;
+4. `nao_assinado`: todas foram verificadas e ao menos uma veio com `contrato_assinado=false`;
+5. `assinado`: todas as relevantes vieram com `contrato_assinado=true`.
 
-A pessoa só fica verde quando todas as matrículas acadêmicas relevantes têm assinatura eletrônica confirmada. Os demais estados são inconclusivos para cobrança. O instante exposto na pessoa é o menor `contrato_status_observado_em` entre as matrículas relevantes, pois a leitura é tão fresca quanto seu componente mais antigo.
+Uma pessoa com dois cursos só fica `assinado` quando os dois contratos relevantes estão assinados. Banda, coral e atividade extra são dispensados exclusivamente pela flag do curso, nunca por nome.
 
 ## Contrato da RPC
 
-`get_situacao_alunos_v1` preserva `tem_data_contrato` e recebe campos aditivos:
+`get_situacao_alunos_v1` preserva `tem_data_contrato` e acrescenta:
 
 - `contrato_assinatura_status text`;
 - `contratos_assinados_todos boolean`;
 - `contratos_relevantes integer`;
 - `contratos_assinados integer`;
-- `contratos_nao_assinados integer` (nome técnico legado para contagem de `false`; não significa pendência);
+- `contratos_nao_assinados integer`;
 - `contratos_sem_contrato integer`;
 - `contratos_nao_verificados integer`;
 - `contrato_status_observado_em timestamptz`;
 - `contrato_reconciliado_em timestamptz`;
 - `contrato_dado_fresco boolean`.
 
-Nenhum desses campos entra automaticamente em `pendencias`. O TOM não pode cobrar contrato enquanto o Emusys não expuser modo e data de assinatura.
+Sem frescura, o estado público é `nao_verificado`. O TOM pode cobrar `nao_assinado` e `sem_contrato`, mas não pode atribuir a etapa ou o responsável pela pendência.
 
 ## Interface
 
-O cabeçalho da Ficha do Aluno mostra um selo somente leitura: `Assinado eletronicamente`, `Sem assinatura eletrônica`, `Sem contrato no Emusys`, `Não verificado` ou `Contrato dispensado`. `Sem assinatura eletrônica` é neutro e explica que contrato manual pode aparecer assim; não é pendência. O selo inclui tooltip/frescor sem sugerir data jurídica.
-
-Na aba Acadêmico, a seção Contrato repete o estado e `Observado pelo LA Report em ...`. Abaixo das datas editáveis aparece: “Início e fim representam o período das aulas; não comprovam assinatura.” O estado não pode ser editado.
+O cabeçalho e a aba Acadêmico mostram `Contrato assinado`, `Não assinado`, `Sem contrato no Emusys`, `Contrato não verificado` ou `Contrato dispensado`. O estado é somente leitura. A observação informa quando o LA Report viu o dado; as datas de início e fim continuam explicitamente descritas como período de aulas, não assinatura.
 
 ## Rollout
 
-O lançamento permanece `shadow`. A persistência, a RPC e a interface ficam no ar, mas o recorte de contrato do TOM continua bloqueado. A ativação exige:
+As oito matrículas de contraprova do Recreio — `32`, `78`, `169`, `328`, `394`, `409`, `167` e `416` — devem permanecer `true` no canário operacional. Na medição de 05/09/2026, o total das três unidades passou de 138 assinadas / 1.030 falsas para 933 assinadas / 238 não assinadas.
 
-1. o Emusys expor modo e data de assinatura no `contrato_atual`;
-2. reconferir os casos manuais e eletrônicos documentados no runbook operacional;
-3. confirmar que assinaturas manuais passam a ser distinguíveis;
-4. definir a regra por pessoa sobre os novos campos;
-5. observar sem cobranças automáticas antes da ativação explícita.
-
+O LA Report está liberado para o TOM depois da publicação desta versão e de uma reconciliação fresca nas três unidades. O acionamento de `CONTRATO_NA_PAUTA` continua fora deste repositório.

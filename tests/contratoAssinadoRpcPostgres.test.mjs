@@ -7,6 +7,8 @@ const migrationPath = 'supabase/migrations/20260905000151_contrato_assinado_cano
 const authMigrationPath = 'supabase/migrations/20260905002258_contrato_assinado_autorizacao.sql';
 const electronicSemanticsName = readdirSync('supabase/migrations')
   .find((name) => name.includes('contrato_assinatura_eletronica_semantica'));
+const manualElectronicSemanticsName = readdirSync('supabase/migrations')
+  .find((name) => name.includes('contrato_assinado_manual_eletronico'));
 
 function docker(args, input) {
   return spawnSync('docker', args, {
@@ -68,8 +70,13 @@ test('PostgreSQL prova lote atomico, identidade por unidade e regra conservadora
     const electronicSemanticsMigration = electronicSemanticsName
       ? readFileSync(`supabase/migrations/${electronicSemanticsName}`, 'utf8')
       : '';
+    assert.ok(manualElectronicSemanticsName, 'migration manual + eletronica ausente');
+    const manualElectronicSemanticsMigration = manualElectronicSemanticsName
+      ? readFileSync(`supabase/migrations/${manualElectronicSemanticsName}`, 'utf8')
+      : '';
     const migration = fullMigration.slice(0, fullMigration.indexOf('-- Duas janelas:'))
-      + '\ncommit;\n' + authMigration + '\n' + electronicSemanticsMigration;
+      + '\ncommit;\n' + authMigration + '\n' + electronicSemanticsMigration
+      + '\n' + manualElectronicSemanticsMigration;
     const UA = '10000000-0000-4000-8000-000000000001';
     const UB = '20000000-0000-4000-8000-000000000002';
 
@@ -157,7 +164,7 @@ test('PostgreSQL prova lote atomico, identidade por unidade e regra conservadora
       select id, true from public.alunos;
       insert into public.situacao_fixture values
         ('p-assinado', 1, array[1,2], 'Assinado', '${UA}'),
-        ('p-sem-assinatura-eletronica', 3, array[3], 'Sem assinatura eletronica', '${UA}'),
+        ('p-nao-assinado', 3, array[3], 'Nao assinado', '${UA}'),
         ('p-sem-contrato', 4, array[4], 'Sem contrato', '${UA}'),
         ('p-nao-verificado', 5, array[5], 'Nao verificado', '${UA}'),
         ('p-dispensado', 6, array[6], 'Dispensado', '${UA}'),
@@ -193,7 +200,7 @@ test('PostgreSQL prova lote atomico, identidade por unidade e regra conservadora
     `));
     assert.deepEqual(statuses, {
       Assinado: 'assinado',
-      'Sem assinatura eletronica': 'sem_assinatura_eletronica',
+      'Nao assinado': 'nao_assinado',
       'Sem contrato': 'sem_contrato',
       'Nao verificado': 'nao_verificado',
       Dispensado: 'dispensado',
@@ -221,7 +228,7 @@ test('PostgreSQL prova lote atomico, identidade por unidade e regra conservadora
       select matricula_contrato_status
       from public.get_contrato_assinatura_aluno_v1(3);
     `);
-    assert.equal(falseEnrollmentStatus, 'sem_assinatura_eletronica');
+    assert.equal(falseEnrollmentStatus, 'nao_assinado');
 
     const scoped = Number(psql(container, String.raw`
       select count(distinct unidade_id) from public.aluno_contratos_emusys

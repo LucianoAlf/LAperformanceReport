@@ -246,6 +246,9 @@
 | `matriculas_2_curso` | integer | sim |  |  |
 | `bolsistas_integrais` | integer | sim | 0 |  |
 | `bolsistas_parciais` | integer | sim | 0 |  |
+| `ticket_denominador_pagantes` | integer | sim |  |  |
+| `ticket_medio_contratual` | numeric(12,2) | sim |  |  |
+| `mrr_contratual` | numeric(14,2) | sim |  |  |
 
 **Únicos:**
 - `dados_mensais_pkey`

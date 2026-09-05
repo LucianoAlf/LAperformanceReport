@@ -1,4 +1,4 @@
-import { CheckCircle2, CircleSlash2, FileX2, ShieldQuestion } from 'lucide-react';
+import { CheckCircle2, CircleSlash2, FileX2, ShieldQuestion, XCircle } from 'lucide-react';
 import {
   apresentarContratoAssinatura,
   formatarObservacaoContrato,
@@ -15,7 +15,7 @@ type Props = {
 
 const ICONES = {
   assinado: CheckCircle2,
-  sem_assinatura_eletronica: ShieldQuestion,
+  nao_assinado: XCircle,
   sem_contrato: FileX2,
   nao_verificado: ShieldQuestion,
   dispensado: CircleSlash2,

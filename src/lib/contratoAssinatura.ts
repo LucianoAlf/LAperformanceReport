@@ -1,6 +1,6 @@
 export const CONTRATO_ASSINATURA_STATUS = [
   'assinado',
-  'sem_assinatura_eletronica',
+  'nao_assinado',
   'sem_contrato',
   'nao_verificado',
   'dispensado',
@@ -17,14 +17,14 @@ type ApresentacaoContrato = {
 
 const APRESENTACOES: Record<ContratoAssinaturaStatus, Omit<ApresentacaoContrato, 'status'>> = {
   assinado: {
-    label: 'Assinado eletronicamente',
-    descricao: 'O Emusys informa contrato_assinado=true pelo fluxo eletrônico. Isso não informa a data real da assinatura.',
+    label: 'Contrato assinado',
+    descricao: 'O Emusys informa contrato_assinado=true. Isso confirma a assinatura, mas não informa o modo nem a data real.',
     classes: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
   },
-  sem_assinatura_eletronica: {
-    label: 'Sem assinatura eletrônica',
-    descricao: 'O Emusys só informa a assinatura eletrônica. Contrato assinado manualmente aparece aqui e não é pendência. Conferir a data de assinatura na tela do Emusys.',
-    classes: 'border-slate-500/40 bg-slate-500/10 text-slate-300',
+  nao_assinado: {
+    label: 'Não assinado',
+    descricao: 'O Emusys informa contrato_assinado=false. O LA Report não sabe se o contrato ainda não foi enviado ou se aguarda a assinatura do aluno.',
+    classes: 'border-amber-500/30 bg-amber-500/10 text-amber-200',
   },
   sem_contrato: {
     label: 'Sem contrato no Emusys',

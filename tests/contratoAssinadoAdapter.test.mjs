@@ -3,19 +3,21 @@ import test from 'node:test';
 import { apresentarContratoAssinatura, formatarObservacaoContrato } from '../src/lib/contratoAssinatura.ts';
 
 test('rotulos nao prometem estado que o Emusys nao fornece', () => {
-  assert.equal(apresentarContratoAssinatura('assinado').label, 'Assinado eletronicamente');
-  const semAssinaturaEletronica = apresentarContratoAssinatura('sem_assinatura_eletronica');
-  assert.equal(semAssinaturaEletronica.label, 'Sem assinatura eletrônica');
+  const assinado = apresentarContratoAssinatura('assinado');
+  assert.equal(assinado.label, 'Contrato assinado');
+  assert.doesNotMatch(assinado.descricao, /eletr[oô]nic/i);
+
+  const naoAssinado = apresentarContratoAssinatura('nao_assinado');
+  assert.equal(naoAssinado.label, 'Não assinado');
   assert.equal(
-    semAssinaturaEletronica.descricao,
-    'O Emusys só informa a assinatura eletrônica. Contrato assinado manualmente aparece aqui e não é pendência. Conferir a data de assinatura na tela do Emusys.',
+    naoAssinado.descricao,
+    'O Emusys informa contrato_assinado=false. O LA Report não sabe se o contrato ainda não foi enviado ou se aguarda a assinatura do aluno.',
   );
-  assert.match(semAssinaturaEletronica.classes, /slate/);
-  assert.doesNotMatch(semAssinaturaEletronica.classes, /amber/);
+  assert.match(naoAssinado.classes, /amber/);
   assert.equal(apresentarContratoAssinatura('sem_contrato').label, 'Sem contrato no Emusys');
   assert.equal(apresentarContratoAssinatura('nao_verificado').label, 'Contrato não verificado');
   assert.equal(apresentarContratoAssinatura('dispensado').label, 'Contrato dispensado');
-  assert.equal(apresentarContratoAssinatura('nao_assinado').status, 'nao_verificado');
+  assert.equal(apresentarContratoAssinatura('sem_assinatura_eletronica').status, 'nao_verificado');
   assert.equal(apresentarContratoAssinatura('qualquer_coisa').status, 'nao_verificado');
 });
 

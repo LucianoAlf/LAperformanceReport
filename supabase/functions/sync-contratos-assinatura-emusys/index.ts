@@ -43,9 +43,13 @@ function mensagemErro(error: unknown): string {
   return text.replace(/[\r\n]+/g, ' ').slice(0, 500);
 }
 
-async function validarAcesso(req: Request): Promise<boolean> {
+function tokenSyncValido(req: Request): boolean {
   const syncToken = req.headers.get('x-sync-token')?.trim() ?? '';
-  if (SYNC_ADMIN_TOKEN && syncToken === SYNC_ADMIN_TOKEN) return true;
+  return Boolean(SYNC_ADMIN_TOKEN && syncToken === SYNC_ADMIN_TOKEN);
+}
+
+async function validarAcesso(req: Request): Promise<boolean> {
+  if (tokenSyncValido(req)) return true;
 
   const bearer = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '').trim();
   return Boolean(bearer && bearer === SUPABASE_SERVICE_ROLE_KEY);
@@ -115,9 +119,15 @@ async function buscarTodasMatriculasAtivas(token: string): Promise<{ items: Reco
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return jsonResponse({ erro: 'metodo_nao_permitido' }, 405);
+
+  const requestUrl = new URL(req.url);
+  const force = requestUrl.searchParams.get('force') === '1';
+  if (force && !tokenSyncValido(req)) {
+    return jsonResponse({ erro: 'force_requer_x_sync_token' }, 403);
+  }
   if (!(await validarAcesso(req))) return jsonResponse({ erro: 'nao_autorizado' }, 403);
 
-  const slug = new URL(req.url).searchParams.get('u')?.trim().toLowerCase() ?? '';
+  const slug = requestUrl.searchParams.get('u')?.trim().toLowerCase() ?? '';
   const unidade = UNIDADES[slug];
   if (!unidade) return jsonResponse({ erro: 'unidade_invalida' }, 400);
 
@@ -134,7 +144,7 @@ serve(async (req) => {
     .limit(1)
     .maybeSingle();
   if (ultimoSucessoError) return jsonResponse({ erro: 'falha_ao_ler_frescor', unidade: slug }, 500);
-  if (ultimoSucesso?.completed_at && dataBrt(ultimoSucesso.completed_at) === dataBrt(new Date())) {
+  if (!force && ultimoSucesso?.completed_at && dataBrt(ultimoSucesso.completed_at) === dataBrt(new Date())) {
     return jsonResponse({ status: 'skipped_fresh', unidade: slug, reconciliado_em: ultimoSucesso.completed_at });
   }
 
@@ -171,7 +181,7 @@ serve(async (req) => {
       });
     if (loteError) throw loteError;
 
-    return jsonResponse({ status: 'succeeded', unidade: slug, paginas: fotografia.paginas, ...resumo });
+    return jsonResponse({ status: 'succeeded', unidade: slug, forcada: force, paginas: fotografia.paginas, ...resumo });
   } catch (error) {
     const erro = mensagemErro(error);
     const { error: logError } = await supabase
