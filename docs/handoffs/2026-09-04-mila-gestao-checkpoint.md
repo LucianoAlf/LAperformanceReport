@@ -317,12 +317,16 @@ bot com material de liderança no mesmo editor. Passou a filtrar `publico='lead'
 
 ### Pendências do índice que o banco respondeu
 
-**#4 — corridinha de agosto, 30 por unidade ou do time?** Agosto fechou
-**Barra 19 · Recreio 23 · CG 24 · rede 66** (`matriculas_comerciais_v1`, só as
-que contam). 🔴 **"30 por unidade no mês" é aritmeticamente impossível** — o
-melhor foi 24. E "30 do time" foi batido por 2,2×. Nenhuma das duas leituras
-fecha para o mês inteiro: ou a corridinha rodou numa janela menor, ou a meta era
-de um recorte. Fica com o Alf e a Krissya.
+**#4 — corridinha de agosto: RESPONDIDA pelo Alf.** Era **por consultora**, e a
+meta era **31**. Agosto fechou, na medida canônica (`matriculas_comerciais_v1`):
+**Barra 19 · Recreio 23 · Campo Grande 24**. **Ninguém bateu.** Fim.
+
+⚠️ **Cicatriz de método, minha, em 06/09:** ao ver que nenhuma unidade chegava a
+31, saí procurando uma contagem alternativa que produzisse 31 — e achei uma (CG
+canônico + segundo curso = 31), tratando a coincidência como explicação. Isso é
+**ajustar a régua ao resultado**. O Alf cortou na hora: a medida canônica está
+certa e ninguém ganhou. Quando um número esperado não aparece, a primeira
+hipótese é que **ele não aconteceu**, não que a métrica é outra.
 
 **#5 — janela de maturação da coorte de mídia.** Convertidos dos últimos 6 meses,
 dias entre lead e matrícula: **Instagram (n=65) mediana 10 dias, 84,6% em 30 dias**,
