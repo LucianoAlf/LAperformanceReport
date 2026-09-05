@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
 const migrationPath = 'supabase/migrations/20260905000151_contrato_assinado_canonico.sql';
 const authMigrationPath = 'supabase/migrations/20260905002258_contrato_assinado_autorizacao.sql';
+const electronicSemanticsName = readdirSync('supabase/migrations')
+  .find((name) => name.includes('contrato_assinatura_eletronica_semantica'));
 
 function docker(args, input) {
   return spawnSync('docker', args, {
@@ -63,8 +65,11 @@ test('PostgreSQL prova lote atomico, identidade por unidade e regra conservadora
     await waitForPostgres(container);
     const fullMigration = readFileSync(migrationPath, 'utf8');
     const authMigration = readFileSync(authMigrationPath, 'utf8');
+    const electronicSemanticsMigration = electronicSemanticsName
+      ? readFileSync(`supabase/migrations/${electronicSemanticsName}`, 'utf8')
+      : '';
     const migration = fullMigration.slice(0, fullMigration.indexOf('-- Duas janelas:'))
-      + '\ncommit;\n' + authMigration;
+      + '\ncommit;\n' + authMigration + '\n' + electronicSemanticsMigration;
     const UA = '10000000-0000-4000-8000-000000000001';
     const UB = '20000000-0000-4000-8000-000000000002';
 
@@ -152,7 +157,7 @@ test('PostgreSQL prova lote atomico, identidade por unidade e regra conservadora
       select id, true from public.alunos;
       insert into public.situacao_fixture values
         ('p-assinado', 1, array[1,2], 'Assinado', '${UA}'),
-        ('p-nao-assinado', 3, array[3], 'Nao assinado', '${UA}'),
+        ('p-sem-assinatura-eletronica', 3, array[3], 'Sem assinatura eletronica', '${UA}'),
         ('p-sem-contrato', 4, array[4], 'Sem contrato', '${UA}'),
         ('p-nao-verificado', 5, array[5], 'Nao verificado', '${UA}'),
         ('p-dispensado', 6, array[6], 'Dispensado', '${UA}'),
@@ -188,7 +193,7 @@ test('PostgreSQL prova lote atomico, identidade por unidade e regra conservadora
     `));
     assert.deepEqual(statuses, {
       Assinado: 'assinado',
-      'Nao assinado': 'nao_assinado',
+      'Sem assinatura eletronica': 'sem_assinatura_eletronica',
       'Sem contrato': 'sem_contrato',
       'Nao verificado': 'nao_verificado',
       Dispensado: 'dispensado',
@@ -206,6 +211,17 @@ test('PostgreSQL prova lote atomico, identidade por unidade e regra conservadora
       contratos_assinados: 2,
       contratos_assinados_todos: true,
     });
+
+    psql(container, String.raw`
+      update public.contrato_assinatura_sync_execucoes
+      set completed_at = now()
+      where id = '30000000-0000-4000-8000-000000000001';
+    `);
+    const falseEnrollmentStatus = psql(container, String.raw`
+      select matricula_contrato_status
+      from public.get_contrato_assinatura_aluno_v1(3);
+    `);
+    assert.equal(falseEnrollmentStatus, 'sem_assinatura_eletronica');
 
     const scoped = Number(psql(container, String.raw`
       select count(distinct unidade_id) from public.aluno_contratos_emusys

@@ -1,6 +1,6 @@
 export const CONTRATO_ASSINATURA_STATUS = [
   'assinado',
-  'nao_assinado',
+  'sem_assinatura_eletronica',
   'sem_contrato',
   'nao_verificado',
   'dispensado',
@@ -17,14 +17,14 @@ type ApresentacaoContrato = {
 
 const APRESENTACOES: Record<ContratoAssinaturaStatus, Omit<ApresentacaoContrato, 'status'>> = {
   assinado: {
-    label: 'Contrato assinado',
-    descricao: 'O Emusys informa contrato_assinado=true. Isso não informa a data real da assinatura.',
+    label: 'Assinado eletronicamente',
+    descricao: 'O Emusys informa contrato_assinado=true pelo fluxo eletrônico. Isso não informa a data real da assinatura.',
     classes: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
   },
-  nao_assinado: {
-    label: 'Não assinado no Emusys',
-    descricao: 'O Emusys informa false, mas não diferencia nunca enviado de um fluxo de assinatura pendente.',
-    classes: 'border-amber-500/30 bg-amber-500/10 text-amber-200',
+  sem_assinatura_eletronica: {
+    label: 'Sem assinatura eletrônica',
+    descricao: 'O Emusys só informa a assinatura eletrônica. Contrato assinado manualmente aparece aqui e não é pendência. Conferir a data de assinatura na tela do Emusys.',
+    classes: 'border-slate-500/40 bg-slate-500/10 text-slate-300',
   },
   sem_contrato: {
     label: 'Sem contrato no Emusys',

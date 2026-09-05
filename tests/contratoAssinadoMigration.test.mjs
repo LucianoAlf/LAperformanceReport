@@ -12,6 +12,13 @@ const authorizationName = readdirSync('supabase/migrations')
 const authorizationSql = authorizationName
   ? readFileSync(`supabase/migrations/${authorizationName}`, 'utf8')
   : '';
+const electronicSemanticsName = readdirSync('supabase/migrations')
+  .find((name) => name.includes('contrato_assinatura_eletronica_semantica'));
+const electronicSemanticsSql = electronicSemanticsName
+  ? readFileSync(`supabase/migrations/${electronicSemanticsName}`, 'utf8')
+  : '';
+const tomDoc = readFileSync('docs/operacao/contrato-assinado-tom.md', 'utf8');
+const designDoc = readFileSync('docs/superpowers/specs/2026-09-04-contrato-assinado-design.md', 'utf8');
 
 test('migration cria persistencia por unidade, matricula e contrato com RLS fechado', () => {
   assert.ok(migrationName, 'migration contrato_assinado_canonico ainda nao existe');
@@ -83,4 +90,23 @@ test('RPCs SECURITY DEFINER autorizam por claim e permissao, nao pelo current_us
   assert.doesNotMatch(authorizationSql, /current_user\s+in\s*\([^)]*postgres/i);
   assert.match(authorizationSql, /get_situacao_alunos_sem_contrato_assinado_core_v1/i);
   assert.match(authorizationSql, /revoke all on function public\.get_situacao_alunos_sem_contrato_assinado_core_v1/i);
+});
+
+test('RPCs publicam false somente como ausencia de assinatura eletronica', () => {
+  assert.ok(electronicSemanticsName, 'migration da semantica de assinatura eletronica ainda nao existe');
+  assert.match(electronicSemanticsSql, /create or replace function public\.get_situacao_alunos_v1/i);
+  assert.match(electronicSemanticsSql, /create or replace function public\.get_contrato_assinatura_aluno_v1/i);
+  assert.match(electronicSemanticsSql, /sem_assinatura_eletronica/i);
+  assert.doesNotMatch(electronicSemanticsSql, /then\s+'nao_assinado'/i);
+  assert.doesNotMatch(electronicSemanticsSql, /drop\s+table|truncate|delete\s+from|update\s+public\.aluno_contratos_emusys/i);
+});
+
+test('documento bloqueia cobranca e registra a contraprova manual versus eletronica', () => {
+  assert.match(tomDoc, /não pode ser ativado enquanto o Emusys não expuser modo e data de assinatura/i);
+  assert.match(tomDoc, /assinaturas manuais[^\n]*`false`/i);
+  for (const matricula of ['32', '78', '169', '328', '394', '409', '167', '416']) {
+    assert.match(tomDoc, new RegExp(`\\|\\s*${matricula}\\s*\\|`));
+  }
+  assert.doesNotMatch(designDoc, /`nao_assinado`|Não assinado no Emusys/);
+  assert.match(designDoc, /sem_assinatura_eletronica/);
 });

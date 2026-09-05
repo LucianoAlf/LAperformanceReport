@@ -19,11 +19,14 @@ test('Ficha le RPC dedicada e nunca escreve estado de assinatura', () => {
 });
 
 test('adapter sustenta somente os cinco estados honestos', () => {
-  for (const status of ['assinado', 'nao_assinado', 'sem_contrato', 'nao_verificado', 'dispensado']) {
+  for (const status of ['assinado', 'sem_assinatura_eletronica', 'sem_contrato', 'nao_verificado', 'dispensado']) {
     assert.match(adapter, new RegExp(`['"]${status}['"]`));
   }
-  assert.doesNotMatch(adapter, /aguardando_aluno|assinatura_solicitada|manual|eletronica/i);
-  assert.match(adapter, /Não assinado no Emusys/);
+  assert.doesNotMatch(adapter, /aguardando_aluno|assinatura_solicitada|modo_assinatura|data_assinatura/i);
+  assert.doesNotMatch(adapter, /['"]nao_assinado['"]|Não assinado no Emusys/);
+  assert.match(adapter, /Sem assinatura eletrônica/);
+  assert.match(adapter, /Contrato assinado manualmente aparece aqui e não é pendência/);
+  assert.doesNotMatch(badge, /XCircle/);
 });
 
 test('selo aparece no cabecalho junto dos selos existentes', () => {
