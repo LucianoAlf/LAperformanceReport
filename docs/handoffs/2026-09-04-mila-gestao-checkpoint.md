@@ -1,142 +1,187 @@
-# Mila de gestão — checkpoint vivo (04/09/2026, noite)
+# Mila de gestão — checkpoint vivo (atualizado 05/09/2026)
 
 Onde a frente parou, o que está no ar, o que falta. **Ler antes de retomar.**
-Plano e histórico completos em `docs/superpowers/specs/2026-09-04-mila-gestao-plano.md`.
+Plano e histórico em `docs/superpowers/specs/2026-09-04-mila-gestao-plano.md`.
 
 ---
 
-## Onde estamos
+## 🔴 A arquitetura (corrigida pelo Luciano em 04/09 — não confundir de novo)
 
-| camada | quem | estado |
-|---|---|---|
-| **Alicerce** | governança, RPCs canônicas, carimbo, escopo | ✅ fechado |
-| **1º andar — operacional** | as 3 consultoras (Vitória/CG, Daiana/Recreio, Kailane/Barra) | ✅ **no ar, é onde estamos** |
-| **2º andar — tática** | gerentes de unidade | ❌ não existe |
-| **3º andar — estratégica** | diretoria | 🟡 só tráfego pago e radar; sem relatório próprio |
+```
+🧱 ALICERCE ......... motor de dados
+1️⃣ PRIMEIRO ANDAR ... contexto → interpretação → orientação
+2️⃣ SEGUNDO ANDAR .... padrões → aprendizados → estratégia
+3️⃣ TERCEIRO ANDAR ... ação e execução
+```
 
-O 1º andar está **completo nas quatro capacidades**: ela responde, ela escreve
-no cadastro, ela manda sozinha (2×/dia + cutucada horária), e ela fala por elas
-com cliente e professor mediante aprovação.
+**Os andares são CAPACIDADE, não persona.** A pilha inteira se repete **para cada
+agente**: a Mila do consultor tem os quatro dela, a Mila da líder comercial tem os
+quatro dela, a Sol tem os dela.
 
----
+⚠️ O erro anterior deste documento foi rotular andar por QUEM USA ("1º =
+operacional/consultoras, 2º = tático/gerentes"). Isso faz parecer que subir de
+andar é trocar de público, quando subir de andar é a **mesma pessoa ganhando uma
+capacidade nova**. Um consultor precisa dos quatro.
 
-## O que está no ar
-
-### 17 ferramentas (MCP `mila-gestao-tools`)
-
-**Leitura (7):** `minha_pauta` · `agenda_do_dia` · `fechamento_do_dia` ·
-`numeros_do_mes` · `estrelas_matriculador` · `ficha_lead` · `pendencias_comerciais`
-**Escrita no cadastro (6):** `registrar_curso_interesse` · `registrar_motivo_perda` ·
-`registrar_canal_origem` · `registrar_consultor` · `anotar_lead` · `fechar_sinal`
-**Recado (4):** `propor_recado` · `revisar_recado` · `recado_pendente` · `enviar_recado`
-**Tráfego (3, só diretoria):** `trafego_por_canal` · `trafego_por_criativo` · `publicos_reativacao`
-
-### 4 crons (user `mila`, VPS em UTC)
-
-| cron | horário BRT | o quê |
-|---|---|---|
-| `30 11 * * 1-6` | 08:30 | briefing do dia |
-| `0 12-21 * * 1-6` | 09h–18h | cutucada (R18 preso no bot + R7 promessa sem retorno) |
-| `30 21 * * 1-6` | 18:30 | fechamento do dia + o mês contra a meta |
-| `*/5 * * * *` | sempre | vigia: avisa no tópico Logs quando a Mila falha ou cala |
-
-⚠️ **O Luciano ia conferir os horários com as meninas** — ajustar quando ele disser.
-
-### Perfis Hermes
-
-| perfil | quem cai nele | particularidade |
-|---|---|---|
-| `mila-consultor-readonly` | `pode_editar=false` (20 colaboradores) | produção; **envia de verdade** |
-| raiz `/home/mila/.hermes` | diretoria (Luciano, Hugo, Anne Susan) + Telegram | — |
-| `mila-shadow` | só o script de teste | `MILA_GESTAO_DRY_RUN: "1"` no config |
-| `mila-sdr` | leads | intocado |
+Como reconhecer em conversa: 1º = *"o que está acontecendo"*; 2º = *"o que isso
+quer dizer e o que aprendemos"* (padrão com amostra); 3º = *"então faz isso"*.
 
 ---
 
-## Regras de negócio que ficaram travadas (não reabrir sem medir)
+## Estado por agente
 
-- **Matrícula do comercial** = `matriculas_comerciais_v1`, que **replica o
-  predicado do relatório**: fora 2º curso, bolsista, banda/coral, transferência,
-  sem parcela, arquivada; agrupa por pessoa+data. Ago/2026: **CG 24 · REC 23 ·
-  BAR 19**, idêntico ao relatório da equipe.
-- **Show-up** = experimentais **+ visitas**. ⚠️ visita não tem confirmação de
-  comparecimento (100% fica `agendada`) e só CG registra.
-- **Mês fechado vem do snapshot**, não do vivo. O vivo dava 279 leads e 61
-  experimentais em ago/REC contra 278 e 51 do relatório.
-- **Experimental**: situação resolvida pela AULA (`vw_experimental_situacao_v1`),
-  com estado `reagendada`. A edge não marca mais "realizada" antes da aula ocorrer.
-- **Escopo**: só a unidade de quem pergunta. Sempre.
+### Mila do CONSULTOR (Vitória/CG · Daiana/Recreio · Kailane/Barra)
+
+| andar | estado |
+|---|---|
+| 🧱 alicerce | ✅ RPCs canônicas, governança, carimbo, escopo por unidade |
+| 1️⃣ contexto/interpretação/orientação | ✅ no ar desde 04/09 — pauta, agenda, mês, estrelas, ficha, pendências + 3 crons |
+| 2️⃣ padrões/aprendizados/estratégia | ✅ **ligado em 05/09** — ver abaixo |
+| 3️⃣ ação/execução | ✅ escrita no cadastro (6 tools) + recado com aprovação e revisão |
+
+### Mila da LÍDER COMERCIAL (Anne Krissya)
+
+| andar | estado |
+|---|---|
+| 🧱 alicerce | ✅ ads (Google+Meta, cron horário), Instagram, atendimento, radar comercial diário |
+| 1️⃣ | ✅ **já existia e eu não sabia**: `anny-leads-watch.js` (cron do `mila`, 5×/dia — 12/14/16/18/20h BRT) manda a ela os leads aguardando resposta 2h+, por unidade e por consultora, na conversa 8809 (inbox 147). E desde 05/09 ela conversa com a Mila com as 3 unidades no escopo. |
+| 2️⃣ | ✅ 05/09 — vê os padrões de `gestao` (inclusive P7, que nomeia gente), a estratégia das 3 unidades e a série de atendimento da equipe |
+| 3️⃣ | ⚠️ **recado falha com `sem_unidade`** — a RPC exige unidade e ela não tem. Não corrigido. |
+
+---
+
+## O que entrou em 05/09 (2º andar do comercial)
+
+**O andar já existia medido e estava MUDO.** Em 03/09 mediu-se `radar_padroes`
+com 5 padrões comerciais (PC1..PC5) e `radar_estrategias` com as ações
+dimensionadas (EC1..EC3), e nada chegava à conversa. Não faltava medir: faltava
+ligar.
+
+### Migrations
+- `20260905120000_segundo_andar_comercial.sql`
+  - `radar_padroes` ganhou **`dominio`** e **`visibilidade`** (`rede` | `gestao`).
+    PC1..PC5 = comercial/rede; **P7 = comercial/gestao** porque nomeia consultoras
+    ("a Vitória prometeu 38 e deixou 8 sem retorno") — mostrá-lo a uma consultora
+    repetiria o vazamento de 04/09.
+  - `radar_regras.padrao_codigo`: **R15/R16/R17 → PC1**, **R18 → PC2**.
+    O mapa é DADO, não código — vale retroativo para os 122 sinais já abertos, e
+    a leitura resolve por `coalesce(sinal.padrao_codigo, regra.padrao_codigo)`.
+    ⚠️ **R7/R8 NÃO são mapeados para P7 de propósito** (P7 é `gestao`).
+  - `radar_estrategias.publico_codigo` liga cada ação a um público de
+    `radar_publico_reativacao_v1(unidade)` — é o que transforma "179 pessoas na
+    rede" em "74 na Barra". EC5 (indicação) e EC6 (remarcar falta) criadas.
+  - `radar_padrao_estrategia` ganhou o elo comercial (existia só para aluno).
+  - RPCs **`mila_padroes_v1`** e **`mila_estrategias_v1`**.
+- `20260905130000_serie_diaria_atendimento_comercial.sql`
+  - Tabela **`atendimento_consultor_diario`** + `snapshot_atendimento_consultor_v1`
+    + cron **`snapshot-atendimento-comercial-diario`** (22:10 UTC = 19:10 BRT).
+  - RPC **`mila_atendimento_serie_v1`** com tendência
+    (piorando/estável/melhorando/**serie_curta**).
+
+### Tools novas (MCP `mila-gestao-tools`, agora 20/23)
+`o_que_aprendemos` · `onde_focar` · `desempenho_atendimento`
+
+### Gate de tráfego corrigido
+O gate era `escopo === 'todas' || departamento in ('diretoria','lider','marketing')`
+— e `'lider'` é **nível**, não departamento. Como `mila_quem_sou_v1` devolve
+`escopo: 'todas'` para quem não tem unidade, **custo de mídia estava visível para
+7 pessoas** que não deviam ver: Fabi e Jessyca (ADM colaboradoras), Rose
+(financeiro), Juliana e Quintela (pedagógico), Ana Paula (RH).
+Hoje: `departamento in ('diretoria','marketing','comercial') && nivel in ('lider','diretoria')`
+→ exatamente Anne Krissya, Anne Susan, Hugo, Luciano e Yuri. Provado no caminho
+real (handshake MCP `tools/list` por telefone).
+
+---
+
+## Regras de negócio travadas (não reabrir sem medir)
+
+- **Matrícula do comercial** = `matriculas_comerciais_v1`. Ago/2026: **CG 24 ·
+  REC 23 · BAR 19**, idêntico ao snapshot do relatório (reconferido em 05/09).
+  ⚠️ O 3º argumento é **exclusivo** (`data_matricula < p_ate`): passar `31/08`
+  perde o dia 31 — a Barra tem 3 matrículas nesse dia. Os 3 chamadores usam
+  meia-aberta corretamente.
+- **Show-up** = experimentais **+ visitas**. Visita não tem confirmação de
+  comparecimento e só CG registra.
+- **Mês fechado vem do snapshot**, nunca do vivo.
+- **Escopo**: só a unidade de quem pergunta. Quem lidera (unidade nula) vê as três.
+- **Quando existe medição, a Mila não opina.** Regra nova na SKILL, nascida de
+  falha real no ensaio de 05/09 (ver abaixo).
 
 ---
 
 ## O que falta
 
-### Próximo passo natural
-1. **2º andar (gerentes)** — nada construído. É o salto de camada.
-2. **Ranking/metas por consultora** — possível agora que `consultor_id` está 100%.
-3. **Alerta de queda de desempenho** — precisa de ~2 semanas de série.
-
-### Pendências conhecidas, com o porquê
-- **Visita sem comparecimento**: ninguém marca quem veio. Ou alguém passa a
-  marcar, ou o show-up continua sendo "agendado no mês".
-- **`emusys_aula_id` de EVENTO**: quando o webhook grava id de evento no lugar do
-  id da aula, a situação não cruza com a grade e cai no status gravado. Dívida
-  antiga do webhook de experimental.
-- **Google Ads por termo de busca** — declarado fora de escopo, para depois.
-- **Calendário escolar** — 0 linhas; recesso ainda é tratado como dado faltando
-  por quem não sabe.
-- **Sazonalidade** e **"acompanhar pendência até o responsável assumir"** — não
-  começados.
-
----
-
-## Cicatrizes do dia (não repetir)
-
-1. 🔴 **O Hermes NÃO propaga env do processo para o MCP.** Chegam 12 variáveis.
-   Qualquer coisa que o servidor de ferramentas precise saber tem que ir pelo
-   bloco `env:` do `mcp_servers` no config do perfil, que **interpola**.
-   Custou dois incidentes no mesmo dia: o carimbo (todas falavam como diretoria)
-   e o modo sombra (mandou WhatsApp real para o professor Erick e a lead Jullyane).
-2. 🔴 **Arquivo de segredo sobrescreve o `env:` do perfil** — o `source` atribui
-   incondicionalmente. O wrapper captura antes e restaura depois (carimbo e DRY).
-3. 🔴 **Validar no caminho REAL, não no wrapper.** A prova de isolamento feita
-   chamando o `.sh` direto passou, e a cadeia Hermes→MCP estava quebrada.
-4. 🔴 **Antes de liberar perfil Hermes para gente**, rodar `hermes chat -q "ok"`
-   naquele `HERMES_HOME` e exigir `rc=0` sem aviso de fallback. O perfil das
-   consultoras estava morto (xai-oauth) e ninguém viu porque ninguém tinha escrito.
-5. ⚠️ **Formato é molde, não instrução.** "Formato de WhatsApp, curto" produzia
-   texto corrido. O envelope leva o molde literal.
-6. ⚠️ **O proxy do Chatwoot devolve 403 sem User-Agent explícito** — 200 no curl,
-   403 no cliente HTTP sem UA. Parece permissão de token e não é.
-7. ⚠️ **Não inventar regra quando o relatório já tem a canônica.** Meu filtro de
-   "passaporte pago" divergiu do relatório em Recreio e Barra.
+1. **Remedir os padrões.** Todo `medido_em` é 03/09 e não existe cron que
+   recalcule. Mitigado — não resolvido — por `mila_padroes_v1` devolver
+   `idade_dias` e `envelhecido` (>45 dias), e a SKILL manda dizer.
+   ⚠️ Não é trivial: PC1 e PC3 dependem da jornada por lead, que
+   `radar_trafego_canal_v1` não entrega no mesmo recorte. Reescrever a prosa
+   automaticamente **redefiniria o padrão em silêncio** — o caminho é conferir e
+   avisar, não sobrescrever.
+2. **Recado para quem lidera** (`sem_unidade`).
+3. **`minha_pauta` não carrega o aprendizado** — `radar_bloco_comercial_grupo_v1`
+   devolve `text[]` e tem outros consumidores; a cutucada carrega, a pauta não.
+4. **Google Ads por campanha → matrícula**: há gasto diário por campanha, mas a
+   atribuição forte lead→anúncio só existe no Meta. Custo por matrícula do Google
+   é da **plataforma**, não da campanha.
+5. **Qualidade do atendimento** (o conteúdo, não o tempo) — exige ler a conversa;
+   o motor semântico faz isso para aluno, não para lead.
 
 ---
 
-## Como testar antes de mexer
+## Cicatrizes (não repetir)
+
+1. 🔴 **O Hermes NÃO propaga env do processo para o MCP.** Só o bloco `env:` do
+   `mcp_servers` chega, e ele interpola. Dois incidentes em 04/09.
+2. 🔴 **Arquivo de segredo sobrescreve o `env:` do perfil** (o `source` é
+   incondicional). O wrapper captura antes e restaura depois.
+3. 🔴 **Validar no caminho REAL, não no wrapper.**
+4. 🔴 **Antes de liberar perfil Hermes para gente:** `hermes chat -q "ok"` com `rc=0`.
+5. ⚠️ **Formato é molde, não instrução.**
+6. ⚠️ **O proxy do Chatwoot devolve 403 sem User-Agent explícito.**
+7. ⚠️ **Não inventar regra quando o relatório já tem a canônica.**
+8. 🔴 **Tool nova não basta — tem que ENSINAR quando usar.** No 1º ensaio de
+   05/09 a Mila tinha `o_que_aprendemos` disponível e mesmo assim respondeu
+   *"por que ligar? porque já mostrou interesse real"* — intuição de vendas, zero
+   medição. Só depois da seção "Quando existe medição, eu não opino" na SKILL ela
+   passou a citar *"em 4.247 leads, quem faz o experimental fecha 40–50%"*.
+9. ⚠️ **Expressão de `select` tem de bater LITERALMENTE com a do `group by`.**
+   `coalesce(x,'')` no select e `coalesce(x,'(sem dono)')` no group by = 42803.
+10. ⚠️ **`automacao_log.aluno_nome` é NOT NULL** — log sem rótulo derruba a função
+    DEPOIS de gravar, e o snapshot volta atrás em silêncio.
+11. ⚠️ **Somar as unidades ANTES de montar a série por pessoa.** A Vitória tem
+    linha em CG e no Recreio; sem isso a líder leria "1 esperando" onde são 14.
+
+---
+
+## Como testar
 
 ```bash
 sudo -u mila /usr/bin/python3 /home/mila/.openclaw/workspace/scripts/mila-shadow.py --listar
 sudo -u mila /usr/bin/python3 /home/mila/.openclaw/workspace/scripts/mila-shadow.py
 ```
 
-10 cenários multi-turno no caminho real, com checagens: pauta, agenda, mês
-fechado, mês corrente, isolamento, ranking, ficha, recado (professor e cliente),
-troca de texto e **conversa solta de 6 turnos sem citação**.
+14 cenários no caminho real, com 3 novos do 2º andar: `padrao-porque`,
+`onde-focar` e **`padrao-gestao-nao-vaza`** (consultora pedindo nome de quem está
+devendo resposta — a Mila não pode entregar o P7).
 
-⚠️ Roda no perfil `mila-shadow`. **Nunca apontar o shadow para o perfil de
-produção** — foi assim que saiu mensagem de verdade em 04/09.
+⚠️ Roda no perfil `mila-shadow`, que tem `MILA_GESTAO_DRY_RUN: "1"` no config.
+**Nunca apontar o shadow para o perfil de produção.**
+
+Handshake de tools por pessoa (prova o gate no caminho real):
+
+```bash
+printf '{"jsonrpc":"2.0","id":1,"method":"initialize",...}\n...\n{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}\n' \
+| MILA_SOLICITANTE_TELEFONE=<tel> MILA_CARIMBO_OBRIGATORIO=1 MILA_GESTAO_DRY_RUN=1 \
+  /home/mila/.openclaw/workspace/scripts/mila-gestao-tools-mcp.sh
+```
 
 ---
 
-## O fio da conversa (dúvida do Luciano, respondida)
+## O fio da conversa
 
-A consultora **não precisa citar/marcar** a mensagem da Mila. A sessão é **por
-pessoa** (`consultor-v2-<telefone>`), então o histórico já é o fio — ela pausa,
-pergunta outra coisa, volta e diz "muda aquilo", e a Mila sabe do que se trata.
-Provado: 6 turnos soltos → 1 recado, 2 revisões acumuladas.
-
-A citação é característica da **Maria**, porque ela trabalha em grupo com várias
-propostas abertas ao mesmo tempo — lá a citação desambigua qual proposta e qual
-chat. A Mila conversa uma a uma. `recado_pendente` só entra quando o fio se
-perde de verdade (reinício, sumiço longo); se nem assim, ela pergunta.
+A consultora **não precisa citar/marcar** a mensagem da Mila: a sessão é por
+pessoa (`chatwoot-consultor-v2-<telefone>`), então o histórico já é o fio.
+A citação é característica da **Maria**, que trabalha em grupo com várias
+propostas abertas ao mesmo tempo. `recado_pendente` só entra quando o fio se
+perde de verdade.

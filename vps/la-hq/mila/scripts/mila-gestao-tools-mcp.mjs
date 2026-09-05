@@ -57,7 +57,19 @@ async function resolverQuem() {
   log({ carimbo: TEL ? TEL.slice(0, 4) + '…' : null, quem: QUEM && QUEM.nome, escopo: QUEM && (QUEM.escopo || QUEM.departamento) });
   return QUEM;
 }
-const veTudo = () => !!QUEM && (QUEM.escopo === 'todas' || ['diretoria', 'lider', 'marketing'].includes(String(QUEM.departamento || '').toLowerCase()));
+// 🔴 O gate testava 'lider' dentro da lista de DEPARTAMENTO, e 'lider' e NIVEL.
+// Efeito medido em 05/09: a Anne Krissya (departamento comercial, nivel lider,
+// unidade nula = as 3) nao via trafego, embora seja quem decide onde gastar. E
+// `QUEM.escopo` nunca existiu — `governanca.quem_eh` devolve
+// (nome, departamento, nivel, unidade_id, pode_editar), entao a 1a condicao era
+// morta. Agora e explicito: PAPEL DE REDE em area que decide midia.
+// ⚠️ Nao vale so `unidade_id is null && lider`: pedagogico, financeiro e
+// administrativo tambem tem lider sem unidade, e custo de midia nao e assunto
+// deles (o app restringe a pagina de Trafego Pago a 2 e-mails).
+const DEPTOS_QUE_VEEM_MIDIA = ['diretoria', 'marketing', 'comercial'];
+const veTudo = () => !!QUEM
+  && DEPTOS_QUE_VEEM_MIDIA.includes(String(QUEM.departamento || '').toLowerCase())
+  && ['lider', 'diretoria'].includes(String(QUEM.nivel || '').toLowerCase());
 
 // ── envio pelo Chatwoot: MESMO caminho do bridge (a mensagem entra na conversa
 // e fica no historico dela). ⚠️ o proxy do Chatwoot devolve 403 sem User-Agent
@@ -125,6 +137,15 @@ const LEITURA = [
   { name: 'pendencias_comerciais',
     description: 'As 5 pendências cadastrais da unidade: matriculado sem anamnese, experimental realizada sem ficha, lead sem canal de origem, lead sem curso de interesse, experimental feita sem desfecho — com total, amostra e a ação. Use para "tem pendência cadastral?", "quem está sem anamnese?". Cada uma delas você pode RESOLVER com as tools de registrar_*.',
     inputSchema: { type: 'object', properties: { amostra: { type: 'integer', description: 'Itens por bucket (padrão 8).' } } } },
+  { name: 'o_que_aprendemos',
+    description: '2o ANDAR. O que a escola ja APRENDEU sobre o comercial, medido com amostra e grau de confianca: onde o funil vaza, qual canal leva gente a aula, se anuncio barato traz aluno. Use quando ela perguntar "por que?", "vale a pena?", "o que funciona melhor?", ou quando voce for justificar uma orientacao. SEMPRE cite a amostra junto do numero, e diga quando `envelhecido` for true (padrao velho e pista, nao verdade). Cada padrao traz `o_que_fazer` — as acoes que ele sustenta.',
+    inputSchema: { type: 'object', properties: { codigo: { type: 'string', description: 'Um padrao especifico (PC1..PC5). Vazio = todos.' } } } },
+  { name: 'onde_focar',
+    description: '2o ANDAR. Onde esta a oportunidade AGORA na unidade de quem pergunta: quantas pessoas em cada publico de reativacao (fez experimental e nao fechou, faltou e nunca remarcou, familias para indicacao, ex-alunos, lead que nunca agendou), com o porque de cada acao e como abordar. Use para "o que eu faco agora?", "de onde tiro matricula esse mes?", "tenho pouca gente na agenda". Devolve TAMANHO e criterio, nunca telefone — para falar com alguem especifico, use ficha_lead. Ofereca UMA acao por vez.',
+    inputSchema: { type: 'object', properties: {} } },
+  { name: 'desempenho_atendimento',
+    description: '2o ANDAR. Quantas conversas ficaram COM O CLIENTE ESPERANDO resposta, dia a dia, com a tendencia ja calculada (piorando/estavel/melhorando/serie_curta). Consultora ve so a PROPRIA linha; quem lidera ve a equipe das 3 unidades. Use para "estou devendo resposta pra alguem?", "como esta meu atendimento?" e, para a lideranca, "quem esta deixando cliente esperando?". ⚠️ E ESTOQUE do que ficou pendurado na foto das 19:10, NAO velocidade de resposta — nunca diga "tempo medio de resposta". Se `tendencia` for `serie_curta`, diga que ainda nao da para falar em piora: faltam dias medidos.',
+    inputSchema: { type: 'object', properties: { dias: { type: 'integer', description: 'Janela (padrao 14, max 90).' } } } },
 ];
 const TRAFEGO = [
   { name: 'trafego_por_canal',
@@ -219,6 +240,12 @@ async function callTool(name, a) {
       return j(await rpc('mila_numeros_do_mes_v1', { p_solicitante_telefone: tel, ...(a.ano ? { p_ano: a.ano } : {}), ...(a.mes ? { p_mes: a.mes } : {}) }));
     case 'pendencias_comerciais':
       return j(await rpc('radar_pendencias_comerciais_v1', { p_solicitante_telefone: tel, p_amostra: a.amostra || 8 }));
+    case 'o_que_aprendemos':
+      return j(await rpc('mila_padroes_v1', { p_solicitante_telefone: tel, ...(a.codigo ? { p_codigo: a.codigo } : {}) }));
+    case 'onde_focar':
+      return j(await rpc('mila_estrategias_v1', { p_solicitante_telefone: tel }));
+    case 'desempenho_atendimento':
+      return j(await rpc('mila_atendimento_serie_v1', { p_solicitante_telefone: tel, ...(a.dias ? { p_dias: a.dias } : {}) }));
     case 'trafego_por_canal': gate();
       return j(await rpc('radar_trafego_canal_v1', { p_dias: a.dias || 30, p_maturidade_dias: a.maturidade_dias ?? 0 }));
     case 'trafego_por_criativo': gate();
