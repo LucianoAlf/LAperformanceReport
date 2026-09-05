@@ -175,6 +175,9 @@ const LEITURA = [
   { name: 'desempenho_atendimento',
     description: '2o ANDAR. Quantas conversas ficaram COM O CLIENTE ESPERANDO resposta, dia a dia, com a tendencia ja calculada (piorando/estavel/melhorando/serie_curta). Consultora ve so a PROPRIA linha; quem lidera ve a equipe das 3 unidades. Use para "estou devendo resposta pra alguem?", "como esta meu atendimento?" e, para a lideranca, "quem esta deixando cliente esperando?". ⚠️ E ESTOQUE do que ficou pendurado na foto das 19:10, NAO velocidade de resposta — nunca diga "tempo medio de resposta". Se `tendencia` for `serie_curta`, diga que ainda nao da para falar em piora: faltam dias medidos.',
     inputSchema: { type: 'object', properties: { dias: { type: 'integer', description: 'Janela (padrao 14, max 90).' } } } },
+  { name: 'retomadas_do_dia',
+    description: 'O BUMERANGUE. Quem pediu para ser procurado de volta e o dia chegou — com a FRASE que a pessoa disse e ha quantos dias. Use no comeco do dia e quando ela perguntar "tem alguem para eu retomar?". 🔴 SEMPRE cite `ele_disse` e a data: "a Juliana te disse em 12/06 que voltaria a falar em setembro porque o filho estava em prova". Lembrete sem a frase ela ignora. `sem_data` sao os que combinaram algo vago ("depois das ferias") — ofereca marcar um dia.',
+    inputSchema: { type: 'object', properties: { data: { type: 'string', description: 'YYYY-MM-DD (padrao hoje).' } } } },
 ];
 const TRAFEGO = [
   { name: 'trafego_por_canal',
@@ -189,6 +192,18 @@ const TRAFEGO = [
 ];
 // ── tools de ESCRITA (uma por intenção; validadas e com trilha no banco) ─────
 const ESCRITA = [
+  { name: 'registrar_retomada',
+    description: 'ESCREVE. Guarda que um lead pediu para ser procurado depois ("me chama em janeiro", "volta a falar comigo daqui a 3 meses"). 🔴 `frase` e OBRIGATORIA e tem de ser o que a PESSOA disse, nao o seu resumo — e ela que faz a consultora lembrar do caso la na frente. `prazo_texto` e a expressao dela ("em janeiro", "daqui a 3 meses"); eu converto para data. Se a expressao for vaga ("depois das ferias") eu guardo SEM data e aviso — nao invento dia. Registrar de novo para o mesmo lead SUBSTITUI o combinado anterior.',
+    inputSchema: { type: 'object', required: ['lead_id', 'frase'],
+      properties: { lead_id: { type: 'integer' }, frase: { type: 'string', description: 'O que a pessoa disse, nas palavras dela.' },
+                    prazo_texto: { type: 'string', description: 'A expressao de tempo dela.' },
+                    motivo: { type: 'string', description: 'preco | horario | distancia | concorrente | outro' } } } },
+  { name: 'desfecho_retomada',
+    description: 'ESCREVE. Fecha uma retomada com o que aconteceu: matriculou | segue_interessado | nao_quer | sem_resposta. E o MEDIR — sem isso nao da para aprender se retomar no prazo converte mais. Se for `segue_interessado`, ofereca marcar a proxima data com registrar_retomada.',
+    inputSchema: { type: 'object', required: ['retomada_id', 'desfecho'],
+      properties: { retomada_id: { type: 'string' },
+                    desfecho: { type: 'string', enum: ['matriculou','segue_interessado','nao_quer','sem_resposta'] },
+                    nota: { type: 'string' } } } },
   { name: 'registrar_curso_interesse',
     description: 'ESCREVE. Registra/corrige o instrumento de interesse do lead ("o curso dele é bateria"). Aceita nome parcial; se ambíguo (ex.: "flauta"), devolve candidatos — pergunte. Sobrescreve o anterior (mudar de instrumento é decisão humana). Fica com trilha de quem pediu.',
     inputSchema: { type: 'object', required: ['lead_id', 'curso'], properties: { lead_id: { type: 'integer' }, curso: { type: 'string' } } } },
@@ -278,6 +293,8 @@ async function callTool(name, a) {
       return j(await rpc('mila_fechamento_dia_v1', { p_solicitante_telefone: tel, ...(a.data ? { p_data: a.data } : {}) }));
     case 'numeros_do_mes':
       return j(await rpc('mila_numeros_do_mes_v1', { p_solicitante_telefone: tel, ...(a.ano ? { p_ano: a.ano } : {}), ...(a.mes ? { p_mes: a.mes } : {}) }));
+    case 'retomadas_do_dia':
+      return j(await rpc('mila_retomadas_do_dia_v1', { p_solicitante_telefone: tel, ...(a.data ? { p_data: a.data } : {}) }));
     case 'pendencias_comerciais':
       return j(await rpc('radar_pendencias_comerciais_v1', { p_solicitante_telefone: tel, p_amostra: a.amostra || 8 }));
     case 'o_que_aprendemos':
@@ -300,6 +317,12 @@ async function callTool(name, a) {
       return escrita('mila_registrar_canal_origem_v1', { p_solicitante_telefone: tel, p_lead_id: a.lead_id, p_canal: a.canal, p_sobrescrever: !!a.sobrescrever });
     case 'fechar_sinal':
       return escrita('mila_fechar_sinal_v1', { p_solicitante_telefone: tel, p_sinal_id: a.sinal_id, p_desfecho: a.desfecho, p_nota: a.nota || null });
+    case 'registrar_retomada':
+      return escrita('mila_registrar_retomada_v1', { p_solicitante_telefone: tel, p_lead_id: a.lead_id,
+        p_frase: a.frase, p_prazo_texto: a.prazo_texto || null, p_motivo: a.motivo || null });
+    case 'desfecho_retomada':
+      return escrita('mila_desfecho_retomada_v1', { p_solicitante_telefone: tel,
+        p_retomada_id: a.retomada_id, p_desfecho: a.desfecho, p_nota: a.nota || null });
     case 'registrar_consultor':
       return escrita('mila_registrar_consultor_v1', { p_solicitante_telefone: tel, p_lead_id: a.lead_id, p_consultor: a.consultor });
     case 'propor_recado':

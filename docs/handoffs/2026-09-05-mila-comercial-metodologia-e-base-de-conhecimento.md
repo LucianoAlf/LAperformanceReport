@@ -38,7 +38,7 @@ Este documento trata da **Mila de gestão**.
 🧱 ALICERCE ......... motor de dados
 1️⃣ PRIMEIRO ANDAR ... contexto → interpretação → orientação
 2️⃣ SEGUNDO ANDAR .... padrões → aprendizados → estratégia
-3️⃣ TERCEIRO ANDAR ... ação e execução
+3️⃣ TERCEIRO ANDAR ... ação → execução → medir
 ```
 
 🔴 **As camadas são CAPACIDADE, não persona.** A pilha inteira se repete **para
