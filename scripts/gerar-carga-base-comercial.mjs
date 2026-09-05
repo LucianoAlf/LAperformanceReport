@@ -62,7 +62,14 @@ linhas.push(`-- CARGA DA BASE DE CONHECIMENTO COMERCIAL v1.0 — 11 blocos, PASS
 const arquivos = Object.keys(META);
 let ordem = 100;
 for (const nome of arquivos) {
-  const bruto = fs.readFileSync(path.join(DIR, nome), 'utf8');
+  // ⚠️ NORMALIZA a quebra de linha do Windows. Com git no Windows o arquivo vem
+  // com CRLF, e em 06/09 isso vazou para dentro do banco: os 11 blocos entraram
+  // com carriage return e foi preciso um UPDATE de limpeza. O texto era o mesmo
+  // (md5 confere depois de normalizar), mas conteúdo de produção não pode
+  // depender do sistema operacional de quem gerou o arquivo.
+  const bruto = fs.readFileSync(path.join(DIR, nome), 'utf8')
+    .split(String.fromCharCode(13) + String.fromCharCode(10))
+    .join(String.fromCharCode(10));
   const quebra = bruto.indexOf('\n');
   const h1 = bruto.slice(0, quebra).replace(/^#\s+/, '').trim();
   const conteudo = bruto.slice(quebra + 1).replace(/^\n+/, '').replace(/\s+$/, '') + '\n';
