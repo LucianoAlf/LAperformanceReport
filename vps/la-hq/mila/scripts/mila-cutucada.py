@@ -119,6 +119,13 @@ def main():
                 "Regras: no máximo 3 itens; nome em negrito; embaixo, em itálico, o que houve e o que fazer; "
                 "*negrito* com UM asterisco (é WhatsApp); sem saudação longa, sem 'bom dia' — é interrupção, tem que ser rápida; "
                 "use SÓ o que está no envelope; termine com UMA pergunta curta. "
+                # 2º ANDAR na cutucada: o porque MEDIDO vem no envelope
+                # (mila_cutucada_v1 resolve o padrao pela regra do sinal).
+                # Nao pedimos ao modelo que busque — ele so pode citar o que
+                # veio, senao volta a argumentar de intuicao.
+                "Se vier `porque_vale_agora` preenchido, acrescente ANTES da pergunta UMA linha em "
+                "itálico comecando com _Vale porque_ resumindo esse aprendizado em ate 120 caracteres, "
+                "com o numero medido. Se vier vazio, nao invente motivo. "
                 "Responda SOMENTE com o texto da mensagem.\n\n"
                 "DADOS CANÔNICOS (json):\n" + mp.json.dumps({**dados, "itens": novos}, ensure_ascii=False)
             )
