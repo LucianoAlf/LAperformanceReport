@@ -1,22 +1,21 @@
 -- BASE DE CONHECIMENTO COMERCIAL — PASSO 1: público, estado e ciclo de vida.
+-- **FATIA 1, liberada pelo Alf e APLICADA em produção em 06/09/2026.**
+-- Só schema + RPC; a carga dos 11 blocos é fatia separada.
 --
 -- Hoje `base_conhecimento_blocos` tem 4 blocos, todos da **Mila SDR** (script
 -- que o bot usa falando com o LEAD), e `get_base_conhecimento` devolve tudo que
--- está `ativo`. A base comercial que o Alf curou em 05/09 tem 11 blocos com dois
--- públicos novos (consultor e liderança) e um ciclo de vida próprio — nada sai
--- de `candidato` antes de a Krissya ler.
+-- está `ativo`. A base comercial curada pelo Alf em 05/09 tem 11 blocos com dois
+-- públicos novos (consultor e liderança) e um ciclo de vida próprio.
 --
--- 🔴 SEM TABELA NOVA, POR DECISÃO. Estender o que existe é a regra da casa e
---    aqui ela cabe: o que muda é a régua de quem vê o quê, não a natureza do
---    objeto. `get_base_conhecimento` continua sendo a ÚNICA montagem — preview
---    da tela e uso pelo agente saem da mesma função, que é o que impede o
---    preview de divergir do que a Mila recebe.
+-- 🔴 SEM TABELA NOVA, POR DECISÃO: o que muda é a régua de quem vê o quê, não a
+--    natureza do objeto. `get_base_conhecimento` continua sendo a ÚNICA
+--    montagem — preview da tela e uso pelo agente saem da mesma função.
 --
--- ⚠️ A SDR NÃO PODE MUDAR NEM UM BYTE. Os 4 blocos atuais nascem
---    `publico='lead'` e `estado='aprovado'` por DEFAULT, e o `p_publico` da
---    função tem default `'lead'` — então os dois consumidores de hoje (a edge
---    `base-conhecimento` e o botão "Ver como a Mila vê") continuam recebendo
---    exatamente o mesmo texto. A migração termina provando isso com md5.
+-- ⚠️ A SDR NÃO MUDOU NEM UM BYTE, e isso foi MEDIDO na aplicação:
+--    md5 antes = md5 depois = dfacc8fd3bc8360bbb43c66bc3a348d1 (1436 chars),
+--    pela chamada nomeada (como a edge faz) e pela posicional.
+--    Uma única assinatura viva depois: get_base_conhecimento(uuid,text).
+--    ACL: {postgres=X, authenticated=X, service_role=X} — anon fora.
 
 -- ── 1. as colunas ───────────────────────────────────────────────────────────
 alter table public.base_conhecimento_blocos
