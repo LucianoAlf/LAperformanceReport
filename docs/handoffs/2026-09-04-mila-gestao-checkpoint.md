@@ -46,7 +46,7 @@ quer dizer e o que aprendemos"* (padrão com amostra); 3º = *"então faz isso"*
 | 🧱 alicerce | ✅ ads (Google+Meta, cron horário), Instagram, atendimento, radar comercial diário |
 | 1️⃣ | ✅ **já existia e eu não sabia**: `anny-leads-watch.js` (cron do `mila`, 5×/dia — 12/14/16/18/20h BRT) manda a ela os leads aguardando resposta 2h+, por unidade e por consultora, na conversa 8809 (inbox 147). E desde 05/09 ela conversa com a Mila com as 3 unidades no escopo. |
 | 2️⃣ | ✅ 05/09 — vê os padrões de `gestao` (inclusive P7, que nomeia gente), a estratégia das 3 unidades e a série de atendimento da equipe |
-| 3️⃣ | ⚠️ **recado falha com `sem_unidade`** — a RPC exige unidade e ela não tem. Não corrigido. |
+| 3️⃣ | ✅ **corrigido em 05/09** — a unidade do recado passou a ser a do DESTINO, e o recado ganhou VOLTA: ela pede, a consultora responde à Mila, a Mila leva de volta |
 
 ---
 
@@ -109,6 +109,26 @@ real (handshake MCP `tools/list` por telefone).
 
 ---
 
+## Metodologia, base de conhecimento e o que vem
+
+📄 **`docs/handoffs/2026-09-05-mila-comercial-metodologia-e-base-de-conhecimento.md`**
+— documento autossuficiente, feito para levar a modelo externo. Traz a sequência
+acordada, o desenho do bumerangue (agenda de retomada), o **cashback de indicação**
+(R$ 50, hoje impagável de forma auditável: 80 matrículas por indicação em 180
+dias e nenhuma registra quem indicou) e a governança em aberto.
+
+### Onde entra MEDIR (resolvido em 05/09)
+
+**Não é um 4º andar** — criar um quinto nível quebraria a metodologia.
+**Medir é a ARESTA DE VOLTA do 3º andar para o 2º**: sem ela a pilha é
+encanamento, com ela vira ciclo. O campo `radar_estrategias.evidencia_eficacia`
+existe e está **vazio nas 14 estratégias** — é literalmente onde mora "essa
+corridinha funcionou". A partir de agora, **toda ação nasce com o desfecho
+previsto**: o que olhar, quando, contra o quê.
+⚠️ "Bateu a meta" não é "a campanha funcionou" — setembro bate por volta às
+aulas. Comparar contra o mesmo mês do ano anterior ou contra as unidades que não
+fizeram; quando não der para isolar, dizer que não dá.
+
 ## O que falta
 
 1. **Remedir os padrões.** Todo `medido_em` é 03/09 e não existe cron que
@@ -118,7 +138,6 @@ real (handshake MCP `tools/list` por telefone).
    `radar_trafego_canal_v1` não entrega no mesmo recorte. Reescrever a prosa
    automaticamente **redefiniria o padrão em silêncio** — o caminho é conferir e
    avisar, não sobrescrever.
-2. **Recado para quem lidera** (`sem_unidade`).
 3. **`minha_pauta` não carrega o aprendizado** — `radar_bloco_comercial_grupo_v1`
    devolve `text[]` e tem outros consumidores; a cutucada carrega, a pauta não.
 4. **Google Ads por campanha → matrícula**: há gasto diário por campanha, mas a
