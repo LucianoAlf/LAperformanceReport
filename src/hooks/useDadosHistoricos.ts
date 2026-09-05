@@ -130,7 +130,7 @@ export function useDadosHistoricos(
             ticketMedio,
             churnRate: Number(dadosAtuaisCanonicos.churnRate) || 0,
             taxaRenovacao: taxaRenovacaoAtual,
-            mrr: Number(dadosAtuaisCanonicos.mrr) || (alunosPagantes * ticketMedio),
+            mrr: Number(dadosAtuaisCanonicos.mrr) || 0,
             inadimplencia: Number(dadosAtuaisCanonicos.inadimplencia) || 0,
           });
         }

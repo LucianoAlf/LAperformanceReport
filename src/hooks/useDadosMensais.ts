@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { calcularTicketMedioCanonico } from '@/lib/ticketMedioCanonico';
 import { CompetenciaRange } from './useCompetenciaFiltro';
 
 export interface DadosMensais {
@@ -21,6 +22,9 @@ export interface DadosMensais {
   inadimplencia: number;
   reajuste_parcelas: number;
   faturamento_estimado: number;
+  mrr_contratual?: number | null;
+  ticket_denominador_pagantes?: number | null;
+  ticket_medio_contratual?: number | null;
   saldo_liquido: number;
   ticket_medio_passaporte: number;
   faturamento_passaporte: number;
@@ -83,6 +87,12 @@ export function useDadosMensais(
         // Calcular dados agregados
         if (data && data.length > 0) {
           const totalRegistros = data.length;
+          const linhasTicket = data.map(d => ({
+            mrr: Number(d.mrr_contratual ?? d.faturamento_estimado) || 0,
+            ticketMedio: Number(d.ticket_medio_contratual ?? d.ticket_medio) || 0,
+            ticketDenominadorPagantes: d.ticket_denominador_pagantes ?? null,
+          }));
+          const mrrContratual = linhasTicket.reduce((total, linha) => total + linha.mrr, 0);
           
           const agregados: DadosMensaisAgregados = {
             alunos_pagantes: Math.round(
@@ -104,7 +114,7 @@ export function useDadosMensais(
               (data.reduce((acc, d) => acc + (d.inadimplencia || 0), 0) / totalRegistros).toFixed(2)
             ),
             faturamento_estimado: Number(
-              data.reduce((acc, d) => acc + (d.faturamento_estimado || 0), 0).toFixed(2)
+              mrrContratual.toFixed(2)
             ),
             faturamento_realizado: 0, // Calculado abaixo
             mrr: 0, // Calculado abaixo
@@ -115,11 +125,8 @@ export function useDadosMensais(
             (agregados.faturamento_estimado * (1 - agregados.inadimplencia / 100)).toFixed(2)
           );
 
-          // Snapshot financeiro: faturamento_estimado ja e o MRR consolidado.
-          agregados.mrr = agregados.faturamento_estimado;
-          agregados.ticket_medio = agregados.alunos_pagantes > 0
-            ? Number((agregados.mrr / agregados.alunos_pagantes).toFixed(2))
-            : 0;
+          agregados.mrr = Number(mrrContratual.toFixed(2));
+          agregados.ticket_medio = calcularTicketMedioCanonico(linhasTicket);
 
           setDadosAgregados(agregados);
         } else {

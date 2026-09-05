@@ -26,6 +26,10 @@ import {
   unidadesFromKPIsCanonicos,
 } from '@/lib/retencaoOperacionalCanonica';
 import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
+import {
+  calcularTicketMedioCanonico,
+  obterDenominadorTicketCanonico,
+} from '@/lib/ticketMedioCanonico';
 
 interface TabGestaoProps {
   ano: number;
@@ -89,6 +93,7 @@ function mapKPIAlunoCanonicoParaGestao(row: any) {
     total_la_adultos: row.school,
     total_la_sem_classificação: row.semClassificacao,
     ticket_medio: row.ticketMedio,
+    ticket_denominador_pagantes: row.ticketDenominadorPagantes ?? null,
     ticket_denominador_faturas: row.ticketDenominadorFaturas || 0,
     mrr: row.mrr,
     arr: row.arr,
@@ -404,6 +409,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
                 total_la_adultos: row.school,
                 total_la_sem_classificação: row.semClassificacao,
                 ticket_medio: row.ticketMedio,
+                ticket_denominador_pagantes: row.ticketDenominadorPagantes ?? null,
                 ticket_denominador_faturas: row.ticketDenominadorFaturas || 0,
                 mrr: row.mrr,
                 arr: row.arr,
@@ -621,12 +627,19 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
 
         // Consolidar dados do mês anterior
         if (dadosMesAnteriorData && dadosMesAnteriorData.length > 0) {
+          const ticketMesAnteriorFallback = calcularTicketMedioCanonico(
+            dadosMesAnteriorData.map((d: any) => ({
+              mrr: Number(d.mrr_contratual ?? d.faturamento_estimado) || 0,
+              ticketMedio: Number(d.ticket_medio_contratual ?? d.ticket_medio) || 0,
+              ticketDenominadorPagantes: d.ticket_denominador_pagantes ?? null,
+            })),
+          );
           const consolidadoMesAnterior = dadosMesAnteriorData.reduce((acc, d) => ({
             alunos_pagantes: acc.alunos_pagantes + (d.alunos_pagantes || 0),
             novas_matriculas: acc.novas_matriculas + (d.novas_matriculas || 0),
             evasoes: acc.evasoes + (d.evasoes || 0),
             ticket_medio: acc.ticket_medio + (Number(d.ticket_medio) || 0),
-            faturamento_estimado: acc.faturamento_estimado + (Number(d.faturamento_estimado) || 0),
+            faturamento_estimado: acc.faturamento_estimado + (Number(d.mrr_contratual ?? d.faturamento_estimado) || 0),
             churn_rate: acc.churn_rate + (Number(d.churn_rate) || 0),
             taxa_renovacao: acc.taxa_renovacao + (Number(d.taxa_renovacao) || 0),
             tempo_permanencia: acc.tempo_permanencia + (Number(d.tempo_permanencia) || 0),
@@ -642,9 +655,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             ...consolidadoMesAnterior,
             ticket_medio: kpisMesAnterior && kpisMesAnterior.fonte !== 'indisponivel'
               ? kpisMesAnterior.ticketMedio
-              : consolidadoMesAnterior.alunos_pagantes > 0
-                ? consolidadoMesAnterior.faturamento_estimado / consolidadoMesAnterior.alunos_pagantes
-                : 0,
+              : ticketMesAnteriorFallback,
             faturamento_estimado: kpisMesAnterior && kpisMesAnterior.fonte !== 'indisponivel'
               ? kpisMesAnterior.mrr
               : consolidadoMesAnterior.faturamento_estimado,
@@ -681,12 +692,19 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
 
         // Consolidar dados do ano anterior
         if (dadosAnoAnteriorData && dadosAnoAnteriorData.length > 0) {
+          const ticketAnoAnteriorFallback = calcularTicketMedioCanonico(
+            dadosAnoAnteriorData.map((d: any) => ({
+              mrr: Number(d.mrr_contratual ?? d.faturamento_estimado) || 0,
+              ticketMedio: Number(d.ticket_medio_contratual ?? d.ticket_medio) || 0,
+              ticketDenominadorPagantes: d.ticket_denominador_pagantes ?? null,
+            })),
+          );
           const consolidadoAnoAnterior = dadosAnoAnteriorData.reduce((acc, d) => ({
             alunos_pagantes: acc.alunos_pagantes + (d.alunos_pagantes || 0),
             novas_matriculas: acc.novas_matriculas + (d.novas_matriculas || 0),
             evasoes: acc.evasoes + (d.evasoes || 0),
             ticket_medio: acc.ticket_medio + (Number(d.ticket_medio) || 0),
-            faturamento_estimado: acc.faturamento_estimado + (Number(d.faturamento_estimado) || 0),
+            faturamento_estimado: acc.faturamento_estimado + (Number(d.mrr_contratual ?? d.faturamento_estimado) || 0),
             churn_rate: acc.churn_rate + (Number(d.churn_rate) || 0),
             taxa_renovacao: acc.taxa_renovacao + (Number(d.taxa_renovacao) || 0),
             tempo_permanencia: acc.tempo_permanencia + (Number(d.tempo_permanencia) || 0),
@@ -702,9 +720,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             ...consolidadoAnoAnterior,
             ticket_medio: kpisAnoAnterior && kpisAnoAnterior.fonte !== 'indisponivel'
               ? kpisAnoAnterior.ticketMedio
-              : consolidadoAnoAnterior.alunos_pagantes > 0
-                ? consolidadoAnoAnterior.faturamento_estimado / consolidadoAnoAnterior.alunos_pagantes
-                : 0,
+              : ticketAnoAnteriorFallback,
             faturamento_estimado: kpisAnoAnterior && kpisAnoAnterior.fonte !== 'indisponivel'
               ? kpisAnoAnterior.mrr
               : consolidadoAnoAnterior.faturamento_estimado,
@@ -743,8 +759,18 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             total_la_kids_sum: acumularCampoOpcional(acc.total_la_kids_sum, item.total_la_kids),
             total_la_adultos_sum: acumularCampoOpcional(acc.total_la_adultos_sum, item.total_la_adultos),
             total_la_sem_classificação_sum: acumularCampoOpcional(acc.total_la_sem_classificação_sum, item.total_la_sem_classificação),
-            ticket_medio_sum: acc.ticket_medio_sum + ((Number(item.ticket_medio) || 0) * (item.ticket_denominador_faturas || item.total_alunos_pagantes || 0)),
-            ticket_denominador_sum: acc.ticket_denominador_sum + (item.ticket_denominador_faturas || item.total_alunos_pagantes || 0),
+            ticket_medio_sum: acc.ticket_medio_sum + ((Number(item.ticket_medio) || 0) * (obterDenominadorTicketCanonico({
+              mrr: Number(item.mrr) || 0,
+              ticketMedio: Number(item.ticket_medio) || 0,
+              ticketDenominadorPagantes: item.ticket_denominador_pagantes ?? null,
+              ticketDenominadorFaturas: item.ticket_denominador_faturas ?? null,
+            }) || 0)),
+            ticket_denominador_sum: acc.ticket_denominador_sum + (obterDenominadorTicketCanonico({
+              mrr: Number(item.mrr) || 0,
+              ticketMedio: Number(item.ticket_medio) || 0,
+              ticketDenominadorPagantes: item.ticket_denominador_pagantes ?? null,
+              ticketDenominadorFaturas: item.ticket_denominador_faturas ?? null,
+            }) || 0),
             mrr_sum: acc.mrr_sum + (Number(item.mrr) || 0),
             arr_sum: acc.arr_sum + (Number(item.arr) || 0),
             tempo_permanencia_medio_sum: acc.tempo_permanencia_medio_sum + (Number(item.tempo_permanencia_medio) || 0),
@@ -1178,7 +1204,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
         // Buscar dados históricos para gráficos financeiros e retenção (tabela dados_mensais - histórico completo 2023-2026)
         let financeiroQuery = supabase
           .from('dados_mensais')
-          .select('mes, ano, alunos_pagantes, ticket_medio, faturamento_estimado, inadimplencia, reajuste_parcelas, churn_rate, taxa_renovacao, unidade_id')
+          .select('mes, ano, alunos_pagantes, ticket_medio, ticket_denominador_pagantes, ticket_medio_contratual, mrr_contratual, faturamento_estimado, inadimplencia, reajuste_parcelas, churn_rate, taxa_renovacao, unidade_id')
           .gte('ano', 2023)
           .order('ano', { ascending: true })
           .order('mes', { ascending: true });
@@ -1220,6 +1246,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
                 churn_rate: row.churnRate,
                 alunos_pagantes: row.alunosPagantes,
                 ticket_medio: row.ticketMedio,
+                ticket_denominador_pagantes: row.ticketDenominadorPagantes ?? null,
                 ticket_denominador_faturas: row.ticketDenominadorFaturas || 0,
                 mrr_atual: row.mrr,
                 faturamento_estimado: row.faturamentoPrevisto,
@@ -1274,6 +1301,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
 
             item.alunos_pagantes = row.alunosPagantes;
             item.ticket_medio = row.ticketMedio;
+            item.ticket_denominador_pagantes = row.ticketDenominadorPagantes ?? null;
             item.ticket_denominador_faturas = row.ticketDenominadorFaturas || 0;
             item.mrr_atual = row.mrr;
             item.faturamento_estimado = row.faturamentoPrevisto;
@@ -1399,7 +1427,12 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             if (key <= mesAtualKey) {
               const atual = ticketPorMes.get(key) || { faturamento: 0, denominador: 0, total: 0, count: 0 };
               atual.faturamento += Number(item.mrr_atual ?? item.faturamento_estimado) || 0;
-              atual.denominador += Number(item.ticket_denominador_faturas || item.alunos_pagantes) || 0;
+              atual.denominador += obterDenominadorTicketCanonico({
+                mrr: Number(item.mrr_atual ?? item.faturamento_estimado) || 0,
+                ticketMedio: Number(item.ticket_medio) || 0,
+                ticketDenominadorPagantes: item.ticket_denominador_pagantes ?? null,
+                ticketDenominadorFaturas: item.ticket_denominador_faturas ?? null,
+              }) || 0;
               atual.total += Number(item.ticket_medio) || 0;
               atual.count += 1;
               ticketPorMes.set(key, atual);

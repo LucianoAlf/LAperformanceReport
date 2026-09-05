@@ -9,6 +9,7 @@ type MovimentoFinanceiroRetencao = {
 
 type ResumoFinanceiroMensal = {
   alunos_pagantes?: number | string | null;
+  ticket_denominador_pagantes?: number | string | null;
   ticket_medio?: number | string | null;
   faturamento?: number | string | null;
   faturamento_previsto?: number | string | null;
@@ -54,11 +55,14 @@ export function calcularKpisMensaisAdministrativos({
   naoRenovacoes?: MovimentoFinanceiroRetencao[];
 }): KpisMensaisAdministrativos {
   const alunosPagantes = n(resumo?.alunos_pagantes);
+  const ticketDenominadorPagantes = n(resumo?.ticket_denominador_pagantes);
   const faturamentoResumo = n(resumo?.faturamento);
   const faturamentoPrevisto = n(resumo?.faturamento_previsto) || faturamentoResumo;
   const ticketResumo = n(resumo?.ticket_medio);
-  const ticketMedio = ticketResumo || (alunosPagantes > 0 ? faturamentoResumo / alunosPagantes : 0);
-  const mrrAtual = n(resumo?.mrr_atual) || faturamentoResumo || (alunosPagantes * ticketMedio);
+  const ticketMedio = ticketResumo || (
+    ticketDenominadorPagantes > 0 ? faturamentoResumo / ticketDenominadorPagantes : 0
+  );
+  const mrrAtual = n(resumo?.mrr_atual) || faturamentoResumo;
   const tempoPermanenciaMeses = n(resumo?.ltv_meses);
   const ltv = tempoPermanenciaMeses * ticketMedio;
 

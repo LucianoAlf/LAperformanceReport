@@ -12,6 +12,7 @@ export interface KPIsAlunosVivosPorUnidade {
   alunosAtivos: number;
   alunosPagantes: number;
   ticketMedio: number;
+  ticketDenominadorPagantes?: number | null;
   mrr: number;
   arr: number;
   churnRate: number;
@@ -327,6 +328,7 @@ export function calcularKPIsAlunosVivosCanonicos(
       alunosAtivos,
       alunosPagantes,
       ticketMedio,
+      ticketDenominadorPagantes: alunosPagantes,
       mrr,
       arr: mrr * 12,
       churnRate: alunosPagantes > 0 ? (evasoesKeys.size / alunosPagantes) * 100 : 0,
@@ -405,6 +407,13 @@ export async function fetchKPIsAlunosVivosCanonicos({
     alunosAtivos: n(row.alunos_ativos),
     alunosPagantes: n(row.alunos_pagantes),
     ticketMedio: n(row.ticket_medio),
+    ticketDenominadorPagantes: row.ticket_denominador_pagantes !== null
+      && row.ticket_denominador_pagantes !== undefined
+      ? n(row.ticket_denominador_pagantes)
+      : row.alunos_pagantes_canonicos !== null
+        && row.alunos_pagantes_canonicos !== undefined
+        ? n(row.alunos_pagantes_canonicos)
+        : null,
     mrr: n(row.mrr),
     arr: n(row.arr),
     churnRate: n(row.churn_rate),

@@ -43,6 +43,7 @@ import {
   isTipoMatriculaForaNovaComercial,
 } from '@/lib/comercialMatriculasCanonicas';
 import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
+import { calcularTicketMedioCanonico } from '@/lib/ticketMedioCanonico';
 import { anexarCursosMovimentacoesAdmin } from '@/lib/movimentacoesAdminCursos';
 import {
   buscarKpisProfessoresCanonicos,
@@ -123,6 +124,7 @@ interface ResumoUnidade {
   alunos_ativos: number;
   alunos_pagantes: number;
   ticket_medio: number;
+  ticket_denominador_pagantes?: number | null;
   ticket_denominador_faturas?: number;
   mrr_atual?: number;
   faturamento_previsto: number;
@@ -679,6 +681,7 @@ export function DashboardPage() {
             alunos_ativos: Math.round(row.alunosAtivos),
             alunos_pagantes: Math.round(row.alunosPagantes),
             ticket_medio: row.ticketMedio,
+            ticket_denominador_pagantes: row.ticketDenominadorPagantes ?? null,
             ticket_denominador_faturas: row.ticketDenominadorFaturas,
             mrr_atual: row.mrr,
             faturamento_previsto: row.faturamentoPrevisto,
@@ -719,8 +722,18 @@ export function DashboardPage() {
                 const dadosUnidade = dadosMensaisUnidades.filter((d: any) => d.unidade_id === u.id);
                 const alunosAtivos = dadosUnidade.reduce((acc: number, d: any) => acc + (d.alunos_ativos || 0), 0);
                 const alunosPagantes = dadosUnidade.reduce((acc: number, d: any) => acc + (d.alunos_pagantes || 0), 0);
-                const faturamento = dadosUnidade.reduce((acc: number, d: any) => acc + parseFloat(d.faturamento_estimado || 0), 0);
-                const ticketMedio = alunosPagantes > 0 ? faturamento / alunosPagantes : 0;
+                const linhasTicket = dadosUnidade.map((d: any) => ({
+                  mrr: Number(d.mrr_contratual ?? d.faturamento_estimado) || 0,
+                  ticketMedio: Number(d.ticket_medio_contratual ?? d.ticket_medio) || 0,
+                  ticketDenominadorPagantes: d.ticket_denominador_pagantes ?? null,
+                }));
+                const faturamento = linhasTicket.reduce((total, linha) => total + linha.mrr, 0);
+                const ticketMedio = calcularTicketMedioCanonico(linhasTicket);
+                const ticketDenominadorPagantes = dadosUnidade.every(
+                  (d: any) => d.ticket_denominador_pagantes !== null && d.ticket_denominador_pagantes !== undefined
+                )
+                  ? dadosUnidade.reduce((total: number, d: any) => total + Number(d.ticket_denominador_pagantes), 0)
+                  : null;
 
                 return {
                   unidade: u.nome,
@@ -728,6 +741,7 @@ export function DashboardPage() {
                   alunos_ativos: alunosAtivos,
                   alunos_pagantes: alunosPagantes,
                   ticket_medio: ticketMedio,
+                  ticket_denominador_pagantes: ticketDenominadorPagantes,
                   faturamento_previsto: faturamento,
                   tempo_medio: 0
                 };
@@ -1168,10 +1182,12 @@ export function DashboardPage() {
                 <td className="py-3 text-right text-white font-bold">
                   {resumoUnidades.length > 0 
                     ? formatCurrency(
-                        resumoUnidades.reduce((acc, d) => acc + (d.ticket_denominador_faturas || d.alunos_pagantes), 0) > 0
-                          ? resumoUnidades.reduce((acc, d) => acc + (d.mrr_atual ?? d.faturamento_previsto), 0) /
-                            resumoUnidades.reduce((acc, d) => acc + (d.ticket_denominador_faturas || d.alunos_pagantes), 0)
-                          : 0
+                        calcularTicketMedioCanonico(resumoUnidades.map(d => ({
+                          mrr: d.mrr_atual ?? d.faturamento_previsto,
+                          ticketMedio: d.ticket_medio,
+                          ticketDenominadorPagantes: d.ticket_denominador_pagantes ?? null,
+                          ticketDenominadorFaturas: d.ticket_denominador_faturas ?? null,
+                        })))
                       )
                     : formatCurrency(0)}
                 </td>
