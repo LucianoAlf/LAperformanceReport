@@ -129,6 +129,32 @@ previsto**: o que olhar, quando, contra o quê.
 aulas. Comparar contra o mesmo mês do ano anterior ou contra as unidades que não
 fizeram; quando não der para isolar, dizer que não dá.
 
+## Bumerangue (agenda de retomada) — no ar em 05/09
+
+**Migrations** `20260905150000` (agenda) + `20260905160000` (extração pela conversa).
+
+- Tabela **`lead_retomada`**: quando a pessoa pediu para voltar, **a frase
+  original** (`NOT NULL`), o motivo e o desfecho.
+- **`fn_resolver_prazo_retomada`** converte o inequívoco e **recusa o vago**
+  ("depois das férias" → NULL, balde "sem data"). Aceita número por extenso,
+  porque é assim que a pessoa fala.
+- **Dois caminhos de escrita, UMA regra:** `fn_upsert_retomada` é o núcleo;
+  a consultora entra por `mila_registrar_retomada_v1` e o extrator por
+  `registrar_retomada_de_conversa_v1`. ⚠️ **O modelo não sobrescreve registro
+  humano** — quem falou com o cliente sabe mais que o LLM lendo depois.
+- **Extrator semântico** (`extrair-sinais-conversa`, prompt **v5-r1**): tipo novo
+  `retomar_depois` + campo `prazo_texto`. ⚠️ `retomar_depois` **não vira sinal
+  do radar** de propósito — sinal significa "aja agora", e uma retomada de
+  janeiro ficaria meses na pauta. Roteia para `lead_retomada`.
+  ⚠️ **Só vale para LEAD**: aluno adiando é assunto de retenção.
+- **Proatividade:** `mila_briefing_manha_v1` ganhou `retomar_hoje` lendo a fonte
+  única, e o molde da manhã tem o bloco 🔄 RETOMAR HOJE com a frase em itálico.
+- **Medir:** `desfecho_retomada` + `vw_retomada_eficacia_v1` (ainda zerada — é o
+  ponto: nasce medindo, não vira retrofit).
+- Travado por `tests/retomadaBumerangue.test.mjs` (8 casos, função real via
+  esbuild). Ensaio contra produção achou a 1ª retomada real na primeira
+  execução: *"Semana que vem volto aí pra fazer minha matrícula."*
+
 ## O que falta
 
 1. **Remedir os padrões.** Todo `medido_em` é 03/09 e não existe cron que

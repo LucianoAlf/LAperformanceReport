@@ -31,6 +31,7 @@ import {
   chaveIdempotencia,
   competenciaBrt,
   decidirSinal,
+  decidirRetomada,
   type VeredictoConversa,
 } from "./contract.ts";
 
@@ -42,7 +43,12 @@ const MODELO = "gpt-5.4-mini-2026-03-17";
 // mudam por motivos diferentes. Trocar a decisao sem trocar o prompt precisa
 // invalidar o ledger do mesmo jeito — senao a conversa ja classificada nunca
 // reaproveita a regra nova (foi o caso da Graciele em 03/09).
-const PROMPT_VERSAO = "v4-d2";
+// v5-r1 (05/09): tipo `retomar_depois` — o BUMERANGUE. Subir a versao e
+// obrigatorio: a chave de idempotencia do log a inclui, entao sem o bump as
+// conversas ja lidas nunca seriam reavaliadas com o tipo novo e o passado
+// ficaria de fora. A dedup do SINAL nao usa a versao, entao reclassificar nao
+// duplica item na pauta.
+const PROMPT_VERSAO = "v5-r1";
 const SOL_EXPORT_URL =
   "https://bvltexmlmydsncfjstbr.supabase.co/functions/v1/exportar-candidatos-atendimento";
 const CONCORRENCIA = 8;
@@ -79,6 +85,15 @@ Sua tarefa é dizer O QUE ESTÁ ACONTECENDO, escolhendo UM tipo:
 - pergunta_sem_resposta: o cliente está esperando algo CONCRETO da escola —
   uma informação, uma decisão, uma providência — e não se encaixa nos tipos
   acima. Não use este tipo só porque a escola "poderia responder algo".
+- retomar_depois: o LEAD adiou COM INTENCAO — disse que volta a falar, ou
+  pediu para ser procurado mais para frente. "me chama em janeiro", "depois das
+  ferias eu vejo", "daqui a 3 meses a gente resolve", "agora nao da, mas me
+  procura no fim do ano".
+  ⚠️ A marca e ADIAMENTO COM INTERESSE PRESERVADO. "Nao quero", "achei caro,
+  vou procurar outra" e "desisti" NAO sao retomar_depois — sao outro.
+  ⚠️ Se ele adiou E citou dinheiro ("ta apertado agora, me chama em janeiro"),
+  vale retomar_depois: a acao certa e agendar a volta, nao oferecer
+  parcelamento a quem ja disse que so decide depois.
 - cortesia: fechamento educado, agradecimento, emoji, "ok", "beleza",
   "combinado". Inclui CONFIRMAÇÃO ou ACEITE de algo que a escola propôs
   ("sim", "pode ser", "confirmado", "ela vai", "tá certo") quando não sobra
@@ -118,12 +133,16 @@ REGRAS DE JULGAMENTO:
   escolha média.
 - trecho_chave: copie LITERALMENTE o pedaço da mensagem do cliente que sustenta
   a sua escolha (até 200 caracteres). Se for cortesia ou spam, copie a mensagem.
+- prazo_texto: SO quando o tipo for retomar_depois. Copie LITERALMENTE a
+  expressao de tempo que a pessoa usou — "em janeiro", "daqui a 3 meses",
+  "depois das ferias". NAO converta para data e NAO invente prazo: se ela
+  adiou sem dizer quando, deixe vazio. Quem transforma isso em dia e o banco.
 - resumo: uma frase curta em português, na terceira pessoa, sem saudação.`;
 
 const schema = {
   type: "object",
   additionalProperties: false,
-  required: ["tipo", "precisa_resposta", "confianca", "resumo", "trecho_chave"],
+  required: ["tipo", "precisa_resposta", "confianca", "resumo", "trecho_chave", "prazo_texto"],
   properties: {
     tipo: {
       type: "string",
@@ -134,6 +153,7 @@ const schema = {
         "reposicao_pedida",
         "ausencia_ou_doenca",
         "pergunta_sem_resposta",
+        "retomar_depois",
         "cortesia",
         "aviso_operacional",
         "spam",
@@ -144,6 +164,9 @@ const schema = {
     confianca: { type: "string", enum: ["alta", "media", "baixa"] },
     resumo: { type: "string" },
     trecho_chave: { type: "string" },
+    // strict structured output exige toda propriedade em `required`; o modelo
+    // devolve "" quando o tipo nao e retomar_depois.
+    prazo_texto: { type: "string" },
   },
 } as const;
 
@@ -369,6 +392,12 @@ serve(async (req) => {
       : null;
     const entidadeTipo: string | null = ident?.entidade_tipo ?? null;
 
+    // 🔴 A decisao da retomada e calculada AQUI, antes do `registro`, para que o
+    // ENSAIO tambem a mostre. Na 1a versao ela ficava depois do `if (ensaio)
+    // return` e o dry_run dizia o tipo mas nao dizia se registraria — validar
+    // sem escrever era exatamente o ponto do ensaio.
+    const dr = decidirRetomada(v, entidadeTipo);
+
     const registro = {
       evento: "mapa_sinais",
       acao: "extrator_conversa",
@@ -389,6 +418,7 @@ serve(async (req) => {
         horas_sem_resposta: c.horas_sem_resposta,
         veredito: v,
         decisao: d,
+        retomada: dr,
         entidade: ident,
         // o texto avaliado fica junto: sem ele, auditar semanas depois é impossível
         ultima_mensagem: (c.transcript ?? []).at(-1)?.texto ?? null,
@@ -408,6 +438,27 @@ serve(async (req) => {
     const encerra = async () => {
       await sb.from("automacao_log").insert(registro);
     };
+
+    // ── BUMERANGUE ────────────────────────────────────────────────────────
+    // Vem ANTES do descarte por `!d.emitir`: `retomar_depois` de proposito nao
+    // vira sinal do radar (sinal significa "aja agora"), entao chegaria aqui
+    // como descartado e a informacao mais valiosa do funil frio se perderia.
+    if (dr.registrar && ident?.entidade_id) {
+      const { data: rr, error: erroRet } = await sb.rpc(
+        "registrar_retomada_de_conversa_v1",
+        {
+          p_lead_id: ident.entidade_id,
+          p_frase: v.trecho_chave,
+          p_prazo_texto: v.prazo_texto ?? null,
+          p_conversation_id: c.conversa_id,
+          p_motivo: null,
+        },
+      );
+      (registro.detalhes as Record<string, unknown>).retomada_gravada =
+        erroRet ? { erro: erroRet.message } : rr;
+      conta(erroRet ? "retomada:erro" : "retomada:gravada");
+      return await encerra();
+    }
 
     if (!d.emitir || !d.regra_codigo) return await encerra();
     if (!entidadeTipo) {
