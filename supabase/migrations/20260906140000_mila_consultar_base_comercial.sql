@@ -33,6 +33,8 @@ declare
   v_limite    int := least(greatest(coalesce(p_limite, 3), 1), 3);
   v_blocos    jsonb;
   v_total_pub int;
+  v_dep       text;
+  v_niv       text;
 begin
   -- ── quem pergunta ─────────────────────────────────────────────────────────
   select * into v_quem
@@ -44,10 +46,26 @@ begin
       'recado', 'Nao consegui identificar quem esta perguntando — sem carimbo eu nao entrego conteudo.');
   end if;
 
-  -- 🔴 Quem lidera lê o material do consultor TAMBÉM; o contrário nunca.
+  -- 🔴 A RÉGUA É DEPARTAMENTO + NÍVEL, NUNCA O NÍVEL SOZINHO. `nivel='lider'`
+  --    inclui Rose (financeiro), Yuri (marketing), Juliana e Quintela
+  --    (pedagógico), Clayton e Jerêh (administrativo): seis pessoas que veriam
+  --    mídia paga, corridinha e o bloco de liderança do time comercial. Foi
+  --    exatamente essa a falha de 05/09, quando custo de mídia ficou visível
+  --    para 7 pessoas — e eu a repeti aqui, na primeira versão desta função.
+  --    Quem está fora do comercial e fora da diretoria não vê bloco NENHUM:
+  --    a base é material de venda, não conteúdo geral da casa.
+  v_dep := lower(coalesce(v_quem.departamento,''));
+  v_niv := lower(coalesce(v_quem.nivel,''));
   v_publico := case
-    when lower(coalesce(v_quem.nivel,'')) in ('lider','diretoria') then 'lideranca'
-    else 'comercial' end;
+    when v_niv = 'diretoria' or (v_dep = 'comercial' and v_niv = 'lider') then 'lideranca'
+    when v_dep = 'comercial' then 'comercial'
+    else null end;
+
+  if v_publico is null then
+    return jsonb_build_object('ok', false, 'motivo', 'fora_do_publico_da_base',
+      'quem', jsonb_build_object('nome', v_quem.nome, 'departamento', v_quem.departamento, 'nivel', v_quem.nivel),
+      'recado', 'Essa base e material do time comercial — nao e para este solicitante.');
+  end if;
 
   select count(*) into v_total_pub
   from base_conhecimento_blocos b
@@ -91,7 +109,7 @@ begin
 
   return jsonb_build_object(
     'ok', true,
-    'quem', jsonb_build_object('nome', v_quem.nome, 'nivel', v_quem.nivel),
+    'quem', jsonb_build_object('nome', v_quem.nome, 'departamento', v_quem.departamento, 'nivel', v_quem.nivel),
     'publico_resolvido', v_publico,
     'blocos_no_publico', v_total_pub,
     'blocos', coalesce(v_blocos, '[]'::jsonb),
