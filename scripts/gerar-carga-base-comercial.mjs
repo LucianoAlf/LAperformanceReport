@@ -40,6 +40,11 @@ const META = {
   'bloco-09-calendario-comercial.md':          { publico: 'lideranca', versao: '0.1' },
   'bloco-10-ex-aluno-reativacao.md':           { publico: 'comercial', versao: '0.1' },
   'bloco-11-pre-atendimento-mila-sdr.md':      { publico: 'lideranca', versao: '0.1' },
+  // ⚠️ RECORTE do 11, decidido pelo Alf em 06/09: as regras de conduta de quem
+  // recebe o bastao sao trabalho de consultor; o diagnostico do bot e as taxas
+  // por unidade ficam com a lideranca. Bloco medido na mao de quem e medido
+  // por ele vira cobranca, e a Mila e parceira.
+  'bloco-12-lead-que-vem-do-bot.md':           { publico: 'comercial', versao: '0.1' },
 };
 
 const TAG = '$bloco_md$';   // conferido: não aparece em nenhum bloco
@@ -92,10 +97,15 @@ linhas.push(`
 do $carga$
 declare v_novos int; v_lead int; v_texto text;
 begin
+  -- ⚠️ Conta TODOS os blocos comerciais, não só os candidatos: depois da 1ª
+  -- carga eles viram 'aprovado', e um número fixo de candidatos quebraria a
+  -- migration em qualquer rodada seguinte — foi o que aconteceu ao acrescentar
+  -- o bloco 12 em 06/09. O total vem da contagem de arquivos, não de um número
+  -- digitado, então bloco novo ajusta a trava sozinho.
   select count(*) into v_novos from public.base_conhecimento_blocos
-   where estado = 'candidato' and publico in ('comercial', 'lideranca');
-  if v_novos <> 11 then
-    raise exception 'esperava 11 blocos candidatos, achei %', v_novos;
+   where publico in ('comercial', 'lideranca');
+  if v_novos <> __TOTAL_BLOCOS__ then
+    raise exception 'esperava __TOTAL_BLOCOS__ blocos comerciais, achei %', v_novos;
   end if;
 
   select count(*) into v_lead from public.base_conhecimento_blocos
@@ -111,7 +121,10 @@ begin
     raise exception 'VAZAMENTO: bloco comercial/lideranca chegou na montagem da SDR';
   end if;
 
-  raise notice 'carga ok: 11 candidatos · SDR intacta (4 blocos, % chars)', length(v_texto);
+  raise notice 'carga ok: % blocos comerciais · SDR intacta (4 blocos, % chars)', v_novos, length(v_texto);
 end $carga$;`);
 
-process.stdout.write(linhas.join('\n') + '\n');
+// O total vem da CONTAGEM DE ARQUIVOS, não de um número digitado: acrescentar
+// um bloco novo passa a ajustar a trava sozinho.
+process.stdout.write(
+  linhas.join('\n').split('__TOTAL_BLOCOS__').join(String(arquivos.length)) + '\n');
