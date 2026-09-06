@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-05 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-06 -->
 
 <!-- fim do cabecalho gerado -->
 # Funções
 
-1291 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
+1293 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
 chamadas diretas ao PostgREST não são visíveis para o gerador.
 
 ## aluno
@@ -277,6 +277,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `mila_aprovar_recado_v1(p_solicitante_telefone text, p_recado_id uuid)` | ORFA | DEFINER | sem consumidor conhecido |
 | `mila_atendimento_serie_v1(p_solicitante_telefone text, p_dias integer)` | ORFA | DEFINER | sem consumidor conhecido |
 | `mila_autoriza_lead(p_solicitante_telefone text, p_lead_id integer)` | SO-INTERNA | DEFINER | funcao:mila_anotar_lead_v1, funcao:mila_registrar_canal_origem_v1, funcao:mila_registrar_consultor_v1, funcao:mila_registrar_curso_interesse_v1, funcao:mila_registrar_motivo_perda_v1 |
+| `mila_base_comercial_v1(p_solicitante_telefone text, p_situacao text, p_limite integer)` | ORFA | DEFINER | sem consumidor conhecido |
 | `mila_briefing_manha_v1(p_solicitante_telefone text, p_data date)` | ORFA | DEFINER | sem consumidor conhecido |
 | `mila_check_disponibilidade_visita(p_unidade_id uuid, p_data date, p_horario time without time zone, p_telefone text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `mila_confirmar_recado_v1(p_recado_id uuid, p_conversation_id bigint, p_message_id bigint, p_erro text)` | ORFA | DEFINER | sem consumidor conhecido |
@@ -297,6 +298,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `mila_registrar_canal_origem_v1(p_solicitante_telefone text, p_lead_id integer, p_canal text, p_sobrescrever boolean)` | ORFA | DEFINER | sem consumidor conhecido |
 | `mila_registrar_consultor_v1(p_solicitante_telefone text, p_lead_id integer, p_consultor text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `mila_registrar_curso_interesse_v1(p_solicitante_telefone text, p_lead_id integer, p_curso text)` | ORFA | DEFINER | sem consumidor conhecido |
+| `mila_registrar_lacuna_base_v1(p_solicitante_telefone text, p_situacao text, p_o_que_faltou text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `mila_registrar_motivo_perda_v1(p_solicitante_telefone text, p_lead_id integer, p_motivo text, p_nota text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `mila_registrar_retomada_v1(p_solicitante_telefone text, p_lead_id bigint, p_frase text, p_prazo_texto text, p_motivo text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `mila_responder_recado_v1(p_telefone text, p_recado_id uuid, p_resposta text)` | ORFA | DEFINER | sem consumidor conhecido |
@@ -1036,7 +1038,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_fabio_identidade_apurar_todos()` | ATIVA | DEFINER | cron:fabio-identidade-apurar |
 | `fn_fabio_janelas_por_minerar(p_limite integer)` | SO-INTERNA | DEFINER | funcao:fn_fabio_laudo, funcao:fn_fabio_laudo_gravar |
 | `fn_fabio_known_issue_ativo(p_assinatura text)` | ORFA | DEFINER · 🔓 anon | sem consumidor conhecido |
-| `fn_fabio_laudo(p_dia date)` | SO-INTERNA | DEFINER | funcao:fn_fabio_laudo_gravar |
+| `fn_fabio_laudo(p_dia date, p_auditoria jsonb)` | SO-INTERNA | DEFINER · 🔓 anon | funcao:fn_fabio_laudo_gravar |
 | `fn_fabio_laudo_gravar(p_dia date)` | ATIVA | DEFINER | cron:fabio-laudo |
 | `fn_fabio_licao_gravar(p_nome text, p_texto text, p_por text, p_porque text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `fn_fabio_normalizar_termo(p_bruto text)` | SO-INTERNA | INVOKER · 🔓 anon | funcao:fn_fabio_identidade_apurar, funcao:fn_fabio_vocabulario_stt |

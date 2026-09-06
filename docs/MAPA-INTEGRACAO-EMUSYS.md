@@ -231,7 +231,10 @@ A edge faz `switch(evento)`:
   `contrato_atual.contrato_assinado=true` cobre assinatura manual e eletrônica;
   a API não expõe modo, data nem a etapa “aguardando o aluno”. O lote fica em
   `aluno_contratos_emusys`, e toda rodada deixa rastro em
-  `contrato_assinatura_sync_execucoes`.
+  `contrato_assinatura_sync_execucoes`. Na leitura por pessoa, a RPC considera
+  todos os `aluno_ids_locais` e usa `aluno_jornada_matricula_disciplina` para
+  recuperar a matrícula exata somente quando a jornada cobre integralmente a
+  quantidade acadêmica local; cobertura parcial continua `nao_verificado`.
 - **Frescura e reexecução:** o cron mantém `skipped_fresh` depois do primeiro
   sucesso do dia BRT. Uma reconciliação extraordinária usa `?force=1` e exige
   `x-sync-token`; bearer sem esse cabeçalho não libera o bypass. O force usa a

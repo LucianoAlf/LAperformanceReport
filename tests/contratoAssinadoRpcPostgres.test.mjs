@@ -9,6 +9,8 @@ const electronicSemanticsName = readdirSync('supabase/migrations')
   .find((name) => name.includes('contrato_assinatura_eletronica_semantica'));
 const manualElectronicSemanticsName = readdirSync('supabase/migrations')
   .find((name) => name.includes('contrato_assinado_manual_eletronico'));
+const personIdentityFixName = readdirSync('supabase/migrations')
+  .find((name) => name.includes('fix_contrato_assinatura_ids_locais_pessoa'));
 
 function docker(args, input) {
   return spawnSync('docker', args, {
@@ -74,9 +76,12 @@ test('PostgreSQL prova lote atomico, identidade por unidade e regra conservadora
     const manualElectronicSemanticsMigration = manualElectronicSemanticsName
       ? readFileSync(`supabase/migrations/${manualElectronicSemanticsName}`, 'utf8')
       : '';
+    const personIdentityFixMigration = personIdentityFixName
+      ? readFileSync(`supabase/migrations/${personIdentityFixName}`, 'utf8')
+      : '';
     const migration = fullMigration.slice(0, fullMigration.indexOf('-- Duas janelas:'))
       + '\ncommit;\n' + authMigration + '\n' + electronicSemanticsMigration
-      + '\n' + manualElectronicSemanticsMigration;
+      + '\n' + manualElectronicSemanticsMigration + '\n' + personIdentityFixMigration;
     const UA = '10000000-0000-4000-8000-000000000001';
     const UB = '20000000-0000-4000-8000-000000000002';
 
@@ -118,6 +123,14 @@ test('PostgreSQL prova lote atomico, identidade por unidade e regra conservadora
         aluno_id integer primary key,
         entra_base_ativa boolean not null
       );
+      create table public.aluno_jornada_matricula_disciplina (
+        unidade_id uuid not null,
+        aluno_id integer not null,
+        emusys_matricula_id bigint,
+        curso_id integer,
+        status_matricula text,
+        status_emusys text
+      );
       create function public.fn_usuario_atual_tem_permissao(text, uuid)
       returns boolean language sql stable as $$ select $2 = '${UA}'::uuid $$;
 
@@ -151,7 +164,8 @@ test('PostgreSQL prova lote atomico, identidade por unidade e regra conservadora
       $$;
 
       insert into public.unidades values ('${UA}', 'A'), ('${UB}', 'B');
-      insert into public.cursos values (1, 'Canto', false), (2, 'GarageBand', true);
+      insert into public.cursos values
+        (1, 'Canto', false), (2, 'GarageBand', true), (3, 'Violino', false);
 
       ${migration}
 
@@ -159,7 +173,9 @@ test('PostgreSQL prova lote atomico, identidade por unidade e regra conservadora
         (1, '${UA}', 1, null, '865'), (2, '${UA}', 1, null, '866'),
         (3, '${UA}', 1, null, '867'), (4, '${UA}', 1, null, '868'),
         (5, '${UA}', 1, null, '869'), (6, '${UA}', 2, null, '870'),
-        (7, '${UB}', 1, null, '865');
+        (7, '${UB}', 1, null, '865'),
+        (8, '${UA}', 1, null, null), (9, '${UA}', 2, null, '872'),
+        (10, '${UA}', 3, null, null), (11, '${UA}', 1, null, '874');
       insert into public.vw_alunos_estado_operacional_v131
       select id, true from public.alunos;
       insert into public.situacao_fixture values
@@ -168,7 +184,27 @@ test('PostgreSQL prova lote atomico, identidade por unidade e regra conservadora
         ('p-sem-contrato', 4, array[4], 'Sem contrato', '${UA}'),
         ('p-nao-verificado', 5, array[5], 'Nao verificado', '${UA}'),
         ('p-dispensado', 6, array[6], 'Dispensado', '${UA}'),
-        ('p-proibido', 7, array[7], 'Proibido', '${UB}');
+        ('p-proibido', 7, array[7], 'Proibido', '${UB}'),
+        ('p-duplicado-academico-banda', 8, array[8,9], 'Duplicado academico e banda', '${UA}'),
+        ('p-duplicado-dois-academicos', 10, array[10,11], 'Duplicado dois academicos', '${UA}');
+
+      insert into public.emusys_matriculas_estado_atual (
+        unidade_id, emusys_matricula_id, emusys_aluno_id, aluno_id,
+        emusys_contrato_id, status_emusys
+      ) values
+        ('${UA}', 871, 80, 8, 911, 'ativa'),
+        ('${UA}', 872, 80, 9, 912, 'ativa'),
+        ('${UA}', 873, 81, 11, 913, 'ativa'),
+        ('${UA}', 874, 81, 11, 914, 'ativa');
+
+      insert into public.aluno_jornada_matricula_disciplina (
+        unidade_id, aluno_id, emusys_matricula_id, curso_id,
+        status_matricula, status_emusys
+      ) values
+        ('${UA}', 8, 871, 1, 'ativa', 'ativa'),
+        ('${UA}', 9, 872, 2, 'ativa', 'ativa'),
+        ('${UA}', 11, 873, 3, 'ativa', 'ativa'),
+        ('${UA}', 11, 874, 1, 'ativa', 'ativa');
 
       insert into public.contrato_assinatura_sync_execucoes (id, unidade_id, unidade_slug)
       values ('30000000-0000-4000-8000-000000000001', '${UA}', 'a');
@@ -178,7 +214,11 @@ test('PostgreSQL prova lote atomico, identidade por unidade e regra conservadora
           jsonb_build_object('unidade_id','${UA}','emusys_matricula_id','865','emusys_aluno_id','1','contrato_emusys_id','901','contrato_assinado',true),
           jsonb_build_object('unidade_id','${UA}','emusys_matricula_id','866','emusys_aluno_id','2','contrato_emusys_id','902','contrato_assinado',true),
           jsonb_build_object('unidade_id','${UA}','emusys_matricula_id','867','emusys_aluno_id','3','contrato_emusys_id','903','contrato_assinado',false),
-          jsonb_build_object('unidade_id','${UA}','emusys_matricula_id','868','emusys_aluno_id','4','contrato_emusys_id',null,'contrato_assinado',null)
+          jsonb_build_object('unidade_id','${UA}','emusys_matricula_id','868','emusys_aluno_id','4','contrato_emusys_id',null,'contrato_assinado',null),
+          jsonb_build_object('unidade_id','${UA}','emusys_matricula_id','871','emusys_aluno_id','80','contrato_emusys_id','911','contrato_assinado',true),
+          jsonb_build_object('unidade_id','${UA}','emusys_matricula_id','872','emusys_aluno_id','80','contrato_emusys_id','912','contrato_assinado',true),
+          jsonb_build_object('unidade_id','${UA}','emusys_matricula_id','873','emusys_aluno_id','81','contrato_emusys_id','913','contrato_assinado',true),
+          jsonb_build_object('unidade_id','${UA}','emusys_matricula_id','874','emusys_aluno_id','81','contrato_emusys_id','914','contrato_assinado',true)
         )
       );
       update public.contrato_assinatura_sync_execucoes
@@ -204,6 +244,49 @@ test('PostgreSQL prova lote atomico, identidade por unidade e regra conservadora
       'Sem contrato': 'sem_contrato',
       'Nao verificado': 'nao_verificado',
       Dispensado: 'dispensado',
+      'Duplicado academico e banda': 'assinado',
+      'Duplicado dois academicos': 'assinado',
+    });
+
+    const duplicatedLocalIds = JSON.parse(psql(container, String.raw`
+      select jsonb_object_agg(pessoa_chave, jsonb_build_object(
+        'status', contrato_assinatura_status,
+        'relevantes', contratos_relevantes,
+        'assinados', contratos_assinados,
+        'nao_verificados', contratos_nao_verificados,
+        'fresco', contrato_dado_fresco
+      ))
+      from public.get_situacao_alunos_v1('${UA}', '2026-09-04', false)
+      where pessoa_chave in ('p-duplicado-academico-banda', 'p-duplicado-dois-academicos');
+    `));
+    assert.deepEqual(duplicatedLocalIds, {
+      'p-duplicado-academico-banda': {
+        status: 'assinado', relevantes: 1, assinados: 1, nao_verificados: 0, fresco: true,
+      },
+      'p-duplicado-dois-academicos': {
+        status: 'assinado', relevantes: 2, assinados: 2, nao_verificados: 0, fresco: true,
+      },
+    });
+
+    psql(container, String.raw`
+      update public.aluno_contratos_emusys
+      set contrato_assinado = false
+      where unidade_id = '${UA}' and emusys_matricula_id = '873';
+    `);
+    const mixedDuplicate = JSON.parse(psql(container, String.raw`
+      select jsonb_build_object(
+        'status', contrato_assinatura_status,
+        'relevantes', contratos_relevantes,
+        'assinados', contratos_assinados,
+        'nao_assinados', contratos_nao_assinados,
+        'nao_verificados', contratos_nao_verificados
+      )
+      from public.get_situacao_alunos_v1('${UA}', '2026-09-04', false)
+      where pessoa_chave = 'p-duplicado-dois-academicos';
+    `));
+    assert.deepEqual(mixedDuplicate, {
+      status: 'nao_assinado', relevantes: 2, assinados: 1,
+      nao_assinados: 1, nao_verificados: 0,
     });
 
     const allSigned = JSON.parse(psql(container, String.raw`

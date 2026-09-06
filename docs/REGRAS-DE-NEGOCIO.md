@@ -174,6 +174,7 @@ A chave de identidade é sempre `unidade_id + emusys_matricula_id`; nome, telefo
 - Desde 05/09/2026, `true` confirma assinatura manual ou eletrônica. A API não informa modo nem data; `contrato_status_observado_em` é somente quando o LA Report observou o booleano.
 - `false` vira `nao_assinado`, mas não distingue “nunca enviado” de “a escola assinou e aguarda o aluno”. A cobrança pode dizer “Não assinado”; não pode atribuir causa ou culpa.
 - A pessoa só fica `assinado` quando **todas** as matrículas acadêmicas ativas relevantes estão em `true`. Matrícula com `cursos.is_projeto_banda=true` é explicitamente dispensada.
+- Se a pessoa possui mais de um `aluno_id` local, a identidade dos contratos considera a jornada de **todos** esses IDs. A jornada só substitui o ID local quando cobre a mesma quantidade de matrículas acadêmicas relevantes; cobertura divergente continua em `nao_verificado`.
 - Sem execução `succeeded` no dia BRT ou sem identidade/observação completa, `contrato_dado_fresco=false`: o TOM informa que não conferiu e não cobra.
 
 Contrato operacional completo: [`docs/operacao/contrato-assinado-tom.md`](operacao/contrato-assinado-tom.md).

@@ -83,7 +83,13 @@ Unidades: Recreio `95553e96-971b-4590-a6eb-0201d013c14d` · Barra
    contrato ainda não renovado. `em_aviso_previo` cobre mês vigente + seguinte.
    `contrato_vencido` = ciclo acadêmico encerrado sem sucessão.
 
-10. **`professores[]`** = professores das matrículas base (vários se vários
+10. **Assinatura do contrato é por todas as matrículas acadêmicas da pessoa.**
+    Leia `contrato_assinatura_status` e `contrato_dado_fresco`, nunca
+    `tem_data_contrato`. Em cadastro local duplicado, a RPC reúne a jornada de
+    todos os `aluno_ids_locais`, mas só usa essa ponte com cobertura integral;
+    lacuna continua `nao_verificado` e não autoriza cobrança.
+
+11. **`professores[]`** = professores das matrículas base (vários se vários
     cursos — não é "o professor", é a lista). **`aulas_resumo[]`** =
     `"Curso — dia HH:MM"` por matrícula base. Para orçamento/valor/formato
     completo, a ficha continua sendo `maria_lareport_buscar_alunos`.

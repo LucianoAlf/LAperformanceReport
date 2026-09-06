@@ -69,7 +69,16 @@ Uma reconciliação forçada e autenticada foi executada em produção nas três
 | Barra | 6 | 283 | 157 | 126 |
 | **Total** | **25** | **1.171** | **933** | **238** |
 
-A RPC publicou zero ocorrências do estado antigo. Duas pessoas permaneceram corretamente em `nao_verificado`, uma em Campo Grande e outra no Recreio, porque cada uma possui uma matrícula acadêmica local sem `emusys_matricula_id`. O TOM deve ignorar essas linhas enquanto `contrato_dado_fresco=false`; ausência de identidade nunca vira cobrança.
+A RPC publicou zero ocorrências do estado antigo. A ressalva original sobre duas pessoas em `nao_verificado` foi corrigida em 06/09/2026: as observações estavam completas, mas uma linha local duplicada de cada pessoa não carregava `alunos.emusys_matricula_id`, embora a jornada canônica carregasse a matrícula exata.
+
+Depois da migration `fix_contrato_assinatura_ids_locais_pessoa`:
+
+| Unidade | Pessoa | IDs locais | Relevantes / assinados / não verificados | Resultado |
+|---|---|---|---:|---|
+| Campo Grande | Ana Luiza Marques Paiva | `1621, 1738` | `2 / 2 / 0` | `assinado`, fresco |
+| Recreio | Davi Lima Queiroz | `1504, 2355` | `1 / 1 / 0` | `assinado`, fresco; Garage Band dispensada |
+
+A varredura encontrou 172 pessoas com múltiplos IDs locais, das quais 146 possuem mais de um ID local ativo: Barra 25, Campo Grande 51 e Recreio 70. Nenhuma ficou em `nao_verificado` depois da correção. Na comparação integral antes da publicação, somente Ana Luiza e Davi mudaram de estado.
 
 O canário confirmou as oito matrículas em `true`, e Giovanna Oliveira da Cunha, matrícula 1558, permaneceu em `false`, como esperado para o estado intermediário que a API não detalha.
 
@@ -111,7 +120,7 @@ Campos por pessoa:
 | `contratos_assinados` | `integer` | Relevantes observadas com `true`. |
 | `contratos_nao_assinados` | `integer` | Relevantes observadas com `false`. |
 | `contratos_sem_contrato` | `integer` | Relevantes observadas sem `contrato_atual`. |
-| `contratos_nao_verificados` | `integer` | Relevantes sem ID seguro ou sem observação. |
+| `contratos_nao_verificados` | `integer` | Relevantes sem identidade segura, inclusive após tentar a cobertura integral da jornada, ou sem observação. |
 | `contrato_status_observado_em` | `timestamptz nullable` | Observação mais antiga entre as matrículas relevantes; não é assinatura. |
 | `contrato_reconciliado_em` | `timestamptz nullable` | Conclusão da rodada válida no dia BRT da referência. |
 | `contrato_dado_fresco` | `boolean` | `true` somente com rodada do dia e todas as matrículas relevantes observadas. |
@@ -138,6 +147,8 @@ O TOM deve buscar o conjunto com `p_apenas_pendentes=false` e aplicar esse recor
 ## Regra por pessoa
 
 A pessoa fica `assinado` somente quando **todas** as matrículas acadêmicas ativas relevantes estão com `contrato_assinado=true`. Um aluno de dois cursos não fica verde com apenas um contrato assinado.
+
+Para pessoas com mais de um `aluno_id` local, a RPC reúne a jornada de todos os IDs e recupera as chaves exatas de matrícula Emusys. Ela só usa essa ponte quando a quantidade de matrículas acadêmicas da jornada é igual à quantidade local relevante. Sem cobertura integral, mantém o caminho conservador e retorna `nao_verificado` quando faltar identidade ou observação; uma observação nunca é repetida para completar outra matrícula.
 
 Precedência: `dispensado` → `nao_verificado` → `sem_contrato` → `nao_assinado` → `assinado`.
 

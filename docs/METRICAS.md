@@ -71,6 +71,8 @@ O estado é calculado por pessoa em `get_situacao_alunos_v1` e detalhado por mat
 
 `contrato_dado_fresco` só é `true` com execução `succeeded` no dia BRT e cobertura completa. O booleano do Emusys cobre assinatura manual e eletrônica, mas não informa modo, data nem a etapa intermediária. `tem_data_contrato` continua sendo período de aulas e não prova assinatura. Detalhes: [`docs/operacao/contrato-assinado-tom.md`](operacao/contrato-assinado-tom.md).
 
+Em pessoas com cadastros locais duplicados, a contagem relevante continua vindo das matrículas acadêmicas ativas locais, mas as chaves de matrícula são recuperadas da jornada canônica sobre todos os `aluno_ids_locais`. Essa ponte só é aceita com igualdade de cardinalidade; sem cobertura integral, a precedência conservadora mantém `nao_verificado`.
+
 ### Aluno pagante
 `entra_financeiro_ativo = true` **E** `conta_como_pagante = true` **E**
 `is_segundo_curso != true`.

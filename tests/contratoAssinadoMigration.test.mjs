@@ -22,6 +22,11 @@ const manualElectronicSemanticsName = readdirSync('supabase/migrations')
 const manualElectronicSemanticsSql = manualElectronicSemanticsName
   ? readFileSync(`supabase/migrations/${manualElectronicSemanticsName}`, 'utf8')
   : '';
+const personIdentityFixName = readdirSync('supabase/migrations')
+  .find((name) => name.includes('fix_contrato_assinatura_ids_locais_pessoa'));
+const personIdentityFixSql = personIdentityFixName
+  ? readFileSync(`supabase/migrations/${personIdentityFixName}`, 'utf8')
+  : '';
 const tomDoc = readFileSync('docs/operacao/contrato-assinado-tom.md', 'utf8');
 const designDoc = readFileSync('docs/superpowers/specs/2026-09-04-contrato-assinado-design.md', 'utf8');
 
@@ -123,4 +128,19 @@ test('documento libera o TOM e registra a virada das assinaturas manuais', () =>
   assert.doesNotMatch(tomDoc, /não pode ser ativado enquanto o Emusys não expuser modo e data de assinatura/i);
   assert.match(designDoc, /`nao_assinado`/);
   assert.doesNotMatch(designDoc, /`sem_assinatura_eletronica`|Assinado eletronicamente/);
+});
+
+test('RPC recupera matriculas pela jornada de todos os ids locais sem afrouxar a precedencia', () => {
+  assert.ok(personIdentityFixName, 'migration de identidade por pessoa ausente');
+  assert.match(personIdentityFixSql, /create or replace function public\.get_situacao_alunos_v1/i);
+  assert.match(personIdentityFixSql, /j\.aluno_id\s*=\s*any\(o\.aluno_ids_locais\)/i);
+  assert.match(personIdentityFixSql, /matriculas_locais\s*=\s*ci\.matriculas_jornada/i);
+  assert.match(personIdentityFixSql, /ace\.unidade_id\s*=\s*p_unidade_id/i);
+  assert.match(personIdentityFixSql, /ace\.emusys_matricula_id\s*=\s*me\.emusys_matricula_id/i);
+  assert.match(personIdentityFixSql, /when s\.reconciliado_em is null or s\.contratos_nao_verificados > 0 then 'nao_verificado'/i);
+  assert.match(personIdentityFixSql, /when s\.contratos_sem_contrato > 0 then 'sem_contrato'/i);
+  assert.match(personIdentityFixSql, /when s\.contratos_nao_assinados > 0 then 'nao_assinado'/i);
+  assert.doesNotMatch(personIdentityFixSql, /insert\s+into|update\s+public\.|delete\s+from|truncate/i);
+  assert.match(personIdentityFixSql, /revoke all on function[\s\S]*from public, anon/i);
+  assert.match(personIdentityFixSql, /grant execute on function[\s\S]*authenticated, service_role, sol_acesso_restrito/i);
 });
