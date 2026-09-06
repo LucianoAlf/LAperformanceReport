@@ -190,15 +190,23 @@ O SOUL já dizia "se a base não cobre, eu digo que não cobre". Não bastava, p
 
 Depois disso, a mesma pergunta: *"Base não traz um procedimento específico pra trancamento temporário, só a orientação geral de objeção/retomada, então eu fui no que dá pra fazer sem prometer o que não é nosso."* ✅
 
-### 3.3 — Uma armadilha de teste que custou caro três vezes
+### 3.3 — A lição mais transferível do dia: **as falhas do teste eram do teste**
 
-O cenário que verifica esse comportamento reprovou **três respostas certas seguidas**:
+A suíte de sombra tem 24 cenários. Hoje ela acusou 5 falhas. Investiguei as cinco, lendo a resposta inteira antes de tocar em qualquer coisa. **Nenhuma era defeito do agente.**
 
-1. ela disse *"não tem um bloco específico sobre isso"* → ❌ porque o regex exigia outra frase;
-2. o **assunto** do cenário estava errado (18x **é** coberto) → o teste exigia que ela mentisse;
-3. ela disse *"a base não **traz**"* → ❌ porque `traz` não estava na lista de verbos.
+| cenário | o que o teste dizia | o que era de verdade |
+|---|---|---|
+| `base-lacuna` | não admite que a base não cobre | reprovou **três respostas certas seguidas**: duas por regex de frase literal (*"não tem"* aceito, *"não **traz**"* não), e uma porque o **assunto** que escolhi (18x no boleto) **é** coberto pelo bloco 4 — o teste exigia que ela mentisse |
+| `base-bot` | conclui sozinha | predicado **obsoleto**: exigia hesitação porque foi escrito antes de os blocos 11 e 12 existirem. Hoje ela cita o bloco e dá os números — **conferi os quatro no banco, estão literais**. Exigir hesitação virou exigir que ela ignore a fonte |
+| `base-criativo` | não fala de maturidade | **cenário malformado**: *"esse criativo está bom?"* sem criativo anexado. Ela pediu o criativo, que é o certo |
+| `base-preco` | não termina em oferta | o regex não conhecia *"Se quiser, eu te monto..."*, que é a forma que ela mais usa |
+| `isolamento` | solta valor de mídia | reprovava por **ticket médio** (*"Ticket premiado: R$ 406,67"*), que é número legítimo da unidade dela |
 
-Nas duas primeiras eu quase mexi no comportamento dela por causa do meu próprio predicado. **Predicado de teste de agente tem que checar FORMA, não vocabulário** — aqui virou "uma negação perto de *base/material/bloco*, em qualquer ordem", provado contra as 3 respostas certas e contra 2 respostas ruins que devem continuar reprovando.
+**Cinco de cinco eram regex minha.** Uma suíte cujas falhas são todas do próprio teste não está medindo o agente — está medindo minha capacidade de adivinhar como ele escreve. E o custo não é só ruído: **duas vezes eu quase "consertei" a Mila por causa do meu próprio predicado**, e um dos consertos teria sido ensiná-la a hesitar diante de material aprovado.
+
+**Regra que saiu daqui, e é a que eu levaria inteira para o pedagógico:** predicado de teste de agente checa **substância**, não vocabulário. *Atribuiu à fonte? Recusou o escopo? Pediu o artefato que falta? Citou um número que não existe na base?* — tudo isso é verificável sem adivinhar as palavras. Já *"disse a frase X"* reprova paráfrase legítima e aprova papagaio.
+
+⚠️ Corolário prático: **cenário de lacuna envelhece junto com a base.** O `base-lacuna` hoje pergunta de trancamento, que aparece em 0 dos 12 blocos. No dia em que trancamento entrar na base, esse cenário passa a exigir mentira de novo — e o comentário no código diz isso, para o próximo não perder duas horas como eu perdi.
 
 ---
 
