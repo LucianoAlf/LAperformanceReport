@@ -228,7 +228,24 @@ export async function buildManifest(
     String(left.la_report_unidade_id).localeCompare(String(right.la_report_unidade_id))
     || compareIdentifiers(left.emusys_fatura_id, right.emusys_fatura_id)
   ));
-  const units = new Map<string, { unidade: string; linhas: number; valor_liquido: number; valor_pago: number }>();
+  // Uma linha com source_missing=true e' uma fatura que a origem NAO devolve mais nesta
+  // competencia. Ela continua no export de proposito: e' assim que o consumidor aprende que a
+  // fatura morreu. Mas ela nao pode entrar na contagem contra a qual um gabarito e' conferido,
+  // senao o snapshot "vivo" fica inflado pelas mortas. Dai os dois pares de numeros.
+  const isAusente = (row: Record<string, unknown>) => row.source_missing === true;
+  const vivas = ordered.filter((row) => !isAusente(row));
+  const ausentes = ordered.filter(isAusente);
+
+  const units = new Map<string, {
+    unidade: string;
+    linhas: number;
+    valor_liquido: number;
+    valor_pago: number;
+    linhas_vivas: number;
+    linhas_ausentes: number;
+    valor_liquido_vivo: number;
+    valor_pago_vivo: number;
+  }>();
   for (const row of ordered) {
     const key = String(row.la_report_unidade_id);
     const current = units.get(key) ?? {
@@ -236,12 +253,31 @@ export async function buildManifest(
       linhas: 0,
       valor_liquido: 0,
       valor_pago: 0,
+      linhas_vivas: 0,
+      linhas_ausentes: 0,
+      valor_liquido_vivo: 0,
+      valor_pago_vivo: 0,
     };
     current.linhas += 1;
     current.valor_liquido = Number((current.valor_liquido + money(row.valor_liquido)).toFixed(2));
     current.valor_pago = Number((current.valor_pago + money(row.valor_pago)).toFixed(2));
+    if (isAusente(row)) {
+      current.linhas_ausentes += 1;
+    } else {
+      current.linhas_vivas += 1;
+      current.valor_liquido_vivo = Number((current.valor_liquido_vivo + money(row.valor_liquido)).toFixed(2));
+      current.valor_pago_vivo = Number((current.valor_pago_vivo + money(row.valor_pago)).toFixed(2));
+    }
     units.set(key, current);
   }
+
+  const ausentesPorMotivo = [...ausentes.reduce((acc, row) => {
+    const motivo = String(row.source_missing_reason ?? 'sem_motivo_declarado');
+    acc.set(motivo, (acc.get(motivo) ?? 0) + 1);
+    return acc;
+  }, new Map<string, number>()).entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([motivo, linhas]) => ({ motivo, linhas }));
   const hashRows = ordered.map((row) => ({
     la_report_unidade_id: row.la_report_unidade_id,
     emusys_fatura_id: row.emusys_fatura_id,
@@ -261,6 +297,14 @@ export async function buildManifest(
     total_linhas: ordered.length,
     total_valor_liquido: Number(ordered.reduce((sum, row) => sum + money(row.valor_liquido), 0).toFixed(2)),
     total_valor_pago: Number(ordered.reduce((sum, row) => sum + money(row.valor_pago), 0).toFixed(2)),
+    total_linhas_vivas: vivas.length,
+    total_linhas_ausentes: ausentes.length,
+    total_valor_liquido_vivo: Number(vivas.reduce((sum, row) => sum + money(row.valor_liquido), 0).toFixed(2)),
+    total_valor_pago_vivo: Number(vivas.reduce((sum, row) => sum + money(row.valor_pago), 0).toFixed(2)),
+    source_missing: {
+      total: ausentes.length,
+      por_motivo: ausentesPorMotivo,
+    },
     cadastro_matches: {
       unico: ordered.filter((row) => row.cadastro_match_status === 'unico').length,
       nao_encontrado: ordered.filter((row) => row.cadastro_match_status === 'nao_encontrado').length,
