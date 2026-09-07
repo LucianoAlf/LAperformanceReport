@@ -225,6 +225,25 @@ function conversaEmTexto(c: Candidato): string {
     linhas.join("\n");
 }
 
+// Traduz o nome da unidade que vem na foto (`sol_chatwoot_inboxes.unidade`)
+// para o id do LA Report. Cache em memoria: sao tres unidades e o run inteiro
+// dura minutos.
+let _unidades: Record<string, string> | null = null;
+async function unidadeDoInbox(
+  sb: SupabaseClient,
+  nome: string | null | undefined,
+): Promise<string | null> {
+  if (!nome) return null;
+  if (!_unidades) {
+    const { data } = await sb.from("unidades").select("id, nome");
+    _unidades = {};
+    for (const u of data ?? []) {
+      _unidades[String(u.nome).toLowerCase().trim()] = u.id;
+    }
+  }
+  return _unidades[String(nome).toLowerCase().trim()] ?? null;
+}
+
 async function classificar(
   c: Candidato,
   apiKey: string,
@@ -346,6 +365,42 @@ serve(async (req) => {
   if (!resp.ok) return json({ error: "sol_export_" + resp.status }, 502);
   const foto = await resp.json();
   const candidatos: Candidato[] = foto.candidatos ?? [];
+
+  // 1b) A SEGUNDA FOTO — o que faz o sinal SUMIR quando a equipe responde.
+  //
+  // 🔴 Medido em 07/09/2026: 5 de 30 sinais de conversa vigentes (17%) já
+  // tinham sido respondidos e continuavam na pauta. A causa é o comentário
+  // logo abaixo: a chave de idempotência inclui a última mensagem, então
+  // conversa parada do mesmo jeito não é reclassificada. O sinal é uma
+  // fotografia do instante e ninguém tirava a segunda.
+  //
+  // Esta foto JÁ é a segunda: por definição ela lista "cliente falou por
+  // último e ninguém respondeu". Quem ainda está nela continua esperando;
+  // quem saiu, foi respondido ou teve a conversa resolvida no Chatwoot.
+  // Custo: zero token, zero chamada nova — a foto já estava buscada.
+  //
+  // ⚠️ Roda ANTES do recorte de pendentes e independe de haver algo novo a
+  // classificar: em dia sem candidato novo é justamente quando os sinais
+  // velhos precisam ser reconferidos.
+  if (!ensaio) {
+    const { error: erroFoto } = await sb.rpc("radar_marcar_foto_conversas_v1", {
+      p_conversa_ids: candidatos.map((c) => Number(c.conversa_id)),
+      // ⚠️ foto truncada não decide nada: ausência não prova resposta.
+      p_truncado: foto.truncado === true,
+    });
+    if (erroFoto) {
+      // Falha aqui NÃO derruba a extração — ela só deixa a pauta um dia mais
+      // velha. Mas precisa aparecer: sem log, o sintoma seria "a pauta voltou
+      // a cobrar quem já respondeu" semanas depois, sem pista nenhuma.
+      await sb.from("automacao_log").insert({
+        evento: "mapa_sinais",
+        acao: "marcar_foto_conversas_falhou",
+        status: "erro",
+        aluno_nome: "(execucao)",
+        detalhes: { erro: String(erroFoto.message).slice(0, 300) },
+      });
+    }
+  }
 
   // 2) já classificados: a chave inclui a ÚLTIMA MENSAGEM, então conversa parada
   //    do mesmo jeito não é reclassificada — só volta se o cliente escrever de novo.
@@ -477,7 +532,11 @@ serve(async (req) => {
     const { error } = await sb.from("radar_sinais").insert({
       entidade_tipo: entidadeTipo,
       entidade_id: ident.entidade_id ?? null,
-      unidade_id: ident.unidade_id ?? null,
+      // ⚠️ Fallback pelo INBOX quando o telefone nao resolve para aluno/lead.
+      //    Sem ele o sinal morre no NOT NULL e a conversa lida some (caso real:
+      //    conversa 20629 da LA_Secretaria_Recreio, 07/09). O cadastro do aluno
+      //    tem precedencia: aluno de CG que escreve ao inbox do Recreio e CG.
+      unidade_id: ident.unidade_id ?? await unidadeDoInbox(sb, c.unidade),
       regra_codigo: d.regra_codigo,
       tipo_sinal: v.tipo,
       severidade: regra?.severidade_padrao ?? "atencao",
