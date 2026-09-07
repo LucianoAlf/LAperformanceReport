@@ -48,23 +48,26 @@ for (const f of ENVS) {
 const URL = (process.env.LA_REPORT_SUPABASE_URL || process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const KEY = process.env.LA_REPORT_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
          || process.env.SUPABASE_SERVICE_ROLE_KEY;
-// ⚠️ O telefone de quem fala vem do PROCESSO, nunca do modelo. O bridge o
-//    injeta ao subir o servidor, como o `agentId` da Maria vem do remetente
-//    antes do modelo abrir a boca.
-const TEL = process.env.SOL_SOLICITANTE_TELEFONE || '';
+// ⚠️ O env e FALLBACK DE ENSAIO, nao a fonte. Em producao o telefone vem no
+//    argumento `p_solicitante_telefone` (veja o cabecalho do patch de 07/09):
+//    o processo MCP recebe env estatico e e UM so para todas as conversas, entao
+//    fixar o numero aqui faria toda conversa se passar pela mesma pessoa.
+const TEL_ENSAIO = process.env.SOL_SOLICITANTE_TELEFONE || '';
 
 async function rpc(fn, args) {
   const r = await fetch(`${URL}/rest/v1/rpc/${fn}`, {
     method: 'POST',
     headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ p_solicitante_telefone: TEL, ...args }),
+    body: JSON.stringify(args),
   });
   if (!r.ok) return { ok: false, motivo: `rpc_${r.status}`, detalhe: (await r.text()).slice(0, 200) };
   return r.json();
 }
 
 // ── as 12 portas ────────────────────────────────────────────────────────────
-const U = { p_unidade: { type: 'string', description: 'Só a diretoria escolhe unidade. Para os demais, deixe vazio — eu já sei qual é a sua.' } };
+// ⚠️ `Q` (quem) entra em TODA porta; `U` (unidade) so onde faz sentido.
+const Q = { p_solicitante_telefone: { type: 'string', description: 'O telefone de quem mandou a mensagem — copie do "Participante que enviou" do envelope, só os dígitos. Não é opcional e não é para inventar: é ele que decide qual unidade você enxerga, e toda chamada fica registrada com esse número. Se não souber quem falou, pergunte em vez de chutar.' } };
+const U = { ...Q, p_unidade: { type: 'string', description: 'Só a diretoria escolhe unidade. Para os demais, deixe vazio — eu já sei qual é a sua.' } };
 
 const PORTAS = [
   { name: 'caixa_do_dia', fn: 'sol_porta_caixa_do_dia_v1',
@@ -94,7 +97,7 @@ const PORTAS = [
 
   { name: 'pendencias_de_cadastro', fn: 'sol_porta_pendencias_cadastro_v1',
     description: 'Os buracos que a pessoa resolve FALANDO com você: lead sem canal de origem, sem curso de interesse, experimental sem desfecho, matrícula sem anamnese. Use quando perguntarem "tenho pendência?" e ofereça preencher na hora, citando um nome. 🔴 Cite UM exemplo e o total — nunca a lista inteira: lista é o que a pessoa pula. A anamnese é a que trava a estrela HUNTER 360.',
-    schema: { p_amostra: { type: 'integer', description: '1 a 8 nomes de exemplo. Padrão 3.' } } },
+    schema: { ...Q, p_amostra: { type: 'integer', description: '1 a 8 nomes de exemplo. Padrão 3.' } } },
 
   { name: 'aviso_previo', fn: 'sol_porta_aviso_previo_v1',
     description: 'Quem entrou em aviso prévio nos últimos 90 dias, com motivo e data prevista de saída. Use para "quem avisou que sai?", "temos aviso prévio esse mês?". 🔴 A conversa aqui é de REVERSÃO, não de cobrança: entender o motivo real e oferecer alternativa concreta — horário, professor, projeto, condição. ⚠️ Aviso prévio é mês vigente MAIS o seguinte (dois meses), e quem está em aviso ainda NÃO conta como evasão.',
@@ -123,9 +126,10 @@ const j = (o) => ({ content: [{ type: 'text', text: JSON.stringify(o) }] });
 async function despachar(name, args) {
   const p = PORTAS.find((x) => x.name === name);
   if (!p) return j({ ok: false, motivo: 'porta_desconhecida', porta: name });
-  if (!TEL) return j({ ok: false, motivo: 'sem_solicitante',
-    recado: 'Não sei quem está perguntando — o telefone vem do processo, não da conversa.' });
-  const limpos = {};
+  const tel = String((args && args.p_solicitante_telefone) || TEL_ENSAIO || '').replace(/\D/g, '');
+  if (!tel) return j({ ok: false, motivo: 'sem_solicitante',
+    recado: 'Não sei quem está perguntando. Me diga o telefone de quem pediu (está no "Participante que enviou") — sem isso eu não sei qual unidade mostrar.' });
+  const limpos = { p_solicitante_telefone: tel };
   for (const [k, v] of Object.entries(args || {})) {
     if (v !== null && v !== undefined && v !== '') limpos[k] = v;
   }
