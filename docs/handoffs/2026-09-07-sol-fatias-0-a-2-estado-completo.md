@@ -178,7 +178,52 @@ alguém olhar uma pauta real e dizer quantos itens mereciam a ligação.
 
 ---
 
-## 6. Fatia 3 — o 3º andar (próxima)
+## 6. Fatia 3 — o 3º andar (ENTREGUE, desligada)
+
+A pauta vai sozinha ao grupo da unidade e a ADM fecha o item falando.
+**No ar, com o interruptor OFF.** PR #384.
+
+| trava | como |
+|---|---|
+| interruptor | `automacoes_config.radar_pauta_grupo`, nasce `false` |
+| agenda | `escola_agenda_v1` — feriado/domingo cala; **recesso opera** |
+| nada a dizer | unidade sem item vigente não gera mensagem |
+| entrega única | (destinatário, regra, pessoa) 1× a cada 14 dias |
+| teto | 8 por turno, do destinatário |
+
+**Como ligar** (é um `update`, não um deploy — o cron já roda e exercita o
+caminho inteiro todo dia sem mandar nada):
+
+```sql
+update automacoes_config set ativo = true where slug = 'radar_pauta_grupo';
+```
+
+**Bug latente que a prova expôs:** `radar_pauta_v1(p_registrar=true)` sempre
+esteve quebrado (`insert ... from no_teto` fora do statement da CTE). Ninguém
+viu porque `radar_entregas` tinha zero linhas — o primeiro envio real teria
+estourado. Virou CTE de escrita.
+
+**Ordem que importa:** lê sem registrar → enfileira → só então registra. A
+inversa marcaria como avisado quem nunca foi.
+
+**A porta de desfecho é a medição de precisão** que faltava:
+`select regra_codigo, count(*) filter (where desfecho='falso_positivo')::numeric
+/ nullif(count(*),0) from radar_sinais where desfecho is not null group by 1;`
+
+Objetos: `radar_enfileirar_pauta_v1` · `sol_porta_registrar_desfecho_v1` (a
+**única** porta que escreve) · `radar_entregas.alvo_chave` · cron
+`radar-pauta-grupo` (jobid 236, `0 12,19 * * 1-6`).
+
+### O que NÃO entrou na Fatia 3, e por quê
+
+**Briefing privado por DM para líder/diretoria.** A camada `estrategica` já
+tem texto pronto em `radar_pauta_v1`, mas não há destinatário `sol` dessa
+camada — criar um exige decidir **quem** recebe e **com que cadência**, e isso
+é decisão do Luciano, não default meu. O grupo cobre o público operacional,
+que era o alvo declarado ("começar pelas farmers").
+
+## 7. Fatia 4 — o que sobra
+
 
 O que falta para a Sol deixar de só responder e passar a **falar**:
 
@@ -200,7 +245,7 @@ sem teto entre agentes é o caminho mais curto para o oposto.
 
 ---
 
-## 7. Objetos novos (para não recriar)
+## 8. Objetos novos (para não recriar)
 
 **Tabelas:** `radar_rodadas` (uma linha por detector por rodada) ·
 `sol_grants_revogados_fatia0`
