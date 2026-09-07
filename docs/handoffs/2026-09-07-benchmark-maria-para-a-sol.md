@@ -42,6 +42,32 @@ E o próprio agente da Maria diz: *quando ela erra, o conserto quase nunca é no
 
 **8. Governança em cron, com canário.** Sonda de 58 perguntas congeladas com **negativo plantado que precisa reprovar** — se passa, a rodada não tem garantia. Foi ela que pegou a queda silenciosa para o fallback (92% → 10% de verdes).
 
+## 2b. ⚠️ Correção, vinda do agente do TOM (mesmo dia)
+
+A peça 5 acima diz que a fluidez da Maria *"vem da descrição com caso"*. O agente do TOM pôs o TOM na mesma régua e **a hipótese não sobrevive**:
+
+| | Maria | TOM |
+|---|---|---|
+| tamanho médio da descrição | 253 chars | **6.613** (26×) |
+| fronteira negativa (NUNCA) | 20% | **64%** |
+| cita a irmã | 14% | **53%** |
+| data/procedência | 8% | **36%** |
+
+O TOM tem **mais** de tudo isso — e "vive quebrando". Se descrição rica explicasse a fluidez, explicaria o contrário.
+
+**O que explica está no código do TOM:** `// BLOCK 4 — SKILL ATIVA (conditional, max 1)`. Uma cascata de regex escolhe **uma** de 64 competências antes de o modelo abrir a boca. A Maria tem 66 ferramentas, **17 KB, todas visíveis em todo turno**, e o modelo escolhe.
+
+Ou seja: a Maria não tem 9% de determinismo e o TOM 100% no *parse* — o TOM tem **100% dos turnos com regex decidindo o que o modelo tem permissão de saber**. Quando a rota acerta, ele vai muito bem (orientação 26× mais rica); quando erra, o modelo não sabe o que não sabe. Variância alta é essa sensação.
+
+🔑 **A variável que importa não é riqueza da descrição — é "tudo visível E cabe".** A descrição com caso ajuda a escolher entre as opções visíveis; ela não substitui a visibilidade.
+
+**O que isso muda para a Sol** — e é a parte que eu não tinha visto:
+
+- O **TOM** falha em "tudo visível" (max 1). A **Sol** falha em "cabe" (466 ferramentas, 424 delas ruído). A **Maria** acerta os dois: ~65, 17 KB. **São falhas opostas com a mesma cura** — reduzir ao que uma pessoa reconhece e mostrar tudo, sempre.
+- O **roteador V4 do caixa já tem a forma certa** neste enquadramento: o prompt enumera **todas** as intenções em todo turno e o modelo escolhe; a gramática só executa. Não é `max 1`.
+- A **peça 7** (hash preview/apply) a Sol **já tem** — `sol_caixa_v3_validar_approval_v1` amarra por hash da fonte + janela de 4h, e os lançamentos por `preview_message_id`. O TOM usa só janela de 20 min e quer roubar isto; nós já roubamos em agosto.
+- A **conferência afirmação × efeito** — que o agente da Maria disse que copiaria do TOM e o do TOM disse que não pode morrer na migração — a Sol tem para **lote** desde 01/09 (`itens gravados = itens do payload`, senão `raise`). É a camada que **precisa sobreviver ao flip**, e o replay de hoje não a mede.
+
 ## 3. O paralelo que decide o flip da Sol
 
 O agente da Maria mediu: **9,2% do tráfego** é decidido por 29 funções `shouldUse*` antes do modelo — e essa fatia produziu **~80% dos defeitos graves**, incluindo um que **engolia a mensagem em silêncio**. A recomendação dele, textual: *"não construir a escada de atalhos. Ela nasceu para economizar token e virou a maior fonte de defeito."*
