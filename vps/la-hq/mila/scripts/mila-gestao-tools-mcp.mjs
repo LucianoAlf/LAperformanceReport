@@ -212,8 +212,12 @@ const BASE_COMERCIAL = [
 ];
 const TRAFEGO = [
   { name: 'trafego_por_canal',
-    description: 'DIRETORIA. Desempenho por canal: leads, agendamentos, matrículas, gasto, custo por lead e por matrícula, retorno em LTV. 🔴 SEMPRE que citar `custo_matricula` ou `conv_pct`, diga na MESMA frase quantos leads ainda não tiveram tempo: o campo `leads_imaturos` conta os criados há menos de `dias_p50_ate_converter` dias (a mediana medida entre o lead pago chegar e virar matrícula). Com imaturos relevantes, `custo_matricula` é um **TETO que ainda vai cair**, nunca "o custo" — em 08/09 ela disse "R$ 1.185 por matrícula" com 109 de 467 leads sem chance de converter, e o Alf respondeu "tá errado". 🔴 NÃO ranqueie canal por conversão com pouca matrícula (4 contra 3 é ruído, não resultado) — diga que a diferença ainda não separa. ⚠️ Os canais vêm agrupados por VERBA, e é assim que deve ser lido: `Instagram/Facebook` é UMA linha porque é uma conta só do Meta (o gasto é indivisível na fonte), e `Site` entra no `Google` (é a landing page da campanha — regra do Alf, 03/09). Não desagregue nem "corrija" isso: dois canais cobrando da mesma plataforma foi o que duplicou o gasto até 08/09. ⚠️ `gasto` NULL com `gasto_dias_cobertos`=0 = NÃO SEI (nunca "de graça"); canal orgânico é "sem mídia", não "custo zero"; e se `gasto_dias_cobertos` < `janela_dias`, diga que a foto de gasto está incompleta. Use dias=30/maturidade=0 para o mês corrente e 180/35 para coorte madura.',
-    inputSchema: { type: 'object', properties: { dias: { type: 'integer' }, maturidade_dias: { type: 'integer' } } } },
+    description: 'DIRETORIA. Desempenho por canal: leads, agendamentos, matrículas, gasto, custo por lead e por matrícula, retorno em LTV. 🔴 SEMPRE que citar `custo_matricula` ou `conv_pct`, diga na MESMA frase quantos leads ainda não tiveram tempo: o campo `leads_imaturos` conta os criados há menos de `dias_p50_ate_converter` dias (a mediana medida entre o lead pago chegar e virar matrícula). Com imaturos relevantes, `custo_matricula` é um **TETO que ainda vai cair**, nunca "o custo" — em 08/09 ela disse "R$ 1.185 por matrícula" com 109 de 467 leads sem chance de converter, e o Alf respondeu "tá errado". 🔴 NÃO ranqueie canal por conversão com pouca matrícula (4 contra 3 é ruído, não resultado) — diga que a diferença ainda não separa. ⚠️ Os canais vêm agrupados por VERBA, e é assim que deve ser lido: `Instagram/Facebook` é UMA linha porque é uma conta só do Meta (o gasto é indivisível na fonte), e `Site` entra no `Google` (é a landing page da campanha — regra do Alf, 03/09). Não desagregue nem "corrija" isso: dois canais cobrando da mesma plataforma foi o que duplicou o gasto até 08/09. 🔴 AS DUAS RESSALVAS APONTAM PARA LADOS OPOSTOS — nunca junte as duas: `leads_imaturos` > 0 significa que faltam MATRÍCULAS por chegar, então `custo_matricula` é TETO e vai CAIR; `gasto_dias_cobertos` < `janela_dias` significa que falta GASTO por entrar, então é um PISO que ainda vai subir. Uma mexe no denominador, a outra no numerador. Em 08/09 ela disse que a cobertura incompleta fazia o custo ser "teto e pode cair" — está invertido, e faz quem lê achar que o número só melhora. ⚠️ `gasto` NULL com `gasto_dias_cobertos`=0 = NÃO SEI (nunca "de graça"); canal orgânico é "sem mídia", não "custo zero". 🔴 PEDIU UM MÊS? USE `de`/`ate` (ex.: agosto = de:2026-08-01, ate:2026-08-31). Janela rolante NÃO é proxy de mês e entregá-la como se fosse é o erro de 08/09: ele pediu "agosto inteiro", ela mandou os últimos 30 dias chamando de proxy, e o número saiu quase no dobro (custo por matrícula R$ 1.185 contra R$ 639 do agosto real). Se a ferramenta não souber responder o que foi pedido, diga que não sabe — nunca entregue outro período. `dias`/`maturidade_dias` só quando a pergunta não tem período nomeado.',
+    inputSchema: { type: 'object', properties: {
+      de: { type: 'string', description: 'Inicio do periodo fechado, YYYY-MM-DD. Use SEMPRE que pedirem um MES ou intervalo nomeado.' },
+      ate: { type: 'string', description: 'Fim do periodo fechado, YYYY-MM-DD. Obrigatorio junto com `de`.' },
+      dias: { type: 'integer', description: 'Janela ROLANTE a partir de hoje. So quando a pergunta nao tem periodo nomeado.' },
+      maturidade_dias: { type: 'integer' } } } },
   { name: 'trafego_por_criativo',
     description: 'DIRETORIA. Funil por criativo do Meta: gasto → conversa → lead → AGENDAMENTO → experimental → matrícula. Ranqueie por custo de AGENDAMENTO, não por custo de conversa (é o que inverte o ranking). Se cohort_madura=false, avise que o número ainda vai mudar.',
     inputSchema: { type: 'object', properties: { de: { type: 'string', description: 'YYYY-MM-DD' }, ate: { type: 'string' } } } },
@@ -371,7 +375,13 @@ async function callTool(name, a) {
     case 'desempenho_atendimento':
       return j(await rpc('mila_atendimento_serie_v1', { p_solicitante_telefone: tel, ...(a.dias ? { p_dias: a.dias } : {}) }));
     case 'trafego_por_canal': gate();
-      return j(await rpc('radar_trafego_canal_v1', { p_dias: a.dias || 30, p_maturidade_dias: a.maturidade_dias ?? 0 }));
+      // 🔴 Periodo FECHADO quando a pessoa pede uma competencia. Ate 08/09 so
+      //    havia janela rolante, e ela entregou "ultimos 30 dias" para quem
+      //    pediu AGOSTO — trazendo 8 dias de setembro e perdendo 8 de agosto.
+      //    O custo por matricula saiu quase o dobro do real (R$ 1.185 x R$ 639).
+      return j(await rpc('radar_trafego_canal_v1', {
+        p_dias: a.dias || 30, p_maturidade_dias: a.maturidade_dias ?? 0,
+        p_de: a.de || null, p_ate: a.ate || null }));
     case 'trafego_por_criativo': gate();
       return j(await rpc('radar_trafego_criativo_v1', { ...(a.de ? { p_de: a.de } : {}), ...(a.ate ? { p_ate: a.ate } : {}) }));
     case 'publicos_reativacao': gate();
