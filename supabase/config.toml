@@ -209,3 +209,10 @@ verify_jwt = false
 # porque quem chama e o pg_cron (sem JWT de usuario); a porta e o token
 # `radar_extrator` em integracao_tokens, conferido em tempo constante.
 verify_jwt = false
+
+[functions.registrar-mensagem-agente]
+# Porta HTTP do orcamento de atencao para agente de OUTRO projeto (o TOM).
+# verify_jwt = false porque quem chama nao tem JWT de usuario; a porta e o
+# token `orcamento_atencao` em `integracao_tokens`, conferido em tempo
+# constante DENTRO da funcao — a anon key e publica e nao serve de porta.
+verify_jwt = false
