@@ -88,6 +88,8 @@ Detalhe dos recortes fechados:
 
 No Recreio Jun–Ago, o relatório volta a conter os 24 professores: 23 com score e 1 explicitamente sem nota. Xande deixa de ser eliminado pelo recorte legado.
 
+Na configuração vigente (`config_versao=5`), o snapshot canônico registra Kaio e Isaque com 2/2 pilares esperados e cobertura normalizada de 100%. O antigo texto 2/5 e 40% era produzido pelo caminho legado do relatório; não correspondia à fotografia exibida pelo painel e não foi preservado como uma segunda regra.
+
 ## Prova de performance
 
 Todas as combinações da matriz transacional ficaram abaixo do limite de 8 segundos. As execuções normalmente ficaram entre 0,96 s e 1,92 s; o maior tempo observado no smoke ampliado foi 3,188 s. A matriz pós-migration em produção, com os 15 payloads e as 15 leituras de comparação, terminou em 24,4 s no total.
@@ -106,9 +108,9 @@ O ciclo Set–Nov e outubro ainda não possuem snapshot de ciclo/período na dat
 
 ## Validação
 
-- suíte completa: 517/517;
+- suíte completa: 49/49 Deno, 10/10 e 29/29 PostgreSQL e 517/517 regressões gerais;
 - regressões específicas: 14/14 em Node/PostgreSQL Docker;
-- Deno check: aprovado;
+- Deno check da Edge: aprovado com resolução automática do diretório npm;
 - build de produção: aprovado;
 - nenhuma alteração na configuração ou nas fórmulas do Health Score.
 
@@ -117,7 +119,11 @@ O ciclo Set–Nov e outubro ainda não possuem snapshot de ciclo/período na dat
 - migration `20260908200000_relatorio_coordenacao_espelha_painel` aplicada em produção; hash final de `montar_relatorio_coordenacao_payload_v3`: `c7aeb3256b177cf4fd782c5705f03ab7`;
 - Edge `gemini-relatorio-coordenacao` publicada na versão 89, `ACTIVE`, preservando `verify_jwt=false`;
 - matriz pós-migration: 15/15 recortes com zero perda de roster, placeholder incorreto, divergência de score ou divergência de métrica;
-- commit, deploy do frontend e prova autenticada no navegador são registrados aqui ao concluir a publicação da `main`.
+- implementação publicada na `main` no commit `d5594f12`;
+- frontend publicado em produção no deployment Vercel `dpl_731gKucZsg1gfTjksjTnPxUcgccj`, com os aliases oficiais atualizados;
+- prova autenticada no navegador: Recreio Jun–Ago mostrou 24/24 no painel e 24/24 no relatório, com a mesma ordem nas 24 posições, Xande presente, Marcos separado como sem nota, `Matriculador` por quantidade absoluta e conversão em bloco próprio;
+- relatórios com IA de junho e agosto responderam HTTP 200 em 5,5 s e 5,0 s; ranking mensal de junho, julho, agosto e setembro abriu sem erro; outubro retornou os 24 professores explicitamente sem base, sem timeout e sem nota zero;
+- recarga completa preservou autenticação, carregou 44/44 professores no consolidado e não registrou erro de console ou de página.
 
 ## Regra para manutenção
 
