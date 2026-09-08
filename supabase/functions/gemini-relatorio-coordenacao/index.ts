@@ -10,6 +10,14 @@ import {
   projetarMapaSinaisPublico,
   type ProjecaoMapaSinaisPublico,
 } from "./mapaSinaisPublico.ts";
+import {
+  ordenarProfessoresPorScoreVisivel,
+  scoreVisivelProfessor,
+} from "../_shared/ordenacaoProfessoresRelatorio.ts";
+import {
+  contarProfessoresSemDadosOficiais,
+  descreverContextoOperacionalRelatorio,
+} from "../_shared/apresentacaoRelatorioCoordenacao.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -100,6 +108,9 @@ interface RelatorioCoordenacaoCanonico {
     ciclo_codigo?: string;
     label?: string;
     estado_publicacao?: string;
+    publicacao_oficial?: boolean;
+    ranking_habilitado?: boolean;
+    ciclo_estado?: string | null;
     data_corte?: string;
     coordenadores?: string[];
     contexto_operacional?: string;
@@ -380,7 +391,15 @@ function descreverMetrica(chave: string, metrica: MetricaProfessor | undefined):
 interface IndicadorRanking {
   chave: string;
   rotulo: string;
+  metricaChave?: string;
+  extrairValor?: (professor: ProfessorContrato) => number | null;
   detalhe: (valor: number, amostra: number | null) => string;
+}
+
+function numeroRankingOuNull(valor: unknown): number | null {
+  if (valor === null || valor === undefined || valor === "") return null;
+  const numeroConvertido = Number(valor);
+  return Number.isFinite(numeroConvertido) ? numeroConvertido : null;
 }
 
 const indicadoresRanking: IndicadorRanking[] = [
@@ -389,6 +408,13 @@ const indicadoresRanking: IndicadorRanking[] = [
   { chave: "permanencia", rotulo: "🕰 PERMANÊNCIA DOS ALUNOS", detalhe: (v, a) => `${numero(v, 1)} meses${a ? ` (${inteiro(a)} vínculos)` : ""}` },
   { chave: "retencao", rotulo: "🔄 RETENÇÃO DE ALUNOS", detalhe: (v, a) => `${percentual(v)}${a ? ` (${inteiro(a)} vínculos)` : ""}` },
   { chave: "presenca", rotulo: "📅 PRESENÇA DOS ALUNOS", detalhe: (v, a) => `${percentual(v)}${a ? ` (${inteiro(a)} chamadas)` : ""}` },
+  {
+    chave: "matriculador",
+    metricaChave: "conversao",
+    rotulo: "🎓 MATRICULADOR",
+    extrairValor: (professor) => numeroRankingOuNull(professor.metricas?.conversao?.numerador),
+    detalhe: (v) => `${inteiro(v)} matrículas`,
+  },
   { chave: "conversao", rotulo: "🎯 CONVERSÃO DE EXPERIMENTAIS", detalhe: (v, a) => `${percentual(v)}${a ? ` (${inteiro(a)} experimentais)` : ""}` },
 ];
 
@@ -398,8 +424,10 @@ function renderizarRankingsPorIndicador(professores: ProfessorContrato[]): strin
     const ranqueados = professores
       .map((p) => ({
         nome: p.nome,
-        valor: p.metricas?.[indicador.chave]?.valor,
-        amostra: p.metricas?.[indicador.chave]?.amostra ?? null,
+        valor: indicador.extrairValor
+          ? indicador.extrairValor(p)
+          : numeroRankingOuNull(p.metricas?.[indicador.chave]?.valor),
+        amostra: p.metricas?.[indicador.metricaChave ?? indicador.chave]?.amostra ?? null,
       }))
       .filter((p) => p.valor !== null && p.valor !== undefined)
       .sort((a, b) => Number(b.valor) - Number(a.valor) || a.nome.localeCompare(b.nome, "pt-BR"))
@@ -430,41 +458,45 @@ function renderizarRelatorio(
     (professor) => professor.estado_publicacao === "em_andamento"
       || professor.estado_publicacao === "ciclo_em_acompanhamento",
   );
+  const cicloOficial = periodo.periodicidade === "ciclo"
+    && periodo.publicacao_oficial === true
+    && periodo.ranking_habilitado === true;
   const contextoPeriodo = periodo.periodicidade === "ciclo"
-    ? `Ciclo oficial ${periodo.label || periodo.ciclo_codigo || "selecionado"}. Os fatos são acumulados pelos numeradores e denominadores do período; ranking e premiação só aparecem após o fechamento oficial.`
+    ? `${cicloOficial ? "Ciclo oficial" : "Ciclo em acompanhamento"} ${periodo.label || periodo.ciclo_codigo || "selecionado"}. Os fatos são acumulados pelos numeradores e denominadores do período.`
     : competenciaEmAndamento
       ? "Leitura do mês em andamento, com as evidências exclusivas da competência selecionada."
       : "Visão mensal com as evidências exclusivas da competência selecionada.";
-  const contexto = periodo.contexto_operacional === "recesso_parcial"
-    ? "Julho teve recesso parcial. Os dados operacionais estão fechados; as notas servem ao acompanhamento pedagógico, enquanto ranking e premiação aguardam o fechamento oficial do ciclo. A ausência de aulas elegíveis não penaliza o professor."
-    : competenciaEmAndamento
-      ? `${contextoPeriodo} As notas acompanham as evidências já registradas e evoluem com a operação.`
-      : `${contextoPeriodo} Cada indicador respeita sua evidência disponível.`;
+  const contexto = descreverContextoOperacionalRelatorio({
+    periodicidade: periodo.periodicidade === "ciclo" ? "ciclo" : "mensal",
+    contextoOperacional: periodo.contexto_operacional,
+    cicloOficial,
+    competenciaEmAndamento,
+    contextoPeriodo,
+  });
+  const professoresSemDadosOficiais = contarProfessoresSemDadosOficiais({
+    resumoSemBaseOperacional: resumo.sem_base_operacional,
+    qualidadeProfessoresSemFonte: dados.qualidade_dados.professores_sem_fonte,
+    professores: dados.professores,
+  });
 
   const professoresComAmostraMinima = dados.experimentais.professores_com_amostra_minima
     ?? dados.experimentais.professores_com_amostra;
   const professoresComConversaoPontuando = dados.experimentais.professores_com_conversao_pontuando
     ?? dados.experimentais.professores_com_amostra;
-  const ordemComparabilidade = (estado: ProfessorContrato["comparabilidade_estado"]): number =>
-    estado === "comparavel" ? 0 : estado === "em_maturacao" ? 1 : 2;
-  const professoresOrdenados = [...dados.professores].sort((a, b) => {
-    const grupo = ordemComparabilidade(a.comparabilidade_estado)
-      - ordemComparabilidade(b.comparabilidade_estado);
-    if (grupo !== 0) return grupo;
-    if (a.comparabilidade_estado === "comparavel") {
-      return Number(b.score_comparavel || 0) - Number(a.score_comparavel || 0)
-        || Number(b.cobertura || 0) - Number(a.cobertura || 0)
-        || a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" });
-    }
-    if (a.comparabilidade_estado === "em_maturacao") {
-      // 2026-09-03: coordenador lê pelo desempenho observado — ordenar por ele.
-      return Number(b.score_observado || 0) - Number(a.score_observado || 0)
-        || Number(b.cobertura || 0) - Number(a.cobertura || 0)
-        || a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" });
-    }
-    return a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" });
-  });
+  const professoresOrdenados = ordenarProfessoresPorScoreVisivel(dados.professores);
   const professores = professoresOrdenados.flatMap((professor, indice) => {
+    if (professor.comparabilidade_estado === "sem_base_operacional") {
+      const motivo = normalizarMotivo(
+        professor.comparabilidade_motivo || "sem base operacional no período",
+      );
+      return [
+        `${indice + 1}) *${professor.nome}*`,
+        `   • Sem nota no recorte — ${motivo}.`,
+        "   • Permanece na lista da equipe e não recebeu nota zero.",
+        "",
+      ];
+    }
+
     const score = professor.comparabilidade_estado === "comparavel"
       ? `Health Score V3: ${numero(professor.score_comparavel, 1)} pontos | Cobertura: ${percentual(professor.cobertura)}`
       : professor.comparabilidade_estado === "em_maturacao"
@@ -490,9 +522,27 @@ function renderizarRelatorio(
     ];
   });
 
-  const ranking = dados.ranking_oficial && dados.ranking_oficial.length > 0
-    ? dados.ranking_oficial.map((item, indice) => `${indice + 1}. ${item.nome} — ${numero(item.score, 1)} pontos`)
-    : ["Ranking e premiações permanecem reservados ao ciclo oficial fechado."];
+  const professoresComScore = professoresOrdenados
+    .map((professor) => ({ professor, score: scoreVisivelProfessor(professor) }))
+    .filter((item): item is { professor: ProfessorContrato; score: number } => item.score !== null);
+  const professoresSemScore = professoresOrdenados
+    .filter((professor) => scoreVisivelProfessor(professor) === null);
+  const ranking = [
+    ...professoresComScore.map((item, indice) =>
+      `${indice + 1}. ${item.professor.nome} — ${numero(item.score, 1)} pontos`
+    ),
+    ...(professoresSemScore.length > 0
+      ? [
+        "",
+        `Sem nota no recorte: ${professoresSemScore.map((professor) => professor.nome).join(", ")}.`,
+      ]
+      : []),
+    professoresComScore.length === 0 && professoresSemScore.length === 0
+      ? "Nenhum professor ativo encontrado."
+      : cicloOficial
+        ? "A lista acima segue a mesma ordem e os mesmos estados exibidos no painel."
+        : "Esta é a ordem diagnóstica do painel; não representa premiação oficial.",
+  ];
 
   const treinamentosIa = narrativa.treinamentos.map((item) => {
     const pessoa = item.professor ? `${item.professor} → ` : "";
@@ -584,7 +634,7 @@ function renderizarRelatorio(
     `• Sinais públicos de carga ou distribuição: *${inteiro(mapaPublico.total_sinais_publicos)}*`,
     "• A carteira contextualiza a operação e não aumenta nem reduz a nota.",
     "",
-    "🏆 *RANKING DO CICLO*",
+    cicloOficial ? "🏆 *RANKING DO CICLO — ORDEM DO PAINEL*" : "📋 *ORDEM DIAGNÓSTICA DO PAINEL*",
     "───────────────────────",
     ...ranking,
     "",
@@ -600,7 +650,7 @@ function renderizarRelatorio(
     "",
     "🔎 *QUALIDADE DOS DADOS*",
     "───────────────────────",
-    `• Professores sem dados oficiais disponíveis: *${inteiro(dados.qualidade_dados.professores_sem_fonte)}*`,
+    `• Professores sem dados oficiais disponíveis: *${inteiro(professoresSemDadosOficiais)}*`,
     "• Ausência de evidência aparece com o motivo real e nunca é tratada como nota zero.",
     formatarQualidadeCapacidade(mapaPublico),
     "",
