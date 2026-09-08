@@ -11,9 +11,22 @@ const manifestMigrationPath =
   'supabase/migrations/20260716190500_manifesto_reconstrucao_particionada.sql';
 const manifestAuditMigrationPath =
   'supabase/migrations/20260717225500_health_score_v3_manifesto_fonte_auditoria.sql';
+const partitionedManifestMigrationPath =
+  'supabase/migrations/20260908180000_manifesto_reconstrucao_professor_por_particao.sql';
+const partitionedManifestPushdownMigrationPath =
+  'supabase/migrations/20260908181000_manifesto_reconstrucao_professor_particao_sem_materializacao.sql';
+const partitionedManifestCoveringIndexesMigrationPath =
+  'supabase/migrations/20260908182000_manifesto_reconstrucao_professor_indices_cobertura.sql';
+const partitionedManifestBatchMigrationPath =
+  'supabase/migrations/20260908183000_manifesto_reconstrucao_professor_micro_lotes.sql';
+const partitionedManifestCursorMigrationPath =
+  'supabase/migrations/20260908184000_manifesto_reconstrucao_professor_micro_lotes_cursor.sql';
+const partitionedManifestIdentityFirstMigrationPath =
+  'supabase/migrations/20260908185000_manifesto_reconstrucao_professor_identidade_primeiro.sql';
 const exactPromotionMigrationPath =
   'supabase/migrations/20260727121000_health_score_v3_promocao_periodos_ativos_exatos.sql';
 const edgePath = 'supabase/functions/reconstruir-periodos-professor/index.ts';
+const orchestratorPath = 'supabase/functions/orquestrar-historico-professor/index.ts';
 const helperPath =
   'supabase/functions/_shared/reconstrucao-particionada-professor.mjs';
 const reconstructorPath =
@@ -123,6 +136,136 @@ test('manifesto calcula identidade uma vez e indexa cada particao do recorte', (
   assert.match(sql, /revoke all[^;]+from public, anon, authenticated/is);
 });
 
+test('manifesto novo materializa somente a particao pedida para caber no timeout', () => {
+  assert.equal(
+    fs.existsSync(partitionedManifestMigrationPath),
+    true,
+    `${partitionedManifestMigrationPath} deve existir`,
+  );
+  const sql = read(partitionedManifestMigrationPath);
+  const edge = read(edgePath);
+
+  assert.match(sql, /preparar_manifesto_reconstrucao_professor_v2/i);
+  assert.match(sql, /p_particao_indice\s+integer/i);
+  assert.match(sql, /PARTICAO_INDICE_INVALIDO/i);
+  assert.match(
+    sql,
+    /mod\([\s\S]+p_total_particoes[\s\S]+as particao_indice[\s\S]+where particionadas\.particao_indice\s*=\s*p_particao_indice/i,
+  );
+  assert.match(sql, /on conflict\s*\([\s\S]+roster_staging_id[\s\S]+\)\s*do nothing/i);
+  assert.match(sql, /pg_advisory_xact_lock[\s\S]+p_particao_indice/i);
+  assert.match(sql, /revoke all[^;]+from public, anon, authenticated/is);
+  assert.match(edge, /preparar_manifesto_reconstrucao_professor_v2/i);
+  assert.match(
+    edge,
+    /preparar_manifesto_reconstrucao_professor_v2[\s\S]{0,650}p_particao_indice:\s*input\.particao_indice/i,
+  );
+});
+
+test('patch da particao remove a barreira que materializava o recorte inteiro', () => {
+  assert.equal(
+    fs.existsSync(partitionedManifestPushdownMigrationPath),
+    true,
+    `${partitionedManifestPushdownMigrationPath} deve existir`,
+  );
+  const sql = read(partitionedManifestPushdownMigrationPath);
+  assert.match(sql, /with identidades as materialized \(/i);
+  assert.match(sql, /execute replace\(v_def, v_ancora, 'with identidades as \('\)/i);
+  assert.match(sql, /esperava uma ancora de materializacao/i);
+});
+
+test('indices de cobertura evitam voltar ao heap largo durante o manifesto', () => {
+  assert.equal(
+    fs.existsSync(partitionedManifestCoveringIndexesMigrationPath),
+    true,
+    `${partitionedManifestCoveringIndexesMigrationPath} deve existir`,
+  );
+  const sql = read(partitionedManifestCoveringIndexesMigrationPath);
+  assert.match(
+    sql,
+    /on public\.emusys_aula_alunos_historico_staging_v1\s*\(\s*unidade_id,\s*aula_staging_id\s*\)\s*include\s*\(id, emusys_aluno_id, aluno_id\)/i,
+  );
+  assert.match(
+    sql,
+    /on public\.emusys_aulas_historico_staging_v1\s*\(\s*unidade_id,\s*id\s*\)\s*include\s*\(data_hora_inicio\)/i,
+  );
+  assert.match(sql, /analyze public\.emusys_aula_alunos_historico_staging_v1/i);
+  assert.match(sql, /analyze public\.emusys_aulas_historico_staging_v1/i);
+});
+
+test('manifesto avanca em micro-lotes retomaveis sem alongar um statement', () => {
+  assert.equal(
+    fs.existsSync(partitionedManifestBatchMigrationPath),
+    true,
+    `${partitionedManifestBatchMigrationPath} deve existir`,
+  );
+  const sql = read(partitionedManifestBatchMigrationPath);
+  const edge = read(edgePath);
+
+  assert.match(sql, /v_tamanho_lote\s+constant integer\s*:=\s*500/i);
+  assert.match(sql, /not exists\s*\([\s\S]+professor_periodos_reconstrucao_manifesto_v1/i);
+  assert.match(sql, /order by particionadas\.roster_staging_id[\s\S]+limit v_tamanho_lote/i);
+  assert.match(sql, /'em_andamento'/i);
+  assert.match(sql, /v_inseridos\s*<\s*v_tamanho_lote[\s\S]+'concluido'/i);
+  assert.doesNotMatch(sql, /if v_total > 0 then[\s\S]+idempotente/i);
+  assert.match(edge, /MAX_MANIFEST_PREPARATION_ROUNDS\s*=\s*32/);
+  assert.match(edge, /manifestoPreparado\?\.status === 'concluido'/);
+  assert.match(edge, /MANIFESTO_PREPARO_EXCEDEU_LIMITE/);
+});
+
+test('cada micro-lote retoma depois do ultimo roster ja persistido', () => {
+  assert.equal(
+    fs.existsSync(partitionedManifestCursorMigrationPath),
+    true,
+    `${partitionedManifestCursorMigrationPath} deve existir`,
+  );
+  const sql = read(partitionedManifestCursorMigrationPath);
+
+  assert.match(sql, /v_ultimo_roster_id\s+bigint/i);
+  assert.match(sql, /coalesce\s*\(\s*max\s*\(\s*roster_staging_id\s*\)/i);
+  assert.match(sql, /r\.id\s*>\s*v_ultimo_roster_id/i);
+  assert.match(sql, /order by particionadas\.roster_staging_id/i);
+  assert.match(sql, /not exists\s*\([\s\S]+professor_periodos_reconstrucao_manifesto_v1/i);
+});
+
+test('manifesto escolhe pessoas da particao antes de buscar o historico delas', () => {
+  assert.equal(
+    fs.existsSync(partitionedManifestIdentityFirstMigrationPath),
+    true,
+    `${partitionedManifestIdentityFirstMigrationPath} deve existir`,
+  );
+  const sql = read(partitionedManifestIdentityFirstMigrationPath);
+
+  assert.match(sql, /emusys_ids as materialized/i);
+  assert.match(sql, /select distinct r\.emusys_aluno_id/i);
+  assert.match(sql, /emusys_particao as materialized/i);
+  assert.match(sql, /r\.emusys_aluno_id\s*=\s*p\.emusys_aluno_id/i);
+  assert.match(sql, /r\.id\s*>\s*v_ultimo_roster_id/i);
+  assert.match(sql, /sem-identidade-roster:/i);
+  assert.match(sql, /idx_aula_alunos_historico_manifesto_emusys_cover/i);
+});
+
+test('orquestrador usa 128 particoes com no maximo duas por ciclo global', () => {
+  const edge = read(orchestratorPath);
+
+  assert.match(edge, /const TOTAL_PARTICOES = 128;/);
+  assert.match(edge, /128 por unidade/);
+  assert.match(edge, /const MAX_PARTICOES_POR_CICLO = 2;/);
+  assert.match(edge, /const JANELA_ROTACAO_MS = 30 \* 60_000;/);
+  assert.match(edge, /function unidadesOrdenadasParaCiclo/);
+  assert.match(edge, /Math\.floor\(Date\.now\(\) \/ JANELA_ROTACAO_MS\)/);
+  assert.match(edge, /for \(const unidade of unidadesOrdenadasParaCiclo\(opcoes\.unidadeId\)\)/);
+  assert.match(
+    edge,
+    /if \(orcamentoParticoes\.processadas >= orcamentoParticoes\.limite\) break;/,
+  );
+  assert.match(edge, /orcamentoParticoes\.processadas \+= 1;/);
+  assert.match(
+    edge,
+    /const orcamentoParticoes = \{ processadas: 0, limite: MAX_PARTICOES_POR_CICLO \};/,
+  );
+});
+
 test('finalizador preserva e valida a versao-fonte do manifesto no cabecalho', () => {
   assert.equal(
     fs.existsSync(manifestAuditMigrationPath),
@@ -146,14 +289,14 @@ test('edge usa RPC paginada no modo particionado e preserva modo pequeno', () =>
   assert.match(edge, /manifesto_versao_fonte/i);
   assert.match(edge, /validarParticionamento/i);
   assert.match(edge, /listar_eventos_staging_particao_professor_v1/i);
-  assert.match(edge, /preparar_manifesto_reconstrucao_professor_v1/i);
+  assert.match(edge, /preparar_manifesto_reconstrucao_professor_v2/i);
   assert.match(edge, /registrar_particao_periodos_professor_v1/i);
   assert.match(edge, /finalizar_reconstrucao_particionada_professor_v1/i);
   assert.match(edge, /materializar_periodos_professor_v1/i);
   assert.match(edge, /processamento_particionado/i);
   assert.match(
     edge,
-    /preparar_manifesto_reconstrucao_professor_v1[\s\S]{0,500}p_versao_reconstrucao:\s*input\.manifesto_versao_fonte/i,
+    /preparar_manifesto_reconstrucao_professor_v2[\s\S]{0,650}p_versao_reconstrucao:\s*input\.manifesto_versao_fonte/i,
   );
   assert.match(
     edge,

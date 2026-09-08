@@ -357,12 +357,16 @@ Pipeline de duas etapas que alimenta a **retenção do professor** (`vw_professo
    (máx. 10 páginas por chamada), popula `emusys_aulas_historico_staging_v1` + `..._aula_alunos_...`.
    Exige `execucao_id` de uma linha em `emusys_historico_backfill_execucoes_v1`.
 2. `reconstruir-periodos-professor` — lê o staging e monta os períodos professor↔aluno em
-   `professor_matricula_disciplina_periodos_v1`. **Particionada em 32 por unidade**; a finalização
-   materializa quando as 32 fecham e a reconstrução **publica sozinha** (vira baseline).
+   `professor_matricula_disciplina_periodos_v1`. **Particionada em 128 por unidade**; cada partição
+   prepara o manifesto em microlotes retomáveis de 250 linhas, escolhendo primeiro as identidades e
+   buscando depois somente suas aulas pelos índices. A finalização materializa quando as 128 fecham
+   e a reconstrução **publica sozinha** (vira baseline).
 
 **Nenhuma das duas roda por `pg_cron` direto** (uma exige `execucao_id`, a outra `particao_indice`). Quem as
-dirige é a edge **`orquestrar-historico-professor`** (re-entrante, ~95 s por tick), chamada pelo cron
-**jobid 129** (`7,37 * * * *`). Cadência real dentro da edge: **backfill diário, reconstrução a cada 7 dias**.
+dirige é a edge **`orquestrar-historico-professor`** (re-entrante, orçamento máximo de ~95 s por tick),
+chamada pelo cron **jobid 129** (`7,37 * * * *`). Para não saturar as RPCs das telas, cada tick processa
+no máximo **duas partições no total**, com pausa de 1 s e rotação da unidade inicial a cada meia hora.
+Cadência real dentro da edge: **backfill diário, reconstrução a cada 7 dias**.
 Kill switch em `automacoes_config(slug='auto_historico_professor')`; trava em `orquestracao_locks_v1`.
 
 ⚠️ **A curadoria (`professor_periodos_revisoes_v1`) só sobrevive à reconstrução por causa da chave natural**

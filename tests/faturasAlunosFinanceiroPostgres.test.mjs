@@ -335,6 +335,15 @@ function bootstrapSql() {
   `;
 }
 
+function leituraUnicaMigrationSource() {
+  const migrationName = fs.readdirSync(migrationsDir)
+    .filter((name) => /_alunos_financeiro_leitura_unica\.sql$/u.test(name))
+    .sort()
+    .at(-1);
+  assert.ok(migrationName, 'migration da leitura financeira unica ausente');
+  return fs.readFileSync(path.join(migrationsDir, migrationName), 'utf8');
+}
+
 function docker(args, input, timeout = 120_000) {
   return spawnSync('docker', args, { input, encoding: 'utf8', timeout, maxBuffer: 10 * 1024 * 1024 });
 }
@@ -425,6 +434,7 @@ test('leitura global separa historico financeiro, D+2 e reconciliacao sem totali
   const canceladasPatch = canceladasValorPatchSource();
   const carteiraAtivaSource = carteiraAtivaMigrationSource();
   const carteiraAtivaV4Source = carteiraAtivaV4MigrationSource();
+  const leituraUnicaSource = leituraUnicaMigrationSource();
   await withPostgres(t, async (container) => {
     const bootstrapped = psql(container, bootstrapSql());
     assert.equal(bootstrapped.status, 0, bootstrapped.stderr || bootstrapped.stdout);
@@ -441,6 +451,10 @@ test('leitura global separa historico financeiro, D+2 e reconciliacao sem totali
     assert.equal(canceladasPatchAplicado.status, 0, canceladasPatchAplicado.stderr || canceladasPatchAplicado.stdout);
     const classificacaoAplicada = psql(container, reconciliacaoClassificacaoSource());
     assert.equal(classificacaoAplicada.status, 0, classificacaoAplicada.stderr || classificacaoAplicada.stdout);
+    const leituraUnicaAplicada = psql(container, leituraUnicaSource);
+    assert.equal(leituraUnicaAplicada.status, 0, leituraUnicaAplicada.stderr || leituraUnicaAplicada.stdout);
+    const leituraUnicaReaplicada = psql(container, leituraUnicaSource);
+    assert.equal(leituraUnicaReaplicada.status, 0, leituraUnicaReaplicada.stderr || leituraUnicaReaplicada.stdout);
 
     const carteiraCanonica = psql(container, `
       select public.get_inadimplencia_canonica(
@@ -487,6 +501,7 @@ test('leitura global separa historico financeiro, D+2 e reconciliacao sem totali
     assert.equal(leitura.reconciliation.source_missing, 1);
     assert.equal(leitura.reconciliation.identidade_invalida, 1);
     assert.equal(leitura.reconciliation.validacoes_origem, 1);
+    assert.deepEqual(leitura.inadimplencia_canonica, canonica);
 
     const origemSemAluno = leitura.reconciliation.items.find((item) => item.emusys_fatura_id === '1006');
     assert.ok(origemSemAluno);
