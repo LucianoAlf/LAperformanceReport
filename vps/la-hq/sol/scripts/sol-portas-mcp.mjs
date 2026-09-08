@@ -66,7 +66,7 @@ async function rpc(fn, args) {
 
 // ── as 12 portas ────────────────────────────────────────────────────────────
 // ⚠️ `Q` (quem) entra em TODA porta; `U` (unidade) so onde faz sentido.
-const Q = { p_solicitante_telefone: { type: 'string', description: 'O telefone de quem mandou a mensagem — copie do "Participante que enviou" do envelope, só os dígitos. Não é opcional e não é para inventar: é ele que decide qual unidade você enxerga, e toda chamada fica registrada com esse número. Se não souber quem falou, pergunte em vez de chutar.' } };
+const Q = { p_solicitante_telefone: { type: 'string', description: 'Quem está perguntando. 🔴 Se a mensagem trouxer `[cracha: SOL1....]`, cole o CRACHÁ INTEIRO aqui — ele é assinado e é a prova de quem falou. Só se não houver crachá, use o número de `[telefone_remetente: ...]`, só os dígitos. Não é opcional e não é para inventar: decide qual unidade você enxerga, e toda chamada fica registrada. Sem saber quem falou, pergunte em vez de chutar.' } };
 const U = { ...Q, p_unidade: { type: 'string', description: 'Só a diretoria escolhe unidade. Para os demais, deixe vazio — eu já sei qual é a sua.' } };
 
 const PORTAS = [
@@ -137,9 +137,17 @@ const j = (o) => ({ content: [{ type: 'text', text: JSON.stringify(o) }] });
 async function despachar(name, args) {
   const p = PORTAS.find((x) => x.name === name);
   if (!p) return j({ ok: false, motivo: 'porta_desconhecida', porta: name });
-  const tel = String((args && args.p_solicitante_telefone) || TEL_ENSAIO || '').replace(/\D/g, '');
+  // 🔴 CRACHA NAO PODE SER LIMPO. O strip de nao-digitos estava certo quando o
+  //    valor era so telefone; com cracha ele destroi a assinatura — medido:
+  //    "SOL1.5521970183684.d2f0f55a..." virou "155219701836842055105...", que
+  //    nao resolve ninguem. Foi a propria auditoria (`telefone_alegado`) que
+  //    mostrou, porque ela grava o que FOI MANDADO, nao o que eu quis mandar.
+  const _bruto = String((args && args.p_solicitante_telefone) || TEL_ENSAIO || "").trim();
+  const tel = /^SOL1./.test(_bruto)
+    ? _bruto.replace(/[^A-Za-z0-9.]/g, "")   // cracha: so tira lixo de colagem
+    : _bruto.replace(/\D/g, "");    // telefone: digitos
   if (!tel) return j({ ok: false, motivo: 'sem_solicitante',
-    recado: 'Não sei quem está perguntando. Me diga o telefone de quem pediu (está no "Participante que enviou") — sem isso eu não sei qual unidade mostrar.' });
+    recado: 'Não sei quem está perguntando. Passe o `[cracha: ...]` da mensagem, ou o número de `[telefone_remetente: ...]` — sem isso eu não sei qual unidade mostrar.' });
   const limpos = { p_solicitante_telefone: tel };
   for (const [k, v] of Object.entries(args || {})) {
     if (v !== null && v !== undefined && v !== '') limpos[k] = v;
