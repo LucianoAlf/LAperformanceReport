@@ -74,6 +74,10 @@ export interface NovaCaixaMovimentacaoInput {
   cartao_modalidade?: CaixaCartaoModalidade | null;
   cartao_parcelas?: number | null;
   link_pagamento?: string | null;
+  /** Fatura do Emusys que este dinheiro liquida. Nulo = receita sem fatura. */
+  fatura_id?: string | null;
+  /** Aluno vinculado ao lancamento, quando ha. */
+  aluno_id?: number | null;
   responsavel?: string;
   criado_por?: string;
 }
