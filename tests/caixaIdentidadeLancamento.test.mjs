@@ -110,8 +110,8 @@ test('a unidade chega no formulario e na tabela de edicao', () => {
     new URL('../src/components/App/Administrativo/CaixaFinanceiro/CaixaFinanceiroTab.tsx', import.meta.url),
     'utf8',
   );
-  assert.match(tab, /<CaixaMovimentacaoForm\n\s+unidadeId=\{unidadeId\}/);
-  assert.match(tab, /<CaixaMovimentacoesTable\n\s+unidadeId=\{unidadeId\}/);
+  assert.match(tab, /<CaixaMovimentacaoForm\r?\n\s+unidadeId=\{unidadeId\}/);
+  assert.match(tab, /<CaixaMovimentacoesTable\r?\n\s+unidadeId=\{unidadeId\}/);
 });
 
 // A tabela recebe e repassa: sem isso a edicao de uma linha cega continuaria cega, que
@@ -122,5 +122,5 @@ test('a tabela repassa a unidade para o formulario de edicao', () => {
     'utf8',
   );
   assert.match(tabela, /unidadeId\?: string \| null;/);
-  assert.match(tabela, /<CaixaMovimentacaoForm\n\s+unidadeId=\{unidadeId\}/);
+  assert.match(tabela, /<CaixaMovimentacaoForm\r?\n\s+unidadeId=\{unidadeId\}/);
 });

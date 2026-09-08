@@ -18,6 +18,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const PAGE_SIZE = 700;
+const MAX_MANIFEST_PREPARATION_ROUNDS = 32;
 
 const UNIDADES = new Set([
   '2ec861f6-023f-4d7b-9927-3960ad8c2a92', // Campo Grande
@@ -312,18 +313,38 @@ async function carregarEventosParticionados(
   if (input.particao_total === null || input.particao_indice === null) {
     throw new ReconstructionError('PARTICIONAMENTO_INCOMPLETO', 400);
   }
-  const { error: manifestoError } = await adminClient.rpc(
-    'preparar_manifesto_reconstrucao_professor_v1',
-    {
-      p_unidade_id: input.unidade_id,
-      p_data_inicio: input.data_inicio,
-      p_data_fim: input.data_fim,
-      p_versao_reconstrucao: input.manifesto_versao_fonte,
-      p_execucao_backfill_id: input.execucao_backfill_id,
-      p_total_particoes: input.particao_total,
-    },
-  );
-  if (manifestoError) throw new ReconstructionError('PREPARO_MANIFESTO_FALHOU', 500);
+  let manifestoPreparado: JsonRecord | null = null;
+  for (let rodada = 0; rodada < MAX_MANIFEST_PREPARATION_ROUNDS; rodada += 1) {
+    const { data: manifestoData, error: manifestoError } = await adminClient.rpc(
+      'preparar_manifesto_reconstrucao_professor_v2',
+      {
+        p_unidade_id: input.unidade_id,
+        p_data_inicio: input.data_inicio,
+        p_data_fim: input.data_fim,
+        p_versao_reconstrucao: input.manifesto_versao_fonte,
+        p_execucao_backfill_id: input.execucao_backfill_id,
+        p_total_particoes: input.particao_total,
+        p_particao_indice: input.particao_indice,
+      },
+    );
+    if (manifestoError) {
+      throw new ReconstructionError('PREPARO_MANIFESTO_FALHOU', 500);
+    }
+
+    manifestoPreparado = manifestoData && typeof manifestoData === 'object' &&
+        !Array.isArray(manifestoData)
+      ? manifestoData as JsonRecord
+      : null;
+
+    if (manifestoPreparado?.status === 'concluido') break;
+    if (manifestoPreparado?.status !== 'em_andamento') {
+      throw new ReconstructionError('PREPARO_MANIFESTO_RESPOSTA_INVALIDA', 500);
+    }
+  }
+
+  if (manifestoPreparado?.status !== 'concluido') {
+    throw new ReconstructionError('MANIFESTO_PREPARO_EXCEDEU_LIMITE', 500);
+  }
 
   return fetchAll<EventoStagingParticionado>(async (from, to) => await adminClient
     .rpc('listar_eventos_staging_particao_professor_v1', {

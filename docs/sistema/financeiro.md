@@ -156,6 +156,12 @@ há apenas `dados_mensais` (~12 campos).
 - **Tabelas:** `emusys_faturas`, `financeiro_sync_queue`, `sync_runs`,
   `financeiro_fatura_reconciliacao_decisoes`
 
+Na rota `/app/alunos`, `get_faturas_alunos_financeiro_v1` também entrega o bloco
+`inadimplencia_canonica`. Essa tela reutiliza o bloco e não chama
+`get_inadimplencia_canonica` uma segunda vez. A rota `/app/faturas` conserva seu
+contrato próprio. Se o bloco vier ausente ou inválido, a cobrança permanece
+bloqueada; não há fallback para uma leitura menos confiável.
+
 ⚠️ O espelho `emusys_faturas` cobre apenas as competências sincronizadas (a partir de
 jun/2026) — número de faturas vencidas é **piso, não valor exato**. Ver `CLAUDE.md`.
 

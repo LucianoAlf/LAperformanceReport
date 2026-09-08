@@ -8,6 +8,12 @@ Este arquivo é o **índice**. O conteúdo mora em `docs/sistema/<domínio>.md`,
 mesmo vocabulário de oito domínios do [mapa do banco](./banco/README.md) — assim
 "onde está X" tem sempre a mesma resposta nas duas metades da documentação.
 
+Atualização de 08/09/2026: a página Alunos passou a receber inadimplência dentro
+da leitura financeira única; a reconstrução histórica de professores passou a
+usar partições menores, microlotes e orçamento global. Evidências, tempos e o
+timeout ainda aberto do relatório de coordenação estão em
+[`docs/auditorias/2026-09-08-rpcs-telas-e-timeouts.md`](./auditorias/2026-09-08-rpcs-telas-e-timeouts.md).
+
 ## Por domínio
 
 | Domínio | Cobre | Arquivo | Banco |

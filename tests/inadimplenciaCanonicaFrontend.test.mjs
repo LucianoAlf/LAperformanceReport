@@ -10,9 +10,9 @@ const refreshEdge = readFileSync(
   'utf8',
 );
 
-test('lista de alunos le a RPC canonica e nao o booleano da jornada', () => {
-  assert.match(alunosPage, /\.rpc\(\s*['"]get_inadimplencia_canonica['"]/);
-  assert.match(alunosPage, /normalizarInadimplenciaCanonica/);
+test('lista de alunos le a inadimplencia canonica embutida nas faturas e nao o booleano da jornada', () => {
+  assert.doesNotMatch(alunosPage, /\.rpc\(\s*['"]get_inadimplencia_canonica['"]/);
+  assert.match(alunosPage, /faturasFinanceirasR\.inadimplenciaCanonica/);
   assert.match(alunosPage, /indexarInadimplenciaPorMatricula/);
   assert.doesNotMatch(
     alunosPage,

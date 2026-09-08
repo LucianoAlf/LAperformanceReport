@@ -47,7 +47,6 @@ import {
   chaveInadimplenciaMatricula,
   indexarInadimplenciaPorMatricula,
   INADIMPLENCIA_CANONICA_LOADING,
-  normalizarInadimplenciaCanonica,
   podeCobrarInadimplenciaCanonica,
   type InadimplenciaCanonicaState,
 } from '@/lib/inadimplenciaCanonica';
@@ -728,7 +727,6 @@ export function AlunosPage() {
       turmasViewR,
       kpisTurmasR,
       anotacoesR,
-      inadimplenciaR,
       faturasFinanceirasR,
       ...outrosResults
     ] = await Promise.all([
@@ -741,9 +739,6 @@ export function AlunosPage() {
         .select('aluno_id, texto, categoria, created_at')
         .eq('resolvido', false)
         .order('created_at', { ascending: false }),
-      supabase.rpc('get_inadimplencia_canonica', {
-        p_unidade_id: unidadeAtual && unidadeAtual !== 'todos' ? unidadeAtual : null,
-      }),
       carregarFaturasAlunosFinanceiras(financeiroRpcClient, {
         unidadeId: unidadeAtual,
         ano: competenciaFiltro.ano,
@@ -771,10 +766,7 @@ export function AlunosPage() {
 
     // ── FASE 2: processar alunos ──
     const { data: alunosRaw, error } = alunosR;
-    const inadimplenciaAtual = normalizarInadimplenciaCanonica(
-      inadimplenciaR.data,
-      inadimplenciaR.error,
-    );
+    const inadimplenciaAtual = faturasFinanceirasR.inadimplenciaCanonica;
     setFaturasFinanceiras(faturasFinanceirasR);
     const leituraFinanceiraDisponivel = podeCobrarInadimplenciaCanonica(inadimplenciaAtual);
     const leituraExpirada = inadimplenciaAtual.collectionAllowed && !leituraFinanceiraDisponivel;

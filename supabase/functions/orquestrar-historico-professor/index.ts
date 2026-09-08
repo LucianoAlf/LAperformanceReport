@@ -4,7 +4,7 @@
 // `reconstruir-periodos-professor` podem ser dirigidas por um `pg_cron` simples —
 //   - o backfill exige um `execucao_id` criado FORA dela e avança no máximo 10 páginas
 //     por chamada (caminha mês a mês);
-//   - a reconstrução exige `particao_indice` explícito, 32 por unidade.
+//   - a reconstrução exige `particao_indice` explícito, 128 por unidade.
 // Um `net.http_post` só faz UMA chamada. Este orquestrador é re-entrante: cada invocação
 // faz um pedaço dentro de um orçamento de tempo e devolve o estado; o cron chama de novo.
 // Mesmo padrão de `disparar-pesquisa-1a-aula-auto`.
@@ -31,7 +31,10 @@ const LOCK_TTL_SEGUNDOS = 900;
 // Tem que ser IDÊNTICO ao que a reconstrução usa, senão o manifesto diverge.
 const VERSAO_RECONSTRUCAO = 'periodos-professor-v1.23-disciplina-mesmo-vinculo-20260718';
 const RECORTE_INICIO = '2018-01-01';
-const TOTAL_PARTICOES = 32;
+// O manifesto histórico contém mais de 230 mil vínculos em Campo Grande. Com 32
+// partes, as maiores inserções ainda ultrapassavam os 8 s do PostgREST. Com 128,
+// a maior fatia medida ficou em 4.253 vínculos e concluiu em 2,3 s (08/09/2026).
+const TOTAL_PARTICOES = 128;
 
 // ⚠️ SEM `inicio_completo: true`, TODO primeiro período de cada partição nasce
 // `inicio_incompleto`. Medido em 09/08/2026 ao esquecer: 0 → 2.269, e os vínculos em
@@ -50,12 +53,23 @@ const DIAS_ENTRE_RECONSTRUCOES = 7;
 
 // A invocação para aqui e devolve o estado; o cron continua no próximo tick.
 const ORCAMENTO_MS = 95_000;
+// Limita a pressão contínua no Postgres no ciclo inteiro. Em produção, duas
+// partições consecutivas passaram; a terceira/quarta sob pressão acumulada
+// voltou a estourar. O cron roda duas vezes por hora e alterna a unidade inicial.
+const MAX_PARTICOES_POR_CICLO = 2;
+const JANELA_ROTACAO_MS = 30 * 60_000;
 
 const UNIDADES = [
   { nome: 'Campo Grande', id: '2ec861f6-023f-4d7b-9927-3960ad8c2a92' },
   { nome: 'Barra', id: '368d47f5-2d88-4475-bc14-ba084a9a348e' },
   { nome: 'Recreio', id: '95553e96-971b-4590-a6eb-0201d013c14d' },
 ];
+
+function unidadesOrdenadasParaCiclo(unidadeId) {
+  if (unidadeId) return UNIDADES.filter((unidade) => unidade.id === unidadeId);
+  const inicio = Math.floor(Date.now() / JANELA_ROTACAO_MS) % UNIDADES.length;
+  return [...UNIDADES.slice(inicio), ...UNIDADES.slice(0, inicio)];
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -214,7 +228,14 @@ async function avancarBackfill(supabase, unidade, hoje, expirou) {
 }
 
 // ── Fase 2: reconstrução ────────────────────────────────────────────────────────────
-async function avancarReconstrucao(supabase, unidade, hoje, execucaoBackfillId, expirou) {
+async function avancarReconstrucao(
+  supabase,
+  unidade,
+  hoje,
+  execucaoBackfillId,
+  expirou,
+  orcamentoParticoes,
+) {
   const { data: ultima } = await supabase
     .from('professor_periodos_reconstrucoes_v1')
     .select('id, data_fim, concluido_em')
@@ -242,6 +263,7 @@ async function avancarReconstrucao(supabase, unidade, hoje, execucaoBackfillId, 
   let ultimoResumo = null;
   for (let indice = 0; indice < TOTAL_PARTICOES; indice += 1) {
     if (feitas.has(indice)) continue;
+    if (orcamentoParticoes.processadas >= orcamentoParticoes.limite) break;
     if (expirou()) break;
     const r = await chamarEdge('reconstruir-periodos-professor', {
       unidade_id: unidade.id,
@@ -257,8 +279,9 @@ async function avancarReconstrucao(supabase, unidade, hoje, execucaoBackfillId, 
     });
     if (!r.ok) return { fase: 'reconstrucao', processadas, erro: `particao ${indice}: HTTP ${r.status}`, detalhe: r.dados };
     processadas += 1;
+    orcamentoParticoes.processadas += 1;
     ultimoResumo = r.dados?.resumo ?? null;
-    await espera(400);
+    await espera(1000);
   }
 
   const restantes = TOTAL_PARTICOES - feitas.size - processadas;
@@ -273,11 +296,11 @@ async function avancarReconstrucao(supabase, unidade, hoje, execucaoBackfillId, 
 async function executarCiclo(supabase, opcoes) {
   const inicio = Date.now();
   const expirou = () => Date.now() - inicio > ORCAMENTO_MS;
+  const orcamentoParticoes = { processadas: 0, limite: MAX_PARTICOES_POR_CICLO };
   const hoje = hojeBRT();
   const relatorio = [];
 
-  for (const unidade of UNIDADES) {
-    if (opcoes.unidadeId && unidade.id !== opcoes.unidadeId) continue;
+  for (const unidade of unidadesOrdenadasParaCiclo(opcoes.unidadeId)) {
     if (expirou()) { relatorio.push({ unidade: unidade.nome, estado: 'orcamento_esgotado' }); continue; }
 
     const bf = await avancarBackfill(supabase, unidade, hoje, expirou);
@@ -286,7 +309,14 @@ async function executarCiclo(supabase, opcoes) {
     if (!bf.erro && bf.execucao_id && (bf.estado === 'concluido' || bf.estado === 'ja_concluido')) {
       passo.reconstrucao = opcoes.pularReconstrucao
         ? { fase: 'reconstrucao', estado: 'pulada_por_parametro' }
-        : await avancarReconstrucao(supabase, unidade, hoje, bf.execucao_id, expirou);
+        : await avancarReconstrucao(
+          supabase,
+          unidade,
+          hoje,
+          bf.execucao_id,
+          expirou,
+          orcamentoParticoes,
+        );
     } else if (!bf.erro) {
       passo.reconstrucao = { fase: 'reconstrucao', estado: 'aguardando_backfill' };
     }
