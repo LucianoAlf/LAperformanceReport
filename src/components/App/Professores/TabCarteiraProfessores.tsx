@@ -95,7 +95,9 @@ type OrdenacaoDirecao = 'asc' | 'desc';
 function ThComExplicacao({ rotulo, explicacao }: { rotulo: string; explicacao: string }) {
   return (
     <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">
-      <Tooltip content={explicacao}>
+      {/* Abre embaixo: o padrao do Tooltip e `right`, que num cabecalho de tabela
+          cobre a coluna vizinha e sai da tela nas ultimas colunas. */}
+      <Tooltip content={explicacao} side="bottom">
         {/* A borda pontilhada é a affordance: sinaliza que há algo a ler aqui,
             sem competir com os dados da tabela. */}
         <span className="inline-flex items-center gap-1 cursor-help border-b border-dotted border-slate-600 hover:text-slate-200 transition-colors">
@@ -700,7 +702,7 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-400">Professor</th>
                 <ThComExplicacao rotulo="Alunos" explicacao="Pessoas distintas com matrícula viva neste professor na competência. Uma pessoa com 2 cursos conta 1 vez. NÃO inclui trancados nem atividade extra (banda, Power Kids, GarageBand, Percussion Kids)." />
                 <ThComExplicacao rotulo="Trancados" explicacao="Alunos com trancamento vigente hoje, segundo o Emusys. Exibidos à parte: não somam em Alunos, MRR, Ticket nem Média/Turma." />
-                <ThComExplicacao rotulo="Atividade extra" explicacao="Pessoas que este professor atende SÓ em banda, Power Kids, GarageBand ou Percussion Kids. Aparecem para que o professor veja quem atende, mas não entram em nenhum indicador — regra confirmada em 08/09/2026." />
+                <ThComExplicacao rotulo="Atividade extra" explicacao="Pessoas que este professor atende em banda, Power Kids, GarageBand ou Percussion Kids. Não entram em nenhum indicador — regra confirmada em 08/09/2026. ⚠️ Não some com Alunos: quem faz curso regular COM ELE já está contado lá e aparece nos dois." />
                 <ThComExplicacao rotulo="MRR" explicacao="Soma das parcelas dos alunos da carteira que contam como pagantes (tipos_matricula.entra_ticket_medio). Ficam de fora: banda, bolsista integral, bolsista parcial e quem tem parcela zero." />
                 <ThComExplicacao rotulo="Ticket" explicacao="MRR ÷ número de alunos que entram no ticket — nunca ÷ total de alunos. Dividir pelo headcount jogaria banda e bolsistas no denominador sem estarem no numerador, diluindo o valor." />
                 <ThComExplicacao rotulo="Média/Turma" explicacao="Ocupações elegíveis ÷ turmas elegíveis na competência. Conta o mesmo aluno uma vez por turma que ele ocupa, e turma de atividade extra fica fora dos dois lados." />
