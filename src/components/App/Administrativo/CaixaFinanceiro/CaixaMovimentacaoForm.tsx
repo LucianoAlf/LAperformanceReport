@@ -30,6 +30,13 @@ import {
   type CaixaCategoriaAmbiente,
 } from '@/lib/caixaCategorias';
 import { cn } from '@/lib/utils';
+import { exigeIdentidade } from '@/lib/caixaIdentidade';
+import {
+  filtrarFaturasPorBusca,
+  resolverFaturaId,
+  useFaturasParaCaixa,
+  type FaturaParaCaixa,
+} from '@/hooks/useFaturasParaCaixa';
 import type {
   CaixaAmbiente,
   CaixaCartaoModalidade,
@@ -40,6 +47,8 @@ import type {
 } from '@/types/caixa';
 
 interface CaixaMovimentacaoFormProps {
+  /** Unidade do caixa: escopa a busca de faturas e resolve a FK. */
+  unidadeId?: string | null;
   disabled?: boolean;
   saving?: boolean;
   title?: string;
@@ -62,6 +71,7 @@ const formas: { value: CaixaFormaPagamento; label: string }[] = [
 ];
 
 export function CaixaMovimentacaoForm({
+  unidadeId,
   disabled = false,
   saving = false,
   title = 'Movimentacao manual',
@@ -91,6 +101,20 @@ export function CaixaMovimentacaoForm({
   const [novaCategoriaNome, setNovaCategoriaNome] = useState('');
   const [criandoCategoria, setCriandoCategoria] = useState(false);
   const [erroCategoria, setErroCategoria] = useState<string | null>(null);
+  const [buscaAluno, setBuscaAluno] = useState('');
+  const [faturaEscolhida, setFaturaEscolhida] = useState<FaturaParaCaixa | null>(null);
+
+  // Identidade do dinheiro: com fatura o caixa e baixa (a receita ja entrou pelo sync
+  // do Emusys); sem fatura e receita nova. Sem esse campo nao da para ligar o caixa ao
+  // DRE sem duplicar. Nunca bloqueia o lancamento — cego e aviso, nao erro.
+  const pedeIdentidade = exigeIdentidade(tipo, categoria);
+  const { faturas, carregando: carregandoFaturas, erro: erroFaturas } = useFaturasParaCaixa(
+    pedeIdentidade ? unidadeId : null,
+  );
+  const sugestoes = useMemo(
+    () => (faturaEscolhida ? [] : filtrarFaturasPorBusca(faturas, buscaAluno)),
+    [buscaAluno, faturaEscolhida, faturas],
+  );
 
   const categoriasDisponiveis = useMemo(
     () => filtrarCategoriasCaixaPorAmbiente(categorias, ambiente),
@@ -175,6 +199,16 @@ export function CaixaMovimentacaoForm({
       return;
     }
 
+    let faturaId: string | null = null;
+    if (faturaEscolhida && unidadeId) {
+      try {
+        faturaId = await resolverFaturaId(unidadeId, faturaEscolhida.emusysFaturaId);
+      } catch {
+        // A FK nao resolveu: grava sem identidade em vez de perder o lancamento.
+        faturaId = null;
+      }
+    }
+
     await onSubmit({
       ambiente,
       tipo,
@@ -186,6 +220,8 @@ export function CaixaMovimentacaoForm({
       cartao_parcelas: ehCartao && cartaoModalidade === 'credito' ? parcelasNum : null,
       link_pagamento: ehCartao ? (linkPagamento.trim() || null) : null,
       responsavel: responsavel.trim() || undefined,
+      fatura_id: faturaId,
+      aluno_id: faturaEscolhida?.alunoId ?? null,
     });
 
     if (!initialValues) {
@@ -195,6 +231,8 @@ export function CaixaMovimentacaoForm({
       setCartaoModalidade('credito');
       setCartaoParcelas('1');
       setLinkPagamento('');
+      setBuscaAluno('');
+      setFaturaEscolhida(null);
     }
     setErro(null);
   }
@@ -370,6 +408,74 @@ export function CaixaMovimentacaoForm({
           className={cn('rounded-lg bg-slate-950/70', erro?.campo === 'descricao' && 'border-rose-500 ring-1 ring-rose-500/50')}
         />
       </label>
+
+      {pedeIdentidade && (
+        <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-medium text-slate-300">Fatura do aluno</p>
+            {!faturaEscolhida && (
+              <span className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-300">
+                sem identidade
+              </span>
+            )}
+          </div>
+
+          {faturaEscolhida ? (
+            <div className="mt-2 flex items-start justify-between gap-3 rounded-lg border border-emerald-500/25 bg-emerald-500/[0.07] px-3 py-2">
+              <div className="min-w-0">
+                <p className="truncate text-sm text-emerald-100">{faturaEscolhida.alunoNome}</p>
+                <p className="mt-0.5 text-[11px] text-emerald-200/70">
+                  fatura {faturaEscolhida.emusysFaturaId}
+                  {faturaEscolhida.cursoNome ? ` · ${faturaEscolhida.cursoNome}` : ''}
+                  {` · ${faturaEscolhida.status}`}
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => { setFaturaEscolhida(null); setBuscaAluno(''); }}
+                className="shrink-0 text-[11px] text-emerald-200/80 underline-offset-2 hover:underline"
+              >
+                trocar
+              </button>
+            </div>
+          ) : (
+            <>
+              <Input
+                value={buscaAluno}
+                disabled={disabled || !unidadeId}
+                onChange={(e) => setBuscaAluno(e.target.value)}
+                placeholder={carregandoFaturas ? 'Carregando faturas...' : 'Buscar aluno pelo nome'}
+                className="mt-2 rounded-lg bg-slate-950/70"
+              />
+              {sugestoes.length > 0 && (
+                <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto">
+                  {sugestoes.map((f) => (
+                    <li key={f.chave}>
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => setFaturaEscolhida(f)}
+                        className="w-full rounded-lg px-3 py-2 text-left transition hover:bg-slate-800/60"
+                      >
+                        <span className="block truncate text-sm text-slate-100">{f.alunoNome}</span>
+                        <span className="block text-[11px] text-slate-500">
+                          {`fatura ${f.emusysFaturaId} · ${f.competencia} · ${f.status}`}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="mt-2 text-[11px] text-slate-500">
+                {erroFaturas
+                  ? 'Nao consegui carregar as faturas. Da para lancar assim mesmo.'
+                  : 'Sem fatura vinculada o lancamento entra como receita nova. Pode salvar assim.'}
+              </p>
+            </>
+          )}
+        </div>
+      )}
 
       <label className="mt-3 block space-y-1 text-xs text-slate-400">
         Responsavel
