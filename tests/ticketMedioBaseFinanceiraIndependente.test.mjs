@@ -100,7 +100,7 @@ test('relatorio rico separa pagantes administrativos do denominador do ticket', 
   );
 });
 
-test('retificacao financeira preserva os KPIs academicos e restaura o ticket aceito do Recreio', () => {
+test('migration histórica separou os KPIs acadêmicos do denominador financeiro', () => {
   for (const expected of [
     /v_ativos\s+constant\s+integer\s*:=\s*344/i,
     /v_pagantes_administrativos\s+constant\s+integer\s*:=\s*334/i,
@@ -150,7 +150,7 @@ test('compatibilidade recebe campos financeiros aditivos sem corromper a coluna 
   );
 });
 
-test('front preserva pagantes administrativos e usa denominador financeiro independente', async () => {
+test('front suporta denominador financeiro independente em uma fixture histórica', async () => {
   const { calcularTicketMedioCanonico } = await importarHelperTicket();
 
   assert.equal(calcularTicketMedioCanonico([{

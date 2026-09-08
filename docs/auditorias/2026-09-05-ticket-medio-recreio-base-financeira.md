@@ -1,4 +1,11 @@
-# Ticket médio de agosto: separação entre pagantes administrativos e base financeira
+# SUPERSEDIDO — Ticket médio de agosto: separação entre pagantes administrativos e base financeira
+
+> Este documento registra a hipótese aceita em 05/09/2026, mas sua conclusão
+> numérica foi refutada pela secretaria em 08/09/2026. O fechamento correto do
+> Recreio é 334 pagantes e R$ 144.749,17 / 334 = R$ 433,38. Consulte
+> `docs/auditorias/2026-09-08-correcao-ticket-medio-recreio-334.md`. Os valores
+> 325/R$ 445,38 abaixo são preservados somente como histórico do incidente e não
+> representam mais a fonte vigente.
 
 Data da correcao: 05/09/2026.
 

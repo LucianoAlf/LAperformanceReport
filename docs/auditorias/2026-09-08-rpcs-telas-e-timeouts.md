@@ -59,33 +59,27 @@ Migration
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | Barra | 200 | 260 | 256 | 285 | 2,34% | 256 | R$ 446,30 |
 | Campo Grande | 200 | 410 | 382 | 477 | 7,85% | 382 | R$ 398,87 |
-| Recreio | 200 | 344 | 334 | 422 | 8,68% | 325 | R$ 445,38 |
+| Recreio | 200 | 344 | 334 | 422 | 8,68% | 334 | R$ 433,38 |
 
-As três respostas passaram pela RPC de produção e pelo formatador da
-`relatorio-admin-whatsapp`. O fato de o Recreio ter 334 pagantes administrativos
-e base financeira 325 não é divergência: são universos diferentes. O ticket usa
-alunos com cobrança, incluindo inadimplentes, e exclui as categorias dispensadas
-pela regra financeira; não usa simplesmente “ativos” nem “quem pagou”.
+As três respostas passam pela RPC de produção e pelo formatador da
+`relatorio-admin-whatsapp`. Pagantes administrativos e denominador financeiro
+continuam sendo campos independentes, mas no fechamento confirmado do Recreio
+ambos valem 334. O ticket inclui pagantes adimplentes e inadimplentes; não é a
+contagem de quem efetivamente pagou no mês.
 
 ### 1.4 Revalidação do ticket após a liberação do relatório
 
-Uma nova conferência, feita depois de a unidade conseguir gerar o documento,
-encontrou duas colunas com semânticas diferentes:
+Uma nova conferência da secretaria, feita depois de a unidade conseguir gerar o
+documento, corrigiu a premissa usada em 05/09: 325 era a contagem anterior à
+reposição dos nove alunos que saíram em setembro. O MRR confirmado é
+R$ 144.749,17 e a base confirmada é 334, portanto o ticket vigente é R$ 433,38.
 
-- `dados_mensais.ticket_medio = 433,38` é o campo legado de compatibilidade. Ele
-  corresponde à conta antiga `144.748,92 / 334` e não pode ser usado como ticket
-  financeiro do fechamento;
-- `dados_mensais.ticket_medio_contratual = 445,38`, com
-  `mrr_contratual = 144.749,17` e `ticket_denominador_pagantes = 325`, é a leitura
-  financeira explícita e vigente.
-
-O caminho do botão foi conferido ponta a ponta no código: o modal chama a Edge em
+O caminho do botão permanece o mesmo: o modal chama a Edge em
 `dry_run_mensal_admin`, a Edge chama `get_relatorio_admin_mensal_rico_v1`, e o
-formatador imprime exclusivamente
-`payload.indicadores_financeiros.ticket_medio`. A RPC de produção devolveu
-`445,38`; o snapshot oficial mais recente também contém `445,38`. Foi acrescentado
-um teste de regressão que injeta simultaneamente `433,38` no resumo legado e
-`445,38` nos indicadores financeiros e exige que apenas `445,38` seja publicado.
+formatador imprime `payload.indicadores_financeiros.ticket_medio`. A migration
+`corrige_ticket_agosto_2026_recreio_334_pagantes` cria novas versões dos três
+snapshots e corrige os campos aditivos de `dados_mensais`, sem reescrever o
+histórico e sem acoplar globalmente o ticket ao KPI administrativo.
 
 ## 2. Fotografia das RPCs
 
@@ -194,8 +188,8 @@ quando expirar, nunca como relatório vazio.
 
 ## 6. Gates executados
 
-- fixture PostgreSQL do relatório/ticket: 5/5, incluindo a conta
-  `144.749,17 / 325 = 445,38`;
+- fixture PostgreSQL do relatório/ticket, incluindo a conta confirmada
+  `144.749,17 / 334 = 433,38` e a preservação de Barra/Campo Grande;
 - regressão do formatador mensal: 7/7;
 - testes de contrato da leitura financeira única;
 - testes de particionamento, retomada e orçamento do orquestrador;

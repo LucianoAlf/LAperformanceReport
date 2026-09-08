@@ -1,11 +1,18 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import test from 'node:test';
 
 const migrationUrl = new URL(
   '../supabase/migrations/20260908170000_relatorio_admin_agosto_2026_integridade_e_base_financeira.sql',
   import.meta.url,
 );
+const correctionMigrationName = readdirSync(
+  new URL('../supabase/migrations/', import.meta.url),
+  { encoding: 'utf8' },
+).find((name) => name.endsWith('_corrige_ticket_agosto_2026_recreio_334_pagantes.sql'));
+const correctionMigrationUrl = correctionMigrationName
+  ? new URL(`../supabase/migrations/${correctionMigrationName}`, import.meta.url)
+  : null;
 
 test('recuperacao de agosto existe como nova migration versionada', () => {
   assert.equal(existsSync(migrationUrl), true);
@@ -38,14 +45,14 @@ test('retificacao corrige a cronologia do Recreio sem reescrever snapshots fecha
   assert.doesNotMatch(sql, /delete\s+from\s+public\.fechamento_mensal_snapshots/iu);
 });
 
-test('migration prova o relatorio rico nas tres unidades com os tickets congelados', () => {
-  const sql = readFileSync(migrationUrl, 'utf8');
+test('correcao final prova o relatorio rico nas tres unidades com os tickets confirmados', () => {
+  assert.ok(correctionMigrationUrl, 'migration final de correcao do ticket ausente');
+  const sql = readFileSync(correctionMigrationUrl, 'utf8');
 
   for (const expected of [
     /Barra[\s\S]*256[\s\S]*446\.30/iu,
     /Campo Grande[\s\S]*382[\s\S]*398\.87/iu,
-    /Recreio[\s\S]*325[\s\S]*445\.38/iu,
-    /Recreio[\s\S]*334[\s\S]*422[\s\S]*8\.68/iu,
+    /Recreio[\s\S]*334[\s\S]*433\.38/iu,
   ]) assert.match(sql, expected);
 
   assert.match(sql, /get_relatorio_admin_mensal_rico_v1/iu);

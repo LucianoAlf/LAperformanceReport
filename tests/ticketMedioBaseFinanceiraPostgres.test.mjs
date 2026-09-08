@@ -56,7 +56,7 @@ function waitForPostgres(container) {
   throw new Error('PostgreSQL de teste nao iniciou');
 }
 
-test('PostgreSQL aceita 344/334 no administrativo e 325 no ticket financeiro', { timeout: 120_000 }, (t) => {
+test('fixture histórica prova que KPI administrativo e denominador financeiro podem divergir', { timeout: 120_000 }, (t) => {
   if (docker(['version']).status !== 0) {
     t.skip('Docker indisponivel para o teste PostgreSQL');
     return;

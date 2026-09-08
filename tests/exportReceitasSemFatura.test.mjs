@@ -34,7 +34,7 @@ test('a view vive no namespace que a cerca da Maria aceita', () => {
 // criado_por da Sol e 'sol-agente:grupo:<numero>' — tem TELEFONE. Telefone nao atravessa
 // para outro banco.
 test('o criado_por cru nao sai na view', () => {
-  const select = sql.match(/select\n[\s\S]*?from public\.caixa_movimentacoes/)?.[0] ?? '';
+  const select = sql.match(/select\r?\n[\s\S]*?from public\.caixa_movimentacoes/)?.[0] ?? '';
   assert.notEqual(select, '', 'select da view nao encontrado');
   assert.doesNotMatch(select, /^\s*m\.criado_por\s*(as|,)/m,
     'criado_por nao pode ser projetado direto');
@@ -45,7 +45,7 @@ test('o criado_por cru nao sai na view', () => {
 // Se divergirem, o export diz uma coisa e o app diz outra sobre a mesma linha. O teste
 // prende as duas nos mesmos exemplos.
 test('a normalizacao no SQL concorda com a do TypeScript', () => {
-  const caso = sql.match(/case\n[\s\S]*?end\s+as\s+registrado_por_origem/)?.[0] ?? '';
+  const caso = sql.match(/case\r?\n[\s\S]*?end\s+as\s+registrado_por_origem/)?.[0] ?? '';
   assert.notEqual(caso, '', 'CASE da origem nao encontrado');
 
   const exemplos = [

@@ -227,19 +227,19 @@ Deno.test("mensal administrativo imprime o ticket financeiro e ignora o legado d
     ...adminRico,
     resumo: {
       ...adminRico.resumo,
-      ticket_medio: 433.38,
+      ticket_medio: 445.38,
     },
     indicadores_financeiros: {
       ...adminRico.indicadores_financeiros,
-      ticket_medio: 445.38,
-      ticket_denominador_pagantes: 325,
+      ticket_medio: 433.38,
+      ticket_denominador_pagantes: 334,
       alunos_pagantes_administrativos: 334,
       mrr_atual: 144749.17,
     },
   });
 
-  assertStringIncludes(texto, "Ticket Médio: *R$ 445,38*");
-  assertFalse(texto.includes("Ticket Médio: *R$ 433,38*"));
+  assertStringIncludes(texto, "Ticket Médio: *R$ 433,38*");
+  assertFalse(texto.includes("Ticket Médio: *R$ 445,38*"));
 });
 
 Deno.test("mensal administrativo bloqueia detalhe divergente do total oficial", () => {
