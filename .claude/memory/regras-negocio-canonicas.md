@@ -217,7 +217,8 @@
 ### 4.1 Carteira do Professor
 - 📋 `COUNT(alunos) WHERE professor_atual_id = <prof_id> AND status = 'ativo'`
 - 📋 Inclui `is_segundo_curso = true`? **Sim** (cada matrícula conta como 1).
-- 📋 Inclui banda? **Não**.
+- ✅ Inclui banda? **Não** na contagem — validado pelo Luciano em 2026-09-08, junto com Health Score, risco de evasão e contagem total de turmas. Na TELA continua visível, em bloco separado que deixa claro não entrar no total (decisão do Hugo).
+- 🔴 **NUNCA foi implementado.** O selo 📋 "INFERIDA DO CÓDIGO ATUAL" que estava aqui era falso: o código nunca filtrou banda da carteira — alguém leu o nome `is_projeto_banda` e presumiu o comportamento sem medir. Números, armadilhas e o que NÃO mexer (presença) em `docs/REGRAS-DE-NEGOCIO.md` §7.1.
 - 📋 Inclui `trancado`? **Não** (decisão 2026-05-20).
 - 📋 Quando aluno sai, `professor_atual_id` **NÃO é zerado** (vínculo histórico mantido).
 

@@ -228,7 +228,7 @@ OR nome ILIKE '%percussion kids%'
 ```
 
 Efeitos da atividade extra:
-- **Excluída** de: alunos ativos, alunos pagantes, ticket médio, MRR, LTV, churn, médias de turma, carteira do professor, score do professor, matrículas novas canônicas.
+- **Excluída** de: alunos ativos, alunos pagantes, ticket médio, MRR, LTV, churn, médias de turma, carteira do professor, score do professor, matrículas novas canônicas, **Health Score do professor, risco de evasão e contagem total de turmas** (estes três confirmados pelo Luciano em 2026-09-08).
 - **Contada** separadamente em `matriculas_banda` e `matriculas_coral`.
 - Movimentações (evasão, renovação, não renovação) de atividade extra **não entram na retenção** — é o que `is_movimentacao_admin_retencao_valida` garante.
 - Bolsista de banda/projeto é tratado à parte e **não infla o número de bolsistas regulares**.
@@ -739,7 +739,43 @@ COUNT(alunos) WHERE professor_atual_id = <prof> AND matrícula ativa
 ```
 
 - Inclui `is_segundo_curso = true`? **Sim** — cada matrícula conta como 1.
-- Inclui banda/atividade extra? **Não.**
+- Inclui banda/atividade extra? **Não** na CONTAGEM — mas continua **visível na tela**, em bloco separado (decisão do Hugo, 2026-09-08). Ver "Como exibir" abaixo.
+
+🔴 **A regra acima NUNCA foi implementada (medido em 2026-09-08).** `is_projeto_banda` só
+é aplicado a `media_alunos_turma`; a contagem da carteira nunca filtrou. Em
+`get_carteira_professor_periodo_canonica`, `carteira_alunos` é `count(distinct
+pessoa_chave)` **sem** `filter (where elegivel_media)`; na legada
+`get_carteira_professores` o flag só entra em `conta_turma`. Efeito medido na rede: **107
+linhas de atividade extra dentro de carteiras, 91 duplicando a mesma pessoa em dois
+professores, 15 professores afetados** — Ramon Pina/Recreio 37 exibidos contra 11 reais,
+Will/Barra 26 contra 16. Origem: áudio do Arthur em 04/09/2026 (Mauricio Cabral, Bateria
+com Lucas Amorim, aparecendo também na carteira do Willian, professor da banda).
+
+⚠️ **Vazou para relatório FECHADO:** o snapshot `relatorio_coordenacao` de ago/2026 da
+Barra publica `alunos_na_carteira = 283` numa unidade de **256 alunos ativos**, e
+`media_por_professor = 14,2`. O `gemini-ranking-professores` monta um **Top 3 por tamanho
+de carteira** a partir do mesmo número. O cron `capturar-relatorio-coordenacao-v2-mensal`
+(jobid 200, dia 2 às 00:15 BRT) congela mais um mês a cada rodada.
+
+✅ **Snapshots já fechados (jun/jul/ago 2026) NÃO serão recapturados** (decisão do Hugo,
+2026-09-08): a correção vale **para frente**. Histórico fechado permanece com o número
+antigo — ao comparar competências, esperar um degrau na virada.
+
+**Como exibir (decisão do Hugo, 2026-09-08):** a atividade extra aparece **fora do número
+principal**, em bloco visualmente separado e rotulado de forma que o leitor entenda que
+**não entra na contagem**. Nunca somada ao total, nunca escondida — o professor dá a aula
+e vê essa gente na agenda. É a mesma decisão de §9.2 ("sinalizar, não esconder") e o que
+`fn_carteira_fatiada` já faz (`regulares` / `em_atividade_extra` / `so_atividade_extra`).
+
+⚠️ **Ao corrigir, NÃO usar `elegivel_media` como filtro da carteira** — ele combina
+"modalidade resolvida" **E** "não é banda", então aluno com modalidade indefinida sairia
+da carteira regular por engano. O filtro é `is_projeto_banda` puro.
+
+⚠️ **`alunos_via_turmas` não é a carteira regular** — conta ocupação (pessoa × turma), não
+pessoa distinta. Serve de conferência, não de substituto.
+
+⚠️ **Presença/faltas é a EXCEÇÃO e não deve ser mexida junto**: §9.2 manda incluir banda
+com badge. Correção feita "varrendo tudo que menciona banda" quebra essa regra.
 - Inclui trancado? **Não** (decisão de 2026-05-20).
 - Exige `entra_carteira_professor = true` no estado operacional.
 
