@@ -15,6 +15,8 @@ import type { CaixaMovimentacao, NovaCaixaMovimentacaoInput } from '@/types/caix
 import { CaixaMovimentacaoForm } from './CaixaMovimentacaoForm';
 
 interface CaixaMovimentacoesTableProps {
+  /** Unidade do caixa: escopa a busca de faturas na edicao. */
+  unidadeId?: string | null;
   movimentos: CaixaMovimentacao[];
   categorias: CaixaCategoriaRecord[];
   disabled?: boolean;
@@ -30,6 +32,7 @@ function badgeClass(tipo: CaixaMovimentacao['tipo']) {
 }
 
 export function CaixaMovimentacoesTable({
+  unidadeId,
   movimentos,
   categorias,
   disabled = false,
@@ -156,6 +159,7 @@ export function CaixaMovimentacoesTable({
           </DialogHeader>
           {movimentoEditando && (
             <CaixaMovimentacaoForm
+              unidadeId={unidadeId}
               title="Dados da movimentacao"
               description="Revise o lancamento e salve a alteracao."
               submitLabel="Salvar alteracoes"

@@ -61,7 +61,17 @@ test('sem identidade nao bloqueia: cego e aviso, nao erro', () => {
   );
   const submit = form.match(/async function handleSubmit[\s\S]*?\n {2}\}/)?.[0] ?? '';
   assert.notEqual(submit, '', 'handleSubmit nao encontrado');
-  assert.doesNotMatch(submit, /fatura|aluno/i, 'submit nao pode recusar por falta de identidade');
+
+  // Nenhuma das recusas do submit pode falar de fatura/aluno: falta de identidade nao
+  // e erro de preenchimento. O submit pode LER a fatura (resolve a FK antes de salvar);
+  // o que ele nao pode e voltar sem salvar por causa dela.
+  const recusas = submit.match(/setErro\(\{[\s\S]*?\}\);/g) ?? [];
+  assert.ok(recusas.length > 0, 'nenhuma validacao encontrada no submit');
+  for (const recusa of recusas) {
+    assert.doesNotMatch(recusa, /fatura|aluno|identidade/i);
+  }
+  assert.match(submit, /await onSubmit\(\{/, 'submit precisa chegar no onSubmit');
+  assert.doesNotMatch(submit, /if \(!faturaEscolhida\)[\s\S]{0,60}return;/);
 });
 
 test('o tipo do insert carrega fatura_id e aluno_id', () => {
@@ -90,4 +100,27 @@ test('o formulario oferece o seletor de fatura na entrada que pede identidade', 
   assert.match(form, /exigeIdentidade/);
   assert.match(form, /faturaId/);
   assert.match(form, /alunoId/);
+});
+
+// Sem unidadeId o seletor nao busca nada e o campo nasce morto: a tela existiria e a
+// identidade continuaria em branco. Aconteceu ao ligar — o patch foi pulado porque o
+// arquivo ja tinha `unidadeId={unidadeId}` para OUTRO componente, e nada acusou.
+test('a unidade chega no formulario e na tabela de edicao', () => {
+  const tab = readFileSync(
+    new URL('../src/components/App/Administrativo/CaixaFinanceiro/CaixaFinanceiroTab.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(tab, /<CaixaMovimentacaoForm\n\s+unidadeId=\{unidadeId\}/);
+  assert.match(tab, /<CaixaMovimentacoesTable\n\s+unidadeId=\{unidadeId\}/);
+});
+
+// A tabela recebe e repassa: sem isso a edicao de uma linha cega continuaria cega, que
+// e justamente onde os 15 lancamentos sem identidade de setembro seriam consertados.
+test('a tabela repassa a unidade para o formulario de edicao', () => {
+  const tabela = readFileSync(
+    new URL('../src/components/App/Administrativo/CaixaFinanceiro/CaixaMovimentacoesTable.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(tabela, /unidadeId\?: string \| null;/);
+  assert.match(tabela, /<CaixaMovimentacaoForm\n\s+unidadeId=\{unidadeId\}/);
 });

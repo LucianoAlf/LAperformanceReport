@@ -410,6 +410,7 @@ export function CaixaFinanceiroTab({
 
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
             <CaixaMovimentacoesTable
+              unidadeId={unidadeId}
               movimentos={movimentos}
               categorias={categorias}
               disabled={saving || caixaFechado}
@@ -433,6 +434,7 @@ export function CaixaFinanceiroTab({
               }}
             />
             <CaixaMovimentacaoForm
+              unidadeId={unidadeId}
               disabled={saving || caixaFechado}
               saving={saving}
               categorias={categorias}
