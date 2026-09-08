@@ -5,6 +5,7 @@ import test from 'node:test';
 import {
   buildExportRows,
   buildManifest,
+  sha256,
   validateCompetencia,
 } from '../supabase/functions/_shared/contasReceberExport.ts';
 import { prepararExportacaoInadimplenciaCanonica } from '../supabase/functions/_shared/inadimplenciaCanonicaExport.ts';
@@ -278,4 +279,60 @@ test('exportacao canonica rejeita source_missing em vez de transforma-lo em cobr
     }),
     /leitura canonica indisponivel/i,
   );
+});
+
+test('manifesto separa linhas vivas das ausentes na origem', async () => {
+  const rows = await buildExportRows({ faturas, alunos, cursos });
+  const manifest = await buildManifest('2026-07-01', rows);
+
+  // A fixture tem uma fatura viva (CG) e uma que a origem nao devolve mais (REC).
+  assert.equal(manifest.total_linhas, 2);
+  assert.equal(manifest.total_linhas_vivas, 1);
+  assert.equal(manifest.total_linhas_ausentes, 1);
+  assert.equal(manifest.source_missing.total, 1);
+  assert.deepEqual(manifest.source_missing.por_motivo, [
+    { motivo: 'nao_confirmada_na_origem_nesta_competencia', linhas: 1 },
+  ]);
+
+  // O dinheiro tambem precisa do par: o total inclui a morta, o vivo nao.
+  assert.equal(manifest.total_valor_liquido, 521);
+  assert.equal(manifest.total_valor_liquido_vivo, 500);
+
+  const cg = manifest.por_unidade.find((unit) => unit.unidade === 'cg');
+  const rec = manifest.por_unidade.find((unit) => unit.unidade === 'rec');
+  assert.deepEqual(
+    [cg.linhas, cg.linhas_vivas, cg.linhas_ausentes],
+    [1, 1, 0],
+  );
+  assert.deepEqual(
+    [rec.linhas, rec.linhas_vivas, rec.linhas_ausentes],
+    [1, 0, 1],
+  );
+
+  // CANARIO: numa fixture que TEM linha ausente, os dois numeros precisam divergir.
+  // Se este assert passar por igualdade, a separacao virou decoracao e o gabarito do
+  // consumidor voltaria a ser conferido contra o total inflado pelas mortas.
+  assert.notEqual(
+    manifest.total_linhas,
+    manifest.total_linhas_vivas,
+    'total e vivas ficaram iguais com uma linha ausente na fixture: a distincao morreu',
+  );
+});
+
+test('manifest_hash cobre so a identidade das linhas, entao campos novos nao o movem', async () => {
+  const rows = await buildExportRows({ faturas, alunos, cursos });
+  const manifest = await buildManifest('2026-07-01', rows);
+
+  // Reconstrucao independente do hash a partir do contrato declarado: competencia mais as
+  // triplas de identidade. Um consumidor com prova de preflight registrada depende disso —
+  // se o hash passar a cobrir os agregados do manifesto, a prova dele morre a cada campo novo.
+  const esperado = await sha256({
+    competencia: '2026-07-01',
+    rows: rows.map((row) => ({
+      la_report_unidade_id: row.la_report_unidade_id,
+      emusys_fatura_id: row.emusys_fatura_id,
+      row_source_hash: row.row_source_hash,
+    })),
+  });
+  assert.equal(manifest.manifest_hash, esperado);
 });
