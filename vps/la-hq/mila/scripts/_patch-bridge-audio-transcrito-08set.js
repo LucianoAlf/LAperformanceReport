@@ -1,4 +1,21 @@
 #!/usr/bin/env node
+// 🔴 SUPERADO NO MESMO DIA — ESTE PATCH NÃO RESOLVE SOZINHO. Ver
+//    `_patch-audio-transcricao-vem-da-api-08set.js`.
+//
+//    A premissa abaixo ("o Chatwoot já transcreveu, a frase estava lá, pronta")
+//    é VERDADEIRA no GET da API e FALSA no webhook: o `push_event_data` do anexo
+//    não carrega `transcribed_text`. Eu validei lendo a mensagem 4548773 pela
+//    API, horas depois de ela chegar, e nunca conferi o que o evento entrega.
+//    Resultado: o patch subiu às 15:24 e os áudios das 16:56, 17:03 e 17:38
+//    continuaram dando `empty_content`.
+//
+//    A queda que ele acrescenta continua no código e é inofensiva — vale se um
+//    dia o Chatwoot passar a mandar o campo no evento. Mas o caminho que
+//    funciona é buscar na API.
+//
+//    Lição: testar no artefato errado. Mesma família de "código no disco não é
+//    código rodando".
+// ─────────────────────────────────────────────────────────────────────────────
 // A MILA PASSA A OUVIR ÁUDIO (08/09/2026).
 //
 // 🔴 O CASO: o Luciano mandou um áudio de 7s para a Mila às 12:19 e ela não
