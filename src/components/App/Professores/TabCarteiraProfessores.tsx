@@ -791,7 +791,7 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
                     <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-500/10 border border-sky-500/20 border-dashed whitespace-nowrap">
                       <Music2 className="w-3.5 h-3.5 text-sky-400" />
                       <span className="text-sm font-semibold text-sky-400">+{carteira.atividade_extra}</span>
-                      <span className="text-xs text-slate-400">não conta</span>
+                      <span className="text-xs text-slate-400">banda</span>
                     </div>
                   </Tooltip>
                 ) : (
@@ -981,7 +981,7 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
                                         <Tooltip content="Atividade extra: não entra na carteira, no MRR, no ticket, na média/turma nem no Health Score do professor.">
                                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-500/10 border border-sky-500/20 border-dashed text-[10px] font-medium text-sky-400 whitespace-nowrap">
                                             <Music2 className="w-3 h-3" />
-                                            não conta
+                                            Banda
                                           </span>
                                         </Tooltip>
                                       )}
