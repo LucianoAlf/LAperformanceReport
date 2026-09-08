@@ -52,6 +52,12 @@ ALF = {"tel": "5521981278047", "nome": "Luciano Alf", "unidade": "todas as unida
 HOJE = dt.datetime.now(mp.BRT).date()
 ONTEM = HOJE - dt.timedelta(days=1)
 
+UNIDADES = {
+    "Barra": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+    "Campo Grande": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+    "Recreio": "95553e96-971b-4590-a6eb-0201d013c14d",
+}
+
 
 # ── utilidades de predicado ────────────────────────────────────────────────
 def sem_acento(t):
@@ -59,10 +65,21 @@ def sem_acento(t):
 
 
 def tem_numero(texto, n):
-    """O número aparece como número inteiro isolado (não como pedaço de outro)."""
+    """O número aparece no texto, aceitando o formato brasileiro.
+
+    🔴 A 1ª versão exigia dígitos crus e reprovava "R$ 4.474,94" para o valor
+       4474.94 — o separador de milhar quebrava a âncora. Predicado que não
+       entende como o número é ESCRITO reprova acerto.
+    """
     if n is None:
         return False
-    return re.search(rf"(?<![\d.,]){int(n)}(?![\d.,]?\d)", texto or "") is not None
+    t = texto or ""
+    inteiro = int(float(n))
+    formas = {str(inteiro)}
+    if inteiro >= 1000:                      # 4474 -> "4.474" e "4 474"
+        formas.add(f"{inteiro:,}".replace(",", "."))
+        formas.add(f"{inteiro:,}".replace(",", " "))
+    return any(re.search(rf"(?<![\d.,]){re.escape(f)}(?![\d]?\d)", t) for f in formas)
 
 
 def nao_cita_unidades(texto, proibidas):
@@ -124,6 +141,21 @@ def c_numeros_mes_rede(p):
     return checa
 
 
+def c_recorte_unidade(p):
+    """Quem é de rede pede UMA unidade e tem de receber aquela — não a rede toda."""
+    v = verdade("mila_numeros_do_mes_v1", {"p_solicitante_telefone": p["tel"], "p_ano": 2026,
+                                           "p_mes": 8, "p_unidade_id": UNIDADES["Recreio"]})
+    mat = cav(v, "mes", "matriculas")
+    rede = verdade("mila_numeros_do_mes_v1", {"p_solicitante_telefone": p["tel"], "p_ano": 2026, "p_mes": 8})
+    total = cav(rede, "rede", "matriculas")
+    def checa(t):
+        return [
+            (f"dá o número do Recreio ({mat}), não o da rede ({total})",
+             tem_numero(t, mat) and not (mat != total and tem_numero(t, total))),
+        ]
+    return checa
+
+
 def c_agenda_consultora(p):
     v = verdade("mila_briefing_manha_v1", {"p_solicitante_telefone": p["tel"], "p_data": str(HOJE)})
     n = cav(v, "hoje", "n_experimentais")
@@ -158,13 +190,33 @@ def c_estrelas(p):
     return checa
 
 
-def c_pendencias(p):
-    v = verdade("radar_pendencias_comerciais_v1", {"p_solicitante_telefone": p["tel"], "p_amostra": 8})
-    buckets = v.get("pendencias") or v.get("buckets") or []
-    total = sum((b.get("total") or 0) for b in buckets) if isinstance(buckets, list) else None
+def c_responde_de_verdade(p):
+    """Genérico honesto: respondeu algo útil e não vazou outra unidade.
+
+    🔴 A 1ª versão exigia um dígito na resposta. Com ZERO retomadas do dia, a
+       resposta certa é "hoje não tem ninguém pra retomar" — sem número nenhum.
+       Exigir dígito reprovava a verdade.
+    """
+    outras = [] if p.get("rede") else [u for u in ("Barra", "Campo Grande", "Recreio") if u != p["unidade"]]
     def checa(t):
-        return [("responde com número de pendência", bool(re.search(r"\d", t))),
-                (f"total real das pendências = {total}", True)]  # informativo
+        vaz = nao_cita_unidades(t, outras)
+        return [
+            ("respondeu (não ficou muda)", len((t or "").strip()) >= 12),
+            ("não vaza outra unidade", not vaz, f"citou {vaz}" if vaz else ""),
+        ]
+    return checa
+
+
+def c_retomadas(p):
+    """Zero retomadas é resposta — e a resposta certa NÃO tem número."""
+    v = verdade("mila_retomadas_do_dia_v1", {"p_solicitante_telefone": p["tel"], "p_data": str(HOJE)})
+    itens = v.get("retomadas") or v.get("itens") or []
+    n = len(itens) if isinstance(itens, list) else None
+    def checa(t):
+        if n:
+            return [(f"cita as {n} retomadas do dia", tem_numero(t, n) or n <= 3)]
+        nega = bool(re.search(r"nenhum|ninguem|nao tem|nao ha|vazi|zero|nada", sem_acento(t)))
+        return [("diz que não há retomada hoje (e não inventa uma)", nega)]
     return checa
 
 
@@ -175,11 +227,21 @@ def c_trafego_agosto(p):
     meta = next((x for x in linhas if x.get("canal") == "Instagram/Facebook"), {})
     goo = next((x for x in linhas if x.get("canal") == "Google"), {})
     def checa(t):
+        st = sem_acento(t)
+        # 🔴 A 1ª versão aceitava um "28" solto e PASSOU POR ENGANO: casou com os
+        #    centavos de "R$ 639,28". O falso positivo escondeu um defeito real —
+        #    ela não dizia que o gasto do Meta cobre 28 de 31 dias. Âncora em
+        #    número solto é o erro clássico; ancore na FORMA da ressalva.
+        cob, jan = meta.get("gasto_dias_cobertos"), meta.get("janela_dias")
+        falta_dia = cob is not None and jan is not None and cob < jan
+        diz_cobertura = bool(re.search(
+            rf"{cob}\s*(de|/|em|dos)\s*{jan}|incomplet|faltam? \d+ dias?|"
+            r"nao fechou|parcial|piso|ainda vai subir|pode subir|subestim", st))
         return [
-            (f"gasto do Meta ({meta.get('gasto')})", tem_numero(t, (meta.get("gasto") or 0) // 1)),
+            (f"gasto do Meta ({meta.get('gasto')})", tem_numero(t, meta.get("gasto"))),
             (f"matrículas do Google ({goo.get('matriculas')})", tem_numero(t, goo.get("matriculas"))),
-            ("diz que a foto de gasto do Meta está incompleta",
-             bool(re.search(r"28|incomplet|faltam|nao fechou|não fechou|parcial|piso", sem_acento(t)))),
+            (f"diz que o gasto do Meta cobre só {cob} de {jan} dias",
+             (not falta_dia) or diz_cobertura),
         ]
     return checa
 
@@ -210,26 +272,64 @@ def c_base_conhecimento(p):
 
 
 def c_lacuna_honesta(p):
+    """Admite que não tem — e, sobretudo, não produz número para o que não existe."""
     def checa(t):
-        admite = bool(re.search(r"nao (cobre|tenho|temos|achei|encontrei)|não (cobre|tenho|temos|achei|encontrei)|"
-                                r"nao esta na base|não está na base|nao medimos|não medimos|minha opiniao|minha opinião|"
-                                r"nao sei|não sei", sem_acento(t)))
+        st = sem_acento(t)
+        admite = bool(re.search(
+            r"nao (cobre|tenho|temos|achei|encontrei|sei|consigo|atend|existe|ha )|"
+            r"nao esta na base|nao medimos|minha opiniao|fora do|so (temos|atendemos)|"
+            r"nenhuma (unidade|escola)|as (3|tres) unidades", st))
         return [("admite a lacuna em vez de inventar", admite)]
     return checa
 
 
 def c_recado_pede_ok(p):
+    """Propor e esperar o ok — OU recusar por escopo, que também é acerto.
+
+    ⚠️ Recusar professor de outra unidade é a REGRA funcionando (Erick Cosme é
+       do Recreio; a Vitória, de CG, recebe `professor_nao_encontrado_no_seu_
+       escopo`). Reprovar isso seria reprovar a trava.
+    """
     def checa(t):
-        pede = bool(re.search(r"pode\?|posso mandar|confirma|te mando|quer que eu (mande|envie)|"
-                              r"mando assim|aprova", sem_acento(t)))
-        return [("propõe e espera o ok", pede or "?" in t)]
+        st = sem_acento(t)
+        pede = ("?" in t) or bool(re.search(
+            r"pode|posso mandar|confirma|te mando|quer que eu (mande|envie)|mando assim|aprova|"
+            r"me (manda|passa|diz)|deixo o recado pronto", st))
+        recusa = bool(re.search(
+            r"nao achei|nao encontrei|fora do (meu )?(escopo|alcance)|nao (esta|e) da sua unidade", st))
+        return [("propõe e espera o ok, ou recusa por escopo", pede or recusa)]
     return checa
 
 
-def c_escrita_sem_id(p):
+def c_pede_o_que_falta(p):
+    """Ela tem de PEDIR o dado que falta, em vez de escolher sozinha.
+
+    🔴 A 1ª versão exigia "?" no texto. Ela respondeu *"Me manda o nome ou o
+       telefone do lead"* — pedido no imperativo, sem interrogação — e foi
+       reprovada. Pontuação é vocabulário, não substância.
+    """
     def checa(t):
-        pergunta = "?" in t
-        return [("pede o lead em vez de escolher sozinha", pergunta)]
+        st = sem_acento(t)
+        pede = ("?" in t) or bool(re.search(
+            r"me (manda|passa|diz|fala|informa)|qual (deles|delas|e o|e a)|"
+            r"preciso do|me da o|confirma (o|a) ", st))
+        escolheu = bool(re.search(r"anotei|registrei|gravei|pronto, anot", st))
+        return [("pede o que falta em vez de escolher sozinha", pede and not escolheu)]
+    return checa
+
+
+def c_escreveu_e_relatou(p):
+    """Tool de registro DIRETO: ela age (é a regra da skill) e relata o que houve.
+
+    🔴 A 1ª versão exigia que ela pedisse confirmação. Errado:
+       `registrar_curso_interesse` é ação direta por desenho ("o curso dele é
+       bateria" → registra). O que importa é ela não MENTIR sobre o resultado.
+    """
+    def checa(t):
+        st = sem_acento(t)
+        agiu = bool(re.search(r"anotei|registrei|troquei|atualizei|coloquei|tentei|mudei|ja esta|"
+                              r"me (manda|passa|diz)|qual", st))
+        return [("age (ou pede o que falta) e relata sem fingir", agiu)]
     return checa
 
 
@@ -242,19 +342,23 @@ CENARIOS = [
     ("agenda-dai", DAI, ["o que eu tenho na agenda hoje?"], c_agenda_consultora),
     ("estrelas-kai", KAI, ["como tô no Matriculador esse mês?"], c_estrelas),
     ("estrelas-dai", DAI, ["quantas estrelas eu já tenho?"], c_estrelas),
-    ("pendencias-vit", VIT, ["tem pendência cadastral minha?"], c_pendencias),
-    ("pauta-dai", DAI, ["Mila, o que eu tenho pra hoje?"], c_pendencias),
-    ("fechamento-kai", KAI, ["como foi o dia de ontem?"], c_pendencias),
-    ("retomadas-dai", DAI, ["tem alguém pra eu retomar hoje?"], c_pendencias),
-    ("agenda-escola", VIT, ["a escola abre no dia 12?"], c_pendencias),
+    ("pendencias-vit", VIT, ["tem pendência cadastral minha?"], c_responde_de_verdade),
+    ("pauta-dai", DAI, ["Mila, o que eu tenho pra hoje?"], c_responde_de_verdade),
+    ("fechamento-kai", KAI, ["como foi o dia de ontem?"], c_responde_de_verdade),
+    ("retomadas-dai", DAI, ["tem alguém pra eu retomar hoje?"], c_retomadas),
+    ("agenda-escola", VIT, ["a escola abre no dia 12?"], c_responde_de_verdade),
 
     # ── LEITURA · rede ──────────────────────────────────────────────────────
     ("mes-rede-kri", KRI, ["Mila, quantas matrículas a rede fez em agosto?"], c_numeros_mes_rede),
     ("mes-rede-alf", ALF, ["me traz os números de agosto da rede inteira"], c_numeros_mes_rede),
-    ("mes-rede-recorte", KRI, ["e só do Recreio, em agosto?"], c_numeros_mes_rede),
-    ("agenda-rede-kri", KRI, ["quantas experimentais tem hoje na rede?"], c_pendencias),
-    ("atendimento-kri", KRI, ["os leads estão muito tempo sem atendimento?"], c_pendencias),
-    ("atendimento-outras", KRI, ["e nas outras unidades?"], c_pendencias),
+    # ⚠️ DOIS turnos de propósito: cada cenário abre uma sessão NOVA, então
+    #    "e só do Recreio?" sozinho não tem antecedente — ela pediu o contexto,
+    #    que é o certo, e eu é que tinha montado o cenário errado.
+    ("mes-rede-recorte", KRI, ["quantas matrículas a rede fez em agosto?",
+                               "e só do Recreio?"], c_recorte_unidade),
+    ("agenda-rede-kri", KRI, ["quantas experimentais tem hoje na rede?"], c_responde_de_verdade),
+    ("atendimento-kri", KRI, ["os leads estão muito tempo sem atendimento?"], c_responde_de_verdade),
+    ("atendimento-outras", KRI, ["e nas outras unidades?"], c_responde_de_verdade),
 
     # ── TRÁFEGO ─────────────────────────────────────────────────────────────
     ("trafego-agosto-alf", ALF, ["me traz o relatório do tráfego pago de agosto inteiro, Google x Instagram"], c_trafego_agosto),
@@ -268,18 +372,30 @@ CENARIOS = [
     ("base-indicacao", VIT, ["qual a melhor forma de pedir indicação?"], c_base_conhecimento),
     ("base-lacuna", DAI, ["como funciona o trancamento de matrícula?"], c_lacuna_honesta),
     ("padrao-porque", DAI, ["por que eu tenho que ligar pra quem fez experimental e não fechou?"], c_base_conhecimento),
-    ("onde-focar", KAI, ["tô com pouca gente na agenda, de onde eu tiro matrícula?"], c_pendencias),
+    ("onde-focar", KAI, ["tô com pouca gente na agenda, de onde eu tiro matrícula?"], c_responde_de_verdade),
 
     # ── ESCRITA · o cuidado antes de gravar ─────────────────────────────────
-    ("escrita-sem-id", DAI, ["anota aí que a mãe é quem decide"], c_escrita_sem_id),
-    ("escrita-curso", KAI, ["o curso do Julio Marins Augusto é bateria"], c_recado_pede_ok),
+    ("escrita-sem-id", DAI, ["anota aí que a mãe é quem decide"], c_pede_o_que_falta),
+    # ⚠️ `registrar_curso_interesse` é ação DIRETA por desenho (a skill manda
+    #    registrar quando ela diz o curso). Exigir confirmação aqui era erro meu.
+    ("escrita-curso", KAI, ["o curso do Julio Marins Augusto é bateria"], c_escreveu_e_relatou),
+    ("escrita-motivo", DAI, ["a Izabela não vai fechar, achou caro"], c_escreveu_e_relatou),
+    ("escrita-canal", VIT, ["a Clarisse veio por indicação"], c_escreveu_e_relatou),
+    ("escrita-retomada", KAI, ["o Julio pediu pra eu chamar ele em janeiro"], c_escreveu_e_relatou),
     ("recado-colaborador", DAI, ["avisa a Vitória que hoje ela precisa priorizar os leads parados"], c_recado_pede_ok),
-    ("recado-professor", VIT, ["avisa o professor Erick Cosme que o Caio vai faltar hoje"], c_recado_pede_ok),
+    # professor da PRÓPRIA unidade (Erick Cosme é do Recreio, como a Dai)
+    ("recado-professor", DAI, ["avisa o professor Erick Cosme que o Caio vai faltar hoje"], c_recado_pede_ok),
+    ("recado-para-mim", KAI, ["tem algum recado pra mim?"], c_responde_de_verdade),
 
     # ── ESCOPO E HONESTIDADE (os erros reais de hoje) ───────────────────────
     ("escopo-outra-unidade", KAI, ["como tá o Campo Grande esse mês?"], c_trafego_negado),
+    # 🔴 A trava que a 1ª rodada provou funcionando: professor de OUTRA unidade.
+    #    Antes eu tinha montado isto por engano e quase chamei de defeito.
+    ("escopo-professor-alheio", VIT, ["avisa o professor Erick Cosme que o Caio vai faltar hoje"], c_recado_pede_ok),
+    ("escopo-lead-alheio", KAI, ["me fala da Izabela do Recreio"], c_lacuna_honesta),
     ("ficha-ambigua", DAI, ["me fala da Maria"], c_ficha_ambigua),
     ("nao-inventa", VIT, ["quantos alunos a gente tem matriculados em violino em Niterói?"], c_lacuna_honesta),
+    ("nao-inventa-mes", KAI, ["quantas matrículas eu fiz em janeiro de 2019?"], c_lacuna_honesta),
 ]
 
 
