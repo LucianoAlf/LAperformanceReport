@@ -47,6 +47,14 @@ done
 # secret devolvia 0. Capturamos antes e restauramos depois, igual ao carimbo.
 _DRY_PEDIDO="${MILA_GESTAO_DRY_RUN:-}"
 _CARIMBO="${MILA_SOLICITANTE_TELEFONE:-${MILA_CONSULTOR_TELEFONE:-}}"
+# 🔴 Carimbo que nao e telefone NAO e carimbo (08/09/2026). O bloco `env:` do
+#    config.yaml interpola ${VAR}; sem a variavel (perfil raiz por cron/Telegram)
+#    o que chega pode ser vazio OU a literal "${MILA_CONSULTOR_TELEFONE}". Lixo
+#    aqui faz `governanca.quem_eh` nao resolver ninguem, e `toolsVisiveis()`
+#    devolve lista VAZIA com QUEM nulo: o agente ficaria mudo, sem nenhuma tool,
+#    e sem dizer por que. Melhor cair no fallback conhecido do que num carimbo
+#    invalido.
+if [[ ! "$_CARIMBO" =~ ^[0-9]{10,15}$ ]]; then _CARIMBO=""; fi
 if [[ "${MILA_CARIMBO_OBRIGATORIO:-0}" == "1" && -z "$_CARIMBO" ]]; then
   echo "carimbo ausente (MILA_CARIMBO_OBRIGATORIO=1): recusando iniciar sem saber quem pergunta" >&2
   exit 1
