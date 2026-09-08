@@ -4,7 +4,7 @@ import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import {
   Users, Wallet, TrendingUp, GraduationCap, Baby, School,
   ChevronDown, ChevronRight, Search, ArrowUpDown, Eye,
-  Loader2, Calendar, Clock, AlertTriangle, Heart, Lock
+  Loader2, Calendar, Clock, AlertTriangle, Heart, Lock, Music2
 } from 'lucide-react';
 import { KPICard } from '@/components/ui/KPICard';
 import { Button } from '@/components/ui/button';
@@ -68,6 +68,11 @@ interface CarteiraProfessor {
   health_score_motivo: string | null;
   // Trancados sao exibidos a parte: nunca somam em total_alunos, mrr, ticket ou media/turma.
   total_trancados: number | null;
+  // Atividade extra (banda, Power Kids, GarageBand, Percussion Kids) segue a MESMA
+  // regra dos trancados: aparece, mas nunca soma em total_alunos, MRR, ticket,
+  // media/turma ou Health Score. Regra 7.1, confirmada pelo Luciano em 2026-09-08.
+  atividade_extra?: number;
+  atividades_extras?: { curso: string; alunos: number }[];
 }
 
 interface Props {
@@ -177,6 +182,15 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
           .select('professor_id, cursos:curso_id (nome)')),
         // Contagem de alunos trancados por professor - exibicao a parte, nunca soma na contagem de ativos.
         consultarSupabaseOpcional(supabase.rpc('get_contagem_trancados_professores', rpcParams)),
+        // Composicao da carteira: quantos sao de atividade extra. Fonte unica no
+        // banco - nao recalcular a separacao aqui, senao a tela diverge do relatorio.
+        consultarSupabaseOpcional(supabase.rpc('get_carteira_professor_periodo_composicao_v1', {
+          p_ano: ano,
+          p_mes: mes,
+          p_unidade_id: unidadeAtual !== 'todos' ? unidadeAtual : null,
+          p_data_inicio: competencia.range.startDate,
+          p_data_fim: competencia.range.endDate,
+        })),
       ]);
       const carteiraResult = await carteiraPromise;
       if (carteiraResult.error) throw carteiraResult.error;
@@ -201,6 +215,7 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
         unidadesResult,
         cursosRelResult,
         trancadosResult,
+        composicaoResult,
       ] = await complementaresPromise;
       // Nenhum enriquecimento pode apagar a carteira contratual já renderizada.
       // Quando uma dessas consultas falha, usamos os dados disponíveis na RPC
@@ -313,9 +328,37 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
         mediaTurmaDisponivel: false,
       });
 
+      // Composicao da carteira. No Consolidado o mesmo professor aparece uma vez
+      // por unidade: somamos os contadores e fundimos o detalhe por curso.
+      const composicaoPorProfessor = new Map<number, { extra: number; detalhe: { curso: string; alunos: number }[] }>();
+      (composicaoResult.data || []).forEach((row: any) => {
+        const professorId = Number(row.professor_id);
+        const atual = composicaoPorProfessor.get(professorId) || { extra: 0, detalhe: [] };
+        atual.extra += Number(row.carteira_atividade_extra ?? 0);
+        const detalheLinha = Array.isArray(row.atividades_extras) ? row.atividades_extras : [];
+        detalheLinha.forEach((item: any) => {
+          const curso = String(item?.curso ?? 'Atividade extra');
+          const alunos = Number(item?.alunos ?? 0);
+          const existente = atual.detalhe.find((d) => d.curso === curso);
+          if (existente) existente.alunos += alunos;
+          else atual.detalhe.push({ curso, alunos });
+        });
+        composicaoPorProfessor.set(professorId, atual);
+      });
+      const carteirasComComposicao = carteirasCalculadas.map((carteira) => ({
+        ...carteira,
+        atividade_extra: composicaoPorProfessor.get(carteira.id)?.extra ?? 0,
+        atividades_extras: composicaoPorProfessor.get(carteira.id)?.detalhe ?? [],
+      }));
+
       // A Carteira canônica é utilizável imediatamente. O enriquecimento de
       // Health Score V3 é complementar e não bloqueia a página se expirar.
-      const carteirasComAlunos = carteirasCalculadas.filter(c => c.total_alunos > 0);
+      // ⚠️ Quem só dá atividade extra CONTINUA na lista, com 0 na carteira e o
+      // bloco de extra preenchido. Some-lo seria esconder professor que atende
+      // alunos de verdade — a decisão é sinalizar, não esconder (§9.2).
+      const carteirasComAlunos = carteirasComComposicao.filter(
+        c => c.total_alunos > 0 || (c.atividade_extra ?? 0) > 0,
+      );
       if (requisicaoId !== requisicaoAtivaRef.current) return;
       setCarteiras(carteirasComAlunos);
       const indisponibilidades = [
@@ -628,12 +671,13 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
       {/* Lista de Professores (Accordion) */}
       <div data-tour="professores-carteira-tabela" className="bg-slate-800/50 rounded-2xl border border-slate-700/50 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1024px]">
+          <table className="w-full min-w-[1140px]">
             <thead className="sticky top-0 z-20 bg-slate-900/95 backdrop-blur">
               <tr className="border-b border-slate-700">
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-400">Professor</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Alunos</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Trancados</th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Atividade extra</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">MRR</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Ticket</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Média/Turma</th>
@@ -712,6 +756,24 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
                   </Tooltip>
                 )}
                 {carteira.total_trancados === 0 && <span className="text-sm text-slate-500">—</span>}
+              </td>
+              <td className="px-2 py-3 text-center align-middle">
+                {/* Atividade extra - exibicao a parte, NAO soma no badge de Alunos */}
+                {(carteira.atividade_extra ?? 0) > 0 ? (
+                  <Tooltip content={`Banda, Power Kids, GarageBand ou Percussion Kids${
+                    carteira.atividades_extras?.length
+                      ? ': ' + carteira.atividades_extras.map((d) => `${d.alunos} ${d.curso}`).join(', ')
+                      : ''
+                  }. Não contam em Alunos, MRR, Ticket, Média/Turma nem no Health Score.`}>
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-500/10 border border-sky-500/20 border-dashed whitespace-nowrap">
+                      <Music2 className="w-3.5 h-3.5 text-sky-400" />
+                      <span className="text-sm font-semibold text-sky-400">+{carteira.atividade_extra}</span>
+                      <span className="text-xs text-slate-400">não conta</span>
+                    </div>
+                  </Tooltip>
+                ) : (
+                  <span className="text-sm text-slate-500">—</span>
+                )}
               </td>
               <td className="px-2 py-3 text-center align-middle">
                 {/* Badge MRR */}
@@ -818,7 +880,7 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
             {/* Conteúdo Expandido - Tabela de Alunos */}
             {expandido === carteira.id && (
               <tr className="bg-slate-900/30">
-                <td colSpan={8} className="p-0">
+                <td colSpan={9} className="p-0">
               <div className="border-t border-slate-700/50 p-4">
                 {loadingAlunos ? (
                   <div className="flex items-center justify-center py-8">
@@ -927,7 +989,7 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
 
         {carteirasFiltradas.length === 0 && (
           <tr>
-            <td colSpan={8} className="text-center py-12 text-slate-400">
+            <td colSpan={9} className="text-center py-12 text-slate-400">
             <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
             <p>Nenhum professor encontrado com os filtros aplicados</p>
             </td>
