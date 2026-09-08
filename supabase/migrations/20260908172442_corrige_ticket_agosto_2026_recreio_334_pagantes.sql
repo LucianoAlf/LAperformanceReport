@@ -1,4 +1,5 @@
 -- Corrige o fechamento financeiro de agosto/2026 do Recreio.
+-- Versao registrada no ledger remoto: 20260908172442.
 --
 -- A retificacao academica de 05/09 recompôs nove alunos cuja saida efetiva
 -- ocorreu em setembro e fechou agosto com 344 ativos e 334 pagantes. A
