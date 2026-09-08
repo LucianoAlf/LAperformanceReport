@@ -178,10 +178,41 @@ const LEITURA = [
   { name: 'retomadas_do_dia',
     description: 'O BUMERANGUE. Quem pediu para ser procurado de volta e o dia chegou — com a FRASE que a pessoa disse e ha quantos dias. Use no comeco do dia e quando ela perguntar "tem alguem para eu retomar?". 🔴 SEMPRE cite `ele_disse` e a data: "a Juliana te disse em 12/06 que voltaria a falar em setembro porque o filho estava em prova". Lembrete sem a frase ela ignora. `sem_data` sao os que combinaram algo vago ("depois das ferias") — ofereca marcar um dia.',
     inputSchema: { type: 'object', properties: { data: { type: 'string', description: 'YYYY-MM-DD (padrao hoje).' } } } },
+  { name: 'agenda_da_escola',
+    description: 'A ESCOLA ABRE? Responde se ha expediente num dia ou num intervalo — cobre FERIADO, RECESSO ESCOLAR e ponte. Use sempre que perguntarem "amanha tem aula?", "a escola abre no feriado?", "tem aula na semana que vem?", ou antes de prometer qualquer coisa marcada para uma data. Devolve por dia: aulas_vivas, tipico (o normal daquele dia da semana) e situacao (normal | expediente_reduzido | sem_expediente | desconhecido). 🔴 `tem_expediente: null` quer dizer NAO SEI (data alem do horizonte da grade) — NUNCA leia como fechado e nunca anuncie feriado com base nisso; diga que nao consegue ver tao longe. ⚠️ A fonte e a GRADE de aulas, nao um calendario cadastrado: por isso ela sabe de recesso e ponte tambem, mas nao sabe o NOME do feriado — nao invente o motivo, diga apenas que nao ha aula.',
+    inputSchema: { type: 'object', properties: {
+      de: { type: 'string', description: 'YYYY-MM-DD (padrao hoje).' },
+      ate: { type: 'string', description: 'YYYY-MM-DD (padrao = igual a "de"). Use para varrer a semana.' } } } },
+];
+
+// ── A BASE DE CONHECIMENTO COMERCIAL ────────────────────────────────────────
+// ⚠️ Array PROPRIO, e nao dentro de LEITURA, porque a visibilidade e outra: e
+//    material de VENDA. Quem nao e do comercial nem da diretoria nao ve nem a
+//    tool — mesmo padrao do TRAFEGO. O gate de conteudo continua no servidor
+//    (a RPC decide pelo telefone); este aqui e a segunda
+//    linha, nao a unica. Duas travas, e a de fora nao substitui a de dentro.
+const BASE_COMERCIAL = [
+  { name: 'consultar_base_comercial',
+    description: 'A BASE DE CONHECIMENTO DO COMERCIAL — como a LA vende, escrito e aprovado pelo Alf. Use SEMPRE que for orientar COMO fazer: conduzir conversa com lead, passar preco, tratar objecao, conduzir experimental e Tour, pedir indicacao, retomar quem sumiu, chamar ex-aluno de volta. E tambem quando ela perguntar "como eu faco isso?", "o que eu falo?", "qual a melhor forma?". 🔴 CITE O BLOCO E A VERSAO ("no bloco 1, Bumerangue v0.4, a regua de preco diz...") — orientacao sem fonte e opiniao, e opiniao nao e o que ela pediu. Se `envelhecido` for true, diga que o bloco venceu a revisao. 🔴 A BUSCA E POR PALAVRA E SEMPRE DEVOLVE BLOCOS, inclusive quando NENHUM serve — voltar com 3 blocos NAO significa que a base cobre o assunto. LEIA o conteudo antes de usar: se o bloco nao responde a pergunta que te fizeram, diga com todas as letras que a base ainda nao cobre isso, rotule o que voce disser como opiniao sua, e chame registrar_lacuna_base NO MESMO TURNO. O campo motivo_vazio so acende no caso raro de nada casar; nao espere por ele. 📅 SE VIER O CAMPO `contexto` (so aparece para quem lidera): ele traz o dia do mes, o mes e os TITULOS dos blocos de ritmo (campanha, corridinha, calendario). Quando a pergunta for sobre o MES — "como a gente ataca setembro", "comecou o mes", "o que fazer agora" — RITMO VEM ANTES DE FUNIL: fale de campanha e calendario primeiro, citando esses blocos, e so depois de bumerangue/experimental/indicacao. A busca e por palavra e nao leva sozinha a esses blocos; e por isso que o campo existe. E sobre `campanha_do_mes`: o sistema NAO sabe se existe uma — PERGUNTE se ja definiram, nunca afirme que falta. ⚠️ O que cada pessoa alcanca e decidido no servidor pelo telefone — nunca comente que existe material que ela nao pode ver.',
+    inputSchema: { type: 'object', properties: {
+      situacao: { type: 'string', description: 'A situacao em palavras suas: "lead pediu preco e sumiu", "vou pensar depois do Tour", "familia com 2 filhos quer desconto". Vazio = os primeiros blocos disponiveis.' },
+      limite: { type: 'integer', description: '1 a 3 blocos (padrao 3).' } } } },
+  { name: 'registrar_eficacia',
+    description: 'FECHA O LACO. Registra o que uma estrategia RENDEU depois de executada — e assim a proxima vez que ela aparecer eu ja sei se funcionou. Use quando quem lidera contar o resultado de uma campanha, corridinha ou acao ("a corridinha deu 8 matriculas"). 🔴 O rotulo e obrigatorio e muda o sentido: observado = aconteceu junto · atribuido = ha razao para ligar · incremental = tem COMPARADOR (mesmo mes do ano passado, ou as unidades que nao fizeram). Sem comparador eu NAO registro como incremental — pergunto contra o que. Nunca diga que a acao CAUSOU o numero se o rotulo for observado.',
+    inputSchema: { type: 'object', required: ['codigo', 'resultado', 'rotulo'], properties: {
+      codigo: { type: 'string', description: 'Codigo da estrategia (EC1, EC5...). Se nao souber, use onde_focar antes.' },
+      resultado: { type: 'string', description: 'O que aconteceu, com numero.' },
+      rotulo: { type: 'string', description: 'observado | atribuido | incremental' },
+      comparador: { type: 'string', description: 'Contra o que. Obrigatorio se rotulo=incremental.' } } } },
+  { name: 'registrar_lacuna_base',
+    description: 'Avisa que a base NAO tinha resposta para uma situacao real. Use quando consultar_base_comercial voltar vazio ou quando o material nao resolveu o caso concreto. Vira fila de escrita — e assim a base cresce a partir do que acontece de verdade, nao do que alguem imaginou. Nao serve para reclamar de sistema nem para pedido de funcionalidade.',
+    inputSchema: { type: 'object', required: ['o_que_faltou'], properties: {
+      situacao: { type: 'string', description: 'O caso que apareceu.' },
+      o_que_faltou: { type: 'string', description: 'O que a base deveria dizer e nao diz.' } } } },
 ];
 const TRAFEGO = [
   { name: 'trafego_por_canal',
-    description: 'DIRETORIA. Desempenho por canal (Instagram, Google, Indicação, Visita...): leads, agendamentos, matrículas, gasto, custo por lead e por matrícula, retorno em LTV. `gasto` NULL com gasto_dias_cobertos=0 = NÃO SEI (nunca "de graça"). Canal orgânico não tem mídia — diga "sem mídia", não "custo zero". Use p_dias=30/p_maturidade=0 para o mês corrente (imaturo) e 180/35 para coorte madura.',
+    description: 'DIRETORIA. Desempenho por canal: leads, agendamentos, matrículas, gasto, custo por lead e por matrícula, retorno em LTV. 🔴 SEMPRE que citar `custo_matricula` ou `conv_pct`, diga na MESMA frase quantos leads ainda não tiveram tempo: o campo `leads_imaturos` conta os criados há menos de `dias_p50_ate_converter` dias (a mediana medida entre o lead pago chegar e virar matrícula). Com imaturos relevantes, `custo_matricula` é um **TETO que ainda vai cair**, nunca "o custo" — em 08/09 ela disse "R$ 1.185 por matrícula" com 109 de 467 leads sem chance de converter, e o Alf respondeu "tá errado". 🔴 NÃO ranqueie canal por conversão com pouca matrícula (4 contra 3 é ruído, não resultado) — diga que a diferença ainda não separa. ⚠️ Os canais vêm agrupados por VERBA, e é assim que deve ser lido: `Instagram/Facebook` é UMA linha porque é uma conta só do Meta (o gasto é indivisível na fonte), e `Site` entra no `Google` (é a landing page da campanha — regra do Alf, 03/09). Não desagregue nem "corrija" isso: dois canais cobrando da mesma plataforma foi o que duplicou o gasto até 08/09. ⚠️ `gasto` NULL com `gasto_dias_cobertos`=0 = NÃO SEI (nunca "de graça"); canal orgânico é "sem mídia", não "custo zero"; e se `gasto_dias_cobertos` < `janela_dias`, diga que a foto de gasto está incompleta. Use dias=30/maturidade=0 para o mês corrente e 180/35 para coorte madura.',
     inputSchema: { type: 'object', properties: { dias: { type: 'integer' }, maturidade_dias: { type: 'integer' } } } },
   { name: 'trafego_por_criativo',
     description: 'DIRETORIA. Funil por criativo do Meta: gasto → conversa → lead → AGENDAMENTO → experimental → matrícula. Ranqueie por custo de AGENDAMENTO, não por custo de conversa (é o que inverte o ranking). Se cohort_madura=false, avise que o número ainda vai mudar.',
@@ -248,14 +279,26 @@ const ESCRITA = [
   { name: 'enviar_recado',
     description: 'ENVIA o recado que ela ACABOU de aprovar. So chame depois de um "pode", "manda", "isso mesmo" — nunca por conta propria, nunca no mesmo turno em que voce propos. Use o recado_id que veio de propor_recado.',
     inputSchema: { type: 'object', required: ['recado_id'], properties: { recado_id: { type: 'string' } } } },
+  { name: 'resolver_conversa',
+    description: 'ESCREVE NO CHATWOOT. Marca a conversa de um lead como RESOLVIDA. 🔴 Use SOMENTE quando a pessoa PEDIR ("pode fechar", "marca como resolvida", "ja acabou esse") — NUNCA por conta propria. O aberta/resolvida e a declaracao dela sobre o proprio trabalho: ela deixa aberto so o que ainda da pra resgatar, e e desse sinal que a pauta do dia depende. Fechar sozinha destruiria justamente o que a gente passou a ler. ⚠️ PECA O MOTIVO NO MESMO TURNO e registre com registrar_motivo_perda — fechar sem motivo so troca um buraco por outro: sai da lista de cobranca e volta amanha como "conversa encerrada e o motivo nao foi registrado". Se ela disser que quer ser procurada mais pra frente, use registrar_retomada com a frase dela em vez de fechar.',
+    inputSchema: { type: 'object', required: ['lead_id'], properties: {
+      lead_id: { type: 'integer', description: 'O lead cuja conversa deve ser fechada.' } } } },
   { name: 'anotar_lead',
     description: 'ESCREVE. Anota uma informação no lead (contexto que hoje se perde: "prefere manhã", "mãe decide", "vem com o irmão"). Faz APPEND com data e autor — nunca substitui o que já estava.',
     inputSchema: { type: 'object', required: ['lead_id', 'texto'], properties: { lead_id: { type: 'integer' }, texto: { type: 'string' } } } },
 ];
 
+// Quem alcanca a base comercial: o time de venda e a diretoria. Espelha a
+// regra que `mila_base_comercial_v1` aplica no servidor — se as duas divergirem,
+// vale a de dentro, e esta aqui so some com a tool da lista.
+const veBaseComercial = () => !!QUEM
+  && (String(QUEM.departamento || '').toLowerCase() === 'comercial'
+      || String(QUEM.nivel || '').toLowerCase() === 'diretoria');
+
 function toolsVisiveis() {
   if (!QUEM) return [];
-  return [...LEITURA, ...(veTudo() ? TRAFEGO : []), ...ESCRITA];
+  return [...LEITURA, ...(veBaseComercial() ? BASE_COMERCIAL : []),
+          ...(veTudo() ? TRAFEGO : []), ...ESCRITA];
 }
 
 async function callTool(name, a) {
@@ -295,6 +338,30 @@ async function callTool(name, a) {
       return j(await rpc('mila_numeros_do_mes_v1', { p_solicitante_telefone: tel, ...(a.ano ? { p_ano: a.ano } : {}), ...(a.mes ? { p_mes: a.mes } : {}) }));
     case 'retomadas_do_dia':
       return j(await rpc('mila_retomadas_do_dia_v1', { p_solicitante_telefone: tel, ...(a.data ? { p_data: a.data } : {}) }));
+    case 'agenda_da_escola':
+      // ⚠️ Sem p_unidade_id: feriado nacional fecha as tres. Unidade so
+      //    importaria para fechamento isolado (obra, falta de luz), e ai a
+      //    pergunta e outra.
+      return j(await rpc('escola_agenda_v1', {
+        ...(a.de ? { p_de: a.de } : {}), ...(a.ate ? { p_ate: a.ate } : {}), p_unidade_id: null }));
+    case 'consultar_base_comercial':
+      // ⚠️ `p_origem` NAO esta no inputSchema de proposito: quem declara se isto
+      //    e ensaio e o processo (DRY), nunca o modelo. Sem isso a suite de
+      //    sombra, que usa telefone real de consultora, entraria no log como
+      //    uso de producao e inflaria a medicao de adocao da base.
+      return j(await rpc('mila_base_comercial_v1', { p_solicitante_telefone: tel,
+        ...(a.situacao ? { p_situacao: a.situacao } : {}), ...(a.limite ? { p_limite: a.limite } : {}),
+        p_origem: DRY ? 'ensaio' : 'producao' }));
+    case 'registrar_eficacia':
+      if (DRY) return j({ ok: true, dry_run: true, recado: 'ensaio: eficacia nao gravada' });
+      return j(await rpc('mila_registrar_eficacia_v1', { p_solicitante_telefone: tel,
+        p_codigo_estrategia: a.codigo, p_resultado: a.resultado, p_rotulo: a.rotulo,
+        ...(a.comparador ? { p_comparador: a.comparador } : {}) }));
+    case 'registrar_lacuna_base':
+      // ⚠️ Escrita: respeita o DRY_RUN do perfil de sombra como as outras.
+      if (DRY) return j({ ok: true, dry_run: true, recado: 'ensaio: lacuna nao gravada' });
+      return j(await rpc('mila_registrar_lacuna_base_v1', { p_solicitante_telefone: tel,
+        p_situacao: a.situacao || null, p_o_que_faltou: a.o_que_faltou }));
     case 'pendencias_comerciais':
       return j(await rpc('radar_pendencias_comerciais_v1', { p_solicitante_telefone: tel, p_amostra: a.amostra || 8 }));
     case 'o_que_aprendemos':
@@ -391,6 +458,22 @@ _${ap.de} me pediu para te avisar. Pode me responder por aqui que eu levo a resp
         return j({ ok: false, entregue: false, motivo: String(e.message || e),
                    nota: 'o retorno nao saiu — diga isso, nao finja que levou' });
       }
+    }
+    case 'resolver_conversa': {
+      if (DRY) return j({ ok: true, dry_run: true, recado: 'ensaio: conversa nao foi fechada' });
+      // ⚠️ O id da conversa vem do ESPELHO, nao do modelo: pedir o
+      //    conversation_id como argumento deixaria o modelo escolher qual
+      //    conversa fechar, e errar ali fecha a conversa de outra pessoa.
+      const r = await rpc('mila_conversa_do_lead_v1', { p_solicitante_telefone: tel, p_lead_id: a.lead_id });
+      if (!r?.ok) return j(r || { ok: false, motivo: 'sem_resposta' });
+      if (r.ja_resolvida) return j({ ok: true, ja_estava: true, conversation_id: r.conversation_id,
+        recado: 'Essa conversa ja estava resolvida — nao mexi. ' +
+                (r.motivo_registrado ? 'E o motivo ja esta registrado.'
+                                     : 'So falta o motivo: me diz em uma palavra o que houve.') });
+      const convId = r.conversation_id;
+      await cw('POST', `/conversations/${convId}/toggle_status`, { status: 'resolved' });
+      return j({ ok: true, conversation_id: convId,
+        recado: 'Conversa marcada como resolvida. Agora me diz em uma palavra o que houve, que eu registro o motivo.' });
     }
     case 'anotar_lead':
       return escrita('mila_anotar_lead_v1', { p_solicitante_telefone: tel, p_lead_id: a.lead_id, p_texto: a.texto });
