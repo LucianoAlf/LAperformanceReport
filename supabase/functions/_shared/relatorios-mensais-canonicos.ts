@@ -1,3 +1,8 @@
+// A classificacao mora em _shared porque o relatorio Gerencial com IA publica o mesmo
+// numero: enquanto cada um classificava por conta propria, o Gerencial saiu com 37
+// saidas onde este aqui ja dizia 29.
+import { classificarSaida, entraNoTotal } from "./composicao-saidas-mensais.ts";
+
 type JsonObject = Record<string, unknown>;
 
 const LINHA = "━━━━━━━━━━━━━━━━━━━━━━";
@@ -208,16 +213,6 @@ function linhasMeta(
   ];
 }
 
-function classificarEvasao(item: JsonObject): string {
-  const tipo = String(item.tipo_evasao ?? "").trim().toLocaleLowerCase("pt-BR");
-  if (tipo.includes("nao_renov") || tipo.includes("não_renov")) return "nao_renovou";
-  if (tipo.includes("2_curso") || tipo.includes("segundo")) return "interrompido_2_curso";
-  if (tipo.includes("bols")) return "interrompido_bolsista";
-  if (tipo.includes("banda")) return "interrompido_banda";
-  if (tipo.includes("transfer")) return "transferencia";
-  return "interrompido";
-}
-
 function percentualReajuste(anterior: unknown, novo: unknown): number {
   const valorAnterior = numero(anterior);
   if (valorAnterior <= 0) return 0;
@@ -291,7 +286,7 @@ export function formatarRelatorioAdminMensalCanonico(payload: JsonObject): strin
     ? inteiro(r.nao_renovacoes) / renovacoesPrevistas * 100
     : 0;
   const quebraEvasoes = evasoesCompletas.reduce<Record<string, number>>((acc, item) => {
-    const tipo = classificarEvasao(item);
+    const tipo = classificarSaida(item);
     acc[tipo] = (acc[tipo] ?? 0) + 1;
     return acc;
   }, {});
@@ -522,8 +517,7 @@ export function formatarRelatorioAdminMensalCanonico(payload: JsonObject): strin
       // Quem está fora do total continua na lista, marcado. Sumir com a linha esconderia da
       // coordenação quem saiu da banda — o que ela precisa saber; o que não pode é entrar
       // na conta de alunos perdidos.
-      const tipoItem = classificarEvasao(item);
-      const foraDoTotal = tipoItem !== "interrompido" && tipoItem !== "nao_renovou";
+      const foraDoTotal = !entraNoTotal(classificarSaida(item));
       linhas.push(
         `${index + 1}) Nome: *${texto(item.aluno_nome)}*${foraDoTotal ? " (não entra no total)" : ""}`,
         `   Motivo: ${texto(item.motivo)}`,

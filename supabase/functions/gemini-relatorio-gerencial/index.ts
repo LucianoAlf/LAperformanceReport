@@ -2,6 +2,10 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { runWithTimeout } from "../_shared/fetch-with-timeout.ts";
+import {
+  type ComposicaoSaidas,
+  composicaoDeSaidas,
+} from "../_shared/composicao-saidas-mensais.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -736,17 +740,42 @@ const narrativaSchema = {
   additionalProperties: false,
 };
 
+/**
+ * Envelopa o módulo compartilhado com a leitura do payload deste relatório. Os avisos são
+ * logados aqui, e não lá dentro: sumir com eles repetiria o defeito que esta correção
+ * ataca — um número errado circulando por semanas sem deixar rastro.
+ */
+function saidasDoMes(admin: Record<string, any>): ComposicaoSaidas {
+  const retencao = admin?.indicadores_retencao || {};
+  const composicao = composicaoDeSaidas(
+    lista(admin?.evasoes),
+    numero(retencao.nao_renovacoes ?? admin?.resumo?.nao_renovacoes),
+    numero(retencao.total_evasoes),
+  );
+  for (const aviso of composicao.avisos) {
+    console.warn("[relatorio-gerencial] saidas do mes:", aviso);
+  }
+  return composicao;
+}
+
 function resumoParaIA(
   dados: RelatorioGerencialCanonico,
 ): Record<string, unknown> {
   const admin = dados.administrativo || {};
   const comercial = dados.comercial || {};
+  const saidas = saidasDoMes(admin);
   return {
     unidade: dados.unidade.nome,
     competencia: dados.competencia,
     alunos: admin.resumo,
     financeiro: admin.indicadores_financeiros,
-    retencao: admin.indicadores_retencao,
+    // `total_evasoes` cru é a soma bruta e contradiz o churn do mesmo objeto; sem os
+    // campos abaixo a IA escrevia a análise em cima do número que a regra da casa não usa.
+    retencao: {
+      ...admin.indicadores_retencao,
+      saidas_que_contam: saidas.totalQueConta,
+      saidas_fora_do_total: saidas.foraDoTotal,
+    },
     comercial: comercial.resumo,
     quantidade_alertas_comerciais: lista(comercial.alertas).length,
     quantidade_trancamentos_para_atencao:
@@ -936,22 +965,7 @@ export async function montarRelatorio(
   );
   const evasoesOperacionais = lista(admin.evasoes);
   const naoRenovacoesLista = lista(admin.nao_renovacoes);
-  const contagemEvasoes = {
-    interrompido: 0,
-    segundoCurso: 0,
-    bolsista: 0,
-    banda: 0,
-    transferencia: 0,
-  };
-  for (const item of evasoesOperacionais) {
-    const tipo = normalizarControle(item?.tipo_evasao);
-    if (tipo.includes("2_curso") || tipo.includes("segundo_curso")) {
-      contagemEvasoes.segundoCurso += 1;
-    } else if (tipo.includes("bolsista")) contagemEvasoes.bolsista += 1;
-    else if (tipo.includes("banda")) contagemEvasoes.banda += 1;
-    else if (tipo.includes("transfer")) contagemEvasoes.transferencia += 1;
-    else contagemEvasoes.interrompido += 1;
-  }
+  const contagemEvasoes = saidasDoMes(admin);
   const motivosEvasao = contarMotivos([
     ...evasoesOperacionais,
     ...naoRenovacoesLista,
@@ -1164,14 +1178,22 @@ export async function montarRelatorio(
   relatorio +=
     "───────────────────────\n📉 *RETENÇÃO*\n───────────────────────\n";
   relatorio += `• Churn: *${percentual(retencao.churn_rate, 2)}*\n`;
-  relatorio += `• Total de saídas: *${numero(retencao.total_evasoes)}*\n`;
+  // O total publicado é o mesmo que o churn logo acima usa. Publicar a soma bruta fazia o
+  // bloco se contradizer na própria tela — 37 saídas ao lado de um churn calculado sobre 29.
+  relatorio += `• Total de saídas: *${contagemEvasoes.totalQueConta}*\n`;
   relatorio += `  - Interrompidos: *${contagemEvasoes.interrompido}*\n`;
-  relatorio +=
-    `  - Interrompido segundo curso: *${contagemEvasoes.segundoCurso}*\n`;
-  relatorio += `  - Interrompido bolsista: *${contagemEvasoes.bolsista}*\n`;
-  relatorio += `  - Interrompido banda: *${contagemEvasoes.banda}*\n`;
-  relatorio += `  - Transferência: *${contagemEvasoes.transferencia}*\n`;
   relatorio += `  - Não renovações: *${naoRenovacoes}*\n`;
+  if (contagemEvasoes.foraDoTotal > 0) {
+    // Quem fica fora do total continua visível: a coordenação precisa saber que houve saída
+    // de banda; o que não pode é isso virar aluno perdido na conta.
+    relatorio +=
+      `• Não entram no total (regra da casa): *${contagemEvasoes.foraDoTotal}*\n`;
+    relatorio +=
+      `  - Interrompido segundo curso: *${contagemEvasoes.segundoCurso}*\n`;
+    relatorio += `  - Interrompido bolsista: *${contagemEvasoes.bolsista}*\n`;
+    relatorio += `  - Interrompido banda: *${contagemEvasoes.banda}*\n`;
+    relatorio += `  - Transferência: *${contagemEvasoes.transferencia}*\n`;
+  }
   relatorio +=
     `• Renovações: *${renovacoesRealizadas}/${renovacoesPrevistas}* (${
       percentual(retencao.taxa_renovacao)
