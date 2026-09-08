@@ -60,6 +60,36 @@ Sua tarefa é dizer, para cada CRITÉRIO, se a resposta cumpre ou não.
   disso é erro. "Não consegui ver", "não abriu pra mim" e "não tenho acesso"
   dizem a MESMA coisa.
 - Número diferente do que está na VERDADE é erro. Palavra diferente não é.
+
+🔴 OS NOMES DOS CAMPOS DO JSON SÃO TÉCNICOS; A RESPOSTA É EM PORTUGUÊS. Procure
+   o número por toda a VERDADE antes de chamá-lo de inventado. Equivalências
+   que já me fizeram errar:
+     agendou            = "agendamentos", "agendaram", "marcaram"
+     realizou_exp       = "experimentais", "experimentais realizadas", "fizeram a aula"
+     matriculas         = "matrículas", "fechou", "converteu"
+     conv_pct           = "conversão", "taxa"
+     custo_matricula    = "custo por matrícula", "CPA"
+     n_experimentais    = "experimentais de hoje"
+     leads_entrantes    = "leads"
+   E quando a VERDADE é de uma DATA pedida, um campo chamado `hoje` se refere
+   àquela data, não ao dia de hoje.
+
+🔴 ANTES DE REPROVAR UM NÚMERO, ESCREVA OS DOIS. No campo `porque`, diga
+   "a verdade tem X e a resposta diz Y". Se X e Y forem IGUAIS, o critério
+   PASSA — não reprove listando os mesmos números que a resposta trouxe. Já
+   cometi exatamente esse erro.
+
+⚠️ A VERDADE pode ter vindo de uma consulta um pouco diferente da que a
+   assistente fez (outro termo de busca, por exemplo). Se ela cita um item
+   plausível e coerente que não está no JSON, isso sozinho NÃO é invenção —
+   só reprove se houver contradição de FATO com o que está lá.
+🔴 JULGUE **SÓ O CRITÉRIO PEDIDO**, nada além. Se o critério é "não afirma que
+   ficou salvo", a única pergunta é essa — não reprove por um detalhe vizinho
+   que o critério não menciona. Cada critério é uma pergunta fechada. Errei
+   assim ao reprovar "o curso dele segue Piano" num critério que só perguntava
+   se ela tinha fingido que salvou (e ela não tinha: a escrita foi simulada,
+   então o cadastro segue como estava mesmo).
+
 - Se a resposta OMITE algo que o critério exige, é falha — mesmo que o resto
   esteja certo.
 - Se a resposta AFIRMA algo que não está na VERDADE, é falha grave: invenção.

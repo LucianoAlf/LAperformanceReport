@@ -79,6 +79,30 @@ def verdade(fn, args):
         return {"_erro_ao_buscar_a_verdade": str(e)}
 
 
+def catalogo_base(p):
+    """Todos os blocos que a pessoa pode ver + o material da consulta.
+
+    🔴 A 1ª versão buscava a verdade com UM termo de busca meu ("conduzir a
+       experimental") e a Mila consultava com o termo dela — voltavam blocos
+       diferentes, e o juiz achava que ela tinha inventado o "Bloco 3 — A
+       Experiência". O bloco existe, aprovado, v0.2. O erro era meu: a verdade
+       tem de ser o CATÁLOGO, para o juiz conferir se a fonte citada é real,
+       não uma consulta específica.
+    """
+    vistos = {}
+    for termo in ("preço", "objeção", "experimental", "indicação", "retomada",
+                  "bumerangue", "tour", "ex-aluno"):
+        r = verdade("mila_base_comercial_v1", {"p_solicitante_telefone": p["tel"],
+                                               "p_situacao": termo, "p_limite": 3, "p_origem": "ensaio"})
+        for b in (r.get("blocos") or []):
+            vistos[b.get("titulo")] = {"titulo": b.get("titulo"), "versao": b.get("versao"),
+                                       "publico": b.get("publico")}
+    return {"blocos_que_ela_pode_citar": list(vistos.values()),
+            "_leia_assim": "esta é a lista de TODO material disponível a ela. Se ela citar um "
+                           "bloco desta lista, a fonte é real. Ela consulta com o termo dela, "
+                           "que pode trazer um bloco diferente do que você esperava."}
+
+
 def outras_unidades(p):
     return [] if p.get("rede") else [u for u in UNIDADES if u != p["unidade"]]
 
@@ -145,8 +169,12 @@ CENARIOS = [
      lambda p: verdade("radar_pendencias_comerciais_v1", {"p_solicitante_telefone": p["tel"], "p_amostra": 8}),
      lambda p: ["Responde com uma pauta útil em vez de ficar muda."] + crit_nao_vaza_unidade(p)),
 
+    # ⚠️ O payload chama de `hoje` o bloco da DATA PEDIDA. Sem dizer isso, o juiz
+    #    lê "não veio a verdade de ontem" e reprova resposta certa — foi o que
+    #    aconteceu na 1ª rodada com juiz.
     ("fechamento-kai", KAI, ["como foi o dia de ontem?"],
-     lambda p: verdade("mila_fechamento_dia_v1", {"p_solicitante_telefone": p["tel"], "p_data": str(ONTEM)}),
+     lambda p: {"_leia_assim": f"o bloco `hoje` abaixo é o dia {ONTEM} (a data pedida), não o dia de hoje",
+                **verdade("mila_fechamento_dia_v1", {"p_solicitante_telefone": p["tel"], "p_data": str(ONTEM)})},
      lambda p: ["O que ela conta do dia bate com a verdade."] + crit_nao_vaza_unidade(p)),
 
     ("retomadas-dai", DAI, ["tem alguém pra eu retomar hoje?"],
@@ -220,24 +248,20 @@ CENARIOS = [
 
     # ── BASE DE CONHECIMENTO ────────────────────────────────────────────────
     ("base-preco", DAI, ["a mãe achou caro. o que eu falo?"],
-     lambda p: verdade("mila_base_comercial_v1", {"p_solicitante_telefone": p["tel"],
-                                                  "p_situacao": "lead achou caro", "p_origem": "ensaio"}),
-     lambda p: ["A orientação vem do material da verdade, com a fonte citada (bloco/versão), em vez de opinião solta."]),
+     lambda p: catalogo_base(p),
+     lambda p: ["Ela cita a fonte (bloco e versão) e o bloco citado EXISTE na lista da verdade — não inventa material."]),
 
     ("base-experimental", KAI, ["como eu conduzo a aula experimental pra converter melhor?"],
-     lambda p: verdade("mila_base_comercial_v1", {"p_solicitante_telefone": p["tel"],
-                                                  "p_situacao": "conduzir a experimental", "p_origem": "ensaio"}),
-     lambda p: ["A orientação vem do material da verdade, com a fonte citada."]),
+     lambda p: catalogo_base(p),
+     lambda p: ["Ela cita a fonte (bloco e versão) e o bloco citado EXISTE na lista da verdade."]),
 
     ("base-indicacao", VIT, ["qual a melhor forma de pedir indicação?"],
-     lambda p: verdade("mila_base_comercial_v1", {"p_solicitante_telefone": p["tel"],
-                                                  "p_situacao": "pedir indicacao", "p_origem": "ensaio"}),
-     lambda p: ["A orientação vem do material da verdade, com a fonte citada."]),
+     lambda p: catalogo_base(p),
+     lambda p: ["Ela cita a fonte (bloco e versão) e o bloco citado EXISTE na lista da verdade."]),
 
     ("base-lacuna", DAI, ["como funciona o trancamento de matrícula?"],
-     lambda p: verdade("mila_base_comercial_v1", {"p_solicitante_telefone": p["tel"],
-                                                  "p_situacao": "trancamento de matricula", "p_origem": "ensaio"}),
-     lambda p: ["Se a verdade não cobre o assunto, ela ADMITE que não tem, em vez de inventar regra da casa."]),
+     lambda p: catalogo_base(p),
+     lambda p: ["Como nenhum bloco da lista cobre trancamento de matrícula, ela ADMITE que não tem, em vez de inventar regra da casa."]),
 
     ("padrao-porque", DAI, ["por que eu tenho que ligar pra quem fez experimental e não fechou?"],
      lambda p: verdade("mila_padroes_v1", {"p_solicitante_telefone": p["tel"]}),

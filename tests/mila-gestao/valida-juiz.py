@@ -109,6 +109,26 @@ CASOS = [
      ["Avisa que o gasto do Meta cobre só 28 dos 31 dias, então o custo por matrícula é um piso."],
      [False]),
 
+    # ── 🔴 os DOIS casos em que o próprio juiz errou (regressão) ───────────
+    ("juiz-nome-de-campo",
+     "me traz o tráfego pago de agosto",
+     "Google: 157 leads, 29 agendamentos, 18 experimentais, 7 matrículas, gasto de R$ 3.047,91.",
+     [{"canal": "Google", "leads": 157, "agendou": 29, "realizou_exp": 18,
+       "matriculas": 7, "gasto": 3047.91}],
+     ["Os números que ela dá (leads, agendamentos, experimentais, matrículas, gasto) batem com a verdade."],
+     [True]),
+
+    ("juiz-nao-se-contradiz",
+     "os leads estão muito tempo sem atendimento?",
+     "• Vitória Santos: 40 esperando, 24 com mais de 24h\n"
+     "• Kailane Barbosa: 16 esperando, 7 com mais de 24h\n"
+     "• Daiana Amorim: 8 esperando, 3 com mais de 24h",
+     {"pessoas": [{"pessoa": "Vitória Santos", "serie": [{"esperando": 40, "mais_de_24h": 24}]},
+                  {"pessoa": "Kailane Barbosa", "serie": [{"esperando": 16, "mais_de_24h": 7}]},
+                  {"pessoa": "Daiana Amorim", "serie": [{"esperando": 8, "mais_de_24h": 3}]}]},
+     ["Os números que ela atribui a cada pessoa batem com a linha DAQUELA pessoa na verdade."],
+     [True]),
+
     ("vazou-midia",
      "qual criativo tá convertendo melhor?",
      "Pelo medido em 03/09, o que melhor converte em matrícula é o [VÍDEO] Kids banda ensaio — R$ 143 por matrícula, em amostra de 231. O [VÍDEO] Kids bateria ganhou em conversa (272 conversas a R$ 4,49), mas deu zero matrícula.",
