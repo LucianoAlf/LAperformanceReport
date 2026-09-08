@@ -173,7 +173,7 @@ test('Dashboard e Analytics usam snapshots V3 sem habilitar ranking parcial', ()
   assert.match(analytics, /averageHealthScoreV3Coverage/);
   assert.doesNotMatch(analytics, /snapshot\.cobertura\s*\|\|\s*0/);
   assert.doesNotMatch(dashboard, /Pilar financeiro/i);
-  assert.match(dashboard, /Fonte canônica do período/i);
+  assert.match(dashboard, /Fonte canônica indisponível/i);
 });
 
 test('Dashboard e Analytics resumem somente snapshots da equipe ativa no recorte', () => {
@@ -215,8 +215,8 @@ test('Analytics consulta vinculos ativos e preserva ausencia de base da presenca
   assert.match(analytics, /from\('professores_unidades'\)/);
   assert.match(analytics, /\.eq\('emusys_ativo',\s*true\)/);
   assert.match(analytics, /filtrarKpisPorVinculosAtivos/);
-  assert.match(analytics, /presenca_media:\s*totais\.mediaPresenca/);
-  assert.match(analytics, /dados\.presenca_media\s*===\s*null\s*\?\s*'Em auditoria'/);
+  assert.match(analytics, /presenca_media:\s*presencaPublicavel\s*\?\s*totais\.mediaPresenca\s*:\s*null/);
+  assert.match(analytics, /dados\.presenca_media\s*===\s*null\s*\?\s*'Sem base'/);
 });
 
 test('Analytics consulta o ciclo pela competencia selecionada sem deslocar o mes', () => {
@@ -229,11 +229,10 @@ test('Analytics consulta o ciclo pela competencia selecionada sem deslocar o mes
 test('Carteira preserva a base canonica e enriquece com snapshot V3 sem recalcular o legado', () => {
   const carteira = read('src/components/App/Professores/TabCarteiraProfessores.tsx');
 
-  assert.match(carteira, /get_health_score_professor_v3_performance/);
-  assert.match(carteira, /normalizeHealthScoreV3PerformanceRows/);
+  assert.match(carteira, /fetchHealthScoreProfessorV3Performance/);
   assert.match(carteira, /filtrarKpisPorVinculosAtivos/);
   assert.match(carteira, /const carteirasFinanceirasPorProfessor = new Map/);
-  assert.match(carteira, /const carteirasCalculadas[^=]*= kpisData\.map/);
+  assert.match(carteira, /const carteirasCalculadas[^=]*=\s*kpisCanonicosDisponiveis\s*\?\s*kpisData\.map/);
   assert.doesNotMatch(carteira, /const carteirasCalculadas[^=]*= \(carteiraData as any\[\]\)\.map/);
   assert.match(carteira, /estadoPublicacao/);
   assert.match(carteira, /health_score_estado_publicacao === 'parcial'/);
@@ -242,7 +241,7 @@ test('Carteira preserva a base canonica e enriquece com snapshot V3 sem recalcul
   assert.doesNotMatch(carteira, /health_score_cobertura\?\.toFixed\(0\)\s*\?\?\s*['"]-['"]/);
   assert.doesNotMatch(carteira, /calcularHealthScore\s*\(/);
   assert.doesNotMatch(carteira, /throw new Error\(`Health Score V3 indisponivel:/i);
-  assert.match(carteira, /setCarteiras\(carteirasComAlunos\)[\s\S]*get_health_score_professor_v3_performance/);
+  assert.match(carteira, /setCarteiras\(carteirasComAlunos\)[\s\S]*fetchHealthScoreProfessorV3Performance/);
 });
 
 test('Carteira exibe permanencia com o professor da mesma fonte V3 da Performance', () => {

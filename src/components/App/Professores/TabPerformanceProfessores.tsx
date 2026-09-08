@@ -209,7 +209,7 @@ function HealthScoreV3MetricCell({
     },
   );
   const renderedValue = display.value === null
-    ? display.state === 'auditoria' ? 'Em auditoria' : evidenceMessage
+    ? display.state === 'auditoria' ? 'Sem base operacional' : evidenceMessage
     : formatHealthScoreV3MetricValue(metricKey, display.value);
   const stateLabel = display.state === 'observado'
     ? 'observado'
@@ -224,7 +224,7 @@ function HealthScoreV3MetricCell({
             : display.state === 'referencia_anterior'
               ? `base de ${formatHealthScoreV3ReferenceMonth(display.referenceCompetence)}`
       : display.state === 'auditoria'
-        ? 'auditoria'
+        ? 'sem base operacional'
         : display.state === 'sem_base'
           ? evidenceMessage
           : null;
@@ -1253,7 +1253,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                 {healthScoreEquipe.disponivel ? healthScoreEquipe.media : '-'}
               </span>
               <p className="text-[8px] font-semibold text-slate-500 uppercase tracking-widest">
-                {healthScoreEquipe.disponivel ? 'Média Geral' : 'Em auditoria'}
+                {healthScoreEquipe.disponivel ? 'Média Geral' : 'Sem base'}
               </p>
             </div>
           </div>
@@ -1593,7 +1593,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                           </div>
                         ) : (
                           <div className="min-w-[230px] text-xs">
-                            <p className="font-bold text-slate-200 mb-1.5">Health Score em auditoria</p>
+                            <p className="font-bold text-slate-200 mb-1.5">Health Score sem base operacional</p>
                             <p className="text-slate-400">
                               O score nao e publicado enquanto a presenca nao tiver confianca alta.
                             </p>
@@ -1615,7 +1615,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                             : 'bg-rose-900/30 border-rose-700 text-rose-400'
                         }`}>
                           <span className="text-sm font-black">
-                            {professor.health_score_confiavel ? Math.round(professor.health_score) : 'Em auditoria'}
+                            {professor.health_score_confiavel ? Math.round(professor.health_score) : 'Sem base'}
                           </span>
                         </div>
                         </Tooltip>
@@ -1861,7 +1861,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                           side="top"
                           content={
                             <div className="text-xs min-w-[220px]">
-                              <p className="font-bold text-slate-200 mb-1.5">Presenca em auditoria</p>
+                              <p className="font-bold text-slate-200 mb-1.5">Cobertura de presenca insuficiente</p>
                               <p className="text-slate-400">
                                 O Emusys ainda mistura falta confirmada com chamada nao registrada neste recorte.
                               </p>
@@ -1874,7 +1874,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                           }
                         >
                           <span className="inline-flex items-center rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-xs font-medium text-slate-400 cursor-help">
-                            Em auditoria
+                            Sem base
                           </span>
                         </Tooltip>
                       )}
@@ -1936,7 +1936,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                           ? formatHealthScoreV3Status(resolveHealthScoreV3ScoreStatus(professor.healthV3))
                           : professor.health_score_confiavel
                             ? (professor.status === 'critico' ? 'Crítico' : professor.status === 'atencao' ? 'Atenção' : 'Excelente')
-                            : 'Em auditoria'}
+                            : 'Sem base'}
                       </span>
                     </td>
                     <td className="text-center px-4 py-3" onClick={(e) => e.stopPropagation()}>
@@ -1984,7 +1984,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           <div>
             <p className="text-slate-300 font-medium">Presença</p>
             <p className="text-slate-400">Publicada apenas com confiança alta</p>
-            <p className="text-slate-500">Recortes incertos ficam em auditoria</p>
+            <p className="text-slate-500">Recortes sem cobertura suficiente ficam sem base operacional</p>
           </div>
         </div>
       </div>

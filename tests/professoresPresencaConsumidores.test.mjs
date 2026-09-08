@@ -17,7 +17,7 @@ const edgeRanking = read('supabase/functions/gemini-ranking-professores/index.ts
 test('performance bloqueia presenca e health sem confianca alta', () => {
   assert.match(performance, /presenca_publicavel/);
   assert.match(performance, /health_score_confiavel/);
-  assert.match(performance, /Em auditoria/);
+  assert.match(performance, /Sem base operacional/);
   assert.match(performance, /professor\.presenca_publicavel\s*&&\s*professor\.taxa_presenca\s*!==\s*null/);
 });
 
@@ -32,7 +32,7 @@ test('relatorios instantaneos preservam null e bloqueiam ranking de presenca e h
   assert.match(relatorioInstantaneo, /taxa_presenca:\s*number\s*\|\s*null/);
   assert.match(relatorioInstantaneo, /presenca_publicavel:\s*boolean/);
   assert.match(relatorioInstantaneo, /health_score_confiavel:\s*boolean/);
-  assert.match(relatorioInstantaneo, /Presenca em auditoria/i);
+  assert.match(relatorioInstantaneo, /Cobertura insuficiente/i);
   assert.doesNotMatch(relatorioInstantaneo, /taxa_presenca:\s*numeroSeguro\s*\(/);
 });
 

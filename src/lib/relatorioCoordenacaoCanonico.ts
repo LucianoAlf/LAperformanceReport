@@ -39,6 +39,8 @@ export interface ProfessorCoordenacaoCanonico {
     total_turmas?: number | null;
     alunos_via_turmas?: number | null;
     turmas_elegiveis_media?: number | null;
+    /** Matrículas comerciais canônicas atribuídas ao professor da experimental. */
+    matriculas_comerciais?: number | null;
   };
   auditoria_health_score?: {
     data_corte?: string | null;
@@ -306,9 +308,8 @@ const indicadoresRanking: IndicadorRanking[] = [
   { chave: 'presenca', rotulo: '📅 PRESENÇA DOS ALUNOS', detalhe: (v, a) => `${numero(v, 1)}%${a ? ` (${numeroInteiro(a)} chamadas)` : ''}` },
   {
     chave: 'matriculador',
-    metricaChave: 'conversao',
     rotulo: '🎓 MATRICULADOR',
-    extrairValor: (professor) => numeroOuNull(metrica(professor, 'conversao')?.numerador),
+    extrairValor: (professor) => numeroOuNull(professor.operacional?.matriculas_comerciais),
     detalhe: (v) => `${numeroInteiro(v)} matrículas`,
   },
   { chave: 'conversao', rotulo: '🎯 CONVERSÃO DE EXPERIMENTAIS', detalhe: (v, a) => `${numero(v, 1)}%${a ? ` (${numeroInteiro(a)} experimentais)` : ''}` },

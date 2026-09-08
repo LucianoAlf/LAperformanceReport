@@ -41,7 +41,7 @@ function formatarPercentualPublicavel(
   estadoPublicacao: AlunoPresenca['estado_publicacao'],
 ): string {
   if (estadoPublicacao !== 'publicado' || denominador <= 0 || percentual === null) {
-    return 'Em auditoria';
+    return 'Cobertura insuficiente';
   }
   return `${percentual.toFixed(1)}%`;
 }
@@ -90,7 +90,7 @@ export function ModalDetalhesPresenca({ open, onClose, professorId, professorNom
         if (error) {
           console.warn('Contrato canônico de presença indisponível:', error.message);
           setDados([]);
-          setErroPublicacao('Em auditoria: o contrato canônico não está publicável para este período.');
+          setErroPublicacao('A presença não está publicável para este período.');
           return;
         }
 
@@ -143,7 +143,7 @@ export function ModalDetalhesPresenca({ open, onClose, professorId, professorNom
       } catch (err) {
         console.error('Erro ao buscar presenca:', err);
         setDados([]);
-        setErroPublicacao('Em auditoria: não foi possível validar a fonte canônica.');
+        setErroPublicacao('Não foi possível validar a fonte canônica da presença.');
       } finally {
         setLoading(false);
       }

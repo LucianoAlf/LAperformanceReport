@@ -232,7 +232,7 @@ test('hook faz uma unica leitura batch e a tabela mantem rollback V2 por feature
   assert.match(tab, /HEALTH_SCORE_V3_PERFORMANCE_ENABLED\s*\?/i);
   assert.match(tab, /calcularHealthScore/i, 'motor V2 deve continuar disponivel para rollback');
   assert.match(tab, /Perman[eÃª]ncia/i);
-  assert.match(tab, /Em auditoria/i);
+  assert.match(tab, /Sem base operacional/i);
   assert.match(tab, /Sem base/i);
 });
 
@@ -263,7 +263,7 @@ test('equipe V3 parte do roster ativo e explica professor sem snapshot', async (
   );
   assert.equal(
     resolveHealthScoreV3EvidenceMessage('fonte_canonica_indisponivel', 'presenca'),
-    'Dados em auditoria',
+    'Sem retrato disponível para o período',
   );
 });
 

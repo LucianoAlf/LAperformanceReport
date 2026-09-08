@@ -75,7 +75,7 @@ function getV3MetricParticipationLabel(metric: HealthScoreV3SnapshotMetric): str
   if (metric.estadoBase === 'sem_base_amostra' || metric.codigoEvidencia === 'amostra_insuficiente') {
     return 'Amostra insuficiente · fora da nota';
   }
-  if (!metric.metricaPublicavel && metric.valorBruto !== null) return 'Auditoria · fora da nota';
+  if (!metric.metricaPublicavel && metric.valorBruto !== null) return 'Evidência não publicável · fora da nota';
   return 'Fora da nota atual';
 }
 
@@ -96,7 +96,7 @@ function formatV3Base(metric: HealthScoreV3SnapshotMetric): string | null {
 interface V3ObservedValue {
   value: number | null;
   displayLabel: string | null;
-  stateLabel: 'observado' | 'em auditoria';
+  stateLabel: 'observado' | 'cobertura insuficiente';
   evidenceLabel: string;
   note: string;
 }
@@ -139,20 +139,20 @@ function getV3ObservedValue(metric: HealthScoreV3SnapshotMetric): V3ObservedValu
     const classificados = v3DetailNumber(metric.detalhes.eventos_classificados_observados);
     const esperados = v3DetailNumber(metric.detalhes.eventos_esperados_observados);
     const coberturaLabel = cobertura === null
-      ? 'cobertura em apuração'
+      ? 'cobertura insuficiente'
       : `cobertura ${cobertura.toFixed(1)}%`;
     const evidenceLabel = classificados !== null && esperados !== null
       ? `Eventos classificados: ${formatHealthScoreV3BaseNumber(classificados) ?? '0'}/${formatHealthScoreV3BaseNumber(esperados) ?? '0'}`
-      : 'Eventos classificados: em apuração';
+      : 'Eventos classificados: cobertura insuficiente';
     const emAuditoria = metric.detalhes.observacao_publicacao === 'em_auditoria';
 
     return {
       value: emAuditoria ? null : valorObservado,
-      displayLabel: emAuditoria ? 'Em auditoria' : null,
-      stateLabel: emAuditoria ? 'em auditoria' : 'observado',
+      displayLabel: emAuditoria ? 'Cobertura insuficiente' : null,
+      stateLabel: emAuditoria ? 'cobertura insuficiente' : 'observado',
       evidenceLabel,
       note: emAuditoria
-        ? `${coberturaLabel}; valor observado preservado para auditoria e não publicado como indicador.`
+        ? `${coberturaLabel}; valor observado preservado, mas não publicado como indicador.`
         : `${coberturaLabel}; valor acompanha os eventos do mês e permanece fora do score até cumprir a política de publicação.`,
     };
   }
@@ -291,7 +291,7 @@ function HealthScoreV3MetricsPanel({
           const observed = getV3ObservedValue(metric);
           const displayValue = metric.valorBruto ?? observed?.value ?? null;
           const displayLabel = observed?.displayLabel ?? formatV3Value(key, displayValue);
-          const observedInAudit = observed?.stateLabel === 'em auditoria';
+          const observedWithInsufficientCoverage = observed?.stateLabel === 'cobertura insuficiente';
           const originalWeight = `${formatHealthScoreV3BaseNumber(metric.peso) ?? '0'}%`;
           const effectiveWeight = metric.pesoEfetivo === null
             ? 'não aplicável neste recorte'
@@ -305,12 +305,12 @@ function HealthScoreV3MetricsPanel({
                   {getV3MetricParticipationLabel(metric)}
                 </span>
               </div>
-              <p className={`mt-2 text-xl font-bold ${observedInAudit ? 'text-amber-300' : displayValue === null ? 'text-slate-500' : 'text-white'}`}>
+              <p className={`mt-2 text-xl font-bold ${observedWithInsufficientCoverage ? 'text-amber-300' : displayValue === null ? 'text-slate-500' : 'text-white'}`}>
                 {displayLabel}
               </p>
               {observed && (
-                <p className={`text-[10px] font-medium uppercase ${observedInAudit ? 'text-amber-300' : 'text-cyan-300'}`}>
-                  {observedInAudit ? 'Valor não publicado' : 'Valor observado'}
+                <p className={`text-[10px] font-medium uppercase ${observedWithInsufficientCoverage ? 'text-amber-300' : 'text-cyan-300'}`}>
+                  {observedWithInsufficientCoverage ? 'Valor não publicado' : 'Valor observado'}
                 </p>
               )}
               <div className="mt-2 space-y-0.5 text-[11px] text-slate-500">
@@ -1004,7 +1004,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                     : 'V3 sem base operacional'
                 : healthScorePublicavel
                 ? (professor.status === 'critico' ? 'Crítico' : professor.status === 'atencao' ? 'Atenção' : 'Excelente')
-                : 'Em auditoria'}
+                : 'Sem base operacional'}
             </span>
           </div>
         </DialogHeader>
@@ -1119,7 +1119,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                 <p className="text-[7px] font-semibold text-slate-500 uppercase tracking-widest">
                   {healthScorePublicavel
                     ? (healthScore.status === 'saudavel' ? 'Saudável' : healthScore.status === 'atencao' ? 'Atenção' : 'Crítico')
-                    : 'Em auditoria'}
+                    : 'Sem base operacional'}
                 </p>
               </div>
             </div>

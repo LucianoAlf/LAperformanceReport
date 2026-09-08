@@ -275,12 +275,13 @@ test('presenca observada respeita politica versionada de auditoria por unidade',
   assert.match(sql, /em_auditoria/i);
 });
 
-test('modal nao publica percentual observado quando a politica exige auditoria', () => {
+test('modal nao publica percentual observado quando a cobertura ainda nao e publicavel', () => {
   const source = read(modalPath);
 
   assert.match(source, /observacao_publicacao/i);
-  assert.match(source, /Em auditoria/i);
-  assert.match(source, /preservado para auditoria/i);
+  assert.match(source, /Cobertura insuficiente/i);
+  assert.match(source, /valor observado preservado/i);
+  assert.doesNotMatch(source, /['"`]Em auditoria['"`]/i);
 });
 
 test('modal individual alterna V3 por flag e exibe base cobertura e recorte', () => {

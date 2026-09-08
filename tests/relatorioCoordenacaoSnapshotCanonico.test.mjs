@@ -29,6 +29,9 @@ function professor(nome, { score = 80, estado = 'comparavel', conversaoValor, ma
         amostra: 10,
       },
     },
+    operacional: {
+      matriculas_comerciais: matriculas,
+    },
   };
 }
 

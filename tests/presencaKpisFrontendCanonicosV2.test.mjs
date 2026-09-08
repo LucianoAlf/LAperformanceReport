@@ -50,7 +50,7 @@ test('interfaces publicam periodo, universo, regra e equacao sem transformar nul
   assert.match(tabProfessores, /presenca_eventos_confirmados/u);
   assert.match(tabProfessores, /presenca_eventos_incertos/u);
   assert.match(tabProfessores, /presentes\s*\/\s*eventos confirmados/iu);
-  assert.match(tabProfessores, /Em auditoria/iu);
+  assert.match(tabProfessores, /Sem base/iu);
   assert.match(presencaTab, /presentes\s*\/\s*eventos confirmados/iu);
   assert.doesNotMatch(faltasHook, /pct_presenca_publicavel:\s*Number\([^)]*\)\s*\|\|\s*0/iu);
 });

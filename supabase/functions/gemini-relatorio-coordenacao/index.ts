@@ -85,6 +85,9 @@ interface ProfessorContrato {
   score_referencia?: number | null;
   classificacao_referencia?: string | null;
   metricas: Record<string, MetricaProfessor>;
+  operacional?: {
+    matriculas_comerciais?: number | null;
+  };
 }
 
 interface SinalContrato {
@@ -410,9 +413,8 @@ const indicadoresRanking: IndicadorRanking[] = [
   { chave: "presenca", rotulo: "📅 PRESENÇA DOS ALUNOS", detalhe: (v, a) => `${percentual(v)}${a ? ` (${inteiro(a)} chamadas)` : ""}` },
   {
     chave: "matriculador",
-    metricaChave: "conversao",
     rotulo: "🎓 MATRICULADOR",
-    extrairValor: (professor) => numeroRankingOuNull(professor.metricas?.conversao?.numerador),
+    extrairValor: (professor) => numeroRankingOuNull(professor.operacional?.matriculas_comerciais),
     detalhe: (v) => `${inteiro(v)} matrículas`,
   },
   { chave: "conversao", rotulo: "🎯 CONVERSÃO DE EXPERIMENTAIS", detalhe: (v, a) => `${percentual(v)}${a ? ` (${inteiro(a)} experimentais)` : ""}` },
