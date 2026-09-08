@@ -4,7 +4,7 @@ import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import {
   Users, Wallet, TrendingUp, GraduationCap, Baby, School,
   ChevronDown, ChevronRight, Search, ArrowUpDown, Eye,
-  Loader2, Calendar, Clock, AlertTriangle, Heart, Lock, Music2
+  Loader2, Calendar, Clock, AlertTriangle, Heart, Lock, Music2, HelpCircle
 } from 'lucide-react';
 import { KPICard } from '@/components/ui/KPICard';
 import { Button } from '@/components/ui/button';
@@ -83,6 +83,29 @@ interface Props {
 
 type OrdenacaoTipo = 'alunos' | 'mrr' | 'ticket' | 'media_turma';
 type OrdenacaoDirecao = 'asc' | 'desc';
+
+/**
+ * Cabeçalho de coluna que explica COMO o número é calculado, no hover.
+ *
+ * Existe porque em 08/09/2026 a definição de "Alunos" mudou (atividade extra saiu
+ * da conta) e nada na tela dizia isso: quem comparasse com o mês anterior veria o
+ * número cair sem explicação. Indicador cuja regra não está ao alcance da mão vira
+ * pergunta para o time de dados — ou, pior, conclusão errada.
+ */
+function ThComExplicacao({ rotulo, explicacao }: { rotulo: string; explicacao: string }) {
+  return (
+    <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">
+      <Tooltip content={explicacao}>
+        {/* A borda pontilhada é a affordance: sinaliza que há algo a ler aqui,
+            sem competir com os dados da tabela. */}
+        <span className="inline-flex items-center gap-1 cursor-help border-b border-dotted border-slate-600 hover:text-slate-200 transition-colors">
+          {rotulo}
+          <HelpCircle className="w-3 h-3 opacity-60" />
+        </span>
+      </Tooltip>
+    </th>
+  );
+}
 
 export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoChange }: Props) {
   const [carteiras, setCarteiras] = useState<CarteiraProfessor[]>([]);
@@ -675,13 +698,13 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
             <thead className="sticky top-0 z-20 bg-slate-900/95 backdrop-blur">
               <tr className="border-b border-slate-700">
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-400">Professor</th>
-                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Alunos</th>
-                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Trancados</th>
-                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Atividade extra</th>
-                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">MRR</th>
-                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Ticket</th>
-                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Média/Turma</th>
-                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Health Score</th>
+                <ThComExplicacao rotulo="Alunos" explicacao="Pessoas distintas com matrícula viva neste professor na competência. Uma pessoa com 2 cursos conta 1 vez. NÃO inclui trancados nem atividade extra (banda, Power Kids, GarageBand, Percussion Kids)." />
+                <ThComExplicacao rotulo="Trancados" explicacao="Alunos com trancamento vigente hoje, segundo o Emusys. Exibidos à parte: não somam em Alunos, MRR, Ticket nem Média/Turma." />
+                <ThComExplicacao rotulo="Atividade extra" explicacao="Pessoas que este professor atende SÓ em banda, Power Kids, GarageBand ou Percussion Kids. Aparecem para que o professor veja quem atende, mas não entram em nenhum indicador — regra confirmada em 08/09/2026." />
+                <ThComExplicacao rotulo="MRR" explicacao="Soma das parcelas dos alunos da carteira que contam como pagantes (tipos_matricula.entra_ticket_medio). Ficam de fora: banda, bolsista integral, bolsista parcial e quem tem parcela zero." />
+                <ThComExplicacao rotulo="Ticket" explicacao="MRR ÷ número de alunos que entram no ticket — nunca ÷ total de alunos. Dividir pelo headcount jogaria banda e bolsistas no denominador sem estarem no numerador, diluindo o valor." />
+                <ThComExplicacao rotulo="Média/Turma" explicacao="Ocupações elegíveis ÷ turmas elegíveis na competência. Conta o mesmo aluno uma vez por turma que ele ocupa, e turma de atividade extra fica fora dos dois lados." />
+                <ThComExplicacao rotulo="Health Score" explicacao="Nota V3 do professor no período, composta por presença, retenção, permanência, média/turma e conversão. O tamanho da carteira é diagnóstico e NÃO altera a nota." />
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Ações</th>
               </tr>
             </thead>
@@ -945,7 +968,28 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
                             <td className="py-2 text-center text-slate-300">
                               {aluno.idade_atual ? `${aluno.idade_atual} anos` : '-'}
                             </td>
-                            <td className="py-2 text-slate-300">{aluno.curso}</td>
+                            <td className="py-2 text-slate-300">
+                              {/* Um badge por curso de atividade extra. A lista mostra
+                                  TODOS os cursos; o badge diz quais nao entram na conta. */}
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {(aluno.cursos_lista?.length ? aluno.cursos_lista : [aluno.curso]).map((nomeCurso) => {
+                                  const ehExtra = aluno.cursos_atividade_extra?.includes(nomeCurso);
+                                  return (
+                                    <span key={nomeCurso} className="inline-flex items-center gap-1">
+                                      <span>{nomeCurso}</span>
+                                      {ehExtra && (
+                                        <Tooltip content="Atividade extra: não entra na carteira, no MRR, no ticket, na média/turma nem no Health Score do professor.">
+                                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-500/10 border border-sky-500/20 border-dashed text-[10px] font-medium text-sky-400 whitespace-nowrap">
+                                            <Music2 className="w-3 h-3" />
+                                            não conta
+                                          </span>
+                                        </Tooltip>
+                                      )}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            </td>
                             <td className="py-2 text-slate-300">
                               <span className="flex items-center gap-1">
                                 <Calendar className="w-3 h-3" />

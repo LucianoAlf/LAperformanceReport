@@ -37,6 +37,11 @@ export interface AlunoCarteiraCanonico {
   idade_atual: number | null;
   curso: string;
   cursos_lista: string[];
+  // Cursos de atividade extra (cursos.is_projeto_banda) desta pessoa com este
+  // professor. A lista continua mostrando TODOS os cursos — o front usa isto só
+  // para marcar quais não entram na contagem da carteira (regra §7.1 e §9.2:
+  // sinalizar, não esconder).
+  cursos_atividade_extra: string[];
   cursos: { nome: string };
   dia_aula: string;
   horario_aula: string;
@@ -154,6 +159,9 @@ function montarPessoasCarteira(
   jornadasPessoaPorChave: Map<string, JornadaCarteiraProfessor[]>,
   alunosPorId: Map<number, AlunoOperacionalCarteira>,
   status: string,
+  // Default vazio: sem o conjunto, nenhum curso e marcado como extra e a lista
+  // segue igual a antes. Degradacao visivel, nunca marcacao errada.
+  cursosProjeto: Set<number> = new Set<number>(),
 ): { pessoas: Map<string, AlunoCarteiraCanonico>; pessoasPorCurso: Map<string, Set<string>> } {
   const pessoas = new Map<string, AlunoCarteiraCanonico>();
   const pessoasPorCurso = new Map<string, Set<string>>();
@@ -169,6 +177,13 @@ function montarPessoasCarteira(
       ?? alunosPessoa[0];
     const primeiraJornada = jornadasPessoa[0];
     const cursos = valoresUnicos(jornadasPessoa.map((jornada) => jornada.curso_nome));
+    // Marcado por curso_id, nunca por nome: o nome do curso varia entre unidades
+    // e casar por texto reintroduziria o filtro frágil que a regra já aposentou.
+    const cursosAtividadeExtra = valoresUnicos(
+      jornadasPessoa
+        .filter((jornada) => jornada.curso_id !== null && cursosProjeto.has(Number(jornada.curso_id)))
+        .map((jornada) => jornada.curso_nome),
+    );
     const dias = valoresUnicos(jornadasPessoa.map((jornada) => jornada.dia_semana));
     const horarios = valoresUnicos(jornadasPessoa.map((jornada) => horarioCurto(jornada.horario)));
 
@@ -187,6 +202,7 @@ function montarPessoasCarteira(
       idade_atual: principal?.idade_atual ?? null,
       curso: cursos.join(', ') || '-',
       cursos_lista: cursos,
+      cursos_atividade_extra: cursosAtividadeExtra,
       cursos: { nome: cursos.join(', ') || '-' },
       dia_aula: dias.join(', ') || '-',
       horario_aula: horarios.join(', ') || '-',
@@ -231,6 +247,7 @@ export function agruparCarteiraProfessorCanonica(
   jornadas: JornadaCarteiraProfessor[],
   alunosOperacionais: AlunoOperacionalCarteira[],
   jornadasTrancadas: JornadaCarteiraProfessor[] = [],
+  cursosProjeto: Set<number> = new Set<number>(),
 ): ResultadoCarteiraProfessorCanonica {
   const alunosPorId = new Map(
     alunosOperacionais.map((aluno) => [Number(aluno.id), aluno]),
@@ -239,14 +256,14 @@ export function agruparCarteiraProfessorCanonica(
   const jornadasPorPessoa = agruparJornadasPorPessoa(
     jornadas.filter((jornada) => jornada.status_matricula === 'ativa'),
   );
-  const { pessoas, pessoasPorCurso } = montarPessoasCarteira(jornadasPorPessoa, alunosPorId, 'ativo');
+  const { pessoas, pessoasPorCurso } = montarPessoasCarteira(jornadasPorPessoa, alunosPorId, 'ativo', cursosProjeto);
 
   // Alunos trancados sao exibidos a parte: nunca entram na distribuicao por
   // curso nem na classificacao LAMK/EMLA, que continuam refletindo so ativos.
   const jornadasTrancadasPorPessoa = agruparJornadasPorPessoa(
     jornadasTrancadas.filter((jornada) => jornada.status_matricula === 'trancada'),
   );
-  const { pessoas: pessoasTrancadas } = montarPessoasCarteira(jornadasTrancadasPorPessoa, alunosPorId, 'trancado');
+  const { pessoas: pessoasTrancadas } = montarPessoasCarteira(jornadasTrancadasPorPessoa, alunosPorId, 'trancado', cursosProjeto);
   const alunosTrancados = [...pessoasTrancadas.values()]
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 
@@ -398,9 +415,30 @@ export async function buscarCarteiraProfessorDetalheCanonica({
 
   if (alunosError) throw alunosError;
 
+  // Quais cursos desta carteira sao atividade extra. Mesmo padrao ja usado em
+  // buscarOcupacoesTurmasProfessorCanonicas: consulta por id, nunca por nome.
+  const cursoIdsCarteira = [...new Set(
+    [...jornadas, ...jornadasTrancadas]
+      .map((jornada) => jornada.curso_id)
+      .filter((id): id is number => id !== null),
+  )];
+  const cursosProjeto = new Set<number>();
+  if (cursoIdsCarteira.length > 0) {
+    const { data: cursosProjetoData, error: cursosProjetoError } = await supabase
+      .from('cursos')
+      .select('id')
+      .in('id', cursoIdsCarteira)
+      .eq('is_projeto_banda', true);
+    // Falha aqui nao pode derrubar a carteira: sem o flag a lista aparece sem os
+    // badges, que e degradacao aceitavel. Some-la em silencio nao seria.
+    if (cursosProjetoError) console.warn('Nao foi possivel marcar atividade extra na carteira', cursosProjetoError);
+    (cursosProjetoData || []).forEach((curso) => cursosProjeto.add(Number(curso.id)));
+  }
+
   return agruparCarteiraProfessorCanonica(
     jornadas,
     (alunosData || []) as AlunoOperacionalCarteira[],
     jornadasTrancadas,
+    cursosProjeto,
   );
 }
