@@ -155,14 +155,17 @@ const LEITURA = [
     description: 'Tudo sobre UM contato numa chamada: etapa, dias parado, experimentais (feitas/faltou/canceladas), professor, canal, anúncio, calor da conversa (chegou a humano? quantas mensagens?), sinais abertos e o que já foi registrado. Busque por telefone OU nome OU lead_id. Se voltar `ambiguo`, PERGUNTE qual — nunca escolha. Só devolve lead da unidade de quem pergunta.',
     inputSchema: { type: 'object', properties: { telefone: { type: 'string' }, nome: { type: 'string' }, lead_id: { type: 'integer' } } } },
   { name: 'agenda_do_dia',
-    description: 'A AGENDA da unidade de quem pergunta num dia: TODAS as experimentais do dia com a situacao de cada uma (agendada/realizada/faltou/cancelada) + visitas (hora, aluno, curso, professor, telefone), o que ficou de ontem sem desfecho, quem faltou e ainda da pra remarcar, quem esta quente agora e a estrela mais perto. Use para "quais as experimentais de hoje?", "o que tenho na agenda?", "quem vem amanha?" — NAO use minha_pauta para isso: pauta e o que precisa de acao, agenda e quem tem aula marcada. `data` YYYY-MM-DD (padrao hoje). SEMPRE cite `reagendadas_para_outro_dia` quando vier preenchido: e o que saiu do dia e foi para outra data — a consultora precisa saber, foi reclamacao real.',
-    inputSchema: { type: 'object', properties: { data: { type: 'string', description: 'YYYY-MM-DD (padrao: hoje).' } } } },
+    description: 'A AGENDA da unidade de quem pergunta num dia: TODAS as experimentais do dia com a situacao de cada uma (agendada/realizada/faltou/cancelada) + visitas (hora, aluno, curso, professor, telefone), o que ficou de ontem sem desfecho, quem faltou e ainda da pra remarcar, quem esta quente agora e a estrela mais perto. Use para "quais as experimentais de hoje?", "o que tenho na agenda?", "quem vem amanha?" — NAO use minha_pauta para isso: pauta e o que precisa de acao, agenda e quem tem aula marcada. `data` YYYY-MM-DD (padrao hoje). SEMPRE cite `reagendadas_para_outro_dia` quando vier preenchido: e o que saiu do dia e foi para outra data — a consultora precisa saber, foi reclamacao real. 🔴 QUEM LIDERA A REDE (diretoria e a Anne Krissya) recebe as TRES unidades: vem `escopo: "a REDE"`, um bloco `rede` com o consolidado e `por_unidade` com cada uma. Cite o consolidado E abra por unidade — foi para isso que ela perguntou. Para ver SO uma, mande `unidade` com o nome ("Recreio"). ⚠️ Para quem TEM unidade, `unidade` e ignorado pelo banco: nao prometa outra unidade a ela.',
+    inputSchema: { type: 'object', properties: { data: { type: 'string', description: 'YYYY-MM-DD (padrao: hoje).' },
+      unidade: { type: 'string', description: 'Nome da unidade (Barra | Campo Grande | Recreio). So para quem enxerga a rede; ignorado para quem tem unidade propria.' } } } },
   { name: 'fechamento_do_dia',
-    description: 'Como FOI o dia na unidade de quem pergunta: experimentais realizadas e o desfecho de cada uma, faltas (remarcada? teto de 3 tentativas?), matriculas do dia, quem e de dias anteriores e segue sem desfecho, e o que ja esta marcado para o proximo dia util. Use para "como foi o dia?", "quantas experimentais teve hoje?", "quem matriculou hoje?". `data` YYYY-MM-DD (padrao hoje).',
-    inputSchema: { type: 'object', properties: { data: { type: 'string', description: 'YYYY-MM-DD (padrao: hoje).' } } } },
+    description: 'Como FOI o dia na unidade de quem pergunta: experimentais realizadas e o desfecho de cada uma, faltas (remarcada? teto de 3 tentativas?), matriculas do dia, quem e de dias anteriores e segue sem desfecho, e o que ja esta marcado para o proximo dia util. Use para "como foi o dia?", "quantas experimentais teve hoje?", "quem matriculou hoje?". `data` YYYY-MM-DD (padrao hoje). 🔴 QUEM LIDERA A REDE (diretoria e a Anne Krissya) recebe as TRES unidades: vem `escopo: "a REDE"`, um bloco `rede` com o consolidado e `por_unidade` com cada uma. Cite o consolidado E abra por unidade — foi para isso que ela perguntou. Para ver SO uma, mande `unidade` com o nome ("Recreio"). ⚠️ Para quem TEM unidade, `unidade` e ignorado pelo banco: nao prometa outra unidade a ela.',
+    inputSchema: { type: 'object', properties: { data: { type: 'string', description: 'YYYY-MM-DD (padrao: hoje).' },
+      unidade: { type: 'string', description: 'Nome da unidade. So para quem enxerga a rede.' } } } },
   { name: 'numeros_do_mes',
-    description: 'Os numeros do MES da unidade de quem pergunta, da MESMA fonte do relatorio comercial que a equipe recebe: leads, experimentais realizadas, faltas, visitas, matriculas, ticket medio da parcela e do passaporte, total de passaportes, o funil (lead->experimental->matricula) com as METAS de cada um, e os canais e cursos mais procurados. Use para "como esta o mes?", "quantos leads eu tive?", "qual meu funil?", "bati a meta?". ⚠️ Mes JA FECHADO vem do fechamento oficial (`fechado: true`) — e o mesmo numero do relatorio, nao recalcule nem compare com o vivo. Mes corrente vem ao vivo e ainda muda: diga isso.',
-    inputSchema: { type: 'object', properties: { ano: { type: 'integer' }, mes: { type: 'integer' } } } },
+    description: 'Os numeros do MES da unidade de quem pergunta, da MESMA fonte do relatorio comercial que a equipe recebe: leads, experimentais realizadas, faltas, visitas, matriculas, ticket medio da parcela e do passaporte, total de passaportes, o funil (lead->experimental->matricula) com as METAS de cada um, e os canais e cursos mais procurados. Use para "como esta o mes?", "quantos leads eu tive?", "qual meu funil?", "bati a meta?". ⚠️ Mes JA FECHADO vem do fechamento oficial (`fechado: true`) — e o mesmo numero do relatorio, nao recalcule nem compare com o vivo. Mes corrente vem ao vivo e ainda muda: diga isso. 🔴 QUEM LIDERA A REDE (diretoria e a Anne Krissya) recebe as TRES unidades: vem `escopo: "a REDE"`, um bloco `rede` com o consolidado e `por_unidade` com cada uma. Cite o consolidado E abra por unidade — foi para isso que ela perguntou. Para ver SO uma, mande `unidade` com o nome ("Recreio"). ⚠️ Para quem TEM unidade, `unidade` e ignorado pelo banco: nao prometa outra unidade a ela.',
+    inputSchema: { type: 'object', properties: { ano: { type: 'integer' }, mes: { type: 'integer' },
+      unidade: { type: 'string', description: 'Nome da unidade. So para quem enxerga a rede.' } } } },
   { name: 'pendencias_comerciais',
     description: 'As 5 pendências cadastrais da unidade: matriculado sem anamnese, experimental realizada sem ficha, lead sem canal de origem, lead sem curso de interesse, experimental feita sem desfecho — com total, amostra e a ação. Use para "tem pendência cadastral?", "quem está sem anamnese?". Cada uma delas você pode RESOLVER com as tools de registrar_*.',
     inputSchema: { type: 'object', properties: { amostra: { type: 'integer', description: 'Itens por bucket (padrão 8).' } } } },
@@ -305,6 +308,26 @@ function toolsVisiveis() {
           ...(veTudo() ? TRAFEGO : []), ...ESCRITA];
 }
 
+// Nome da unidade -> uuid. O modelo fala "Recreio", nunca um uuid — pedir
+// uuid a ele e convite a alucinacao.
+// ⚠️ Nome desconhecido LEVANTA erro em vez de virar null: null silencioso
+//    devolveria a REDE INTEIRA para quem pediu UMA unidade.
+const _unidadeCache = new Map();
+async function unidadeIdPorNome(nome) {
+  if (!nome) return null;
+  const chave = String(nome).trim().toLowerCase();
+  if (_unidadeCache.has(chave)) return _unidadeCache.get(chave);
+  const rows = await fetch(`${URL_}/rest/v1/unidades?select=id,nome&ativo=eq.true`,
+    { headers: { apikey: KEY, Authorization: `Bearer ${KEY}` } }).then((r) => r.json());
+  const norm = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+  const achou = (rows || []).find((u) => norm(u.nome) === norm(nome));
+  if (!achou) {
+    throw new Error(`unidade_desconhecida: "${nome}" — as ativas sao ${(rows || []).map((u) => u.nome).join(", ")}`);
+  }
+  _unidadeCache.set(chave, achou.id);
+  return achou.id;
+}
+
 async function callTool(name, a) {
   if (!QUEM) throw new Error('solicitante_nao_autorizado: o telefone carimbado nesta instancia nao esta na governanca');
   const tel = TEL; // sempre do carimbo, nunca do argumento
@@ -335,11 +358,17 @@ async function callTool(name, a) {
     case 'ficha_lead':
       return j(await rpc('get_situacao_lead_v1', { p_solicitante_telefone: tel, p_telefone_lead: a.telefone || null, p_nome_lead: a.nome || null, p_lead_id: a.lead_id || null }));
     case 'agenda_do_dia':
-      return j(await rpc('mila_briefing_manha_v1', { p_solicitante_telefone: tel, ...(a.data ? { p_data: a.data } : {}) }));
+      // ⚠️ `p_unidade_id` so tem efeito para quem enxerga a rede; a RPC o
+      //    IGNORA para quem tem unidade propria (trava no banco).
+      return j(await rpc('mila_briefing_manha_v1', { p_solicitante_telefone: tel,
+        ...(a.data ? { p_data: a.data } : {}), p_unidade_id: await unidadeIdPorNome(a.unidade) }));
     case 'fechamento_do_dia':
-      return j(await rpc('mila_fechamento_dia_v1', { p_solicitante_telefone: tel, ...(a.data ? { p_data: a.data } : {}) }));
+      return j(await rpc('mila_fechamento_dia_v1', { p_solicitante_telefone: tel,
+        ...(a.data ? { p_data: a.data } : {}), p_unidade_id: await unidadeIdPorNome(a.unidade) }));
     case 'numeros_do_mes':
-      return j(await rpc('mila_numeros_do_mes_v1', { p_solicitante_telefone: tel, ...(a.ano ? { p_ano: a.ano } : {}), ...(a.mes ? { p_mes: a.mes } : {}) }));
+      return j(await rpc('mila_numeros_do_mes_v1', { p_solicitante_telefone: tel,
+        ...(a.ano ? { p_ano: a.ano } : {}), ...(a.mes ? { p_mes: a.mes } : {}),
+        p_unidade_id: await unidadeIdPorNome(a.unidade) }));
     case 'retomadas_do_dia':
       return j(await rpc('mila_retomadas_do_dia_v1', { p_solicitante_telefone: tel, ...(a.data ? { p_data: a.data } : {}) }));
     case 'agenda_da_escola':
