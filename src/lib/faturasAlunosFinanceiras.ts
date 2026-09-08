@@ -1,3 +1,9 @@
+import {
+  INADIMPLENCIA_CANONICA_LOADING,
+  normalizarInadimplenciaCanonica,
+  type InadimplenciaCanonicaState,
+} from './inadimplenciaCanonica.ts';
+
 export type FaturasFinanceirasSituacao =
   | 'todas'
   | 'pagas'
@@ -130,6 +136,7 @@ export interface FaturasFinanceirasState {
   };
   collectionAllowed: boolean;
   collectionScope: string;
+  inadimplenciaCanonica: InadimplenciaCanonicaState;
   totals: Record<Exclude<FaturasFinanceirasSituacao, 'reconciliacao'>, FaturasFinanceirasTotals> & {
     visaoAtual: FaturasFinanceirasTotals & { status: string };
   };
@@ -215,6 +222,11 @@ const emptyState = (status: FaturasFinanceirasStatusLeitura, error: string | nul
   },
   collectionAllowed: false,
   collectionScope: 'blocked',
+  inadimplenciaCanonica: status === 'loading'
+    ? INADIMPLENCIA_CANONICA_LOADING
+    : normalizarInadimplenciaCanonica(null, {
+        message: error ?? 'Falha ao consultar a inadimplencia canonica.',
+      }),
   totals: {
     todas: emptyTotals(),
     pagas: emptyTotals(),
@@ -624,6 +636,7 @@ export function normalizarFaturasAlunosFinanceiras(payload: unknown, error?: { m
     return emptyState('error', 'Os totais de reconciliacao vieram invalidos.');
   }
   const collectionAllowed = status !== 'stale' && operational.collection_allowed;
+  const inadimplenciaCanonica = normalizarInadimplenciaCanonica(root.inadimplencia_canonica);
   const resolvidasManualmente = asFiniteNumberOrNull(reconciliation.resolvidas_manualmente) ?? 0;
   const foraOperacao = asRecord(reconciliation.fora_operacao);
   const foraHistorico = asFiniteNumberOrNull(foraOperacao?.historico_ex_aluno) ?? 0;
@@ -649,6 +662,7 @@ export function normalizarFaturasAlunosFinanceiras(payload: unknown, error?: { m
     },
     collectionAllowed,
     collectionScope: collectionAllowed ? asText(operational.collection_scope) ?? 'blocked' : 'blocked',
+    inadimplenciaCanonica,
     totals: {
       todas: parsedTotals.todas,
       pagas: parsedTotals.pagas,

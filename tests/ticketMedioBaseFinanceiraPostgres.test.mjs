@@ -10,13 +10,20 @@ const migration = readFileSync(
   ),
   'utf8',
 );
+const recoveryMigration = readFileSync(
+  new URL(
+    '../supabase/migrations/20260908170000_relatorio_admin_agosto_2026_integridade_e_base_financeira.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 
-function extractFunction(name) {
-  const start = migration.indexOf(`create or replace function public.${name}`);
+function extractFunction(source, name) {
+  const start = source.indexOf(`create or replace function public.${name}`);
   assert.ok(start >= 0, `funcao ${name} ausente da migration`);
-  const close = migration.indexOf('\n$function$;', start);
+  const close = source.indexOf('\n$function$;', start);
   assert.ok(close > start, `fim da funcao ${name} ausente da migration`);
-  return migration.slice(start, close + '\n$function$;'.length);
+  return source.slice(start, close + '\n$function$;'.length);
 }
 
 function docker(args, input) {
@@ -165,7 +172,7 @@ test('PostgreSQL aceita 344/334 no administrativo e 325 no ticket financeiro', {
       from payloads;
     `);
 
-    psql(container, extractFunction('aplicar_financeiro_ticket_contratual_v3'));
+    psql(container, extractFunction(migration, 'aplicar_financeiro_ticket_contratual_v3'));
 
     const financeiro = JSON.parse(psql(container, String.raw`
       select public.aplicar_financeiro_ticket_contratual_v3(
@@ -201,15 +208,10 @@ test('PostgreSQL aceita 344/334 no administrativo e 325 no ticket financeiro', {
           tempo_permanencia_medio: 15,
         },
       },
-      financeiro_ticket_contratual: {
-        ticket_denominador_pagantes: 325,
-      },
       financeiro_faturas_emusys: {
         totais: {
           mrr_atual: 143346.97,
           faturamento_previsto: 144749.17,
-          ticket_denominador_pagantes: 325,
-          alunos_pagantes_canonicos: 325,
         },
       },
       kpis_gestao: [{ inadimplentes: 1, inadimplencia: 0.31 }],
@@ -243,7 +245,10 @@ test('PostgreSQL aceita 344/334 no administrativo e 325 no ticket financeiro', {
       );
     `);
 
-    psql(container, extractFunction('get_relatorio_admin_mensal_rico_v1'));
+    psql(
+      container,
+      extractFunction(recoveryMigration, 'get_relatorio_admin_mensal_rico_v1'),
+    );
 
     const rico = JSON.parse(psql(container, String.raw`
       select public.get_relatorio_admin_mensal_rico_v1(
