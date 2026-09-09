@@ -225,6 +225,54 @@ function conversaEmTexto(c: Candidato): string {
     linhas.join("\n");
 }
 
+/**
+ * Devolve, das conversas dadas, as que continuam ABERTAS no Chatwoot.
+ *
+ * Existe porque o espelho da SOL não sabe de resolução (ver o comentário no
+ * passo 3b). Sem credencial configurada ou com a API fora do ar, devolve a
+ * lista inteira: a falta de resposta não pode virar "todo mundo foi atendido",
+ * que sumiria com a pauta em silêncio.
+ */
+async function filtrarAindaAbertasNoChatwoot(
+  ids: number[],
+  sb: SupabaseClient,
+): Promise<number[]> {
+  const url = Deno.env.get("CHATWOOT_URL");
+  const conta = Deno.env.get("CHATWOOT_ACCOUNT_ID");
+  const token = Deno.env.get("CHATWOOT_API_TOKEN");
+  if (!url || !conta || !token || ids.length === 0) return ids;
+
+  const base = url.replace(/\/+$/, "") + "/api/v1/accounts/" + conta;
+  const abertas: number[] = [];
+  const semResposta: number[] = [];
+
+  await emLotes(ids, 8, async (id) => {
+    try {
+      const r = await fetch(base + "/conversations/" + id, {
+        headers: { api_access_token: token, "User-Agent": "la-radar-sinais" },
+      });
+      if (!r.ok) return void semResposta.push(id);
+      const c = await r.json();
+      // `resolved` é a declaração da equipe. `pending`/`snoozed` seguem vivas.
+      if (c?.status !== "resolved") abertas.push(id);
+    } catch {
+      semResposta.push(id);
+    }
+  });
+
+  if (semResposta.length) {
+    // Sem log isto vira "a pauta encolheu sozinha" semanas depois, sem pista.
+    await sb.from("automacao_log").insert({
+      evento: "mapa_sinais",
+      acao: "status_chatwoot_indisponivel",
+      status: "warn",
+      aluno_nome: "(execucao)",
+      detalhes: { conversas: semResposta.slice(0, 50), total: semResposta.length },
+    });
+  }
+  return [...abertas, ...semResposta];
+}
+
 // Traduz o nome da unidade que vem na foto (`sol_chatwoot_inboxes.unidade`)
 // para o id do LA Report. Cache em memoria: sao tres unidades e o run inteiro
 // dura minutos.
@@ -368,23 +416,35 @@ serve(async (req) => {
 
   // 1b) A SEGUNDA FOTO — o que faz o sinal SUMIR quando a equipe responde.
   //
-  // 🔴 Medido em 07/09/2026: 5 de 30 sinais de conversa vigentes (17%) já
-  // tinham sido respondidos e continuavam na pauta. A causa é o comentário
-  // logo abaixo: a chave de idempotência inclui a última mensagem, então
-  // conversa parada do mesmo jeito não é reclassificada. O sinal é uma
-  // fotografia do instante e ninguém tirava a segunda.
+  // 🔴 "CLIENTE FALOU POR ÚLTIMO" NÃO É "CLIENTE ESPERANDO" (09/09/2026).
   //
-  // Esta foto JÁ é a segunda: por definição ela lista "cliente falou por
-  // último e ninguém respondeu". Quem ainda está nela continua esperando;
-  // quem saiu, foi respondido ou teve a conversa resolvida no Chatwoot.
-  // Custo: zero token, zero chamada nova — a foto já estava buscada.
+  // Esta marcação rodava AQUI, no passo 1, com a lista crua de candidatos — e
+  // a lista crua é `ultimo_autor = 'contact'`. Só que a última palavra do
+  // cliente costuma ser o agradecimento que ENCERRA a conversa. Medido, nos
+  // 18 sinais que a vigência mantinha vivos indevidamente, a última fala era:
+  //   ❤️ · 👍 · 🙏🏻 · 🥰 · "Obrigada" · "Isso" · "Sim" · "ok" · "Sábado"
+  // — nove segundos depois de a consultora responder, em vários casos. Foi
+  // exatamente o que a Daiana relatou: *"quando puxa é porque eu tô
+  // encerrando a conversa"*.
   //
-  // ⚠️ Roda ANTES do recorte de pendentes e independe de haver algo novo a
-  // classificar: em dia sem candidato novo é justamente quando os sinais
-  // velhos precisam ser reconferidos.
-  if (!ensaio) {
+  // O absurdo era de ORDEM, não de regra: no passo 3 o modelo lê o ❤️, decide
+  // `cortesia · precisa_resposta:false` e não emite sinal — mas o passo 1 já
+  // tinha carimbado o sinal velho como vigente. A mesma rodada julgava "não
+  // precisa mais" depois de ter afirmado "ainda precisa". O proxy grosseiro
+  // atropelava o juízo fino.
+  //
+  // Agora a marcação é `marcarFotoJulgada()`, chamada DEPOIS da classificação,
+  // com as conversas que o veredito desta rodada diz que ainda esperam.
+  // ⚠️ Quem NÃO foi julgado nesta rodada (erro de OpenAI, ou além do teto)
+  //    entra na lista assim mesmo: a direção da falha aqui é fail-OPEN — item
+  //    velho custa um instante de atenção, item sumido custa um aluno.
+  // ⚠️ Segue independendo de haver candidato novo: em dia sem nada a
+  //    classificar é justamente quando os sinais velhos precisam ser
+  //    reconferidos, e o veredito do ledger cobre esse caso.
+  const marcarFotoJulgada = async (aindaEsperam: number[]) => {
+    if (ensaio) return;
     const { error: erroFoto } = await sb.rpc("radar_marcar_foto_conversas_v1", {
-      p_conversa_ids: candidatos.map((c) => Number(c.conversa_id)),
+      p_conversa_ids: aindaEsperam,
       // ⚠️ foto truncada não decide nada: ausência não prova resposta.
       p_truncado: foto.truncado === true,
     });
@@ -400,21 +460,28 @@ serve(async (req) => {
         detalhes: { erro: String(erroFoto.message).slice(0, 300) },
       });
     }
-  }
+  };
 
   // 2) já classificados: a chave inclui a ÚLTIMA MENSAGEM, então conversa parada
   //    do mesmo jeito não é reclassificada — só volta se o cliente escrever de novo.
   const chaves = candidatos.map((c) =>
     chaveIdempotencia(c.conversa_id, c.ultimo_message_id, PROMPT_VERSAO)
   );
+  // 🔴 O `status` vem junto porque ELE É O VEREDITO: gravamos
+  // `status: d.emitir ? "ok" : "warn"` logo abaixo. Para a conversa que já foi
+  // julgada nesta mesma última mensagem, este é o julgamento vigente — e é o
+  // que decide se ela continua na foto. Antes só o `idempotency_key` era lido
+  // e o veredito, já gravado, era jogado fora.
   const jaVistas = new Set<string>();
+  const veredictoNoLedger = new Map<string, boolean>();
   for (let i = 0; i < chaves.length; i += 200) {
     const { data } = await sb.from("automacao_log")
-      .select("idempotency_key")
+      .select("idempotency_key, status")
       .in("idempotency_key", chaves.slice(i, i + 200));
-    (data ?? []).forEach((r: { idempotency_key: string }) =>
-      jaVistas.add(r.idempotency_key)
-    );
+    (data ?? []).forEach((r: { idempotency_key: string; status: string }) => {
+      jaVistas.add(r.idempotency_key);
+      veredictoNoLedger.set(r.idempotency_key, r.status === "ok");
+    });
   }
   const pendentes = candidatos.filter((c) =>
     !jaVistas.has(
@@ -427,22 +494,36 @@ serve(async (req) => {
   const conta = (k: string) => placar[k] = (placar[k] ?? 0) + 1;
   const amostraEnsaio: unknown[] = [];
 
+  // Veredito desta rodada, por conversa: `true` = a escola ainda deve retorno.
+  // É o que alimenta a segunda foto lá no fim.
+  const aindaEspera = new Map<number, boolean>();
+
   await emLotes(novos, CONCORRENCIA, async (c) => {
     let v: VeredictoConversa;
     try {
       v = await classificar(c, apiKey);
     } catch (e) {
       conta("erro_openai");
+      // ⚠️ Sem veredito não se conclui nada: mantém na foto (fail-open).
+      aindaEspera.set(Number(c.conversa_id), true);
       if (!ensaio) await logErro(sb, c, String(e).slice(0, 300));
       return;
     }
 
     const d = decidirSinal(v);
     conta("tipo:" + v.tipo);
+    aindaEspera.set(Number(c.conversa_id), d.emitir);
 
+    // ⚠️ A unidade da PORTA vai junto e desempata SÓ entre leads. A mesma
+    // pessoa costuma ter lead em 2 unidades (Kellen: 2021/CG e 13997/Recreio;
+    // Suelen: 8922/CG e 9826/Recreio) e a RPC escolhia "o mais novo" — foi
+    // assim que duas conversas do inbox `Mila_CG` foram parar na pauta do
+    // Recreio em 09/09, uma delas pedindo literalmente aula "em Campo Grande".
+    // Para ALUNO a dica é ignorada de propósito: matrícula manda sobre porta.
     const ident = c.telefone
       ? (await sb.rpc("radar_resolver_entidade_por_telefone", {
         p_telefone: c.telefone,
+        p_unidade_id: await unidadeDoInbox(sb, c.unidade),
       })).data
       : null;
     const entidadeTipo: string | null = ident?.entidade_tipo ?? null;
@@ -603,10 +684,56 @@ serve(async (req) => {
     await encerra();
   });
 
+  // 3) SEGUNDA FOTO, agora com o veredito na mão (ver 1b).
+  //
+  // Continua na foto quem, pelo julgamento MAIS RECENTE, ainda espera retorno:
+  //   · julgado nesta rodada        → `aindaEspera` (d.emitir)
+  //   · julgado antes, e a conversa não andou desde então → veredito do ledger
+  //   · não julgado (erro, ou além do teto) → FICA, porque não sabemos
+  //
+  // ⚠️ O 3º caso é fail-open deliberado e é o oposto da regra do caixa da Sol:
+  //    lá, na dúvida, não se mexe em dinheiro; aqui, na dúvida, não se some com
+  //    um cliente.
+  const peloVeredito = candidatos
+    .filter((c) => {
+      const daRodada = aindaEspera.get(Number(c.conversa_id));
+      if (daRodada !== undefined) return daRodada;
+      const doLedger = veredictoNoLedger.get(
+        chaveIdempotencia(c.conversa_id, c.ultimo_message_id, PROMPT_VERSAO),
+      );
+      return doLedger ?? true;
+    })
+    .map((c) => Number(c.conversa_id));
+
+  // 3b) ÚLTIMO PORTÃO: a conversa ainda está ABERTA no Chatwoot?
+  //
+  // 🔴 O espelho da SOL só recebe `message_created` — conferido em 09/09/2026,
+  // 2.640 eventos em 3 dias e NENHUM outro tipo. O `conversa_status` que a
+  // `vw_atendimento_candidatos_sinal` filtra vem de dentro do payload da
+  // ÚLTIMA MENSAGEM, então ele congela ali: conversa resolvida DEPOIS da última
+  // mensagem continua candidata para sempre. Foi o caso da Débora (conv 20184,
+  // resolvida, cobrada por 14 dias) e da Nilza (20732).
+  //
+  // RESOLVER é o gesto pelo qual a equipe declara o desfecho — é a informação
+  // mais forte que existe sobre "acabou", e é dela mesma. Ignorá-la é cobrar
+  // quem trabalhou certo.
+  //
+  // ⚠️ Pergunta à FONTE, e só sobre quem sobreviveu ao veredito (37 de 259 hoje):
+  //    N pequeno e limitado pela lista curta, não pela foto inteira.
+  // ⚠️ Chatwoot fora do ar mantém todo mundo (fail-open) — mesma direção do
+  //    resto deste passo. Não confundir com a regra do caixa da Sol, onde a
+  //    dúvida trava; aqui a dúvida custa atenção, lá custa dinheiro.
+  const aindaEsperam = await filtrarAindaAbertasNoChatwoot(peloVeredito, sb);
+  await marcarFotoJulgada(aindaEsperam);
+
   return json({
     ok: true,
     ensaio,
     candidatos_na_foto: candidatos.length,
+    // 🔴 A distância entre estes dois números É o defeito que este passo
+    // conserta: eram as conversas mantidas na pauta por terem o cliente
+    // falando por último, mesmo já julgadas como "não precisa resposta".
+    ainda_esperam_pelo_veredito: aindaEsperam.length,
     // Os tres sao coisas diferentes e antes estavam somados num numero so,
     // que dizia "154 ja classificados" no primeiro run, com o ledger vazio.
     ja_no_ledger: candidatos.length - pendentes.length,
