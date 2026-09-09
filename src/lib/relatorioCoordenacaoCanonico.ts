@@ -1,4 +1,4 @@
-import { formatarQuantidadeCarteira } from '../../supabase/functions/_shared/apresentacaoRelatorioCoordenacao.ts';
+import { formatarQuantidadeCarteira, linhasAtualizacaoRelatorio } from '../../supabase/functions/_shared/apresentacaoRelatorioCoordenacao.ts';
 
 export type TipoRelatorioCoordenacaoCanonico =
   | 'ranking'
@@ -212,6 +212,7 @@ function formatarData(dataIso: string): string {
 
 function formatarDataHora(data: Date): string {
   return data.toLocaleString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -329,6 +330,7 @@ function cabecalho(titulo: string, contrato: RelatorioCoordenacaoCanonicoV2): st
     `📅 *${visao}*`,
     `🗓 Período: ${formatarData(periodo.inicio)} até ${formatarData(periodo.fim)}`,
     ...(documento ? [documento] : []),
+    ...linhasAtualizacaoRelatorio(periodo.data_corte, contrato.documento?.gerado_em),
     '━━━━━━━━━━━━━━━━━━━━━━',
     '',
     `_Dados oficiais do período selecionado no LA Report. ${estado}_`,
@@ -340,7 +342,7 @@ function rodape(dataGeracao = new Date()): string[] {
   return [
     '',
     '━━━━━━━━━━━━━━━━━━━━━━',
-    `📅 Gerado em: ${formatarDataHora(dataGeracao)}`,
+    `📅 Texto gerado em: ${formatarDataHora(dataGeracao)}`,
     '━━━━━━━━━━━━━━━━━━━━━━',
   ];
 }

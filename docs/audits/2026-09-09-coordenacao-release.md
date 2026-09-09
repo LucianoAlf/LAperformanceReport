@@ -2,16 +2,21 @@
 
 ## Estado da liberação
 
-**Em validação, sem liberação para premiação.** Branch `fix/coordenacao-confiabilidade-total`, HEAD inicial `19878d577266921ff3719484318bf32deda436a9`. Sem commit, push, merge ou deploy de frontend. Edge publicada em versão 97 após autorização explícita.
+**Em validação, sem liberação para premiação.** Branch `fix/coordenacao-confiabilidade-total`, HEAD inicial `19878d577266921ff3719484318bf32deda436a9`. Implementação versionada em `eb2cd9e1`, main integrada sem conflito em `a82ddb2f`, PR #409 aberto e enviado. Frontend ainda não publicado. Edge publicada em versão 97 após autorização explícita.
 
 Duas decisões foram confirmadas explicitamente pelo usuário nesta continuação:
 
 1. Manter **D+30**: Jun–Ago oficial apenas a partir de **30/09**, após reapuração e fechamento explícito. Regularização dos 117 registros publicada às 17:38:40 UTC; notas/evidências e documentos anteriores preservados, retirando somente a oficialidade corrente. Não foi criado novo job de fechamento/premiação automática.
-2. Autorizar a integração existente com OpenAI, envio de nomes/prioridades, deploy e teste real. Edge 95 substituída por 96 e depois 97 (última inclui apresentação compartilhada da carteira). Autorização customizada existente preservada; nenhum novo dado financeiro enviado à IA. A sessão Playwright encerrou durante a primeira tentativa; navegador reaberto na tela de login e usuário solicitado a autenticar novamente. Ainda não contar o quinto relatório como validado no navegador.
+2. Autorizar a integração existente com OpenAI, envio de nomes/prioridades, deploy e teste real. Edge 95 substituída por 96 e depois 97 (última inclui apresentação compartilhada da carteira). Autorização customizada existente preservada; nenhum novo dado financeiro enviado à IA. A sessão CLI encerrou, mas a sessão legítima do Chrome habitual foi recuperada sem manipular autenticação. O quinto relatório já gerou nos quatro escopos de Jun–Ago; a repetição integral no frontend final segue pendente.
 
 O usuário também determinou retirar MRR dos cinco relatórios de Coordenação. Valores, totais e pendências financeiras foram removidos da apresentação; documentos de origem e relatórios gerenciais permanecem intactos. O menu já não promete MRR. Carteiras fracionárias de ciclos usam o mesmo formatador nos cinco relatórios, sem arredondar a média para pessoas inteiras.
 
 ### Evidência da continuação autorizada
+
+- Integração: `npm test` completo em `a82ddb2f` passou localmente, incluindo 523 testes principais, pretests e 280 Node + 29 Deno de Coordenação. Build integrado: 4.791 módulos, exit 0, 16,71 s.
+- CI inicialmente passou nos pretests e 523 testes principais, mas a resolução de tipos da Edge exigia OpenAI 4 no node_modules do frontend (OpenAI 6). Correção restrita ao comando de testes: `--node-modules-dir=none --frozen`, com lock Deno gerado/versionado; nenhum pacote npm do frontend ou Edge publicada alterado. Revisor executou 29/29 com `--frozen --cached-only`; principal repetiu 49 pretests + 29 específicos. Commits `1b46c5a0`/`2b7a2bbf`.
+- Captura diária não é consulta em tempo real: às 17:56:55 UTC, os oito documentos abertos mantinham 120/120 pares mensal/ciclo e 720/720 métricas iguais, painel/documentos com 1.440 métricas iguais. A fonte operacional já avançara de 898/1.067 para 907/1.076 presenças no consolidado; ambas as fotografias eram aditivas. Nenhum refresh oculto ou dado forçado para mascarar defasagem.
+- Correção de clareza: os cinco cabeçalhos passam a informar separadamente data de corte e atualização do documento (hora de Brasília); o rodapé identifica a geração do texto. Dois testes novos reproduziram a omissão antes da correção. Reexecução: 31 Deno + 19 Node, zero falhas; build 4.791 módulos, exit 0, 14,24 s. Nenhuma regra de cálculo, captura, documento histórico ou cron alterado nesta correção.
 
 - RED/GREEN para remoção financeira e restrição do payload OpenAI; mais testes de menu e precisão fracionária. Última execução focada: 23 Node + 19 Deno aprovados, zero falhas. Os três testes V2 com rótulos antigos foram atualizados para os contratos de apresentação vigentes, preservando o teste de ausência sem zero artificial.
 - Fixture PostgreSQL com setembro/outubro/novembro já carregados: cortes progressivos retornam **8/10 = 80%**, **35/40 = 87,5%**, **45/50 = 90%**. Denominadores propositalmente diferentes comprovam soma de eventos, não média simples de percentuais. Cinco testes de períodos/fontes/paridade passaram.

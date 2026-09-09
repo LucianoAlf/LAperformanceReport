@@ -6,6 +6,27 @@ import {
   type RelatorioCoordenacaoCanonicoV2,
 } from "./relatorioCoordenacaoCanonico.ts";
 
+Deno.test("quatro relatórios distinguem corte e atualização dos dados da geração do texto", () => {
+  const contrato = contratoBase();
+  contrato.periodo.data_corte = "2026-08-31";
+  for (const tipo of ["ranking", "carteira", "presenca", "retencao"] as const) {
+    const texto = gerarRelatorioCoordenacaoCanonico({ tipo, contrato, dataGeracao: new Date("2026-09-09T20:00:00Z") });
+    assertMatch(texto, /Dados considerados até: 31\/08\/2026/);
+    assertMatch(texto, /Atualização do documento: 09\/09\/2026, 09:00 \(Brasília\)/);
+    assertMatch(texto, /Texto gerado em: 09\/09\/2026, 17:00/);
+  }
+  contrato.periodo.data_corte = undefined;
+  contrato.documento!.gerado_em = "inválido";
+  const semData = gerarRelatorioCoordenacaoCanonico({ tipo: "presenca", contrato });
+  assertMatch(semData, /Dados considerados até: não informado/);
+  assertMatch(semData, /Atualização do documento: não informada/);
+  assertNotMatch(semData, /Invalid Date/);
+  for (const invalido of ["2026-09-09", "2026-02-30T12:00:00Z", "2026-09-09T24:00:00Z"]) {
+    contrato.documento!.gerado_em = invalido;
+    assertMatch(gerarRelatorioCoordenacaoCanonico({ tipo: "presenca", contrato }), /Atualização do documento: não informada/);
+  }
+});
+
 function contratoBase(): RelatorioCoordenacaoCanonicoV2 {
   return {
     schema_version: 4,

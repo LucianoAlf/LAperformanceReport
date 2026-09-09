@@ -21,6 +21,20 @@ const nomesPrioritarios = [
   "Professora Epsilon",
 ];
 
+Deno.test("relatório completo expõe a captura sem confundir com a geração do texto", async () => {
+  await comEdgeIsolada(() => import("./index.ts?confiabilidade=captura"), async (edge) => {
+    const dados = contratoFixture();
+    dados.periodo.data_corte = "2026-08-31";
+    dados.documento = { id: "fixture", versao: 1, hash: "fixture", status: "retificado", gerado_em: "2026-09-09T12:00:00Z" };
+    const mapa = projetarMapaSinaisPublico(dados.mapa_sinais);
+    const narrativa = await edge.gerarNarrativa(dados, mapa, undefined);
+    const texto = edge.renderizarRelatorio(dados, narrativa, mapa);
+    assertMatch(texto, /Dados considerados até: 31\/08\/2026/);
+    assertMatch(texto, /Atualização do documento: 09\/09\/2026, 09:00 \(Brasília\)/);
+    assertMatch(texto, /Texto gerado em:/);
+  });
+});
+
 function contratoFixture(): Contrato {
   const professores: Contrato["professores"] = Array.from(
     { length: 30 },
@@ -374,7 +388,7 @@ Deno.test("plano de ação só pede completar cadastro quando há pendência obs
         );
         const narrativa = await edge.gerarNarrativa(dados, mapa, undefined);
         const texto = edge.renderizarRelatorio(dados, narrativa, mapa);
-        const plano = secao(texto, "*PLANO DE AÇÃO PEDAGÓGICO*", "Gerado em:");
+        const plano = secao(texto, "*PLANO DE AÇÃO PEDAGÓGICO*", "Texto gerado em:");
         const instrucaoCadastro = /Completar os vínculos de turma e sala/;
         if (comPendencia) {
           assertMatch(narrativa.plano_acao.join("\n"), instrucaoCadastro);

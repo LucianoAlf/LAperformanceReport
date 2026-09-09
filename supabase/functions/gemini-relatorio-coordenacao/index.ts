@@ -16,6 +16,7 @@ import {
 } from "../_shared/ordenacaoProfessoresRelatorio.ts";
 import {
   contarProfessoresSemDadosOficiais,
+  linhasAtualizacaoRelatorio,
   descreverContextoOperacionalRelatorio,
   formatarQuantidadeCarteira,
 } from "../_shared/apresentacaoRelatorioCoordenacao.ts";
@@ -737,6 +738,7 @@ function renderizarRelatorio(
     ...(dados.documento?.versao
       ? [`📄 Documento: versão ${dados.documento.versao} — ${dados.documento.status === "retificado" ? "relatório retificado" : dados.documento.status === "preview" ? "relatório em acompanhamento" : "relatório publicado"}`]
       : []),
+    ...linhasAtualizacaoRelatorio(periodo.data_corte, dados.documento?.gerado_em),
     "━━━━━━━━━━━━━━━━━━━━━━",
     "",
     `> ${narrativa.resumo}`,
@@ -851,7 +853,7 @@ function renderizarRelatorio(
     listaOuNenhum(narrativa.plano_acao, "Manter acompanhamento pedagógico regular."),
     "",
     "━━━━━━━━━━━━━━━━━━━━━━",
-    `📅 Gerado em: ${gerado}`,
+    `📅 Texto gerado em: ${gerado}`,
     "━━━━━━━━━━━━━━━━━━━━━━",
   ];
 
