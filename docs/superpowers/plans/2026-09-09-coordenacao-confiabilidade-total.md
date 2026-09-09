@@ -9,8 +9,8 @@ Eliminar as divergências do ciclo Jun–Ago/2026 e impedir regressão nos ciclo
 ## Gates encontrados durante a execução
 
 - **Decisão confirmada pelo usuário nesta continuação:** manter D+30, com Jun–Ago oficial em 30/09; manter ciclos correntes vivos acumulando somente meses já iniciados; autorizar a integração existente com OpenAI; retirar MRR e informações financeiras da apresentação dos cinco relatórios de Coordenação, sem alterar dados ou relatórios financeiros/gerenciais.
-- **Publicação D+30:** o checkpoint aprovado em 09/08 (`docs/handoffs/2026-08-09-frente-professores-checkpoint-vivo.md`) fixa o fechamento oficial de Jun–Ago em 30/09. A retificação executada em 09/09 seguindo o direcionamento recente publicou os comparáveis antes dessa data. O conflito foi informado ao usuário; aguarda decisão explícita entre manter D+30 e antecipar a classificação. Não liberar premiação nem declarar o rollout concluído enquanto isso estiver pendente.
-- **IA externa:** a publicação da Edge foi bloqueada pela revisão automática por manter envio de nomes/prioridades pedagógicas à OpenAI. Autorização específica foi solicitada. Não contornar o bloqueio por outra ferramenta nem disparar o relatório com IA antes da resposta.
+- **Publicação D+30 — concluído:** o usuário confirmou manter 30/09 como data mínima. A regularização versionada preservou notas/evidências, retirou a publicação antecipada corrente e exige reapuração fresca antes do fechamento. Não houve liberação de premiação.
+- **IA externa/autenticação — concluído:** após as autorizações específicas de OpenAI e da autenticação existente, Edge 99 publicada às 19:03:10 UTC. Handler preservado, chamadas sem sessão ou com token inválido sem acesso ao relatório, geração autenticada conferida. Não houve contorno das recusas anteriores.
 - **Agendamento — gate concluído:** a migration preparou funções sem ativação. Ensaio real com rollback passou em 81,174 s e execução definitiva em 69,301 s, ambos dentro de 110 s. Configurador então ativou o job 257 às 08:00 UTC e desativou somente os oito jobs substituídos, preservando histórico e demais agendamentos.
 
 ## Invariantes de negócio
@@ -30,11 +30,13 @@ Eliminar as divergências do ciclo Jun–Ago/2026 e impedir regressão nos ciclo
 ### Continuação autorizada — fechamento e liberação
 
 - [x] Remover apresentação financeira dos cinco relatórios com prova red/green; preservar o documento de origem e outros consumidores.
-- [ ] Restabelecer o bloqueio oficial antes de D+30 e regularizar a publicação antecipada de Jun–Ago por transição versionada, preservando notas, evidências e histórico.
-- [ ] Provar acumulação do ciclo em setembro/outubro/novembro e o fechamento formal elegível a partir de D+30, sem meses futuros ou soma incorreta de percentuais.
-- [ ] Reconciliar documentos novos, painel, fontes e versões nos quatro escopos.
-- [ ] Revisar, testar, versionar e publicar frontend/Edge; gerar os cinco relatórios em navegador autenticado, com reload e verificação de console/rede.
-- [ ] Registrar evidências finais e limites mensuráveis; nunca converter concordância entre relatórios em garantia fictícia sobre fatos ausentes na origem.
+- [x] Restabelecer o bloqueio oficial antes de D+30 e regularizar a publicação antecipada de Jun–Ago por transição versionada, preservando notas, evidências e histórico.
+- [x] Provar acumulação do ciclo em setembro/outubro/novembro e o fechamento formal elegível a partir de D+30, sem meses futuros ou soma incorreta de percentuais.
+- [x] Reconciliar documentos novos, painel, fontes e versões nos quatro escopos.
+- [x] Revisar, testar, versionar e publicar frontend/Edge; gerar os cinco relatórios em navegador autenticado, com reload e verificação de console/rede.
+- [x] Registrar evidências finais e limites mensuráveis; nunca converter concordância entre relatórios em garantia fictícia sobre fatos ausentes na origem.
+
+Evidência final, versões, hashes, matriz de testes e limites: [`docs/audits/2026-09-09-coordenacao-release.md`](../../audits/2026-09-09-coordenacao-release.md).
 
 ### 1. Contratos de apresentação
 

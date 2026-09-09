@@ -2,7 +2,35 @@
 
 ## Estado da liberação
 
-**Em validação, sem liberação para premiação.** Branch `fix/coordenacao-confiabilidade-total`, HEAD inicial `19878d577266921ff3719484318bf32deda436a9`. Implementação versionada em `eb2cd9e1`, main integrada sem conflito em `a82ddb2f`, PR #409 aberto e enviado. Frontend ainda não publicado. Edge publicada em versão 97 após autorização explícita.
+**Publicação e validação concluídas para os recortes descritos abaixo; uso diagnóstico, sem liberação para premiação.** PR #409 integrado em `main` por squash `e7f50139a0400764db0c1c77cc08c796ac7eb21d`, em 09/09/2026 às 18:17:50 UTC. A árvore final da branch `fix/coordenacao-confiabilidade-total` (`a4d8abd4545f8551318143d2ea23570af42a1ef4`) foi conferida igual à de `main`. A Edge 99 está ativa e já exibe corte/atualização no relatório completo. Este registro documental final é posterior à publicação do código.
+
+### Conclusão após a autorização final
+
+- O usuário confirmou expressamente a republicação mantendo `verify_jwt=false` e a autenticação customizada existente. A leitura imediatamente anterior encontrou versão 98 com o mesmo hash/código da 97; ela ainda não continha os novos rótulos. Nenhuma mudança concorrente no handler foi sobrescrita.
+- Publicação definitiva em **09/09/2026 às 19:03:10.063 UTC (16:03 BRT)**: `gemini-relatorio-coordenacao`, **versão 99**, ACTIVE, hash `4c22077c12e0e84981f9619456b14be660a840c0cbc51907893382a007c78efb`. Os cinco arquivos remotos conferem com os arquivos versionados em `main` (normalização somente de CRLF/LF). Handler de autenticação idêntico antes/depois; nenhuma alteração de banco ou credenciais nesta publicação.
+- Testes focados reexecutados: **31/31 Deno**, zero falhas. A primeira tentativa no sandbox falhou antes de executar testes por pipe do runtime Deno 2.5.1/Windows; a execução autorizada fora dessa restrição passou em 574 ms. O CI integral já aprovado (`34387491952`, 922 testes) teve seu estado `completed/success` reconfirmado.
+- Provas negativas com requisição de período válida: sem Authorization retornou **401 / Sessão inválida**; Bearer inválido retornou **500 / erro genérico de consulta**, sem relatório nem dados. O segundo status conserva o tratamento existente e não é apresentado como 401 ou como validação HTTP ideal.
+- Depois da Edge 99, quatro relatórios completos foram gerados novamente no navegador autenticado: **Consolidado Set–Nov, Consolidado Setembro, Consolidado Jun–Ago e Campo Grande Jun–Ago**. Em todos, corte, atualização do documento e geração do texto corretos; nenhuma informação financeira; **28/28 seções de Top 10** idênticas às saídas locais da mesma versão documental. Essas quatro gerações complementam, não substituem, as 60 conferidas anteriormente.
+- Jun–Ago: corte 31/08/2026 e atualização 09/09 às 14:38 BRT. Setembro/Set–Nov: corte 09/09/2026 e atualização 13:41 BRT. O resultado atual mantém Valdo em **4º com nove matrículas no consolidado** e **2º com seis em Campo Grande**. Jun–Ago segue diagnóstico aguardando D+30, sem título de ranking oficial.
+- Console do navegador sem erros da aplicação após as gerações. As esperas de automação que expiraram foram seguidas de inspeção do estado: o relatório terminou e renderizou; não houve modal vazio persistente ou falha da aplicação. Nenhuma mensagem foi enviada por WhatsApp.
+- Não resta gate técnico de publicação desta frente. Permanecem limites explícitos: captura diária, ocorrências de origem incompletas/conflitantes identificadas e fechamento oficial futuro condicionado a D+30/reapuração. Paridade dos contratos verificados não significa que todos os fatos ausentes na origem passaram a existir.
+
+### Checkpoint publicado — 09/09/2026, após 18:48 UTC
+
+- Produção: `dpl_83WBtR2qPeR56fi3E9fbJVYHCf2V`, estado Ready, projeto `la-performance-report`, commit `e7f50139a0400764db0c1c77cc08c796ac7eb21d`. Alias `https://la-performance-report.vercel.app` confirmado. O build de produção começou às 18:17:54 UTC.
+- CI final: run `34387491952`, **922 testes aprovados** (49 + 10 + 29 pretests, 523 principais, 31 Deno e 280 Node de Coordenação), sem falhas. Verificação de identificadores, Gitleaks e preview também aprovados.
+- Banco: última auditoria principal READ ONLY às **18:17:11.536396 UTC**, **119/119 verificações** aprovadas; auditoria independente às 18:15:48 UTC também aprovada. Os 129 documentos/hashes conferidos nos oito domínios externos à Coordenação permaneceram iguais.
+- Navegador real autenticado em produção: **60 relatórios** (cinco formatos × três unidades e consolidado × Jun–Ago, Setembro e Set–Nov). Foram comparadas **84 seções de Top 10** e **349 posições/nomes/notas** entre os relatórios completo e Health Score, sem divergência. Versões, equipe, presença, conversão pontuando e quantidade de saídas conferidas contra os documentos correspondentes.
+- Os **48 relatórios locais** foram gerados após a publicação e recarga do frontend às 18:19:23 UTC. Os **12 relatórios completos** usaram a mesma Edge 97: seis antes e seis depois dessa publicação. Não se afirma que todos os 60 foram gerados depois do deploy. Todos os recortes comparados mantiveram as mesmas versões e dados.
+- MRR e valores financeiros ausentes nos 60 textos. As 48 saídas locais exibem corretamente corte e hora de atualização do documento, separados da geração do texto. As 12 saídas da Edge 97 ainda não incluem esses dois novos rótulos.
+- Nova reconexão e recarga do Chrome após 18:48 UTC: página com 44 professores carregou; relatório de Presença consolidado Set–Nov foi regenerado e renderizou normalmente, versão 12, **898/1.067 = 84,2%**, corte 09/09, atualização 13:41 BRT, sem MRR. Console sem erros da aplicação. Avisos anteriores de Tailwind CDN são preexistentes. Erros de comunicação da automação com a antiga sessão do navegador não foram erros da aplicação.
+- Logs das RPCs de documento, no trecho observado entre 18:19 e 18:44:57 UTC: 13 respostas 200 em `get_relatorio_coordenacao_documento_v4` e seis em `get_relatorio_coordenacao_documento_v4_por_id`. Essa consulta não prova o status HTTP de toda a aplicação ou da Edge.
+- Atualização viva significa **captura diária às 05:00 BRT**, não consulta em tempo real. Setembro e Set–Nov têm os mesmos dados até o corte atual; as fixtures PostgreSQL comprovam incorporação progressiva de outubro e novembro sem usar meses futuros nem média simples de percentuais.
+- Dados incompletos/conflitantes da origem continuam explicitamente identificados; não foram transformados em ausência de aulas, zero de pendências ou certeza artificial. Assim, a prova é de paridade dos contratos e recortes testados, não uma promessa de perfeição de todos os registros de origem.
+
+**Bloqueio restante:** a checagem de segurança recusou a republicação da Edge com `verify_jwt=false`, embora o valor já esteja ativo e o handler de autenticação permaneça byte a byte igual ao da versão 97. A sessão continua sendo exigida e encaminhada às consultas com permissões do usuário; não se pretende abrir acesso anônimo. A política exige confirmação específica do usuário após essa explicação. Solicitação enviada em texto; nenhum contorno por CLI, mudança de autenticação ou nova tentativa será feito sem a confirmação. O patch está em `main`, mas a função publicada ainda é a 97. Não declarar a entrega 100% concluída até publicar e conferir esse último rótulo no relatório completo.
+
+Os checkpoints abaixo são históricos; suas contagens e pendências descrevem o momento de cada execução, não substituem o estado publicado acima.
 
 Duas decisões foram confirmadas explicitamente pelo usuário nesta continuação:
 
@@ -124,8 +152,9 @@ A troca de Agosto mensal para Ciclo mostrava Jun–Ago mas consultava a chave do
 - O catálogo cresceu por uma migration concorrente alheia a esta tarefa (`20260909163318`, função `sol_caixa_resolver_pagamento_v1`). Nenhuma alteração foi feita nessa frente; o wrapper de presença conserva assinatura única/OID e ACL privada.
 - Destaque vazio não prova ausência de registros. O renderizador completo agora informa apenas que não há destaque disponível; caso negativo reproduzido antes de ajustar a mensagem.
 
-## Ainda não comprovado / não liberado
+## Limites após a conclusão
 
-- Repetição autenticada dos cinco relatórios atuais em todos os escopos/períodos selecionados, após publicar a interface; o primeiro completo já gerou corretamente na sessão Chrome recuperada.
-- Commit/PR/merge/deploy e validação do frontend publicado.
-- Não declarar “100% concluído” antes de fechar esses gates.
+- A matriz de 60 relatórios cobriu três recortes em quatro escopos; não equivale a teste de todas as competências históricas existentes.
+- A Edge 99 foi adicionalmente conferida nos quatro recortes discriminados na conclusão; não se afirma que as 60 gerações anteriores usaram a 99.
+- D+30 e uma reapuração fresca continuam obrigatórios antes de oficializar Jun–Ago. Não há autorização automática para premiação.
+- A presença declara os eventos elegíveis e os eventos excluídos/incompletos/conflitantes. Não se promete completude artificial da origem nem atualização em tempo real.
