@@ -1,34 +1,32 @@
 #!/usr/bin/env python3
-"""As skills passam a NOMEAR as portas — o modelo só busca o que sabe nomear.
+"""As skills passam a NOMEAR as portas — reforço de saliência, NÃO causa-raiz.
 
-🔴 A CAUSA, provada em 09/09/2026 (o Alfredo pediu prova, e ela refuta as duas
-   hipóteses anteriores — a minha e a dele):
+⚠️ CORRIGIDO EM 09/09/2026, DEPOIS DA MEDIÇÃO DO ALFREDO. A versão anterior
+   deste cabeçalho afirmava que as 14 portas "não estão no array visível ao
+   modelo" e que por isso ele não as achava. **Isso está errado e a medição é
+   dele:** o perfil vivo tem 480 tools deferidas (~72,8 mil tokens) e as portas
+   da Sol **já aparecem nominalmente no catálogo resumido do `tool_search`**.
+   O modelo consegue encontrá-las. Meu diagnóstico estava incompleto.
 
-   1. `tools.tool_search.enabled: auto` no `config.yaml`. O `tool_search.py` do
-      Hermes diz na própria doc: *"MCP and non-core plugin tools are REPLACED in
-      the model-visible array... the moment ANY deferrable tools are present,
-      they hide behind the bridge."* Ou seja: **as 14 portas não estão no array
-      visível ao modelo.** Ele só as alcança buscando.
+   O que o dado sustenta continua de pé, e é menos do que eu tinha dito:
+     · desde 08/09, o journal registra 14 chamadas de
+       `mcp__sol_acesso_restrito__query` e ZERO de `mcp__sol_portas__*`
+       (uma delas bateu em `permission denied for table alunos`, existindo a
+       porta `situacao_dos_alunos`);
+     · as skills citam `sol-acesso-restrito__query` pelo nome literal 2×, e
+       nome literal de porta 0×.
 
-   2. As skills ativas citam `sol-acesso-restrito__query` **pelo nome literal,
-      2 vezes**. Citam o nome literal de **alguma porta: ZERO vezes.**
+   Ou seja: nomear as portas torna a busca mais provável. **Não é a causa.**
+   As duas hipóteses que restam, e que o Alfredo priorizou com razão, são
+   (a) reduzir a superfície de 480 tools — só o `mcp-hugo` responde por 424 —
+   e (b) tirar a `query` larga da superfície operacional nos domínios que as
+   portas já cobrem. Ferramenta disponível não vence instrução escrita; mas
+   atalho largo disponível vence porta específica com a mesma facilidade.
 
-   3. Resultado medido no journal do `hermes-gateway-sol.service`, desde 08/09:
-      **14 chamadas de `mcp__sol_acesso_restrito__query`, 0 de `mcp__sol_portas__*`.**
-      Uma delas bateu em `permission denied for table alunos` — existindo a porta
-      `situacao_dos_alunos`.
+⚠️ Isto NÃO edita o texto de prioridade que já existe (o patch de 07/09 já
+   mandava priorizar as portas). Só acrescenta o catálogo de nomes.
 
-   O modelo não desobedeceu. Ele buscou o que sabia nomear, achou, e usou.
-
-⚠️ NÃO É "editar três skills às cegas", que foi a minha proposta anterior e que o
-   Alfredo recusou com razão. As skills já mandam priorizar as portas — o que
-   falta é o CATÁLOGO: nome exato, um por linha, para o `tool_search` conseguir
-   casar a busca.
-
-⚠️ Não mexe no texto de prioridade que já existe. Só acrescenta a lista.
-
-⚠️ NÃO APLICADO EM PRODUÇÃO. Este arquivo é a mudança proposta; rodar exige o
-   gate do Alf, porque o perfil da Sol é produção.
+⚠️ NÃO APLICADO EM PRODUÇÃO. Dry-run por padrão; `--aplicar` exige o gate.
 """
 import os
 import pathlib

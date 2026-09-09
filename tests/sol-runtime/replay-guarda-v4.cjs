@@ -22,7 +22,14 @@ const ALVO = process.env.SOL_CAIXA_CJS
   || '/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs';
 const LOG = process.env.SOL_CAIXA_LOG
   || '/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa.log';
-const DESDE = process.argv[2] || '2026-09-01';
+// 🔴 A JANELA COMECA EM 08/09 E ISSO NAO E ESCOLHA — E LIMITE DO DADO.
+// O campo `texto` so passou a ser gravado no shadow em 08/09/2026. Medido:
+// 31/08 a 05/09 tem 366 decisoes e ZERO com texto; 08-09/09 tem 174, todas com.
+// Rodar antes disso faz a guarda julgar mensagens que ela nao ve — e texto
+// vazio nunca casa "pode", entao TODA aprovacao antiga aparecia como barrada.
+// Foi o que aconteceu na minha primeira leitura: 19 `aprovacao_sem_pode`, dos
+// quais 16 eram cegueira do log. Prova que roda sobre o vazio nao e prova.
+const DESDE = process.argv[2] || '2026-09-08';
 
 const mod = { exports: {} };
 const ctx = {
@@ -42,7 +49,7 @@ const FINANCEIRAS = new Set([
 (async () => {
   const rl = readline.createInterface({ input: fs.createReadStream(LOG), crlfDelay: Infinity });
   const barradas = [];
-  let financeiras = 0, passaram = 0, total = 0;
+  let financeiras = 0, passaram = 0, total = 0, cegas = 0;
   const porMotivo = {};
 
   for await (const ln of rl) {
@@ -52,6 +59,9 @@ const FINANCEIRAS = new Set([
     if ((d.ts || '') < DESDE) continue;
     total++;
     if (!FINANCEIRAS.has(d.intencao)) continue;
+    // Sem o texto a guarda nao tem o que julgar. Contar como "barrada" seria
+    // inventar um numero; o certo e' declarar a cegueira.
+    if (!String(d.texto || '').trim()) { cegas++; continue; }
     financeiras++;
     const r = guarda({ intencao: d.intencao, texto: d.texto || '', confianca: d.confianca });
     if (r.permitido) { passaram++; continue; }
@@ -63,6 +73,7 @@ const FINANCEIRAS = new Set([
   console.log(`REPLAY DA GUARDA — desde ${DESDE}\n`);
   console.log(`decisoes do shadow ........ ${total}`);
   console.log(`intencoes FINANCEIRAS ..... ${financeiras}`);
+  if (cegas) console.log(`  (${cegas} descartadas: log sem o texto — nao julgo o que nao vejo)`);
   console.log(`  passariam ............... ${passaram}`);
   console.log(`  BARRADAS ................ ${barradas.length}`);
   for (const [m, n] of Object.entries(porMotivo)) console.log(`     ${n}  ${m}`);
