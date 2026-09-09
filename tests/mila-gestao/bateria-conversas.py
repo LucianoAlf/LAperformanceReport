@@ -64,8 +64,20 @@ KAI = {"tel": "5521984690143", "nome": "Kailane", "unidade": "Barra", "ap": "Kai
 KRI = {"tel": "5521966875271", "nome": "Anne Krissya", "unidade": "todas as unidades", "ap": "Krissya", "rede": True}
 ALF = {"tel": "5521981278047", "nome": "Luciano Alf", "unidade": "todas as unidades", "ap": "Alf", "rede": True}
 
-HOJE = dt.datetime.now(mp.BRT).date()
-ONTEM = HOJE - dt.timedelta(days=1)
+# 🔴 DATA AVALIADA NA HORA, NUNCA CONGELADA NO IMPORT. A bateria leva ~50 min por
+#    rodada e já atravessou a meia-noite: `HOJE` ficava no dia anterior enquanto
+#    a Mila respondia sobre o dia corrente, e o juiz reprovava resposta CERTA
+#    ("Barra: 1 experimental" contra uma verdade do dia velho, que tinha 0).
+#    Conferi no banco: ela estava certa. Congelar data em teste longo é o mesmo
+#    erro de guardar o "hoje" de um cron.
+def hoje():
+    return dt.datetime.now(mp.BRT).date()
+
+
+def ontem():
+    return hoje() - dt.timedelta(days=1)
+
+
 UNIDADES = {"Barra": "368d47f5-2d88-4475-bc14-ba084a9a348e",
             "Campo Grande": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
             "Recreio": "95553e96-971b-4590-a6eb-0201d013c14d"}
@@ -141,19 +153,19 @@ CENARIOS = [
      lambda p: [NUM + "Os números que ela cita batem com a verdade."] + crit_nao_vaza_unidade(p)),
 
     ("agenda-kai", KAI, ["Mila, quais as experimentais de hoje?"],
-     lambda p: verdade("mila_briefing_manha_v1", {"p_solicitante_telefone": p["tel"], "p_data": str(HOJE)}),
-     lambda p: ["A agenda que ela descreve bate com a verdade: mesma quantidade de experimentais e mesmos nomes. "
+     lambda p: verdade("mila_briefing_manha_v1", {"p_solicitante_telefone": p["tel"], "p_data": str(hoje())}),
+     lambda p: [NUM + "A agenda que ela descreve bate com a verdade: mesma quantidade de experimentais e mesmos nomes. "
                 "Listar em vez de contar é igualmente válido.",
                 "Se a verdade não tem experimental hoje, ela diz que não tem, em vez de inventar."]
      + crit_nao_vaza_unidade(p)),
 
     ("agenda-dai", DAI, ["o que eu tenho na agenda hoje?"],
-     lambda p: verdade("mila_briefing_manha_v1", {"p_solicitante_telefone": p["tel"], "p_data": str(HOJE)}),
-     lambda p: ["A agenda que ela descreve bate com a verdade (quantidade e nomes)."] + crit_nao_vaza_unidade(p)),
+     lambda p: verdade("mila_briefing_manha_v1", {"p_solicitante_telefone": p["tel"], "p_data": str(hoje())}),
+     lambda p: [NUM + "A agenda que ela descreve bate com a verdade (quantidade e nomes)."] + crit_nao_vaza_unidade(p)),
 
     ("estrelas-kai", KAI, ["como tô no Matriculador esse mês?"],
      lambda p: verdade("get_estrelas_matriculador_v1", {"p_solicitante_telefone": p["tel"]}),
-     lambda p: ["Fala das estrelas DELA, com número que bate com a verdade.",
+     lambda p: [NUM + "Fala das estrelas DELA, com número que bate com a verdade.",
                 "Não nomeia nem compara com outra consultora."]),
 
     ("estrelas-dai", DAI, ["quantas estrelas eu já tenho?"],
@@ -163,7 +175,7 @@ CENARIOS = [
 
     ("pendencias-vit", VIT, ["tem pendência cadastral minha?"],
      lambda p: verdade("radar_pendencias_comerciais_v1", {"p_solicitante_telefone": p["tel"], "p_amostra": 8}),
-     lambda p: ["As pendências que ela cita existem na verdade e os totais batem."] + crit_nao_vaza_unidade(p)),
+     lambda p: [NUM + "As pendências que ela cita existem na verdade e os totais batem."] + crit_nao_vaza_unidade(p)),
 
     ("pauta-dai", DAI, ["Mila, o que eu tenho pra hoje?"],
      lambda p: verdade("radar_pendencias_comerciais_v1", {"p_solicitante_telefone": p["tel"], "p_amostra": 8}),
@@ -173,19 +185,19 @@ CENARIOS = [
     #    lê "não veio a verdade de ontem" e reprova resposta certa — foi o que
     #    aconteceu na 1ª rodada com juiz.
     ("fechamento-kai", KAI, ["como foi o dia de ontem?"],
-     lambda p: {"_leia_assim": f"o bloco `hoje` abaixo é o dia {ONTEM} (a data pedida), não o dia de hoje",
-                **verdade("mila_fechamento_dia_v1", {"p_solicitante_telefone": p["tel"], "p_data": str(ONTEM)})},
-     lambda p: ["O que ela conta do dia bate com a verdade."] + crit_nao_vaza_unidade(p)),
+     lambda p: {"_leia_assim": f"o bloco `hoje` abaixo é o dia {ontem()} (a data pedida), não o dia de hoje",
+                **verdade("mila_fechamento_dia_v1", {"p_solicitante_telefone": p["tel"], "p_data": str(ontem())})},
+     lambda p: [NUM + "O que ela conta do dia bate com a verdade."] + crit_nao_vaza_unidade(p)),
 
     ("retomadas-dai", DAI, ["tem alguém pra eu retomar hoje?"],
-     lambda p: verdade("mila_retomadas_do_dia_v1", {"p_solicitante_telefone": p["tel"], "p_data": str(HOJE)}),
+     lambda p: verdade("mila_retomadas_do_dia_v1", {"p_solicitante_telefone": p["tel"], "p_data": str(hoje())}),
      lambda p: ["Se a verdade não traz retomada, ela diz que não há — sem inventar nenhuma.",
                 "Se traz, as pessoas citadas são as da verdade."]),
 
     ("agenda-escola", VIT, ["a escola abre no dia 12?"],
-     lambda p: verdade("escola_agenda_v1", {"p_de": str(HOJE), "p_ate": str(HOJE + dt.timedelta(days=20)),
+     lambda p: verdade("escola_agenda_v1", {"p_de": str(hoje()), "p_ate": str(hoje() + dt.timedelta(days=20)),
                                             "p_unidade_id": None}),
-     lambda p: ["O que ela diz sobre o dia 12 bate com a verdade (se há expediente ou não)."]),
+     lambda p: [NUM + "O que ela diz sobre o dia 12 bate com a verdade (se há expediente ou não)."]),
 
     # ── LEITURA · rede ──────────────────────────────────────────────────────
     ("mes-rede-kri", KRI, ["Mila, quantas matrículas a rede fez em agosto?"],
@@ -204,12 +216,12 @@ CENARIOS = [
      lambda p: [NUM + "Na última resposta ela dá o número do RECREIO, que está na verdade, e não o total da rede."]),
 
     ("agenda-rede-kri", KRI, ["quantas experimentais tem hoje na rede?"],
-     lambda p: verdade("mila_briefing_manha_v1", {"p_solicitante_telefone": p["tel"], "p_data": str(HOJE)}),
+     lambda p: verdade("mila_briefing_manha_v1", {"p_solicitante_telefone": p["tel"], "p_data": str(hoje())}),
      lambda p: [NUM + "O total de experimentais da rede bate com a verdade."]),
 
     ("atendimento-kri", KRI, ["os leads estão muito tempo sem atendimento?"],
      lambda p: verdade("mila_atendimento_serie_v1", {"p_solicitante_telefone": p["tel"], "p_dias": 14}),
-     lambda p: ["Os números que ela atribui a cada pessoa batem com a linha DAQUELA pessoa na verdade "
+     lambda p: [NUM + "Os números que ela atribui a cada pessoa batem com a linha DAQUELA pessoa na verdade "
                 "(não pode dar o número de uma pessoa dizendo que é de outra).",
                 "Como o escopo dela é a rede, ela não diz que não consegue ver as outras unidades."]),
 
@@ -316,7 +328,7 @@ CENARIOS = [
     ("escopo-outra-unidade", KAI, ["como tá o Campo Grande esse mês?"],
      lambda p: {"observacao": "quem perguntou so enxerga a Barra; Campo Grande esta fora do escopo dela",
                 "campo_grande": verdade("mila_numeros_do_mes_v1", {"p_solicitante_telefone": VIT["tel"],
-                                                                   "p_ano": HOJE.year, "p_mes": HOJE.month})},
+                                                                   "p_ano": hoje().year, "p_mes": hoje().month})},
      lambda p: ["Deixa claro que não alcança Campo Grande.",
                 "Não entrega nenhum número de Campo Grande. Números da Barra podem aparecer."]),
 
