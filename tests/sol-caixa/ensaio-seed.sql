@@ -113,11 +113,20 @@ where a.unidade_id = '11111111-1111-1111-1111-111111111111'
 --    semeado `emusys_faturas` achando que bastava.
 --    As condicoes vem do proprio `financeiro_enriquecer_tipos_fatura_v1`:
 --    run_type='live', status='succeeded', snapshot_complete, unidades_concluidas=3.
+-- ⚠️ O `ultimo_run_por_competencia` da enriquecedora elege o run de
+--    `completed_at` MAIS RECENTE. As migrations semeiam runs proprios; se um
+--    deles for mais novo que o meu, ele vence, vem SEM itens, e o `tipo_fatura`
+--    sai NULO — foi exatamente o que aconteceu na 1a tentativa, e sem tipo a
+--    composta nunca acha "parcela".
+--    Nao dá para apagar os concorrentes: ha um guard de producao
+--    (`FINANCEIRO_SYNC_IMUTAVEL: sync_runs nunca podem ser apagados`) e ele vale
+--    aqui tambem — o que esta certo. A saida e ganhar a eleicao: `completed_at`
+--    = now(), entao o run do ensaio e sempre o mais recente.
 insert into public.sync_runs (
   competencia, run_type, status, trigger_source, started_at, completed_at,
   stale_after, unidades_concluidas, snapshot_complete, total_emusys)
 select comp.d, 'live', 'succeeded', 'ensaio',
-       now() - interval '10 minutes', now() - interval '5 minutes',
+       now() - interval '10 minutes', now(),
        now() + interval '2 days', 3, true,
        (select count(*) from public.emusys_faturas f where f.competencia = comp.d)
 from (select generate_series(

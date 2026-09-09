@@ -45,16 +45,31 @@ begin
 
   ------------------------------------------------------- A) cadeia de LEITURA
   -- dois alunos: um com 2+ faturas (composto) e um com 1
-  select jsonb_agg(jsonb_build_object('aluno_nome', nome)) into v_itens
+  -- ⚠️ O VALOR DECLARADO E OBRIGATORIO na fixture: sem ele
+  --    `sol_caixa_resolver_composto_aluno_v1` recusa com `valor_total_invalido`,
+  --    a cascata cai na canonica e o caso N x M — que e o ponto do ensaio —
+  --    nunca acontece. Na 1a execucao deste arquivo foi exatamente isso: 2
+  --    alunos viraram 2 linhas em vez de 3, e o ensaio passou sem provar nada.
+  select jsonb_agg(jsonb_build_object('aluno_nome', nome, 'valor', soma)) into v_itens
     from (
-      (select a.nome from public.alunos a
+      (select a.nome,
+              (select sum(coalesce(f.valor_pago, f.valor_original))
+                 from public.emusys_faturas f
+                where f.emusys_student_id = a.emusys_student_id::bigint
+                  and f.competencia = date_trunc('month', current_date)::date) as soma
+         from public.alunos a
         where a.unidade_id = v_unidade
           and (select count(*) from public.emusys_faturas f
                 where f.emusys_student_id = a.emusys_student_id::bigint
                   and f.competencia = date_trunc('month', current_date)::date) >= 2
         order by a.id limit 1)
       union all
-      (select a.nome from public.alunos a
+      (select a.nome,
+              (select sum(coalesce(f.valor_pago, f.valor_original))
+                 from public.emusys_faturas f
+                where f.emusys_student_id = a.emusys_student_id::bigint
+                  and f.competencia = date_trunc('month', current_date)::date) as soma
+         from public.alunos a
         where a.unidade_id = v_unidade
           and (select count(*) from public.emusys_faturas f
                 where f.emusys_student_id = a.emusys_student_id::bigint
@@ -73,6 +88,13 @@ begin
   v_total := (v_r->>'soma_itens')::numeric;
   raise notice 'A) resolver: % alunos declarados -> % linhas planas, R$ %',
     jsonb_array_length(v_itens), v_n, v_total;
+  -- 2 alunos com um deles composto TEM de virar 3+ linhas. Se virar 2, a
+  -- composta nao entrou e o ensaio esta medindo o caso facil.
+  if v_n <= jsonb_array_length(v_itens) then
+    v_falhas := v_falhas || format(
+      'A) %s alunos viraram %s linhas — o caso composto (N x M) nao foi exercitado',
+      jsonb_array_length(v_itens), v_n);
+  end if;
 
   -- é ESTE array que o "pode" revalida
   v_snap := public.sol_caixa_validar_multi_aluno_snapshot_v1(
@@ -101,6 +123,8 @@ begin
     'unidade_id', v_unidade,
     'data_caixa', current_date,
     'itens', v_r->'itens',
+    -- a RPC le `valor`; `valor_total` fica junto porque o bridge manda os dois
+    'valor', v_total,
     'valor_total', v_total,
     'forma_pagamento', 'pix',
     'categoria', 'parcela',
@@ -133,8 +157,10 @@ begin
     -- Recusa por portão de autorização/V3 é ESPERADA num banco sem o trilho do
     -- WhatsApp montado. O que não pode acontecer é gravar parcial — e é o C que
     -- prova isso. Registro o motivo para o leitor saber onde parou.
-    raise notice 'B) lote recusado por portao (%s) — esperado sem trilho V3: %',
-      coalesce(v_res->>'motivo','<nulo>'), v_res->>'motivo';
+    v_falhas := v_falhas || format(
+      'B) o lote nao chegou ao laco: recusado com "%s". A atomicidade (C) so vale '
+      'se o caminho feliz gravar antes — senao C passa sem provar nada.',
+      coalesce(v_res->>'motivo','<nulo>'));
     if v_movs_depois <> v_movs_antes then
       v_falhas := v_falhas || format(
         'B) lote RECUSADO mas gravou %s movimentacoes — escrita fora do caminho aprovado',
@@ -163,7 +189,7 @@ begin
       'C) 🔴 LOTE PARCIAL: payload adulterado gravou %s movimentacoes (deveria gravar ZERO)',
       v_movs_depois - v_movs_antes);
   else
-    raise notice 'C) payload adulterado nao gravou nada%s',
+    raise notice 'C) payload adulterado nao gravou nada%',
       case when v_erro is null then '' else ' (erro: ' || left(v_erro, 60) || ')' end;
   end if;
 
