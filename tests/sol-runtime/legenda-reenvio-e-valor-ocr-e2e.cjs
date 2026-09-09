@@ -11,7 +11,7 @@
 // ⚠️ Este teste reproduz a ENTREGA REAL da bridge (media e texto como dois handle()
 // concorrentes, 250ms de distância) — o teste anterior mandava um evento só fundido,
 // e foi exatamente por isso que não pegou.
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
+const mod = require('./_alvo.cjs');
 
 const CHAT = '5521973870998-1583848991@g.us';
 const UNIDADE = '95553e96-971b-4590-a6eb-0201d013c14d';

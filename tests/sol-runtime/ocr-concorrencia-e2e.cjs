@@ -20,7 +20,7 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
+const mod = require('./_alvo.cjs');
 
 const LIMIAR_MS = 10000; // bem abaixo do timeout de 45s configurado no ocrLocal
 

@@ -13,7 +13,7 @@
 //   V1 quem ENVIA a mensagem não é o aluno do próprio lançamento
 //   V2 rótulo de vendedor ("Venda:", "Vendedor:", "Vendido por:", "Atendente:")
 //   V3 lojinha sem comprador PERGUNTA o nome (antes escondia a seção)
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
+const mod = require('./_alvo.cjs');
 
 const CHAT = '120363263030561835@g.us';
 const UNIDADE = '368d47f5-2d88-4475-bc14-ba084a9a348e';

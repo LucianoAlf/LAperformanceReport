@@ -6,7 +6,7 @@
 //  D1: formato ensinado é parseado DETERMINISTICAMENTE — LLM fora do caminho.
 //  D2: pendência multi (lote/manual-review) não é alvo de correção de nome.
 //  D3: token de comentário (ta/certo/esse/ai...) mata o nome LIVRE.
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
+const mod = require('./_alvo.cjs');
 
 const CHAT = '5521981278047-1544204225@g.us';
 const UNIDADE = '2ec861f6-023f-4d7b-9927-3960ad8c2a92';

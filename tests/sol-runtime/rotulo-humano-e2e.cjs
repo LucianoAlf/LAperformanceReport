@@ -4,7 +4,7 @@
 //
 // Cobre: (1) rótulo humano ganha do pagador; (2) correção CITANDO o card alcança
 // pendência cujo aluno está errado mas plausível.
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
+const mod = require('./_alvo.cjs');
 
 const CHAT = '5521981278047-1544204225@g.us';
 const UNIDADE = '2ec861f6-023f-4d7b-9927-3960ad8c2a92';

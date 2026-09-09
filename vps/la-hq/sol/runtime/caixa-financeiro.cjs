@@ -1038,6 +1038,39 @@ function resolverMultiAlunoCaixaV1(payload, { url, key } = carregarEnv()) {
   });
 }
 
+// N ALUNOS × N FATURAS — a ferramenta do pagamento INTEIRO (09/09/2026).
+//
+// 🔴 Substitui `sol_caixa_resolver_multi_aluno_v1`, que resolvia UMA fatura por
+//    aluno (`limit 1`) e, no aluno com dois cursos ou com passaporte + parcela,
+//    fechava a conta errada e devolvia `soma_itens_divergente`. Era a regressão
+//    que a Mayra viveu: 19 minutos, 6 mensagens e desistiu — e o MESMO par de
+//    alunos tinha sido lançado com sucesso em 01/09.
+//
+// ⚠️ Timeout 45s, não 15s. Medido com `explain analyze` em produção: 2 alunos
+//    4,1s e 4 alunos 10,0s, porque cada ramo reconstrói o envelope de faturas da
+//    unidade. A RPC ganhou `statement_timeout` próprio de 60s (o do PostgREST é
+//    8s); 15s aqui desistiria antes do banco responder e a Sol diria "fonte
+//    indisponível" para um caso que ia dar certo.
+function resolverPagamentoItensV1(payload, { url, key } = carregarEnv()) {
+  return new Promise((resolve, reject) => {
+    if (!key) return reject(new Error('missing SUPABASE service key'));
+    const body = JSON.stringify({
+      p_unidade_id: payload.unidade_id,
+      p_itens: payload.itens,
+      p_valor_total: payload.valor_total,
+      p_competencia: payload.competencia || null,
+    });
+    const u = new URL(`${url}/rest/v1/rpc/sol_caixa_resolver_pagamento_itens_v1`);
+    const req = https.request({ hostname: u.hostname, path: u.pathname, method: 'POST', headers: {
+      apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body),
+    }}, (res) => {
+      let data = ''; res.on('data', (c) => { data += c; });
+      res.on('end', () => { try { resolve(data ? JSON.parse(data) : null); } catch (e) { reject(new Error(`resposta invalida (${res.statusCode})`)); } });
+    });
+    req.on('error', reject); req.setTimeout(45000, () => req.destroy(new Error('timeout resolver pagamento inteiro'))); req.write(body); req.end();
+  });
+}
+
 function lancarRecebimentoLote(payload, env) {
   return chamarRpcCaixa('sol_caixa_lancar_recebimento_lote_v1', payload, env);
 }
@@ -1966,6 +1999,63 @@ function interpretarComprovante(texto, { timeout = 30000 } = {}) {
   });
 }
 
+// GUARDA FINANCEIRA DA V4 (09/09/2026) — ver o patch versionado no repo.
+//
+// Responde uma pergunta só: "esta intencao financeira pode prosseguir com este
+// texto?". Nao descobre intencao (isso e do modelo) e nao resolve fatura (isso
+// e da RPC). E o portao entre entender e AUTORIZAR.
+const _INTENCOES_FINANCEIRAS = new Set([
+  'lancamento_por_texto', 'lancamento_multi_aluno', 'saida_dinheiro',
+  'saida_caixa', 'corrigir_lancamento_gravado', 'aprovar',
+]);
+
+// "pode" ANCORADO no comeco — mesma regra do token frouxo do legado (31/08).
+// ⚠️ Tolera o markdown do WhatsApp: o REPLAY pegou "*pode, pix*" sendo barrado,
+//    e isso e aprovacao legitima com asterisco de negrito na frente. O teste
+//    unitario passou 19/19 sem ver isso; so o corpus real mostrou.
+// ⚠️ Aceita tambem "pode <verbo>" em mensagem curta, para "e outro pagamento,
+//    pode lancar". Prosa longa continua fora — foi ela que aprovou por engano
+//    em 31/08.
+const _PODE_EXPLICITO = /^[\s*_~]*(?:pode|podi)\b/i;
+const _PODE_CURTO = /\bpode\s+(?:lan[cç]ar|dar\s+baixa|registrar|gravar)\b/i;
+
+// Marca de EXTRATO colado. 🔴 O discriminador e QUANTOS PAGAMENTOS, nao quantas
+// marcas: o replay mostrou que UMA linha de extrato ("*KIDS* 03/09 PIX RECEBIDO
+// 07895543725 R$367,00= PIX Parcela 09/2026 de Carlos") e ditado LEGITIMO — a
+// Rose cola a linha daquele pagamento para a Sol lancar. Contar marcas barrava
+// esses casos, porque a mesma linha ja tem data + PIX RECEBIDO + "R$…=" = 3.
+const _PAGAMENTO_NO_EXTRATO = /PIX\s+RECEBIDO\s+\d{6,}|R\$\s*[\d.,]+\s*=/gi;
+// ⚠️ SO o cabecalho de relatorio. Tirei `*EMLA*` e `*KIDS*` daqui depois do
+//    replay: eles sao ROTULO DE UNIDADE, nao marca de extrato, e apareciam em
+//    ditado legitimo ("*KIDS* 03/09 PIX RECEBIDO … R$367,00= Parcela de Carlos"),
+//    que e a Rose colando UM pagamento para lancar. Barrar por eles matava o
+//    caso bom — que e como toda guarda boa vira guarda ruim.
+const _CABECALHO_RELATORIO = /\*?\s*Recebimentos?\s+em\s+aberto/i;
+
+function guardaFinanceiraV4(decisao) {
+  const intencao = String((decisao && decisao.intencao) || '');
+  const texto = String((decisao && decisao.texto) || '');
+  if (!_INTENCOES_FINANCEIRAS.has(intencao)) return { permitido: true };
+
+  // (b) aprovacao exige o gesto declarado. Confianca NAO substitui — dinheiro
+  //     nao se move por probabilidade.
+  if (intencao === 'aprovar'
+      && !_PODE_EXPLICITO.test(texto)
+      && !(texto.length <= 40 && _PODE_CURTO.test(texto))) {
+    return { permitido: false, motivo: 'aprovacao_sem_pode' };
+  }
+
+  // (a) extrato colado nao e ditado de caixa. Exige 2+ marcas OU o cabecalho:
+  //     uma data solta aparece em legenda legitima ("parcela 09/2026").
+  // 2+ PAGAMENTOS distintos = extrato; 1 = a pessoa colou a linha daquele
+  // pagamento, que e uso normal e virou lancamento certo 2x no corpus.
+  const pagamentos = (texto.match(_PAGAMENTO_NO_EXTRATO) || []).length;
+  if (_CABECALHO_RELATORIO.test(texto) || pagamentos >= 3) {
+    return { permitido: false, motivo: 'relatorio_colado' };
+  }
+  return { permitido: true };
+}
+
 // V4 FASE 1 — ROTEADOR EM SHADOW (31/08, go do Luciano): o mapa COMPLETO de
 // intencoes do caixa, nao so correcoes. Roda em paralelo (fire-and-forget no
 // bridge) para TODA mensagem de texto do grupo; a decisao vai para o log ao
@@ -2456,7 +2546,7 @@ function categoriaEhSaida(categoria) {
   return ['seguranca', 'despesa', 'retirada', 'troco'].includes(String(categoria || '').toLowerCase());
 }
 
-function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverMultiAlunoCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, log = () => {}, janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
+function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, log = () => {}, janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
   // SOL_CAIXA_V3_LEDGER_FAKE=1 (suite de testes): fiacao V3 ativa, banco intacto.
   // Sem isto, teste que nao mocka os registradores grava preview/approval REAL
   // no ledger de producao — 62% dos previews de 24-31/08 eram artefato de teste.
@@ -2671,6 +2761,24 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
         soma_itens_divergente: 'a soma dos alunos não fecha com o valor do comprovante — confere os valores.',
         item_nao_validado: `não consegui casar um dos itens${_quem} com fatura oficial — ${_pedeDivisao}.`,
         fonte_indisponivel: 'a fonte oficial de faturas está fora do ar agora. Não lanço sem confirmar; tenta de novo em alguns minutos.',
+        // 🔴 Motivos do resolver do pagamento INTEIRO (09/09). Antes destes, um
+        //    nome ambíguo não recusava: a cascata descia um ramo e ESCOLHIA um
+        //    aluno. Recusar sem dizer quantos homônimos existem é beco sem saída — daí
+        //    o número vir junto.
+        nome_ambiguo: (() => {
+          const n = Array.isArray(resolvido && resolvido.candidatos) ? resolvido.candidatos.length : 0;
+          const quantos = n > 1 ? `achei ${n} alunos` : 'achei mais de um aluno';
+          return `${quantos} com esse primeiro nome nesta unidade e não escolho por você — me manda o nome completo${_quem ? '' : ' de cada um'}.`;
+        })(),
+        valor_declarado_nao_bate: (() => {
+          const enc = Number(resolvido && resolvido.valor_encontrado);
+          const dec = Number(resolvido && resolvido.valor_declarado);
+          const visto = enc ? ` A fatura que achei${_quem} é de ${fmtBRL(enc)}.` : '';
+          return `o valor que você escreveu${dec ? ` (${fmtBRL(dec)})` : ''} não bate com fatura nenhuma${_quem}.${visto} Se for desconto negociado, escreve o valor na mensagem que eu lanço sem vincular a fatura.`;
+        })(),
+        aluno_sem_nome: 'não consegui ler o nome de um dos alunos — ' + _pedeDivisao + '.',
+        sem_fatura_que_bata: `não achei fatura${_quem} que feche com esse valor — confere o valor, ou ${_pedeDivisao}.`,
+        itens_ausentes: 'não entendi a divisão — ' + _pedeDivisao + '.',
       };
       const _detalhe = _motivosMulti[resolvido && resolvido.motivo]
         || 'ainda não consegui confirmar todas as faturas oficiais — confere aluno, competência e valor de cada um.';
@@ -5362,7 +5470,7 @@ module.exports = {
   _alunoRotulado, _limparAlunoRotulado, _semAlunoDeclarado, extrairCategoriaCorrecao,
   _ehDitadoDeCaixa, classificarCorrecaoPendencia, listarPreviewsAbertosV3, _contestaFatura, rotearMensagemV4,
   casarNao, ehConversaSemComando,
-  montarPreview, montarPreviewMultiAluno, fmtBRL, carregarEnv, lancarRecebimento, lancarRecebimentoLote, resolverMultiAlunoCaixaV1, resolverCompostoAlunoCaixaV1, lancarSaidaCaixa, buscarLancamentoParaCorrecao,
+  montarPreview, montarPreviewMultiAluno, fmtBRL, carregarEnv, lancarRecebimento, lancarRecebimentoLote, resolverMultiAlunoCaixaV1, resolverPagamentoItensV1, resolverCompostoAlunoCaixaV1, lancarSaidaCaixa, buscarLancamentoParaCorrecao,
   buscarMovimentosCaixa, corrigirMovimentoCaixa, estornarMovimentoCaixa, registrarPreviewV3, registrarApprovalV3, criarHandlerFinanceiro,
   confirmacaoLimpa, classificarMidia, bodyLimpo, nomeDoAtor, buscarResponsavel, mesmaPessoa, pagamentoMultiplo,
   extrairDivisaoPagamento, extrairSomaAditivaPagamento, extrairAdicionalPagamento, detectarLojinhaProduto, detectarContextoMultiAluno, validarIntencaoMultiAluno,
@@ -5373,6 +5481,7 @@ module.exports = {
   periodoQuitacao, extrairPeriodoMeses,
   extrairCompetenciaTexto, compostoDeFaturas, buscarCompostoFaturasMes, descricaoDoComposto,
   extrairComprovanteVisao, interpretarComprovante, interpretarMultiAluno, extrairItensNomeValor, casarParcela,
+  guardaFinanceiraV4,
   ocrLocal,
   extrairCorrecaoForma, extrairLancamentoCitado, extrairComandoMovimento,
   categoriaEhSaida,

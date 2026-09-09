@@ -1,7 +1,7 @@
 // REGRESSÃO: o preview incompleto agora sobrevive — mas o gate NÃO pode ter afrouxado.
 // 1) "pode" seco (sem forma) num preview incompleto -> NÃO pode lançar
 // 2) preview COMPLETO cujo V3 falha de verdade -> continua bloqueado
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
+const mod = require('./_alvo.cjs');
 
 const CHAT = '5521973870998-1583848991@g.us';
 const UNIDADE = '95553e96-971b-4590-a6eb-0201d013c14d';

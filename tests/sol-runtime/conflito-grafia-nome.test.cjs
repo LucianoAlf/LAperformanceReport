@@ -18,7 +18,7 @@
 const assert = require('assert');
 const fs = require('fs');
 
-const src = fs.readFileSync('caixa-financeiro.cjs', 'utf8');
+const src = fs.readFileSync(require('./_alvo.cjs').__alvo, 'utf8');
 const pega = (re, nome) => {
   const m = src.match(re);
   assert.ok(m, `nao achei ${nome} no fonte — o patch foi revertido?`);

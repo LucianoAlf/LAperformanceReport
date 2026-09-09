@@ -1,62 +1,93 @@
 #!/usr/bin/env bash
-# Compara, por hash, o artefato do Git com o que está RODANDO na la-hq.
+# Estado da promoção Git ↔ runtime da Sol. Três estados, não dois.
 #
-# 🔴 POR QUE EXISTE. Em 09/09/2026 a auditoria cruzada com o Alfredo achou o
-#    mesmo buraco por dois caminhos: o `caixa-financeiro.cjs` que decide dinheiro
-#    nos três grupos financeiros — 5.379 linhas — **não existia em Git**. O repo
-#    guardava 29 scripts de patch (o delta) e nunca o artefato. Busca por nome e
-#    busca por conteúdo (`preview_competencia_corrigida`) deram zero.
+# 🔴 POR QUE TRÊS. A primeira versão comparava só "igual/diferente" e criou um
+#    paradoxo que o Alfredo pegou em 09/09/2026: o canônico espelhava o runtime,
+#    a guarda financeira ainda não estava no runtime, logo não estava no
+#    canônico — e o teste dela falhava em checkout limpo.
 #
-#    O versionamento de fato eram 174 arquivos `.bak-*` no diretório da VPS,
-#    nomeados à mão. Funcionou — usei-os para bisseccionar uma regressão neste
-#    mesmo dia — mas um `rm *.bak-*` apagaria a única história existente.
+#    A confusão era de papel. O canônico não é uma FOTO do runtime: é o estado
+#    DESEJADO, testado, que ainda vai ser promovido. Git à frente é o normal de
+#    quem trabalha; o que é anomalia é o runtime à frente.
 #
-# ⚠️ Este script NÃO promove e NÃO escreve nada. Ele responde uma pergunta:
-#    "o que está rodando é o que está versionado?". Promoção é ato humano, com
-#    o gate do Alf.
+#      IGUAL          → nada pendente
+#      GIT À FRENTE   → há promoção a fazer (esperado durante o trabalho)
+#      🔴 RUNTIME FORA DO GIT → alguém aplicou patch sem versionar
 #
-# Uso:
-#   ./paridade.sh            # confere e sai 0 (igual) ou 1 (divergiu)
-#   ./paridade.sh --baixar   # traz o vivo para o repo (NÃO commita)
+#    O terceiro é o perigoso, e o `RUNTIME_BASELINE.sha256` é o que permite
+#    distingui-lo: ele guarda o hash do que estava rodando quando o canônico foi
+#    escrito. Sem esse terceiro ponto de comparação, "diferente" é ambíguo.
+#
+# 🔴 SÃO TRÊS ARTEFATOS, NÃO UM (09/09/2026). Ao fazer a suíte rodar em checkout
+#    limpo apareceram mais dois arquivos do runtime que nenhum lugar versionava
+#    — `caixa-abertura-fechamento.cjs` e `group-engagement.cjs` —, e três testes
+#    só carregavam na VPS por causa deles. Artefato fora do Git é código que
+#    decide dinheiro sem revisão; o manifesto agora cobre os três.
+#
+# ⚠️ Não promove e não escreve nada em produção. Promoção é ato humano com gate.
 set -euo pipefail
 
-REMOTO_HOST="${SOL_HOST:-lahq}"
-REMOTO_ARQ="/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs"
-AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/caixa-financeiro.cjs"
+HOST="${SOL_HOST:-lahq}"
+AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MANIFESTO="$AQUI/RUNTIME_BASELINE.sha256"
 
-hash_remoto() { ssh "$REMOTO_HOST" "sha256sum $REMOTO_ARQ" | awk '{print $1}'; }
-hash_local()  { sha256sum "$AQUI" | awk '{print $1}'; }
+fora_do_git=0
+pendentes=0
 
-if [[ "${1:-}" == "--baixar" ]]; then
-  # ⚠️ trazer o vivo para o repo é o caminho CERTO hoje: a fonte de verdade
-  #    ainda é o runtime. Quando a promoção Git -> runtime existir, este flag
-  #    vira o caminho errado e deve ser removido.
-  scp -q "$REMOTO_HOST:$REMOTO_ARQ" "$AQUI"
-  echo "baixado do runtime · $(hash_local)"
-  echo "⚠️ o repo agora reflete o RUNTIME. Commite dizendo de onde veio."
-  exit 0
-fi
+printf '%-30s %-10s %s\n' ARTEFATO ESTADO DETALHE
+printf '%s\n' '---------------------------------------------------------------'
 
-R="$(hash_remoto)"
-L="$(hash_local)"
+while read -r h_baseline arquivo remoto; do
+  [[ -z "${h_baseline:-}" || "$h_baseline" == \#* ]] && continue
+  # ⚠️ `ssh -n` e obrigatorio: sem ele o ssh consome o stdin do `while read` e
+  #    o laco morre depois do primeiro artefato — as outras linhas somem em
+  #    silencio, que e a pior forma de um verificador falhar.
+  h_runtime="$(ssh -n "$HOST" "sha256sum $remoto" | awk '{print $1}')"
+  h_canonico="$(sha256sum "$AQUI/$arquivo" | awk '{print $1}')"
 
-echo "runtime (la-hq) : $R"
-echo "git    (repo)   : $L"
+  if [[ "$h_runtime" != "$h_baseline" ]]; then
+    printf '%-30s %-10s %s\n' "$arquivo" '🔴 FORA' "runtime ${h_runtime:0:12} ≠ baseline ${h_baseline:0:12}"
+    fora_do_git=1
+  elif [[ "$h_canonico" == "$h_runtime" ]]; then
+    printf '%-30s %-10s %s\n' "$arquivo" '✅ igual' "${h_canonico:0:12}"
+  else
+    printf '%-30s %-10s %s\n' "$arquivo" '🟡 git+' "canônico ${h_canonico:0:12} a promover"
+    pendentes=$((pendentes + 1))
+  fi
+done < "$MANIFESTO"
 
-if [[ "$R" == "$L" ]]; then
-  echo "✅ paridade — o que roda é o que está versionado"
-  exit 0
-fi
+echo
 
-cat <<'AVISO'
-🔴 DIVERGIU — o runtime NÃO é o que está no Git.
+if [[ "$fora_do_git" -eq 1 ]]; then
+  cat <<'AVISO'
+🔴 RUNTIME FORA DO GIT — alguém aplicou patch na VPS sem versionar.
 
-Isto significa que alguém aplicou patch direto na VPS sem versionar, ou que o
-repo avançou sem promover. Nos dois casos, a história do caixa está incompleta.
+Este é o estado que não pode existir: há código decidindo dinheiro que nunca
+passou por revisão nem teste. NÃO promova por cima — o diff pode ser de outra
+pessoa.
 
-O que fazer, na ordem:
-  1. NÃO apague nenhum .bak-* — eles são a única história que existe;
-  2. `./paridade.sh --baixar` e leia o diff antes de commitar;
-  3. se o diff for de alguém, pergunte antes de sobrescrever.
+  1. NÃO apague nenhum .bak-* (é a única história que existe);
+  2. traga o vivo para um arquivo à parte e leia o diff;
+  3. descubra quem aplicou antes de decidir o que fica.
 AVISO
+  exit 2
+fi
+
+if [[ "$pendentes" -eq 0 ]]; then
+  echo "✅ IGUAL — nada pendente de promoção"
+  exit 0
+fi
+
+cat <<PENDENTE
+🟡 GIT À FRENTE — $pendentes artefato(s) pendente(s) (estado normal de trabalho)
+
+O canônico foi testado e ainda não subiu. Promover é ato humano com gate, e a
+ordem importa — o baseline por último, senão a próxima execução acusa "runtime
+fora do Git":
+
+  scp <canônico> $HOST:<remoto>
+  ssh $HOST 'systemctl --user restart hermes-gateway-sol.service'
+  ssh $HOST 'sha256sum <remoto>'      # atualizar a linha no manifesto
+  ./paridade.sh                        # deve voltar IGUAL, e aí commitar
+PENDENTE
 exit 1

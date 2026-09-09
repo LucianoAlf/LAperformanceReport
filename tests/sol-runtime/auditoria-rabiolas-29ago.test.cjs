@@ -10,8 +10,8 @@
 // 2. DESPEDIDAS: "Fechado pessoal" / "Bom final de semana" iam ao LLM, que
 //    respondia vazio, e o fallback do gateway postava "(Response formatting
 //    failed, plain text:)" no grupo (2x às 15:02-15:03).
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
-const gate = require('/home/sol/.hermes/hermes-agent/scripts/whatsapp-bridge/group-engagement.cjs');
+const mod = require('./_alvo.cjs');
+const gate = require('./_alvo.cjs').groupEngagement();
 
 const CHAT = '5521981278047-1544204225@g.us';
 const UNIDADE = '2ec861f6-023f-4d7b-9927-3960ad8c2a92';

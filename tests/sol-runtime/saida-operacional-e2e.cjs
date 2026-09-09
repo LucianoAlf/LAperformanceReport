@@ -1,7 +1,7 @@
 // Diagnóstico do caso Mayra/CG 25/08: "Sol, teve uma saída em dinheiro - PG segurança
 // semana 25/08 R$100,00" virou RECEBIMENTO, e depois a correção "Sol, foi saída" virou
 // NOME DE ALUNO.
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
+const mod = require('./_alvo.cjs');
 
 const CHAT = '5521999999999-cg@g.us';
 const UNIDADE = '2ec861f6-023f-4d7b-9927-3960ad8c2a92';

@@ -8,7 +8,7 @@
 //      nunca decide multi. Terceiro falso positivo do OCR em dois dias.
 //  E2: correção que declara UM aluno converte a revisão multi em lançamento single.
 //  E3: "camisa" é produto de lojinha (só havia "camiseta").
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
+const mod = require('./_alvo.cjs');
 
 const CHAT = '120363263030561835@g.us';
 const UNIDADE = '368d47f5-2d88-4475-bc14-ba084a9a348e';

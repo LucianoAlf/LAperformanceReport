@@ -12,7 +12,7 @@
 //     seguinte, e o responsável declarado era ignorado).
 // Shadow V4 nas mesmas mensagens: corrigir_aluno SEM nome (certo!) e
 // corrigir_aluno "Luiza Rodrigues" (certo!) — 2 vitórias do roteador.
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
+const mod = require('./_alvo.cjs');
 
 const CHAT = '120363263030561835@g.us';
 const UNIDADE = '368d47f5-2d88-4475-bc14-ba084a9a348e';

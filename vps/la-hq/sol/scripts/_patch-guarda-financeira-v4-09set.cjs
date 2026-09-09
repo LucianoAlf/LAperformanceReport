@@ -35,6 +35,20 @@ const fs = require('fs');
 const ALVO = process.env.SOL_CAIXA_CJS
   || '/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs';
 
+// ⛔ SUPERADO — a guarda vive no artefato CANÔNICO desde 09/09/2026.
+//
+// Este script existiu para levar a guarda ao runtime; hoje a promoção é o `scp`
+// do `vps/la-hq/sol/runtime/caixa-financeiro.cjs`, que já a contém. Ele fica no
+// repositório como registro do que foi feito — mas com trava, porque a âncora
+// dele (`// V4 FASE 1 — ROTEADOR EM SHADOW`) é REEMITIDA no fim do bloco novo:
+// rodá-lo duas vezes definiria `guardaFinanceiraV4` duas vezes, e a segunda
+// definição venceria em silêncio. Armadilha bem escondida para quem viesse
+// depois.
+if (/function\s+guardaFinanceiraV4\s*\(/.test(fs.readFileSync(ALVO, 'utf8'))) {
+  console.log('== a guarda ja esta no alvo (canonico). Nada a fazer — promova por scp.');
+  process.exit(0);
+}
+
 const carimbo = new Date().toISOString().replace(/[-:.]/g, '').slice(0, 15);
 fs.writeFileSync(`${ALVO}.bak-${carimbo}-antes-guarda-v4`, fs.readFileSync(ALVO, 'utf8'));
 

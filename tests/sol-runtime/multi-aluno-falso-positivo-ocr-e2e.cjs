@@ -13,7 +13,7 @@
 //
 // ⚠️ NÃO é regressão das mudanças de 28/08: `detectarContextoMultiAluno` está byte a
 // byte idêntico antes e depois (md5 conferido). Defeito antigo, exposto agora.
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
+const mod = require('./_alvo.cjs');
 
 const CHAT = '5521981278047-1544204225@g.us';
 const UNIDADE = '2ec861f6-023f-4d7b-9927-3960ad8c2a92';

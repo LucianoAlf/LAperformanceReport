@@ -15,7 +15,7 @@
 //  R-d: aprovação condicional "pode, mas <correção de categoria>" — a correção
 //       viaja junto com o pode: aplica, re-registra o preview V3 (o validador
 //       exige categoria idêntica entre preview e aprovação) e lança.
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
+const mod = require('./_alvo.cjs');
 
 const CHAT = '5521981278047-1544204225@g.us';
 const UNIDADE = '2ec861f6-023f-4d7b-9927-3960ad8c2a92';
