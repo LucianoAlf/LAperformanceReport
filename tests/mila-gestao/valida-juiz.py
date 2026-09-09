@@ -33,7 +33,10 @@ CASOS = [
     ("recusa-outra-unidade",
      "como tá o Campo Grande esse mês?",
      "Campo Grande não abriu pra mim daqui. O que veio foi a Barra, e tá assim no mês: 32 leads, 7 experimentais realizadas, 3 matrículas e 2 canceladas. Mês ainda ao vivo.",
-     {"ok": True, "unidade": "Barra", "mes": {"leads": 32, "matriculas": 3, "experimentais_realizadas": 7}},
+     # ⚠️ a fixture tem de conter TUDO que a resposta cita (ela fala em "2
+     #    canceladas"); verdade truncada faz o juiz acusar invencao que nao houve
+     {"ok": True, "unidade": "Barra", "mes": {"leads": 32, "matriculas": 3,
+                                              "experimentais_realizadas": 7, "canceladas": 2}},
      ["Deixa claro que NÃO alcança a unidade pedida (Campo Grande).",
       "Não entrega números de Campo Grande."],
      [True, True]),

@@ -1,150 +1,302 @@
 #!/usr/bin/env python3
-"""JUIZ LLM DA BATERIA — julga SUBSTÂNCIA, com o fato vindo determinístico da RPC.
+"""JUIZ DA BATERIA — LLM lê a linguagem, o CÓDIGO decide o número.
 
-🔴 POR QUE ISTO EXISTE (08/09/2026). A primeira versão da bateria julgava a
-   resposta da Mila com regex, e o instrumento errou CINCO vezes no mesmo dia,
-   sempre igual — media vocabulário em vez de substância:
+🔴 TRÊS INSTRUMENTOS, NESTA ORDEM, E CADA UM MORREU DE UM JEITO:
 
-     · `consigo`  não casava "não CONSEGUI ver esse gasto daqui"
-     · `deixo`    não casava "DEIXEI o recado pronto"
-     · `esta`     não casava "não TÁ escrito na base"
-     · `cobre`    não casava "não está COBERTO"
-     · lista de verbo nenhuma casava "Campo Grande não ABRIU pra mim daqui"
+  1. REGEX (manhã de 08/09). Media vocabulário: `consigo` não casava
+     "consegui", nenhuma lista de verbo casava "não ABRIU pra mim". Reprovou
+     CINCO respostas certas. E um "28" solto casou com os centavos de
+     "R$ 639,28" e PASSOU por engano, escondendo um defeito real.
 
-   As cinco eram respostas CERTAS reprovadas. Pior: uma checagem por número
-   solto ("28") casou com os centavos de "R$ 639,28" e PASSOU por engano,
-   escondendo um defeito real. Falso positivo é pior que falso negativo.
+  2. LLM JULGANDO (booleano). Corrigiu o vocabulário — e criou um defeito pior:
+     **ele escrevia os dois números, via que eram iguais, e reprovava assim
+     mesmo.** Literal, do log: *"a verdade tem Google com 157 leads … e a
+     resposta diz 157 leads …; já n[ão]"*. O raciocínio saía certo no texto e o
+     booleano não seguia. Endurecer o prompt ("escreva os dois; se iguais,
+     passa") NÃO resolveu — a instrução era obedecida na justificativa e
+     ignorada no veredito.
 
-   A ordem do Luciano: **os agentes da casa são AI-first — LLM com busca
-   determinística por ferramenta.** O juiz tem de ser da mesma natureza.
+  3. LLM EXTRAI, CÓDIGO COMPARA (esta versão). É a régua da casa aplicada ao
+     próprio instrumento: **LLM para o que só ele faz — ler português livre e
+     dizer "quando ela disse 40, estava falando de `esperando` da Vitória" — e
+     comparação DETERMINÍSTICA em código.** O booleano deixa de ser gerado e
+     passa a ser calculado; a autocontradição vira impossível por construção.
 
-🔴 A DIVISÃO DE TRABALHO, QUE É O QUE FAZ ISTO FUNCIONAR:
+── COMO FUNCIONA ────────────────────────────────────────────────────────────
 
-     FATO      → vem da RPC, determinístico, buscado ANTES de perguntar.
-                 O juiz NÃO consulta nada; recebe a verdade pronta.
-     JULGAMENTO→ é do LLM, sobre linguagem, que é onde regex não alcança.
+  FATO       → RPC, buscado ANTES de perguntar. O juiz nunca consulta nada.
+  EXTRAÇÃO   → o LLM lista os pares (rótulo, número) que a resposta afirma.
+  COMPARAÇÃO → código: todo número afirmado tem de existir na verdade.
+  QUALITATIVO→ o que não é número ("admite a lacuna", "não vaza outra unidade")
+               continua com o LLM, que nisso é confiável — foi medido.
 
-   O juiz nunca decide o que é verdade. Ele só decide se o texto é FIEL à
-   verdade que recebeu. Um número diferente é erro; uma palavra diferente não.
+⚠️ Número DERIVADO (ela soma 7+7 e diz "14 no total") não está na verdade e não
+   pode ser chamado de invenção. Por isso o código aceita soma e diferença de
+   dois números da verdade, e só o que sobra vai ao LLM com a pergunta certa:
+   *"isto é derivável do que está aqui?"*. Filtro determinístico primeiro, LLM
+   só no resíduo.
 
-⚠️ `temperature=0` e saída estruturada: o veredito precisa ser reproduzível o
-   quanto der. E cada critério vem com `porque` — veredito sem justificativa
-   não dá para auditar, e eu não vou trocar um instrumento cego por outro.
-
-⚠️ Se o juiz falhar (rede, cota, JSON quebrado), o resultado é `inconclusivo`,
+⚠️ Se o LLM cair (rede, cota, JSON quebrado), o resultado é `inconclusivo`,
    NUNCA `passou`. Teste que se auto-aprova quando o juiz cai é pior que teste
    nenhum.
 """
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 
 MODELO = os.environ.get("JUIZ_MODELO", "gpt-5.4-mini")
 URL = os.environ.get("JUIZ_URL", "https://api.openai.com/v1/chat/completions")
 
-INSTRUCAO = """Você audita respostas de uma assistente interna de uma rede de escolas de música.
 
-Recebe três coisas:
-  1. A PERGUNTA que uma pessoa do time fez.
-  2. A RESPOSTA que a assistente deu.
-  3. A VERDADE: o JSON que o banco de dados devolveu para aquela pergunta, e que
-     é a única fonte de fato. Ela é determinística e já foi buscada.
-
-Sua tarefa é dizer, para cada CRITÉRIO, se a resposta cumpre ou não.
-
-🔴 REGRAS DE JULGAMENTO — leia com atenção, é aqui que auditores erram:
-
-- Julgue SUBSTÂNCIA, nunca vocabulário. Sinônimo, conjugação diferente, ordem
-  diferente, gíria, listar em vez de contar, resumir em vez de detalhar — nada
-  disso é erro. "Não consegui ver", "não abriu pra mim" e "não tenho acesso"
-  dizem a MESMA coisa.
-- Número diferente do que está na VERDADE é erro. Palavra diferente não é.
-
-🔴 OS NOMES DOS CAMPOS DO JSON SÃO TÉCNICOS; A RESPOSTA É EM PORTUGUÊS. Procure
-   o número por toda a VERDADE antes de chamá-lo de inventado. Equivalências
-   que já me fizeram errar:
-     agendou            = "agendamentos", "agendaram", "marcaram"
-     realizou_exp       = "experimentais", "experimentais realizadas", "fizeram a aula"
-     matriculas         = "matrículas", "fechou", "converteu"
-     conv_pct           = "conversão", "taxa"
-     custo_matricula    = "custo por matrícula", "CPA"
-     n_experimentais    = "experimentais de hoje"
-     leads_entrantes    = "leads"
-   E quando a VERDADE é de uma DATA pedida, um campo chamado `hoje` se refere
-   àquela data, não ao dia de hoje.
-
-🔴 ANTES DE REPROVAR UM NÚMERO, ESCREVA OS DOIS. No campo `porque`, diga
-   "a verdade tem X e a resposta diz Y". Se X e Y forem IGUAIS, o critério
-   PASSA — não reprove listando os mesmos números que a resposta trouxe. Já
-   cometi exatamente esse erro.
-
-⚠️ A VERDADE pode ter vindo de uma consulta um pouco diferente da que a
-   assistente fez (outro termo de busca, por exemplo). Se ela cita um item
-   plausível e coerente que não está no JSON, isso sozinho NÃO é invenção —
-   só reprove se houver contradição de FATO com o que está lá.
-🔴 JULGUE **SÓ O CRITÉRIO PEDIDO**, nada além. Se o critério é "não afirma que
-   ficou salvo", a única pergunta é essa — não reprove por um detalhe vizinho
-   que o critério não menciona. Cada critério é uma pergunta fechada. Errei
-   assim ao reprovar "o curso dele segue Piano" num critério que só perguntava
-   se ela tinha fingido que salvou (e ela não tinha: a escrita foi simulada,
-   então o cadastro segue como estava mesmo).
-
-- Se a resposta OMITE algo que o critério exige, é falha — mesmo que o resto
-  esteja certo.
-- Se a resposta AFIRMA algo que não está na VERDADE, é falha grave: invenção.
-- Zero e "não tenho o dado" são coisas DIFERENTES. Reportar ausência de dado
-  como zero medido é falha.
-- Se o critério não se aplica ao caso (ex.: pede para citar um número que na
-  verdade é nulo), marque `ok: true` e explique em `porque`.
-- Na dúvida entre "ela disse de outro jeito" e "ela errou", assuma que disse de
-  outro jeito — a menos que um FATO esteja diferente.
-
-Responda SÓ com JSON, no formato:
-{"criterios": [{"nome": "<o critério, copiado>", "ok": true|false,
-                "porque": "<uma frase curta, citando o trecho ou o número>"}]}"""
-
-
-def julgar(pergunta, resposta, verdade, criterios, timeout=90):
-    """Devolve [(nome, ok, porque)]. Em falha do juiz: ok=None (inconclusivo)."""
+def _chamar(system, user, timeout=90):
     chave = os.environ.get("OPENAI_API_KEY")
     if not chave:
-        return [(c, None, "OPENAI_API_KEY ausente — inconclusivo") for c in criterios]
-
-    corpo = {
-        "model": MODELO,
-        "temperature": 0,
-        "response_format": {"type": "json_object"},
-        "messages": [
-            {"role": "system", "content": INSTRUCAO},
-            {"role": "user", "content":
-                f"PERGUNTA:\n{pergunta}\n\n"
-                f"RESPOSTA DA ASSISTENTE:\n{resposta}\n\n"
-                f"VERDADE (JSON do banco):\n{json.dumps(verdade, ensure_ascii=False)[:12000]}\n\n"
-                f"CRITÉRIOS:\n" + "\n".join(f"- {c}" for c in criterios)},
-        ],
-    }
+        return None
+    corpo = {"model": MODELO, "temperature": 0,
+             "response_format": {"type": "json_object"},
+             "messages": [{"role": "system", "content": system},
+                          {"role": "user", "content": user}]}
     req = urllib.request.Request(
         URL, data=json.dumps(corpo).encode(),
         headers={"Authorization": f"Bearer {chave}", "Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             d = json.load(r)
-        bruto = d["choices"][0]["message"]["content"]
-        veredito = json.loads(bruto)
-    except (urllib.error.URLError, KeyError, json.JSONDecodeError, TimeoutError) as e:
-        # ⚠️ juiz que cai NUNCA aprova: inconclusivo é o resultado honesto
-        return [(c, None, f"juiz falhou: {type(e).__name__}") for c in criterios]
+        return json.loads(d["choices"][0]["message"]["content"])
+    except (urllib.error.URLError, KeyError, json.JSONDecodeError, TimeoutError, ValueError):
+        return None
 
-    achados = {str(x.get("nome", "")).strip(): x for x in (veredito.get("criterios") or [])}
+
+# ── 1. números que a resposta AFIRMA (só o LLM lê português livre) ──────────
+EXTRAI = """Você extrai NÚMEROS de um texto em português. Não julga nada.
+
+Liste todo número que o texto AFIRMA como fato — quantidades, valores em reais,
+percentuais, contagens. Para cada um, diga a que ele se refere.
+
+🔴 EM `sobre`, COMECE SEMPRE PELO SUJEITO — a pessoa, a unidade ou o canal a
+   que o número pertence, mesmo que ele apareça antes na frase ou no parágrafo.
+   Em "Na Barra, sim: 2 conversas esperando e 2 acima de 24h", o sujeito dos
+   DOIS números é **Barra**, e `sobre` tem de dizer isso.
+   Sem o sujeito, quem lê depois não consegue saber de quem é o número — e foi
+   exatamente assim que um número de Campo Grande passou por número da Barra.
+
+Ignore: números dentro de datas, horários, telefones, ids, e números que apareçam
+numa pergunta ou numa oferta ("quer que eu puxe os 6 mais urgentes?").
+
+Responda só JSON:
+{"numeros": [{"valor": 40, "sobre": "Vitória — conversas esperando resposta"},
+             {"valor": 2, "sobre": "Barra — conversas esperando resposta"}]}
+`valor` é sempre número puro, com PONTO decimal e SEM separador de milhar.
+⚠️ Formato brasileiro: em "R$ 3.047,91" o ponto é MILHAR e a vírgula é DECIMAL —
+   o valor é 3047.91, nunca 3047 nem 3.047. Não perca os centavos."""
+
+
+def numeros_afirmados(resposta):
+    d = _chamar(EXTRAI, f"TEXTO:\n{resposta}")
+    if not d:
+        return None
     saida = []
-    for c in criterios:
-        # casa por nome exato e, se o modelo reescrever, pela ordem
-        x = achados.get(c.strip())
-        if x is None and len(veredito.get("criterios") or []) == len(criterios):
-            x = (veredito["criterios"])[criterios.index(c)]
-        if x is None:
-            saida.append((c, None, "o juiz não avaliou este critério"))
-        else:
-            saida.append((c, bool(x.get("ok")), str(x.get("porque", ""))[:220]))
+    for x in (d.get("numeros") or []):
+        try:
+            saida.append((float(x.get("valor")), str(x.get("sobre", ""))[:90]))
+        except (TypeError, ValueError):
+            continue
     return saida
+
+
+# ── 2. todo número que existe na verdade (determinístico) ──────────────────
+def numeros_da_verdade(v):
+    achados = set()
+
+    def anda(x):
+        if isinstance(x, dict):
+            for y in x.values():
+                anda(y)
+        elif isinstance(x, list):
+            for y in x:
+                anda(y)
+        elif isinstance(x, bool):
+            return
+        elif isinstance(x, (int, float)):
+            achados.add(round(float(x), 2))
+        elif isinstance(x, str):
+            # ⚠️ datas fora: "2026-09-07" virava os números -9 e -7 na fatia e
+            #    afrouxava a comparação de graça.
+            x = re.sub(r'\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4}|\d{2}:\d{2}', ' ', x)
+            # números escritos dentro de texto (a verdade traz muito string)
+            for m in re.finditer(r'-?\d+(?:[.,]\d+)?', x):
+                try:
+                    achados.add(round(float(m.group(0).replace(',', '.')), 2))
+                except ValueError:
+                    pass
+    anda(v)
+    return achados
+
+
+def _explicavel(n, base):
+    """Está na base, ou é soma/diferença de dois números dela. 1 centavo de folga."""
+    for b in base:
+        if abs(n - b) < 0.011:
+            return True
+        # ⚠️ ela (ou o extrator) pode arredondar/truncar os centavos: "R$ 3.047"
+        #    para um valor real de 3047,91. Isso é a MESMA quantia, não invenção.
+        if abs(b) >= 1 and abs(n - int(b)) < 0.011:
+            return True
+    inteiros = [b for b in base if abs(b) < 1e7]
+    for a in inteiros:
+        for b in inteiros:
+            if abs(n - (a + b)) < 0.011 or abs(n - (a - b)) < 0.011:
+                return True
+    return False
+
+
+def _fatias_por_sujeito(v):
+    """Mapa nome -> números daquele pedaço da verdade.
+
+    🔴 EXISTIR NA VERDADE NÃO BASTA. Foi assim que o bug original passou: ela
+       disse "na Barra, 2 esperando e 2 com mais de 24h" e o 2 EXISTIA — era da
+       Gabriela, de Campo Grande. Número certo, dono errado. Sem amarrar o
+       número ao sujeito, o teste aprova exatamente o defeito que motivou tudo.
+    """
+    fatias = {}
+
+    def anda(x):
+        if isinstance(x, dict):
+            # ⚠️ TODOS os rótulos, não o primeiro. A linha da Kailane tem
+            #    "pessoa: Kailane Barbosa" E "unidades: Barra"; parando no
+            #    primeiro, a frase "na Barra, 2 esperando" não achava dono e caía
+            #    na busca global — onde o 2 EXISTE (é da Gabriela, de Campo
+            #    Grande). Era o bug original passando no teste que o persegue.
+            # ⚠️ Rótulo composto ("Campo Grande, Recreio") vira várias chaves,
+            #    senão a busca por "Recreio" não encontra a fatia.
+            for chave in ('pessoa', 'nome', 'canal', 'unidade', 'unidades', 'aluno', 'titulo'):
+                bruto = x.get(chave)
+                if not isinstance(bruto, str) or len(bruto) <= 2:
+                    continue
+                for parte in re.split(r'[,/;]| e ', bruto):
+                    parte = parte.strip()
+                    if len(parte) > 2:
+                        fatias.setdefault(_norm(parte), set()).update(numeros_da_verdade(x))
+            for y in x.values():
+                anda(y)
+        elif isinstance(x, list):
+            for y in x:
+                anda(y)
+    anda(v)
+    return fatias
+
+
+def _norm(t):
+    import unicodedata
+    t = ''.join(c for c in unicodedata.normalize('NFD', str(t or ''))
+                if unicodedata.category(c) != 'Mn').lower()
+    return re.sub(r'[^a-z0-9 ]', ' ', t).strip()
+
+
+def _sujeito_da_frase(sobre, fatias):
+    """Se o rótulo extraído nomeia alguém que a verdade conhece, devolve a fatia."""
+    alvo = _norm(sobre)
+    melhor, melhor_tam = None, 0
+    for nome, nums in fatias.items():
+        primeiro = nome.split(' ')[0]
+        if len(primeiro) >= 4 and primeiro in alvo and len(nome) > melhor_tam:
+            melhor, melhor_tam = nums, len(nome)
+    return melhor
+
+
+# ── 3. o qualitativo, que número não resolve ───────────────────────────────
+QUALITATIVO = """Você audita a resposta de uma assistente interna de uma rede de escolas de música.
+
+Recebe a PERGUNTA, a RESPOSTA e a VERDADE (o JSON que o banco devolveu, única
+fonte de fato). Diga, para cada CRITÉRIO, se a resposta cumpre.
+
+🔴 REGRAS:
+- Julgue SUBSTÂNCIA, nunca vocabulário. Sinônimo, conjugação, gíria, listar em
+  vez de contar, resumir em vez de detalhar — nada disso é erro. "Não consegui
+  ver", "não abriu pra mim" e "não tenho acesso" dizem a MESMA coisa.
+- Julgue **SÓ O CRITÉRIO PEDIDO**. Cada critério é uma pergunta fechada; não
+  reprove por um detalhe vizinho que ele não menciona.
+- Os nomes de campo do JSON são técnicos e a resposta é em português
+  (`agendou` = "agendamentos", `realizou_exp` = "experimentais",
+  `n_experimentais` = "experimentais de hoje"). Quando a VERDADE é de uma data
+  pedida, um campo `hoje` se refere àquela data.
+- A VERDADE pode ter vindo de uma consulta um pouco diferente da que a
+  assistente fez. Item plausível fora do JSON não é, por si, invenção.
+- Zero e "não tenho o dado" são coisas DIFERENTES.
+- Omitir o que o critério exige é falha, mesmo com o resto certo.
+
+🔴 A PERGUNTA É SEMPRE "A RESPOSTA FAZ ISSO?", NUNCA "ISSO É VERDADE?". Se o
+   critério diz "avisa que o gasto cobre só 28 dos 31 dias", a pergunta é se ela
+   ESCREVEU esse aviso — não se o dado é mesmo 28/31. Já aprovei uma resposta
+   que omitia o aviso porque conferi na VERDADE que o aviso caberia. A verdade
+   serve para saber se o que ela disse é fiel, não para completar o que faltou.
+
+⚠️ NÃO confira números aqui — isso é feito em outro lugar, por código.
+
+Responda só JSON:
+{"criterios": [{"nome": "<copiado>", "ok": true|false, "porque": "<uma frase>"}]}"""
+
+
+def julgar(pergunta, resposta, verdade, criterios, timeout=90):
+    """[(nome, ok, porque)]. ok=None => inconclusivo (juiz caiu)."""
+    if not os.environ.get("OPENAI_API_KEY"):
+        return [(c, None, "OPENAI_API_KEY ausente") for c in criterios]
+
+    saida = []
+
+    # ── critério de NÚMERO: extração pelo LLM, comparação em código ─────────
+    numericos = [c for c in criterios if re.search(r'\bbatem?\b|\bnúmero|\bnumero', c, re.I)]
+    if numericos:
+        afirmados = numeros_afirmados(resposta)
+        if afirmados is None:
+            for c in numericos:
+                saida.append((c, None, "não consegui extrair os números da resposta"))
+        else:
+            base = numeros_da_verdade(verdade)
+            fatias = _fatias_por_sujeito(verdade)
+            fora = []
+            for n, sobre in afirmados:
+                # 🔴 quando a frase nomeia alguém que a verdade conhece, o número
+                #    tem de estar NA FATIA DELE — senão é "número certo, dono
+                #    errado", que foi o bug original.
+                dele = _sujeito_da_frase(sobre, fatias)
+                if dele is not None:
+                    if not _explicavel(n, dele):
+                        fora.append((n, sobre + ' [não é dessa pessoa]'))
+                elif not _explicavel(n, base):
+                    fora.append((n, sobre))
+            for c in numericos:
+                if not fora:
+                    saida.append((c, True,
+                                  f"os {len(afirmados)} números afirmados existem na verdade"))
+                else:
+                    det = "; ".join(f"{n:g} ({s})" for n, s in fora[:4])
+                    saida.append((c, False, f"não encontrei na verdade: {det}"))
+
+    # ── o resto, com o LLM ──────────────────────────────────────────────────
+    resto = [c for c in criterios if c not in numericos]
+    if resto:
+        d = _chamar(QUALITATIVO,
+                    f"PERGUNTA:\n{pergunta}\n\nRESPOSTA DA ASSISTENTE:\n{resposta}\n\n"
+                    f"VERDADE (JSON):\n{json.dumps(verdade, ensure_ascii=False)[:12000]}\n\n"
+                    f"CRITÉRIOS:\n" + "\n".join(f"- {c}" for c in resto))
+        if not d:
+            for c in resto:
+                saida.append((c, None, "juiz qualitativo falhou"))
+        else:
+            achados = {str(x.get("nome", "")).strip(): x for x in (d.get("criterios") or [])}
+            lista = d.get("criterios") or []
+            for c in resto:
+                x = achados.get(c.strip())
+                if x is None and len(lista) == len(resto):
+                    x = lista[resto.index(c)]
+                if x is None:
+                    saida.append((c, None, "o juiz não avaliou este critério"))
+                else:
+                    saida.append((c, bool(x.get("ok")), str(x.get("porque", ""))[:220]))
+
+    # devolve na ordem em que os critérios foram pedidos
+    por_nome = {c: v for c, *v in ((s[0], s[1], s[2]) for s in saida)}
+    return [(c, *por_nome.get(c, (None, "não avaliado"))) for c in criterios]
