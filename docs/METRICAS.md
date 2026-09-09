@@ -163,6 +163,25 @@ Metas de experimentais agendadas não são comparadas com experimentais
 realizadas. A meta `ticket_parcela` acompanha somente o ticket das novas
 parcelas comerciais, nunca o ticket financeiro da base ativa.
 
+### Coordenação: universos e publicação (09/09/2026)
+
+Presença da equipe = soma de presentes / soma de ocorrências elegíveis; a
+contagem de professores com eventos usa denominador observado positivo, mesmo
+quando a amostra individual não alcança o mínimo de dez para pontuar. Flags de
+qualidade são contagens independentes e podem se sobrepor, não uma soma de
+pendências. Sem denominador, taxa é nula, nunca zero presumido.
+
+Turmas operacionais e turmas da amostra individual do Health Score são universos
+separados. Destaques individuais exigem amostra positiva. Cobertura é x/y
+indicadores aplicáveis. A contagem de conversão pontuando usa `peso_efetivo > 0`,
+não a quantidade de professores com amostra mínima.
+
+Por decisão explícita de 09/09, os cinco relatórios de Coordenação não apresentam
+MRR, valores ou pendências financeiras. Os dados de origem e demais consumidores
+financeiros permanecem preservados. O ranking oficial exige correspondência exata entre
+IDs/notas do documento e todos os professores comparáveis publicados. Relatórios
+retificados identificam sua versão, sem sobrescrever a cópia histórica.
+
 ### Ticket médio (mensalidade)
 Média de `valor_parcela` dos alunos com `entra_financeiro_ativo = true` **E**
 `tipo_matricula.entra_ticket_medio = true` **E** `valor_parcela > 0`,
@@ -613,6 +632,18 @@ numeradores e denominadores brutos dos meses elegíveis são somados antes da
 divisão; nunca se calcula a taxa pela média dos percentuais mensais. Ausência de
 experimental recebe `sem_experimental_periodo`, e amostra menor que o corte
 recebe `amostra_insuficiente`; ambos saem do denominador da nota.
+
+Mensal e ciclo compartilham `get_health_score_professor_v3_conversao_periodo_canonico`.
+A identidade de evento/lead basta para uma experimental não convertida entrar no
+denominador; não se exige aluno matriculado nesse caso. A matrícula com data
+comprovada é obrigatória no numerador. Uma matrícula recebe um único crédito,
+atribuído à última experimental anterior dentro de D+30; o casamento considera
+eventos dos meses vizinhos antes de filtrar a coorte selecionada. IDs externos
+iguais em unidades diferentes não são fundidos. Declaração de conversão sem
+matrícula comprovada mantém o valor observado visível, mas bloqueia esse pilar
+na nota. A janela D+30 de publicação oficial foi reconfirmada pelo responsável
+em 09/09 (Jun–Ago elegível em 30/09); não confundir nota diagnóstica com
+autorização de premiação.
 
 #### Metas segmentadas de carteira e turma
 

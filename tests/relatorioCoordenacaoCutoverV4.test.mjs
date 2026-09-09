@@ -15,6 +15,10 @@ const privacyMigrationPath =
 const carteiraPainelMigrationPath =
   'supabase/migrations/20260909053853_relatorio_coordenacao_carteira_espelha_painel_v4.sql';
 
+test('menu da coordenacao nao promete MRR nem analise financeira', () => {
+  assert.doesNotMatch(fs.readFileSync(modalPath, 'utf8'), /MRR|R\$/);
+});
+
 function professor(indice, overrides = {}) {
   const nome = `Professor ${String(indice).padStart(2, '0')}`;
   const valor = 100 - indice;
@@ -305,16 +309,14 @@ test('Matriculador nao publica professor com zero ou origem incompleta', () => {
   assert.doesNotMatch(matriculador, /Professor 02|Professor 03|0 matrículas/);
 });
 
-test('valor monetario ausente permanece ausente e informa a cobertura', () => {
+test('valor monetario ausente nao aparece na coordenacao e preserva a movimentacao', () => {
   const texto = gerarRelatorioCoordenacaoCanonico({
     tipo: 'retencao',
     contrato: contratoV4(),
   });
 
-  assert.match(texto, /MRR perdido total: \*Valor não informado\*/);
-  assert.match(texto, /Movimentações com valor não informado: \*1\*/);
-  assert.match(texto, /Aluno sem valor[\s\S]*MRR perdido: Valor não informado/);
-  assert.doesNotMatch(texto, /Aluno sem valor[\s\S]{0,300}MRR perdido: R\$ 0,00/);
+  assert.match(texto, /Aluno sem valor/);
+  assert.doesNotMatch(texto, /MRR|R\$|valor não informado/i);
 });
 
 test('texto entregue a coordenacao nao vaza termos de implementacao', () => {

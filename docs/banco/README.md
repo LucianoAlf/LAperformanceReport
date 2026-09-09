@@ -9,6 +9,11 @@
 
 ## Regenerar
 
+Coordenação (09/09/2026): a invalidação de um snapshot preserva o histórico
+`publicado`, mas exige `invalidado_em`, `publicavel=false` e
+`ranking_habilitado=false`. Valores e métricas antigos continuam imutáveis.
+A migration de estrutura não executa o backfill longo sob lock de DDL.
+
 ```bash
 npm run mapa:banco
 ```

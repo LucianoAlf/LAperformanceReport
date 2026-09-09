@@ -5,6 +5,22 @@
 
 ## Professores (`/app/professores`)
 
+**Confiabilidade da Coordenação (09/09/2026):** o fechamento só publica a equipe
+comparável integral e com recorte completo. Retificação cria novos registros,
+preservando valores e evidências dos anteriores. Presença do Health Score usa
+`get_health_score_professor_v3_presenca_periodo_v2` sobre ocorrências classificadas;
+amostra positiva continua visível mesmo abaixo do mínimo para pontuar. Os cinco
+relatórios compartilham o documento V4 identificado por versão; destaques exigem
+amostra observada. Ver [registro de validação](../audits/2026-09-09-coordenacao-release.md).
+
+O batch da Coordenação atualiza oito recortes juntos às 05:00 BRT, com limite
+de 110 s e rollback integral. Não altera documentos finais. Mensal e ciclo
+normalizam a chave do relatório pelo início do período; a troca Agosto → Ciclo
+consulta junho, e Janeiro/Fevereiro → Ciclo consulta dezembro do ano anterior.
+O responsável reconfirmou D+30 até 30/09; a publicação antecipada está em regularização
+versionada. Edge 97 publicada com autorização para a integração OpenAI; frontend e
+verificação final permanecem em andamento. Os cinco relatórios omitem valores financeiros.
+
 **Alinhamento da carteira com o V3 (14/08/2026):** o indicador
 `numero_alunos` do periodo aberto usa `get_carteira_professor_periodo_canonica`,
 a mesma fonte baseada na jornada ativa que abastece os KPIs da Carteira.

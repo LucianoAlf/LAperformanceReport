@@ -504,8 +504,10 @@ const fixture = String.raw`
      confianca,fonte,regra_versao,motivo_sem_base,codigo_evidencia,detalhes)
   select id,'presenca',
     case competencia when '2026-09-01' then 80 when '2026-10-01' then 90 else 100 end,
-    case competencia when '2026-09-01' then 8 when '2026-10-01' then 9 else 10 end,
-    10,10,'ok','alta','fixture','fixture',null,'evidencia_valida',
+    case competencia when '2026-09-01' then 8 when '2026-10-01' then 27 else 10 end,
+    case competencia when '2026-10-01' then 30 else 10 end,
+    case competencia when '2026-10-01' then 30 else 10 end,
+    'ok','alta','fixture','fixture',null,'evidencia_valida',
     jsonb_build_object('competencia_referencia',case when competencia='2026-09-01' then '2026-08-01' else competencia::text end)
   from s where professor_id=1
   union all
@@ -558,6 +560,15 @@ test('fontes V4 preservam historico, acumulam fatos e nao fabricam zero', { time
 
       with periodos as (
         select * from public.relatorio_coordenacao_periodos_v4(2026,9,'ciclo','2026-09-30')
+      ), evolucao_ciclo as (
+        select d.corte, p.numerador, p.denominador, p.valor,
+          (select count(*) from public.relatorio_coordenacao_periodos_v4(
+            2026,9,'ciclo',d.corte
+          )) as meses
+        from (values (date '2026-09-30'), (date '2026-10-31'), (date '2026-11-30')) d(corte)
+        cross join lateral public.relatorio_coordenacao_presenca_v4(
+          '${unitId}',2026,9,'ciclo',d.corte
+        ) p where p.professor_id=1
       ), carteira as (
         select * from public.relatorio_coordenacao_carteira_v4(
           '${unitId}',2026,8,'ciclo','2026-08-31'
@@ -606,6 +617,7 @@ test('fontes V4 preservam historico, acumulam fatos e nao fabricam zero', { time
       )
       select jsonb_build_object(
         'periodos', (select jsonb_build_object('qtd',count(*),'max',max(competencia)) from periodos),
+        'evolucao_ciclo', (select jsonb_agg(to_jsonb(e) order by corte) from evolucao_ciclo e),
         'carteira', (select to_jsonb(c) from carteira c),
         'presenca', (select to_jsonb(p) from presenca p),
         'matriculas', (select payload from matriculas),
@@ -630,9 +642,14 @@ test('fontes V4 preservam historico, acumulam fatos e nao fabricam zero', { time
     assert.deepEqual(result.periodos, { qtd: 1, max: '2026-09-01' });
     assert.equal(Number(result.carteira.carteira_media), 12.33);
     assert.equal(result.carteira.meses_observados, 3);
-    assert.equal(Number(result.presenca.valor), 85);
-    assert.equal(Number(result.presenca.numerador), 17);
-    assert.equal(Number(result.presenca.denominador), 20);
+    assert.equal(Number(result.presenca.valor), 87.5);
+    assert.equal(Number(result.presenca.numerador), 35);
+    assert.equal(Number(result.presenca.denominador), 40);
+    assert.deepEqual(result.evolucao_ciclo, [
+      { corte: '2026-09-30', meses: 1, numerador: 8, denominador: 10, valor: 80 },
+      { corte: '2026-10-31', meses: 2, numerador: 35, denominador: 40, valor: 87.5 },
+      { corte: '2026-11-30', meses: 3, numerador: 45, denominador: 50, valor: 90 },
+    ], 'Ciclo deve acumular somente meses iniciados e ponderar pelas chamadas, nao pela media simples dos percentuais');
     assert.equal(result.matriculas.origem_completa, true);
     assert.equal(result.matriculas.matriculas_total, 8);
     assert.equal(result.matriculas.matriculas_sem_professor, 1);
