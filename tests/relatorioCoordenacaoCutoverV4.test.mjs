@@ -8,6 +8,8 @@ const modalPath = 'src/components/App/Professores/ModalRelatorioCoordenacao.tsx'
 const formatterPath = 'src/lib/relatorioCoordenacaoCanonico.ts';
 const edgePath = 'supabase/functions/gemini-relatorio-coordenacao/index.ts';
 const migrationPath = 'supabase/migrations/20260909043050_relatorio_coordenacao_cutover_v4.sql';
+const releaseGateMigrationPath =
+  'supabase/migrations/20260909065200_relatorio_coordenacao_release_gate_v4.sql';
 const privacyMigrationPath =
   'supabase/migrations/20260909053633_relatorio_coordenacao_documentos_privados_v4.sql';
 const carteiraPainelMigrationPath =
@@ -135,13 +137,21 @@ test('os cinco consumidores leem o documento V4 e nao recompõem o V3 no clique'
   const modal = fs.readFileSync(modalPath, 'utf8');
   const edge = fs.readFileSync(edgePath, 'utf8');
   const migration = fs.readFileSync(migrationPath, 'utf8');
+  const releaseGate = fs.readFileSync(releaseGateMigrationPath, 'utf8');
 
   assert.match(modal, /get_relatorio_coordenacao_documento_v4/);
   assert.doesNotMatch(modal, /get_relatorio_coordenacao_canonico_v3/);
   assert.match(edge, /get_relatorio_coordenacao_documento_v4_por_id/);
   assert.doesNotMatch(edge, /get_relatorio_coordenacao_canonico_v3/);
   assert.match(edge, /schema_version\s*!==\s*4/);
-  assert.match(migration, /get_relatorio_coordenacao_canonico_v3[\s\S]*get_relatorio_coordenacao_documento_v4/);
+  assert.doesNotMatch(
+    migration,
+    /create\s+or\s+replace\s+function\s+public\.get_relatorio_coordenacao_canonico_v3/i,
+  );
+  assert.match(
+    releaseGate,
+    /get_relatorio_coordenacao_canonico_v3[\s\S]*get_relatorio_coordenacao_documento_v4/,
+  );
 });
 
 test('modal fixa a identidade do documento também no relatório narrativo', () => {
@@ -293,6 +303,7 @@ test('nomes proprios do negocio nao sao bloqueados nem reescritos', () => {
 
 test('cutover agenda atualizacao diaria por escopo sem depender do leitor publico', () => {
   const migration = fs.readFileSync(migrationPath, 'utf8');
+  const releaseGate = fs.readFileSync(releaseGateMigrationPath, 'utf8');
 
   assert.match(migration, /executar_relatorio_coordenacao_documento_v4_diario/);
   assert.match(migration, /materializar_relatorio_coordenacao_documento_v4/);
@@ -301,4 +312,21 @@ test('cutover agenda atualizacao diaria por escopo sem depender do leitor public
   assert.match(migration, /cron\.schedule/);
   assert.match(migration, /'mensal'/);
   assert.match(migration, /'ciclo'/);
+  assert.doesNotMatch(
+    migration,
+    /select\s+public\.configurar_relatorio_coordenacao_documento_v4_cron\(\)/i,
+  );
+
+  const materializacao = releaseGate.indexOf(
+    'v_resultado := public.materializar_relatorio_coordenacao_documento_v4',
+  );
+  const publicacao = releaseGate.indexOf(
+    'create or replace function public.get_relatorio_coordenacao_canonico_v3',
+  );
+  const agendamento = releaseGate.indexOf(
+    'select public.configurar_relatorio_coordenacao_documento_v4_cron();',
+  );
+  assert.ok(materializacao >= 0, 'release deve materializar os documentos');
+  assert.ok(publicacao > materializacao, 'leitor publico so pode mudar depois da carga');
+  assert.ok(agendamento > publicacao, 'cron so pode ser ativado depois da publicacao segura');
 });

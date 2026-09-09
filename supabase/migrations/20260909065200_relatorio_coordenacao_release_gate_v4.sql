@@ -178,6 +178,10 @@ grant execute on function public.get_relatorio_coordenacao_canonico_v3(
   uuid, integer, integer, text
 ) to authenticated, service_role;
 
+-- Os jobs so entram em operacao depois da carga validada e do alias publico.
+-- Qualquer falha aqui reverte tambem a materializacao e a troca do leitor.
+select public.configurar_relatorio_coordenacao_documento_v4_cron();
+
 comment on function public.montar_relatorio_coordenacao_conteudo_v4(
   uuid, integer, integer, text
 ) is 'Produtor factual privado liberado pelo gate transacional coordenacao-v4-20260909065200.';

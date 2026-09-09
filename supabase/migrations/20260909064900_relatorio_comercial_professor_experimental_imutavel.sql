@@ -343,6 +343,12 @@ begin
       and jsonb_typeof(s.payload -> 'matriculas') = 'array'
     order by s.ano, s.mes, s.unidade_id, s.versao desc
   loop
+    if v_snapshot.payload_hash is distinct from
+         public.hash_jsonb_canonico(v_snapshot.payload) then
+      raise exception 'RELATORIO_COMERCIAL_SNAPSHOT_ORIGEM_HASH_INVALIDO: documento %',
+        v_snapshot.id using errcode = '22000';
+    end if;
+
     if not exists (
       select 1
       from jsonb_array_elements(v_snapshot.payload -> 'matriculas') item

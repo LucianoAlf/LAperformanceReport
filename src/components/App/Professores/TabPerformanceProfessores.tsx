@@ -294,7 +294,6 @@ function HealthScoreV3MetricCell({
             {snapshot?.periodicidade === 'ciclo' && ['media_turma', 'numero_alunos'].includes(metricKey) && (
               <p className="text-sky-300">Fotografia do fim do recorte; não é média dos três meses.</p>
             )}
-            {metric?.fonte && <p className="break-all">Fonte: <strong>{metric.fonte}</strong></p>}
           </div>
           {display.state === 'sem_base' && (
             <p className="mt-1.5 text-amber-300">{evidenceMessage}</p>

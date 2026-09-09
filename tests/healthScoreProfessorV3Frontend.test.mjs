@@ -26,8 +26,17 @@ const componentPath =
 const pagePath = 'src/components/App/Professores/ProfessoresPage.tsx';
 const modalPath =
   'src/components/App/Professores/ModalDetalhesProfessorPerformance.tsx';
+const performanceTablePath =
+  'src/components/App/Professores/TabPerformanceProfessores.tsx';
 
 const read = (path) => fs.readFileSync(path, 'utf8');
+
+test('tabela publica nao exibe identificador tecnico da fonte da metrica', () => {
+  const source = read(performanceTablePath);
+
+  assert.doesNotMatch(source, /metric\?\.fonte/);
+  assert.doesNotMatch(source, />Fonte:\s*<strong>\{metric\.fonte\}/);
+});
 
 test('Gate 7 expoe configuracao V3 somente por RPCs guardadas', () => {
   const sql = `${read(migrationPath)}\n${read(comparabilityConfigMigrationPath)}`;

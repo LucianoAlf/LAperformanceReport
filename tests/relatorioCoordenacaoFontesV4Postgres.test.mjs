@@ -480,6 +480,9 @@ const fixture = String.raw`
     (2026,6,'unidade','${secondUnitId}','relatorio_gerencial',1,'fechado',
       '{"dados_mes_atual":[{"novas_matriculas":42}]}'::jsonb,'2026-07-01 03:00Z');
 
+  update public.fechamento_mensal_snapshots
+  set payload_hash = public.hash_jsonb_canonico(payload);
+
   insert into public.motivos_saida values (1,'Desistencia',true,true);
   insert into public.movimentacoes_admin values
     (1,'${unitId}','2026-06-10','evasao','Aluno movimento 1',201,1,'Desistencia',1,400,null,false),
@@ -668,6 +671,56 @@ test('fontes V4 preservam historico, acumulam fatos e nao fabricam zero', { time
     `);
     assert.notEqual(privateHelper.status, 0);
     assert.match(privateHelper.stderr, /permission denied/i);
+  } finally {
+    docker(['stop', container]);
+  }
+});
+
+test('retificacao comercial falha fechado quando o snapshot de origem foi adulterado', { timeout: 120_000 }, async (t) => {
+  if (docker(['info']).status !== 0) {
+    t.skip('Docker indisponivel para fixture PostgreSQL');
+    return;
+  }
+
+  const container = `la-coord-fontes-hash-${process.pid}-${Date.now()}`;
+  const started = docker([
+    'run', '--detach', '--rm', '--name', container,
+    '--env', 'POSTGRES_PASSWORD=postgres', 'postgres:17-alpine',
+  ]);
+  assert.equal(started.status, 0, started.stderr || started.stdout);
+
+  try {
+    await waitForPostgres(container);
+    const prelude = [
+      fixture,
+      readFileSync(migrationPath, 'utf8'),
+      readFileSync(carteiraTotalMigrationPath, 'utf8'),
+      readFileSync(matriculadorFechadoMigrationPath, 'utf8'),
+      readFileSync(carteiraRosterMigrationPath, 'utf8'),
+      readFileSync(matriculadorSemFallbackMigrationPath, 'utf8'),
+    ].join('\n');
+    const prepared = psql(container, prelude);
+    assert.equal(prepared.status, 0, prepared.stderr || prepared.stdout);
+
+    const corrupted = psql(container, String.raw`
+      update public.fechamento_mensal_snapshots
+      set payload = payload || '{"adulterado":true}'::jsonb
+      where dominio='relatorio_comercial_mensal'
+        and ano=2026 and mes=7 and unidade_id='${unitId}' and versao=1;
+    `);
+    assert.equal(corrupted.status, 0, corrupted.stderr || corrupted.stdout);
+
+    const migration = readFileSync(matriculadorImutavelMigrationPath, 'utf8');
+    const applied = psql(container, migration);
+    assert.notEqual(applied.status, 0, applied.stderr || applied.stdout);
+    assert.match(applied.stderr, /RELATORIO_COMERCIAL_SNAPSHOT_ORIGEM_HASH_INVALIDO/u);
+
+    const versions = psql(container, String.raw`
+      select count(*) from public.fechamento_mensal_snapshots
+      where dominio='relatorio_comercial_mensal' and versao > 1;
+    `);
+    assert.equal(versions.status, 0, versions.stderr || versions.stdout);
+    assert.equal(Number(versions.stdout.trim()), 0);
   } finally {
     docker(['stop', container]);
   }

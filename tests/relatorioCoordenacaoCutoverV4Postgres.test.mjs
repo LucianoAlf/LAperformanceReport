@@ -216,10 +216,31 @@ const fixtureSemDocumentos = fixture.replace(
 const fixtureReleaseGate = String.raw`
   create extension pgcrypto;
   create schema auth;
+  create schema cron;
   create role anon;
   create role authenticated;
   create role service_role;
   create function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
+  create function public.fn_health_score_professor_v3_ator_leitura(uuid)
+  returns integer language sql stable security definer as $$ select 1 $$;
+
+  create table cron.job (
+    jobid bigserial primary key,
+    jobname text not null,
+    schedule text not null,
+    command text not null,
+    username text not null default current_user
+  );
+  create function cron.schedule(text,text,text) returns bigint language plpgsql as $$
+  declare v_id bigint;
+  begin
+    insert into cron.job(jobname,schedule,command) values ($1,$2,$3) returning jobid into v_id;
+    return v_id;
+  end
+  $$;
+  create function cron.unschedule(bigint) returns boolean language plpgsql as $$
+  begin delete from cron.job where jobid=$1; return found; end
+  $$;
 
   create table public.unidades (
     id uuid primary key,
@@ -323,7 +344,7 @@ const fixtureReleaseGate = String.raw`
   $$;
 `;
 
-test('cutover falha fechado e preserva V3 quando a carga inicial esta incompleta', { timeout: 120_000 }, async (t) => {
+test('preparacao do cutover aceita base vazia sem publicar V4 nem ativar jobs', { timeout: 120_000 }, async (t) => {
   if (docker(['info']).status !== 0) {
     t.skip('Docker indisponivel para fixture PostgreSQL');
     return;
@@ -341,11 +362,7 @@ test('cutover falha fechado e preserva V3 quando a carga inicial esta incompleta
     await waitForPostgres(container);
     const migration = readFileSync(migrationPath, 'utf8');
     const applied = psql(container, `${fixtureSemDocumentos}\n${migration}`);
-    assert.notEqual(applied.status, 0, applied.stderr || applied.stdout);
-    assert.match(
-      applied.stderr,
-      /RELATORIO_COORDENACAO_V4_CARGA_INICIAL_INCOMPLETA/u,
-    );
+    assert.equal(applied.status, 0, applied.stderr || applied.stdout);
 
     const jobs = psql(container, 'select count(*) from cron.job;');
     assert.equal(jobs.status, 0, jobs.stderr || jobs.stdout);
@@ -365,7 +382,7 @@ test('cutover falha fechado e preserva V3 quando a carga inicial esta incompleta
   }
 });
 
-test('cutover V4 preserva produtor, fixa documento e agenda escopos isolados', { timeout: 120_000 }, async (t) => {
+test('preparacao cria leitor exato e executor sem trocar alias nem agendar', { timeout: 120_000 }, async (t) => {
   if (docker(['info']).status !== 0) {
     t.skip('Docker indisponivel para fixture PostgreSQL');
     return;
@@ -387,25 +404,27 @@ test('cutover V4 preserva produtor, fixa documento e agenda escopos isolados', {
 
     const wrapper = psql(container, String.raw`
       set role authenticated;
-      select jsonb_build_object(
-        'schema', d->>'schema_version',
-        'id', d#>>'{documento,id}',
-        'legado', d->>'legado'
-      )::text
-      from (select public.get_relatorio_coordenacao_canonico_v3(
+      select public.get_relatorio_coordenacao_canonico_v3(
         '10000000-0000-0000-0000-000000000001',2026,9,'ciclo'
-      ) d) x;
+      )::text;
     `);
     assert.equal(wrapper.status, 0, wrapper.stderr || wrapper.stdout);
     const wrapperResult = JSON.parse(wrapper.stdout.trim().split(/\r?\n/).at(-1));
-    assert.equal(wrapperResult.schema, '4');
-    assert.equal(wrapperResult.legado, null);
-    assert.ok(wrapperResult.id);
+    assert.equal(wrapperResult.schema_version, 3);
+    assert.equal(wrapperResult.legado, true);
+
+    const documentId = psql(container, String.raw`
+      select id from public.fechamento_mensal_snapshots
+      where unidade_id='10000000-0000-0000-0000-000000000001'
+        and ano=2026 and mes=9 and dominio='relatorio_coordenacao_ciclo'
+      order by versao desc limit 1;
+    `);
+    assert.equal(documentId.status, 0, documentId.stderr || documentId.stdout);
 
     const exact = psql(container, String.raw`
       set role authenticated;
       select (public.get_relatorio_coordenacao_documento_v4_por_id(
-        '${wrapperResult.id}'::uuid
+        '${documentId.stdout.trim()}'::uuid
       )->>'schema_version');
     `);
     assert.equal(exact.status, 0, exact.stderr || exact.stdout);
@@ -421,10 +440,10 @@ test('cutover V4 preserva produtor, fixa documento e agenda escopos isolados', {
     `);
     assert.equal(jobs.status, 0, jobs.stderr || jobs.stdout);
     assert.deepEqual(JSON.parse(jobs.stdout.trim()), {
-      total: 4,
-      mensal: 2,
-      ciclo: 2,
-      todos_isolados: true,
+      total: 0,
+      mensal: 0,
+      ciclo: 0,
+      todos_isolados: null,
     });
 
     const run = psql(container, String.raw`
@@ -449,7 +468,7 @@ test('cutover V4 preserva produtor, fixa documento e agenda escopos isolados', {
     const anonymous = psql(container, String.raw`
       set role anon;
       select public.get_relatorio_coordenacao_documento_v4_por_id(
-        '${wrapperResult.id}'::uuid
+        '${documentId.stdout.trim()}'::uuid
       );
     `);
     assert.notEqual(anonymous.status, 0);
@@ -475,8 +494,12 @@ test('release gate materializa todos os recortes com o produtor final antes de p
 
   try {
     await waitForPostgres(container);
+    const cutoverMigration = readFileSync(migrationPath, 'utf8');
     const releaseMigration = readFileSync(releaseGateMigrationPath, 'utf8');
-    const applied = psql(container, `${fixtureReleaseGate}\n${releaseMigration}`);
+    const applied = psql(
+      container,
+      `${fixtureReleaseGate}\n${cutoverMigration}\n${releaseMigration}`,
+    );
     assert.equal(applied.status, 0, applied.stderr || applied.stdout);
 
     const result = psql(container, String.raw`
@@ -485,6 +508,7 @@ test('release gate materializa todos os recortes com o produtor final antes de p
         'escopos',count(distinct (escopo,coalesce(unidade_id::text,'consolidado'))),
         'recortes',count(distinct (ano,mes,dominio)),
         'marcados',bool_and(payload#>>'{motor_documento,versao}'='coordenacao-v4-20260909065200'),
+        'jobs',(select count(*) from cron.job),
         'schema_v3',public.get_relatorio_coordenacao_canonico_v3(
           null,2026,9,'ciclo'
         )->>'schema_version'
@@ -497,6 +521,7 @@ test('release gate materializa todos os recortes com o produtor final antes de p
       escopos: 2,
       recortes: 6,
       marcados: true,
+      jobs: 4,
       schema_v3: '4',
     });
   } finally {
@@ -519,6 +544,7 @@ test('release gate reverte o cutover inteiro quando um documento final nao exist
 
   try {
     await waitForPostgres(container);
+    const cutoverMigration = readFileSync(migrationPath, 'utf8');
     const releaseMigration = readFileSync(releaseGateMigrationPath, 'utf8');
     const fixtureSemGravacao = fixtureReleaseGate.replace(
       /create function public\.materializar_relatorio_coordenacao_documento_v4\([\s\S]*?\n  \$\$;/,
@@ -528,7 +554,10 @@ test('release gate reverte o cutover inteiro quando um documento final nao exist
     select jsonb_build_object('ok',true,'criado',false)
   $$;`,
     );
-    const applied = psql(container, `${fixtureSemGravacao}\n${releaseMigration}`);
+    const applied = psql(
+      container,
+      `${fixtureSemGravacao}\n${cutoverMigration}\n${releaseMigration}`,
+    );
     assert.notEqual(applied.status, 0);
     assert.match(
       applied.stderr,
@@ -538,6 +567,7 @@ test('release gate reverte o cutover inteiro quando um documento final nao exist
     const rollback = psql(container, String.raw`
       select jsonb_build_object(
         'documentos',count(*),
+        'jobs',(select count(*) from cron.job),
         'legado',public.get_relatorio_coordenacao_canonico_v3(
           null,2026,9,'ciclo'
         )->>'legado'
@@ -547,6 +577,7 @@ test('release gate reverte o cutover inteiro quando um documento final nao exist
     assert.equal(rollback.status, 0, rollback.stderr || rollback.stdout);
     assert.deepEqual(JSON.parse(rollback.stdout.trim()), {
       documentos: 0,
+      jobs: 0,
       legado: 'true',
     });
   } finally {

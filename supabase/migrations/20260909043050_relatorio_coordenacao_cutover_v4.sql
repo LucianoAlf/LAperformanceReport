@@ -207,81 +207,9 @@ $function$;
 revoke all on function public.configurar_relatorio_coordenacao_documento_v4_cron()
   from public, anon, authenticated, service_role;
 
--- O alias V3 so pode mudar dentro da mesma transacao em que todos os documentos
--- exigidos ja existem. Assim um replay novo nunca publica o leitor V4 pela metade.
-do $cutover_gate$
-declare
-  v_faltantes text;
-begin
-  with escopos as (
-    select u.id as unidade_id, 'unidade'::text as escopo, u.nome
-    from public.unidades u
-    where u.ativo = true
-    union all
-    select null::uuid, 'consolidado'::text, 'Consolidado'::text
-  ), periodos(ano, mes, periodicidade, dominio, status_esperado) as (
-    values
-      (2026, 6, 'mensal'::text, 'relatorio_coordenacao'::text, 'retificado'::text),
-      (2026, 7, 'mensal'::text, 'relatorio_coordenacao'::text, 'retificado'::text),
-      (2026, 8, 'mensal'::text, 'relatorio_coordenacao'::text, 'retificado'::text),
-      (2026, 6, 'ciclo'::text, 'relatorio_coordenacao_ciclo'::text, 'retificado'::text),
-      (2026, 9, 'mensal'::text, 'relatorio_coordenacao'::text, 'preview'::text),
-      (2026, 9, 'ciclo'::text, 'relatorio_coordenacao_ciclo'::text, 'preview'::text)
-  ), faltantes as (
-    select format('%s:%s-%s:%s', e.nome, p.ano, lpad(p.mes::text, 2, '0'), p.periodicidade) as chave
-    from escopos e
-    cross join periodos p
-    where not exists (
-      select 1
-      from public.fechamento_mensal_snapshots s
-      where s.ano = p.ano
-        and s.mes = p.mes
-        and s.escopo = e.escopo
-        and s.unidade_id is not distinct from e.unidade_id
-        and s.dominio = p.dominio
-        and s.status = p.status_esperado
-        and s.payload @> '{"schema_version": 4}'::jsonb
-        and s.payload_hash = public.hash_jsonb_canonico(s.payload - 'documento')
-    )
-  )
-  select string_agg(f.chave, ', ' order by f.chave)
-    into v_faltantes
-  from faltantes f;
-
-  if v_faltantes is not null then
-    raise exception 'RELATORIO_COORDENACAO_V4_CARGA_INICIAL_INCOMPLETA: %', v_faltantes
-      using errcode = '55000';
-  end if;
-end;
-$cutover_gate$;
-
--- Compatibilidade para consumidores ainda compilados com o nome V3. O corpo e
--- deliberadamente uma unica leitura do documento; nao ha consulta operacional.
-create or replace function public.get_relatorio_coordenacao_canonico_v3(
-  p_unidade_id uuid,
-  p_ano integer,
-  p_mes integer,
-  p_periodicidade text default 'mensal'
-)
-returns jsonb
-language sql
-stable
-security definer
-set search_path = public, pg_temp
-as $function$
-  select public.get_relatorio_coordenacao_documento_v4(
-    p_unidade_id,
-    p_ano,
-    p_mes,
-    p_periodicidade
-  );
-$function$;
-
-revoke all on function public.get_relatorio_coordenacao_canonico_v3(uuid, integer, integer, text)
-  from public, anon;
-grant execute on function public.get_relatorio_coordenacao_canonico_v3(uuid, integer, integer, text)
-  to authenticated, service_role;
-
-select public.configurar_relatorio_coordenacao_documento_v4_cron();
+-- Esta migration apenas prepara leitores e jobs privados. O alias publico e o
+-- cron sao ativados pela migration de release, na mesma transacao que produz e
+-- valida todos os documentos iniciais. Assim um replay limpo sempre alcanca o
+-- gate final e nunca publica uma carga pela metade.
 
 commit;
