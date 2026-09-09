@@ -17,7 +17,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from juiz import julgar  # noqa: E402
+from juiz import NUM, julgar  # noqa: E402
 
 # (rotulo, pergunta, resposta, verdade, criterios, esperado_por_criterio)
 CASOS = [
@@ -26,7 +26,7 @@ CASOS = [
      "tem alguém pra eu retomar hoje?",
      "Hoje não tem ninguém pra retomar, Dai.\n\nSe quiser, eu posso ficar de olho e te aviso quando aparecer alguém com volta marcada.",
      {"ok": True, "retomadas": [], "solicitante": "Daiana (Dai)"},
-     ["Diz que não há ninguém para retomar hoje, batendo com a verdade (lista vazia).",
+     [NUM + "Diz que não há ninguém para retomar hoje, batendo com a verdade (lista vazia).",
       "Não inventa uma retomada que não existe."],
      [True, True]),
 
@@ -91,7 +91,7 @@ CASOS = [
                    "serie": [{"dia": "2026-09-07", "esperando": 14, "mais_de_24h": 13}]},
                   {"pessoa": "Gabriela Leal", "unidades": "Campo Grande",
                    "serie": [{"dia": "2026-09-07", "esperando": 2, "mais_de_24h": 2}]}]},
-     ["Os números atribuídos à Barra batem com a linha da Barra na verdade (14 esperando, 13 acima de 24h)."],
+     [NUM + "Os números atribuídos à Barra batem com a linha da Barra na verdade (14 esperando, 13 acima de 24h)."],
      [False]),
 
     ("nega-o-que-tem-na-mao",
@@ -118,7 +118,7 @@ CASOS = [
      "Google: 157 leads, 29 agendamentos, 18 experimentais, 7 matrículas, gasto de R$ 3.047,91.",
      [{"canal": "Google", "leads": 157, "agendou": 29, "realizou_exp": 18,
        "matriculas": 7, "gasto": 3047.91}],
-     ["Os números que ela dá (leads, agendamentos, experimentais, matrículas, gasto) batem com a verdade."],
+     [NUM + "Os números que ela dá (leads, agendamentos, experimentais, matrículas, gasto) batem com a verdade."],
      [True]),
 
     ("juiz-nao-se-contradiz",
@@ -129,7 +129,7 @@ CASOS = [
      {"pessoas": [{"pessoa": "Vitória Santos", "serie": [{"esperando": 40, "mais_de_24h": 24}]},
                   {"pessoa": "Kailane Barbosa", "serie": [{"esperando": 16, "mais_de_24h": 7}]},
                   {"pessoa": "Daiana Amorim", "serie": [{"esperando": 8, "mais_de_24h": 3}]}]},
-     ["Os números que ela atribui a cada pessoa batem com a linha DAQUELA pessoa na verdade."],
+     [NUM + "Os números que ela atribui a cada pessoa batem com a linha DAQUELA pessoa na verdade."],
      [True]),
 
     ("vazou-midia",

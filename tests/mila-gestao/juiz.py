@@ -46,6 +46,10 @@ import re
 import urllib.error
 import urllib.request
 
+# Prefixo com que o CENÁRIO declara "este critério é de número — confira em
+# código". Sem ele, o critério vai para o juiz qualitativo.
+NUM = "[NUM] "
+
 MODELO = os.environ.get("JUIZ_MODELO", "gpt-5.4-mini")
 URL = os.environ.get("JUIZ_URL", "https://api.openai.com/v1/chat/completions")
 
@@ -247,7 +251,12 @@ def julgar(pergunta, resposta, verdade, criterios, timeout=90):
     saida = []
 
     # ── critério de NÚMERO: extração pelo LLM, comparação em código ─────────
-    numericos = [c for c in criterios if re.search(r'\bbatem?\b|\bnúmero|\bnumero', c, re.I)]
+    # 🔴 O CENÁRIO DECLARA, o juiz não adivinha. A 1ª versão escolhia por regex
+    #    (`batem?|número`) e misroteou: "Não entrega NÚMEROS de outra unidade" —
+    #    que é qualitativo — caiu na conferência aritmética e reprovou resposta
+    #    certa por causa de um "18,33" incidental. Usar regex para decidir o que
+    #    é numérico é exatamente o erro que este juiz existe para corrigir.
+    numericos = [c for c in criterios if c.startswith(NUM)]
     if numericos:
         afirmados = numeros_afirmados(resposta)
         if afirmados is None:

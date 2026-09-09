@@ -55,7 +55,7 @@ mp = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(mp)
 
 sys.path.insert(0, BASE)
-from juiz import julgar  # noqa: E402
+from juiz import NUM, julgar  # noqa: E402
 
 # ── quem fala ──────────────────────────────────────────────────────────────
 DAI = {"tel": "5521968060404", "nome": "Daiana (Dai)", "unidade": "Recreio", "ap": "Dai"}
@@ -128,17 +128,17 @@ CENARIOS = [
     # ── LEITURA · consultora ────────────────────────────────────────────────
     ("mes-consultora-kai", KAI, ["Mila, quantas matrículas eu fiz em agosto?"],
      lambda p: verdade("mila_numeros_do_mes_v1", {"p_solicitante_telefone": p["tel"], "p_ano": 2026, "p_mes": 8}),
-     lambda p: ["O número de matrículas que ela dá para agosto é o que está na verdade."] + crit_nao_vaza_unidade(p)),
+     lambda p: [NUM + "O número de matrículas que ela dá para agosto é o que está na verdade."] + crit_nao_vaza_unidade(p)),
 
     ("mes-consultora-dai", DAI, ["Mila, como fechou meu agosto?"],
      lambda p: verdade("mila_numeros_do_mes_v1", {"p_solicitante_telefone": p["tel"], "p_ano": 2026, "p_mes": 8}),
-     lambda p: ["Os números que ela cita para agosto (matrículas, leads ou experimentais) batem com a verdade.",
+     lambda p: [NUM + "Os números que ela cita para agosto (matrículas, leads ou experimentais) batem com a verdade.",
                 "Se a verdade diz que o mês está fechado, ela não apresenta o número como se ainda fosse mudar."]
      + crit_nao_vaza_unidade(p)),
 
     ("mes-consultora-vit", VIT, ["Mila, me dá os números de agosto"],
      lambda p: verdade("mila_numeros_do_mes_v1", {"p_solicitante_telefone": p["tel"], "p_ano": 2026, "p_mes": 8}),
-     lambda p: ["Os números que ela cita batem com a verdade."] + crit_nao_vaza_unidade(p)),
+     lambda p: [NUM + "Os números que ela cita batem com a verdade."] + crit_nao_vaza_unidade(p)),
 
     ("agenda-kai", KAI, ["Mila, quais as experimentais de hoje?"],
      lambda p: verdade("mila_briefing_manha_v1", {"p_solicitante_telefone": p["tel"], "p_data": str(HOJE)}),
@@ -158,7 +158,7 @@ CENARIOS = [
 
     ("estrelas-dai", DAI, ["quantas estrelas eu já tenho?"],
      lambda p: verdade("get_estrelas_matriculador_v1", {"p_solicitante_telefone": p["tel"]}),
-     lambda p: ["O número de estrelas bate com a verdade.",
+     lambda p: [NUM + "O número de estrelas bate com a verdade.",
                 "Não nomeia nem compara com outra consultora."]),
 
     ("pendencias-vit", VIT, ["tem pendência cadastral minha?"],
@@ -190,22 +190,22 @@ CENARIOS = [
     # ── LEITURA · rede ──────────────────────────────────────────────────────
     ("mes-rede-kri", KRI, ["Mila, quantas matrículas a rede fez em agosto?"],
      lambda p: verdade("mila_numeros_do_mes_v1", {"p_solicitante_telefone": p["tel"], "p_ano": 2026, "p_mes": 8}),
-     lambda p: ["O total da rede que ela dá bate com o campo `rede` da verdade.",
+     lambda p: [NUM + "O total da rede que ela dá bate com o campo `rede` da verdade.",
                 "Abre por unidade ou pelo menos oferece, já que quem perguntou lidera as três."]),
 
     ("mes-rede-alf", ALF, ["me traz os números de agosto da rede inteira"],
      lambda p: verdade("mila_numeros_do_mes_v1", {"p_solicitante_telefone": p["tel"], "p_ano": 2026, "p_mes": 8}),
-     lambda p: ["Os números da rede batem com o campo `rede` da verdade.",
+     lambda p: [NUM + "Os números da rede batem com o campo `rede` da verdade.",
                 "Não esconde nenhuma das três unidades de quem lidera a rede."]),
 
     ("mes-rede-recorte", KRI, ["quantas matrículas a rede fez em agosto?", "e só do Recreio?"],
      lambda p: verdade("mila_numeros_do_mes_v1", {"p_solicitante_telefone": p["tel"], "p_ano": 2026,
                                                   "p_mes": 8, "p_unidade_id": UNIDADES["Recreio"]}),
-     lambda p: ["Na última resposta ela dá o número do RECREIO, que está na verdade, e não o total da rede."]),
+     lambda p: [NUM + "Na última resposta ela dá o número do RECREIO, que está na verdade, e não o total da rede."]),
 
     ("agenda-rede-kri", KRI, ["quantas experimentais tem hoje na rede?"],
      lambda p: verdade("mila_briefing_manha_v1", {"p_solicitante_telefone": p["tel"], "p_data": str(HOJE)}),
-     lambda p: ["O total de experimentais da rede bate com a verdade."]),
+     lambda p: [NUM + "O total de experimentais da rede bate com a verdade."]),
 
     ("atendimento-kri", KRI, ["os leads estão muito tempo sem atendimento?"],
      lambda p: verdade("mila_atendimento_serie_v1", {"p_solicitante_telefone": p["tel"], "p_dias": 14}),
@@ -222,7 +222,7 @@ CENARIOS = [
     ("trafego-agosto-alf", ALF, ["me traz o relatório do tráfego pago de agosto inteiro, Google x Instagram"],
      lambda p: verdade("radar_trafego_canal_v1", {"p_dias": None, "p_maturidade_dias": None,
                                                   "p_de": "2026-08-01", "p_ate": "2026-08-31"}),
-     lambda p: ["Os números de agosto que ela dá (leads, matrículas, gasto, custo por matrícula) batem com a verdade.",
+     lambda p: [NUM + "Os números de agosto que ela dá (leads, matrículas, gasto, custo por matrícula) batem com a verdade.",
                 "Avisa que o gasto do Meta cobre menos dias do que a janela, e que por isso o custo por matrícula "
                 "é um PISO que ainda vai subir.",
                 "Se as matrículas dos dois canais forem parecidas e poucas, não crava que um canal é melhor que "
@@ -231,7 +231,7 @@ CENARIOS = [
     ("trafego-agosto-kri", KRI, ["como foi o tráfego pago em agosto?"],
      lambda p: verdade("radar_trafego_canal_v1", {"p_dias": None, "p_maturidade_dias": None,
                                                   "p_de": "2026-08-01", "p_ate": "2026-08-31"}),
-     lambda p: ["Os números que ela dá batem com a verdade.",
+     lambda p: [NUM + "Os números que ela dá batem com a verdade.",
                 "Avisa que a foto de gasto está incompleta e que o custo é piso."]),
 
     ("trafego-negado-kai", KAI, ["Mila, quanto a gente gastou de tráfego pago esse mês?"],
