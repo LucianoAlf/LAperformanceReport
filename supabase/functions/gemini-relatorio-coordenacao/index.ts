@@ -176,6 +176,7 @@ function normalizarMotivo(motivo: string): string {
   if (m.includes("vinculo professor-unidade com menos de seis meses")) return "vínculo recente com a unidade (menos de 6 meses)";
   if (m.includes("carteira canonica zerada")) return "sem alunos na carteira no período";
   if (m.includes("nenhum evento confiavel")) return "sem aulas registradas no período";
+  if (m.includes("recesso")) return "sem aulas no período por recesso";
   return motivo;
 }
 
@@ -420,6 +421,8 @@ const indicadoresRanking: IndicadorRanking[] = [
   { chave: "conversao", rotulo: "🎯 CONVERSÃO DE EXPERIMENTAIS", detalhe: (v, a) => `${percentual(v)}${a ? ` (${inteiro(a)} experimentais)` : ""}` },
 ];
 
+const LIMITE_DESTAQUES_POR_INDICADOR = 10;
+
 function renderizarRankingsPorIndicador(professores: ProfessorContrato[]): string[] {
   const linhas: string[] = [];
   for (const indicador of indicadoresRanking) {
@@ -433,7 +436,7 @@ function renderizarRankingsPorIndicador(professores: ProfessorContrato[]): strin
       }))
       .filter((p) => p.valor !== null && p.valor !== undefined)
       .sort((a, b) => Number(b.valor) - Number(a.valor) || a.nome.localeCompare(b.nome, "pt-BR"))
-      .slice(0, 5);
+      .slice(0, LIMITE_DESTAQUES_POR_INDICADOR);
 
     if (!ranqueados.length) {
       linhas.push(`${indicador.rotulo}: sem registros elegíveis no período.`);
@@ -463,8 +466,18 @@ function renderizarRelatorio(
   const cicloOficial = periodo.periodicidade === "ciclo"
     && periodo.publicacao_oficial === true
     && periodo.ranking_habilitado === true;
+  const avisoCiclo = periodo.periodicidade !== "ciclo"
+    ? ""
+    : cicloOficial
+      ? " Dados operacionais estão fechados."
+      : " Ranking e premiação aguardam o fechamento oficial do ciclo.";
+  const avisoRecesso = String(periodo.contexto_operacional || "")
+    .toLocaleLowerCase("pt-BR")
+    .includes("recesso")
+    ? " O período inclui recesso; indicadores sem aulas elegíveis são apresentados sem nota zero."
+    : "";
   const contextoPeriodo = periodo.periodicidade === "ciclo"
-    ? `${cicloOficial ? "Ciclo oficial" : "Ciclo em acompanhamento"} ${periodo.label || periodo.ciclo_codigo || "selecionado"}. Os fatos são acumulados pelos numeradores e denominadores do período.`
+    ? `${cicloOficial ? "Ciclo oficial" : "Ciclo em acompanhamento"} ${periodo.label || periodo.ciclo_codigo || "selecionado"}. Os fatos são acumulados pelos numeradores e denominadores do período.${avisoCiclo}${avisoRecesso}`
     : competenciaEmAndamento
       ? "Leitura do mês em andamento, com as evidências exclusivas da competência selecionada."
       : "Visão mensal com as evidências exclusivas da competência selecionada.";

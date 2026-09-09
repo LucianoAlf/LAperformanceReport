@@ -315,6 +315,8 @@ const indicadoresRanking: IndicadorRanking[] = [
   { chave: 'conversao', rotulo: '🎯 CONVERSÃO DE EXPERIMENTAIS', detalhe: (v, a) => `${numero(v, 1)}%${a ? ` (${numeroInteiro(a)} experimentais)` : ''}` },
 ];
 
+const LIMITE_DESTAQUES_POR_INDICADOR = 10;
+
 function linhasRankingPorIndicador(contrato: RelatorioCoordenacaoCanonicoV2): string[] {
   const linhas: string[] = [];
   for (const indicador of indicadoresRanking) {
@@ -328,7 +330,7 @@ function linhasRankingPorIndicador(contrato: RelatorioCoordenacaoCanonicoV2): st
       }))
       .filter((item) => item.valor !== null)
       .sort((a, b) => Number(b.valor) - Number(a.valor) || a.nome.localeCompare(b.nome, 'pt-BR'))
-      .slice(0, 5);
+      .slice(0, LIMITE_DESTAQUES_POR_INDICADOR);
 
     if (!ranqueados.length) {
       linhas.push(`${indicador.rotulo}: sem registros elegíveis no período.`);
