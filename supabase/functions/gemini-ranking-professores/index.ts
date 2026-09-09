@@ -91,7 +91,10 @@ Deno.serve(async (req) => {
         taxa_retencao: retencao?.valor_bruto,
         tempo_medio: permanencia?.valor_bruto,
         taxa_conversao: conversao?.valor_bruto,
-        matriculas: conversao?.numerador,
+        // O ranking de Matriculador só pode usar a contagem comercial
+        // canônica, atribuída ao professor da experimental. O numerador da
+        // conversão mede outro universo e não é fallback aceitável.
+        matriculas: p.matriculas_comerciais ?? p.operacional?.matriculas_comerciais ?? 0,
         experimentais: conversao?.denominador,
         media_presenca: presenca?.valor_bruto,
         presenca_publicavel: presenca?.metrica_publicavel === true,
@@ -180,7 +183,7 @@ Deno.serve(async (req) => {
       relatorioTemplate += `🎯 Meta: *${metaHealthScore}* pts\n`;
       relatorioTemplate += `📉 Gap Médio: *${(mediaHealthScore - metaHealthScore).toFixed(1)}* pts\n\n`;
     } else {
-      relatorioTemplate += `*Em auditoria* — presença sem cobertura suficiente para publicar Health Score.\n\n`;
+      relatorioTemplate += `*Cobertura insuficiente* — presença sem cobertura suficiente para publicar Health Score.\n\n`;
     }
 
     // RANKING CARTEIRA DE ALUNOS
@@ -222,7 +225,7 @@ Deno.serve(async (req) => {
       relatorioTemplate += `🎯 Meta: *${metaPresenca}%*\n`;
       relatorioTemplate += `📉 Gap: *${(mediaPresenca - metaPresenca).toFixed(1)}%*\n\n`;
     } else {
-      relatorioTemplate += `*Em auditoria* — nenhum professor atingiu cobertura suficiente para ranking de presença.\n\n`;
+      relatorioTemplate += `*Cobertura insuficiente* — nenhum professor atingiu cobertura suficiente para ranking de presença.\n\n`;
     }
 
     // RANKING MÉDIA ALUNOS/TURMA
@@ -303,11 +306,11 @@ Deno.serve(async (req) => {
     relatorioTemplate += `───────────────────────\n`;
     relatorioTemplate += mediaHealthScore !== null
       ? `• *${abaixoMediaHS}* professores abaixo da média em Health Score\n`
-      : `• Health Score: *Em auditoria*\n`;
+      : `• Health Score: *Sem base publicada*\n`;
     relatorioTemplate += `• *${semMatriculas}* professores sem matrículas no mês\n`;
     relatorioTemplate += mediaPresenca !== null
       ? `• *${presencaBaixa}* professores com presença < 70%\n\n`
-      : `• Presença: *Em auditoria*\n\n`;
+      : `• Presença: *Cobertura insuficiente*\n\n`;
 
     // RECOMENDAÇÕES ESTRATÉGICAS
     relatorioTemplate += `───────────────────────\n`;
@@ -327,10 +330,10 @@ Deno.serve(async (req) => {
     const top3Presenca = rankingPresenca.slice(0, 3).map((p: any) => ({ nome: p.professor_nome, presenca: p.media_presenca }));
     const bottom3Presenca = rankingPresenca.slice(-3).map((p: any) => ({ nome: p.professor_nome, presenca: p.media_presenca }));
     const blocoHealthIA = mediaHealthScore === null
-      ? 'EM AUDITORIA — não classificar nem recomendar por Health Score.'
+      ? 'SEM BASE PUBLICADA — não classificar nem recomendar por Health Score.'
       : `Média da unidade: ${mediaHealthScore} pts (meta: ${metaHealthScore})\nTop 3: ${top3HS.map(p => `${p.nome} (${p.score})`).join(', ')}\nBottom 3: ${bottom3HS.map(p => `${p.nome} (${p.score})`).join(', ')}\n${abaixoMediaHS} professores abaixo da média`;
     const blocoPresencaIA = mediaPresenca === null
-      ? 'EM AUDITORIA — não classificar nem recomendar por presença.'
+      ? 'COBERTURA INSUFICIENTE — não classificar nem recomendar por presença.'
       : `Média: ${mediaPresenca.toFixed(1)}% (meta: ${metaPresenca}%)\nTop 3: ${top3Presenca.map(p => `${p.nome} (${p.presenca?.toFixed(1)}%)`).join(', ')}\nBottom 3: ${bottom3Presenca.map(p => `${p.nome} (${p.presenca?.toFixed(1)}%)`).join(', ')}\n${presencaBaixa} professores com presença < 70%`;
 
     // Prompt para a IA

@@ -387,7 +387,7 @@ function gerarRanking(params: GerarRelatorioParams): string {
       `• Professores: *${resumo.totalProfessores}*`,
       `• Alunos em carteira: *${resumo.totalAlunos}*`,
       `• Media alunos/turma: *${n(resumo.mediaAlunosTurma, 2)}*`,
-      `• Presenca media: *${resumo.mediaPresenca === null ? 'Em auditoria' : `${n(resumo.mediaPresenca, 1)}%`}*`,
+      `• Presenca media: *${resumo.mediaPresenca === null ? 'Cobertura insuficiente' : `${n(resumo.mediaPresenca, 1)}%`}*`,
       `• Health Score comparavel medio: *${resumo.mediaHealth === null ? 'Sem base comparavel' : n(resumo.mediaHealth, 1)}*`,
       `• Professores comparaveis: *${resumo.totalHealthComparaveis}*`,
       `• Em maturacao: *${resumo.totalHealthEmMaturacao}*`,
@@ -409,7 +409,7 @@ function gerarRanking(params: GerarRelatorioParams): string {
     `• Professores: *${resumo.totalProfessores}*`,
     `• Alunos em carteira: *${resumo.totalAlunos}*`,
     `• Media alunos/turma: *${n(resumo.mediaAlunosTurma, 2)}*`,
-    `• Presenca media: *${resumo.mediaPresenca === null ? 'Em auditoria' : `${n(resumo.mediaPresenca, 1)}%`}*`,
+    `• Presenca media: *${resumo.mediaPresenca === null ? 'Cobertura insuficiente' : `${n(resumo.mediaPresenca, 1)}%`}*`,
     `• Health Score comparavel medio: *${resumo.mediaHealth === null ? 'Sem base comparavel' : n(resumo.mediaHealth, 1)}*`,
     `• Professores comparaveis: *${resumo.totalHealthComparaveis}*`,
     '',
@@ -435,7 +435,7 @@ function gerarRanking(params: GerarRelatorioParams): string {
       ? limitar([...presencasPublicaveis].sort((a, b) => Number(b.taxa_presenca) - Number(a.taxa_presenca))).map((p, i) =>
           linhaRanking(p, i, `${n(p.taxa_presenca, 1)}%`)
         )
-      : ['Em auditoria: nenhuma taxa de presenca atingiu confianca alta neste recorte.']),
+      : ['Cobertura insuficiente: nenhuma taxa de presenca atingiu confianca alta neste recorte.']),
     '',
     '🎓 *TOP MATRICULADORES POS-EXPERIMENTAL*',
     ...limitar([...professoresRankeaveis].sort((a, b) => b.matriculas_pos_exp - a.matriculas_pos_exp)).map((p, i) =>
@@ -503,7 +503,7 @@ function gerarPresenca(params: GerarRelatorioParams): string {
       'Nenhuma taxa de presenca atingiu confianca alta neste recorte.',
       'O Emusys ainda mistura falta confirmada com chamada nao registrada em parte do historico.',
       '',
-      `• Professores em auditoria: *${todosProfessores.length}*`,
+      `• Professores sem base operacional: *${todosProfessores.length}*`,
       `• Eventos confirmados: *${eventosConfirmados}*`,
       `• Eventos incertos: *${eventosIncertos}*`,
       '',
@@ -525,7 +525,7 @@ function gerarPresenca(params: GerarRelatorioParams): string {
     '━━━━━━━━━━━━━━━━━━━━━━',
     `• Presenca media: *${n(resumo.mediaPresenca, 1)}%*`,
     `• Professores com dado publicavel: *${professores.length}*`,
-    `• Professores em auditoria: *${todosProfessores.length - professores.length}*`,
+    `• Professores sem base operacional: *${todosProfessores.length - professores.length}*`,
     `• Professores abaixo de 70%: *${criticos.length}*`,
     `• Professores entre 70% e 80%: *${atencao.length}*`,
     '',

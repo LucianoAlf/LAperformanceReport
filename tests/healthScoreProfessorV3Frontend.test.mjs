@@ -26,8 +26,17 @@ const componentPath =
 const pagePath = 'src/components/App/Professores/ProfessoresPage.tsx';
 const modalPath =
   'src/components/App/Professores/ModalDetalhesProfessorPerformance.tsx';
+const performanceTablePath =
+  'src/components/App/Professores/TabPerformanceProfessores.tsx';
 
 const read = (path) => fs.readFileSync(path, 'utf8');
+
+test('tabela publica nao exibe identificador tecnico da fonte da metrica', () => {
+  const source = read(performanceTablePath);
+
+  assert.doesNotMatch(source, /metric\?\.fonte/);
+  assert.doesNotMatch(source, />Fonte:\s*<strong>\{metric\.fonte\}/);
+});
 
 test('Gate 7 expoe configuracao V3 somente por RPCs guardadas', () => {
   const sql = `${read(migrationPath)}\n${read(comparabilityConfigMigrationPath)}`;
@@ -275,12 +284,14 @@ test('presenca observada respeita politica versionada de auditoria por unidade',
   assert.match(sql, /em_auditoria/i);
 });
 
-test('modal nao publica percentual observado quando a politica exige auditoria', () => {
+test('modal publica percentual observado sem antecipa-lo para a nota', () => {
   const source = read(modalPath);
 
-  assert.match(source, /observacao_publicacao/i);
-  assert.match(source, /Em auditoria/i);
-  assert.match(source, /preservado para auditoria/i);
+  assert.match(source, /metric\.detalhes\.valor_observado/i);
+  assert.match(source, /displayValue\s*=\s*metric\.valorBruto\s*\?\?\s*observed\?\.value/i);
+  assert.match(source, /stateLabel:\s*'observado'/i);
+  assert.match(source, /permanece fora do score/i);
+  assert.doesNotMatch(source, /['"`]Em auditoria['"`]/i);
 });
 
 test('modal individual alterna V3 por flag e exibe base cobertura e recorte', () => {

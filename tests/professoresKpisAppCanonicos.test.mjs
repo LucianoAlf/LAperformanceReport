@@ -37,8 +37,8 @@ test('historico auxiliar nao derruba os KPIs atuais', () => {
   assert.match(performance, /setProfessores\(professoresCompletos\)/);
 });
 
-test('dashboard nao recalcula media de professores pela view operacional', () => {
-  assert.match(dashboard, /buscarKpisTurmasCanonicos/);
+test('dashboard usa resumo canonico leve sem recalcular pela view operacional', () => {
+  assert.match(dashboard, /buscarResumoDashboardProfessoresCanonico/);
   assert.doesNotMatch(dashboard, /from\(['"]vw_turmas_implicitas['"]\)/);
 });
 
@@ -52,7 +52,7 @@ test('gestao de alunos usa a competencia e a fonte neutra no KPI de media por tu
 });
 
 test('cadastro de professores usa mapas canonicos por professor e unidade', () => {
-  assert.match(cadastro, /buscarKpisTurmasCanonicos/);
+  assert.match(cadastro, /buscarKpisProfessoresCadastroCanonicos/);
   assert.match(cadastro, /context\?\.competencia/);
   assert.doesNotMatch(cadastro, /const agora = new Date\(\)/);
   assert.doesNotMatch(cadastro, /from\(['"]vw_turmas_implicitas['"]\)/);

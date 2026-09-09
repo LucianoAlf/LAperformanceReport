@@ -850,7 +850,7 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
                   ? `Health Score V3 ${carteira.health_score_estado_publicacao}: ${carteira.health_score?.toFixed(1)} (${carteira.health_status === 'saudavel' ? 'Saudável' : carteira.health_status === 'atencao' ? 'Atenção' : 'Crítico'}). Cobertura: ${formatHealthScoreV3Coverage(carteira.health_score_cobertura)}.`
                   : carteira.health_score_estado_publicacao === 'indisponivel'
                     ? `Health Score V3 indisponível. ${carteira.health_score_motivo || 'Tente novamente em instantes.'}`
-                    : `Health Score V3 sem base. ${carteira.health_score_motivo || 'Snapshot canônico indisponível para o recorte.'}`}>
+                    : `Health Score V3 sem dados no período. ${carteira.health_score_motivo || 'Dados indisponíveis para o período selecionado.'}`}>
                   <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border whitespace-nowrap ${
                     !carteira.health_score_exibivel
                       ? 'bg-slate-800 border-slate-600'

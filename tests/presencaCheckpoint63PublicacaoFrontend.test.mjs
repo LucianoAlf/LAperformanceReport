@@ -39,11 +39,15 @@ test('hook de faltas transporta denominador e metadados sem fabricar percentual 
   assert.match(faltas, /denominador:\s*universoPublicavel[\s\S]*?\?[^:]+:\s*null/u);
 });
 
-test('Professores Detalhes preserva null e mostra Em auditoria sem denominador publicável', () => {
-  exigeMetadadosVisiveis(professor, 'Professores/Detalhes');
+test('Professores Detalhes preserva null e explica cobertura insuficiente sem denominador publicável', () => {
   assert.match(professor, /percentual:\s*number\s*\|\s*null/u);
-  assert.match(professor, /formatarPercentualPublicavel/u);
-  assert.match(professor, /Em auditoria/u);
+  assert.match(professor, /formatarPercentualObservado/u);
+  assert.match(professor, /Eventos confirmados/u);
+  assert.match(professor, /Presença observada/u);
+  assert.doesNotMatch(professor, /Fonte:/u);
+  assert.doesNotMatch(professor, /regra_versao/u);
+  assert.doesNotMatch(professor, /estado_publicacao/u);
+  assert.doesNotMatch(professor, /em_auditoria/u);
   assert.doesNotMatch(professor, /percentual:\s*v\.total > 0[\s\S]*:\s*0/u);
   assert.doesNotMatch(professor, /\{d\.percentual\.toFixed\(1\)\}%/u);
 });

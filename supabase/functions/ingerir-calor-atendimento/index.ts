@@ -66,7 +66,7 @@ serve(async (req) => {
 
   let linhas: Linha[] = [];
   try {
-    const resp = await fetch(`${SOL_EXPORT_URL}?fonte=calor&limite=500`, {
+    const resp = await fetch(`${SOL_EXPORT_URL}?fonte=calor&limite=1000`, {
       headers: { "x-radar-token": tokSol.token },
     });
     if (!resp.ok) {
@@ -96,6 +96,11 @@ serve(async (req) => {
     porNome.set(String(u.nome).trim().toLowerCase(), u.id as string);
   }
 
+  // um carimbo só para a rodada inteira: é ele que separa "veio nesta foto" de
+  // "ficou para trás", logo abaixo. Gerar por linha faria a comparação depender
+  // da ordem de gravação.
+  const carimbo = new Date().toISOString();
+
   const registros = linhas.map((l) => ({
     conversa_id: Number(l.conversa_id),
     inbox_id: l.inbox_id != null ? Number(l.inbox_id) : null,
@@ -117,12 +122,50 @@ serve(async (req) => {
     minutos_ate_humano: l.minutos_ate_humano != null ? Number(l.minutos_ate_humano) : null,
     msgs_do_contato: Number(l.msgs_do_contato ?? 0),
     msgs_do_bot: Number(l.msgs_do_bot ?? 0),
-    atualizado_em: new Date().toISOString(),
+    atualizado_em: carimbo,
   })).filter((r) => Number.isFinite(r.conversa_id));
 
   const { error, count } = await sb.from("atendimento_conversa_estado")
     .upsert(registros, { onConflict: "conversa_id", count: "exact" });
   if (error) return json({ error: error.message }, 500);
+
+  // 🔴 O ESTADO SÓ RECEBIA UPSERT E NUNCA PERDIA LINHA (09/09/2026).
+  //
+  // Conversa que sai da view — porque a equipe RESOLVEU — ficava aqui com a
+  // última foto, e o detector seguia lendo. Foi assim que o Henrique Supriano
+  // (conv 20732), encerrado no Chatwoot, continuou virando R18 e caiu na DM da
+  // Daiana às 08:00 com "entra agora". Mesmo padrão do ciclo de renovação: o
+  // sync fazia upsert do que veio e nunca encerrava o que saiu.
+  //
+  // ⚠️ AUSÊNCIA NÃO PROVA SAÍDA quando a foto é truncada. O teto do `fonte=calor`
+  //    foi ao maximo do PostgREST (1.000), mas a view tem 1.452 linhas e a
+  //    guarda continua obrigatória: no dia em que a base crescer além do teto, o
+  //    corte volta a existir e apagar "quem não veio" varreria conversa viva.
+  //
+  // A trava é a MARCA D'ÁGUA: o export ordena por `ultima_msg_em desc`, então a
+  // foto cobre INTEGRALMENTE tudo a partir da linha mais antiga que veio. Acima
+  // dessa marca, não ter vindo é prova de saída; abaixo dela, não se conclui
+  // nada — mesmo raciocínio do `p_truncado` da foto de conversa, aproveitando a
+  // ordenação para salvar a parte que dá para afirmar.
+  //
+  // ⚠️ O predicado é `atualizado_em < carimbo desta rodada`, NÃO uma lista de
+  //    ids: com mil linhas o `not.in.(…)` viraria uma URL de varios kB. Toda
+  //    linha da foto acabou de ser gravada com este carimbo, então quem ficou
+  //    para trás é exatamente quem não veio.
+  let encerradas = 0;
+  const marca = registros
+    .map((r) => r.ultima_msg_em)
+    .filter((d): d is string => !!d)
+    .sort()[0];
+  if (marca) {
+    const { data: apagadas, error: errDel } = await sb
+      .from("atendimento_conversa_estado")
+      .delete()
+      .gte("ultima_msg_em", marca)
+      .lt("atualizado_em", carimbo)
+      .select("conversa_id");
+    if (!errDel) encerradas = (apagadas ?? []).length;
+  }
 
   // `telefone_key` é derivada pela função canônica do projeto — normalizar em TS
   // criaria uma 2ª regra de telefone, que é exatamente o que já mordeu aqui
@@ -136,6 +179,8 @@ serve(async (req) => {
     ok: true,
     conversas_lidas: linhas.length,
     gravadas: count ?? registros.length,
+    // saíram da view acima da marca d'água (resolvidas ou respondidas)
+    encerradas,
     telefone_key_ok: keyOk,
     detector: errDet ? { erro: errDet.message } : det,
   });

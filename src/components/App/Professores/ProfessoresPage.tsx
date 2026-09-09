@@ -38,14 +38,10 @@ import { normalizarDisponibilidadeSemanal } from './disponibilidadeCanonica';
 import { ChecklistsTab } from '../Administrativo/PainelFarmer/ChecklistsTab';
 import { useHealthScoreConfig } from '@/hooks/useHealthScoreConfig';
 import {
-  buscarKpisProfessoresCanonicos,
-  indexarKpisProfessoresCanonicos,
-} from '@/lib/professoresKpisCanonicos';
-import {
-  buscarKpisTurmasCanonicos,
-  calcularTotaisKpisTurmasCanonicos,
-  indexarKpisTurmasCanonicos,
-} from '@/lib/turmasKpisCanonicos';
+  buscarKpisProfessoresCadastroCanonicos,
+  calcularMediaAlunosTurmaCadastroCanonica,
+  indexarKpisProfessoresCadastroCanonicos,
+} from '@/lib/professoresCadastroKpisCanonicos';
 import type { 
   Professor, Unidade, Curso, KPIsProfessores, 
   FiltrosProfessores, ProfessorFormData
@@ -246,21 +242,10 @@ export function ProfessoresPage() {
       // Performance e Carteira têm leitores próprios. O container do Cadastro
       // não pode abrir as RPCs pesadas desses KPIs quando outra aba está ativa.
       const carregarKpisCadastro = abaAtiva === 'cadastro';
-      const [kpisCanonicos, kpisTurmasCanonicos] = await Promise.all([
-        carregarKpisCadastro
-          ? buscarKpisProfessoresCanonicos(filtroPeriodo)
-          : Promise.resolve([]),
-        carregarKpisCadastro
-          ? buscarKpisTurmasCanonicos(filtroPeriodo).catch((error) => {
-            console.error('Erro ao buscar media canonica de alunos por turma em Professores:', error);
-            return null;
-          })
-          : Promise.resolve(null),
-      ]);
-      const kpisPorProfessorUnidade = indexarKpisProfessoresCanonicos(kpisCanonicos);
-      const kpisTurmasPorProfessorUnidade = kpisTurmasCanonicos
-        ? indexarKpisTurmasCanonicos(kpisTurmasCanonicos)
-        : new Map();
+      const kpisCadastro = carregarKpisCadastro
+        ? await buscarKpisProfessoresCadastroCanonicos(filtroPeriodo)
+        : [];
+      const kpisPorProfessorUnidade = indexarKpisProfessoresCadastroCanonicos(kpisCadastro);
 
       const turmasPorProfessorUnidade = new Map<string, number>();
       const alunosPorProfessorUnidade = new Map<string, number>();
@@ -269,8 +254,6 @@ export function ProfessoresPage() {
       kpisPorProfessorUnidade.forEach((kpi, key) => {
         turmasPorProfessorUnidade.set(key, kpi.total_turmas);
         alunosPorProfessorUnidade.set(key, kpi.carteira_alunos);
-      });
-      kpisTurmasPorProfessorUnidade.forEach((kpi, key) => {
         mediaAlunosTurmaPorProfessorUnidade.set(key, kpi.media_alunos_turma);
       });
 
@@ -333,9 +316,9 @@ export function ProfessoresPage() {
       setTurmasPorProfessorUnidade(turmasPorProfessorUnidade);
       setAlunosPorProfessorUnidade(alunosPorProfessorUnidade);
       setMediaAlunosTurmaPorProfessorUnidade(mediaAlunosTurmaPorProfessorUnidade);
-      setMediaAlunosTurmaGeralCanonica(kpisTurmasCanonicos
-        ? calcularTotaisKpisTurmasCanonicos(kpisTurmasCanonicos).mediaAlunosTurma
-        : null);
+      setMediaAlunosTurmaGeralCanonica(
+        calcularMediaAlunosTurmaCadastroCanonica(kpisCadastro),
+      );
     } catch (error) {
       const detalhe = error as { code?: string; message?: string; details?: string; hint?: string };
       console.error('Erro ao carregar professores:', JSON.stringify({

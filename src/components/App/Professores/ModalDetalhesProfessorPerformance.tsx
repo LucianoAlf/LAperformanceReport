@@ -31,6 +31,7 @@ import {
 import {
   doesHealthScoreV3MetricContributeToScore,
   formatHealthScoreV3BaseNumber,
+  parseHealthScoreV3DetailNumber,
   resolveHealthScoreV3EvidenceMessage,
   resolveHealthScoreV3PublicationLabel,
   serializeHealthScoreV3ForAi,
@@ -75,7 +76,7 @@ function getV3MetricParticipationLabel(metric: HealthScoreV3SnapshotMetric): str
   if (metric.estadoBase === 'sem_base_amostra' || metric.codigoEvidencia === 'amostra_insuficiente') {
     return 'Amostra insuficiente · fora da nota';
   }
-  if (!metric.metricaPublicavel && metric.valorBruto !== null) return 'Auditoria · fora da nota';
+  if (!metric.metricaPublicavel && metric.valorBruto !== null) return 'Evidência não publicável · fora da nota';
   return 'Fora da nota atual';
 }
 
@@ -96,14 +97,9 @@ function formatV3Base(metric: HealthScoreV3SnapshotMetric): string | null {
 interface V3ObservedValue {
   value: number | null;
   displayLabel: string | null;
-  stateLabel: 'observado' | 'em auditoria';
+  stateLabel: 'observado' | 'cobertura insuficiente';
   evidenceLabel: string;
   note: string;
-}
-
-function v3DetailNumber(value: unknown): number | null {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function getV3ObservedValue(metric: HealthScoreV3SnapshotMetric): V3ObservedValue | null {
@@ -116,12 +112,12 @@ function getV3ObservedValue(metric: HealthScoreV3SnapshotMetric): V3ObservedValu
     const ultimoFechamento = fechamentos[fechamentos.length - 1];
     if (!ultimoFechamento || typeof ultimoFechamento !== 'object') return null;
 
-    const alunos = v3DetailNumber(
+    const alunos = parseHealthScoreV3DetailNumber(
       (ultimoFechamento as Record<string, unknown>).alunos_fechamento,
     );
     if (alunos === null) return null;
 
-    const meses = v3DetailNumber(metric.detalhes.meses_com_base) ?? fechamentos.length;
+    const meses = parseHealthScoreV3DetailNumber(metric.detalhes.meses_com_base) ?? fechamentos.length;
     return {
       value: alunos,
       displayLabel: null,
@@ -132,28 +128,24 @@ function getV3ObservedValue(metric: HealthScoreV3SnapshotMetric): V3ObservedValu
   }
 
   if (metric.metrica === 'presenca') {
-    const valorObservado = v3DetailNumber(metric.detalhes.valor_observado);
+    const valorObservado = parseHealthScoreV3DetailNumber(metric.detalhes.valor_observado);
     if (valorObservado === null) return null;
 
-    const cobertura = v3DetailNumber(metric.detalhes.cobertura_observada);
-    const classificados = v3DetailNumber(metric.detalhes.eventos_classificados_observados);
-    const esperados = v3DetailNumber(metric.detalhes.eventos_esperados_observados);
+    const cobertura = parseHealthScoreV3DetailNumber(metric.detalhes.cobertura_observada);
+    const classificados = parseHealthScoreV3DetailNumber(metric.detalhes.eventos_classificados_observados);
+    const esperados = parseHealthScoreV3DetailNumber(metric.detalhes.eventos_esperados_observados);
     const coberturaLabel = cobertura === null
-      ? 'cobertura em apuração'
+      ? 'cobertura insuficiente'
       : `cobertura ${cobertura.toFixed(1)}%`;
     const evidenceLabel = classificados !== null && esperados !== null
       ? `Eventos classificados: ${formatHealthScoreV3BaseNumber(classificados) ?? '0'}/${formatHealthScoreV3BaseNumber(esperados) ?? '0'}`
-      : 'Eventos classificados: em apuração';
-    const emAuditoria = metric.detalhes.observacao_publicacao === 'em_auditoria';
-
+      : 'Eventos classificados: cobertura insuficiente';
     return {
-      value: emAuditoria ? null : valorObservado,
-      displayLabel: emAuditoria ? 'Em auditoria' : null,
-      stateLabel: emAuditoria ? 'em auditoria' : 'observado',
+      value: valorObservado,
+      displayLabel: null,
+      stateLabel: 'observado',
       evidenceLabel,
-      note: emAuditoria
-        ? `${coberturaLabel}; valor observado preservado para auditoria e não publicado como indicador.`
-        : `${coberturaLabel}; valor acompanha os eventos do mês e permanece fora do score até cumprir a política de publicação.`,
+      note: `${coberturaLabel}; valor acompanha os eventos do período e permanece fora do score até cumprir os critérios da nota.`,
     };
   }
 
@@ -204,7 +196,7 @@ function HealthScoreV3MetricsPanel({
     return (
       <div className="min-h-[220px] flex items-center justify-center rounded-lg border border-violet-500/20 bg-violet-500/5">
         <Loader2 className="w-5 h-5 animate-spin text-violet-400" />
-        <span className="ml-2 text-sm text-slate-300">Carregando snapshot V3...</span>
+        <span className="ml-2 text-sm text-slate-300">Carregando indicadores...</span>
       </div>
     );
   }
@@ -212,7 +204,7 @@ function HealthScoreV3MetricsPanel({
   if (error) {
     return (
       <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-4">
-        <p className="text-sm font-medium text-rose-300">Snapshot V3 indisponível</p>
+        <p className="text-sm font-medium text-rose-300">Indicadores do período indisponíveis</p>
         <p className="mt-1 text-xs text-rose-200/80">{error}</p>
       </div>
     );
@@ -221,8 +213,8 @@ function HealthScoreV3MetricsPanel({
   if (!snapshot) {
     return (
       <div className="rounded-lg border border-slate-700 bg-slate-800/40 p-4">
-        <p className="text-sm font-medium text-slate-200">Sem base operacional para este recorte</p>
-        <p className="mt-1 text-xs text-slate-400">Recorte: {recorte}. Os dados canônicos ainda não produziram um pilar válido.</p>
+        <p className="text-sm font-medium text-slate-200">Sem dados no período</p>
+        <p className="mt-1 text-xs text-slate-400">Recorte: {recorte}. Ainda não há indicadores disponíveis para esta seleção.</p>
       </div>
     );
   }
@@ -230,8 +222,8 @@ function HealthScoreV3MetricsPanel({
   const comparable = snapshot.comparabilidadeEstado === 'comparavel';
   const observed = snapshot.comparabilidadeEstado === 'em_maturacao';
   const scoreValue = comparable ? snapshot.scoreComparavel : observed ? snapshot.scoreObservado : null;
-  const scoreLabel = scoreValue === null ? 'Sem base operacional' : Math.round(scoreValue).toString();
-  const scoreTitle = comparable ? 'Health Score V3' : observed ? 'Desempenho observado' : 'Sem base operacional';
+  const scoreLabel = scoreValue === null ? 'Sem dados no período' : Math.round(scoreValue).toString();
+  const scoreTitle = comparable ? 'Health Score V3' : observed ? 'Desempenho observado' : 'Sem dados no período';
   const coverageLabel = snapshot.cobertura === null ? 'Sem base' : `${snapshot.cobertura.toFixed(0)}%`;
 
   return (
@@ -291,7 +283,7 @@ function HealthScoreV3MetricsPanel({
           const observed = getV3ObservedValue(metric);
           const displayValue = metric.valorBruto ?? observed?.value ?? null;
           const displayLabel = observed?.displayLabel ?? formatV3Value(key, displayValue);
-          const observedInAudit = observed?.stateLabel === 'em auditoria';
+          const observedWithInsufficientCoverage = observed?.stateLabel === 'cobertura insuficiente';
           const originalWeight = `${formatHealthScoreV3BaseNumber(metric.peso) ?? '0'}%`;
           const effectiveWeight = metric.pesoEfetivo === null
             ? 'não aplicável neste recorte'
@@ -305,12 +297,12 @@ function HealthScoreV3MetricsPanel({
                   {getV3MetricParticipationLabel(metric)}
                 </span>
               </div>
-              <p className={`mt-2 text-xl font-bold ${observedInAudit ? 'text-amber-300' : displayValue === null ? 'text-slate-500' : 'text-white'}`}>
+              <p className={`mt-2 text-xl font-bold ${observedWithInsufficientCoverage ? 'text-amber-300' : displayValue === null ? 'text-slate-500' : 'text-white'}`}>
                 {displayLabel}
               </p>
               {observed && (
-                <p className={`text-[10px] font-medium uppercase ${observedInAudit ? 'text-amber-300' : 'text-cyan-300'}`}>
-                  {observedInAudit ? 'Valor não publicado' : 'Valor observado'}
+                <p className={`text-[10px] font-medium uppercase ${observedWithInsufficientCoverage ? 'text-amber-300' : 'text-cyan-300'}`}>
+                  {observedWithInsufficientCoverage ? 'Valor não publicado' : 'Valor observado'}
                 </p>
               )}
               <div className="mt-2 space-y-0.5 text-[11px] text-slate-500">
@@ -1001,10 +993,10 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                   ? 'V3 comparável'
                   : healthScoreV3Performance?.comparabilidadeEstado === 'em_maturacao'
                     ? 'V3 · Em acompanhamento'
-                    : 'V3 sem base operacional'
+                    : 'V3 · Sem dados no período'
                 : healthScorePublicavel
                 ? (professor.status === 'critico' ? 'Crítico' : professor.status === 'atencao' ? 'Atenção' : 'Excelente')
-                : 'Em auditoria'}
+                : 'Sem dados no período'}
             </span>
           </div>
         </DialogHeader>
@@ -1119,7 +1111,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                 <p className="text-[7px] font-semibold text-slate-500 uppercase tracking-widest">
                   {healthScorePublicavel
                     ? (healthScore.status === 'saudavel' ? 'Saudável' : healthScore.status === 'atencao' ? 'Atenção' : 'Crítico')
-                    : 'Em auditoria'}
+                    : 'Sem dados no período'}
                 </p>
               </div>
             </div>

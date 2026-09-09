@@ -464,9 +464,9 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
       setDraftIsDirty(false);
       await simulate(saved.id, simulationMonth);
       setSimulationIsCurrent(true);
-      toast.success('Simulação concluída', 'Nenhum snapshot ou consumidor produtivo foi alterado.');
+      toast.success('Simulação concluída', 'A configuração ativa e os resultados exibidos não foram alterados.');
     } catch {
-      toast.error('Simulação indisponível', 'Confira se há snapshots em sombra para a competência.');
+      toast.error('Simulação indisponível', 'Confira se há dados disponíveis para a competência.');
     }
   };
 

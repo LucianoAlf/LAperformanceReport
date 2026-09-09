@@ -12,6 +12,18 @@ const tabPath = 'src/components/App/Professores/TabPerformanceProfessores.tsx';
 
 const read = (path) => fs.readFileSync(path, 'utf8');
 
+test('parser numerico preserva ausencia e aceita zero explicito', async () => {
+  const { parseHealthScoreV3DetailNumber } = await import(`../${helperPath}`);
+
+  assert.equal(parseHealthScoreV3DetailNumber(null), null);
+  assert.equal(parseHealthScoreV3DetailNumber(undefined), null);
+  assert.equal(parseHealthScoreV3DetailNumber(''), null);
+  assert.equal(parseHealthScoreV3DetailNumber('   '), null);
+  assert.equal(parseHealthScoreV3DetailNumber('0'), 0);
+  assert.equal(parseHealthScoreV3DetailNumber(81.5), 81.5);
+  assert.equal(parseHealthScoreV3DetailNumber('invalido'), null);
+});
+
 test('Gate 8 cria leitura batch V3 guardada no escopo exato e na ultima revisao', () => {
   assert.equal(fs.existsSync(migrationPath), true, 'migration batch V3 ainda nao existe');
   const sql = read(migrationPath);
@@ -28,7 +40,7 @@ test('Gate 8 cria leitura batch V3 guardada no escopo exato e na ultima revisao'
   assert.match(sql, /grant execute[\s\S]*to authenticated, service_role/i);
 });
 
-test('normalizador batch preserva null, valor observado e auditoria sem fallback', async () => {
+test('normalizador batch exibe a presenca observada sem liberar ranking quando a publicacao esta pendente', async () => {
   assert.equal(fs.existsSync(helperPath), true, 'normalizador V3 da Performance ainda nao existe');
   const {
     normalizeHealthScoreV3PerformanceRows,
@@ -116,10 +128,18 @@ test('normalizador batch preserva null, valor observado e auditoria sem fallback
   assert.equal(snapshots[0].score, null);
 
   const presenca = resolveHealthScoreV3MetricDisplay(snapshots[0], 'presenca');
-  assert.equal(presenca.value, null);
+  assert.equal(presenca.value, 8.64);
   assert.equal(presenca.observedValue, 8.64);
-  assert.equal(presenca.state, 'auditoria');
+  assert.equal(presenca.state, 'observado');
   assert.equal(presenca.rankable, false);
+
+  const metricaPresenca = snapshots[0].metrics.get('presenca');
+  assert.ok(metricaPresenca);
+  metricaPresenca.valorBruto = 100;
+  const presencaBruta = resolveHealthScoreV3MetricDisplay(snapshots[0], 'presenca');
+  assert.equal(presencaBruta.value, 100);
+  assert.equal(presencaBruta.state, 'observado');
+  assert.equal(presencaBruta.rankable, false);
 
   const alunos = resolveHealthScoreV3MetricDisplay(snapshots[0], 'numero_alunos');
   assert.equal(alunos.value, 26);
@@ -232,7 +252,7 @@ test('hook faz uma unica leitura batch e a tabela mantem rollback V2 por feature
   assert.match(tab, /HEALTH_SCORE_V3_PERFORMANCE_ENABLED\s*\?/i);
   assert.match(tab, /calcularHealthScore/i, 'motor V2 deve continuar disponivel para rollback');
   assert.match(tab, /Perman[eÃª]ncia/i);
-  assert.match(tab, /Em auditoria/i);
+  assert.match(tab, /Sem dados no per[ií]odo/i);
   assert.match(tab, /Sem base/i);
 });
 
@@ -263,7 +283,7 @@ test('equipe V3 parte do roster ativo e explica professor sem snapshot', async (
   );
   assert.equal(
     resolveHealthScoreV3EvidenceMessage('fonte_canonica_indisponivel', 'presenca'),
-    'Dados em auditoria',
+    'Sem dados disponíveis para o período',
   );
 });
 

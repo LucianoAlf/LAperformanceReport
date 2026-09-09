@@ -390,8 +390,8 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
             <span>
               Presença canônica v2 · {periodoInicio.split('-').reverse().join('/')} a {periodoFim.split('-').reverse().join('/')}
               {' · '}{dados.presenca_eventos_confirmados} eventos confirmados
-              {dados.presenca_eventos_incertos > 0 ? ` · ${dados.presenca_eventos_incertos} em auditoria` : ''}
-              {' · '}{dados.estado_publicacao === 'publicado' ? 'Publicado' : 'Em auditoria'}
+              {dados.presenca_eventos_incertos > 0 ? ` · ${dados.presenca_eventos_incertos} pendentes de confirmação` : ''}
+              {' · '}{dados.estado_publicacao === 'publicado' ? 'Publicado' : 'Em acompanhamento'}
               {' · '}{dados.presenca_regra_versao}
             </span>
           </div>
@@ -415,7 +415,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
             <KPICard
               icon={Clock}
               label="Presença Média"
-              value={dados.presenca_media === null ? 'Em auditoria' : `${dados.presenca_media.toFixed(1)}%`}
+              value={dados.presenca_media === null ? 'Sem base' : `${dados.presenca_media.toFixed(1)}%`}
               variant="emerald"
               tooltip={`Equação: presentes / eventos confirmados. Universo: ${dados.presenca_eventos_confirmados} confirmados e ${dados.presenca_eventos_incertos} incertos. Estado: ${dados.estado_publicacao}. Regra: ${dados.presenca_regra_versao}.`}
             />

@@ -1,3 +1,8 @@
+// A classificacao mora em _shared porque o relatorio Gerencial com IA publica o mesmo
+// numero: enquanto cada um classificava por conta propria, o Gerencial saiu com 37
+// saidas onde este aqui ja dizia 29.
+import { classificarSaida, entraNoTotal } from "./composicao-saidas-mensais.ts";
+
 type JsonObject = Record<string, unknown>;
 
 const LINHA = "━━━━━━━━━━━━━━━━━━━━━━";
@@ -136,6 +141,26 @@ function dataHoraBrasil(value: unknown): string {
   return `${part("day")}/${part("month")}/${part("year")} às ${part("hour")}:${part("minute")}`;
 }
 
+/**
+ * Data (sem hora) de um timestamp em BRT. Diferente de `dataBrasil`, que fatia a string
+ * de um campo `date`: aqui a origem é `timestamptz` em UTC, e fatiar erraria o dia toda
+ * vez que a captura cai depois das 21h de Brasília. Devolve "" quando não há data —
+ * quem chama decide se omite a linha, em vez de imprimir "Não informada".
+ */
+function dataBrasilDeTimestamp(value: unknown): string {
+  const date = new Date(String(value ?? ""));
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("day")}/${part("month")}/${part("year")}`;
+}
+
 function equipeAdministrativa(item: JsonObject): string {
   const farmers = Array.isArray(item.farmers) ? item.farmers : [];
   const candidatos = farmers.length > 0 ? farmers : [item.gerente];
@@ -186,16 +211,6 @@ function linhasMeta(
     `   ${gerarBarraMeta(valorAtual, valorMeta, inversa)}`,
     `   Atual: *${numeroPublico(valorAtual)}%* | Meta: *${comparador}${numeroPublico(valorMeta)}%*`,
   ];
-}
-
-function classificarEvasao(item: JsonObject): string {
-  const tipo = String(item.tipo_evasao ?? "").trim().toLocaleLowerCase("pt-BR");
-  if (tipo.includes("nao_renov") || tipo.includes("não_renov")) return "nao_renovou";
-  if (tipo.includes("2_curso") || tipo.includes("segundo")) return "interrompido_2_curso";
-  if (tipo.includes("bols")) return "interrompido_bolsista";
-  if (tipo.includes("banda")) return "interrompido_banda";
-  if (tipo.includes("transfer")) return "transferencia";
-  return "interrompido";
 }
 
 function percentualReajuste(anterior: unknown, novo: unknown): number {
@@ -271,7 +286,7 @@ export function formatarRelatorioAdminMensalCanonico(payload: JsonObject): strin
     ? inteiro(r.nao_renovacoes) / renovacoesPrevistas * 100
     : 0;
   const quebraEvasoes = evasoesCompletas.reduce<Record<string, number>>((acc, item) => {
-    const tipo = classificarEvasao(item);
+    const tipo = classificarSaida(item);
     acc[tipo] = (acc[tipo] ?? 0) + 1;
     return acc;
   }, {});
@@ -473,22 +488,38 @@ export function formatarRelatorioAdminMensalCanonico(payload: JsonObject): strin
   linhas.push(
     "🚪 *EVASÕES (Saíram no mês)*",
     LINHA,
-    `• Total no mês: *${inteiro(r.evasoes)}*`,
+    // Bolsista, atividade extra (banda/coral), 2º curso e transferência ficam fora dos DOIS
+    // lados da conta (REGRAS-DE-NEGOCIO §3.5 e §5). `saidasChurnPagantes` é o mesmo número
+    // que o churn imprime logo acima e que a tela usa (`dados_mensais.evasoes`); publicar a
+    // soma bruta aqui fazia o total contradizer o próprio relatório — em ago/2026 o Recreio
+    // saiu com 37 onde o sistema dizia 29, e 7 das 8 saídas de banda somadas a mais seguem
+    // alunas ativas da escola.
+    `• Total no mês: *${saidasChurnPagantes}*`,
     `• Interrompido: *${quebraEvasoes.interrompido ?? 0}*`,
-    `• Interrompido 2º Curso: *${quebraEvasoes.interrompido_2_curso ?? 0}*`,
-    `• Interrompido Bolsista: *${quebraEvasoes.interrompido_bolsista ?? 0}*`,
-    `• Interrompido Banda: *${quebraEvasoes.interrompido_banda ?? 0}*`,
     `• Não renovou: *${quebraEvasoes.nao_renovou ?? 0}*`,
-    `• Transferência: *${quebraEvasoes.transferencia ?? 0}*`,
-    "",
   );
+  if (saidasForaDoChurn > 0) {
+    linhas.push(
+      "",
+      "Não entram no total (regra da casa):",
+      `• Interrompido 2º Curso: *${saidasSegundoCurso}*`,
+      `• Interrompido Bolsista: *${saidasBolsistas}*`,
+      `• Interrompido Banda: *${saidasBanda}*`,
+      `• Transferência: *${saidasTransferencia}*`,
+    );
+  }
+  linhas.push("");
 
   if (evasoesCompletas.length === 0) {
     linhas.push("Nenhuma evasão registrada no mês.", "");
   } else {
     evasoesCompletas.forEach((item, index) => {
+      // Quem está fora do total continua na lista, marcado. Sumir com a linha esconderia da
+      // coordenação quem saiu da banda — o que ela precisa saber; o que não pode é entrar
+      // na conta de alunos perdidos.
+      const foraDoTotal = !entraNoTotal(classificarSaida(item));
       linhas.push(
-        `${index + 1}) Nome: *${texto(item.aluno_nome)}*`,
+        `${index + 1}) Nome: *${texto(item.aluno_nome)}*${foraDoTotal ? " (não entra no total)" : ""}`,
         `   Motivo: ${texto(item.motivo)}`,
       );
       const valorPerdido = numero(item.valor_perdido);
@@ -500,9 +531,14 @@ export function formatarRelatorioAdminMensalCanonico(payload: JsonObject): strin
     });
   }
 
+  // Os números vêm da foto tirada no fechamento, não do instante do envio. O mesmo mês
+  // pode ser reenviado dias depois de uma retificação, e antes disso o rodapé só trazia
+  // a hora do envio — quem lia tomava os dados como sendo do dia em que a mensagem chegou.
+  const dataFechamento = dataBrasilDeTimestamp(payload.capturado_em);
+  linhas.push(LINHA);
+  if (dataFechamento) linhas.push(`📅 Dados do fechamento de ${dataFechamento}`);
   linhas.push(
-    LINHA,
-    `📅 Gerado em: ${dataHoraBrasil(payload.gerado_em)}`,
+    `📤 Enviado em ${dataHoraBrasil(payload.gerado_em)}`,
     LINHA,
   );
   return linhas.join("\n").replace(/\n{3,}/g, "\n\n").trim();

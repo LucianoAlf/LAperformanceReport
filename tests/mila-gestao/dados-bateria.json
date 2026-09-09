@@ -1,0 +1,35 @@
+{
+  "_nota": "Dados REAIS do banco em 08/09/2026. lead_de_outra_unidade e de proposito: e o teste de escopo — consultora nao pode enxergar.",
+  "dia_util": "2026-09-07",
+  "sinal_id": "e1feed4d-5875-4caa-bb37-77ace41b7a39",
+  "recado_id_falso": "00000000-0000-0000-0000-0000000000aa",
+  "retomada_id_falso": "00000000-0000-0000-0000-0000000000bb",
+  "lead_da_unidade": {
+    "kailane": 14054,
+    "daiana": 14056,
+    "vitoria": 14058,
+    "krissya": 14058,
+    "luciano": 14058,
+    "arthur": 14054,
+    "ninguem": 14054
+  },
+  "lead_de_outra_unidade": {
+    "kailane": 14056,
+    "daiana": 14058,
+    "vitoria": 14054,
+    "krissya": 14054,
+    "luciano": 14054,
+    "arthur": 14056,
+    "ninguem": 14056
+  },
+  "telefone_lead": {
+    "kailane": "5521994836653",
+    "daiana": "5521965146322",
+    "vitoria": "5521999826953",
+    "krissya": "5521999826953",
+    "luciano": "5521999826953",
+    "arthur": "5521994836653",
+    "ninguem": "5521994836653"
+  },
+  "unidade_barra": "Barra"
+}

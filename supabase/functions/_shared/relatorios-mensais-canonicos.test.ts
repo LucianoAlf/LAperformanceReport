@@ -194,11 +194,22 @@ Deno.test("mensal administrativo preserva modelo rico, multicurso e trancamentos
   assertStringIncludes(texto, "🎯 *METAS FIDELIZA+ LA*");
   assertStringIncludes(texto, "Forma de PG: C.R");
   assertStringIncludes(texto, "⚠️ *AVISOS PRÉVIOS para sair em AGOSTO*");
-  assertStringIncludes(texto, "• Total no mês: *7*");
+  // Bolsista e atividade extra ficam fora dos DOIS lados da conta (REGRAS-DE-NEGOCIO §3.5 e
+  // §5). O total precisa ser o mesmo numero que o churn ja usa — 4 interrompidos + 2 nao
+  // renovacoes = 6 — e nao a soma bruta 7, que inclui a bolsista Ana Beatriz.
+  assertStringIncludes(texto, "• Total no mês: *6*");
   assertStringIncludes(texto, "• Interrompido: *4*");
-  assertStringIncludes(texto, "• Interrompido Bolsista: *1*");
   assertStringIncludes(texto, "• Não renovou: *2*");
-  assertStringIncludes(texto, "📅 Gerado em: 01/08/2026 às 10:30");
+  assertStringIncludes(texto, "Não entram no total (regra da casa):");
+  assertStringIncludes(texto, "• Interrompido Bolsista: *1*");
+  // Quem nao conta no total continua aparecendo na lista, mas marcado — some-lo em silencio
+  // esconderia da coordenacao quem de fato saiu de alguma atividade.
+  assertStringIncludes(texto, "Ana Beatriz Paz de Almeida* (não entra no total)");
+  // O rodapé separa a foto do fechamento do momento do envio: o mesmo mês pode ser
+  // reenviado dias depois (retificação), e sem isso o leitor lê a data do envio como
+  // se fosse a dos dados. capturado_em vem em UTC e precisa virar BRT — 00:12Z é 31/07.
+  assertStringIncludes(texto, "📅 Dados do fechamento de 31/07/2026");
+  assertStringIncludes(texto, "📤 Enviado em 01/08/2026 às 10:30");
 
   const secoes = [
     "👥 *ALUNOS*",
@@ -240,6 +251,15 @@ Deno.test("mensal administrativo imprime o ticket financeiro e ignora o legado d
 
   assertStringIncludes(texto, "Ticket Médio: *R$ 433,38*");
   assertFalse(texto.includes("Ticket Médio: *R$ 445,38*"));
+});
+
+Deno.test("mensal administrativo omite a data do fechamento quando ela nao veio no payload", () => {
+  const { capturado_em: _ignorado, ...semCaptura } = adminRico;
+  const texto = formatarRelatorioAdminMensalCanonico(semCaptura);
+
+  // Sem capturado_em preferimos não dizer nada a inventar uma data de fechamento.
+  assertFalse(texto.includes("Dados do fechamento de"));
+  assertStringIncludes(texto, "📤 Enviado em 01/08/2026 às 10:30");
 });
 
 Deno.test("mensal administrativo bloqueia detalhe divergente do total oficial", () => {

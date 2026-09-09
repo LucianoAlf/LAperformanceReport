@@ -32,20 +32,21 @@ test('relatorio e insights individuais recebem V3 sem recalcular a V2', () => {
   assert.doesNotMatch(reportBlock, /calcularHealthScore\s*\(/);
 });
 
-test('relatorio da coordenacao envia periodicidade e usa o produtor canonico V3 do servidor', () => {
+test('relatorio da coordenacao envia periodicidade e fixa o documento V4 do servidor', () => {
   const modal = read('src/components/App/Professores/ModalRelatorioCoordenacao.tsx');
   const edge = read('supabase/functions/gemini-relatorio-coordenacao/index.ts');
   const migration = read('supabase/migrations/20260803223000_relatorios_coordenacao_periodicidade_canonica.sql');
 
   assert.match(modal, /gemini-relatorio-coordenacao/);
-  assert.match(modal, /body:\s*\{[\s\S]*?unidade:\s*unidadeId,[\s\S]*?ano:\s*anoRelatorio,[\s\S]*?mes:\s*mesRelatorio,[\s\S]*?periodicidade/);
+  assert.match(modal, /body:\s*\{[\s\S]*?unidade:\s*unidadeId,[\s\S]*?ano:\s*anoRelatorio,[\s\S]*?mes:\s*mesRelatorio,[\s\S]*?periodicidade,[\s\S]*?documento_id:\s*documento\.documento\.id/);
   assert.doesNotMatch(modal, /get_dados_relatorio_coordenacao|get_kpis_professor_periodo_canonico/);
-  assert.match(edge, /get_relatorio_coordenacao_canonico_v3/);
+  assert.match(modal, /get_relatorio_coordenacao_documento_v4/);
+  assert.match(edge, /get_relatorio_coordenacao_documento_v4_por_id/);
   assert.match(migration, /get_health_score_professor_v3_performance/);
   assert.match(migration, /p_periodicidade/);
 });
 
-test('relatorios instantaneos usam o mesmo contrato canonico V3 do mensal e ciclo', () => {
+test('relatorios instantaneos usam o mesmo documento V4 do mensal e ciclo', () => {
   const modal = read('src/components/App/Professores/ModalRelatorioCoordenacao.tsx');
   const instantaneo = modal.slice(
     modal.indexOf('const gerarRelatorioInstantaneo'),
@@ -53,10 +54,10 @@ test('relatorios instantaneos usam o mesmo contrato canonico V3 do mensal e cicl
   );
 
   assert.match(instantaneo, /gerarRelatorioCoordenacaoCanonico/);
-  assert.match(instantaneo, /get_relatorio_coordenacao_canonico_v3/);
+  assert.match(instantaneo, /obterDocumento/);
   assert.doesNotMatch(instantaneo, /buscarDadosRelatorioCoordenacao/);
   assert.doesNotMatch(instantaneo, /get_dados_relatorio_coordenacao/);
-  assert.match(instantaneo, /supabase\.rpc/);
+  assert.doesNotMatch(instantaneo, /supabase\.rpc/);
 });
 
 test('produtor mensal da coordenacao usa o roster ativo da Performance', () => {
@@ -140,7 +141,8 @@ test('geradores pedagogicos consomem V3 e nao recalculam Health Score legado', (
   }
 
   const coordenacao = read('supabase/functions/gemini-relatorio-coordenacao/index.ts');
-  assert.match(coordenacao, /get_relatorio_coordenacao_canonico_v3/);
+  assert.match(coordenacao, /get_relatorio_coordenacao_documento_v4_por_id/);
+  assert.match(coordenacao, /documento_id/);
   assert.match(coordenacao, /estado_publicacao/i);
   assert.match(coordenacao, /estado_evidencia/i);
   assert.doesNotMatch(coordenacao, /function calcularHealthScore\s*\(/i);
@@ -173,7 +175,7 @@ test('Dashboard e Analytics usam snapshots V3 sem habilitar ranking parcial', ()
   assert.match(analytics, /averageHealthScoreV3Coverage/);
   assert.doesNotMatch(analytics, /snapshot\.cobertura\s*\|\|\s*0/);
   assert.doesNotMatch(dashboard, /Pilar financeiro/i);
-  assert.match(dashboard, /Fonte canônica do período/i);
+  assert.match(dashboard, /Fonte canônica indisponível/i);
 });
 
 test('Dashboard e Analytics resumem somente snapshots da equipe ativa no recorte', () => {
@@ -192,8 +194,8 @@ test('Dashboard e Performance agregam somente KPIs de vinculos ativos', () => {
   const dashboard = read('src/components/App/Dashboard/DashboardPage.tsx');
   const performance = read('src/components/App/Professores/TabPerformanceProfessores.tsx');
 
-  assert.match(dashboard, /filtrarKpisPorVinculosAtivos/);
-  assert.match(dashboard, /const kpisProfessoresAtivos = filtrarKpisPorVinculosAtivos/);
+  assert.match(dashboard, /const professoresAtivos = new Set\(dadosProfessores\?\.professores_ativos_ids/);
+  assert.match(dashboard, /healthScoreV3Snapshots\.filter\([\s\S]*?professoresAtivos\.has\(snapshot\.professorId\)/);
   assert.match(performance, /filtrarKpisPorVinculosAtivos/);
   assert.match(performance, /const kpisAtivos = filtrarKpisPorVinculosAtivos/);
 });
@@ -207,6 +209,9 @@ test('Performance V3 nao bloqueia a tela consultando o KPI legado e hidrata auxi
   );
   assert.match(performance, /hydrateProfessorPerformanceFromV3/);
   assert.match(performance, /const\s+professoresTabela[\s\S]*?hydrateProfessorPerformanceFromV3/);
+  assert.match(performance, /ocupacoes_elegiveis\s*\?\?\s*hidratado\.alunos_via_turmas/);
+  assert.match(performance, /turmas_elegiveis\s*\?\?\s*hidratado\.turmas_elegiveis_media/);
+  assert.match(performance, /media_alunos_turma\s*\?\?\s*hidratado\.media_alunos_turma/);
 });
 
 test('Analytics consulta vinculos ativos e preserva ausencia de base da presenca', () => {
@@ -215,8 +220,8 @@ test('Analytics consulta vinculos ativos e preserva ausencia de base da presenca
   assert.match(analytics, /from\('professores_unidades'\)/);
   assert.match(analytics, /\.eq\('emusys_ativo',\s*true\)/);
   assert.match(analytics, /filtrarKpisPorVinculosAtivos/);
-  assert.match(analytics, /presenca_media:\s*totais\.mediaPresenca/);
-  assert.match(analytics, /dados\.presenca_media\s*===\s*null\s*\?\s*'Em auditoria'/);
+  assert.match(analytics, /presenca_media:\s*presencaPublicavel\s*\?\s*totais\.mediaPresenca\s*:\s*null/);
+  assert.match(analytics, /dados\.presenca_media\s*===\s*null\s*\?\s*'Sem base'/);
 });
 
 test('Analytics consulta o ciclo pela competencia selecionada sem deslocar o mes', () => {
@@ -229,11 +234,10 @@ test('Analytics consulta o ciclo pela competencia selecionada sem deslocar o mes
 test('Carteira preserva a base canonica e enriquece com snapshot V3 sem recalcular o legado', () => {
   const carteira = read('src/components/App/Professores/TabCarteiraProfessores.tsx');
 
-  assert.match(carteira, /get_health_score_professor_v3_performance/);
-  assert.match(carteira, /normalizeHealthScoreV3PerformanceRows/);
+  assert.match(carteira, /fetchHealthScoreProfessorV3Performance/);
   assert.match(carteira, /filtrarKpisPorVinculosAtivos/);
   assert.match(carteira, /const carteirasFinanceirasPorProfessor = new Map/);
-  assert.match(carteira, /const carteirasCalculadas[^=]*= kpisData\.map/);
+  assert.match(carteira, /const carteirasCalculadas[^=]*=\s*kpisCanonicosDisponiveis\s*\?\s*kpisData\.map/);
   assert.doesNotMatch(carteira, /const carteirasCalculadas[^=]*= \(carteiraData as any\[\]\)\.map/);
   assert.match(carteira, /estadoPublicacao/);
   assert.match(carteira, /health_score_estado_publicacao === 'parcial'/);
@@ -242,7 +246,7 @@ test('Carteira preserva a base canonica e enriquece com snapshot V3 sem recalcul
   assert.doesNotMatch(carteira, /health_score_cobertura\?\.toFixed\(0\)\s*\?\?\s*['"]-['"]/);
   assert.doesNotMatch(carteira, /calcularHealthScore\s*\(/);
   assert.doesNotMatch(carteira, /throw new Error\(`Health Score V3 indisponivel:/i);
-  assert.match(carteira, /setCarteiras\(carteirasComAlunos\)[\s\S]*get_health_score_professor_v3_performance/);
+  assert.match(carteira, /setCarteiras\(carteirasComAlunos\)[\s\S]*fetchHealthScoreProfessorV3Performance/);
 });
 
 test('Carteira exibe permanencia com o professor da mesma fonte V3 da Performance', () => {

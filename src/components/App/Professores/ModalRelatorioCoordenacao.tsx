@@ -23,7 +23,8 @@ import {
   Activity,
   BriefcaseBusiness,
   ShieldAlert,
-  Send
+  Send,
+  TriangleAlert,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/useToast';
@@ -48,6 +49,10 @@ interface ModalRelatorioCoordenacaoProps {
 
 type TipoRelatorio = 'mensal' | TipoRelatorioCoordenacaoCanonico;
 type ModoPeriodo = 'mes_anterior' | 'competencia_tela' | 'personalizado';
+type DocumentoRelatorioV4 = RelatorioCoordenacaoCanonicoV2 & {
+  schema_version: 4;
+  documento: NonNullable<RelatorioCoordenacaoCanonicoV2['documento']>;
+};
 
 function inicioMes(ano: number, mes: number): Date {
   return new Date(ano, mes - 1, 1);
@@ -66,7 +71,12 @@ function competenciaAnteriorHoje() {
   };
 }
 
-function deveAbrirMesAnterior(anoTela: number, mesTela: number): boolean {
+function deveAbrirMesAnterior(
+  anoTela: number,
+  mesTela: number,
+  periodicidade: 'mensal' | 'ciclo',
+): boolean {
+  if (periodicidade !== 'mensal') return false;
   const hoje = new Date();
   const telaEhMesAtual = anoTela === hoje.getFullYear() && mesTela === hoje.getMonth() + 1;
   return telaEhMesAtual && hoje.getDate() <= 10;
@@ -85,11 +95,16 @@ export function ModalRelatorioCoordenacao({
   const [tipoRelatorio, setTipoRelatorio] = useState<TipoRelatorio | null>(null);
   const [textoRelatorio, setTextoRelatorio] = useState('');
   const [loadingIA, setLoadingIA] = useState(false);
+  const [erroRelatorio, setErroRelatorio] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
   const [enviandoWhatsApp, setEnviandoWhatsApp] = useState(false);
   const [enviadoWhatsApp, setEnviadoWhatsApp] = useState(false);
   const [erroWhatsApp, setErroWhatsApp] = useState<string | null>(null);
   const [numeroTeste, setNumeroTeste] = useState('');
+  const [documentoCarregado, setDocumentoCarregado] = useState<{
+    chave: string;
+    documento: DocumentoRelatorioV4;
+  } | null>(null);
   const { usuario } = useAuth();
 
   const mesesPorExtenso: Record<number, string> = {
@@ -99,13 +114,13 @@ export function ModalRelatorioCoordenacao({
   };
 
   const competenciaInicial = useMemo(() => {
-    return deveAbrirMesAnterior(ano, mes)
+    return deveAbrirMesAnterior(ano, mes, periodicidade)
       ? competenciaAnteriorHoje()
       : { ano, mes };
-  }, [ano, mes]);
+  }, [ano, mes, periodicidade]);
 
   const [modoPeriodo, setModoPeriodo] = useState<ModoPeriodo>(
-    deveAbrirMesAnterior(ano, mes) ? 'mes_anterior' : 'competencia_tela'
+    deveAbrirMesAnterior(ano, mes, periodicidade) ? 'mes_anterior' : 'competencia_tela'
   );
   const [dataInicio, setDataInicio] = useState<Date>(() => inicioMes(competenciaInicial.ano, competenciaInicial.mes));
   const [dataFim, setDataFim] = useState<Date>(() => fimMes(competenciaInicial.ano, competenciaInicial.mes));
@@ -113,13 +128,15 @@ export function ModalRelatorioCoordenacao({
   useEffect(() => {
     if (!open) return;
 
-    const abrirMesAnterior = deveAbrirMesAnterior(ano, mes);
+    const abrirMesAnterior = deveAbrirMesAnterior(ano, mes, periodicidade);
     const proximaCompetencia = abrirMesAnterior ? competenciaAnteriorHoje() : { ano, mes };
 
     setModoPeriodo(abrirMesAnterior ? 'mes_anterior' : 'competencia_tela');
     setDataInicio(inicioMes(proximaCompetencia.ano, proximaCompetencia.mes));
     setDataFim(fimMes(proximaCompetencia.ano, proximaCompetencia.mes));
-  }, [ano, mes, open]);
+    setDocumentoCarregado(null);
+    setErroRelatorio(null);
+  }, [ano, mes, open, periodicidade]);
 
   const periodoSelecionado = useMemo(() => {
     const mesmoMes = dataInicio.getFullYear() === dataFim.getFullYear()
@@ -149,6 +166,7 @@ export function ModalRelatorioCoordenacao({
 
   const selecionarPeriodo = (modo: ModoPeriodo) => {
     setModoPeriodo(modo);
+    setDocumentoCarregado(null);
 
     if (modo === 'mes_anterior') {
       const competencia = competenciaAnteriorHoje();
@@ -177,14 +195,51 @@ export function ModalRelatorioCoordenacao({
     };
   };
 
+  const obterDocumento = async (
+    anoRelatorio: number,
+    mesRelatorio: number,
+  ): Promise<DocumentoRelatorioV4> => {
+    const chave = [
+      unidadeId || 'consolidado',
+      anoRelatorio,
+      mesRelatorio,
+      periodicidade,
+    ].join(':');
+    if (documentoCarregado?.chave === chave) return documentoCarregado.documento;
+
+    const { data, error } = await supabase.rpc('get_relatorio_coordenacao_documento_v4', {
+      p_unidade_id: unidadeId,
+      p_ano: anoRelatorio,
+      p_mes: mesRelatorio,
+      p_periodicidade: periodicidade,
+    });
+    if (error) {
+      console.error('Erro ao consultar os dados da Coordenação:', error);
+      throw new Error('Não foi possível reunir os dados da Coordenação deste período.');
+    }
+
+    const documento = data as unknown as DocumentoRelatorioV4;
+    if (
+      documento?.schema_version !== 4
+      || !documento.documento?.id
+      || !Array.isArray(documento.professores)
+    ) {
+      throw new Error('Os dados da Coordenação estão incompletos para este período.');
+    }
+    setDocumentoCarregado({ chave, documento });
+    return documento;
+  };
+
   const gerarRelatorioIA = async () => {
     const tipo: TipoRelatorio = 'mensal';
     setTipoRelatorio(tipo);
     setLoadingIA(true);
     setTextoRelatorio('');
+    setErroRelatorio(null);
 
     try {
       const { anoRelatorio, mesRelatorio } = validarCompetenciaMensal();
+      const documento = await obterDocumento(anoRelatorio, mesRelatorio);
 
       // Edge Function apenas para o relatório mensal narrativo com IA.
       const edgeFunctionName = 'gemini-relatorio-coordenacao';
@@ -198,6 +253,7 @@ export function ModalRelatorioCoordenacao({
             ano: anoRelatorio,
             mes: mesRelatorio,
             periodicidade,
+            documento_id: documento.documento.id,
           }
         }
       );
@@ -223,6 +279,9 @@ export function ModalRelatorioCoordenacao({
       }
 
       if (responseIA?.success && responseIA?.relatorio) {
+        if (responseIA.documento_id !== documento.documento.id) {
+          throw new Error('O relatório retornou uma versão diferente da selecionada. Tente novamente.');
+        }
         setTextoRelatorio(responseIA.relatorio);
         toast.success('Relatório gerado!', 'Relatório de coordenação gerado com sucesso');
       } else {
@@ -231,7 +290,9 @@ export function ModalRelatorioCoordenacao({
 
     } catch (error) {
       console.error('Erro ao gerar relatório:', error);
-      toast.error('Erro', error instanceof Error ? error.message : 'Erro ao gerar relatório');
+      const mensagem = error instanceof Error ? error.message : 'Erro ao gerar relatório';
+      setErroRelatorio(mensagem);
+      toast.error('Erro', mensagem);
     } finally {
       setLoadingIA(false);
     }
@@ -241,28 +302,20 @@ export function ModalRelatorioCoordenacao({
     setTipoRelatorio(tipo);
     setLoadingIA(true);
     setTextoRelatorio('');
+    setErroRelatorio(null);
 
     try {
       const { anoRelatorio, mesRelatorio } = validarCompetenciaMensal();
-      const { data, error } = await supabase.rpc('get_relatorio_coordenacao_canonico_v3', {
-        p_unidade_id: unidadeId,
-        p_ano: anoRelatorio,
-        p_mes: mesRelatorio,
-        p_periodicidade: periodicidade,
-      });
-      if (error) {
-        console.error('Erro ao consultar os dados oficiais da Coordenação:', error);
-        throw new Error('Não foi possível reunir os dados da Coordenação desta competência.');
-      }
-
-      const contrato = data as unknown as RelatorioCoordenacaoCanonicoV2;
+      const contrato = await obterDocumento(anoRelatorio, mesRelatorio);
       setTextoRelatorio(gerarRelatorioCoordenacaoCanonico({
         tipo,
         contrato,
       }));
       toast.success('Relatório gerado!', 'Relatório gerado com os dados oficiais da competência');
     } catch (error) {
-      toast.error('Erro', error instanceof Error ? error.message : 'Erro ao gerar relatório');
+      const mensagem = error instanceof Error ? error.message : 'Erro ao gerar relatório';
+      setErroRelatorio(mensagem);
+      toast.error('Erro', mensagem);
     } finally {
       setLoadingIA(false);
     }
@@ -293,12 +346,18 @@ export function ModalRelatorioCoordenacao({
     toast.error('Erro ao copiar', `Selecione o texto manualmente e pressione ${getManualCopyShortcut()}`);
   };
 
-  const resetarModal = () => {
+  const voltarParaSelecao = () => {
     setTipoRelatorio(null);
     setTextoRelatorio('');
+    setErroRelatorio(null);
     setCopiado(false);
     setEnviadoWhatsApp(false);
     setErroWhatsApp(null);
+  };
+
+  const limparModal = () => {
+    voltarParaSelecao();
+    setDocumentoCarregado(null);
   };
 
   const enviarWhatsAppGrupo = async () => {
@@ -346,7 +405,7 @@ export function ModalRelatorioCoordenacao({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => {
-      if (!isOpen) resetarModal();
+      if (!isOpen) limparModal();
       onOpenChange(isOpen);
     }}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col bg-slate-900 border-slate-700">
@@ -365,7 +424,7 @@ export function ModalRelatorioCoordenacao({
           <div className="space-y-5 py-6 overflow-y-auto pr-1">
             <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4">
               <Label className="text-slate-300 text-sm font-medium mb-3 block">
-                {periodicidade === 'ciclo' ? 'Ciclo oficial da tela' : 'Período do relatório'}
+                {periodicidade === 'ciclo' ? 'Ciclo da tela' : 'Período do relatório'}
               </Label>
 
               {periodicidade === 'mensal' && (
@@ -397,14 +456,22 @@ export function ModalRelatorioCoordenacao({
                     <Label className="text-slate-400 text-xs mb-1 block">Data início</Label>
                     <DatePicker
                       date={dataInicio}
-                      onDateChange={(date) => date && setDataInicio(date)}
+                      onDateChange={(date) => {
+                        if (!date) return;
+                        setDataInicio(date);
+                        setDocumentoCarregado(null);
+                      }}
                     />
                   </div>
                   <div>
                     <Label className="text-slate-400 text-xs mb-1 block">Data fim</Label>
                     <DatePicker
                       date={dataFim}
-                      onDateChange={(date) => date && setDataFim(date)}
+                      onDateChange={(date) => {
+                        if (!date) return;
+                        setDataFim(date);
+                        setDocumentoCarregado(null);
+                      }}
                     />
                   </div>
                 </div>
@@ -423,7 +490,7 @@ export function ModalRelatorioCoordenacao({
                 )}
                 {periodicidade === 'ciclo' && (
                   <p className="text-slate-400">
-                    O ciclo acumula fatos brutos dos três meses e só libera ranking após o fechamento oficial.
+                    O ciclo reúne os meses já transcorridos e só libera premiação após o fechamento.
                   </p>
                 )}
               </div>
@@ -478,7 +545,7 @@ export function ModalRelatorioCoordenacao({
               </div>
               <p className="text-sm text-slate-400">
                 Rankings detalhados por carteira, retenção, presença, conversão e
-                média de alunos por turma. Sem IA e sem Edge Function.
+                média de alunos por turma, usando a mesma atualização exibida nos demais relatórios.
               </p>
             </button>
 
@@ -577,6 +644,36 @@ export function ModalRelatorioCoordenacao({
           </div>
         )}
 
+        {erroRelatorio && !loadingIA && !textoRelatorio && (
+          <div
+            role="alert"
+            className="flex-1 flex flex-col items-center justify-center gap-5 rounded-xl border border-red-500/30 bg-red-500/10 px-6 py-10 text-center"
+          >
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500/15">
+              <TriangleAlert className="h-6 w-6 text-red-300" />
+            </div>
+            <div className="max-w-xl space-y-2">
+              <p className="font-semibold text-white">Não foi possível gerar o relatório</p>
+              <p className="text-sm text-red-100/80">{erroRelatorio}</p>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <Button
+                variant="outline"
+                onClick={voltarParaSelecao}
+                className="border-slate-600 text-slate-200 hover:bg-slate-800"
+              >
+                Voltar
+              </Button>
+              <Button
+                onClick={regenerarRelatorio}
+                className="bg-violet-600 hover:bg-violet-700"
+              >
+                Tentar novamente
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Relatório gerado */}
         {textoRelatorio && !loadingIA && (
           <div className="flex-1 flex flex-col gap-4 overflow-hidden">
@@ -594,7 +691,7 @@ export function ModalRelatorioCoordenacao({
             <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-700">
               <Button
                 variant="outline"
-                onClick={resetarModal}
+                onClick={voltarParaSelecao}
                 className="border-slate-600 text-slate-300 hover:bg-slate-800"
               >
                 Voltar

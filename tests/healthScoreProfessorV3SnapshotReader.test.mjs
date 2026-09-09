@@ -82,7 +82,7 @@ test('frontend consulta o leitor rapido de snapshot e nunca o produtor vivo', as
   assert.match(tab, /Tentar novamente/i);
   assert.match(tab, /healthV3Error\s*\?\s*\[\]\s*:\s*mergeHealthScoreV3ActiveRoster/i);
   assert.match(tab, /healthV3SnapshotCoverageIncomplete/i);
-  assert.match(tab, /Retrato incompleto/i);
+  assert.match(tab, /Dados do período incompletos/i);
 });
 
 test('cobertura parcial mantém a tabela visível e sinaliza a lacuna sem bloquear o roster', async () => {

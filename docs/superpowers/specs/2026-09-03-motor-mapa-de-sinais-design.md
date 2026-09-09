@@ -1660,6 +1660,15 @@ dias sem ninguém ver:
    ⚠️ **Sem filtro de cortesia de propósito**: cortaria 176 → 51 chamadas, mas
    classificar linguagem por regex é o que se decidiu parar de fazer aqui, e a
    economia seria de centavos. Quem decide se "❤️" precisa de resposta é o modelo.
+   🔴 **E foi exatamente este princípio que a "segunda foto" violou (07→09/09).**
+   Ela passou a marcar como "ainda esperando" toda conversa desta view — ou seja,
+   voltou a decidir por `ultimo_autor='contact'`, o proxy que este parágrafo
+   recusa —, e ainda rodava **antes** da classificação, então o veredito do
+   modelo chegava tarde demais para desfazer o carimbo. Medido: 18 sinais vivos
+   cuja última fala era `❤️ 👍 🙏🏻 "Obrigada" "Sim" "Sábado"`. Corrigido em
+   09/09: a foto é marcada **depois**, com o veredito. Ao mexer aqui, lembrar que
+   **"o cliente falou por último" nunca foi a definição de pendência** — é só o
+   funil barato que traz os candidatos até o modelo.
 2. **`exportar-candidatos-atendimento`** (edge SOL, `verify_jwt=false`) — só
    transporte, token conferido em tempo constante. ⚠️ **Por que edge e não a view
    pelo PostgREST:** exigiria `GRANT SELECT` para `anon`, e a anon key é pública —
