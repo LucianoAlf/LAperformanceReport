@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 
-const migrationPath = 'supabase/migrations/20260909031109_relatorio_coordenacao_documento_v4.sql';
+const migrationPath = 'supabase/migrations/20260909040926_relatorio_coordenacao_documento_v4.sql';
 
 function functionBody(sql, name) {
   const start = sql.toLowerCase().indexOf(`function public.${name.toLowerCase()}`);
@@ -61,4 +61,3 @@ test('migration preserva todos os dominios de fechamento existentes', () => {
     assert.match(sql, new RegExp(`'${domain}'`));
   }
 });
-

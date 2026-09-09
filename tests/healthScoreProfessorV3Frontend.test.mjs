@@ -275,12 +275,13 @@ test('presenca observada respeita politica versionada de auditoria por unidade',
   assert.match(sql, /em_auditoria/i);
 });
 
-test('modal nao publica percentual observado quando a cobertura ainda nao e publicavel', () => {
+test('modal publica percentual observado sem antecipa-lo para a nota', () => {
   const source = read(modalPath);
 
-  assert.match(source, /observacao_publicacao/i);
-  assert.match(source, /Cobertura insuficiente/i);
-  assert.match(source, /valor observado preservado/i);
+  assert.match(source, /metric\.detalhes\.valor_observado/i);
+  assert.match(source, /displayValue\s*=\s*metric\.valorBruto\s*\?\?\s*observed\?\.value/i);
+  assert.match(source, /stateLabel:\s*'observado'/i);
+  assert.match(source, /permanece fora do score/i);
   assert.doesNotMatch(source, /['"`]Em auditoria['"`]/i);
 });
 

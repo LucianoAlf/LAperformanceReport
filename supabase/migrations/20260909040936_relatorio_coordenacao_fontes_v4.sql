@@ -773,7 +773,10 @@ begin
       using errcode = '22023';
   end if;
 
-  v_base := public.get_relatorio_coordenacao_canonico_v3(
+  -- O produtor usa a fotografia-base diretamente. O nome publico V3 passa a
+  -- delegar ao documento V4 no cutover e, portanto, nunca pode ser dependencia
+  -- deste caminho de escrita.
+  v_base := public.montar_relatorio_coordenacao_payload_v3(
     p_unidade_id, p_ano, p_mes, p_periodicidade
   );
   if v_base is null

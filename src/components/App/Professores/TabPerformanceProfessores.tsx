@@ -62,7 +62,10 @@ import {
   type HealthScoreV3UiStatus,
 } from '@/lib/healthScoreProfessorV3Performance';
 import type { HealthMetricKeyV3 } from '@/lib/healthScoreProfessorV3';
-import { getHealthScoreV3Period } from '@/lib/healthScoreProfessorV3Periodos';
+import {
+  getHealthScoreV3Period,
+  getHealthScoreV3QueryCompetence,
+} from '@/lib/healthScoreProfessorV3Periodos';
 
 const HEALTH_SCORE_V3_PERFORMANCE_FLAG = import.meta.env.VITE_HEALTH_SCORE_V3_PERFORMANCE_ENABLED;
 const HEALTH_SCORE_V3_PERFORMANCE_ENABLED =
@@ -209,7 +212,7 @@ function HealthScoreV3MetricCell({
     },
   );
   const renderedValue = display.value === null
-    ? display.state === 'auditoria' ? 'Sem base operacional' : evidenceMessage
+    ? evidenceMessage
     : formatHealthScoreV3MetricValue(metricKey, display.value);
   const stateLabel = display.state === 'observado'
     ? 'observado'
@@ -224,7 +227,7 @@ function HealthScoreV3MetricCell({
             : display.state === 'referencia_anterior'
               ? `base de ${formatHealthScoreV3ReferenceMonth(display.referenceCompetence)}`
       : display.state === 'auditoria'
-        ? 'sem base operacional'
+        ? 'observado'
         : display.state === 'sem_base'
           ? evidenceMessage
           : null;
@@ -266,7 +269,7 @@ function HealthScoreV3MetricCell({
           <p className="mb-1.5 font-bold text-slate-200">{HEALTH_SCORE_V3_METRIC_LABELS[metricKey]}</p>
           {display.state === 'auditoria' && display.observedValue !== null && (
             <p className="mb-1 text-amber-300">
-              Valor observado preservado: {formatHealthScoreV3MetricValue(metricKey, display.observedValue)}
+              Valor do período: {formatHealthScoreV3MetricValue(metricKey, display.observedValue)}
             </p>
           )}
           {display.state === 'referencia_anterior' && (
@@ -330,7 +333,7 @@ function formatHealthScoreV3Status(status: HealthScoreV3UiStatus): string {
   if (status === 'saudavel') return 'Saudável';
   if (status === 'parcial') return 'Parcial';
   if (status === 'em_maturacao') return 'Em acompanhamento';
-  if (status === 'sem_base_operacional') return 'Sem base operacional';
+  if (status === 'sem_base_operacional') return 'Sem dados no período';
   return 'Evidência pendente';
 }
 
@@ -347,7 +350,7 @@ function formatAlertaPerformanceCount(alerta: AlertaPerformance): string {
   if (alerta.tipo === 'parcial') return `${sujeito} com nota parcial`;
   if (alerta.tipo === 'evidencia_pendente') return `${sujeito} com evidência pendente`;
   if (alerta.tipo === 'em_maturacao') return `${sujeito} em acompanhamento`;
-  if (alerta.tipo === 'sem_base_operacional') return `${sujeito} sem base operacional`;
+  if (alerta.tipo === 'sem_base_operacional') return `${sujeito} sem dados no período`;
   return alerta.quantidade === 1 ? `${sujeito} saudável` : `${sujeito} saudáveis`;
 }
 
@@ -389,6 +392,14 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
     () => getHealthScoreV3Period(ano, mes, modoVisualizacao === 'trimestre' ? 'ciclo' : 'mensal'),
     [ano, mes, modoVisualizacao],
   );
+  const competenciaConsultaV3 = useMemo(
+    () => getHealthScoreV3QueryCompetence(
+      ano,
+      mes,
+      modoVisualizacao === 'trimestre' ? 'ciclo' : 'mensal',
+    ),
+    [ano, mes, modoVisualizacao],
+  );
   const periodoLabel = periodoV3.label;
   const healthScoreWeights = healthWeights ?? DEFAULT_HEALTH_WEIGHTS;
   const healthV3UnitId = unidadeAtual === 'todos' ? null : unidadeAtual;
@@ -398,7 +409,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
     error: healthV3Error,
     reload: reloadHealthV3,
   } = useHealthScoreProfessorV3Performance({
-    competencia,
+    competencia: competenciaConsultaV3,
     unidadeId: healthV3UnitId,
     periodicidade: modoVisualizacao === 'trimestre' ? 'ciclo' : 'mensal',
     enabled: HEALTH_SCORE_V3_PERFORMANCE_ENABLED,
@@ -803,10 +814,10 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
   const healthV3SnapshotsAtivos = useMemo(() => healthV3Error ? [] : mergeHealthScoreV3ActiveRoster({
     snapshots: healthV3Snapshots,
     professorIds: professores.map((professor) => professor.id),
-    competencia,
+    competencia: competenciaConsultaV3,
     unidadeId: healthV3UnitId,
     periodicidade: modoVisualizacao === 'trimestre' ? 'ciclo' : 'mensal',
-  }), [competencia, healthV3Error, healthV3Snapshots, healthV3UnitId, modoVisualizacao, professores]);
+  }), [competenciaConsultaV3, healthV3Error, healthV3Snapshots, healthV3UnitId, modoVisualizacao, professores]);
 
   const healthV3SnapshotUnavailable = HEALTH_SCORE_V3_PERFORMANCE_ENABLED
     && !healthV3Error
@@ -838,9 +849,11 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       );
       return {
         ...hidratado,
-        alunos_via_turmas: Number(kpiTurma?.ocupacoes_elegiveis ?? 0),
-        turmas_elegiveis_media: Number(kpiTurma?.turmas_elegiveis ?? 0),
-        media_alunos_turma: Number(kpiTurma?.media_alunos_turma ?? 0),
+        alunos_via_turmas: Number(kpiTurma?.ocupacoes_elegiveis ?? hidratado.alunos_via_turmas),
+        turmas_elegiveis_media: Number(
+          kpiTurma?.turmas_elegiveis ?? hidratado.turmas_elegiveis_media,
+        ),
+        media_alunos_turma: Number(kpiTurma?.media_alunos_turma ?? hidratado.media_alunos_turma),
         healthV3,
       };
     }),
@@ -1078,13 +1091,13 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-5 text-sm text-amber-100">
           <p className="font-semibold">
             {healthV3SnapshotCoverageIncomplete
-              ? 'Retrato incompleto (tabela disponivel)'
-              : 'Retrato de Performance sendo preparado'}
+              ? 'Dados do período incompletos'
+              : 'Dados de Performance sendo preparados'}
           </p>
           <p className="mt-1 text-amber-100/80">
             {healthV3SnapshotCoverageIncomplete
-              ? `Faltam retratos materializados para ${healthV3MissingSnapshotCount} professor(es). O roster continua visivel e os faltantes ficam como sem base operacional.`
-              : 'Ainda nao existe uma fotografia materializada para este periodo e escopo. O roster continua visivel ate a materializacao.'}
+              ? `Não foi possível carregar os indicadores de ${healthV3MissingSnapshotCount} professor(es). A equipe permanece visível e nenhum valor foi substituído.`
+              : 'Ainda não há indicadores disponíveis para este período e unidade.'}
           </p>
           <button
             type="button"
@@ -1279,8 +1292,8 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         </div>
       ) : (
         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
-          Conversao de professores usando fonte canonica Emusys + vinculo LA Report.
-          Matriculas pos-exp contam matriculas/cursos gerados por experimentais confirmadas; no Health Score a contribuicao e limitada a 100.
+          Conversão de professores usando dados do Emusys e vínculos do LA Report.
+          Matrículas pós-experimental contam cursos gerados por experimentais confirmadas; no Health Score a contribuição é limitada a 100.
         </div>
       )}
 
@@ -1302,7 +1315,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                     <SelectItem value="saudavel">🟢 Saudável</SelectItem>
                     <SelectItem value="comparavel">🟢 Comparável</SelectItem>
                     <SelectItem value="em_maturacao">🔵 Em maturação</SelectItem>
-                    <SelectItem value="sem_base_operacional">⚪ Sem base operacional</SelectItem>
+                    <SelectItem value="sem_base_operacional">⚪ Sem dados no período</SelectItem>
                   </>
                 ) : (
                   <SelectItem value="excelente">🟢 Excelente</SelectItem>
@@ -1541,7 +1554,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                                 ? 'Health Score'
                                 : professor.healthV3?.comparabilidadeEstado === 'em_maturacao'
                                   ? 'Desempenho observado'
-                                  : 'Sem base operacional'}
+                                  : 'Sem dados no período'}
                             </span>
                             {professor.healthV3?.comparabilidadeEstado === 'em_maturacao' && (
                               <span className="whitespace-nowrap text-[9px] text-cyan-300">
@@ -1593,7 +1606,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                           </div>
                         ) : (
                           <div className="min-w-[230px] text-xs">
-                            <p className="font-bold text-slate-200 mb-1.5">Health Score sem base operacional</p>
+                            <p className="font-bold text-slate-200 mb-1.5">Health Score sem dados no período</p>
                             <p className="text-slate-400">
                               O score nao e publicado enquanto a presenca nao tiver confianca alta.
                             </p>
@@ -1779,7 +1792,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                                 )}
                               </div>
                               <div className="flex justify-between gap-4 pt-1">
-                                <span className="text-cyan-400">Matriculas pos-exp canonicas</span>
+                                <span className="text-cyan-400">Matrículas pós-experimental</span>
                                 <span className="text-cyan-300 font-medium">
                                   {professor.matriculas_pos_exp}
                                   {professor.experimentais > 0 && (
@@ -1800,7 +1813,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                                 <span className="text-white font-bold">{professor.matriculas_pos_exp + professor.matriculas_diretas}</span>
                               </div>
                             </div>
-                            <p className="text-emerald-300 mt-1.5 text-[10px]">Fonte canonica Emusys + vinculo LA Report</p>
+                            <p className="text-emerald-300 mt-1.5 text-[10px]">Fonte: Emusys + vínculos do LA Report</p>
                           </div>
                         }
                       >
@@ -1979,12 +1992,12 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           <div>
             <p className="text-slate-300 font-medium">Conversao Exp-&gt;Mat</p>
             <p className="text-green-400">&gt;40% Saudavel</p>
-            <p className="text-slate-400">Fonte canonica Emusys</p>
+            <p className="text-slate-400">Fonte: Emusys + vínculos do LA Report</p>
           </div>
           <div>
             <p className="text-slate-300 font-medium">Presença</p>
             <p className="text-slate-400">Publicada apenas com confiança alta</p>
-            <p className="text-slate-500">Recortes sem cobertura suficiente ficam sem base operacional</p>
+            <p className="text-slate-500">Períodos sem registros suficientes aparecem sem nota</p>
           </div>
         </div>
       </div>
@@ -2027,7 +2040,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         open={modalDetalhes.open}
         onClose={() => setModalDetalhes({ open: false, professor: null })}
         professor={modalDetalhes.professor}
-        competencia={competencia}
+        competencia={competenciaConsultaV3}
         onNovaMeta={(profId) => {
           setModalDetalhes({ open: false, professor: null });
           setModalMeta({ open: true, professorId: profId });

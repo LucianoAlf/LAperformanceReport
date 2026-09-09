@@ -18,6 +18,7 @@ import {
   contarProfessoresSemDadosOficiais,
   descreverContextoOperacionalRelatorio,
 } from "../_shared/apresentacaoRelatorioCoordenacao.ts";
+import { fetchJsonWithDeadline } from "../_shared/fetchJsonDeadline.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -29,10 +30,19 @@ const jsonUtf8Headers = {
   "Content-Type": "application/json; charset=utf-8",
 };
 
+const TEMPO_LIMITE_IA_MS = 12_000;
+
 const TERMOS_PUBLICOS_BLOQUEADOS = [
   "RPC",
   "snapshot",
   "migration",
+  "auditoria",
+  "canônico",
+  "canonico",
+  "canônica",
+  "canonica",
+  "pilar",
+  "pilares",
   "camada canônica",
   "camada canonica",
   "read model",
@@ -43,6 +53,7 @@ const TERMOS_PUBLICOS_BLOQUEADOS = [
 type JsonRecord = Record<string, unknown>;
 
 interface RelatorioCoordenacaoRequest {
+  documento_id?: string;
   unidade?: string | null;
   ano?: number;
   mes?: number;
@@ -100,6 +111,13 @@ interface SinalContrato {
 
 interface RelatorioCoordenacaoCanonico {
   schema_version: number;
+  documento?: {
+    id: string;
+    versao: number;
+    hash: string;
+    status: string;
+    gerado_em: string;
+  };
   periodo: {
     unidade_id: string | null;
     unidade_nome: string;
@@ -164,6 +182,7 @@ const rotulosMetricas: Record<string, string> = {
 // Regra: coordenador não sabe o que é "canônico", "evidência", "pilar".
 function normalizarMotivo(motivo: string): string {
   const m = motivo.toLowerCase();
+  if (m.includes("pilar") || m.includes("auditoria")) return "informações insuficientes no período";
   if (m.includes("nenhuma evidencia canonica emitida")) return "sem registros elegíveis no período";
   if (m.includes("unidade em auditoria")) return "indicador pausado neste período (auditoria da unidade)";
   if (m.includes("cobertura semantica inferior") || m.includes("cobertura de presença insuficiente")) return "cobertura de presença abaixo do mínimo exigido";
@@ -207,8 +226,9 @@ function numero(valor: unknown, casas = 1): string {
 }
 
 function inteiro(valor: unknown): string {
-  const convertido = Number(valor ?? 0);
-  return Number.isFinite(convertido) ? convertido.toLocaleString("pt-BR") : "0";
+  if (valor === null || valor === undefined || valor === "") return "não informado";
+  const convertido = Number(valor);
+  return Number.isFinite(convertido) ? convertido.toLocaleString("pt-BR") : "não informado";
 }
 
 function percentual(valor: unknown): string {
@@ -225,14 +245,45 @@ function escaparRegex(texto: string): string {
 
 function sanitizarTextoPublico(texto: string): string {
   let seguro = String(texto || "").replace(/\bget_[a-z0-9_]+\b/gi, "dados oficiais");
+  seguro = seguro
+    .replace(/\bcan[oô]nic(?:o|a|os|as)?\b/gi, "oficial")
+    .replace(/\bauditoria\b/gi, "verificação")
+    .replace(/\bsnapshots?\b/gi, "atualização")
+    .replace(/\bmigrations?\b/gi, "atualização")
+    .replace(/\bpilares?\b/gi, "indicadores");
   for (const termo of TERMOS_PUBLICOS_BLOQUEADOS) {
     seguro = seguro.replace(new RegExp(escaparRegex(termo), "gi"), "dados oficiais");
   }
   return seguro.trim();
 }
 
-function assertPublicReportSafe(texto: string): void {
-  const normalizado = texto.toLocaleLowerCase("pt-BR");
+function termosDeNegocioPreservados(
+  dados: RelatorioCoordenacaoCanonico,
+  mapaPublico: ProjecaoMapaSinaisPublico,
+  narrativa: NarrativaCoordenacao,
+): string[] {
+  return [
+    dados.periodo.unidade_nome,
+    dados.periodo.label,
+    dados.periodo.ciclo_codigo,
+    ...(dados.periodo.coordenadores || []),
+    ...dados.professores.map((professor) => professor.nome),
+    ...(dados.ranking_oficial || []).map((professor) => professor.nome),
+    ...mapaPublico.prioridades.map((item) => item.professor),
+    ...mapaPublico.oportunidades.map((item) => item.professor),
+    ...(dados.agenda_treinamentos.catalogo || []).map((item) => item.nome),
+    ...narrativa.treinamentos.flatMap((item) => [item.professor, item.treinamento]),
+  ].filter((valor): valor is string => typeof valor === "string" && valor.trim().length > 0);
+}
+
+function assertPublicReportSafe(texto: string, termosPermitidos: string[] = []): void {
+  const textoParaValidacao = [...new Set(termosPermitidos)]
+    .sort((a, b) => b.length - a.length)
+    .reduce(
+      (acumulado, termo) => acumulado.replace(new RegExp(escaparRegex(termo), "giu"), "[dado]"),
+      texto,
+    );
+  const normalizado = textoParaValidacao.toLocaleLowerCase("pt-BR");
   const vazamentos = [
     ...TERMOS_PUBLICOS_BLOQUEADOS.filter((termo) => normalizado.includes(termo.toLocaleLowerCase("pt-BR"))),
     ...(normalizado.match(/\bget_[a-z0-9_]+\b/g) || []),
@@ -268,40 +319,52 @@ function narrativaDeterministica(
   };
 }
 
-function normalizarNarrativa(valor: unknown, fallback: NarrativaCoordenacao): NarrativaCoordenacao {
+function chaveTexto(valor: string): string {
+  return valor.trim().toLocaleLowerCase("pt-BR");
+}
+
+function normalizarNarrativa(
+  valor: unknown,
+  fallback: NarrativaCoordenacao,
+  prioridadesPermitidas: ProjecaoMapaSinaisPublico["prioridades"],
+  catalogoPermitido: Array<{ nome: string; foco?: string }>,
+): NarrativaCoordenacao {
   if (!valor || typeof valor !== "object") return fallback;
   const bruto = valor as Record<string, unknown>;
-  const strings = (entrada: unknown): string[] => Array.isArray(entrada)
-    ? entrada.filter((item): item is string => typeof item === "string").map(sanitizarTextoPublico).filter(Boolean).slice(0, 5)
-    : [];
+  const prioridadesPorNome = new Map(
+    prioridadesPermitidas.map((item) => [chaveTexto(item.professor), item]),
+  );
+  const treinamentosPorNome = new Map(
+    catalogoPermitido.map((item) => [chaveTexto(item.nome), item.nome]),
+  );
   const treinamentos = Array.isArray(bruto.treinamentos)
     ? bruto.treinamentos.filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
-      .map((item) => ({
-        professor: typeof item.professor === "string" ? sanitizarTextoPublico(item.professor) : undefined,
-        treinamento: sanitizarTextoPublico(String(item.treinamento || "")),
-        motivo: sanitizarTextoPublico(String(item.motivo || "")),
-      }))
-      .filter((item) => item.treinamento && item.motivo)
+      .map((item) => {
+        const prioridade = typeof item.professor === "string"
+          ? prioridadesPorNome.get(chaveTexto(item.professor))
+          : undefined;
+        const treinamento = typeof item.treinamento === "string"
+          ? treinamentosPorNome.get(chaveTexto(item.treinamento))
+          : undefined;
+        if (!prioridade) return { professor: undefined, treinamento, motivo: "" };
+        return {
+          professor: prioridade.professor,
+          treinamento,
+          motivo: sanitizarTextoPublico(prioridade.direcionamento),
+        };
+      })
+      .filter((item): item is { professor: string; treinamento: string; motivo: string } =>
+        Boolean(item.professor && item.treinamento && item.motivo))
       .slice(0, 5)
     : [];
 
   return {
-    resumo: typeof bruto.resumo === "string" ? sanitizarTextoPublico(bruto.resumo) : fallback.resumo,
-    conquistas: strings(bruto.conquistas).length > 0 ? strings(bruto.conquistas) : fallback.conquistas,
-    pontos_atencao: strings(bruto.pontos_atencao).length > 0 ? strings(bruto.pontos_atencao) : fallback.pontos_atencao,
+    resumo: fallback.resumo,
+    conquistas: fallback.conquistas,
+    pontos_atencao: fallback.pontos_atencao,
     treinamentos,
-    plano_acao: strings(bruto.plano_acao).length > 0 ? strings(bruto.plano_acao) : fallback.plano_acao,
+    plano_acao: fallback.plano_acao,
   };
-}
-
-async function fetchOpenAIComRetry(url: string, options: RequestInit, maxRetries = 2): Promise<Response> {
-  let resposta: Response | null = null;
-  for (let tentativa = 0; tentativa <= maxRetries; tentativa += 1) {
-    resposta = await fetch(url, options);
-    if (resposta.ok || resposta.status !== 429 || tentativa === maxRetries) return resposta;
-    await new Promise((resolve) => setTimeout(resolve, 600 * 2 ** tentativa));
-  }
-  return resposta || new Response(null, { status: 500 });
 }
 
 async function gerarNarrativa(
@@ -317,22 +380,15 @@ async function gerarNarrativa(
     foco: item.foco,
   }));
   const entrada = {
-    periodo: {
-      unidade: dados.periodo.unidade_nome,
-      competencia: `${dados.periodo.ano}-${String(dados.periodo.mes).padStart(2, "0")}`,
-      contexto: dados.periodo.contexto_operacional,
-    },
-    resumo_equipe: dados.resumo_equipe,
-    mapa_sinais_publico: {
-      prioridades: mapaPublico.prioridades,
-      oportunidades: mapaPublico.oportunidades,
-    },
-    qualidade_dados: dados.qualidade_dados,
+    prioridades: mapaPublico.prioridades.map((item) => ({
+      professor: item.professor,
+      direcionamento: item.direcionamento,
+    })),
     catalogo_treinamentos: catalogo,
   };
 
   try {
-    const resposta = await fetchOpenAIComRetry("https://api.openai.com/v1/chat/completions", {
+    const resposta = await fetchJsonWithDeadline("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -341,29 +397,33 @@ async function gerarNarrativa(
       body: JSON.stringify({
         model: "gpt-5.4-mini-2026-03-17",
         temperature: 0.2,
-        max_completion_tokens: 1400,
+        max_completion_tokens: 600,
         response_format: { type: "json_object" },
         messages: [
           {
             role: "system",
             content: [
-              "Você redige uma leitura pedagógica breve e empática para a Coordenação de uma escola de música.",
-              "Use somente os sinais recebidos. Não calcule números, notas, médias, taxas, classificações ou rankings.",
-              "Não invente fatos nem recomende punição. Sugira treinamentos apenas do catálogo recebido.",
-              "Prioridades, oportunidades, limites e ordenação já estão prontos na projeção pública; não promova, remova ou reclassifique professores.",
-              "Pontos de atenção e treinamentos podem mencionar somente professores presentes em prioridades; oportunidades servem apenas à redistribuição ou conquista.",
-              "Responda JSON com: resumo, conquistas[], pontos_atencao[], treinamentos[{professor,treinamento,motivo}], plano_acao[].",
+              "Você sugere treinamentos pedagógicos para uma escola de música.",
+              "Use somente professores da lista de prioridades e nomes exatos do catálogo recebido.",
+              "Não escreva números, notas, médias, taxas, classificações, rankings ou fatos novos.",
+              "Não recomende punição e não altere nomes.",
+              "Responda JSON apenas com treinamentos[{professor,treinamento}].",
             ].join(" "),
           },
           { role: "user", content: JSON.stringify(entrada) },
         ],
       }),
-    });
+    }, { timeoutMs: TEMPO_LIMITE_IA_MS, maxRetries: 2 });
     if (!resposta.ok) return fallback;
-    const payload = await resposta.json();
+    const payload = resposta.payload as JsonRecord;
     const texto = payload?.choices?.[0]?.message?.content;
     if (typeof texto !== "string") return fallback;
-    return normalizarNarrativa(JSON.parse(texto), fallback);
+    return normalizarNarrativa(
+      JSON.parse(texto),
+      fallback,
+      mapaPublico.prioridades,
+      catalogo,
+    );
   } catch (error) {
     console.error("Falha ao gerar narrativa pedagógica; usando texto determinístico:", error);
     return fallback;
@@ -435,6 +495,7 @@ function renderizarRankingsPorIndicador(professores: ProfessorContrato[]): strin
         amostra: p.metricas?.[indicador.metricaChave ?? indicador.chave]?.amostra ?? null,
       }))
       .filter((p) => p.valor !== null && p.valor !== undefined)
+      .filter((p) => indicador.chave !== "matriculador" || Number(p.valor) > 0)
       .sort((a, b) => Number(b.valor) - Number(a.valor) || a.nome.localeCompare(b.nome, "pt-BR"))
       .slice(0, LIMITE_DESTAQUES_POR_INDICADOR);
 
@@ -502,21 +563,21 @@ function renderizarRelatorio(
   const professores = professoresOrdenados.flatMap((professor, indice) => {
     if (professor.comparabilidade_estado === "sem_base_operacional") {
       const motivo = normalizarMotivo(
-        professor.comparabilidade_motivo || "sem base operacional no período",
+        professor.comparabilidade_motivo || "dados insuficientes no período",
       );
       return [
         `${indice + 1}) *${professor.nome}*`,
-        `   • Sem nota no recorte — ${motivo}.`,
+        `   • Sem nota no período — ${motivo}.`,
         "   • Permanece na lista da equipe e não recebeu nota zero.",
         "",
       ];
     }
 
     const score = professor.comparabilidade_estado === "comparavel"
-      ? `Health Score V3: ${numero(professor.score_comparavel, 1)} pontos | Cobertura: ${percentual(professor.cobertura)}`
+      ? `Health Score V3: ${numero(professor.score_comparavel, 1)} pontos`
       : professor.comparabilidade_estado === "em_maturacao"
-        ? `Desempenho observado: ${numero(professor.score_observado, 1)} | Cobertura: ${percentual(professor.cobertura)} | ${inteiro(professor.pilares_validos)}/${inteiro(professor.pilares_esperados)} pilares válidos`
-        : `Sem base operacional — ${professor.comparabilidade_motivo || "nenhum pilar válido"}`;
+        ? `Desempenho observado: ${numero(professor.score_observado, 1)} | resultado em acompanhamento`
+        : "Sem nota no período";
     const referencia = professor.comparabilidade_estado !== "comparavel"
       && professor.score_referencia !== null
       && professor.score_referencia !== undefined
@@ -594,7 +655,7 @@ function renderizarRelatorio(
     `• Professores ativos: *${inteiro(resumo.total_professores)}*`,
     `• Professores comparáveis: *${inteiro(resumo.comparaveis)}*`,
     `• Em maturação: *${inteiro(resumo.em_maturacao)}*`,
-    `• Sem base operacional: *${inteiro(resumo.sem_base_operacional)}*`,
+    `• Sem nota no período: *${inteiro(resumo.sem_base_operacional)}*`,
     `• Faixa saudável: *${inteiro(resumo.saudaveis)}*`,
     `• Faixa de atenção: *${inteiro(resumo.atencao)}*`,
     `• Faixa crítica: *${inteiro(resumo.criticos)}*`,
@@ -627,7 +688,7 @@ function renderizarRelatorio(
     `• Saídas válidas totais: *${inteiro(dados.saidas_retencao.saidas_validas_total)}*`,
     `• Saídas atribuíveis ao professor: *${inteiro(dados.saidas_retencao.saidas_atribuiveis_professor)}*`,
     "",
-    "📅 *PRESENÇA E COBERTURA*",
+    "📅 *PRESENÇA DOS ALUNOS*",
     "───────────────────────",
     `• Professores com evidência: *${inteiro(dados.presenca.professores_com_evidencia)}*`,
     `• Presença média observada: *${percentual(dados.presenca.presenca_media)}*`,
@@ -686,8 +747,11 @@ function renderizarRelatorio(
     "━━━━━━━━━━━━━━━━━━━━━━",
   ];
 
-  const relatorio = sanitizarTextoPublico(linhas.join("\n"));
-  assertPublicReportSafe(relatorio);
+  const relatorio = linhas.join("\n");
+  assertPublicReportSafe(
+    relatorio,
+    termosDeNegocioPreservados(dados, mapaPublico, narrativa),
+  );
   return relatorio;
 }
 
@@ -733,19 +797,28 @@ Deno.serve(async (req) => {
       global: { headers: { Authorization: authorization } },
       auth: { persistSession: false, autoRefreshToken: false },
     });
-    const { data, error } = await supabase.rpc("get_relatorio_coordenacao_canonico_v3", {
-      p_unidade_id: filtros.unidade,
-      p_ano: filtros.ano,
-      p_mes: filtros.mes,
-      p_periodicidade: filtros.periodicidade,
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.documento_id || "")) {
+      throw new Error("Documento do relatório inválido.");
+    }
+    const { data, error } = await supabase.rpc("get_relatorio_coordenacao_documento_v4_por_id", {
+      p_documento_id: body.documento_id,
     });
     if (error) {
       console.error("Falha ao consultar dados pedagógicos oficiais:", error.code, error.message);
       throw new Error("Não foi possível reunir os dados pedagógicos desta competência.");
     }
     const contrato = data as RelatorioCoordenacaoCanonico;
-    if (!contrato || contrato.schema_version !== 3 || !Array.isArray(contrato.professores)) {
+    if (!contrato || contrato.schema_version !== 4 || !Array.isArray(contrato.professores)) {
       throw new Error("Os dados pedagógicos retornaram incompletos.");
+    }
+    if (
+      contrato.documento?.id !== body.documento_id
+      || contrato.periodo.unidade_id !== filtros.unidade
+      || contrato.periodo.ano !== filtros.ano
+      || contrato.periodo.mes !== filtros.mes
+      || contrato.periodo.periodicidade !== filtros.periodicidade
+    ) {
+      throw new Error("O documento não corresponde ao período selecionado.");
     }
     if (!Array.isArray(contrato.mapa_sinais)) {
       throw new Error("O mapa pedagógico retornou incompleto.");
@@ -758,7 +831,13 @@ Deno.serve(async (req) => {
     }
     const narrativa = await gerarNarrativa(contrato, mapaPublico, Deno.env.get("OPENAI_API_KEY"));
     const relatorio = renderizarRelatorio(contrato, narrativa, mapaPublico);
-    return new Response(JSON.stringify({ success: true, relatorio }), {
+    return new Response(JSON.stringify({
+      success: true,
+      relatorio,
+      documento_id: contrato.documento?.id,
+      documento_versao: contrato.documento?.versao,
+      documento_hash: contrato.documento?.hash,
+    }), {
       status: 200,
       headers: jsonUtf8Headers,
     });

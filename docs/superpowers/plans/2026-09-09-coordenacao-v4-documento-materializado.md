@@ -14,7 +14,7 @@
 
 - Create: `tests/relatorioCoordenacaoDocumentoV4.test.mjs` — contrato estático, ACL, domínios e ausência de recomposição no leitor.
 - Create: `tests/relatorioCoordenacaoDocumentoV4Postgres.test.mjs` — fixture PostgreSQL real para versão, hash, idempotência, concorrência e leitura.
-- Modify: `supabase/migrations/20260909031109_relatorio_coordenacao_documento_v4.sql` — infraestrutura aditiva, produtor em sombra, materializador e leitor V4.
+- Modify: `supabase/migrations/20260909040926_relatorio_coordenacao_documento_v4.sql` — infraestrutura aditiva, produtor em sombra, materializador e leitor V4.
 - Create: `docs/auditorias/2026-09-09-relatorio-coordenacao-v4-shadow.md` — resultados da carga em sombra e tempos de leitura.
 
 ### Task 1: Fixar o contrato em testes vermelhos
@@ -84,7 +84,7 @@ Expected: FAIL porque as quatro funções V4 e o domínio de ciclo ainda não ex
 
 **Files:**
 
-- Modify: `supabase/migrations/20260909031109_relatorio_coordenacao_documento_v4.sql`
+- Modify: `supabase/migrations/20260909040926_relatorio_coordenacao_documento_v4.sql`
 
 - [ ] **Step 1: Ampliar o domínio e criar o índice de leitura**
 
@@ -211,7 +211,7 @@ Expected: PASS; recaptura idêntica mantém uma versão, conteúdo alterado cria
 - [ ] **Step 6: Commit da fundação**
 
 ```powershell
-git add tests/relatorioCoordenacaoDocumentoV4*.mjs supabase/migrations/20260909031109_relatorio_coordenacao_documento_v4.sql
+git add tests/relatorioCoordenacaoDocumentoV4*.mjs supabase/migrations/20260909040926_relatorio_coordenacao_documento_v4.sql
 git commit -m "feat(professores): materializa documento v4 da coordenacao"
 ```
 

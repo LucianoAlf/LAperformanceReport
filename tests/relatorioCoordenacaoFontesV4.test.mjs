@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 
-const migrationPath = 'supabase/migrations/20260909031111_relatorio_coordenacao_fontes_v4.sql';
+const migrationPath = 'supabase/migrations/20260909040936_relatorio_coordenacao_fontes_v4.sql';
+const carteiraRosterMigrationPath =
+  'supabase/migrations/20260909043652_relatorio_coordenacao_carteira_roster_v4.sql';
+const matriculadorSemFallbackMigrationPath =
+  'supabase/migrations/20260909045906_relatorio_coordenacao_sem_fallback_legado_v4.sql';
 
 function functionBody(sql, name) {
   const normalized = sql.toLowerCase();
@@ -35,6 +39,17 @@ test('carteira historica preserva o fechamento mensal e retira apenas extra excl
   assert.match(body, /meses_observados/i);
 });
 
+test('carteira consolidada usa o mesmo roster historico publicado por unidade', () => {
+  const sql = fs.readFileSync(carteiraRosterMigrationPath, 'utf8');
+  const body = functionBody(sql, 'relatorio_coordenacao_carteira_v4');
+
+  assert.match(body, /montar_relatorio_coordenacao_payload_v3/i);
+  assert.match(body, /roster_unidade/i);
+  assert.match(body, /join\s+roster_unidade/i);
+  assert.match(body, /unidade_id/i);
+  assert.match(body, /professor_id/i);
+});
+
 test('Matriculador prefere documento comercial fechado e grava identidade estavel', () => {
   const sql = fs.readFileSync(migrationPath, 'utf8');
   const body = functionBody(sql, 'relatorio_coordenacao_matriculas_v4');
@@ -48,6 +63,19 @@ test('Matriculador prefere documento comercial fechado e grava identidade estave
   assert.match(body, /por_professor/i);
   assert.match(body, /matriculas_sem_professor/i);
   assert.doesNotMatch(body, /matriculas_pos_experimental/i);
+});
+
+test('Matriculador fechado nunca recorre ao documento gerencial legado', () => {
+  const sql = fs.readFileSync(matriculadorSemFallbackMigrationPath, 'utf8');
+  const body = functionBody(sql, 'relatorio_coordenacao_matriculas_base_v4');
+
+  assert.match(body, /relatorio_comercial_mensal/i);
+  assert.match(body, /matriculas_comerciais_v1/i);
+  assert.match(body, /fechamento_comercial_ausente/i);
+  assert.match(body, /v_origem_completa\s*:=\s*false/i);
+  assert.doesNotMatch(body, /relatorio_gerencial/i);
+  assert.doesNotMatch(body, /dados_mes_atual/i);
+  assert.doesNotMatch(body, /kpis_comercial/i);
 });
 
 test('saidas removem anulacoes e preservam MRR desconhecido como null', () => {
@@ -66,6 +94,12 @@ test('produtor V4 troca apenas fatos operacionais e preserva score e conversao',
   const sql = fs.readFileSync(migrationPath, 'utf8');
   const body = functionBody(sql, 'montar_relatorio_coordenacao_conteudo_v4');
 
+  assert.match(body, /montar_relatorio_coordenacao_payload_v3/i);
+  assert.doesNotMatch(
+    body,
+    /get_relatorio_coordenacao_canonico_v3/i,
+    'o produtor nao pode depender do nome publico que sera cortado para o leitor V4',
+  );
   assert.match(body, /relatorio_coordenacao_carteira_v4/i);
   assert.match(body, /relatorio_coordenacao_matriculas_v4/i);
   assert.match(body, /relatorio_coordenacao_presenca_v4/i);
@@ -85,4 +119,3 @@ test('zero comercial so e publicado quando a origem do periodo esta completa', (
   assert.match(body, /origem_completa/i);
   assert.match(body, /case[\s\S]*origem_completa[\s\S]*coalesce[\s\S]*else\s+null/i);
 });
-

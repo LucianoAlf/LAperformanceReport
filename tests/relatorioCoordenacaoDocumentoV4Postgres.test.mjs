@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 const migrationPath = new URL(
-  '../supabase/migrations/20260909031109_relatorio_coordenacao_documento_v4.sql',
+  '../supabase/migrations/20260909040926_relatorio_coordenacao_documento_v4.sql',
   import.meta.url,
 );
 
@@ -38,8 +38,14 @@ function psql(container, sql) {
 }
 
 async function waitForPostgres(container) {
+  let consecutiveReadyChecks = 0;
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    if (psql(container, 'select 1;').status === 0) return;
+    if (psql(container, 'select 1;').status === 0) {
+      consecutiveReadyChecks += 1;
+      if (consecutiveReadyChecks >= 3) return;
+    } else {
+      consecutiveReadyChecks = 0;
+    }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   throw new Error('PostgreSQL de teste nao iniciou a tempo');
@@ -284,4 +290,3 @@ test('documento V4 e append-only, idempotente, isolado e legivel sem recompor', 
     docker(['stop', container]);
   }
 });
-

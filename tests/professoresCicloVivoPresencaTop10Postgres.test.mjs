@@ -372,7 +372,9 @@ test('ciclo vivo reutiliza a referência mensal e ignora mês futuro em PostgreS
     const setup = psql(container, setupSql);
     assert.equal(setup.status, 0, setup.stderr || setup.stdout);
 
-    const migration = readFileSync(migrationPath, 'utf8');
+    // Dollar-quoted anchors are compared byte for byte by the migration. Normalize
+    // the checkout line endings so the Windows fixture matches pg_get_functiondef.
+    const migration = readFileSync(migrationPath, 'utf8').replace(/\r\n/gu, '\n');
     const applied = psql(container, migration);
     assert.equal(applied.status, 0, applied.stderr || applied.stdout);
 

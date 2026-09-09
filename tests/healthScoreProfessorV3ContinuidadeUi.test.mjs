@@ -14,11 +14,24 @@ const hook = readFileSync(
   new URL('../src/hooks/useHealthScoreProfessorV3.ts', import.meta.url),
   'utf8',
 );
+const carteira = readFileSync(
+  new URL('../src/components/App/Professores/TabCarteiraProfessores.tsx', import.meta.url),
+  'utf8',
+);
+const presenca = readFileSync(
+  new URL('../src/components/App/Professores/ModalDetalhesPresenca.tsx', import.meta.url),
+  'utf8',
+);
+const configuracao = readFileSync(
+  new URL('../src/components/App/Professores/HealthScoreV3Config.tsx', import.meta.url),
+  'utf8',
+);
 
 test('tabela diferencia Health Score comparavel de desempenho observado', () => {
   assert.match(tab, /Desempenho observado/);
   assert.match(tab, /Em acompanhamento/);
-  assert.match(tab, /Sem base operacional/);
+  assert.match(tab, /Sem dados no per[ií]odo/);
+  assert.doesNotMatch(tab, /Dados em auditoria|Sem base operacional/i);
   assert.match(tab, /pilaresValidos/);
   assert.match(tab, /scoreComparavel/);
   assert.match(tab, /scoreObservado/);
@@ -35,11 +48,18 @@ test('modal consome o mesmo snapshot normalizado do read model', () => {
   assert.match(hook, /snapshot/);
   assert.match(modal, /performance=\{healthScoreV3Performance\}/);
   assert.match(modal, /Desempenho observado/);
-  assert.match(modal, /Sem base operacional/);
+  assert.match(modal, /Sem dados no per[ií]odo/);
+  assert.doesNotMatch(modal, /Dados em auditoria|Sem base operacional/i);
 });
 
 test('filtros da tabela usam os tres estados canonicos', () => {
   assert.match(tab, /value="comparavel"/);
   assert.match(tab, /value="em_maturacao"/);
   assert.match(tab, /value="sem_base_operacional"/);
+});
+
+test('mensagens visiveis da pagina de professores nao expoem implementacao', () => {
+  assert.doesNotMatch(carteira, /Snapshot can[oô]nico indisponível/i);
+  assert.doesNotMatch(presenca, /fonte can[oô]nica da presença/i);
+  assert.doesNotMatch(configuracao, /Nenhum snapshot|snapshots em sombra/i);
 });

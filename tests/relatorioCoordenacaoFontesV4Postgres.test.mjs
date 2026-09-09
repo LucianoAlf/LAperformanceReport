@@ -5,7 +5,27 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 const migrationPath = new URL(
-  '../supabase/migrations/20260909031111_relatorio_coordenacao_fontes_v4.sql',
+  '../supabase/migrations/20260909040936_relatorio_coordenacao_fontes_v4.sql',
+  import.meta.url,
+);
+const carteiraTotalMigrationPath = new URL(
+  '../supabase/migrations/20260909042112_relatorio_coordenacao_carteira_total_v4.sql',
+  import.meta.url,
+);
+const matriculadorFechadoMigrationPath = new URL(
+  '../supabase/migrations/20260909042826_relatorio_coordenacao_matriculador_fechado_v4.sql',
+  import.meta.url,
+);
+const carteiraRosterMigrationPath = new URL(
+  '../supabase/migrations/20260909043652_relatorio_coordenacao_carteira_roster_v4.sql',
+  import.meta.url,
+);
+const matriculadorSemFallbackMigrationPath = new URL(
+  '../supabase/migrations/20260909045906_relatorio_coordenacao_sem_fallback_legado_v4.sql',
+  import.meta.url,
+);
+const matriculadorImutavelMigrationPath = new URL(
+  '../supabase/migrations/20260909064900_relatorio_comercial_professor_experimental_imutavel.sql',
   import.meta.url,
 );
 
@@ -50,6 +70,7 @@ async function waitForPostgres(container) {
 }
 
 const unitId = '10000000-0000-0000-0000-000000000001';
+const secondUnitId = '20000000-0000-0000-0000-000000000002';
 
 const fixture = String.raw`
   create extension pgcrypto;
@@ -62,6 +83,7 @@ const fixture = String.raw`
 
   create table public.unidades (
     id uuid primary key,
+    codigo text not null,
     nome text not null,
     ativo boolean not null default true
   );
@@ -181,18 +203,54 @@ const fixture = String.raw`
     fonte text not null default 'fixture',
     payload jsonb not null,
     payload_hash text not null default 'fixture',
+    observacao text,
     capturado_em timestamptz not null,
+    capturado_por uuid,
+    aprovado_em timestamptz,
+    aprovado_por uuid,
+    fechado_em timestamptz,
+    fechado_por uuid,
+    updated_at timestamptz not null default now(),
     created_at timestamptz not null default now()
   );
+  create table public.fechamento_mensal_auditoria (
+    id bigserial primary key,
+    snapshot_id uuid not null,
+    ano integer not null,
+    mes integer not null,
+    escopo text not null,
+    unidade_id uuid,
+    acao text not null,
+    detalhes jsonb not null,
+    actor_id uuid
+  );
+
+  create function public.hash_jsonb_canonico(payload jsonb)
+  returns text language sql stable as $$
+    select encode(digest(coalesce(payload, '{}'::jsonb)::text, 'sha256'), 'hex')
+  $$;
+
+  create function public.montar_relatorio_comercial_mensal_payload_v1(uuid,integer,integer)
+  returns jsonb language sql stable security definer as $$
+    select jsonb_build_object(
+      'competencia',jsonb_build_object('ano',$2,'mes',$3),
+      'unidade',jsonb_build_object('id',$1),
+      'matriculas','[]'::jsonb,
+      'resumo',jsonb_build_object('matriculas',0)
+    )
+  $$;
 
   insert into public.unidades values
-    ('${unitId}', 'Campo Grande', true);
+    ('${unitId}', 'CG', 'Campo Grande', true),
+    ('${secondUnitId}', 'OUTRA', 'Unidade sem professor 2 no roster', true);
   insert into public.professores values
     (1, 'Valdo Delfino', 'valdo delfino', true),
     (2, 'Professor sem matricula', 'professor sem matricula', true);
   insert into public.professores_unidades values
     (1, '${unitId}', true, 'validado'),
-    (2, '${unitId}', true, 'validado');
+    (2, '${unitId}', true, 'validado'),
+    (1, '${secondUnitId}', true, 'validado'),
+    (2, '${secondUnitId}', true, 'validado');
 
   create function public.fn_health_score_v3_periodo(p_competencia date, p_periodicidade text)
   returns table(periodo_inicio date, periodo_fim date, ciclo_codigo text, periodo_label text)
@@ -265,7 +323,7 @@ const fixture = String.raw`
   create function public.is_movimentacao_admin_retencao_valida(integer)
   returns boolean language sql stable as $$ select true $$;
 
-  create function public.get_relatorio_coordenacao_canonico_v3(
+  create function public.montar_relatorio_coordenacao_payload_v3(
     p_unidade_id uuid, p_ano integer, p_mes integer,
     p_periodicidade text default 'mensal'
   ) returns jsonb language plpgsql stable as $$
@@ -283,7 +341,18 @@ const fixture = String.raw`
         'unidade_id', p_unidade_id, 'unidade_nome', 'Campo Grande'
       ),
       'resumo_equipe', jsonb_build_object('total_professores',2),
-      'professores', jsonb_build_array(
+      'professores', case when p_unidade_id = '${secondUnitId}'::uuid then jsonb_build_array(
+        jsonb_build_object(
+          'professor_id',1,'nome','Valdo Delfino','score',91,'score_observado',91,
+          'score_comparavel',91,'comparabilidade_estado','comparavel',
+          'metricas',jsonb_build_object(
+            'numero_alunos',jsonb_build_object('valor',999,'valor_bruto',999,'numerador',999,'detalhes','{}'::jsonb),
+            'presenca',jsonb_build_object('valor',70,'valor_bruto',70,'numerador',7,'denominador',10,'amostra',10,'codigo_evidencia','fixture'),
+            'conversao',jsonb_build_object('valor',50,'valor_bruto',50,'numerador',1,'denominador',2,'amostra',2)
+          ),
+          'operacional',jsonb_build_object('carteira_alunos',999,'matriculas_comerciais',999)
+        )
+      ) else jsonb_build_array(
         jsonb_build_object(
           'professor_id',1,'nome','Valdo Delfino','score',91,'score_observado',91,
           'score_comparavel',91,'comparabilidade_estado','comparavel',
@@ -304,7 +373,7 @@ const fixture = String.raw`
           ),
           'operacional',jsonb_build_object('carteira_alunos',null,'matriculas_comerciais',999)
         )
-      ),
+      ) end,
       'presenca',jsonb_build_object('pendencias',1),
       'carteira_carga','{}'::jsonb,
       'saidas_retencao','{}'::jsonb,
@@ -316,7 +385,7 @@ const fixture = String.raw`
 
   create function public.montar_relatorio_coordenacao_conteudo_v4(uuid,integer,integer,text)
   returns jsonb language sql stable as $$
-    select public.get_relatorio_coordenacao_canonico_v3($1,$2,$3,$4)
+    select public.montar_relatorio_coordenacao_payload_v3($1,$2,$3,$4)
   $$;
 
   insert into public.professor_carteira_mensal_canonica
@@ -324,25 +393,55 @@ const fixture = String.raw`
   values
     ('2026-06-01','${unitId}',1,12,'fechamento','2026-07-01'),
     ('2026-07-01','${unitId}',1,14,'fechamento','2026-08-01'),
-    ('2026-08-01','${unitId}',1,12,'fechamento','2026-09-01');
+    ('2026-08-01','${unitId}',1,13,'fechamento','2026-09-01'),
+    ('2026-06-01','${unitId}',2,10,'fechamento','2026-07-01'),
+    ('2026-07-01','${unitId}',2,10,'fechamento','2026-08-01'),
+    ('2026-08-01','${unitId}',2,11,'fechamento','2026-09-01'),
+    ('2026-06-01','${secondUnitId}',1,2,'fechamento','2026-07-01'),
+    ('2026-07-01','${secondUnitId}',1,2,'fechamento','2026-08-01'),
+    ('2026-08-01','${secondUnitId}',1,2,'fechamento','2026-09-01'),
+    ('2026-06-01','${secondUnitId}',2,3,'fechamento','2026-07-01'),
+    ('2026-07-01','${secondUnitId}',2,3,'fechamento','2026-08-01'),
+    ('2026-08-01','${secondUnitId}',2,3,'fechamento','2026-09-01');
   insert into public.fixture_carteira_composicao values
     ('2026-06-01','${unitId}',1,10,2,2,12,5,6),
     ('2026-07-01','${unitId}',1,14,0,0,14,6,6),
-    ('2026-08-01','${unitId}',1,12,0,0,12,7,7);
+    ('2026-08-01','${unitId}',1,13,0,0,13,7,7),
+    ('2026-06-01','${unitId}',2,10,0,0,10,5,5),
+    ('2026-07-01','${unitId}',2,10,0,0,10,5,5),
+    ('2026-08-01','${unitId}',2,11,0,0,11,5,5),
+    ('2026-06-01','${secondUnitId}',1,2,0,0,2,1,1),
+    ('2026-07-01','${secondUnitId}',1,2,0,0,2,1,1),
+    ('2026-08-01','${secondUnitId}',1,2,0,0,2,1,1),
+    ('2026-06-01','${secondUnitId}',2,3,0,0,3,1,1),
+    ('2026-07-01','${secondUnitId}',2,3,0,0,3,1,1),
+    ('2026-08-01','${secondUnitId}',2,3,0,0,3,1,1);
   insert into public.fixture_carteira_kpi values
     ('2026-06-01','${unitId}',1,12,2,5,10,5),
     ('2026-07-01','${unitId}',1,14,2,6,12,6),
-    ('2026-08-01','${unitId}',1,12,2,7,14,7);
+    ('2026-08-01','${unitId}',1,13,2,7,14,7),
+    ('2026-06-01','${unitId}',2,10,2,5,10,5),
+    ('2026-07-01','${unitId}',2,10,2,5,10,5),
+    ('2026-08-01','${unitId}',2,11,2,5,10,5),
+    ('2026-06-01','${secondUnitId}',1,2,2,1,2,1),
+    ('2026-07-01','${secondUnitId}',1,2,2,1,2,1),
+    ('2026-08-01','${secondUnitId}',1,2,2,1,2,1),
+    ('2026-06-01','${secondUnitId}',2,3,3,1,3,1),
+    ('2026-07-01','${secondUnitId}',2,3,3,1,3,1),
+    ('2026-08-01','${secondUnitId}',2,3,3,1,3,1);
 
   insert into public.alunos values
     (101,'Aluno 101',1,false,'2026-06-10 12:00Z'),
     (102,'Aluno 102',1,false,'2026-06-20 12:00Z'),
     (103,'Aluno tardio',1,false,'2026-07-01 12:00Z'),
-    (104,'Aluno 104',1,false,'2026-07-10 12:00Z'),
+    -- O cadastro vivo mudou para outro professor depois do fechamento; o
+    -- documento comercial de julho preserva Valdo como autor da experimental.
+    (104,'Aluno 104',2,false,'2026-07-10 12:00Z'),
     (105,'Aluno por nome',null,false,'2026-07-11 12:00Z'),
     (106,'Aluno sem professor',null,false,'2026-07-12 12:00Z'),
     (107,'Aluno 107',1,false,'2026-08-10 12:00Z'),
     (108,'Aluno 108',1,false,'2026-08-11 12:00Z'),
+    (1770,'Aluno historico CG',2,false,'2026-06-12 12:00Z'),
     (201,'Aluno movimento 1',null,false,'2026-01-01 12:00Z'),
     (202,'Aluno movimento 2',null,false,'2026-01-01 12:00Z'),
     (203,'Aluno movimento 3',null,false,'2026-01-01 12:00Z');
@@ -360,7 +459,13 @@ const fixture = String.raw`
     (ano,mes,escopo,unidade_id,dominio,versao,status,payload,capturado_em)
   values
     (2026,6,'unidade','${unitId}','relatorio_gerencial',1,'fechado',
-      '{"dados_mes_atual":[{"novas_matriculas":2}]}'::jsonb,'2026-07-01 03:00Z'),
+      '{"dados_mes_atual":[{"novas_matriculas":999}]}'::jsonb,'2026-07-01 03:00Z'),
+    (2026,6,'unidade','${unitId}','relatorio_comercial_mensal',1,'fechado',
+      '{"matriculas":[
+        {"id":101,"professores_experimentais":"Valdo Delfino"},
+        {"id":102,"professores_experimentais":"Valdo Delfino"},
+        {"id":1770,"professores_experimentais":"Nome atual incorreto"}
+      ]}'::jsonb,'2026-07-01 03:00Z'),
     (2026,7,'unidade','${unitId}','relatorio_comercial_mensal',1,'fechado',
       '{"matriculas":[
         {"id":104,"professores_experimentais":"Valdo Delfino"},
@@ -371,7 +476,9 @@ const fixture = String.raw`
       '{"matriculas":[
         {"id":107,"professores_experimentais":"Valdo Delfino"},
         {"id":108,"professores_experimentais":"Valdo Delfino"}
-      ]}'::jsonb,'2026-09-01 03:00Z');
+      ]}'::jsonb,'2026-09-01 03:00Z'),
+    (2026,6,'unidade','${secondUnitId}','relatorio_gerencial',1,'fechado',
+      '{"dados_mes_atual":[{"novas_matriculas":42}]}'::jsonb,'2026-07-01 03:00Z');
 
   insert into public.motivos_saida values (1,'Desistencia',true,true);
   insert into public.movimentacoes_admin values
@@ -421,7 +528,21 @@ test('fontes V4 preservam historico, acumulam fatos e nao fabricam zero', { time
   try {
     await waitForPostgres(container);
     const migration = readFileSync(migrationPath, 'utf8');
-    const applied = psql(container, `${fixture}\n${migration}`);
+    const carteiraTotalMigration = readFileSync(carteiraTotalMigrationPath, 'utf8');
+    const matriculadorFechadoMigration = readFileSync(matriculadorFechadoMigrationPath, 'utf8');
+    const carteiraRosterMigration = readFileSync(carteiraRosterMigrationPath, 'utf8');
+    const matriculadorSemFallbackMigration = readFileSync(
+      matriculadorSemFallbackMigrationPath,
+      'utf8',
+    );
+    const matriculadorImutavelMigration = readFileSync(
+      matriculadorImutavelMigrationPath,
+      'utf8',
+    );
+    const applied = psql(
+      container,
+      `${fixture}\n${migration}\n${carteiraTotalMigration}\n${matriculadorFechadoMigration}\n${carteiraRosterMigration}\n${matriculadorSemFallbackMigration}\n${matriculadorImutavelMigration}`,
+    );
     assert.equal(
       applied.status,
       0,
@@ -429,6 +550,9 @@ test('fontes V4 preservam historico, acumulam fatos e nao fabricam zero', { time
     );
 
     const query = psql(container, String.raw`
+      update public.professores set nome='Valdo renomeado depois do fechamento' where id=1;
+      update public.alunos set professor_experimental_id=2 where id between 101 and 108;
+
       with periodos as (
         select * from public.relatorio_coordenacao_periodos_v4(2026,9,'ciclo','2026-09-30')
       ), carteira as (
@@ -443,6 +567,10 @@ test('fontes V4 preservam historico, acumulam fatos e nao fabricam zero', { time
         select public.relatorio_coordenacao_matriculas_v4(
           '${unitId}',2026,8,'ciclo','2026-08-31'
         ) payload
+      ), matriculas_sem_fechamento as (
+        select public.relatorio_coordenacao_matriculas_v4(
+          '${secondUnitId}',2026,6,'mensal','2026-06-30'
+        ) payload
       ), saidas as (
         select public.relatorio_coordenacao_saidas_v4(
           '${unitId}','2026-06-01','2026-08-31'
@@ -451,36 +579,68 @@ test('fontes V4 preservam historico, acumulam fatos e nao fabricam zero', { time
         select public.montar_relatorio_coordenacao_conteudo_v4(
           '${unitId}',2026,8,'ciclo'
         ) payload
+      ), consolidado as (
+        select public.montar_relatorio_coordenacao_conteudo_v4(
+          null,2026,8,'ciclo'
+        ) payload
+      ), congelamento as (
+        select jsonb_build_object(
+          'documentos',count(distinct s.id),
+          'versao_minima',min(s.versao),
+          'todos_com_chave',bool_and(not exists (
+            select 1 from jsonb_array_elements(s.payload->'matriculas') item
+            where not (item ? 'professor_experimental_id_fechado')
+          )),
+          'historico_1770',max((item->>'professor_experimental_id_fechado')::integer)
+            filter (where item->>'id'='1770'),
+          'ids',jsonb_agg(distinct item->'professor_experimental_id_fechado'
+            order by item->'professor_experimental_id_fechado')
+        ) payload
+        from public.fechamento_mensal_snapshots s
+        cross join lateral jsonb_array_elements(s.payload->'matriculas') item
+        where s.unidade_id='${unitId}' and s.ano=2026 and s.mes between 6 and 8
+          and s.dominio='relatorio_comercial_mensal' and s.versao=2
       )
       select jsonb_build_object(
         'periodos', (select jsonb_build_object('qtd',count(*),'max',max(competencia)) from periodos),
         'carteira', (select to_jsonb(c) from carteira c),
         'presenca', (select to_jsonb(p) from presenca p),
         'matriculas', (select payload from matriculas),
+        'matriculas_sem_fechamento', (select payload from matriculas_sem_fechamento),
         'saidas', (select payload from saidas),
         'documento', (select jsonb_build_object(
           'score',payload#>'{professores,0,score_observado}',
           'conversao',payload#>'{professores,0,metricas,conversao}',
           'carteira',payload#>'{professores,0,metricas,numero_alunos,valor}',
+          'carteira_total',payload#>'{carteira_carga,alunos_na_carteira}',
           'matriculas_valdo',payload#>'{professores,0,operacional,matriculas_comerciais}',
           'matriculas_sem',payload#>'{professores,1,operacional,matriculas_comerciais}',
           'schema_version',payload->'schema_version'
-        ) from documento)
+        ) from documento),
+        'carteira_consolidada', (select payload#>'{carteira_carga,alunos_na_carteira}' from consolidado),
+        'congelamento', (select payload from congelamento)
       )::text;
     `);
     assert.equal(query.status, 0, query.stderr || query.stdout);
     const result = JSON.parse(query.stdout.trim().split(/\r?\n/).at(-1));
 
     assert.deepEqual(result.periodos, { qtd: 1, max: '2026-09-01' });
-    assert.equal(Number(result.carteira.carteira_media), 12);
+    assert.equal(Number(result.carteira.carteira_media), 12.33);
     assert.equal(result.carteira.meses_observados, 3);
     assert.equal(Number(result.presenca.valor), 85);
     assert.equal(Number(result.presenca.numerador), 17);
     assert.equal(Number(result.presenca.denominador), 20);
     assert.equal(result.matriculas.origem_completa, true);
-    assert.equal(result.matriculas.matriculas_total, 7);
+    assert.equal(result.matriculas.matriculas_total, 8);
     assert.equal(result.matriculas.matriculas_sem_professor, 1);
     assert.equal(result.matriculas.por_professor['1'], 6);
+    assert.equal(result.matriculas.documentos.length, 3);
+    assert.ok(result.matriculas.documentos.every((item) => item.tipo === 'relatorio_comercial_mensal'));
+    assert.equal(result.matriculas_sem_fechamento.origem_completa, false);
+    assert.equal(result.matriculas_sem_fechamento.matriculas_total, null);
+    assert.equal(result.matriculas_sem_fechamento.matriculas_atribuidas_professor, null);
+    assert.equal(result.matriculas_sem_fechamento.matriculas_sem_professor, null);
+    assert.equal(result.matriculas_sem_fechamento.documentos[0].tipo, 'fechamento_comercial_ausente');
     assert.equal(result.saidas.saidas_validas_total, 2);
     assert.equal(Number(result.saidas.mrr_perdido_total), 400);
     assert.equal(result.saidas.valores_mrr_pendentes, 1);
@@ -488,10 +648,17 @@ test('fontes V4 preservam historico, acumulam fatos e nao fabricam zero', { time
     assert.equal(result.saidas.movimentos[1].valor_mrr, null);
     assert.equal(Number(result.documento.score), 91);
     assert.equal(Number(result.documento.conversao.valor), 50);
-    assert.equal(Number(result.documento.carteira), 12);
+    assert.equal(Number(result.documento.carteira), 12.33);
+    assert.equal(Number(result.documento.carteira_total), 22.67);
     assert.equal(result.documento.matriculas_valdo, 6);
     assert.equal(result.documento.matriculas_sem, 0);
     assert.equal(result.documento.schema_version, 4);
+    assert.equal(Number(result.carteira_consolidada), 24.67);
+    assert.equal(result.congelamento.documentos, 3);
+    assert.equal(result.congelamento.versao_minima, 2);
+    assert.equal(result.congelamento.todos_com_chave, true);
+    assert.equal(result.congelamento.historico_1770, 36);
+    assert.deepEqual(result.congelamento.ids, [null, 1, 36]);
 
     const privateHelper = psql(container, String.raw`
       set role authenticated;

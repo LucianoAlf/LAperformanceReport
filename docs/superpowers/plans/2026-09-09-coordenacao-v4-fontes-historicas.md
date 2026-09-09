@@ -14,7 +14,7 @@
 
 - Create: `tests/relatorioCoordenacaoFontesV4.test.mjs` — invariantes estáticos e linguagem de ausência.
 - Create: `tests/relatorioCoordenacaoFontesV4Postgres.test.mjs` — fixtures para carteira regular, presença acumulada, matrículas, anulações e valores nulos.
-- Modify: `supabase/migrations/20260909031111_relatorio_coordenacao_fontes_v4.sql` — produtores determinísticos e substituição do conteúdo V4.
+- Modify: `supabase/migrations/20260909040936_relatorio_coordenacao_fontes_v4.sql` — produtores determinísticos e substituição do conteúdo V4.
 - Create: `docs/auditorias/2026-09-09-paridade-coordenacao-jun-ago.md` — equações e divergências reconciliadas por unidade.
 
 ### Task 1: Escrever regressões de negócio em vermelho
@@ -85,7 +85,7 @@ Expected: FAIL nos cinco comportamentos, pois o conteúdo V4 ainda espelha V3.
 
 **Files:**
 
-- Modify: `supabase/migrations/20260909031111_relatorio_coordenacao_fontes_v4.sql`
+- Modify: `supabase/migrations/20260909040936_relatorio_coordenacao_fontes_v4.sql`
 
 - [ ] **Step 1: Criar a resolução de meses efetivamente transcorridos**
 
@@ -170,7 +170,7 @@ Expected: PASS para carteira, presença, Matriculador, anulação e null monetá
 - [ ] **Step 8: Commit dos produtores**
 
 ```powershell
-git add tests/relatorioCoordenacaoFontesV4*.mjs supabase/migrations/20260909031111_relatorio_coordenacao_fontes_v4.sql
+git add tests/relatorioCoordenacaoFontesV4*.mjs supabase/migrations/20260909040936_relatorio_coordenacao_fontes_v4.sql
 git commit -m "fix(professores): reconcilia fontes do documento v4"
 ```
 
@@ -211,4 +211,3 @@ git commit -m "docs(professores): registra paridade historica da coordenacao"
 - Matriculador é quantidade comercial; conversão permanece separada.
 - Anulados saem e MRR desconhecido permanece desconhecido.
 - Relatórios gerenciais não são reescritos; divergência compartilhada bloqueia a nova versão até reconciliação.
-

@@ -14,7 +14,7 @@
 
 - Create: `tests/relatorioCoordenacaoCutoverV4.test.mjs` — contrato dos cinco relatórios, Top 10, linguagem pública e null.
 - Create: `tests/relatorioCoordenacaoCutoverV4Postgres.test.mjs` — wrapper atômico e leitor rápido.
-- Modify: `supabase/migrations/20260909031112_relatorio_coordenacao_cutover_v4.sql` — wrapper V3 e agendamento diário V4.
+- Modify: `supabase/migrations/20260909043050_relatorio_coordenacao_cutover_v4.sql` — wrapper V3 e agendamento diário V4.
 - Modify: `src/lib/relatorioCoordenacaoCanonico.ts` — schema V4, Top 10 e formatação sem zero falso.
 - Modify: `src/components/App/Professores/ModalRelatorioCoordenacao.tsx` — leitura V4 e pinagem do documento.
 - Modify: `supabase/functions/gemini-relatorio-coordenacao/index.ts` — leitura V4, números determinísticos e vocabulário público.
@@ -69,7 +69,7 @@ Expected: FAIL porque consumidores ainda chamam V3, schema 4 é rejeitado e dois
 
 **Files:**
 
-- Modify: `supabase/migrations/20260909031112_relatorio_coordenacao_cutover_v4.sql`
+- Modify: `supabase/migrations/20260909043050_relatorio_coordenacao_cutover_v4.sql`
 
 - [ ] **Step 1: Transformar V3 em wrapper de compatibilidade**
 
@@ -150,7 +150,7 @@ Expected: PASS sem warnings novos; os cinco relatórios aceitam o mesmo document
 - [ ] **Step 7: Commit dos consumidores**
 
 ```powershell
-git add src/lib/relatorioCoordenacaoCanonico.ts src/components/App/Professores/ModalRelatorioCoordenacao.tsx supabase/functions/gemini-relatorio-coordenacao/index.ts src/types/database.types.ts tests/relatorioCoordenacaoCutoverV4*.mjs supabase/migrations/20260909031112_relatorio_coordenacao_cutover_v4.sql
+git add src/lib/relatorioCoordenacaoCanonico.ts src/components/App/Professores/ModalRelatorioCoordenacao.tsx supabase/functions/gemini-relatorio-coordenacao/index.ts src/types/database.types.ts tests/relatorioCoordenacaoCutoverV4*.mjs supabase/migrations/20260909043050_relatorio_coordenacao_cutover_v4.sql
 git commit -m "feat(professores): corta relatorios da coordenacao para v4"
 ```
 
@@ -202,4 +202,3 @@ Usar revisão de código, verificação final e acabamento de branch antes do me
 - Top 10, null, linguagem pública e distinção entre ordem diagnóstica e ranking oficial têm regressões.
 - O cutover só acontece após carga e paridade; nenhuma consulta pesada fica no clique.
 - Merge/deploy e prova real em navegador fazem parte da conclusão, conforme autorização do usuário.
-

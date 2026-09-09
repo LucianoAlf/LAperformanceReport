@@ -69,9 +69,9 @@ Metas pedagógicas por unidade, curso e modalidade são preservadas porque a rea
 
 ## Relatórios da Coordenação
 
-O modal envia unidade, ano, mês e `periodicidade` (`mensal` ou `ciclo`). A Edge Function autentica o usuário e consulta `get_relatorio_coordenacao_canonico_v3`; frontend e IA não fornecem nem recalculam métricas.
+O modal lê `get_relatorio_coordenacao_documento_v4` com unidade, ano, mês e `periodicidade` (`mensal` ou `ciclo`) e envia à Edge Function o identificador exato do documento. A Edge autentica o usuário e relê esse mesmo conteúdo por `get_relatorio_coordenacao_documento_v4_por_id`; frontend e IA não fornecem nem recalculam métricas.
 
-Os cinco relatórios da Coordenação consomem o mesmo produtor canônico V3. No mensal, apresentam evidências exclusivas do mês. No ciclo, usam o intervalo fixo resolvido pelo banco e as agregações por numerador/denominador. Ranking de Professores permanece indisponível até existir ciclo oficial fechado elegível.
+Os cinco relatórios da Coordenação consomem o mesmo documento V4 materializado e append-only. No mensal, apresentam evidências exclusivas do mês. No ciclo aberto, o corte avança com a operação: setembro; setembro mais outubro; e, por fim, setembro a novembro. As taxas são acumuladas por numerador e denominador, nunca por média de percentuais. Ranking oficial e premiação permanecem indisponíveis até existir ciclo fechado elegível.
 
 Os relatórios:
 

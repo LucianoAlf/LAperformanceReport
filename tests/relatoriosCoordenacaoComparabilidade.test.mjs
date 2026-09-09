@@ -82,20 +82,20 @@ test('contrato SQL enriquece os cinco relatórios sem alterar snapshots fechados
   assert.doesNotMatch(sql, /delete\s+from\s+public\.fechamento_mensal_snapshots/i);
 });
 
-test('relatório de desempenho separa comparáveis, maturação e sem base', () => {
+test('relatório de desempenho lista a equipe em ordem e separa quem ficou sem nota', () => {
   const texto = gerarRelatorioCoordenacaoCanonico({
     tipo: 'ranking',
     contrato: contrato(),
     dataGeracao: new Date('2026-08-03T12:00:00-03:00'),
   });
 
-  assert.match(texto, /PROFESSORES COM HEALTH SCORE COMPARÁVEL/);
+  assert.match(texto, /ORDEM DO PAINEL — LEITURA DIAGNÓSTICA/);
   assert.match(texto, /Professor Comparável[^\n]*86,0 pontos/);
-  assert.match(texto, /EM MATURAÇÃO/);
   assert.match(texto, /Professor Novo[^\n]*Desempenho observado: 100,0/);
-  assert.match(texto, /2\/5 pilares/);
-  assert.match(texto, /SEM BASE OPERACIONAL/);
+  assert.match(texto, /resultado em acompanhamento/);
+  assert.match(texto, /SEM NOTA NO RECORTE/);
   assert.match(texto, /Professor Sem Base/);
+  assert.doesNotMatch(texto, /pilares?/i);
   assert.doesNotMatch(texto, /Professor Novo[^\n]*Health Score/i);
 });
 
