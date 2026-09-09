@@ -164,6 +164,57 @@ test('modal fixa a identidade do documento também no relatório narrativo', () 
   assert.match(edge, /contrato\.documento\?\.id/);
 });
 
+test('edge continua atendendo abas abertas antes do documento_id sem recompor dados', () => {
+  const edge = fs.readFileSync(edgePath, 'utf8');
+
+  assert.match(
+    edge,
+    /const documentoId = typeof body\.documento_id === "string"[\s\S]*body\.documento_id\.trim\(\)[\s\S]*: ""/,
+  );
+  assert.match(
+    edge,
+    /documentoId\s*\?[\s\S]*get_relatorio_coordenacao_documento_v4_por_id[\s\S]*:[\s\S]*get_relatorio_coordenacao_documento_v4/,
+  );
+  assert.match(edge, /p_unidade_id:\s*filtros\.unidade/);
+  assert.match(edge, /p_ano:\s*filtros\.ano/);
+  assert.match(edge, /p_mes:\s*filtros\.mes/);
+  assert.match(edge, /p_periodicidade:\s*filtros\.periodicidade/);
+  assert.match(
+    edge,
+    /documentoId\s*&&\s*contrato\.documento\?\.id\s*!==\s*documentoId/,
+  );
+  assert.doesNotMatch(edge, /const\s+contrato\s*=\s*body\.dados/);
+  assert.doesNotMatch(edge, /get_relatorio_coordenacao_canonico_v3/);
+});
+
+test('falha de geracao deixa mensagem persistente e acoes de recuperacao no modal', () => {
+  const modal = fs.readFileSync(modalPath, 'utf8');
+
+  assert.match(modal, /const \[erroRelatorio, setErroRelatorio\] = useState<string \| null>\(null\)/);
+  assert.match(modal, /setErroRelatorio\(mensagem\)/);
+  assert.match(
+    modal,
+    /erroRelatorio\s*&&\s*!loadingIA\s*&&\s*!textoRelatorio/,
+  );
+  assert.match(modal, /Tentar novamente/);
+  assert.match(modal, /onClick=\{voltarParaSelecao\}/);
+});
+
+test('fontes da Edge Function nao contem sequencias de texto com UTF-8 corrompido', () => {
+  const paths = [
+    edgePath,
+    'supabase/functions/gemini-relatorio-coordenacao/mapaSinaisPublico.ts',
+    'supabase/functions/_shared/ordenacaoProfessoresRelatorio.ts',
+    'supabase/functions/_shared/apresentacaoRelatorioCoordenacao.ts',
+    'supabase/functions/_shared/fetchJsonDeadline.ts',
+  ];
+  const mojibake = /\u00c3[\u0080-\u00bf]|\u00c2[\u0080-\u00bf]|\u00e2[\u0080-\u009f\u2010-\u203f]|\u00f0[\u0080-\u024f]|\ufffd/u;
+
+  for (const path of paths) {
+    assert.doesNotMatch(fs.readFileSync(path, 'utf8'), mojibake, path);
+  }
+});
+
 test('ciclo abre exatamente a competencia selecionada na tela mesmo no inicio do mes', () => {
   const modal = fs.readFileSync(modalPath, 'utf8');
 

@@ -797,12 +797,25 @@ Deno.serve(async (req) => {
       global: { headers: { Authorization: authorization } },
       auth: { persistSession: false, autoRefreshToken: false },
     });
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.documento_id || "")) {
+    const documentoId = typeof body.documento_id === "string"
+      ? body.documento_id.trim()
+      : "";
+    if (
+      documentoId
+      && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(documentoId)
+    ) {
       throw new Error("Documento do relatório inválido.");
     }
-    const { data, error } = await supabase.rpc("get_relatorio_coordenacao_documento_v4_por_id", {
-      p_documento_id: body.documento_id,
-    });
+    const { data, error } = await (documentoId
+      ? supabase.rpc("get_relatorio_coordenacao_documento_v4_por_id", {
+        p_documento_id: documentoId,
+      })
+      : supabase.rpc("get_relatorio_coordenacao_documento_v4", {
+        p_unidade_id: filtros.unidade,
+        p_ano: filtros.ano,
+        p_mes: filtros.mes,
+        p_periodicidade: filtros.periodicidade,
+      }));
     if (error) {
       console.error("Falha ao consultar dados pedagógicos oficiais:", error.code, error.message);
       throw new Error("Não foi possível reunir os dados pedagógicos desta competência.");
@@ -812,7 +825,7 @@ Deno.serve(async (req) => {
       throw new Error("Os dados pedagógicos retornaram incompletos.");
     }
     if (
-      contrato.documento?.id !== body.documento_id
+      (documentoId && contrato.documento?.id !== documentoId)
       || contrato.periodo.unidade_id !== filtros.unidade
       || contrato.periodo.ano !== filtros.ano
       || contrato.periodo.mes !== filtros.mes

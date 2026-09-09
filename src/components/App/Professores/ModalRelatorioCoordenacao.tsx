@@ -23,7 +23,8 @@ import {
   Activity,
   BriefcaseBusiness,
   ShieldAlert,
-  Send
+  Send,
+  TriangleAlert,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/useToast';
@@ -94,6 +95,7 @@ export function ModalRelatorioCoordenacao({
   const [tipoRelatorio, setTipoRelatorio] = useState<TipoRelatorio | null>(null);
   const [textoRelatorio, setTextoRelatorio] = useState('');
   const [loadingIA, setLoadingIA] = useState(false);
+  const [erroRelatorio, setErroRelatorio] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
   const [enviandoWhatsApp, setEnviandoWhatsApp] = useState(false);
   const [enviadoWhatsApp, setEnviadoWhatsApp] = useState(false);
@@ -133,6 +135,7 @@ export function ModalRelatorioCoordenacao({
     setDataInicio(inicioMes(proximaCompetencia.ano, proximaCompetencia.mes));
     setDataFim(fimMes(proximaCompetencia.ano, proximaCompetencia.mes));
     setDocumentoCarregado(null);
+    setErroRelatorio(null);
   }, [ano, mes, open, periodicidade]);
 
   const periodoSelecionado = useMemo(() => {
@@ -232,6 +235,7 @@ export function ModalRelatorioCoordenacao({
     setTipoRelatorio(tipo);
     setLoadingIA(true);
     setTextoRelatorio('');
+    setErroRelatorio(null);
 
     try {
       const { anoRelatorio, mesRelatorio } = validarCompetenciaMensal();
@@ -286,7 +290,9 @@ export function ModalRelatorioCoordenacao({
 
     } catch (error) {
       console.error('Erro ao gerar relatório:', error);
-      toast.error('Erro', error instanceof Error ? error.message : 'Erro ao gerar relatório');
+      const mensagem = error instanceof Error ? error.message : 'Erro ao gerar relatório';
+      setErroRelatorio(mensagem);
+      toast.error('Erro', mensagem);
     } finally {
       setLoadingIA(false);
     }
@@ -296,6 +302,7 @@ export function ModalRelatorioCoordenacao({
     setTipoRelatorio(tipo);
     setLoadingIA(true);
     setTextoRelatorio('');
+    setErroRelatorio(null);
 
     try {
       const { anoRelatorio, mesRelatorio } = validarCompetenciaMensal();
@@ -306,7 +313,9 @@ export function ModalRelatorioCoordenacao({
       }));
       toast.success('Relatório gerado!', 'Relatório gerado com os dados oficiais da competência');
     } catch (error) {
-      toast.error('Erro', error instanceof Error ? error.message : 'Erro ao gerar relatório');
+      const mensagem = error instanceof Error ? error.message : 'Erro ao gerar relatório';
+      setErroRelatorio(mensagem);
+      toast.error('Erro', mensagem);
     } finally {
       setLoadingIA(false);
     }
@@ -340,6 +349,7 @@ export function ModalRelatorioCoordenacao({
   const voltarParaSelecao = () => {
     setTipoRelatorio(null);
     setTextoRelatorio('');
+    setErroRelatorio(null);
     setCopiado(false);
     setEnviadoWhatsApp(false);
     setErroWhatsApp(null);
@@ -630,6 +640,36 @@ export function ModalRelatorioCoordenacao({
                   ? 'Analisando dados da equipe pedagógica'
                   : 'Buscando indicadores da competência selecionada'}
               </p>
+            </div>
+          </div>
+        )}
+
+        {erroRelatorio && !loadingIA && !textoRelatorio && (
+          <div
+            role="alert"
+            className="flex-1 flex flex-col items-center justify-center gap-5 rounded-xl border border-red-500/30 bg-red-500/10 px-6 py-10 text-center"
+          >
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500/15">
+              <TriangleAlert className="h-6 w-6 text-red-300" />
+            </div>
+            <div className="max-w-xl space-y-2">
+              <p className="font-semibold text-white">Não foi possível gerar o relatório</p>
+              <p className="text-sm text-red-100/80">{erroRelatorio}</p>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <Button
+                variant="outline"
+                onClick={voltarParaSelecao}
+                className="border-slate-600 text-slate-200 hover:bg-slate-800"
+              >
+                Voltar
+              </Button>
+              <Button
+                onClick={regenerarRelatorio}
+                className="bg-violet-600 hover:bg-violet-700"
+              >
+                Tentar novamente
+              </Button>
             </div>
           </div>
         )}
