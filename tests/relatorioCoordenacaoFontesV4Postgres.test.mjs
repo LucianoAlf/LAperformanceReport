@@ -25,7 +25,7 @@ const matriculadorSemFallbackMigrationPath = new URL(
   import.meta.url,
 );
 const matriculadorImutavelMigrationPath = new URL(
-  '../supabase/migrations/20260909064900_relatorio_comercial_professor_experimental_imutavel.sql',
+  '../supabase/migrations/20260909081127_relatorio_comercial_professor_experimental_imutavel.sql',
   import.meta.url,
 );
 

@@ -9,7 +9,7 @@ const migrationPath = new URL(
   import.meta.url,
 );
 const releaseGateMigrationPath = new URL(
-  '../supabase/migrations/20260909065200_relatorio_coordenacao_release_gate_v4.sql',
+  '../supabase/migrations/20260909081131_relatorio_coordenacao_release_gate_v4.sql',
   import.meta.url,
 );
 

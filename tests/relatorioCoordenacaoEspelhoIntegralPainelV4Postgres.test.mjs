@@ -9,7 +9,7 @@ const migrationPath = new URL(
   import.meta.url,
 );
 const cicloCompetenciaMigrationPath = new URL(
-  '../supabase/migrations/20260909064600_relatorio_coordenacao_ciclo_competencia_painel_v4.sql',
+  '../supabase/migrations/20260909081124_relatorio_coordenacao_ciclo_competencia_painel_v4.sql',
   import.meta.url,
 );
 const dockerWindows = join(

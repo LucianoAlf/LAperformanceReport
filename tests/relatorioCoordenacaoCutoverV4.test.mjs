@@ -9,7 +9,7 @@ const formatterPath = 'src/lib/relatorioCoordenacaoCanonico.ts';
 const edgePath = 'supabase/functions/gemini-relatorio-coordenacao/index.ts';
 const migrationPath = 'supabase/migrations/20260909043050_relatorio_coordenacao_cutover_v4.sql';
 const releaseGateMigrationPath =
-  'supabase/migrations/20260909065200_relatorio_coordenacao_release_gate_v4.sql';
+  'supabase/migrations/20260909081131_relatorio_coordenacao_release_gate_v4.sql';
 const privacyMigrationPath =
   'supabase/migrations/20260909053633_relatorio_coordenacao_documentos_privados_v4.sql';
 const carteiraPainelMigrationPath =
