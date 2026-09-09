@@ -45,18 +45,7 @@ import {
 import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
 import { calcularTicketMedioCanonico } from '@/lib/ticketMedioCanonico';
 import { anexarCursosMovimentacoesAdmin } from '@/lib/movimentacoesAdminCursos';
-import {
-  buscarKpisProfessoresCanonicos,
-  calcularTotaisKpisProfessoresCanonicos,
-} from '@/lib/professoresKpisCanonicos';
-import {
-  buscarKpisTurmasCanonicos,
-  calcularTotaisKpisTurmasCanonicos,
-} from '@/lib/turmasKpisCanonicos';
-import {
-  chaveProfessorUnidade,
-  filtrarKpisPorVinculosAtivos,
-} from '@/lib/professoresKpisAgregados';
+import { buscarResumoDashboardProfessoresCanonico } from '@/lib/dashboardProfessoresResumoCanonico';
 import { useHealthScoreProfessorV3Performance } from '@/hooks/useHealthScoreProfessorV3Performance';
 import { getHealthScoreV3Period } from '@/lib/healthScoreProfessorV3Periodos';
 
@@ -554,76 +543,49 @@ export function DashboardPage() {
         }
 
         // ===== DADOS DE PROFESSORES =====
-        // MESMA LÓGICA da página ProfessoresPage.tsx:
-        // 1. Buscar professores ativos
-        // 2. Buscar relacionamentos professor-unidade
-        // 3. Buscar turmas (implícitas e explícitas) para calcular total_alunos e total_turmas
-        // 4. Filtrar por unidade e calcular KPIs
-        
-        // Buscar dados de professores em PARALELO (5 queries → 1 roundtrip)
+        // O Dashboard lê apenas os numeradores dos três cartões. A RPC enxuta
+        // preserva a carteira, a média ponderada de turma e a renovação sem
+        // recalcular presença e experimentais, que pertencem a outras telas.
         const startDate = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
         const ultimoDia = new Date(ano, mesFim, 0).getDate();
         const endDate = `${ano}-${String(mesFim).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
-        const [profsR, profUnidR, kpisProfessores, kpisTurmas] = await Promise.all([
+        const [profsR, profUnidR, resumoProfessores] = await Promise.all([
           supabase.from('professores').select('id, nome, ativo').eq('ativo', true),
           supabase
             .from('professores_unidades')
             .select('professor_id, unidade_id')
             .eq('emusys_ativo', true)
             .neq('validacao_status', 'ignorado'),
-          buscarKpisProfessoresCanonicos({
+          buscarResumoDashboardProfessoresCanonico({
             ano,
             mes: mesInicio,
             unidadeId: unidade,
             dataInicio: startDate,
             dataFim: endDate,
-          }),
-          buscarKpisTurmasCanonicos({
-            ano,
-            mes: mesInicio,
-            unidadeId: unidade,
-            dataInicio: startDate,
-            dataFim: endDate,
-          }).catch((error) => {
-            console.error('Erro ao buscar média canônica de alunos por turma no Dashboard:', error);
-            return null;
           }),
         ]);
 
         const professoresAtivos = new Set((profsR.data || []).map((p: any) => Number(p.id)));
-        const vinculosAtivos = new Set(
-          (profUnidR.data || [])
-            .filter((pu: any) => unidade === 'todos' || pu.unidade_id === unidade)
-            .map((pu: any) => chaveProfessorUnidade(
-              Number(pu.professor_id),
-              pu.unidade_id ? String(pu.unidade_id) : null,
-            ))
-            .filter((chave): chave is string => chave !== null),
-        );
         const professoresRelacionados = new Set(
           (profUnidR.data || [])
             .filter((pu: any) => unidade === 'todos' || pu.unidade_id === unidade)
             .map((pu: any) => Number(pu.professor_id))
             .filter((id: number) => professoresAtivos.has(id))
         );
-        const kpisProfessoresAtivos = filtrarKpisPorVinculosAtivos(
-          kpisProfessores,
-          professoresAtivos,
-          vinculosAtivos,
-        );
-        const totaisProfessores = calcularTotaisKpisProfessoresCanonicos(kpisProfessoresAtivos);
-        const totaisTurmas = kpisTurmas
-          ? calcularTotaisKpisTurmasCanonicos(kpisTurmas)
-          : null;
-        const totalProfs = professoresRelacionados.size || totaisProfessores.totalProfessores;
+        const totalProfs = professoresRelacionados.size;
+        const totalRenovacoes = resumoProfessores.renovacoes + resumoProfessores.nao_renovacoes;
 
         setDadosProfessores({
           total_professores: totalProfs,
           media_alunos_professor: totalProfs > 0
-            ? Math.round((totaisProfessores.carteiraAlunos / totalProfs) * 10) / 10
+            ? Math.round((resumoProfessores.carteira_alunos / totalProfs) * 10) / 10
             : 0,
-          taxa_renovacao: totaisProfessores.taxaRenovacao,
-          media_alunos_turma: totaisTurmas?.mediaAlunosTurma ?? null,
+          taxa_renovacao: totalRenovacoes > 0
+            ? (resumoProfessores.renovacoes / totalRenovacoes) * 100
+            : 0,
+          media_alunos_turma: resumoProfessores.turmas_elegiveis_media > 0
+            ? resumoProfessores.alunos_via_turmas / resumoProfessores.turmas_elegiveis_media
+            : 0,
           professores_ativos_ids: Array.from(professoresRelacionados),
         });
 
