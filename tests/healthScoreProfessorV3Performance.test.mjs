@@ -12,6 +12,22 @@ const tabPath = 'src/components/App/Professores/TabPerformanceProfessores.tsx';
 
 const read = (path) => fs.readFileSync(path, 'utf8');
 
+test('ausencia de evidencia usa mensagem operacional sem expor a origem interna', async () => {
+  const { resolveHealthScoreV3EvidenceMessage } = await import(`../${helperPath}`);
+  assert.equal(
+    resolveHealthScoreV3EvidenceMessage(
+      'fonte_canonica_sem_evidencia', 'retencao',
+      'nenhuma evidencia canonica emitida para a metrica no periodo',
+    ),
+    'Sem dados disponíveis para o período',
+  );
+  assert.equal(
+    resolveHealthScoreV3EvidenceMessage('calendario_sem_aulas_elegiveis', 'presenca'),
+    'Sem aulas elegíveis no período',
+    'ausencia de dados nao deve substituir ausencia comprovada de aulas',
+  );
+});
+
 test('parser numerico preserva ausencia e aceita zero explicito', async () => {
   const { parseHealthScoreV3DetailNumber } = await import(`../${helperPath}`);
 

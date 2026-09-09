@@ -934,6 +934,21 @@ Modelo Random Forest treinado offline, exportado para JS. Roda em cron diário e
 
 ## 10. Relatórios e fechamento mensal
 
+### Coordenação — contrato de confiabilidade (09/09/2026)
+
+**Decisão reconfirmada pelo responsável em 09/09:** manter D+30 (Jun–Ago oficial somente a partir de 30/09). A publicação antecipada deve ser regularizada por novas revisões, sem apagar notas ou histórico. Rollout ainda em validação; não interpretar as flags antecipadas como autorização de premiação. Ver [gates da execução](superpowers/plans/2026-09-09-coordenacao-confiabilidade-total.md).
+
+- Os cinco relatórios usam a mesma versão do documento, período e equipe da página de Professores. A versão e a condição de retificação/acompanhamento aparecem no cabeçalho.
+- Ciclo fechado publica todos e somente os professores comparáveis do recorte completo. Professor em maturação permanece na equipe, separado da classificação oficial. A publicação valida quantidade, identidade e nota; não basta copiar a ordem visual.
+- Retificação preserva notas, configurações e evidências da revisão anterior. A revisão substituída fica invalidada e fora do ranking; `publicado` preserva o fato histórico da publicação.
+- Presença acumula numerador e denominador das ocorrências elegíveis. Sinalizações de incompletude/divergência não se transformam em ausência de aulas nem bloqueiam globalmente eventos já classificados. Podem se sobrepor. Eventos observáveis e amostra mínima para pontuação são conceitos distintos.
+- Destaques mostram até dez professores com valor e amostra válidos. Matrículas comerciais e conversões pós-experimental continuam indicadores diferentes.
+- Cobertura informa indicadores válidos/aplicáveis (x/y), não cinco pilares presumidamente completos. Turmas operacionais e amostras de turmas usadas no Health Score recebem rótulos diferentes.
+- Os cinco relatórios de Coordenação omitem MRR, valores e pendências financeiras. Movimentações e motivos pedagógicos permanecem; os dados financeiros de origem e relatórios gerenciais não são alterados. Carteiras de ciclo preservam as frações da média com apresentação idêntica entre relatórios.
+- Prioridades são fatos determinísticos; sugestões cobrem cada prioridade uma vez. Não se recomenda corrigir cadastro quando nenhuma pendência cadastral foi identificada.
+- Ciclo aberto incorpora somente meses iniciados, segue em acompanhamento e não publica ranking oficial. A consulta prioriza competência e depois revisão, para outubro não ficar preso às revisões de setembro.
+- Conversão mensal e de ciclo usam a mesma resolução de experimental e matrícula: o denominador não exige que um lead não convertido já seja aluno; o numerador exige matrícula comprovada em D+30, sem crédito duplicado entre meses ou unidades. Conversão declarada sem comprovação não entra na nota.
+
 ### 10.1 Fonte de uma competência encerrada ✅
 
 **Ao ler mês passado, a fonte canônica é `fechamento_mensal_snapshots` (status `fechado`), nunca o cálculo vivo.**

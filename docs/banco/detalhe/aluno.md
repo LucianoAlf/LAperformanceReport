@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-06 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-09 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — aluno
 
-136 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+138 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## aluno_acoes
 
@@ -1479,6 +1479,7 @@
 | `arquivado_em` | timestamp with time zone | não | now() |  |
 | `arquivado_por` | text | sim |  |  |
 | `arquivado_motivo` | text | não |  |  |
+| `origem_registro` | text | sim |  |  |
 
 **Únicos:**
 - `movimentacoes_admin_arquivadas_pkey`
@@ -2016,6 +2017,7 @@
 | `erro` | text | sim |  |  |
 | `enviado_em` | timestamp with time zone | sim |  |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
+| `alvo_chave` | text | sim |  |  |
 
 **Únicos:**
 - `radar_entregas_chave_idem_key`
@@ -2129,9 +2131,27 @@
 | `atualizada_em` | timestamp with time zone | não | now() |  |
 | `dominio` | text | sim |  |  |
 | `padrao_codigo` | text | sim |  | radar_padroes.codigo |
+| `detector` | text | sim |  |  |
 
 **Únicos:**
 - `radar_regras_pkey`
+
+## radar_rodadas
+
+> Uma linha por execucao do detector. Existe para desambiguar "a situacao parou de aparecer" (sanou) de "o detector nao rodou" (nao sei). Sem isso, cron parado esvazia a pauta em silencio.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('radar_rodadas_id_seq'::regclass) |  |
+| `rodada` | text | não |  |  |
+| `iniciada_em` | timestamp with time zone | não | now() |  |
+| `concluida_em` | timestamp with time zone | sim |  |  |
+| `resultado` | jsonb | sim |  |  |
+| `erros` | jsonb | sim |  |  |
+| `detector` | text | sim |  |  |
+
+**Únicos:**
+- `radar_rodadas_pkey`
 
 ## radar_sinais
 
@@ -2169,6 +2189,7 @@
 | `atualizado_em` | timestamp with time zone | não | now() |  |
 | `padrao_codigo` | text | sim |  |  |
 | `dominio` | text | sim |  |  |
+| `visto_em` | timestamp with time zone | sim |  |  |
 
 **Únicos:**
 - `radar_sinais_dedup_uidx`
@@ -3400,6 +3421,48 @@
 | `mes_saida` | date | sim |  |  |
 | `faltas_consecutivas` | bigint | sim |  |  |
 | `aluno_foto_url` | text | sim |  |  |
+
+## vw_radar_sinal_vigencia_v1
+
+> Vigencia do sinal: `vigente` = o detector DAQUELA regra o afirmou na ultima rodada boa (por insert ou por remarcacao — dai o GREATEST com detectado_em, sem o qual sinal recem-nascido virava `sanou`); `sanou` = a rodada correu e ele parou de ser afirmado; `sem_rodada` = detector atrasado, e ALARME, nunca lista vazia. Leia SEMPRE daqui para montar pauta — nunca de radar_sinais cru.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | sim |  |  |
+| `entidade_tipo` | text | sim |  |  |
+| `entidade_id` | bigint | sim |  |  |
+| `unidade_id` | uuid | sim |  |  |
+| `regra_codigo` | text | sim |  |  |
+| `tipo_sinal` | text | sim |  |  |
+| `severidade` | text | sim |  |  |
+| `canonico` | boolean | sim |  |  |
+| `origem` | text | sim |  |  |
+| `contexto` | text | sim |  |  |
+| `interpretacao` | text | sim |  |  |
+| `orientacao` | text | sim |  |  |
+| `evidencia` | jsonb | sim |  |  |
+| `identificacao` | jsonb | sim |  |  |
+| `detectado_em` | timestamp with time zone | sim |  |  |
+| `competencia` | date | sim |  |  |
+| `expira_em` | timestamp with time zone | sim |  |  |
+| `chave_dedup` | text | sim |  |  |
+| `status` | text | sim |  |  |
+| `triado_por` | text | sim |  |  |
+| `triado_em` | timestamp with time zone | sim |  |  |
+| `tarefa_id` | uuid | sim |  |  |
+| `desfecho` | text | sim |  |  |
+| `desfecho_em` | timestamp with time zone | sim |  |  |
+| `desfecho_nota` | text | sim |  |  |
+| `regra_versao` | text | sim |  |  |
+| `criado_em` | timestamp with time zone | sim |  |  |
+| `atualizado_em` | timestamp with time zone | sim |  |  |
+| `padrao_codigo` | text | sim |  |  |
+| `dominio` | text | sim |  |  |
+| `visto_em` | timestamp with time zone | sim |  |  |
+| `situacao` | text | sim |  |  |
+| `detector_da_regra` | text | sim |  |  |
+| `rodada_referencia` | timestamp with time zone | sim |  |  |
+| `vigencia` | text | sim |  |  |
 
 ## vw_renovacao_ciclos
 

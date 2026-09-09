@@ -818,6 +818,19 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
     periodicidade: modoVisualizacao === 'trimestre' ? 'ciclo' : 'mensal',
   }), [competenciaConsultaV3, healthV3Error, healthV3Snapshots, healthV3UnitId, modoVisualizacao, professores]);
 
+  const cicloOficialCompleto = useMemo(() => {
+    if (modoVisualizacao !== 'trimestre' || healthV3SnapshotCoverageIncomplete) return false;
+    const comparaveis = healthV3SnapshotsAtivos.filter(
+      (snapshot) => snapshot.comparabilidadeEstado === 'comparavel'
+        && snapshot.scoreComparavel !== null,
+    );
+    return comparaveis.length > 0 && comparaveis.every(
+      (snapshot) => snapshot.estadoPublicacao === 'oficial'
+        && snapshot.rankingHabilitado
+        && snapshot.snapshotPublicavel,
+    );
+  }, [healthV3SnapshotCoverageIncomplete, healthV3SnapshotsAtivos, modoVisualizacao]);
+
   const healthV3SnapshotUnavailable = HEALTH_SCORE_V3_PERFORMANCE_ENABLED
     && !healthV3Error
     && professores.length > 0
@@ -1286,8 +1299,17 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       </div>
 
       {HEALTH_SCORE_V3_PERFORMANCE_ENABLED ? (
-        <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-sm text-violet-100">
-          Health Score em andamento usa os dados já disponíveis da competência. Rankings e premiações permanecem reservados ao ciclo oficial fechado.
+        <div className={cn(
+          'rounded-lg border px-4 py-3 text-sm',
+          cicloOficialCompleto
+            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
+            : 'border-violet-500/30 bg-violet-500/10 text-violet-100',
+        )}>
+          {modoVisualizacao === 'trimestre'
+            ? cicloOficialCompleto
+              ? 'Ciclo oficial fechado. A classificação exibida é a publicação oficial do período.'
+              : 'Ciclo em acompanhamento. Os dados já disponíveis são diagnósticos; ranking e premiação aguardam o fechamento.'
+            : 'Evidências do mês selecionado. A classificação oficial e a premiação pertencem ao ciclo fechado.'}
         </div>
       ) : (
         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
@@ -1995,8 +2017,8 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           </div>
           <div>
             <p className="text-slate-300 font-medium">Presença</p>
-            <p className="text-slate-400">Publicada apenas com confiança alta</p>
-            <p className="text-slate-500">Períodos sem registros suficientes aparecem sem nota</p>
+            <p className="text-slate-400">Percentual dos eventos elegíveis do período</p>
+            <p className="text-slate-500">Amostra pequena permanece visível, mas não compõe a nota</p>
           </div>
         </div>
       </div>

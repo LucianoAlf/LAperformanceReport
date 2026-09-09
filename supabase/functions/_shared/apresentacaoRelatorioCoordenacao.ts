@@ -6,6 +6,15 @@ export interface ContextoOperacionalRelatorio {
   contextoPeriodo: string;
 }
 
+// Carteiras no ciclo são médias de vínculos: preservar as frações nos cinco relatórios.
+export function formatarQuantidadeCarteira(valor: unknown): string {
+  if (valor === null || valor === undefined || valor === '') return 'Não informado';
+  const quantidade = Number(valor);
+  return Number.isFinite(quantidade)
+    ? quantidade.toLocaleString('pt-BR', { maximumFractionDigits: 2 })
+    : 'Não informado';
+}
+
 interface ProfessorComEstadoComparabilidade {
   comparabilidade_estado?: string | null;
 }

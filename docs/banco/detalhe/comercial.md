@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-06 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-09 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — comercial
 
-67 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+69 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## agente_conversas
 
@@ -48,6 +48,36 @@
 **Únicos:**
 - `agente_fila_mensagens_agente_id_telefone_key`
 - `agente_fila_mensagens_pkey`
+
+## agente_mensagens_externas
+
+> Onde TOM/Fabio/Mila registram o que mandaram, para o orcamento de atencao contar todos. Vazia enquanto eles nao adotarem — e o numero diz isso, em vez de fingir cobertura.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('agente_mensagens_externas_id_seq'::regclass) |  |
+| `agente` | text | não |  |  |
+| `destino` | text | não |  |  |
+| `tipo` | text | sim |  |  |
+| `peso` | text | não | 'essencial'::text |  |
+| `enviada_em` | timestamp with time zone | não | now() |  |
+| `criado_por` | text | sim | CURRENT_USER |  |
+
+**Únicos:**
+- `agente_mensagens_externas_pkey`
+
+## agente_orcamento_config
+
+> Quantas mensagens por dia um destino aguenta antes de a Sol calar os nudges. Fato operacional (essencial) nunca e cortado — so contado.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `destino_tipo` | text | não |  |  |
+| `teto_dia` | integer | não |  |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `agente_orcamento_config_pkey`
 
 ## agentes
 
@@ -824,6 +854,11 @@
 | `meta_ctwa_clid` | text | sim |  |  |
 | `data_nascimento` | date | sim |  |  |
 | `origem_registro` | text | não | 'funil'::text |  |
+| `chatwoot_status` | text | sim |  |  |
+| `chatwoot_status_em` | timestamp with time zone | sim |  |  |
+| `chatwoot_ultima_msg_em` | timestamp with time zone | sim |  |  |
+| `chatwoot_ultima_msg_de` | text | sim |  |  |
+| `chatwoot_espelhado_em` | timestamp with time zone | sim |  |  |
 
 **Únicos:**
 - `idx_leads_emusys_lead_id`
@@ -1064,7 +1099,7 @@
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
 | `id` | uuid | não | gen_random_uuid() |  |
-| `unidade_id` | uuid | não |  | unidades.id |
+| `unidade_id` | uuid | sim |  | unidades.id |
 | `solicitante_telefone` | text | não |  |  |
 | `solicitante_nome` | text | não |  |  |
 | `destino_tipo` | text | não |  |  |
@@ -1251,7 +1286,7 @@
 
 ## vw_experimental_pendencia
 
-> Experimental realizada, do corte pra frente, cujo professor tem o app e ainda nao CONFIRMOU a devolutiva. Fecha por ALLOWLIST (so status=confirmado fecha) de proposito: rascunho e o DEFAULT da tabela, e um denylist trataria omissao de status como devolutiva feita. Regua propria: a de aluno (vw_registro_pendencia) nao e tocada.
+> Experimentais realizadas sem devolutiva. `data_hora_fim` sustenta o atraso; `data_hora_inicio` (07/09/2026) e a hora que o PROFESSOR reconhece -- antes disso as duas mensagens mandavam a hora do FIM como se fosse a da aula.
 
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
@@ -1268,6 +1303,7 @@
 | `horas_em_atraso` | integer | sim |  |  |
 | `dias_em_atraso` | integer | sim |  |  |
 | `tipo_alvo` | text | sim |  |  |
+| `data_hora_inicio` | timestamp with time zone | sim |  |  |
 
 ## vw_experimental_realizada_sem_ficha
 
@@ -1365,8 +1401,6 @@
 | `taxa_lead_matricula` | numeric | sim |  |  |
 
 ## vw_instagram_sessoes_resolvidas
-
-> Sessão do Instagram + quem é a pessoa hoje (aluno/família/lead/desconhecido), pela RPC canônica. Não reimplementar o casamento de telefone no consumidor.
 
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|

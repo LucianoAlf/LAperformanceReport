@@ -189,9 +189,16 @@ export function ModalRelatorioCoordenacao({
       throw new Error('O relatorio pedagogico mensal precisa ficar dentro de uma unica competencia.');
     }
 
+    // A tabela pode chegar ao ciclo a partir de qualquer um dos seus meses.
+    // O documento usa sempre o inicio do ciclo, inclusive dez do ano anterior.
+    const periodoDocumento = getHealthScoreV3Period(
+      periodoSelecionado.ano,
+      periodoSelecionado.mes,
+      periodicidade,
+    );
     return {
-      anoRelatorio: periodoSelecionado.ano,
-      mesRelatorio: periodoSelecionado.mes,
+      anoRelatorio: Number(periodoDocumento.inicio.slice(0, 4)),
+      mesRelatorio: Number(periodoDocumento.inicio.slice(5, 7)),
     };
   };
 
@@ -617,7 +624,7 @@ export function ModalRelatorioCoordenacao({
                 </div>
               </div>
               <p className="text-sm text-slate-400">
-                Consolida evasões, não renovações e MRR perdido já vinculado aos indicadores carregados.
+                Consolida evasões, não renovações e os motivos de saída relacionados ao acompanhamento pedagógico.
               </p>
             </button>
             </div>
