@@ -1,0 +1,68 @@
+# Suíte do runtime do caixa da Sol, em checkout limpo.
+#
+# 🔴 POR QUE ISTO EXISTE. Até 09/09/2026, 35 dos 38 testes faziam
+#    `require('/home/sol/...')` — o caminho do runtime na VPS. Não rodavam em
+#    lugar nenhum além da máquina de quem tinha a VPS montada, e quando rodavam
+#    testavam o arquivo VIVO, inclusive patch aplicado à mão e nunca versionado.
+#    "A suíte está verde" era uma afirmação que ninguém conseguia conferir.
+#    Na primeira execução honesta: 2 verdes de 38.
+#
+# ⚠️ `SOL_CAIXA_V3_LEDGER_FAKE=1` NÃO É DECORAÇÃO. Sem ele a suíte grava previews
+#    do ledger V3 em PRODUÇÃO — medido em 24-31/08: 62% dos previews (499 de 807)
+#    eram artefato de teste. O runner já exporta as três variáveis, mas elas
+#    aparecem aqui também porque um dia alguém vai chamar o node direto.
+#
+# ⚠️ Os testes que precisam de credencial do Supabase PULAM declarando (e o
+#    runner os conta como pulados, não como verdes). Vermelho que mente por
+#    falta de credencial ensina a ignorar a suíte.
+name: sol-caixa-suite
+
+on:
+  pull_request:
+    paths:
+      - 'vps/la-hq/sol/runtime/**'
+      - 'tests/sol-runtime/**'
+      - '.github/workflows/sol-caixa-suite.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'vps/la-hq/sol/runtime/**'
+      - 'tests/sol-runtime/**'
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SOL_CAIXA_V3_LEDGER_MODE: production
+      SOL_CAIXA_V3_LEDGER_STRICT: '0'
+      SOL_CAIXA_V3_LEDGER_FAKE: '1'
+      SOL_CAIXA_V4_SHADOW: '0'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # A paridade Git↔runtime não roda aqui: ela precisa de SSH para a la-hq.
+      # O que o CI garante é que o ARTEFATO CANÔNICO passa sozinho — que era
+      # exatamente o buraco apontado no commit 02b849eb.
+      - name: artefato canônico existe e carrega
+        run: node -c vps/la-hq/sol/runtime/caixa-financeiro.cjs
+
+      - name: suíte do caixa
+        run: bash tests/sol-runtime/rodar-suite.sh
+
+      # Um teste que "passa" porque não rodou é pior que um vermelho. Se o nº de
+      # verdes cair abaixo do piso conhecido, o job falha mesmo com 0 vermelhos.
+      - name: piso de cobertura
+        run: |
+          set -euo pipefail
+          saida="$(bash tests/sol-runtime/rodar-suite.sh | tail -1)"
+          echo "$saida"
+          verdes="$(sed -E 's/.*verdes: ([0-9]+).*/\1/' <<<"$saida")"
+          if [ "$verdes" -lt 30 ]; then
+            echo "::error::apenas $verdes testes verdes — piso é 30. Teste deixou de rodar?"
+            exit 1
+          fi

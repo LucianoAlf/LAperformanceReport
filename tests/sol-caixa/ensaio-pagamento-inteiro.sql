@@ -1,107 +1,257 @@
--- Ensaio do pagamento inteiro (N alunos × N faturas) contra dados REAIS.
--- Leitura pura: nenhuma linha é escrita, nenhum caixa é tocado.
+-- Ensaio do pagamento inteiro (N alunos × N faturas). FAIL-STOP.
 --
---   psql "$SOL_DB_URL" -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-pagamento-inteiro.sql
+--   psql "$DSN" -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-pagamento-inteiro.sql
+--   echo $?      # 0 = passou · != 0 = falhou
 --
--- 🔴 COMO ISTO FOI VERIFICADO ANTES DE EXISTIR (09/09/2026). As duas migrations
---    ainda não podiam ser aplicadas (produção estava sob gate), então recriei as
---    funções corrigidas dentro de `pg_temp` — schema de sessão, invisível para
---    todo mundo, descartado ao desconectar — e rodei estes mesmos casos contra
---    os dados de produção. Foi assim que o defeito apareceu: com a função como
---    estava no ar, `[{"aluno_nome":"Davi","valor":1290}]` devolvia **ok=TRUE**
---    resolvendo UMA fatura de R$ 367,00 (`soma_confere:false`, diferença 923).
+-- 🔴 A VERSÃO ANTERIOR NÃO ERA UM ENSAIO — era um relatório. Ela fazia um
+--    SELECT com uma coluna `veredito` que escrevia `*** FALHOU ***`, e o psql
+--    saía com código 0 do mesmo jeito. Ou seja: entraria verde em qualquer CI,
+--    com todas as verificações erradas. O Alfredo pegou isso, e é o tipo de
+--    defeito pior que não ter teste — dá a sensação de cobertura.
+--    Agora toda divergência entra em `v_falhas` e o bloco termina em
+--    `raise exception`, que faz o psql sair != 0.
 --
--- ⚠️ Este arquivo NÃO recopia o corpo das funções. Guardar uma terceira versão
---    da regra para "poder testar" seria a mesma doença que ele testa. Aqui só
---    moram as PERGUNTAS; as respostas vêm das funções vivas.
+-- ⚠️ ACUMULA as falhas em vez de morrer na primeira: descobrir os 9 problemas
+--    numa rodada vale mais que descobrir um por vez.
 --
--- ⚠️ Depende de dados reais de Campo Grande (a família Souza Chaves Ribeiro,
---    setembro/2026). Se as faturas mudarem de competência, os casos 2 e 3
---    passam a pular sozinhos em vez de mentir — ver o `case when` de cada um.
+-- ⚠️ NÃO DEPENDE DE NOME DE ALUNO. A versão anterior fixava "Davi Guilherme" e
+--    "Thuanny": funcionava no banco de produção de hoje e em nenhum outro, e
+--    envelheceria junto com as faturas. Aqui os casos são DESCOBERTOS a partir
+--    do próprio envelope; fixture ausente é `raise`, nunca "passou".
+--
+-- ⚠️ SOMENTE LEITURA. Nada aqui escreve. A prova de atomicidade do lote, que
+--    escreve, mora em `ensaio-lote-atomicidade.sql` e exige banco isolado.
 
 \set ON_ERROR_STOP on
-set statement_timeout = '120s';
+\timing off
 
-\echo '=== ENSAIO: pagamento inteiro (N alunos x N faturas) ==='
+do $ensaio$
+declare
+  v_unidade    uuid;
+  v_as_of      date := (now() at time zone 'America/Sao_Paulo')::date;
+  v_env        jsonb;
+  v_falhas     text[] := '{}';
+  v_checks     int := 0;
 
-with u as (
-  select id from unidades where nome ilike '%campo grande%' limit 1
-),
--- CASO 1 — ambiguidade é RECUSA, nunca sorteio.
---   Há 10 alunos "Davi" em CG. Antes desta correção a cascata tratava a recusa
---   da composta como "não é composto" e descia um ramo, que escolhia um deles.
-c1 as (
-  select sol_caixa_resolver_pagamento_v1((select id from u),
-    '[{"aluno_nome":"Davi","valor":1290}]'::jsonb, 1290, null) as j
-),
--- CASO 2 — o caso da Mayra: 2 alunos, 5 faturas, R$ 1.722,00.
-c2 as (
-  select sol_caixa_resolver_pagamento_itens_v1((select id from u),
-    '[{"aluno_nome":"Davi Guilherme De Souza Chaves Ribeiro","valor":1290},
-      {"aluno_nome":"Thuanny","valor":432}]'::jsonb, 1722, null) as j
-),
--- CASO 3 — valor declarado é contrato: fatura de outro valor não serve.
-c3 as (
-  select sol_caixa_resolver_pagamento_v1((select id from u),
-    '[{"aluno_nome":"Thuanny","valor":999}]'::jsonb, 999, null) as j
-),
--- CASO 4 — soma que não fecha derruba o lote inteiro (atomicidade).
-c4 as (
-  select sol_caixa_resolver_pagamento_itens_v1((select id from u),
-    '[{"aluno_nome":"Davi Guilherme De Souza Chaves Ribeiro","valor":1290},
-      {"aluno_nome":"Thuanny","valor":432}]'::jsonb, 9999, null) as j
-)
-select v.caso, v.esperado, v.obtido,
-       case when v.esperado = v.obtido then 'ok' else '*** FALHOU ***' end as veredito
-from (
-  values
-    ('1 ambiguidade recusa',
-     'false/nome_ambiguo',
-     (select (j->>'ok') || '/' || coalesce(j->'alunos'->0->>'motivo','?') from c1)),
+  v_sid_multi  text;   -- aluno com 2+ faturas na competência
+  v_nome_multi text;
+  v_soma_multi numeric;
+  v_sid_uni    text;   -- aluno com exatamente 1
+  v_nome_uni   text;
+  v_valor_uni  numeric;
+  v_primeiro   text;   -- primeiro nome compartilhado por 2+ alunos
+  v_homonimos  int;
 
-    ('2 Mayra: ok',
-     'true',
-     (select j->>'ok' from c2)),
+  v_r          jsonb;
+  v_n          int;
 
-    ('2 Mayra: linhas no lote',
-     '5',
-     (select jsonb_array_length(j->'itens')::text from c2)),
+begin
+  ------------------------------------------------------------------ 0) fixture
+  select u.id into v_unidade
+    from unidades u
+   where exists (select 1 from alunos a where a.unidade_id = u.id
+                   and a.status ilike 'ativo%')
+   order by (select count(*) from alunos a where a.unidade_id = u.id) desc
+   limit 1;
+  if v_unidade is null then
+    raise exception 'FIXTURE AUSENTE: nenhuma unidade com alunos ativos';
+  end if;
 
-    ('2 Mayra: faturas distintas',
-     '5',
-     (select count(distinct x->>'canonical_fatura_id')::text
-        from c2, jsonb_array_elements(j->'itens') x)),
+  v_env := public.sol_faturas_alunos_v1(
+    v_unidade, extract(year from v_as_of)::int, extract(month from v_as_of)::int,
+    'janela_3', 'todas', v_as_of);
+  if coalesce(v_env->>'status','') not in ('ok','partial') then
+    raise exception 'FIXTURE AUSENTE: envelope de faturas indisponivel (status=%)',
+      coalesce(v_env->>'status','<nulo>');
+  end if;
 
-    ('2 Mayra: soma',
-     '1722.00',
-     (select j->>'soma_itens' from c2)),
+  -- aluno com 2+ parcelas PAGAS na competência (caso composto)
+  select x.sid, x.soma into v_sid_multi, v_soma_multi
+    from (select i->>'emusys_student_id' as sid,
+                 count(*) as n,
+                 sum(coalesce(nullif(i->'valores'->>'valor_pago','')::numeric,
+                              nullif(i->'valores'->>'valor_hoje','')::numeric,0)) as soma
+            from jsonb_array_elements(v_env->'items') i
+           where coalesce(i->>'tipo_fatura','') = 'parcela'
+             and coalesce(i->>'status','') = 'paga'
+             and nullif(i->>'emusys_student_id','') is not null
+           group by 1) x
+   where x.n >= 2 and x.soma > 0
+   order by x.n desc, x.soma desc
+   limit 1;
 
-    ('2 Mayra: toda linha leva status da fatura',
-     '0',
-     (select count(*)::text from c2, jsonb_array_elements(j->'itens') x
-       where x->'fatura'->>'status' is null)),
+  -- aluno com exatamente 1 (caso canônica/casador)
+  select x.sid, x.soma into v_sid_uni, v_valor_uni
+    from (select i->>'emusys_student_id' as sid,
+                 count(*) as n,
+                 sum(coalesce(nullif(i->'valores'->>'valor_pago','')::numeric,
+                              nullif(i->'valores'->>'valor_hoje','')::numeric,0)) as soma
+            from jsonb_array_elements(v_env->'items') i
+           where coalesce(i->>'tipo_fatura','') = 'parcela'
+             and coalesce(i->>'status','') = 'paga'
+             and nullif(i->>'emusys_student_id','') is not null
+           group by 1) x
+   where x.n = 1 and x.soma > 0
+   limit 1;
 
-    ('2 Mayra: competencia normalizada MM/YYYY',
-     '0',
-     (select count(*)::text from c2, jsonb_array_elements(j->'itens') x
-       where x->>'competencia' !~ '^[0-9]{2}/[0-9]{4}$')),
+  if v_sid_multi is null or v_sid_uni is null then
+    raise exception 'FIXTURE AUSENTE: preciso de 1 aluno com 2+ parcelas pagas e 1 com exatamente 1 (achei multi=% uni=%)',
+      coalesce(v_sid_multi,'<nenhum>'), coalesce(v_sid_uni,'<nenhum>');
+  end if;
 
-    ('3 valor declarado e contrato',
-     'false/valor_declarado_nao_bate',
-     (select (j->>'ok') || '/' || coalesce(j->'alunos'->0->>'motivo','?') from c3)),
+  select a.nome into v_nome_multi from alunos a
+   where a.unidade_id = v_unidade and a.emusys_student_id = v_sid_multi limit 1;
+  select a.nome into v_nome_uni from alunos a
+   where a.unidade_id = v_unidade and a.emusys_student_id = v_sid_uni limit 1;
+  if v_nome_multi is null or v_nome_uni is null then
+    raise exception 'FIXTURE AUSENTE: emusys_student_id sem aluno correspondente na unidade';
+  end if;
 
-    ('4 atomicidade: soma nao fecha',
-     'false/soma_itens_divergente',
-     (select (j->>'ok') || '/' || coalesce(j->>'motivo','?') from c4))
-) as v(caso, esperado, obtido)
-order by v.caso;
+  -- primeiro nome compartilhado por 2+ pessoas (caso ambiguidade)
+  select lower(split_part(a.nome,' ',1)), count(distinct a.nome)
+    into v_primeiro, v_homonimos
+    from alunos a
+   where a.unidade_id = v_unidade and (a.status ilike 'ativo%' or a.status is null)
+     and a.nome is not null
+   group by 1
+  having count(distinct a.nome) >= 2
+   order by 2 desc
+   limit 1;
+  if v_primeiro is null then
+    raise exception 'FIXTURE AUSENTE: nenhum primeiro nome compartilhado por 2+ alunos';
+  end if;
 
--- Teto de tempo, para não descobrir isso de novo em produção. O `authenticator`
--- do PostgREST impõe 8 s a todo acesso — inclusive `service_role` —, e cada ramo
--- reconstrói o envelope de faturas da unidade (~1,25 s por construção).
-\echo '=== custo (o 57014 mora aqui) ==='
-explain (analyze, costs off, timing off)
-select sol_caixa_resolver_pagamento_itens_v1(
-  (select id from unidades where nome ilike '%campo grande%' limit 1),
-  '[{"aluno_nome":"Davi Guilherme De Souza Chaves Ribeiro","valor":1290},
-    {"aluno_nome":"Thuanny","valor":432}]'::jsonb, 1722, null);
+  raise notice 'fixture: unidade=% | multi=% (% faturas, R$ %) | uni=% | ambiguo="%" (% homonimos)',
+    v_unidade, v_nome_multi, 2, v_soma_multi, v_nome_uni, v_primeiro, v_homonimos;
+
+  ------------------------------------------------- 1) ambiguidade é RECUSA
+  v_checks := v_checks + 1;
+  v_r := public.sol_caixa_resolver_pagamento_v1(
+           v_unidade, jsonb_build_array(jsonb_build_object('aluno_nome', v_primeiro,
+                        'valor', v_soma_multi)), v_soma_multi, null);
+  if coalesce((v_r->>'ok')::boolean, false) then
+    v_falhas := v_falhas || format(
+      '1. ambiguidade: "%s" tem %s homonimos e a funcao devolveu ok:true (escolheu um em silencio)',
+      v_primeiro, v_homonimos);
+  elsif coalesce(v_r->'alunos'->0->>'motivo','') <> 'nome_ambiguo' then
+    v_falhas := v_falhas || format('1. ambiguidade: esperava motivo nome_ambiguo, veio "%s"',
+      coalesce(v_r->'alunos'->0->>'motivo','<nulo>'));
+  end if;
+
+  ------------------------------------------- 2) composto: N faturas, soma exata
+  v_checks := v_checks + 1;
+  v_r := public.sol_caixa_resolver_pagamento_itens_v1(
+           v_unidade, jsonb_build_array(jsonb_build_object('aluno_nome', v_nome_multi,
+                        'valor', v_soma_multi)), v_soma_multi, null);
+  if not coalesce((v_r->>'ok')::boolean, false) then
+    v_falhas := v_falhas || format('2. composto: esperava ok:true, veio ok:false motivo=%s',
+      coalesce(v_r->>'motivo','<nulo>'));
+  else
+    v_n := jsonb_array_length(coalesce(v_r->'itens','[]'::jsonb));
+    if v_n < 2 then
+      v_falhas := v_falhas || format('2. composto: esperava 2+ linhas planas, veio %s', v_n);
+    end if;
+
+    v_checks := v_checks + 1;
+    if (select count(distinct i->>'canonical_fatura_id')
+          from jsonb_array_elements(v_r->'itens') i) <> v_n then
+      v_falhas := v_falhas ||
+        '3. composto: ha fatura REPETIDA na lista plana (pagaria duas vezes a mesma)';
+    end if;
+
+    v_checks := v_checks + 1;
+    if abs(coalesce((v_r->>'soma_itens')::numeric,0) - v_soma_multi) > 0.01 then
+      v_falhas := v_falhas || format('4. composto: soma %s != declarado %s',
+        v_r->>'soma_itens', v_soma_multi);
+    end if;
+
+    v_checks := v_checks + 1;
+    if exists (select 1 from jsonb_array_elements(v_r->'itens') i
+                where i->'fatura'->>'status' is null) then
+      v_falhas := v_falhas ||
+        '5. composto: linha sem status de fatura — o validador do snapshot nao revalida';
+    end if;
+
+    v_checks := v_checks + 1;
+    if exists (select 1 from jsonb_array_elements(v_r->'itens') i
+                where coalesce(i->>'competencia','') !~ '^[0-9]{2}/[0-9]{4}$') then
+      v_falhas := v_falhas || '6. composto: competencia fora do formato MM/YYYY na lista plana';
+    end if;
+  end if;
+
+  --------------------------------- 7) valor declarado que nao bate = RECUSA
+  v_checks := v_checks + 1;
+  v_r := public.sol_caixa_resolver_pagamento_v1(
+           v_unidade, jsonb_build_array(jsonb_build_object('aluno_nome', v_nome_uni,
+                        'valor', v_valor_uni + 777.77)), v_valor_uni + 777.77, null);
+  if coalesce((v_r->>'ok')::boolean, false) then
+    v_falhas := v_falhas || format(
+      '7. valor declarado: pedi R$ %s para quem tem R$ %s e a funcao devolveu ok:true',
+      v_valor_uni + 777.77, v_valor_uni);
+  end if;
+
+  ------------------------------------------ 8) atomicidade: soma nao fecha
+  v_checks := v_checks + 1;
+  v_r := public.sol_caixa_resolver_pagamento_itens_v1(
+           v_unidade, jsonb_build_array(jsonb_build_object('aluno_nome', v_nome_multi,
+                        'valor', v_soma_multi)), v_soma_multi + 999, null);
+  if coalesce((v_r->>'ok')::boolean, false) then
+    v_falhas := v_falhas || '8. atomicidade: soma divergente do total devolveu ok:true';
+  elsif coalesce(v_r->>'motivo','') <> 'soma_itens_divergente' then
+    v_falhas := v_falhas || format('8. atomicidade: esperava soma_itens_divergente, veio "%s"',
+      coalesce(v_r->>'motivo','<nulo>'));
+  end if;
+
+  ------------------------------------------------------ 9) ACL das funcoes
+  -- Recriar funcao reabre EXECUTE para `anon` por causa do ALTER DEFAULT
+  -- PRIVILEGES do schema. Isto ja mordeu 3x neste projeto; aqui vira asserção.
+  v_checks := v_checks + 1;
+  declare
+    v_fn text;
+    v_faltou text[] := '{}';
+    v_sobrou text[] := '{}';
+  begin
+    foreach v_fn in array array[
+      'public.sol_caixa_resolver_pagamento_v1(uuid,jsonb,numeric,date)',
+      'public.sol_caixa_resolver_pagamento_itens_v1(uuid,jsonb,numeric,date)',
+      'public.sol_caixa_resolver_composto_aluno_v1(jsonb)',
+      'public.sol_caixa_parcela_canonica(uuid,text,numeric,date)']
+    loop
+      if has_function_privilege('anon', v_fn, 'EXECUTE') then
+        v_sobrou := v_sobrou || v_fn;
+      end if;
+      if has_function_privilege('authenticated', v_fn, 'EXECUTE') then
+        v_sobrou := v_sobrou || (v_fn || ' [authenticated]');
+      end if;
+      if not has_function_privilege('service_role', v_fn, 'EXECUTE') then
+        v_faltou := v_faltou || v_fn;
+      end if;
+    end loop;
+    if array_length(v_sobrou,1) > 0 then
+      v_falhas := v_falhas || format('9. ACL: executavel por anon/authenticated: %s',
+        array_to_string(v_sobrou, ', '));
+    end if;
+    if array_length(v_faltou,1) > 0 then
+      v_falhas := v_falhas || format('9. ACL: service_role SEM execute em: %s',
+        array_to_string(v_faltou, ', '));
+    end if;
+  exception when undefined_object then
+    raise notice '9. ACL: papel anon/authenticated inexistente neste banco — check pulado';
+  end;
+
+  ------------------------------------- 10) as cascas nao guardam regra propria
+  -- Se a original voltar a ter o corpo da regra, viram duas fontes de verdade.
+  v_checks := v_checks + 1;
+  if pg_get_functiondef('public.sol_caixa_parcela_canonica(uuid,text,numeric,date)'::regprocedure)
+       like '%sol_faturas_alunos_v1%' then
+    v_falhas := v_falhas ||
+      '10. DRY: sol_caixa_parcela_canonica voltou a montar o envelope — deveria delegar a _env_v1';
+  end if;
+
+  ------------------------------------------------------------------ veredito
+  if array_length(v_falhas,1) > 0 then
+    raise exception E'ENSAIO FALHOU — % de % verificacoes:\n  %',
+      array_length(v_falhas,1), v_checks, array_to_string(v_falhas, E'\n  ');
+  end if;
+  raise notice 'ENSAIO OK — % verificacoes, nenhuma divergencia', v_checks;
+end $ensaio$;

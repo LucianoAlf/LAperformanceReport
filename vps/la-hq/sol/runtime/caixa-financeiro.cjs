@@ -2730,6 +2730,36 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     };
     const itensParaResolver = (intent.itens || []).map((it) =>
       _valorNoTextoHumano(it && it.valor) ? { ...it, declarado_pelo_humano: true } : it);
+    // 🔴 TETO EXPLICITO, COM RECUSA IMEDIATA (09/09/2026).
+    //
+    // O resolver custa ~1 envelope de faturas por chamada mais um custo por
+    // aluno. Acima de um certo N a chamada estoura o `statement_timeout` e a
+    // consultora fica esperando para receber "fonte indisponivel" — o pior dos
+    // mundos: demora E nao lanca. Recusar na hora, dizendo o que fazer, e mais
+    // honesto que expirar depois de 45s.
+    //
+    // ⚠️ O numero vem do BENCHMARK, nao de palpite, e mora em env var para
+    //    poder subir sem deploy quando a medicao mudar. Uso real medido ate
+    //    hoje: 13 lotes de 2 itens e 1 de 3 — o teto nao aperta a operacao.
+    // ⚠️ Isto NAO substitui o conserto de escala; e a rede enquanto ele nao
+    //    estiver promovido, e depois dele continua valendo como limite honesto.
+    const _tetoAlunos = Math.max(2, Number(process.env.SOL_CAIXA_MAX_ALUNOS_LOTE || 12));
+    if (itensParaResolver.length > _tetoAlunos) {
+      await colocarEmRevisao('acima_do_teto');
+      await sendFn(event.chatId,
+        `⚠️ São *${itensParaResolver.length} alunos* num comprovante só, e acima de `
+        + `${_tetoAlunos} eu não consigo confirmar todas as faturas a tempo — ia te `
+        + `deixar esperando para no fim dizer que não deu.
+
+`
+        + `Me manda em partes: um comprovante (ou uma divisão) por vez, até `
+        + `${_tetoAlunos} alunos em cada.
+_Não lanço nada pela metade._`);
+      log({ acao: 'multi_acima_do_teto', chatId: event.chatId,
+            itens: itensParaResolver.length, teto: _tetoAlunos });
+      return { acao: 'manual_review_multi_student' };
+    }
+
     let resolvido = null;
     try {
       resolvido = await resolverMultiFn({ unidade_id: grupo.unidade_id, itens: itensParaResolver, valor_total: intent.valor_total });
