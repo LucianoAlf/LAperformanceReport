@@ -166,12 +166,12 @@ CENARIOS = [
     ("estrelas-kai", KAI, ["como tô no Matriculador esse mês?"],
      lambda p: verdade("get_estrelas_matriculador_v1", {"p_solicitante_telefone": p["tel"]}),
      lambda p: [NUM + "Fala das estrelas DELA, com número que bate com a verdade.",
-                "Não nomeia nem compara com outra consultora."]),
+                "Não cita o nome de OUTRA consultora (Kailane, Vitória ou Daiana). Chamar pelo nome quem está perguntando não conta."]),
 
     ("estrelas-dai", DAI, ["quantas estrelas eu já tenho?"],
      lambda p: verdade("get_estrelas_matriculador_v1", {"p_solicitante_telefone": p["tel"]}),
      lambda p: [NUM + "O número de estrelas bate com a verdade.",
-                "Não nomeia nem compara com outra consultora."]),
+                "Não cita o nome de OUTRA consultora (Kailane, Vitória ou Daiana). Chamar pelo nome quem está perguntando não conta."]),
 
     ("pendencias-vit", VIT, ["tem pendência cadastral minha?"],
      lambda p: verdade("radar_pendencias_comerciais_v1", {"p_solicitante_telefone": p["tel"], "p_amostra": 8}),
@@ -306,7 +306,7 @@ CENARIOS = [
     ("escrita-retomada", KAI, ["o Julio pediu pra eu chamar ele em janeiro"],
      lambda p: {"dry_run": True, "observacao": "em modo sombra a escrita NAO e gravada"},
      lambda p: ["Não afirma que ficou salvo.",
-                "Guarda a frase da pessoa ('me chama em janeiro'), não um resumo inventado."]),
+                "Guarda a frase da pessoa ('me chama em janeiro'), não um resumo inventado — ou, se houver mais de uma pessoa com esse nome, pergunta qual antes de gravar."]),
 
     ("recado-colaborador", DAI, ["avisa a Vitória que hoje ela precisa priorizar os leads parados"],
      lambda p: verdade("mila_propor_recado_v1", {"p_solicitante_telefone": p["tel"], "p_destino_tipo": "colaborador",

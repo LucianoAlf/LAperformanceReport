@@ -250,6 +250,11 @@ def julgar(pergunta, resposta, verdade, criterios, timeout=90):
                     if not _igual(n, valor):
                         erros.append("disse " + format(n, 'g') + " para «" + sobre
                                      + "», mas " + caminho + " vale " + format(valor, 'g'))
+                elif abs(n) >= 1e9:
+                    # ⚠️ telefone/id não é métrica. O LLM extraiu "5521994836653"
+                    #    da resposta e, como o cardápio filtra números longos, ele
+                    #    virou "não está no banco" — reprovando uma agenda certa.
+                    continue
                 elif not _derivavel(n, valores):
                     erros.append(format(n, 'g') + " («" + sobre + "») não está no banco"
                                  + " nem sai de soma dele" + (" — " + nota if nota else ""))
