@@ -156,6 +156,12 @@ def _explicavel(n, base):
     return False
 
 
+# Chaves estruturais do payload — não são nome de ninguém.
+_CHAVES_TECNICAS = {'mes', 'hoje', 'ontem', 'rede', 'funil', 'kpis', 'serie', 'itens',
+                    'blocos', 'pessoas', 'padroes', 'dados', 'args', 'meta', 'resumo',
+                    'por_unidade', 'programa', 'quentes_agora', 'pendencias_de_hoje'}
+
+
 def _fatias_por_sujeito(v):
     """Mapa nome -> números daquele pedaço da verdade.
 
@@ -175,6 +181,14 @@ def _fatias_por_sujeito(v):
             #    Grande). Era o bug original passando no teste que o persegue.
             # ⚠️ Rótulo composto ("Campo Grande, Recreio") vira várias chaves,
             #    senão a busca por "Recreio" não encontra a fatia.
+            # 🔴 A CHAVE do dicionário também é rótulo. `por_unidade` vem como
+            #    {"Barra": {...}, "Recreio": {...}} — o nome da unidade é a
+            #    CHAVE, não o valor de um campo. Sem indexar por chave, "1
+            #    experimental no Recreio" não achava a fatia do Recreio, caía na
+            #    busca global e o número era acusado de não ser "dessa pessoa".
+            for k, v2 in x.items():
+                if isinstance(v2, (dict, list)) and isinstance(k, str) and len(k) > 2                         and not k.startswith('_') and k.lower() not in _CHAVES_TECNICAS:
+                    fatias.setdefault(_norm(k), set()).update(numeros_da_verdade(v2))
             for chave in ('pessoa', 'nome', 'canal', 'unidade', 'unidades', 'aluno', 'titulo'):
                 bruto = x.get(chave)
                 if not isinstance(bruto, str) or len(bruto) <= 2:
