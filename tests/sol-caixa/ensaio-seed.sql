@@ -51,7 +51,14 @@ alter table public.emusys_faturas disable trigger user;
 
 -- 1.200 alunos. Primeiro nome vem de um pool de 20 → ~60 homônimos por nome,
 -- que é a ordem de grandeza real (medido: 10 "Davi" em Campo Grande).
-insert into public.alunos (nome, unidade_id, status, emusys_student_id,
+-- 🔴 `alunos` E MATRICULA, NAO PESSOA (regra da casa). Quem faz 4 cursos tem 4
+--    linhas, cada uma com seu `emusys_matricula_id`. Meu seed criava UMA linha
+--    por pessoa e deixava a matricula NULA — e o composto exige `aluno.id` no
+--    item do envelope, que so aparece pelo vinculo
+--    `alunos.emusys_matricula_id = emusys_faturas.emusys_matricula_id`. Sem
+--    isso ele descartava TODAS as faturas e recusava com
+--    `composicao_exige_duas_faturas` mesmo com 4 na competencia.
+insert into public.alunos (nome, unidade_id, status, emusys_student_id, emusys_matricula_id,
                            valor_parcela, responsavel_nome, data_matricula)
 select
   (array['Alex','Bruna','Caio','Dani','Elis','Fabio','Gabi','Hugo','Ines','Joao',
@@ -64,6 +71,7 @@ select
   '11111111-1111-1111-1111-111111111111',
   'ativo',
   (900000 + i)::text,
+  (500000 + i * 10)::text,
   350 + (i % 12) * 25,
   'Responsavel ' || to_char(i, 'FM0000'),
   current_date - ((i % 700) || ' days')::interval
@@ -148,6 +156,19 @@ select r.id, f.id, f.competencia, f.unidade_id, f.unidade_codigo,
                           'numero_parcela', 1, 'total_parcelas_contrato', 12)
 from public.emusys_faturas f
 join public.sync_runs r on r.competencia = f.competencia and r.trigger_source = 'ensaio';
+
+-- Uma linha de `alunos` por curso ADICIONAL, espelhando a matricula da fatura.
+insert into public.alunos (nome, unidade_id, status, emusys_student_id, emusys_matricula_id,
+                           valor_parcela, responsavel_nome, data_matricula, is_segundo_curso)
+select distinct a.nome, a.unidade_id, 'ativo', a.emusys_student_id,
+       f.emusys_matricula_id::text,
+       coalesce(f.valor_pago, f.valor_original), a.responsavel_nome, a.data_matricula, true
+from public.emusys_faturas f
+join public.alunos a on a.emusys_student_id = f.emusys_student_id::text
+                    and a.unidade_id = f.unidade_id
+where f.unidade_id = '11111111-1111-1111-1111-111111111111'
+  and f.competencia = date_trunc('month', current_date)::date
+  and f.emusys_matricula_id::text <> a.emusys_matricula_id;
 
 alter table public.alunos enable trigger user;
 alter table public.emusys_faturas enable trigger user;
