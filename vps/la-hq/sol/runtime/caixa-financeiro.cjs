@@ -2980,6 +2980,57 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
         const valor = extrairValor(texto);
         const forma = extrairForma(texto, null);
         if (!valor) {
+          // 🔴 COM CARD ABERTO, ISTO E CORRECAO — E O VALOR ESTA NO CARD (09/09/2026).
+          //
+          // Caso Jhon/CG 16:08-16:09: o ditado inteiro passou de primeira e abriu o
+          // card certo de R$ 100. Ele so quis trocar `despesa` por `seguranca`,
+          // CITANDO o card, e ouviu "falta o valor" — o valor estava na mensagem que
+          // ele citou. Teve de reenviar tudo, e sobrou um card orfao.
+          //
+          // A guarda para isso JA EXISTIA e cobria metade: `_pendAbertaTexto` anula
+          // `_saidaExplicitaFromCaption` mas nao `_categoriaExplicitaFromCaption`,
+          // que e justamente a forma de corrigir. Em vez de mexer no parentese e
+          // deixar a frase cair no "Nao entendi" (o caminho de correcao la embaixo
+          // so conhece parcela/passaporte/lojinha/matricula, nunca `seguranca`),
+          // a correcao e resolvida AQUI, onde a categoria ja foi reconhecida.
+          //
+          // ⚠️ Nao e regex nova de dialogo: reusa o detector que ja rodou.
+          const _abertasCat = limparVelhos(chatId, agora).filter((p) => Number(p.valor) > 0);
+          let _alvoCat = null;
+          if (event.quotedMessageId) {
+            _alvoCat = _abertasCat.find((p) => p.previewId === event.quotedMessageId
+              || (p.msgIds || []).includes(event.quotedMessageId)) || null;
+          }
+          if (!_alvoCat && _abertasCat.length === 1) _alvoCat = _abertasCat[0];
+          if (_alvoCat) {
+            _alvoCat.categoria = categoriaTexto;
+            _alvoCat.descricao = _descricaoSaidaTexto(_alvoCat.textoDitado || texto, categoriaTexto);
+            _alvoCat.ts = agora;
+            let _txtCat = `Ajustei: a categoria é ${categoriaTexto}. Remontei o preview:\n\n` + montarPreview({
+              unidadeNome: _alvoCat.nome, valor: _alvoCat.valor, forma: _alvoCat.forma,
+              categoria: categoriaTexto, aluno: _alvoCat.aluno, competencia: _alvoCat.competencia,
+              parcela: _alvoCat.parcela, confiancaBaixa: false,
+              responsavelFinanceiro: _alvoCat.responsavelFinanceiro, formaIncerta: _alvoCat.formaIncerta,
+              cartaoModalidade: _alvoCat.cartaoModalidade, cartaoParcelas: _alvoCat.cartaoParcelas,
+              multiplas: false, alunoViaPagador: null, pagadorNome: null, candidatosAluno: null,
+              canonica: null, duplicata: null, quitacao: null, faturaIndisponivel: false,
+              composto: null, bloqueiaLancamento: false, itemLojinha: null,
+            });
+            if (dryRun) _txtCat += '\n\n_(modo teste — nada será gravado no caixa)_';
+            _alvoCat.previewId = await sendFn(chatId, _txtCat);
+            (_alvoCat.msgIds = _alvoCat.msgIds || []).push(_alvoCat.previewId);
+            _alvoCat.toquePor = String(event.senderPhone || event.senderId || '') || _alvoCat.toquePor;
+            _alvoCat.toqueTs = agora;
+            // O "pode" confere o hash do preview: remontar sem revincular o ledger V3
+            // deixaria a aprovacao apontando para um card que ninguem mais ve.
+            if (!await vincularPreviewRemontadoV3({
+              event, grupo: grp, pendencia: _alvoCat, previewId: _alvoCat.previewId, texto: _txtCat,
+              result: { acao: 'preview_categoria_saida_corrigida', categoria: categoriaTexto },
+            })) return { acao: 'preview_categoria_saida_corrigida_sem_v3' };
+            log({ acao: 'preview_categoria_saida_corrigida', chatId,
+                  categoria: categoriaTexto, valor: _alvoCat.valor });
+            return { acao: 'preview_categoria_saida_corrigida' };
+          }
           await sendFn(chatId, `Entendi que é saída de ${categoriaTexto}, mas falta o valor. Manda de novo com o valor.`);
           log({ acao: 'saida_texto_sem_valor', chatId, categoria: categoriaTexto });
           return { acao: 'saida_texto_sem_valor' };
@@ -3024,6 +3075,11 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
         const pendencia = {
           previewId, unidade_id: grp.unidade_id, nome: grp.nome, valor, forma,
           categoria: categoriaTexto, aluno: null, competencia: null, descricao,
+          // O ditado que gerou o card fica guardado: `_descricaoSaidaTexto` e funcao
+          // pura do TEXTO + categoria, entao corrigir so a categoria depois exige o
+          // texto original — senao a descricao fica com a categoria velha dentro
+          // ("PG Semana Despesa - seguranca") mesmo com o card ja corrigido.
+          textoDitado: texto,
           parcela: null, responsavelFinanceiro: null, cartaoModalidade: null,
           cartaoParcelas: null, formaIncerta: false, quitacao: null, multiplas: false,
           composto: null, itemLojinha: null, bloqueiaLancamento: false,
@@ -3038,6 +3094,23 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
         if (v3 && v3.preview_id) {
           pendencia.v3PreviewId = v3.preview_id;
           pendencia.v3PreviewHash = v3.preview_hash || null;
+        }
+        // 🔴 O MESMO DITADO REENVIADO SUBSTITUI O CARD — NAO EMPILHA (09/09/2026).
+        // Em 16:09 o Jhon reenviou a frase inteira e nasceu um segundo card; o
+        // primeiro ficou aberto e virou "📌 Ainda aguardando: PG Semana Despesa -
+        // seguranca — R$ 100,00". Card orfao com valor nao e ruido: um "pode"
+        // citando ele lanca os mesmos R$ 100 DE NOVO.
+        // ⚠️ O discriminador e o TEXTO, nao so o valor: duas saidas legitimas de
+        //    R$ 100 no mesmo dia (seguranca e material) precisam coexistir. Mesmo
+        //    texto = a pessoa achou que a Sol nao ouviu, e mandou outra vez.
+        const _norm = (x) => bodyLimpo(String(x || '')).toLowerCase().replace(/\s+/g, ' ').trim();
+        const _iDup = arr.findIndex((p) => p.unidade_id === grp.unidade_id
+          && Number(p.valor) > 0 && Math.abs(Number(p.valor) - valor) < 0.01
+          && _norm(p.textoDitado) && _norm(p.textoDitado) === _norm(texto));
+        if (_iDup >= 0) {
+          const _velho = arr.splice(_iDup, 1)[0];
+          log({ acao: 'saida_preview_substitui_reenvio', chatId,
+                previewIdAntigo: _velho && _velho.previewId, valor });
         }
         arr.push(pendencia);
         pendentes.set(chatId, arr);
