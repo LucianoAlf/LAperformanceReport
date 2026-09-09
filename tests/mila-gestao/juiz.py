@@ -187,7 +187,12 @@ def _fatias_por_sujeito(v):
             #    experimental no Recreio" não achava a fatia do Recreio, caía na
             #    busca global e o número era acusado de não ser "dessa pessoa".
             for k, v2 in x.items():
-                if isinstance(v2, (dict, list)) and isinstance(k, str) and len(k) > 2                         and not k.startswith('_') and k.lower() not in _CHAVES_TECNICAS:
+                # ⚠️ Só chave que é NOME PRÓPRIO vira sujeito. `por_unidade` usa
+                #    "Barra"/"Recreio"; campo comum é minúsculo ("experimentais",
+                #    "visitas"). Sem esse corte, a fatia "experimentais" vencia a
+                #    do "Recreio" na frase "1 experimental no Recreio" — e o
+                #    número certo era acusado de não ser daquela unidade.
+                if isinstance(v2, (dict, list)) and isinstance(k, str) and len(k) > 2                         and k[0].isupper() and k.lower() not in _CHAVES_TECNICAS:
                     fatias.setdefault(_norm(k), set()).update(numeros_da_verdade(v2))
             for chave in ('pessoa', 'nome', 'canal', 'unidade', 'unidades', 'aluno', 'titulo'):
                 bruto = x.get(chave)
