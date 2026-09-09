@@ -42,10 +42,15 @@ test('rankings e detalhes usam somente RPCs v2 publicaveis', () => {
 });
 
 test('interfaces publicam periodo, universo, regra e equacao sem transformar nulo em zero', () => {
-  for (const source of [faltasHook, presencaTab, modalProfessor, tabProfessores]) {
+  for (const source of [faltasHook, presencaTab, tabProfessores]) {
     assert.match(source, /estado_publicacao/iu);
     assert.match(source, /regra_versao/iu);
   }
+
+  assert.doesNotMatch(modalProfessor, /estado_publicacao/iu);
+  assert.doesNotMatch(modalProfessor, /regra_versao/iu);
+  assert.doesNotMatch(modalProfessor, /em_auditoria/iu);
+  assert.match(modalProfessor, /formatarPercentualObservado/u);
 
   assert.match(tabProfessores, /presenca_eventos_confirmados/u);
   assert.match(tabProfessores, /presenca_eventos_incertos/u);

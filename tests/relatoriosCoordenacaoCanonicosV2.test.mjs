@@ -186,7 +186,7 @@ const params = (tipo) => ({
   dataGeracao: new Date('2026-08-03T09:00:00-03:00'),
 });
 
-test('V2 permanece compativel e os cinco relatorios atuais usam o contrato canonico V3', () => {
+test('V2 permanece compativel e os cinco relatorios atuais usam o documento V4', () => {
   assert.equal(fs.existsSync(migrationPath), true);
   assert.equal(fs.existsSync(migrationV3Path), true);
   const sql = fs.readFileSync(migrationPath, 'utf8');
@@ -199,11 +199,11 @@ test('V2 permanece compativel e os cinco relatorios atuais usam o contrato canon
   assert.match(sql, /hash_jsonb_canonico/i);
   assert.match(sqlV3, /get_relatorio_coordenacao_canonico_v3/i);
   assert.match(sqlV3, /get_relatorio_coordenacao_canonico_v2/i);
-  assert.match(modal, /get_relatorio_coordenacao_canonico_v3/i);
+  assert.match(modal, /get_relatorio_coordenacao_documento_v4/i);
   assert.match(modal, /gerarRelatorioCoordenacaoCanonico/i);
   assert.doesNotMatch(modal.slice(modal.indexOf('const gerarRelatorioInstantaneo'), modal.indexOf('const regenerarRelatorio')), /professores,/i);
-  assert.match(edge, /get_relatorio_coordenacao_canonico_v3/i);
-  assert.match(edge, /schema_version\s*!==\s*3/i);
+  assert.match(edge, /get_relatorio_coordenacao_documento_v4_por_id/i);
+  assert.match(edge, /schema_version\s*!==\s*4/i);
 });
 
 test('relatorio separa score comparavel de desempenho observado sem publicar premiacao parcial', () => {
@@ -214,7 +214,8 @@ test('relatorio separa score comparavel de desempenho observado sem publicar pre
   assert.match(texto, /Professor Maior Score[\s\S]*93,4 pontos/);
   assert.match(texto, /Professor Menor Score[^\n]*Desempenho observado: 66,7/);
   assert.ok(texto.indexOf('Professor Maior Score') < texto.indexOf('Professor Menor Score'));
-  assert.match(texto, /ranking e premiação exigem ciclo oficial fechado/i);
+  assert.match(texto, /ORDEM DO PAINEL — LEITURA DIAGNÓSTICA/i);
+  assert.match(texto, /não representa premiação oficial/i);
   assert.doesNotMatch(texto, /Health Score parcial médio: \*Sem base\*/i);
 });
 

@@ -152,12 +152,12 @@ test('modal e Edge enviam explicitamente a periodicidade do relatorio', () => {
 
   assert.match(tab, /<ModalRelatorioCoordenacao[\s\S]*periodicidade=\{modoVisualizacao === 'trimestre' \? 'ciclo' : 'mensal'\}/);
   assert.match(modal, /periodicidade:\s*'mensal'\s*\|\s*'ciclo'/);
-  assert.match(modal, /get_relatorio_coordenacao_canonico_v3/);
+  assert.match(modal, /get_relatorio_coordenacao_documento_v4/);
   assert.match(modal, /p_periodicidade:\s*periodicidade/);
   assert.match(modal, /body:\s*\{[^}]*periodicidade/s);
-  assert.match(edge, /get_relatorio_coordenacao_canonico_v3/);
+  assert.match(edge, /get_relatorio_coordenacao_documento_v4_por_id/);
   assert.match(edge, /periodicidade/);
-  assert.match(edge, /schema_version\s*!==\s*3/);
+  assert.match(edge, /schema_version\s*!==\s*4/);
 });
 
 test('relatorio de ciclo deixa claro o periodo e nao publica ranking aberto', () => {
@@ -170,8 +170,9 @@ test('relatorio de ciclo deixa claro o periodo e nao publica ranking aberto', ()
   assert.match(texto, /CICLO JUN-AGO\/2026/);
   assert.match(texto, /Ciclo em acompanhamento/i);
   assert.match(texto, /Professor Comparável[^\n]*88,0 pontos/);
-  assert.doesNotMatch(texto, /1\. Professor Comparável/);
-  assert.match(texto, /ranking e premiação exigem ciclo oficial fechado/i);
+  assert.match(texto, /1\. Professor Comparável/);
+  assert.match(texto, /ORDEM DO PAINEL — LEITURA DIAGNÓSTICA/i);
+  assert.match(texto, /não representa premiação oficial/i);
   assert.match(texto, /Professor em Formação[^\n]*Desempenho observado: 96,0/);
 });
 
