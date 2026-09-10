@@ -1,2 +1,9 @@
 # scripts que rodam na VPS (linux): CRLF do Windows quebra o bash ($'do\r') — LF sempre
 vps/** text eol=lf
+
+# ensaio do caixa: os scripts rodam em Linux (la-hq via tar/scp, e o CI). Sem
+# esta regra o checkout no Windows os escreve com CRLF, o tar leva o CR junto e
+# o bash de la responde `set: pipefail: invalid option name` — o mesmo motivo
+# da regra de `vps/**` acima. Medido em 10/09, depois de um merge reescrever os
+# arquivos: o ensaio parou no passo 2 de 7.
+tests/sol-caixa/** text eol=lf

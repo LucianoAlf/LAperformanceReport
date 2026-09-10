@@ -128,6 +128,27 @@ jobs:
           psql -f /tmp/todas.sql > /tmp/replay.log 2>&1 || true
           echo "erros no replay: $(grep -c ': ERROR:' /tmp/replay.log || true)"
 
+      # 🔎 DIAGNOSTICO. `syntax error` no replay quase sempre significa que uma
+      #    instrucao ANTERIOR ficou com aspas abertas e engoliu tudo ate achar um
+      #    terminador — o numero que o psql reporta e o FIM da instrucao, nao o
+      #    inicio. Imprimir o trecho do arquivo e o marcador anterior e o que
+      #    mostra ONDE ela comecou. Existe porque este job falhou com
+      #    `syntax error at or near "\`"` que a la-hq, com arquivo identico, nao
+      #    reproduz — e diferenca de ambiente sem evidencia e chute.
+      - name: contexto de erro de sintaxe (diagnóstico)
+        if: always()
+        run: |
+          grep -n 'syntax error' /tmp/replay.log | head -3 | while IFS= read -r l; do
+            ln=$(sed -E 's|.*/tmp/todas[.]sql:([0-9]+):.*||' <<<"$l")
+            case "$ln" in ''|*[!0-9]*) echo "$l"; continue;; esac
+            ini=$(( ln > 25 ? ln - 25 : 1 ))
+            echo "=== $l"
+            echo "--- ultimo marcador antes da linha $ln:"
+            head -n "$ln" /tmp/todas.sql | grep '^[\]echo === ' | tail -2 | sed 's/^/    /'
+            echo "--- linhas $ini..$((ln+2)):"
+            sed -n "${ini},$((ln+2))p" /tmp/todas.sql | sed 's/^/    /'
+          done || true
+
       - name: nenhuma migration crítica pode ter falhado
         run: |
           set -euo pipefail
