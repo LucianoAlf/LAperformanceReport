@@ -1,0 +1,179 @@
+# Suíte do runtime do caixa da Sol, em checkout limpo.
+#
+# 🔴 POR QUE ISTO EXISTE. Até 09/09/2026, 35 dos 38 testes faziam
+#    `require('/home/sol/...')` — o caminho do runtime na VPS. Não rodavam em
+#    lugar nenhum além da máquina de quem tinha a VPS montada, e quando rodavam
+#    testavam o arquivo VIVO, inclusive patch aplicado à mão e nunca versionado.
+#    "A suíte está verde" era uma afirmação que ninguém conseguia conferir.
+#    Na primeira execução honesta: 2 verdes de 38.
+#
+# ⚠️ `SOL_CAIXA_V3_LEDGER_FAKE=1` NÃO É DECORAÇÃO. Sem ele a suíte grava previews
+#    do ledger V3 em PRODUÇÃO — medido em 24-31/08: 62% dos previews (499 de 807)
+#    eram artefato de teste. O runner já exporta as três variáveis, mas elas
+#    aparecem aqui também porque um dia alguém vai chamar o node direto.
+#
+# ⚠️ Os testes que precisam de credencial do Supabase PULAM declarando (e o
+#    runner os conta como pulados, não como verdes). Vermelho que mente por
+#    falta de credencial ensina a ignorar a suíte.
+name: sol-caixa-suite
+
+on:
+  pull_request:
+    paths:
+      - 'vps/la-hq/sol/runtime/**'
+      - 'tests/sol-runtime/**'
+      - '.github/workflows/sol-caixa-suite.yml'
+      # 🔴 O CI ficava verde sem observar NADA disto. Adicionado em 09/09.
+      - 'supabase/migrations/**'
+      - 'tests/sol-caixa/**'
+  push:
+    branches: [main]
+    paths:
+      - 'vps/la-hq/sol/runtime/**'
+      - 'tests/sol-runtime/**'
+      - 'supabase/migrations/**'
+      - 'tests/sol-caixa/**'
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SOL_CAIXA_V3_LEDGER_MODE: production
+      SOL_CAIXA_V3_LEDGER_STRICT: '0'
+      SOL_CAIXA_V3_LEDGER_FAKE: '1'
+      SOL_CAIXA_V4_SHADOW: '0'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # A paridade Git↔runtime não roda aqui: ela precisa de SSH para a la-hq.
+      # O que o CI garante é que o ARTEFATO CANÔNICO passa sozinho — que era
+      # exatamente o buraco apontado no commit 02b849eb.
+      - name: artefato canônico existe e carrega
+        run: node -c vps/la-hq/sol/runtime/caixa-financeiro.cjs
+
+      - name: suíte do caixa
+        run: bash tests/sol-runtime/rodar-suite.sh
+
+      # Um teste que "passa" porque não rodou é pior que um vermelho. Se o nº de
+      # verdes cair abaixo do piso conhecido, o job falha mesmo com 0 vermelhos.
+      - name: piso de cobertura
+        run: |
+          set -euo pipefail
+          saida="$(bash tests/sol-runtime/rodar-suite.sh | tail -1)"
+          echo "$saida"
+          verdes="$(sed -E 's/.*verdes: ([0-9]+).*/\1/' <<<"$saida")"
+          if [ "$verdes" -lt 30 ]; then
+            echo "::error::apenas $verdes testes verdes — piso é 30. Teste deixou de rodar?"
+            exit 1
+          fi
+
+  # 🔴 O JOB QUE FALTAVA. Até 09/09/2026 o CI só olhava o runtime JS: ficou VERDE
+  #    enquanto a regra financeira do resolver nem estava instalada no banco,
+  #    porque a migration que a introduz abortava em replay limpo. Falso-verde de
+  #    CI é pior que CI nenhum — ele dá permissão.
+  ensaio-sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: ensaio
+          POSTGRES_DB: ensaio
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 20
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: ensaio
+      PGDATABASE: ensaio
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: cliente psql 17
+        run: |
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /usr/share/keyrings/pgdg.gpg
+          sudo sed -i 's|deb |deb [signed-by=/usr/share/keyrings/pgdg.gpg] |' /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client-17
+
+      - name: papéis, extensões e stubs
+        run: psql -q -f tests/sol-caixa/ensaio-bootstrap.sql
+
+      # ⚠️ ORDEM OBRIGATÓRIA: schema base ANTES das migrations. Sem isso elas
+      #    falham em cascata, e a "segunda passada para consertar" é o que
+      #    quebra a `20260817193125` (ela RENOMEIA e CRIA; na 2ª vez aborta).
+      - name: schema base
+        run: psql -q -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-schema-base.sql
+
+      # 🔴 A CONCATENAÇÃO É DO SCRIPT COMPARTILHADO, NÃO DAQUI. Esta lógica já
+      #    existia no preparador da la-hq e foi reescrita à mão neste YAML com
+      #    `printf '\echo ...'` — UMA barra, que o printf do bash lê como
+      #    ESCAPE. Cada migration perdeu a PRIMEIRA instrução (o ESC grudou
+      #    nela) e a trava do passo seguinte ficou CEGA, sem marcador para
+      #    atribuir erro: respondeu "nenhuma" com 13 das 16 funções fora do
+      #    banco. Duplicar a lógica foi o defeito; o script confere os
+      #    marcadores e falha alto se faltar um.
+      - name: replay ÚNICO das migrations
+        run: |
+          set -euo pipefail
+          bash tests/sol-caixa/ensaio-montar-todas.sh supabase/migrations /tmp/todas.sql
+          psql -f /tmp/todas.sql > /tmp/replay.log 2>&1 || true
+          echo "erros no replay: $(grep -c ': ERROR:' /tmp/replay.log || true)"
+
+      # 🔎 DIAGNOSTICO. `syntax error` no replay quase sempre significa que uma
+      #    instrucao ANTERIOR ficou com aspas abertas e engoliu tudo ate achar um
+      #    terminador — o numero que o psql reporta e o FIM da instrucao, nao o
+      #    inicio. Imprimir o trecho do arquivo e o marcador anterior e o que
+      #    mostra ONDE ela comecou. Existe porque este job falhou com
+      #    `syntax error at or near "\`"` que a la-hq, com arquivo identico, nao
+      #    reproduz — e diferenca de ambiente sem evidencia e chute.
+      - name: contexto de erro de sintaxe (diagnóstico)
+        if: always()
+        run: |
+          grep -n 'syntax error' /tmp/replay.log | head -3 | while IFS= read -r l; do
+            # awk em vez de sed: o \1 do sed some quando este arquivo
+            # atravessa camadas de escape. Aqui nao ha barra nenhuma a perder.
+            ln=$(awk -F'todas.sql:' '{split($2,a,":"); print a[1]}' <<<"$l")
+            case "$ln" in ''|*[!0-9]*) echo "$l"; continue;; esac
+            ini=$(( ln > 25 ? ln - 25 : 1 ))
+            echo "=== $l"
+            echo "--- ultimo marcador antes da linha $ln:"
+            head -n "$ln" /tmp/todas.sql | grep '^[\]echo === ' | tail -2 | sed 's/^/    /'
+            echo "--- linhas $ini..$((ln+2)):"
+            sed -n "${ini},$((ln+2))p" /tmp/todas.sql | sed 's/^/    /'
+          done || true
+
+      - name: nenhuma migration crítica pode ter falhado
+        run: |
+          set -euo pipefail
+          # Escopo: as migrations do CAIXA de 09/09. Fora ficam o histórico
+          # (~2.580 erros de ruído do harness, cujo estado final é provado pelo
+          # manifesto 16/16 no passo seguinte) e as do RADAR/Mila do mesmo dia,
+          # que dependem de tabelas fora deste schema base — cobrar delas aqui
+          # seria vermelho permanente e falso.
+          awk '/^=== /{arq=$2; next} /: ERROR:/{if (arq ~ /^20260909/ && arq ~ /caixa|pagamento|reconciliacao|envelope|resolver_pagamento|lista_plana/) print arq": "$0}' \
+            /tmp/replay.log | sort -u | head -20 > /tmp/criticas.txt || true
+          if [ -s /tmp/criticas.txt ]; then
+            echo "::error::migration crítica falhou no replay"; cat /tmp/criticas.txt; exit 1
+          fi
+          echo "nenhuma"
+
+      - name: seed sintético
+        run: psql -q -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-seed.sql
+
+      - name: cadeia reproduz produção (16/16)
+        run: psql -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-verificar-cadeia.sql
+
+      - name: ensaio do pagamento inteiro (10/10, fail-stop)
+        run: psql -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-pagamento-inteiro.sql
+
+      - name: cadeia real, caminho feliz V3 e atomicidade
+        run: psql -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-cadeia-e-atomicidade.sql

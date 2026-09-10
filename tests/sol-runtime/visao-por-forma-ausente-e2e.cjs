@@ -12,7 +12,7 @@
 // ⚠️ INCENTIVO INVERTIDO: às 11:27 a MESMA foto, com legenda SEM valor, disparou a
 // visão e saiu "cartão crédito" certinho. Às 12:08 o Arthur caprichou e escreveu o
 // valor — e a Sol soube MENOS. Este teste trava exatamente esse par.
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
+const mod = require('./_alvo.cjs');
 
 const CHAT = '120363263030561835@g.us';
 const UNIDADE = '368d47f5-2d88-4475-bc14-ba084a9a348e';

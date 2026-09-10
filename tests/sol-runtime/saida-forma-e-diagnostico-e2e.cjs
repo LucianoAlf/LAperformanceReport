@@ -6,7 +6,7 @@
 //  S2: fail-closed do multi dizia "confere aluno, competência e valor" quando o
 //      motivo real era "a fatura ainda não aparece paga na cópia do Emusys".
 //  S3: confirmação do lançamento único não dizia o aluno.
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
+const mod = require('./_alvo.cjs');
 
 const CHAT = '5521981278047-1544204225@g.us';
 const UNIDADE = '2ec861f6-023f-4d7b-9927-3960ad8c2a92';

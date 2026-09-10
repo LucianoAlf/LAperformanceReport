@@ -5,7 +5,7 @@
 // existia desde a V3 — nunca teve o fio ligado ao WhatsApp.
 // ⚠️ O shadow V4 também disse 'nada' nas duas mensagens: a intenção não existia
 // no mapa do roteador. Gap dos dois lados — ambos corrigidos aqui.
-const abf = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-abertura-fechamento.cjs');
+const abf = require('./_alvo.cjs').aberturaFechamento();
 
 const CHAT = '120363263030561835@g.us';
 const GRUPO = { grupo_jid: CHAT, chat_id: CHAT, unidade_id: '368d47f5-2d88-4475-bc14-ba084a9a348e', nome: 'Barra' };
