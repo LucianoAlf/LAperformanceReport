@@ -21,6 +21,7 @@ process.env.SOL_CAIXA_V3_LEDGER_MODE = process.env.SOL_CAIXA_V3_LEDGER_MODE || '
 process.env.SOL_CAIXA_V3_LEDGER_STRICT = process.env.SOL_CAIXA_V3_LEDGER_STRICT || '0';
 process.env.SOL_CAIXA_V3_LEDGER_FAKE = '1';
 const mod = require('./_alvo.cjs');
+const crypto = require('crypto');
 
 const CHAT = '5521981278047-1544204225@g.us';
 const UNIDADE = '2ec861f6-023f-4d7b-9927-3960ad8c2a92';
@@ -46,10 +47,11 @@ const RES_LIS = { ok: true, valor_total: 657, soma_itens: 657, alunos: 1, via: '
   ] };
 
 function novo(over = {}) {
-  const enviadas = []; const logs = []; const pedidos = []; let seq = 0;
+  const enviadas = []; const logs = []; const pedidos = [];
+  const ledger = new Map(); let msgSeq = 0; let v3Seq = 0;
   const h = mod.criarHandlerFinanceiro({
     grupos: { [CHAT]: { grupo_jid: CHAT, unidade_id: UNIDADE, nome: 'Campo Grande' } },
-    sendFn: async (_c, t) => { enviadas.push(String(t)); return 'MSG' + (++seq); },
+    sendFn: async (_c, t) => { enviadas.push(String(t)); return 'MSG' + (++msgSeq); },
     rotearV4Fn: async () => DEC_LIS,
     resolverEnvelopeFn: async (p) => { pedidos.push(p); return RES_LIS; },
     ocrFn: async () => ({ text: '', status: 'ok', file_bytes: 10 }),
@@ -66,12 +68,39 @@ function novo(over = {}) {
     // 🔴 MOCK FIEL: o fluxo exige `preview_id` E `preview_hash`; sem os dois ele
     //    responde "preview seguro nao registrado" e NAO cria pendencia — foi
     //    assim que o F10 antigo passou sem exercitar nada.
-    registrarPreviewV3Fn: async () => ({ ok: true, preview_id: 'prev-' + (++seq), preview_hash: 'hash-' + seq }),
-    registrarApprovalV3Fn: async () => ({ ok: true, approval_id: 'appr-' + (++seq) }),
+    registrarPreviewV3Fn: async (payload) => {
+      const id = 'prev-' + (++v3Seq);
+      ledger.set(id, { id, status: payload.preview_status || 'public_preview_sent', hash: payload.preview_hash,
+        operacao: payload.operacao, criadoEm: new Date().toISOString(),
+        pending: payload.preview_json && payload.preview_json.pending,
+        previewMessageId: payload.preview_json && payload.preview_json.preview_message_id });
+      return { ok: true, preview_id: id };
+    },
+    finalizarPreviewV3Fn: async (payload) => {
+      const p = ledger.get(payload.preview_id);
+      if (!p || p.hash !== payload.preview_hash || p.status !== 'public_preview_sent') {
+        return { ok: false, motivo: 'preview_v3_nao_aberto' };
+      }
+      if (payload.status === 'superseded') {
+        const n = ledger.get(payload.replacement_preview_id);
+        if (!n || n.hash !== payload.replacement_preview_hash || n.status !== 'awaiting_supersede') {
+          return { ok: false, motivo: 'preview_substituto_invalido' };
+        }
+        n.status = 'public_preview_sent';
+      }
+      p.status = payload.status;
+      p.replacementPreviewId = payload.replacement_preview_id || null;
+      return { ok: true, preview_id: p.id, status: p.status };
+    },
+    registrarApprovalV3Fn: async (payload) => {
+      const p = ledger.get(payload.preview_id);
+      if (!p || p.status !== 'public_preview_sent') return { ok: false, motivo: 'preview_v3_nao_aberto' };
+      return { ok: true, approval_id: 'appr-' + (++v3Seq) };
+    },
     log: (o) => logs.push(o),
     ...over,
   });
-  return { h, enviadas, logs, pedidos };
+  return { h, enviadas, logs, pedidos, ledger };
 }
 const junta = (a) => a.join(' || ');
 
@@ -217,12 +246,15 @@ const junta = (a) => a.join(' || ');
   //    inteiro: quem montaria a pergunta ao banco seria de novo a gramatica.
   const DEC_CORR = { intencao: 'corrigir_competencia', competencia: '08/2026', confianca: 0.9 };
   let turno = 0;
-  const C = novo({ rotearV4Fn: async () => (++turno === 1 ? DEC_LIS : DEC_CORR) });
+  const C = novo({ rotearV4Fn: async () => (++turno === 1 ? DEC_LIS : (turno === 2 ? DEC_CORR : { intencao: 'aprovar' })) });
   await C.h.handle({ chatId: CHAT, senderPhone: ADM, messageId: 'T1', body: TEXTO_LIS,
     hasMedia: true, mediaType: 'image', downloadMedia: async () => Buffer.from('x') });
   checar(C.pedidos.length === 1, 'F10: 1o turno nao chamou o Core');
   checar(C.pedidos[0].envelope.itens[0].competencias[0] === '09/2026',
     'F10: 1o turno com competencia errada -> ' + JSON.stringify(C.pedidos[0].envelope.itens));
+  const antesDaCorrecao = (C.h._pendentes.get(CHAT) || [])[0];
+  const idAntigo = antesDaCorrecao && antesDaCorrecao.previewId;
+  const ledgerAntigo = antesDaCorrecao && antesDaCorrecao.v3PreviewId;
 
   const r2 = await C.h.handle({ chatId: CHAT, senderPhone: ADM, messageId: 'T2',
     body: 'na verdade essa parcela é de agosto, 08/2026' });
@@ -252,8 +284,47 @@ const junta = (a) => a.join(' || ');
 
   // o preview ANTIGO nao pode mais aprovar; o NOVO pode
   const idNovo = pends[0].previewId;
-  const idAntigo = C.enviadas.length && null;
+  const ledgerNovo = pends[0].v3PreviewId;
   checar(!!idNovo, 'F10: pendencia sobrevivente sem previewId');
+  checar(idAntigo && idAntigo !== idNovo, 'F10: nao capturou dois cards distintos');
+  checar(C.ledger.get(ledgerAntigo) && C.ledger.get(ledgerAntigo).status === 'superseded',
+    'F10: preview V3 antigo nao ficou superseded -> ' + JSON.stringify(C.ledger.get(ledgerAntigo)));
+  checar(C.ledger.get(ledgerNovo) && C.ledger.get(ledgerNovo).status === 'public_preview_sent',
+    'F10: preview V3 novo nao ficou aberto -> ' + JSON.stringify(C.ledger.get(ledgerNovo)));
+  checar(C.ledger.get(ledgerAntigo).replacementPreviewId === ledgerNovo,
+    'F10: preview antigo nao aponta para o substituto');
+
+  // RESTART REALISTA: apenas status aberto volta. O envelope precisa voltar do
+  // preview_json.pending; se vivia so no Map, a proxima correcao se perdia.
+  const abertos = [...C.ledger.values()].filter((p) => p.status === 'public_preview_sent').map((p) => ({
+    id: p.id, preview_hash: p.hash, criado_em: p.criadoEm, operacao: p.operacao,
+    chat_id_hash: crypto.createHash('md5').update(CHAT).digest('hex'),
+    pending: p.pending, preview_message_id: p.previewMessageId,
+  }));
+  let lancamentos = 0;
+  const R = novo({
+    listarPreviewsAbertosFn: async () => abertos,
+    rotearV4Fn: async () => ({ intencao: 'aprovar' }),
+    registrarApprovalV3Fn: async () => ({ ok: true, approval_id: 'approval-restart' }),
+    lancarLoteFn: async (p) => {
+      lancamentos++;
+      return { ok: true, lote_id: 'lote-restart',
+        movimentacoes: p.itens.map((i, n) => ({ aluno_nome: i.aluno_nome, valor: i.valor, movimentacao_id: 'm' + n })) };
+    },
+  });
+  const rr = await R.h.reidratarPendencias();
+  checar(rr.ok && rr.total === 1, 'F10/restart: reidratou ' + JSON.stringify(rr));
+  checar(R.h._envelopesV4.get(CHAT) && R.h._envelopesV4.get(CHAT).envelope,
+    'F10/restart: envelope estruturado nao voltou do ledger');
+  await R.h.handle({ chatId: CHAT, senderPhone: ADM, messageId: 'APROVA-ANTIGO',
+    body: 'pode', quotedMessageId: idAntigo });
+  checar(lancamentos === 0, 'F10/restart: preview antigo aprovou depois do restart');
+  await R.h.handle({ chatId: CHAT, senderPhone: ADM, messageId: 'APROVA-NOVO',
+    body: 'pode', quotedMessageId: idNovo });
+  checar(lancamentos === 1, 'F10/restart: preview novo nao aprovou exatamente uma vez -> ' + lancamentos);
+  checar((R.h._pendentes.get(CHAT) || []).length === 0,
+    'F10/restart: aprovacao deixou pendencia aberta');
+  checar(!R.h._envelopesV4.has(CHAT), 'F10/restart: aprovacao deixou envelope orfao');
 
   // e as guardas da correcao, como funcao pura
   const corrVr = mod.aplicarCorrecaoEnvelope(
@@ -302,9 +373,56 @@ const junta = (a) => a.join(' || ');
   checar(eCat.ok && eCat.envelope.itens[0].categorias.join(',') === 'passaporte,parcela',
     'F12: categorias nao normalizadas -> ' + JSON.stringify(eCat.envelope && eCat.envelope.itens));
 
+  // ── F13: CICLO DE VIDA — descarte, expiracao e falha V3 limpam estado ─────
+  let rotaDesc = 0;
+  const DSC = novo({ rotearV4Fn: async () => (++rotaDesc === 1 ? DEC_LIS : { intencao: 'descartar' }) });
+  await DSC.h.handle({ chatId: CHAT, senderPhone: ADM, messageId: 'DESC-1', body: TEXTO_LIS });
+  const pendDesc = (DSC.h._pendentes.get(CHAT) || [])[0];
+  await DSC.h.handle({ chatId: CHAT, senderPhone: ADM, messageId: 'DESC-2', body: 'não',
+    quotedMessageId: pendDesc && pendDesc.previewId });
+  checar((DSC.h._pendentes.get(CHAT) || []).length === 0, 'F13/descarte: pendencia continuou aberta');
+  checar(!DSC.h._envelopesV4.has(CHAT), 'F13/descarte: envelope ficou orfao');
+  checar(pendDesc && DSC.ledger.get(pendDesc.v3PreviewId).status === 'rejected',
+    'F13/descarte: ledger nao ficou rejected');
+
+  const EXP = novo({ janelaMs: 100 });
+  await EXP.h.handle({ chatId: CHAT, senderPhone: ADM, messageId: 'EXP-1', body: TEXTO_LIS }, 1000);
+  const pendExp = (EXP.h._pendentes.get(CHAT) || [])[0];
+  EXP.h.temPendencia(CHAT, 1200);
+  await new Promise((resolve) => setImmediate(resolve));
+  checar((EXP.h._pendentes.get(CHAT) || []).length === 0, 'F13/expiracao: pendencia continuou aberta');
+  checar(!EXP.h._envelopesV4.has(CHAT), 'F13/expiracao: envelope ficou orfao');
+  checar(pendExp && EXP.ledger.get(pendExp.v3PreviewId).status === 'expired',
+    'F13/expiracao: ledger nao ficou expired');
+
+  const PF = novo({ registrarPreviewV3Fn: async () => ({ ok: false, motivo: 'falha_injetada' }) });
+  await PF.h.handle({ chatId: CHAT, senderPhone: ADM, messageId: 'PERSISTE-FALHA', body: TEXTO_LIS });
+  checar((PF.h._pendentes.get(CHAT) || []).length === 0, 'F13/persistencia: criou pendencia sem ledger');
+  checar(!PF.h._envelopesV4.has(CHAT), 'F13/persistencia: criou envelope sem ledger');
+
+  let rotaFalha = 0;
+  const SF = novo({
+    rotearV4Fn: async () => (++rotaFalha === 1 ? DEC_LIS : DEC_CORR),
+    finalizarPreviewV3Fn: async () => ({ ok: false, motivo: 'falha_injetada' }),
+  });
+  await SF.h.handle({ chatId: CHAT, senderPhone: ADM, messageId: 'SF-1', body: TEXTO_LIS });
+  const pendAntesSf = (SF.h._pendentes.get(CHAT) || [])[0];
+  const rSf = await SF.h.handle({ chatId: CHAT, senderPhone: ADM, messageId: 'SF-2',
+    body: 'na verdade é agosto, 08/2026' });
+  const abertosSf = [...SF.ledger.values()].filter((p) => p.status === 'public_preview_sent');
+  const esperaSf = [...SF.ledger.values()].filter((p) => p.status === 'awaiting_supersede');
+  checar(rSf && rSf.acao === 'preview_correcao_bloqueada', 'F13/supersede: falha nao bloqueou');
+  checar(abertosSf.length === 1 && abertosSf[0].id === pendAntesSf.v3PreviewId,
+    'F13/supersede: falha deixou mais de um preview aprovavel');
+  checar(esperaSf.length === 1, 'F13/supersede: novo preview nao ficou inaprovavel aguardando troca');
+  checar((SF.h._pendentes.get(CHAT) || []).length === 1
+    && (SF.h._pendentes.get(CHAT) || [])[0].previewId === pendAntesSf.previewId,
+    'F13/supersede: runtime trocou a pendencia apesar da falha');
+
   if (CAN === undefined) delete process.env.SOL_CAIXA_V4_CANARIO; else process.env.SOL_CAIXA_V4_CANARIO = CAN;
   if (falhas.length) { console.error('FALHOU:'); falhas.forEach((f) => console.error('  - ' + f)); process.exit(1); }
   console.log('ok agent-first: portao por lista, replay Lis/Mayra em TEXTO e em MIDIA COM LEGENDA, '
     + 'midia sem legenda cede o OCR, fail-safe em 4 ramos, ambiguidade pergunta, homonimo com lista, '
-    + 'contrato plural, correcao no 2o turno pelo handle(), mutante 357+300+657 com total recusado');
+    + 'contrato plural, correcao no 2o turno com supersede persistido/restart, '
+    + 'ciclo de vida completo e mutante 357+300+657 com total recusado');
 })();

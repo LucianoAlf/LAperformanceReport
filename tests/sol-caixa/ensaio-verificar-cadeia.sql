@@ -56,7 +56,10 @@ declare
     'sol_caixa_lancar_recebimento_lote_v1|f7141f150b5ac1be2aa306b0b41dec18',
     'sol_caixa_normalizar_competencia_v1|1d6dd117f0e28bf6b05ddb797842c1bd',
     'sol_caixa_responsavel_aluno|577221c9cc8aa423bf0dd373762d407c',
-    'sol_caixa_v3_validar_approval_v1|2f274032638f6ecc73deeaaf75a5f14a',
+    -- Estado-alvo desta branch: o validador agora exige preview aberto e dentro
+    -- da janela de 30 minutos. O hash anterior (2f2740...) e o vivo antes da
+    -- promocao e fica preservado no rollback da migration 20260910213000.
+    'sol_caixa_v3_validar_approval_v1|715a577da13f677465d4e85ea784a222',
     'sol_caixa_validar_multi_aluno_snapshot_v1|f4ede61d95baefcf7a08584c68d954c0',
     'sol_faturas_alunos_v1|0a05681e69320774c073eb25a772215e',
     'sol_nome_mesma_pessoa_v1|c38e778a608963e7cd97325c4d4c1aba'];

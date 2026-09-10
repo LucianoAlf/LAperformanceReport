@@ -1004,6 +1004,10 @@ function registrarApprovalV3(payload, env) {
   return chamarRpcCaixaParam('sol_caixa_shadow_registrar_approval', 'payload', payload, env);
 }
 
+function finalizarPreviewV3(payload, env) {
+  return chamarRpcCaixa('sol_caixa_v3_finalizar_preview_v1', payload, env);
+}
+
 function buscarMovimentosCaixa(payload, env) {
   return chamarRpcCaixa('sol_caixa_buscar_movimentos_v1', payload, env);
 }
@@ -2766,7 +2770,7 @@ function categoriaEhSaida(categoria) {
   return ['seguranca', 'despesa', 'retirada', 'troco'].includes(String(categoria || '').toLowerCase());
 }
 
-function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, resolverEnvelopeFn = resolverEnvelopeCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, log = () => {}, janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
+function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, finalizarPreviewV3Fn = finalizarPreviewV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, resolverEnvelopeFn = resolverEnvelopeCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, log = () => {}, janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
   // SOL_CAIXA_V3_LEDGER_FAKE=1 (suite de testes): fiacao V3 ativa, banco intacto.
   // Sem isto, teste que nao mocka os registradores grava preview/approval REAL
   // no ledger de producao — 62% dos previews de 24-31/08 eram artefato de teste.
@@ -2776,6 +2780,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     let _fakeSeq = 0;
     if (registrarPreviewV3Fn === registrarPreviewV3) registrarPreviewV3Fn = async () => ({ ok: true, preview_id: 'fake-prev-' + (++_fakeSeq) });
     if (registrarApprovalV3Fn === registrarApprovalV3) registrarApprovalV3Fn = async () => ({ ok: true, approval_id: 'fake-appr-' + (++_fakeSeq) });
+    if (finalizarPreviewV3Fn === finalizarPreviewV3) finalizarPreviewV3Fn = async () => ({ ok: true });
   }
   // grupos: { [chatId]: { unidade_id, nome } }
   const pendentes = new Map();   // chatId -> [ {previewId, unidade_id, nome, valor, forma, categoria, aluno, idemKey, origem, ts} ]
@@ -2789,7 +2794,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   const v3LedgerAtivo = ['production', 'prod', 'on', '1'].includes(v3LedgerMode);
   const v3LedgerStrict = process.env.SOL_CAIXA_V3_LEDGER_STRICT === '1';
 
-  async function registrarPreviewPublicoV3({ event, grupo, previewId, texto, pendencia, result }) {
+  async function registrarPreviewPublicoV3({ event, grupo, previewId, texto, pendencia, result, previewStatus = 'public_preview_sent' }) {
     if (!v3LedgerAtivo) return null;
     const previewJson = {
       public_preview_sent: true,
@@ -2807,6 +2812,9 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       observed_at: event.ts || new Date(Number(event.timestamp || Math.floor(Date.now() / 1000)) * 1000).toISOString(),
       source: 'sol_caixa_whatsapp_production',
       mode: 'v3_production_public_preview',
+      // O evento foi observado/publicado; quem controla se o card pode ser
+      // aprovado e o preview_status abaixo. Na correcao, o card novo nasce
+      // awaiting_supersede ate o banco trocar os dois estados atomicamente.
       status: 'public_preview_sent',
       raw_ref: {
         message_id_sha256: sha256(event.messageId),
@@ -2826,7 +2834,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       categoria: pendencia.categoria || 'unknown',
       valor_centavos: pendencia.valor != null ? String(Math.round(Number(pendencia.valor) * 100)) : '',
       forma: pendencia.forma || 'unknown',
-      preview_status: 'public_preview_sent',
+      preview_status: previewStatus,
       preview_json: previewJson,
     };
     try {
@@ -2891,6 +2899,31 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     }
   }
 
+  async function finalizarPreviewSeguroV3({ alvo, status, substituto = null, motivo = null }) {
+    if (!v3LedgerAtivo || !alvo || !alvo.v3PreviewId) return { ok: true, sem_ledger: true };
+    const payload = {
+      preview_id: alvo.v3PreviewId,
+      preview_hash: alvo.v3PreviewHash || null,
+      status,
+      motivo: motivo || status,
+      replacement_preview_id: substituto && substituto.v3PreviewId || null,
+      replacement_preview_hash: substituto && substituto.v3PreviewHash || null,
+    };
+    try {
+      const r = await finalizarPreviewV3Fn(payload);
+      const ok = !!(r && r.ok);
+      log({ acao: 'v3_preview_finalizado', ok, status, preview_ledger_id: alvo.v3PreviewId,
+            substituto_ledger_id: substituto && substituto.v3PreviewId || null,
+            motivo: ok ? null : (r && r.motivo) || 'resposta_invalida' });
+      return r || { ok: false, motivo: 'resposta_invalida' };
+    } catch (e) {
+      log({ acao: 'v3_preview_finalizacao_erro', status, preview_ledger_id: alvo.v3PreviewId,
+            erro: String(e && e.message) });
+      if (v3LedgerStrict) throw e;
+      return { ok: false, motivo: 'erro_rpc_finalizacao' };
+    }
+  }
+
   // ── CAMINHO AGENT-FIRST ────────────────────────────────────────────────────
   //
   // 🔴 A INVERSAO MORA AQUI, NO ARTEFATO VERSIONADO — nao no bridge. O bridge
@@ -2916,6 +2949,14 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   // remontar frase. Guardado ao lado da pendencia, com o mesmo tempo de vida.
   const envelopesV4 = new Map();
 
+  function limparEnvelopeDaPendencia(chatId, pendencia, motivo) {
+    const guardado = envelopesV4.get(chatId);
+    if (!guardado || !pendencia || guardado.previewId !== pendencia.previewId) return;
+    envelopesV4.delete(chatId);
+    log({ acao: 'agent_first_envelope_descartado', chatId, motivo,
+          previewId: pendencia.previewId || null });
+  }
+
   async function tratarAgentFirst(event, grupo, agora) {
     const texto = bodyLimpo(event.body);
     if (!texto) return null;
@@ -2936,8 +2977,10 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     //    `limparVelhos` a tira; e se o V3 nao registrou, ela nunca nasceu. Um
     //    envelope orfao seria estado invisivel decidindo dinheiro.
     const guardado = envelopesV4.get(event.chatId);
-    const pendVivo = !!(guardado && guardado.previewId
-      && arr.some((p) => p.previewId === guardado.previewId));
+    const pendGuardada = guardado && guardado.previewId
+      ? arr.find((p) => p.previewId === guardado.previewId) || null
+      : null;
+    const pendVivo = !!pendGuardada;
     if (guardado && !pendVivo) {
       envelopesV4.delete(event.chatId);
       log({ acao: 'agent_first_envelope_descartado', chatId: event.chatId, motivo: 'pendencia_nao_existe_mais' });
@@ -3014,7 +3057,11 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     const anterior = vivo && guardado ? guardado.previewId : null;
     const saida = await abrirFluxoMultiAluno({
       event, grupo, textoFonte: texto, textoHumano: texto, agora,
-      origemMessageId: event.messageId, resolvidoPronto: res,
+      // A correcao conserva a origem do comprovante. Alem de preservar a
+      // idempotencia, isto faz a reidratacao escolher somente o preview mais
+      // novo mesmo se um runtime antigo ainda enxergar os dois por instantes.
+      origemMessageId: (vivo && pendGuardada && pendGuardada.origem) || event.messageId,
+      resolvidoPronto: res, agentFirstEnvelope: env.envelope,
       supersedePreviewId: anterior,
       intent: { ok: true, valor_total: Number(res.valor_total), forma: env.envelope.forma,
                 categoria: null,
@@ -3024,7 +3071,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     // V3 que nao registrou nao deixa pendencia — e nao pode deixar envelope.
     if (saida && saida.previewId) {
       envelopesV4.set(event.chatId, { envelope: env.envelope, ts: agora, previewId: saida.previewId });
-    } else {
+    } else if (!(saida && saida.preservarEnvelope)) {
       envelopesV4.delete(event.chatId);
       log({ acao: 'agent_first_envelope_descartado', chatId: event.chatId,
             motivo: (saida && saida.acao) || 'sem_preview' });
@@ -3032,7 +3079,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     return saida;
   }
 
-  async function abrirFluxoMultiAluno({ event, grupo, textoFonte, textoHumano, intent, agora, origemMessageId, resolvidoPronto = null, supersedePreviewId = null }) {
+  async function abrirFluxoMultiAluno({ event, grupo, textoFonte, textoHumano, intent, agora, origemMessageId, resolvidoPronto = null, agentFirstEnvelope = null, supersedePreviewId = null }) {
     const arr = limparVelhos(event.chatId, agora);
     // Janela de reenvio: OCR lento (frequente, ~45s de timeout) leva a equipe a mandar o
     // MESMO comprovante de novo. Sem isto, cada reenvio empilha outra pendencia MANUAL
@@ -3207,9 +3254,17 @@ _Não lanço nada pela metade._`);
       origem: origemMessageId || event.messageId, idemKey: `${event.chatId}:${origemMessageId || event.messageId}:lote-multi`,
       enviadoPor: nomeParaCarimbo(idEnviou, event), ts: agora,
     };
+    // O envelope faz parte do estado persistido do preview V3. Guardar apenas
+    // num Map resolvia o segundo turno ate o primeiro restart; depois o bridge
+    // reidratava o card sem os fatos que o LLM tinha estruturado.
+    if (agentFirstEnvelope) pendencia.agentFirstEnvelope = agentFirstEnvelope;
     const v3 = await registrarPreviewPublicoV3({
       event, grupo, previewId, texto, pendencia,
       result: { acao: 'preview_multi_aluno_enviado', itens: itens.length, valor_total: intent.valor_total },
+      // A correcao nasce NAO APROVAVEL. A mesma transacao que encerra o card
+      // antigo promove este para public_preview_sent. Se a troca falhar, o
+      // novo nunca fica aberto no ledger — nao ha janela com dois aprovaveis.
+      previewStatus: supersedePreviewId ? 'awaiting_supersede' : 'public_preview_sent',
     });
     if (!v3 || !v3.preview_id || !v3.preview_hash) {
       await sendFn(event.chatId, '⚠️ Não deixei esse lote pendente porque o preview seguro não foi registrado. Não responda *pode*; tenta de novo em instantes.');
@@ -3240,6 +3295,34 @@ _Não lanço nada pela metade._`);
     //    explicitamente por quem chama; nunca uma pendencia alheia.
     if (supersedePreviewId) {
       const velhas = arr.filter((p) => p.previewId === supersedePreviewId);
+      if (velhas.length !== 1) {
+        await finalizarPreviewSeguroV3({
+          alvo: pendencia, status: 'rejected', motivo: 'preview_anterior_nao_unico',
+        });
+        await sendFn(event.chatId,
+          '⚠️ Preparei a correção, mas o preview anterior não está mais disponível com segurança. '
+          + 'Ignore o card novo e refaça o lançamento.');
+        log({ acao: 'preview_correcao_bloqueada', chatId: event.chatId,
+              anterior: supersedePreviewId, motivo: 'preview_anterior_nao_unico' });
+        return { acao: 'preview_correcao_bloqueada', preservarEnvelope: false };
+      }
+      for (const velha of velhas) {
+        const fim = await finalizarPreviewSeguroV3({
+          alvo: velha, status: 'superseded', substituto: pendencia,
+          motivo: 'correcao_agent_first',
+        });
+        if (!fim || !fim.ok) {
+          // O novo nasceu `awaiting_supersede`, portanto ja e inaprovavel. O
+          // antigo continua sendo o unico aberto; nenhuma compensacao remota e
+          // necessaria e uma queda entre duas RPCs nao cria estado intermediario.
+          await sendFn(event.chatId,
+            '⚠️ Preparei a correção, mas não consegui substituir o preview antigo com segurança. '
+            + 'Ignore o card novo e não responda *pode* nele; o card anterior continua valendo. Tenta a correção de novo em instantes.');
+          log({ acao: 'preview_correcao_bloqueada', chatId: event.chatId,
+                anterior: supersedePreviewId, motivo: fim && fim.motivo });
+          return { acao: 'preview_correcao_bloqueada', preservarEnvelope: true };
+        }
+      }
       for (const v of velhas) arr.splice(arr.indexOf(v), 1);
       if (velhas.length) {
         log({ acao: 'preview_sucedido_por_correcao', chatId: event.chatId,
@@ -3337,7 +3420,14 @@ _Não lanço nada pela metade._`);
   function limparVelhos(chatId, agora) {
     const arr = pendentes.get(chatId) || [];
     const vivos = arr.filter((p) => agora - p.ts < janelaMs);
+    const expirados = arr.filter((p) => agora - p.ts >= janelaMs);
     pendentes.set(chatId, vivos);
+    for (const p of expirados) {
+      limparEnvelopeDaPendencia(chatId, p, 'expirou');
+      // A aprovacao vence no mesmo limite do card. A RPC tambem confere a idade,
+      // portanto esta escrita e trilha/auditoria — nao a unica barreira.
+      void finalizarPreviewSeguroV3({ alvo: p, status: 'expired', motivo: 'janela_runtime_expirou' });
+    }
     return vivos;
   }
 
@@ -4652,7 +4742,18 @@ _Não lanço nada pela metade._`);
         if (event.quotedMessageId) alvoD = arrD.find((p) => p.previewId === event.quotedMessageId) || null;
         if (!alvoD && arrD.length === 1) alvoD = arrD[0];
         if (alvoD) {
+          const fimD = await finalizarPreviewSeguroV3({
+            alvo: alvoD, status: 'rejected', motivo: 'descartado_pelo_operador',
+          });
+          if (!fimD || !fimD.ok) {
+            await sendFn(chatId,
+              '⚠️ Não consegui descartar esse preview com segurança agora. Ele continua pendente; tenta de novo em instantes.');
+            log({ acao: 'preview_descarte_bloqueado', chatId, previewId: alvoD.previewId,
+                  motivo: fimD && fimD.motivo });
+            return { acao: 'preview_descarte_bloqueado' };
+          }
           pendentes.set(chatId, arrD.filter((p) => p !== alvoD));
+          limparEnvelopeDaPendencia(chatId, alvoD, 'descartado');
           // 🔴 ANTES DE AFIRMAR, OLHAR. "Nada foi gravado no caixa" e afirmacao
           // sobre o CAIXA; descartar o preview so autoriza a falar do PREVIEW.
           // Em 08/09 ela disse as duas como se fossem uma, e a entrada das 11:24
@@ -5473,6 +5574,16 @@ _Não lanço nada pela metade._`);
       if (arr.length === 0) return { acao: 'pode_sem_pendencia' };
       let alvo = null;
       if (event.quotedMessageId) alvo = arr.find((p) => _citaPend(p, event.quotedMessageId)) || null;
+      // Citar um card velho/estranho NAO pode cair na unica pendencia atual.
+      // Depois de uma correcao existe exatamente um card vigente; antes desta
+      // guarda, responder "pode" citando o antigo lancava o novo — a interface
+      // dizia uma coisa e a autorizacao valia para outra.
+      if (event.quotedMessageId && !alvo) {
+        await sendFn(chatId,
+          '⚠️ Esse card não está mais pendente. Responde *pode* citando o preview mais recente.');
+        log({ acao: 'pode_preview_invalido', chatId, quotedMessageId: event.quotedMessageId });
+        return { acao: 'pode_preview_invalido' };
+      }
       if (!alvo) {
         if (arr.length === 1) alvo = arr[0];
         else {
@@ -5498,6 +5609,7 @@ _Não lanço nada pela metade._`);
       if (alvo.tipoOperacao === 'estornar_movimento' || alvo.tipoOperacao === 'corrigir_movimento') {
         if (dryRun) {
           pendentes.set(chatId, arr.filter((p) => p !== alvo));
+          limparEnvelopeDaPendencia(chatId, alvo, 'dryrun');
           await sendFn(chatId, `🧪 (teste) Eu ${alvo.tipoOperacao === 'estornar_movimento' ? 'estornaria' : 'corrigiria'} o lançamento ${alvo.movimentacao_id}.`);
           return { acao: `dryrun_${alvo.tipoOperacao}` };
         }
@@ -5533,6 +5645,7 @@ _Não lanço nada pela metade._`);
           try { rOp = await estornarMovimentoFn(payloadOperacao); }
           catch (e) { await sendFn(chatId, '⚠️ Deu erro técnico ao estornar. Já registrei o problema.'); log({ acao: 'erro_rpc_estornar_movimento', erro: String(e && e.message) }); return { acao: 'erro_estornar_movimento' }; }
           pendentes.set(chatId, arr.filter((p) => p !== alvo));
+          limparEnvelopeDaPendencia(chatId, alvo, 'estornado');
           if (rOp && rOp.ok) {
             await sendFn(chatId, `Estornei no caixa: ${fmtBRL(rOp.valor || alvo.valor)}. Não apaguei o original; criei o movimento inverso auditado.`);
             log({ acao: 'movimento_estornado', movimentacao_id: alvo.movimentacao_id, estorno_id: rOp.movimentacao_estorno_id });
@@ -5544,6 +5657,7 @@ _Não lanço nada pela metade._`);
         try { rOp = await corrigirMovimentoFn({ ...payloadOperacao, correcoes: alvo.correcoes || {} }); }
         catch (e) { await sendFn(chatId, '⚠️ Deu erro técnico ao corrigir. Já registrei o problema.'); log({ acao: 'erro_rpc_corrigir_movimento', erro: String(e && e.message) }); return { acao: 'erro_corrigir_movimento' }; }
         pendentes.set(chatId, arr.filter((p) => p !== alvo));
+        limparEnvelopeDaPendencia(chatId, alvo, 'movimento_corrigido');
         if (rOp && rOp.ok) {
           const depois = rOp.depois || {};
           await sendFn(chatId, `Corrigi no caixa: ${fmtBRL(depois.valor || alvo.valor)} · ${depois.categoria || alvo.categoria || 'lançamento'} · ${depois.forma_pagamento || alvo.forma || ''}.`);
@@ -5589,6 +5703,7 @@ _Não lanço nada pela metade._`);
           return { acao: 'lote_multi_rpc_erro' };
         }
         pendentes.set(chatId, arr.filter((p) => p !== alvo));
+        limparEnvelopeDaPendencia(chatId, alvo, 'aprovado_lote');
         if (lote && lote.ok) {
           const movsLote = lote.movimentacoes || [];
           if (movsLote.length !== alvo.itens.length) {
@@ -5691,6 +5806,7 @@ _Não lanço nada pela metade._`);
       }
       if (dryRun) {
         pendentes.set(chatId, arr.filter((p) => p !== alvo));
+        limparEnvelopeDaPendencia(chatId, alvo, 'dryrun');
         await sendFn(chatId, `🧪 (teste) Eu lançaria na ${alvo.nome}: ${cap(alvo.categoria || 'parcela')} — ${fmtBRL(valor)} (${forma}). Nada foi gravado.`);
         log({ acao: 'dryrun', valor });
         return { acao: 'dryrun' };
@@ -5744,6 +5860,7 @@ _Não lanço nada pela metade._`);
       catch (e) { await sendFn(chatId, '⚠️ Deu erro técnico ao lançar. Já registrei o problema; tenta de novo em instantes.'); log({ acao: 'erro_rpc', erro: String(e && e.message) }); return { acao: 'erro' }; }
       // remove a pendência alvo
       pendentes.set(chatId, arr.filter((p) => p !== alvo));
+      limparEnvelopeDaPendencia(chatId, alvo, 'aprovado');
       if (r && r.ok && r.ja_lancado) { await sendFn(chatId, 'Esse comprovante já tinha sido lançado ✅.'); return { acao: 'ja_lancado' }; }
       if (r && r.ok) {
         const quem = (alvo.enviadoPor && alvo.enviadoPor !== autorizadoPor)
@@ -5844,6 +5961,13 @@ _Não lanço nada pela metade._`);
         pend.reidratada = true;
         arr.push(pend);
         pendentes.set(chatId, arr);
+        if (pend.agentFirstEnvelope && pend.previewId) {
+          envelopesV4.set(chatId, {
+            envelope: pend.agentFirstEnvelope,
+            ts: Number(pend.ts) || new Date(a.criado_em).getTime() || agora,
+            previewId: pend.previewId,
+          });
+        }
         n++;
       }
       log({ acao: 'reidratacao_pendencias', total: n });
@@ -5981,7 +6105,8 @@ _Não lanço nada pela metade._`);
   // _fh.ehConversaSemComando(body) desde 25/08, mas o handler nunca a expos —
   // o guard de "elogio nao leva nao-entendi" estava morto por undefined.
   return { handle, temPendencia, citaAlgumaPendencia, ehConversaSemComando,
-    reidratarPendencias, tratarNaoEntendida, observarRoteadorV4, tratarAgentFirst, _pendentes: pendentes };
+    reidratarPendencias, tratarNaoEntendida, observarRoteadorV4, tratarAgentFirst,
+    _pendentes: pendentes, _envelopesV4: envelopesV4 };
 }
 
 function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
@@ -5994,7 +6119,7 @@ module.exports = {
   montarEnvelopeV4, aplicarCorrecaoEnvelope, _v4CanarioLigado, resolverEnvelopeCaixaV1, valorConfereComTexto,
   casarNao, ehConversaSemComando,
   montarPreview, montarPreviewMultiAluno, fmtBRL, carregarEnv, lancarRecebimento, lancarRecebimentoLote, resolverMultiAlunoCaixaV1, resolverPagamentoItensV1, resolverCompostoAlunoCaixaV1, lancarSaidaCaixa, buscarLancamentoParaCorrecao,
-  buscarMovimentosCaixa, corrigirMovimentoCaixa, estornarMovimentoCaixa, registrarPreviewV3, registrarApprovalV3, criarHandlerFinanceiro,
+  buscarMovimentosCaixa, corrigirMovimentoCaixa, estornarMovimentoCaixa, registrarPreviewV3, registrarApprovalV3, finalizarPreviewV3, criarHandlerFinanceiro,
   confirmacaoLimpa, classificarMidia, bodyLimpo, nomeDoAtor, buscarResponsavel, mesmaPessoa, pagamentoMultiplo,
   extrairDivisaoPagamento, extrairSomaAditivaPagamento, extrairAdicionalPagamento, detectarLojinhaProduto, detectarContextoMultiAluno, validarIntencaoMultiAluno,
   identificarPessoa, nomeParaCarimbo, ehPerguntaDeCaixa, resumoDoDia, montarResumoCaixa,

@@ -154,12 +154,13 @@ jobs:
       - name: nenhuma migration crítica pode ter falhado
         run: |
           set -euo pipefail
-          # Escopo: as migrations do CAIXA de 09/09. Fora ficam o histórico
+          # Escopo: as migrations do CAIXA de 09/09 e a migration de estado
+          # terminal do preview V3 desta frente. Fora ficam o histórico
           # (~2.580 erros de ruído do harness, cujo estado final é provado pelo
           # manifesto 16/16 no passo seguinte) e as do RADAR/Mila do mesmo dia,
           # que dependem de tabelas fora deste schema base — cobrar delas aqui
           # seria vermelho permanente e falso.
-          awk '/^=== /{arq=$2; next} /: ERROR:/{if (arq ~ /^20260909/ && arq ~ /caixa|pagamento|reconciliacao|envelope|resolver_pagamento|lista_plana/) print arq": "$0}' \
+          awk '/^=== /{arq=$2; next} /: ERROR:/{if ((arq ~ /^20260909/ && arq ~ /caixa|pagamento|reconciliacao|envelope|resolver_pagamento|lista_plana/) || arq ~ /^20260910213000_preview_v3_tem_estado_terminal/) print arq": "$0}' \
             /tmp/replay.log | sort -u | head -20 > /tmp/criticas.txt || true
           if [ -s /tmp/criticas.txt ]; then
             echo "::error::migration crítica falhou no replay"; cat /tmp/criticas.txt; exit 1
@@ -177,6 +178,9 @@ jobs:
 
       - name: orquestrador — envelope estruturado vira combinação única
         run: psql -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-envelope-estruturado.sql
+
+      - name: preview V3 — estado terminal e aprovação única
+        run: psql -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-preview-estado-v3.sql
 
       - name: cadeia real, caminho feliz V3 e atomicidade
         run: psql -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-cadeia-e-atomicidade.sql
