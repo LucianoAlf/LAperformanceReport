@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const migration = readFileSync(new URL('../supabase/migrations/20260910001614_kpis_admin_bandas_por_matricula_distinta.sql', import.meta.url), 'utf8');
+const migration = readFileSync(new URL('../supabase/migrations/20260910003947_kpis_admin_bandas_por_matricula_distinta.sql', import.meta.url), 'utf8');
 const original = readFileSync(new URL('../supabase/migrations/20260731163353_relatorio_admin_canonico_multicurso_trancamentos.sql', import.meta.url), 'utf8');
 const start = original.indexOf('create or replace function public.get_kpis_alunos_admin_operacional_impl_v2(');
 const end = original.indexOf('\n$function$;', start) + '\n$function$;'.length;
