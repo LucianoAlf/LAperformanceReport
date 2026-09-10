@@ -175,5 +175,8 @@ jobs:
       - name: ensaio do pagamento inteiro (10/10, fail-stop)
         run: psql -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-pagamento-inteiro.sql
 
+      - name: orquestrador — envelope estruturado vira combinação única
+        run: psql -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-envelope-estruturado.sql
+
       - name: cadeia real, caminho feliz V3 e atomicidade
         run: psql -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-cadeia-e-atomicidade.sql

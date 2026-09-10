@@ -82,6 +82,8 @@ echo "-- cadeia reproduz produção (16/16)"
 roda -v ON_ERROR_STOP=1 -f /tmp/ensaio-verificar-cadeia.sql 2>&1 | grep -viE '^DO$' | tail -8
 echo "-- pagamento inteiro (10/10, fail-stop)"
 roda -v ON_ERROR_STOP=1 -f /tmp/ensaio-pagamento-inteiro.sql 2>&1 | grep -viE '^DO$|Timing' | tail -8
+echo "-- orquestrador: envelope estruturado -> combinacao unica"
+roda -v ON_ERROR_STOP=1 -f /tmp/ensaio-envelope-estruturado.sql 2>&1 | grep -viE '^DO$' | tail -4
 echo "-- cadeia real, caminho feliz V3 e atomicidade"
 roda -v ON_ERROR_STOP=1 -f /tmp/ensaio-cadeia-e-atomicidade.sql 2>&1 \
   | grep -viE '^BEGIN|^DO$|^ROLLBACK|^CREATE|^DROP|^INSERT|audit_log' | tail -8

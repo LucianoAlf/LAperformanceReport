@@ -5,7 +5,13 @@
 #
 # Atualizar SOMENTE junto com a promoção, e no mesmo commit.
 #
+# ⚠️ EU ESQUECI DISTO NA PROMOCAO DE 10/09 e o `paridade.sh` passou a
+#    acusar "runtime fora do Git" sem haver patch nenhum — alarme que da
+#    lobo ensina a ignorar o alarme, que e o defeito que ele existe para
+#    impedir. O hash abaixo e o do artefato promovido naquele dia.
+
+#
 # <sha256>  <arquivo>  <caminho na la-hq>
-a7ef7ad72ffd4e38efa97fac1c37402ce1771cda2dac4cb8539326904b05b132  caixa-financeiro.cjs  /home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs
+0059033dd28d764a5c08b6e78cbc04357338dd23c5b73464daa319ac7880fead  caixa-financeiro.cjs  /home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs
 448130f82d5071530b511508744144d3c2a6fda26b86336070559d27926f872f  caixa-abertura-fechamento.cjs  /home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-abertura-fechamento.cjs
 a720c73c99a0556197affd7b830b5af57f4b3fb9a33d24f18db8abc455fb2bf5  group-engagement.cjs  /home/sol/.hermes/hermes-agent/scripts/whatsapp-bridge/group-engagement.cjs

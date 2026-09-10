@@ -1051,6 +1051,27 @@ function resolverMultiAlunoCaixaV1(payload, { url, key } = carregarEnv()) {
 //    unidade. A RPC ganhou `statement_timeout` próprio de 60s (o do PostgREST é
 //    8s); 15s aqui desistiria antes do banco responder e a Sol diria "fonte
 //    indisponível" para um caso que ia dar certo.
+// Orquestrador: envelope estruturado -> combinacao unica. E a RPC que fecha o
+// buraco medido em 10/09 — a ferramenta sabia responder, ninguem perguntava
+// direito. Timeout maior porque ela monta o envelope e varre subconjuntos.
+function resolverEnvelopeCaixaV1(payload, { url, key } = carregarEnv()) {
+  return new Promise((resolve, reject) => {
+    if (!key) return reject(new Error('missing SUPABASE service key'));
+    const body = JSON.stringify({
+      p_unidade_id: payload.unidade_id,
+      p_envelope: payload.envelope,
+    });
+    const u = new URL(`${url}/rest/v1/rpc/sol_caixa_resolver_envelope_v1`);
+    const req = https.request({ hostname: u.hostname, path: u.pathname, method: 'POST', headers: {
+      apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body),
+    }}, (res) => {
+      let data = ''; res.on('data', (c) => { data += c; });
+      res.on('end', () => { try { resolve(data ? JSON.parse(data) : null); } catch (e) { reject(new Error(`resposta invalida (${res.statusCode})`)); } });
+    });
+    req.on('error', reject); req.setTimeout(45000, () => req.destroy(new Error('timeout resolver envelope'))); req.write(body); req.end();
+  });
+}
+
 function resolverPagamentoItensV1(payload, { url, key } = carregarEnv()) {
   return new Promise((resolve, reject) => {
     if (!key) return reject(new Error('missing SUPABASE service key'));
@@ -2165,6 +2186,60 @@ function valorConfereComTexto(valor, ...textos) {
   return { ok: false, motivo: 'nao_esta_no_texto' };
 }
 
+// A DECISAO DO ROTEADOR VIRA ENVELOPE ESTRUTURADO — nunca frase.
+//
+// 🔴 O QUE ESTA FUNCAO EXISTE PARA IMPEDIR. A tentacao obvia era transformar a
+//    decisao do LLM de volta numa frase canonica e re-passar pelo parser legado
+//    (foi o que o fallback de dialogo de 31/08 faz). Isso recria exatamente o
+//    defeito: quem monta a pergunta ao banco continua sendo a gramatica, e ela
+//    entrega nome contaminado e primeiro valor. Aqui o payload vai DIRETO ao
+//    Core, no formato que ele consome.
+//
+// ⚠️ NAO INVENTA NADA. Se o modelo nao deu identidade (nem aluno, nem pagador)
+//    ou nao deu total, devolve recusa com motivo. Preencher por conta propria
+//    seria o LLM decidindo dinheiro, que e o invariante que esta frente inteira
+//    protege.
+// ⚠️ `valor`/`valor_total` ja chegam aqui PENEIRADOS por valorConfereComTexto.
+function montarEnvelopeV4(dec) {
+  if (!dec || typeof dec !== 'object') return { ok: false, motivo: 'sem_decisao' };
+  if (!['lancamento_por_texto', 'lancamento_multi_aluno'].includes(dec.intencao)) {
+    return { ok: false, motivo: 'intencao_nao_lanca', intencao: dec.intencao };
+  }
+  const total = (dec.valor_total != null) ? dec.valor_total : dec.valor;
+  if (total == null || !(Number(total) > 0)) return { ok: false, motivo: 'sem_valor_total' };
+
+  let itens = Array.isArray(dec.itens) ? dec.itens.filter((i) => i && i.aluno) : [];
+  // singular -> plural: o contrato antigo continua valendo como entrada
+  if (!itens.length && dec.aluno_nome) {
+    itens = [{ aluno: dec.aluno_nome,
+               categorias: dec.categoria ? [dec.categoria] : [],
+               competencias: dec.competencia ? [dec.competencia] : [] }];
+  }
+  // pagador SOZINHO e legitimo: quem expande a familia e o Core, com as RPCs
+  // de identidade. O que nao pode e' seguir sem identidade nenhuma.
+  if (!itens.length && !dec.pagador) return { ok: false, motivo: 'sem_identidade' };
+
+  return { ok: true, envelope: {
+    pagador: dec.pagador || null,
+    valor_total: Number(total),
+    forma: dec.forma || null,
+    itens: itens.map((i) => ({
+      aluno: String(i.aluno).trim(),
+      categorias: Array.isArray(i.categorias) ? i.categorias : [],
+      competencias: Array.isArray(i.competencias) ? i.competencias : [],
+    })),
+  } };
+}
+
+// PORTAO DO CANARIO — desligado por padrao, e por LISTA, nunca global.
+// `SOL_CAIXA_V4_CANARIO` recebe chatIds separados por virgula. Vazio = ninguem.
+// ⚠️ Lista, e nao booleano: flip global em dinheiro nao e canario, e aposta.
+function _v4CanarioLigado(chatId) {
+  const lista = String(process.env.SOL_CAIXA_V4_CANARIO || '')
+    .split(',').map((s) => s.trim()).filter(Boolean);
+  return lista.length > 0 && lista.includes(String(chatId || ''));
+}
+
 function rotearMensagemV4(texto, contexto, { timeout = 30000 } = {}) {
   return new Promise((resolve) => {
     const t = String(texto || '').trim();
@@ -2174,7 +2249,20 @@ function rotearMensagemV4(texto, contexto, { timeout = 30000 } = {}) {
       + JSON.stringify(contexto).slice(0, 1200)
       + '. Classifique a INTENCAO da mensagem. Responda SOMENTE JSON valido, sem markdown: '
       + '{"intencao":"aprovar|descartar|corrigir_aluno|corrigir_valor|corrigir_categoria|corrigir_forma|corrigir_competencia|sem_aluno|contestar_fatura|saida_dinheiro|lancamento_por_texto|lancamento_multi_aluno|corrigir_lancamento_gravado|estornar_lancamento|reabrir_caixa|abrir_caixa|fechar_caixa|consulta_caixa|conversa|nada",'
-      + '"aluno_nome":null,"valor":null,"forma":null,"categoria":null,"competencia":null,"entidade":null,"confianca":0.0}. '
+      + '"aluno_nome":null,"valor":null,"forma":null,"categoria":null,"competencia":null,"entidade":null,'
+      // 🔴 O CONTRATO PLURAL (10/09). O singular nao comportava familia nem
+      //    varios meses: um `aluno_nome`, um `valor`, uma `competencia`.
+      //    Mesmo invertendo o bridge, esses dois casos ficariam
+      //    estruturalmente incompletos. Os campos antigos FICAM porque o
+      //    placar do shadow os le — quebrar o log seria perder a serie.
+      + '"pagador":null,"valor_total":null,'
+      + '"itens":[{"aluno":null,"categorias":[],"competencias":[]}],"confianca":0.0}. '
+      + 'CAMPOS PLURAIS: "pagador" e quem PAGOU quando a mensagem nomeia o responsavel em vez do aluno '
+      + '("a mae da Lis mandou", "pagamento da Gisele"); deixe null se quem aparece e o proprio aluno. '
+      + '"valor_total" e o total do comprovante — quando a mensagem traz parciais E um total, valor_total e o TOTAL. '
+      + '"itens" tem UMA entrada por ALUNO citado (nao por fatura): itens[].categorias em '
+      + '[parcela,passaporte,matricula,lojinha,venda,outro] e itens[].competencias em MM/AAAA, ambas listas, vazias quando a mensagem nao diz. '
+      + 'Um aluno com dois cursos e UM item; dois irmaos sao DOIS itens. Varios meses do mesmo aluno vao em competencias[]. '
       + 'REGRAS: "conversa" = papo de equipe/elogio/despedida; "nada" = assunto alheio ao caixa. '
       + '"aprovar" quando autorizam lancar o que ja esta num card do contexto — inclusive so com "pode", "pode sim", "ok", "isso", "manda", respondendo a pergunta da Sol. Exige card no contexto: sem card, "pode" sozinho e "conversa". '
       + '"lancamento_por_texto" quando a mensagem DITA um pagamento novo, sem comprovante e sem card aberto: traz aluno e/ou valor e/ou competencia ("PG parcela 09/26 Aluno: Fulano LA CG - R$377,00"). Nao confundir com "aprovar" — aqui nao ha card para aprovar, ha um lancamento sendo criado. '
@@ -2186,16 +2274,54 @@ function rotearMensagemV4(texto, contexto, { timeout = 30000 } = {}) {
       + '"reabrir_caixa" quando pedem para abrir NOVAMENTE um caixa fechado ("pode abrir novamente", "reabre o caixa"). '
       + '"lancamento_multi_aluno" quando um pagamento cobre DOIS OU MAIS alunos (divisao por aluno). '
       + 'NUNCA invente nome ou valor que nao esteja na mensagem. confianca entre 0 e 1.\n\nMENSAGEM:\n' + t.slice(0, 900);
-    const normaliza = (o) => (!o || typeof o !== 'object') ? null : ({
-      intencao: String(o.intencao || 'nada'),
-      aluno_nome: (o.aluno_nome && String(o.aluno_nome).trim()) || null,
-      valor: o.valor != null ? parseBRMoney(String(o.valor)) : null,
-      forma: (o.forma && String(o.forma).toLowerCase().trim()) || null,
-      categoria: (o.categoria && String(o.categoria).toLowerCase().trim()) || null,
-      competencia: (o.competencia && String(o.competencia).trim()) || null,
-      entidade: (o.entidade && String(o.entidade).trim()) || null,
-      confianca: Number(o.confianca) || null,
-    });
+    // 🔴 A GUARDA DE VALOR VALE NO CAMINHO PRINCIPAL, NAO SO NO FALLBACK.
+    //    Ate 10/09 `valorConfereComTexto` so era aplicada no ramo `execFile`,
+    //    que hoje quase nunca roda — o caminho vivo e o HTTPS, e ele passava o
+    //    numero do modelo direto. Foi assim que R$ 2.034,90 virou 20.349.
+    //    Anula o VALOR, nunca a decisao: a intencao pode estar certa e o fluxo
+    //    pergunta o numero, que e o caminho seguro.
+    const _guardar = (v, ...ts) => {
+      if (v == null) return { valor: null, recusado: null };
+      const g = valorConfereComTexto(v, ...ts);
+      return g.ok ? { valor: v, recusado: null } : { valor: null, recusado: { valor: v, motivo: g.motivo } };
+    };
+    const normaliza = (o) => {
+      if (!o || typeof o !== 'object') return null;
+      const _v  = o.valor != null ? parseBRMoney(String(o.valor)) : null;
+      const _vt = o.valor_total != null ? parseBRMoney(String(o.valor_total)) : null;
+      const gv  = _guardar(_v, texto);
+      const gvt = _guardar(_vt, texto);
+      // itens[]: uma entrada por ALUNO. Listas sempre listas — `null` aqui
+      // obrigaria todo consumidor a repetir a mesma checagem.
+      const itens = Array.isArray(o.itens) ? o.itens.map((it) => {
+        if (!it || typeof it !== 'object') return null;
+        const aluno = (it.aluno && String(it.aluno).trim()) || null;
+        if (!aluno) return null;
+        const lista = (x) => (Array.isArray(x) ? x : (x == null ? [] : [x]))
+          .map((y) => String(y || '').trim()).filter(Boolean);
+        const gi = _guardar(it.valor != null ? parseBRMoney(String(it.valor)) : null, texto);
+        return {
+          aluno,
+          categorias: lista(it.categorias).map((c) => c.toLowerCase()),
+          // competencia sai do modelo como "09/2026", "9/26", "setembro"…
+          competencias: lista(it.competencias).map((c) => extrairCompetenciaTexto(c) || c).filter(Boolean),
+          valor: gi.valor, valor_recusado: gi.recusado,
+        };
+      }).filter(Boolean) : [];
+      return {
+        intencao: String(o.intencao || 'nada'),
+        aluno_nome: (o.aluno_nome && String(o.aluno_nome).trim()) || null,
+        valor: gv.valor, valor_recusado: gv.recusado,
+        forma: (o.forma && String(o.forma).toLowerCase().trim()) || null,
+        categoria: (o.categoria && String(o.categoria).toLowerCase().trim()) || null,
+        competencia: (o.competencia && String(o.competencia).trim()) || null,
+        entidade: (o.entidade && String(o.entidade).trim()) || null,
+        pagador: (o.pagador && String(o.pagador).trim()) || null,
+        valor_total: gvt.valor, valor_total_recusado: gvt.recusado,
+        itens,
+        confianca: Number(o.confianca) || null,
+      };
+    };
     // Caminho normal: HTTPS direto.
     if (_v4ChaveZen()) {
       return _v4Http(prompt, timeout).then((txt) => resolve(normaliza(_parseVisionJson(txt || ''))));
@@ -2546,7 +2672,7 @@ function categoriaEhSaida(categoria) {
   return ['seguranca', 'despesa', 'retirada', 'troco'].includes(String(categoria || '').toLowerCase());
 }
 
-function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, log = () => {}, janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
+function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, resolverEnvelopeFn = resolverEnvelopeCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, log = () => {}, janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
   // SOL_CAIXA_V3_LEDGER_FAKE=1 (suite de testes): fiacao V3 ativa, banco intacto.
   // Sem isto, teste que nao mocka os registradores grava preview/approval REAL
   // no ledger de producao — 62% dos previews de 24-31/08 eram artefato de teste.
@@ -2671,7 +2797,91 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     }
   }
 
-  async function abrirFluxoMultiAluno({ event, grupo, textoFonte, textoHumano, intent, agora, origemMessageId }) {
+  // ── CAMINHO AGENT-FIRST ────────────────────────────────────────────────────
+  //
+  // 🔴 A INVERSAO MORA AQUI, NO ARTEFATO VERSIONADO — nao no bridge. O bridge
+  //    nao esta sob hash no RUNTIME_BASELINE: trocar a ordem la seria uma
+  //    mudanca de comportamento de dinheiro sem teste, sem paridade e sem
+  //    rollback por hash. Aqui ela tem as tres coisas.
+  //
+  // 🔴 O QUE ELE FAZ DE DIFERENTE. O legado le a frase com gramatica e entrega
+  //    ao banco `nome = "PG parcelas aluna Lis Dal Mora Mello curso canto e
+  //    curso de violao Kids CG"` e `valor = 357` (medido, 10/09). Aqui o LLM
+  //    entende, vira ENVELOPE ESTRUTURADO e o Core resolve. A frase nunca e
+  //    remontada para o parser antigo — fazer isso recriaria o defeito.
+  //
+  // ⚠️ FAIL-SAFE, SEMPRE PARA O LADO DE NAO RESPONDER. Sem decisao, sem
+  //    envelope, sem combinacao ou com erro: devolve null e o caminho de hoje
+  //    assume. O agent-first pode nao responder; nao pode responder errado.
+  // ⚠️ TIMEOUT CURTO (12s, nao 30s). Em SOMBRA esperar era melhor que desistir,
+  //    porque um null custava uma observacao. Na FRENTE o custo se inverte: a
+  //    consultora esta olhando a tela.
+  // ⚠️ NAO APROVA NADA. Termina em preview + pendencia; o "pode" segue humano e
+  //    passando pelo cofre V3, e a escrita segue no lote atomico.
+  async function tratarAgentFirst(event, grupo, agora) {
+    const texto = bodyLimpo(event.body);
+    if (!texto) return null;
+    const arr = limparVelhos(event.chatId, agora);
+    const contexto = arr.slice(0, 3).map((p, i) => ({
+      card: i + 1, valor: p.valor || null, forma: p.forma || null,
+      categoria: p.categoria || null, aluno: p.aluno || null, competencia: p.competencia || null,
+    }));
+    const t0 = Date.now();
+    let dec = null;
+    try { dec = await rotearV4Fn(texto, contexto, { timeout: 12000 }); } catch (e) { dec = null; }
+    if (!dec) { log({ acao: 'agent_first_sem_decisao', chatId: event.chatId, ms: Date.now() - t0 }); return null; }
+
+    const env = montarEnvelopeV4(dec);
+    if (!env.ok) {
+      log({ acao: 'agent_first_sem_envelope', chatId: event.chatId, motivo: env.motivo,
+            intencao: dec.intencao, confianca: dec.confianca });
+      return null;
+    }
+
+    let res = null;
+    try { res = await resolverEnvelopeFn({ unidade_id: grupo.unidade_id, envelope: env.envelope }); }
+    catch (e) { log({ acao: 'agent_first_erro_resolver', chatId: event.chatId, erro: String(e && e.message) }); return null; }
+    if (!res) return null;
+
+    // PERGUNTA, nunca escolhe: e a mesma regra que matou o `limit 1` do casador.
+    if (res.motivo === 'combinacao_ambigua') {
+      const alts = (Array.isArray(res.alternativas) ? res.alternativas : []).map((a, i) =>
+        `*${i + 1})* ` + (Array.isArray(a) ? a : []).map((f) =>
+          `${f.aluno_nome} · ${f.categoria} ${f.competencia} — ${fmtBRL(Number(f.valor))}`).join(' + '))
+        .join(String.fromCharCode(10));
+      await sendFn(event.chatId,
+        `❓ Achei *mais de uma* combinação de faturas que fecha ${fmtBRL(Number(res.valor_total))}. `
+        + 'Não vou escolher por você — me diz qual é:' + String.fromCharCode(10) + alts);
+      log({ acao: 'agent_first_pergunta', chatId: event.chatId, motivo: 'combinacao_ambigua', combinacoes: res.combinacoes });
+      return { acao: 'agent_first_pergunta', motivo: 'combinacao_ambigua' };
+    }
+    if (res.motivo === 'nome_ambiguo') {
+      const c = Array.isArray(res.candidatos) ? res.candidatos : [];
+      await sendFn(event.chatId,
+        `❓ Tem *${c.length}* alunos com esse nome nesta unidade${c.length ? ': ' + c.slice(0, 6).map((x) => x.aluno_nome || x.nome).filter(Boolean).join(', ') : ''}. `
+        + 'Me diz o nome completo de quem pagou.');
+      log({ acao: 'agent_first_pergunta', chatId: event.chatId, motivo: 'nome_ambiguo', candidatos: c.length });
+      return { acao: 'agent_first_pergunta', motivo: 'nome_ambiguo' };
+    }
+    if (!res.ok || !Array.isArray(res.itens) || res.itens.length === 0) {
+      log({ acao: 'agent_first_nao_resolveu', chatId: event.chatId, motivo: res.motivo || 'sem_itens' });
+      return null;
+    }
+
+    log({ acao: 'agent_first_resolveu', chatId: event.chatId, via: res.via,
+          linhas: res.itens.length, alunos: res.alunos, ms: Date.now() - t0 });
+    // Daqui para baixo e o fluxo de sempre: preview, cofre V3, "pode" humano,
+    // lote atomico. O agent-first so troca QUEM montou a pergunta.
+    return abrirFluxoMultiAluno({
+      event, grupo, textoFonte: texto, textoHumano: texto, agora,
+      origemMessageId: event.messageId, resolvidoPronto: res,
+      intent: { ok: true, valor_total: Number(res.valor_total), forma: env.envelope.forma,
+                categoria: null,
+                itens: res.itens.map((i) => ({ aluno_nome: i.aluno_nome, valor: Number(i.valor), categoria: i.categoria })) },
+    });
+  }
+
+  async function abrirFluxoMultiAluno({ event, grupo, textoFonte, textoHumano, intent, agora, origemMessageId, resolvidoPronto = null }) {
     const arr = limparVelhos(event.chatId, agora);
     // Janela de reenvio: OCR lento (frequente, ~45s de timeout) leva a equipe a mandar o
     // MESMO comprovante de novo. Sem isto, cada reenvio empilha outra pendencia MANUAL
@@ -2760,11 +2970,18 @@ _Não lanço nada pela metade._`);
       return { acao: 'manual_review_multi_student' };
     }
 
-    let resolvido = null;
-    try {
-      resolvido = await resolverMultiFn({ unidade_id: grupo.unidade_id, itens: itensParaResolver, valor_total: intent.valor_total });
-    } catch (e) {
-      log({ acao: 'resolver_multi_aluno_erro', chatId: event.chatId, erro: String(e && e.message) });
+    // ⚠️ `resolvidoPronto` e o caminho AGENT-FIRST: quem ja resolveu foi o
+    //    orquestrador do envelope (pagador -> pessoas -> faturas -> combinacao
+    //    unica). Daqui para baixo NADA muda — preview, cofre V3, aprovacao
+    //    humana e lote atomico sao os mesmos. Duplicar esse trecho para o
+    //    caminho novo seria criar a segunda fonte de verdade do lancamento.
+    let resolvido = resolvidoPronto || null;
+    if (!resolvido) {
+      try {
+        resolvido = await resolverMultiFn({ unidade_id: grupo.unidade_id, itens: itensParaResolver, valor_total: intent.valor_total });
+      } catch (e) {
+        log({ acao: 'resolver_multi_aluno_erro', chatId: event.chatId, erro: String(e && e.message) });
+      }
     }
     if (!resolvido || !resolvido.ok || !Array.isArray(resolvido.itens)) {
       await colocarEmRevisao(resolvido && resolvido.motivo || 'itens_nao_validados');
@@ -2966,6 +3183,17 @@ _Não lanço nada pela metade._`);
     // A foto sai aqui, antes de qualquer coisa consumir pendencia (P2).
     fotografarContextoV4(event, chatId, agora);
     const senderNum = String(event.senderPhone || event.senderId || '').replace(/@.*/, '').replace(/\D/g, '');
+
+    // CANARIO AGENT-FIRST — DESLIGADO por padrao, por LISTA de grupo.
+    // ⚠️ Antes de tudo, de proposito: se o legado responder primeiro, o
+    //    canario nao mede nada (foi o diagnostico do caso Lis/Mayra).
+    // ⚠️ Nao vale para midia nesta rodada: o caminho de comprovante tem OCR e
+    //    visao, e misturar as duas inversoes no mesmo canario impede saber qual
+    //    delas moveu o numero.
+    if (!event.hasMedia && !event._sintetico && _v4CanarioLigado(chatId)) {
+      const rAgent = await tratarAgentFirst(event, grp, agora);
+      if (rAgent) return rAgent;
+    }
 
     // 0) pergunta sobre o caixa do dia -> resposta com DADO (nunca LLM)
     if (process.env.SOL_RESUMO_SHORTCUT !== '0' && !event.hasMedia && ehPerguntaDeCaixa(event.body)) {
@@ -5562,7 +5790,7 @@ _Não lanço nada pela metade._`);
   // _fh.ehConversaSemComando(body) desde 25/08, mas o handler nunca a expos —
   // o guard de "elogio nao leva nao-entendi" estava morto por undefined.
   return { handle, temPendencia, citaAlgumaPendencia, ehConversaSemComando,
-    reidratarPendencias, tratarNaoEntendida, observarRoteadorV4, _pendentes: pendentes };
+    reidratarPendencias, tratarNaoEntendida, observarRoteadorV4, tratarAgentFirst, _pendentes: pendentes };
 }
 
 function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
@@ -5572,6 +5800,7 @@ module.exports = {
   _saidaExplicitaFromCaption, _nomeHumanoTardio, extrairValorOcr, _vendedorRotulado, _mesmaPessoa,
   _alunoRotulado, _limparAlunoRotulado, _semAlunoDeclarado, extrairCategoriaCorrecao,
   _ehDitadoDeCaixa, classificarCorrecaoPendencia, listarPreviewsAbertosV3, _contestaFatura, rotearMensagemV4,
+  montarEnvelopeV4, _v4CanarioLigado, resolverEnvelopeCaixaV1, valorConfereComTexto,
   casarNao, ehConversaSemComando,
   montarPreview, montarPreviewMultiAluno, fmtBRL, carregarEnv, lancarRecebimento, lancarRecebimentoLote, resolverMultiAlunoCaixaV1, resolverPagamentoItensV1, resolverCompostoAlunoCaixaV1, lancarSaidaCaixa, buscarLancamentoParaCorrecao,
   buscarMovimentosCaixa, corrigirMovimentoCaixa, estornarMovimentoCaixa, registrarPreviewV3, registrarApprovalV3, criarHandlerFinanceiro,

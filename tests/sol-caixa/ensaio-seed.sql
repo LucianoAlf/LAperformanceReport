@@ -121,6 +121,32 @@ where a.unidade_id = '11111111-1111-1111-1111-111111111111'
 --    semeado `emusys_faturas` achando que bastava.
 --    As condicoes vem do proprio `financeiro_enriquecer_tipos_fatura_v1`:
 --    run_type='live', status='succeeded', snapshot_complete, unidades_concluidas=3.
+-- ⚠️ FIXTURE DELIBERADA DE AMBIGUIDADE: um aluno com DUAS faturas de valor
+--    IDENTICO na competencia corrente. Sem ela nao ha como PROVAR "duas
+--    combinacoes fecham o total, entao pergunta" — a regra ficaria escrita sem
+--    ensaio, que e exatamente o tipo de verde que esta frente passou o dia
+--    matando. O seed normal usa `valor_parcela + k*30`, sempre distinto, entao
+--    a ambiguidade nunca aparecia por acaso.
+insert into public.alunos (nome, unidade_id, status, emusys_student_id, emusys_matricula_id,
+                           valor_parcela, responsavel_nome, data_matricula)
+values ('Gemea Ambigua 9001', '11111111-1111-1111-1111-111111111111', 'ativo',
+        990001, 990001, 400.00, 'Responsavel Gemea 9001', current_date - 200);
+
+insert into public.emusys_faturas (
+  unidade_id, unidade_codigo, emusys_fatura_id, emusys_matricula_id,
+  emusys_contrato_id, emusys_student_id, descricao, status,
+  data_vencimento, data_pagamento, competencia, valor_original, valor_pago)
+select '11111111-1111-1111-1111-111111111111', 'ENS',
+       (9900000 + g)::bigint, 990001::bigint, 990001::bigint, 990001::bigint,
+       'Parcela ' || to_char(date_trunc('month', current_date)::date, 'MM/YYYY')
+         || ' do curso de ' || (array['Violao','Canto'])[g],
+       'paga',
+       (date_trunc('month', current_date)::date + interval '4 days')::date,
+       (date_trunc('month', current_date)::date + interval '3 days')::date,
+       date_trunc('month', current_date)::date,
+       400.00, 400.00
+  from generate_series(1,2) g;
+
 -- ⚠️ O `ultimo_run_por_competencia` da enriquecedora elege o run de
 --    `completed_at` MAIS RECENTE. As migrations semeiam runs proprios; se um
 --    deles for mais novo que o meu, ele vence, vem SEM itens, e o `tipo_fatura`
@@ -186,13 +212,20 @@ declare
   v_alunos int;
   v_multi int;
 begin
+  -- ⚠️ A FIXTURE DELIBERADA DE AMBIGUIDADE (student 990001) NAO CONTA AQUI.
+  --    Esta guarda mede a ordem de grandeza do seed ORGANICO, para o benchmark
+  --    valer; duas faturas plantadas de proposito nao mudam ordem de grandeza
+  --    nenhuma. Afrouxar o limite para caber a fixture seria mexer na regua
+  --    para o numero passar — que e o oposto do que a guarda existe para fazer.
   select count(*) into v_faturas_comp from public.emusys_faturas
-   where competencia = date_trunc('month', current_date)::date;
+   where competencia = date_trunc('month', current_date)::date
+     and emusys_student_id <> 990001;
   select count(*) into v_alunos from public.alunos
    where unidade_id = '11111111-1111-1111-1111-111111111111';
   select count(*) into v_multi from (
     select emusys_student_id from public.emusys_faturas
      where competencia = date_trunc('month', current_date)::date
+       and emusys_student_id <> 990001
      group by 1 having count(*) >= 2) x;
 
   raise notice 'seed: % alunos · % faturas na competencia · % alunos com 2+ faturas',
