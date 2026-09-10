@@ -223,9 +223,10 @@ test('carteira explicita os graos sem chamar 417 de pessoas unicas', () => {
   const texto = gerarRelatorioCoordenacaoCanonico(params('carteira'));
 
   assert.match(texto, /Vínculos de acompanhamento nas carteiras: \*417\*/);
-  assert.match(texto, /Turmas operacionais: \*407\*/);
+  assert.match(texto, /Turmas operacionais registradas: \*407\*/);
   assert.match(texto, /Ocupações elegíveis: \*469\*/);
-  assert.match(texto, /Turmas elegíveis para a média: \*391\*/);
+  // O contrato V2 não contém o universo individual: não reutilizar o operacional.
+  assert.match(texto, /Turmas usadas nas médias individuais: \*Não informado\*/);
   assert.match(texto, /Média ponderada alunos\/turma: \*1,20\*/);
   assert.doesNotMatch(texto, /Total de alunos na carteira: \*417\*/);
 });
@@ -235,8 +236,9 @@ test('presenca usa o fechamento ponderado compartilhado pelo mensal', () => {
 
   assert.match(texto, /Presença média ponderada: \*65,9%\*/);
   assert.match(texto, /Presenças confirmadas: \*1\.382\/2\.098\*/);
-  assert.match(texto, /Professores com evidência: \*24\*/);
-  assert.match(texto, /Pendências de evidência: \*0\*/);
+  assert.match(texto, /Professores da equipe atual com eventos elegíveis: \*24 de 24\*/);
+  assert.match(texto, /Ocorrências fora do percentual: \*Não informado\*/);
+  assert.doesNotMatch(texto, /Pendências de evidência: \*0\*/);
 });
 
 test('presenca indisponivel nao vira zero artificial', () => {
@@ -255,20 +257,20 @@ test('presenca indisponivel nao vira zero artificial', () => {
     dataGeracao: new Date('2026-08-03T09:00:00-03:00'),
   });
 
-  assert.match(texto, /Presença média ponderada: \*não calculável%\*/);
+  assert.match(texto, /Presença média ponderada: \*não calculável\*/);
   assert.doesNotMatch(texto, /Presença média ponderada: \*0,0%\*/);
-  assert.match(texto, /Pendências de evidência: \*32\*/);
+  assert.match(texto, /Professores da equipe atual com eventos elegíveis: \*0 de 24\*/);
+  assert.match(texto, /Ocorrências com informação incompleta: \*Não informado\*/);
 });
 
-test('retencao separa movimento total de impacto atribuivel e explica todo o MRR', () => {
+test('retencao separa movimento total de impacto atribuivel sem apresentar financeiro', () => {
   const texto = gerarRelatorioCoordenacaoCanonico(params('retencao'));
 
   assert.match(texto, /Retenção atribuível observada: \*96,8%\*/);
   assert.match(texto, /Evasões válidas: \*5\*/);
   assert.match(texto, /Não renovações válidas: \*2\*/);
   assert.match(texto, /Saídas atribuíveis ao professor: \*1\*/);
-  assert.match(texto, /MRR perdido total: \*R\$ 2\.412,85\*/);
-  assert.match(texto, /MRR atribuível ao professor: \*R\$ 395,00\*/);
+  assert.doesNotMatch(texto, /MRR|R\$|valor não informado/i);
   assert.match(texto, /Aluno Movimento Geral/);
   assert.match(texto, /Aluno Movimento Atribuivel/);
   assert.match(texto, /Aluno sem professor informado/);

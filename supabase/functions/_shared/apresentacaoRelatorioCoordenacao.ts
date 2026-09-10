@@ -6,6 +6,36 @@ export interface ContextoOperacionalRelatorio {
   contextoPeriodo: string;
 }
 
+// Carteiras no ciclo são médias de vínculos: preservar as frações nos cinco relatórios.
+export function formatarQuantidadeCarteira(valor: unknown): string {
+  if (valor === null || valor === undefined || valor === '') return 'Não informado';
+  const quantidade = Number(valor);
+  return Number.isFinite(quantidade)
+    ? quantidade.toLocaleString('pt-BR', { maximumFractionDigits: 2 })
+    : 'Não informado';
+}
+
+// O clique gera texto; não recaptura os dados do documento compartilhado.
+export function linhasAtualizacaoRelatorio(dataCorte?: string | null, atualizadoEm?: string | null): string[] {
+  const corteIso = String(dataCorte ?? '').slice(0, 10);
+  const corte = /^\d{4}-\d{2}-\d{2}$/.test(corteIso)
+    && Number.isFinite(Date.parse(`${corteIso}T00:00:00Z`))
+    && new Date(`${corteIso}T00:00:00Z`).toISOString().slice(0, 10) === corteIso
+    ? corteIso.split('-').reverse().join('/') : 'não informado';
+  const timestamp = String(atualizadoEm ?? '');
+  const dataTimestamp = timestamp.slice(0, 10);
+  const formatoValido = /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(timestamp);
+  const diaValido = formatoValido && Number.isFinite(Date.parse(`${dataTimestamp}T00:00:00Z`))
+    && new Date(`${dataTimestamp}T00:00:00Z`).toISOString().slice(0, 10) === dataTimestamp;
+  const atualizado = diaValido ? new Date(timestamp) : null;
+  const hora = atualizado && Number.isFinite(atualizado.getTime())
+    ? `${atualizado.toLocaleString('pt-BR', {
+      timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit',
+      year: 'numeric', hour: '2-digit', minute: '2-digit',
+    })} (Brasília)` : 'não informada';
+  return [`🗓 Dados considerados até: ${corte}`, `🕒 Atualização do documento: ${hora}`];
+}
+
 interface ProfessorComEstadoComparabilidade {
   comparabilidade_estado?: string | null;
 }

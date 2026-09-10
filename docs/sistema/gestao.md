@@ -3,6 +3,16 @@
 > Índice geral: [`docs/MAPA-SISTEMA.md`](../MAPA-SISTEMA.md) ·
 > Banco: [`docs/banco/detalhe/gestao.md`](../banco/detalhe/gestao.md)
 
+## Relatórios de Coordenação (09/09/2026)
+
+- `montar_relatorio_coordenacao_conteudo_v4` produz o documento compartilhado pelos cinco relatórios; os geradores local e `gemini-relatorio-coordenacao` apresentam a mesma versão/status.
+- `get_health_score_professor_v3_presenca_periodo_v2` agrega ocorrências classificadas sem veto global por unidade. Mensal e ciclo compartilham `get_health_score_professor_v3_conversao_periodo_canonico`, com matrícula comprovada, crédito único e janela D+30.
+- `fechar_health_score_professor_v3_ciclo` exige recorte integral e publica atomicamente os comparáveis. `retificar_coordenacao_jun_ago_2026` é interno (`service_role`) e preserva a revisão oficial anterior como invalidada.
+- Alteração de estrutura e backfill são transações separadas: o recálculo não mantém o lock de DDL da tabela de snapshots. A carga e a comparação dos documentos precedem a liberação.
+- Frontend diferencia fechamento oficial de acompanhamento, exige identidade/notas do ranking e mantém maturação fora da classificação; Top 10 exige amostra, cobertura exibe x/y e sugestões não duplicam prioridades.
+- `executar_relatorio_coordenacao_batch_diario_v4` captura mensal/ciclo das três unidades e consolidado em uma transação REPEATABLE READ, às 05:00 BRT (job 257). Limites: 110 s de execução e 3 s de lock. Falha em um recorte desfaz os oito; documentos finais são preservados.
+- **Liberação em validação:** responsável reconfirmou D+30 (Jun–Ago a partir de 30/09), autorizou OpenAI e retirou financeiro dos cinco relatórios. Edge 97 publicada; frontend e regularização versionada da publicação antecipada em andamento. Ver [gates e evidências](../audits/2026-09-09-coordenacao-release.md).
+
 ## Dashboard (`/app`)
 - **Componentes:** `Dashboard/DashboardPage.tsx`, `Dashboard/ModalDetalheKPI.tsx`
 - **Hooks:** `useMetasKPI`, `useComercialOperacionalResumoV2`, `useHealthScoreProfessorV3Performance`

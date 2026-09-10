@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-06 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-09 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — professor
 
-142 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+145 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## anotacoes
 
@@ -659,6 +659,49 @@
 - `fabio_licao_pkey`
 - `ux_licao_nome_versao`
 
+## fabio_memoria_janela
+
+> Que janelas o extrator de memoria ja leu. Linha ausente = nao lida; `propostas = 0` = lida e nao tinha nada. As duas coisas sao diferentes. DRYRUN nao escreve aqui.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `origem` | text | não |  |  |
+| `professor_id` | integer | sim |  | professores.id |
+| `janela_dia` | date | não |  |  |
+| `mensagens` | bigint | sim |  |  |
+| `propostas` | integer | não | 0 |  |
+| `gravadas` | integer | não | 0 |  |
+| `extraida_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `ux_fabio_memoria_janela`
+
+## fabio_memoria_proposta
+
+> Tudo o que o extrator propos, aceito ou recusado, com o motivo. Recusa que nao deixa rastro faz "nao achou nada" e "o portao barrou tudo" darem o mesmo zero. `dryrun = true` significa que o cofre NAO foi tocado.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `professor_id` | integer | não |  | professores.id |
+| `origem` | text | não | '1a1'::text |  |
+| `janela_dia` | date | não |  |  |
+| `proposto_por` | text | não |  |  |
+| `tipo` | text | não |  |  |
+| `chave` | text | não |  |  |
+| `valor` | text | sim |  |  |
+| `evidencia` | text | sim |  |  |
+| `citacao_confere` | boolean | não | false |  |
+| `veredito` | text | não |  |  |
+| `veredito_porque` | text | sim |  |  |
+| `gravada` | boolean | não | false |  |
+| `memoria_id` | uuid | sim |  | fabio_professor_memoria.id |
+| `dryrun` | boolean | não | true |  |
+| `criada_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `fabio_memoria_proposta_pkey`
+
 ## fabio_mineracao_janela
 
 > Que janelas ja foram lidas. Linha ausente = nao minerado; `propostas = 0` = minerado e nao achou nada. As duas coisas sao diferentes e nao podem virar o mesmo zero.
@@ -784,6 +827,34 @@
 **Únicos:**
 - `fabio_professor_identidade_pkey`
 
+## fabio_professor_memoria
+
+> Memoria do Fabio sobre cada professor: apelido, tom, preferencias, jeito e fatos. Escrita SO por RPC (fabio_memoria_gravar / _revogar), leitura por fabio_memoria_do_professor. Toda linha carrega a evidencia que a originou; sem evidencia nao grava. Desenho espelhado do snapshot diario da Maria, 07/09/2026.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `professor_id` | integer | não |  | professores.id |
+| `tipo` | text | não |  |  |
+| `chave` | text | não |  |  |
+| `valor` | text | não |  |  |
+| `confianca` | text | não | 'observado'::text |  |
+| `horizonte` | text | não | 'medio'::text |  |
+| `origem` | text | não |  |  |
+| `evidencia` | text | não |  |  |
+| `janela_dia` | date | sim |  |  |
+| `versao` | integer | não | 1 |  |
+| `supersedes` | uuid | sim |  | fabio_professor_memoria.id |
+| `vigente` | boolean | não | true |  |
+| `criada_em` | timestamp with time zone | não | now() |  |
+| `revogada_em` | timestamp with time zone | sim |  |  |
+| `revogada_motivo` | text | sim |  |  |
+| `revisada_em` | timestamp with time zone | sim |  |  |
+
+**Únicos:**
+- `fabio_professor_memoria_pkey`
+- `ux_fabio_professor_memoria_vigente`
+
 ## fabio_professor_preferences
 
 | Coluna | Tipo | Nulo | Default | Referência |
@@ -872,7 +943,7 @@
 
 ## fabio_relato_proposto
 
-> Proposta de achado vinda de conversa, e o julgamento dela. O minerador PROPOE e nunca grava achado -- auditor nao e corretor. `citacao_confere=false` e modelo inventando, e fica registrado como taxa de erro do instrumento, separado de defeito do sistema.
+> Propostas de atrito mineradas da conversa do professor. CONTEM CITACAO LITERAL do que ele disse -- fechada para anon/authenticated e com RLS desde 08/09/2026, quando a auditoria achou que a chave publica lia e apagava.
 
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
@@ -1204,7 +1275,7 @@
 | `snapshot_metrica_id` | uuid | não |  | health_score_professor_v3_snapshot_metricas.id |
 | `config_meta_segmento_id` | uuid | sim |  | health_score_professor_v3_config_metas_curso_modalidade.id |
 | `unidade_id` | uuid | não |  | health_score_professor_v3_config_metas_curso_modalidade.unidade_id |
-| `curso_id` | integer | não |  | professor_unidade_curso_modalidade.curso_id |
+| `curso_id` | integer | não |  | cursos.id |
 | `modalidade` | text | não |  | professor_unidade_curso_modalidade.modalidade |
 | `pessoas_unicas` | integer | não | 0 |  |
 | `vinculos_ativos` | integer | não | 0 |  |
@@ -3363,7 +3434,7 @@
 
 ## vw_registro_pendencia
 
-> Aulas encerradas sem conteudo registrado. cobravel = dentro da data de corte E professor com o app liberado (fn_professor_usa_app).
+> Aulas sem registro. "Tem registro" tem DUAS linguas: anotacoes_fabio para a aula comum e lead_experimental_registros (status confirmado) para a experimental. So a segunda foi ensinada em 07/09/2026 -- antes disso o Fabio cobrava experimental ja registrada.
 
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|

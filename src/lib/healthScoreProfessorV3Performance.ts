@@ -109,6 +109,7 @@ const HEALTH_SCORE_V3_EVIDENCE_MESSAGES: Record<string, string> = {
   conversao_em_auditoria: 'Conversão indisponível para o período',
   segmentacao_incompleta: 'Vínculo de curso ou modalidade precisa de revisão',
   fonte_canonica_indisponivel: 'Sem dados disponíveis para o período',
+  fonte_canonica_sem_evidencia: 'Sem dados disponíveis para o período',
   metrica_nao_aplicavel: 'Não aplicável neste período',
   referencia_periodo_anterior: 'Referência temporária do período anterior',
   competencia_em_andamento: 'Competência em andamento',

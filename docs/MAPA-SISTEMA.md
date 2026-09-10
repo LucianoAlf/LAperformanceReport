@@ -16,6 +16,10 @@ timeout ainda aberto do relatório de coordenação estão em
 
 ## Por domínio
 
+Coordenação (09/09/2026): contrato de publicação integral do ciclo, retificação
+versionada e contagens explícitas de presença/indicadores. Ver
+[regras](REGRAS-DE-NEGOCIO.md) e [mapa de gestão](sistema/gestao.md).
+
 | Domínio | Cobre | Arquivo | Banco |
 |---|---|---|---|
 | **aluno** | Alunos, Sucesso do Aluno, Retenção, Bandas | [sistema/aluno.md](sistema/aluno.md) | [detalhe/aluno.md](banco/detalhe/aluno.md) |

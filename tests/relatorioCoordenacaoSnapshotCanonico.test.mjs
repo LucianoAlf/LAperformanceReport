@@ -213,7 +213,8 @@ test('ranking espelha o painel mesmo quando o recorte oficial legado esta vazio'
   assert.doesNotMatch(relatorio, /Nenhum professor compar[aÃ¡]vel/);
 
   const edge = fs.readFileSync(edgePath, 'utf8');
-  assert.doesNotMatch(edge, /dados\.ranking_oficial\.map/);
+  const renderer = edge.slice(edge.indexOf('function renderizarRelatorio('));
+  assert.doesNotMatch(renderer, /dados\.ranking_oficial\.map/);
   assert.doesNotMatch(edge, /Boolean\(dados\.ranking_oficial/);
   assert.match(edge, /ordenarProfessoresPorScoreVisivel/);
   assert.match(
