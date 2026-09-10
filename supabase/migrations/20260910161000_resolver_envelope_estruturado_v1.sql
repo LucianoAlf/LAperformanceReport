@@ -126,6 +126,15 @@ begin
          order by ord), '[]'::jsonb)
     into v_fat
     from (
+      -- 🔴 O FILTRO INCIDE SOBRE AS COLUNAS JA CALCULADAS. Antes ele repetia o
+      --    `case` da categoria dentro do `exists` — duas copias da mesma
+      --    traducao, que e a receita das duplicatas de renovacao.
+      -- 🔴 IGUALDADE EXATA DE NOME, nunca `sol_nome_mesma_pessoa_v1`: aquela
+      --    responde "mesmo PRIMEIRO nome", condicao necessaria e jamais
+      --    suficiente. Usada como filtro, "Paula Dias 0075" puxou todas as
+      --    Paula e estourou o teto com `universo_grande`. O nome aqui ja saiu
+      --    canonico das RPCs de identidade, que sao quem pode decidir isso — e
+      --    que RECUSAM quando ha duvida.
       select row_number() over (order by comp, aluno, cfid) as ord, *
         from (
           select coalesce(i->'aluno'->>'nome', i->>'aluno') as aluno,
@@ -134,10 +143,21 @@ begin
                       then coalesce(nullif((i->'valores'->>'valor_pago')::numeric, 0),
                                     (i->'valores'->>'valor_hoje')::numeric)
                       else (i->'valores'->>'valor_hoje')::numeric end as valor,
+                 -- ⚠️ MAPA UNICO DE CATEGORIA, e nao um `case` repetido no filtro:
+                 --    duas copias da mesma traducao sao duas fontes de verdade.
+                 -- ⚠️ NAO EXISTE tipo `matricula` NO DADO. Medido em producao:
+                 --    "Taxa de Matricula do curso de X" e "Passaporte do curso
+                 --    de X" tem o MESMO tipo_fatura `passaporte_taxa_matricula`.
+                 --    Entao "passaporte + matricula + parcela" sao tres FATURAS
+                 --    de naturezas distintas, mas DUAS categorias. Inventar uma
+                 --    terceira aqui faria a Sol prometer um filtro que o dado
+                 --    nao sustenta.
                  case coalesce(i->>'tipo_fatura','')
                    when 'parcela' then 'parcela'
                    when 'passaporte_taxa_matricula' then 'passaporte'
-                   when 'matricula' then 'matricula'
+                   when 'lojinha_produto' then 'lojinha'
+                   when 'venda_ingressos' then 'venda'
+                   when 'avulsa_outro' then 'outro'
                    else 'outro' end                          as categoria,
                  (i->>'competencia')::date                   as comp,
                  i->>'canonical_fatura_id'                   as cfid,
@@ -169,33 +189,17 @@ begin
                         else (i->'valores'->>'valor_hoje')::numeric end, 0) > 0
              and (coalesce(i->>'status','') <> 'paga'
                   or coalesce((i->>'data_pagamento')::date, v_as_of) >= v_as_of - 7)
-             and exists (
-               select 1 from jsonb_array_elements(v_filtros) f
-                -- 🔴 IGUALDADE EXATA, NAO `sol_nome_mesma_pessoa_v1`. Aquela
-                --    funcao responde "mesmo PRIMEIRO nome" — condicao
-                --    necessaria para identidade, nunca suficiente. Usada como
-                --    FILTRO ela varre o universo: no ensaio, "Paula Dias 0075"
-                --    puxou todas as Paula e estourou o teto de 16 com
-                --    `universo_grande`. O nome aqui ja saiu canonico de
-                --    `sol_caixa_responsavel_aluno` / `_aluno_por_responsavel`,
-                --    que sao quem tem o direito de decidir identidade — e que
-                --    RECUSAM quando ha duvida. Comparar de novo por semelhanca
-                --    seria refazer a decisao delas com regra mais fraca.
-                where upper(btrim(f->>'aluno'))
-                    = upper(btrim(coalesce(i->'aluno'->>'nome', i->>'aluno')))
-                  and (jsonb_typeof(f->'categorias') is distinct from 'array'
-                       or jsonb_array_length(f->'categorias') = 0
-                       or (case coalesce(i->>'tipo_fatura','')
-                             when 'parcela' then 'parcela'
-                             when 'passaporte_taxa_matricula' then 'passaporte'
-                             when 'matricula' then 'matricula'
-                             else 'outro' end)
-                          in (select jsonb_array_elements_text(f->'categorias')))
-                  and (jsonb_typeof(f->'competencias') is distinct from 'array'
-                       or jsonb_array_length(f->'competencias') = 0
-                       or to_char((i->>'competencia')::date, 'MM/YYYY')
-                          in (select jsonb_array_elements_text(f->'competencias'))))
+
         ) w
+       where exists (
+         select 1 from jsonb_array_elements(v_filtros) f
+          where upper(btrim(f->>'aluno')) = upper(btrim(w.aluno))
+            and (jsonb_typeof(f->'categorias') is distinct from 'array'
+                 or jsonb_array_length(f->'categorias') = 0
+                 or w.categoria in (select jsonb_array_elements_text(f->'categorias')))
+            and (jsonb_typeof(f->'competencias') is distinct from 'array'
+                 or jsonb_array_length(f->'competencias') = 0
+                 or to_char(w.comp, 'MM/YYYY') in (select jsonb_array_elements_text(f->'competencias'))))
     ) z;
 
   v_n := jsonb_array_length(v_fat);

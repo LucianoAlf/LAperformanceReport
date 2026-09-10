@@ -2205,6 +2205,13 @@ function montarEnvelopeV4(dec) {
   if (!['lancamento_por_texto', 'lancamento_multi_aluno'].includes(dec.intencao)) {
     return { ok: false, motivo: 'intencao_nao_lanca', intencao: dec.intencao };
   }
+  // 🔴 TOTAL RECUSADO NAO CAI PARA O PARCIAL. Se `valorConfereComTexto` anulou
+  //    o total, cair no `valor` reabre exatamente o defeito da Lis: numa frase
+  //    com 357 + 300 e total 657, um total invalido ao lado de valor=357
+  //    produziria de novo o card parcial de R$ 357. Prefiro nao responder.
+  if (dec.valor_total_recusado) {
+    return { ok: false, motivo: 'valor_total_recusado', recusado: dec.valor_total_recusado };
+  }
   const total = (dec.valor_total != null) ? dec.valor_total : dec.valor;
   if (total == null || !(Number(total) > 0)) return { ok: false, motivo: 'sem_valor_total' };
 
@@ -2229,6 +2236,64 @@ function montarEnvelopeV4(dec) {
       competencias: Array.isArray(i.competencias) ? i.competencias : [],
     })),
   } };
+}
+
+// CORRECAO NO SEGUNDO TURNO — muda o ENVELOPE, nunca remonta a frase.
+//
+// 🔴 POR QUE NAO VIRA FRASE. O fallback de dialogo de 31/08 traduz a intencao do
+//    LLM para uma frase canonica e re-passa pelo `handle()`. Ali fazia sentido,
+//    porque o destino era a gramatica. Aqui seria o defeito de volta: quem
+//    montaria a pergunta ao banco seria de novo o parser. A correcao incide
+//    sobre o objeto estruturado, e o Core resolve outra vez.
+//
+// ⚠️ Correcao NAO inventa: campo que o modelo nao trouxe fica como estava.
+//    E `corrigir_valor` so vale com valor que sobreviveu a guarda de texto.
+function aplicarCorrecaoEnvelope(envelope, dec) {
+  if (!envelope || !dec) return { ok: false, motivo: 'sem_base' };
+  const e = JSON.parse(JSON.stringify(envelope));
+  const itens = Array.isArray(e.itens) ? e.itens : [];
+  switch (dec.intencao) {
+    case 'corrigir_competencia': {
+      const c = dec.competencia && String(dec.competencia).trim();
+      if (!c) return { ok: false, motivo: 'correcao_sem_competencia' };
+      // competencia declarada vale para TODOS os itens do envelope: o humano
+      // esta corrigindo o comprovante, nao um aluno especifico.
+      itens.forEach((it) => { it.competencias = [c]; });
+      break;
+    }
+    case 'corrigir_valor': {
+      if (dec.valor_recusado || dec.valor == null || !(Number(dec.valor) > 0)) {
+        return { ok: false, motivo: 'correcao_sem_valor' };
+      }
+      e.valor_total = Number(dec.valor);
+      break;
+    }
+    case 'corrigir_aluno': {
+      const n = dec.aluno_nome && String(dec.aluno_nome).trim();
+      if (!n) return { ok: false, motivo: 'correcao_sem_aluno' };
+      // um item -> troca; varios -> nao adivinha QUAL, devolve para perguntar
+      if (itens.length === 1) { itens[0].aluno = n; e.pagador = null; }
+      else if (itens.length === 0) { e.itens = [{ aluno: n, categorias: [], competencias: [] }]; e.pagador = null; }
+      else return { ok: false, motivo: 'correcao_aluno_ambigua' };
+      break;
+    }
+    case 'corrigir_categoria': {
+      const c = dec.categoria && String(dec.categoria).toLowerCase().trim();
+      if (!c) return { ok: false, motivo: 'correcao_sem_categoria' };
+      itens.forEach((it) => { it.categorias = [c]; });
+      break;
+    }
+    case 'corrigir_forma': {
+      const f = dec.forma && String(dec.forma).toLowerCase().trim();
+      if (!f) return { ok: false, motivo: 'correcao_sem_forma' };
+      e.forma = f;
+      break;
+    }
+    default:
+      return { ok: false, motivo: 'intencao_nao_corrige', intencao: dec.intencao };
+  }
+  e.itens = itens;
+  return { ok: true, envelope: e };
 }
 
 // PORTAO DO CANARIO — desligado por padrao, e por LISTA, nunca global.
@@ -2818,6 +2883,10 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   //    consultora esta olhando a tela.
   // ⚠️ NAO APROVA NADA. Termina em preview + pendencia; o "pode" segue humano e
   //    passando pelo cofre V3, e a escrita segue no lote atomico.
+  // Envelope vivo por chat: e o que permite corrigir no SEGUNDO TURNO sem
+  // remontar frase. Guardado ao lado da pendencia, com o mesmo tempo de vida.
+  const envelopesV4 = new Map();
+
   async function tratarAgentFirst(event, grupo, agora) {
     const texto = bodyLimpo(event.body);
     if (!texto) return null;
@@ -2831,7 +2900,22 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     try { dec = await rotearV4Fn(texto, contexto, { timeout: 12000 }); } catch (e) { dec = null; }
     if (!dec) { log({ acao: 'agent_first_sem_decisao', chatId: event.chatId, ms: Date.now() - t0 }); return null; }
 
-    const env = montarEnvelopeV4(dec);
+    // ── SEGUNDO TURNO: corrige o ENVELOPE guardado, nunca remonta frase ──────
+    const guardado = envelopesV4.get(event.chatId);
+    const vivo = guardado && (agora - guardado.ts) < janelaMs;
+    let env;
+    if (vivo && String(dec.intencao || '').startsWith('corrigir_')) {
+      const corr = aplicarCorrecaoEnvelope(guardado.envelope, dec);
+      if (!corr.ok) {
+        log({ acao: 'agent_first_correcao_recusada', chatId: event.chatId,
+              motivo: corr.motivo, intencao: dec.intencao });
+        return null;
+      }
+      env = corr;
+      log({ acao: 'agent_first_correcao', chatId: event.chatId, intencao: dec.intencao });
+    } else {
+      env = montarEnvelopeV4(dec);
+    }
     if (!env.ok) {
       log({ acao: 'agent_first_sem_envelope', chatId: event.chatId, motivo: env.motivo,
             intencao: dec.intencao, confianca: dec.confianca });
@@ -2870,6 +2954,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
 
     log({ acao: 'agent_first_resolveu', chatId: event.chatId, via: res.via,
           linhas: res.itens.length, alunos: res.alunos, ms: Date.now() - t0 });
+    envelopesV4.set(event.chatId, { envelope: env.envelope, ts: agora });
     // Daqui para baixo e o fluxo de sempre: preview, cofre V3, "pode" humano,
     // lote atomico. O agent-first so troca QUEM montou a pergunta.
     return abrirFluxoMultiAluno({
@@ -3190,7 +3275,17 @@ _Não lanço nada pela metade._`);
     // ⚠️ Nao vale para midia nesta rodada: o caminho de comprovante tem OCR e
     //    visao, e misturar as duas inversoes no mesmo canario impede saber qual
     //    delas moveu o numero.
-    if (!event.hasMedia && !event._sintetico && _v4CanarioLigado(chatId)) {
+    // 🔴 LEGENDA DE MIDIA TAMBEM PASSA AQUI — foi o buraco do gate anterior. O
+    //    comprovante da Lis chegou como MIDIA COM LEGENDA, e eu tinha gatado em
+    //    `!event.hasMedia`: o caso que originou a frente ficava justamente fora
+    //    dela, e o meu teste, sendo de texto puro, nao representava o evento
+    //    real. O OCR NAO MUDA: sem legenda, ou se o agent-first nao resolver, o
+    //    fluxo de comprovante de hoje assume inteiro.
+    // ⚠️ Quando resolve, o valor NAO vem do OCR — vem do total escrito pelo
+    //    humano, conferido contra as FATURAS pelo Core. E' criterio mais forte
+    //    que o OCR, nao mais fraco: este caminho nunca lanca sem vinculo de
+    //    fatura, enquanto a legenda no fluxo legado pode.
+    if (!event._sintetico && _v4CanarioLigado(chatId)) {
       const rAgent = await tratarAgentFirst(event, grp, agora);
       if (rAgent) return rAgent;
     }
@@ -5800,7 +5895,7 @@ module.exports = {
   _saidaExplicitaFromCaption, _nomeHumanoTardio, extrairValorOcr, _vendedorRotulado, _mesmaPessoa,
   _alunoRotulado, _limparAlunoRotulado, _semAlunoDeclarado, extrairCategoriaCorrecao,
   _ehDitadoDeCaixa, classificarCorrecaoPendencia, listarPreviewsAbertosV3, _contestaFatura, rotearMensagemV4,
-  montarEnvelopeV4, _v4CanarioLigado, resolverEnvelopeCaixaV1, valorConfereComTexto,
+  montarEnvelopeV4, aplicarCorrecaoEnvelope, _v4CanarioLigado, resolverEnvelopeCaixaV1, valorConfereComTexto,
   casarNao, ehConversaSemComando,
   montarPreview, montarPreviewMultiAluno, fmtBRL, carregarEnv, lancarRecebimento, lancarRecebimentoLote, resolverMultiAlunoCaixaV1, resolverPagamentoItensV1, resolverCompostoAlunoCaixaV1, lancarSaidaCaixa, buscarLancamentoParaCorrecao,
   buscarMovimentosCaixa, corrigirMovimentoCaixa, estornarMovimentoCaixa, registrarPreviewV3, registrarApprovalV3, criarHandlerFinanceiro,

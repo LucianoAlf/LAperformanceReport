@@ -52,6 +52,8 @@ function novo(over = {}) {
     sendFn: async (_c, t) => { enviadas.push(String(t)); return 'MSG' + (++seq); },
     rotearV4Fn: async () => DEC_LIS,
     resolverEnvelopeFn: async (p) => { pedidos.push(p); return RES_LIS; },
+    ocrFn: async () => ({ text: '', status: 'ok', file_bytes: 10 }),
+    visaoFn: async () => null,
     interpretarFn: async () => null, interpretarMultiFn: async () => null,
     classificarCorrecaoFn: async () => null,
     canonicaFn: async () => null, casarFn: async () => null,
@@ -179,7 +181,87 @@ const junta = (a) => a.join(' || ');
   checar(g(435.50, 'foi R$ 200 + 235,50').ok === true, 'F7: guarda recusou soma de partes marcadas');
   checar(g(435.50, 'foi 200 + 235,50').ok === false, 'F7: guarda somou inteiro solto sem R$');
 
+
+  // ── F8: O EVENTO REAL — MIDIA COM LEGENDA. O comprovante da Lis chegou assim,
+  //    e o gate anterior (`!event.hasMedia`) deixava justamente ele de fora: meu
+  //    teste, de texto puro, nao representava o caso que originou a frente.
+  process.env.SOL_CAIXA_V4_CANARIO = CHAT;
+  const M = novo();
+  const rM = await M.h.handle({ chatId: CHAT, senderPhone: ADM, messageId: 'LIS-MIDIA',
+    body: TEXTO_LIS, hasMedia: true, mediaType: 'image', downloadMedia: async () => Buffer.from('x') });
+  checar(M.pedidos.length === 1, 'F8: com hasMedia o Core do envelope NAO foi chamado');
+  const envM = M.pedidos[0] && M.pedidos[0].envelope;
+  checar(envM && Number(envM.valor_total) === 657,
+    'F8: valor_total = ' + (envM && envM.valor_total) + ', esperava 657 (o legado manda 357)');
+  checar(envM && envM.itens.length === 1 && envM.itens[0].aluno === 'Lis Dal Mora Mello',
+    'F8: aluno = ' + JSON.stringify(envM && envM.itens) + ' (o legado manda a frase inteira)');
+  const cardM = M.enviadas.find((x) => /R\$/.test(x)) || '';
+  checar(/657/.test(cardM), 'F8: card sem 657 -> ' + JSON.stringify(cardM.slice(0, 160)));
+  checar(!/357,00\*/.test(cardM.split('TOTAL')[0] || ''), 'F8: card liderado por 357 (defeito antigo)');
+  checar(M.logs.some((l) => l.acao === 'agent_first_resolveu'), 'F8: agent-first nao assumiu na midia');
+
+  // ── F9: MIDIA SEM LEGENDA -> agent-first sai de fininho, OCR intacto ───────
+  const SL = novo();
+  await SL.h.handle({ chatId: CHAT, senderPhone: ADM, messageId: 'SEM-LEGENDA',
+    body: '', hasMedia: true, mediaType: 'image', downloadMedia: async () => Buffer.from('x') });
+  checar(SL.pedidos.length === 0, 'F9: agent-first chamou o Core sem legenda nenhuma');
+
+  // ── F10: CORRECAO NO SEGUNDO TURNO, PELO handle() DE VERDADE ──────────────
+  //    O 2o turno tem de mudar o ENVELOPE guardado e re-resolver. Se em vez
+  //    disso a intencao virasse frase canonica e voltasse ao parser legado
+  //    (que e o que o fallback de dialogo de 31/08 faz), o defeito voltaria
+  //    inteiro: quem montaria a pergunta ao banco seria de novo a gramatica.
+  const DEC_CORR = { intencao: 'corrigir_competencia', competencia: '08/2026', confianca: 0.9 };
+  let turno = 0;
+  const C = novo({ rotearV4Fn: async () => (++turno === 1 ? DEC_LIS : DEC_CORR) });
+  await C.h.handle({ chatId: CHAT, senderPhone: ADM, messageId: 'T1', body: TEXTO_LIS,
+    hasMedia: true, mediaType: 'image', downloadMedia: async () => Buffer.from('x') });
+  checar(C.pedidos.length === 1, 'F10: 1o turno nao chamou o Core');
+  checar(C.pedidos[0].envelope.itens[0].competencias[0] === '09/2026',
+    'F10: 1o turno com competencia errada -> ' + JSON.stringify(C.pedidos[0].envelope.itens));
+
+  const r2 = await C.h.handle({ chatId: CHAT, senderPhone: ADM, messageId: 'T2',
+    body: 'na verdade essa parcela é de agosto, 08/2026' });
+  checar(C.pedidos.length === 2, 'F10: 2o turno NAO re-resolveu pelo Core -> ' + C.pedidos.length);
+  const env2 = C.pedidos[1] && C.pedidos[1].envelope;
+  checar(env2 && env2.itens[0].competencias[0] === '08/2026',
+    'F10: correcao nao entrou no envelope -> ' + JSON.stringify(env2 && env2.itens));
+  checar(env2 && env2.itens[0].aluno === 'Lis Dal Mora Mello' && Number(env2.valor_total) === 657,
+    'F10: 2o turno perdeu aluno/total do 1o -> ' + JSON.stringify(env2));
+  checar(C.logs.some((l) => l.acao === 'agent_first_correcao'),
+    'F10: nao registrou que foi correcao de envelope');
+  checar(r2 && String(r2.acao) !== 'nada', 'F10: 2o turno caiu no vazio');
+
+  // e as guardas da correcao, como funcao pura
+  const corrVr = mod.aplicarCorrecaoEnvelope(
+    { valor_total: 657, forma: 'pix', itens: [{ aluno: 'X', categorias: [], competencias: [] }] },
+    { intencao: 'corrigir_valor', valor: 20349, valor_recusado: { valor: 20349, motivo: 'nao_esta_no_texto' } });
+  checar(corrVr.motivo === 'correcao_sem_valor', 'F10: aceitou correcao com valor que a guarda recusou');
+  const corrA = mod.aplicarCorrecaoEnvelope(
+    { valor_total: 900, forma: 'pix', itens: [{ aluno: 'A', categorias: [], competencias: [] },
+                                              { aluno: 'B', categorias: [], competencias: [] }] },
+    { intencao: 'corrigir_aluno', aluno_nome: 'C' });
+  checar(corrA.motivo === 'correcao_aluno_ambigua', 'F10: trocou aluno sem saber QUAL de dois');
+
+  // ── F11: MUTANTE 357 + 300 + 657 — total recusado NAO pode virar parcial ───
+  const decMut = { intencao: 'lancamento_por_texto', aluno_nome: 'Lis Dal Mora Mello',
+    valor: 357, valor_total: null,
+    valor_total_recusado: { valor: 657000, motivo: 'nao_esta_no_texto' },
+    forma: 'pix', competencia: '09/2026',
+    itens: [{ aluno: 'Lis Dal Mora Mello', categorias: ['parcela'], competencias: ['09/2026'] }] };
+  const envMut = mod.montarEnvelopeV4(decMut);
+  checar(envMut.ok === false && envMut.motivo === 'valor_total_recusado',
+    'F11: com total recusado caiu para o valor PARCIAL -> ' + JSON.stringify(envMut));
+  const MUT = novo({ rotearV4Fn: async () => decMut });
+  const rMut = await MUT.h.handle({ chatId: CHAT, senderPhone: ADM, messageId: 'MUT',
+    body: TEXTO_LIS, hasMedia: true, mediaType: 'image', downloadMedia: async () => Buffer.from('x') });
+  checar(MUT.pedidos.length === 0, 'F11: chamou o Core com total recusado');
+  checar(!(rMut && String(rMut.acao).startsWith('agent_first')),
+    'F11: agent-first respondeu com total recusado');
+
   if (CAN === undefined) delete process.env.SOL_CAIXA_V4_CANARIO; else process.env.SOL_CAIXA_V4_CANARIO = CAN;
   if (falhas.length) { console.error('FALHOU:'); falhas.forEach((f) => console.error('  - ' + f)); process.exit(1); }
-  console.log('ok agent-first: portao, replay Lis/Mayra, fail-safe, ambiguidade, homonimo, contrato plural, guarda de valor');
+  console.log('ok agent-first: portao por lista, replay Lis/Mayra em TEXTO e em MIDIA COM LEGENDA, '
+    + 'midia sem legenda cede o OCR, fail-safe em 4 ramos, ambiguidade pergunta, homonimo com lista, '
+    + 'contrato plural, correcao no 2o turno pelo handle(), mutante 357+300+657 com total recusado');
 })();

@@ -147,6 +147,61 @@ select '11111111-1111-1111-1111-111111111111', 'ENS',
        400.00, 400.00
   from generate_series(1,2) g;
 
+-- ⚠️ FIXTURES REAIS DOS TRES CASOS QUE EU TINHA SUPERDECLARADO (10/09). O ensaio
+--    anterior "provava" familia usando o MESMO aluno com duas matriculas — isso
+--    e um filho com dois cursos, nao irmaos —, e trio/varios-meses so provavam
+--    que arrays sobreviviam no JS. Aqui os tres casos existem no DADO e as
+--    assercoes conferem o CONTEUDO resolvido.
+-- ⚠️ `aberta` (nao `paga`): sao contas a pagar. Em producao `aberta` traz
+--    `valor_hoje` e `paga` nao — os dois ramos do universo ficam exercitados.
+
+-- (a) IRMAOS: duas PESSOAS distintas sob o MESMO responsavel financeiro.
+insert into public.alunos (nome, unidade_id, status, emusys_student_id, emusys_matricula_id,
+                           valor_parcela, responsavel_nome, data_matricula)
+values ('Irmao Um 9101', '11111111-1111-1111-1111-111111111111', 'ativo', 990101, 990101,
+        310.00, 'Responsavel Irmaos 9100', current_date - 300),
+       ('Irma Dois 9102', '11111111-1111-1111-1111-111111111111', 'ativo', 990102, 990102,
+        290.00, 'Responsavel Irmaos 9100', current_date - 300),
+-- (b) TRIO: parcela + Passaporte + Taxa de Matricula no mesmo mes.
+       ('Trio Faturas 9200', '11111111-1111-1111-1111-111111111111', 'ativo', 990200, 990200,
+        400.00, 'Responsavel Trio 9200', current_date - 60),
+-- (c) TRES COMPETENCIAS: o aluno deve tres meses e paga tudo de uma vez.
+       ('Tres Meses 9300', '11111111-1111-1111-1111-111111111111', 'ativo', 990300, 990300,
+        200.00, 'Responsavel Meses 9300', current_date - 300);
+
+insert into public.emusys_faturas (
+  unidade_id, unidade_codigo, emusys_fatura_id, emusys_matricula_id,
+  emusys_contrato_id, emusys_student_id, descricao, status,
+  data_vencimento, data_pagamento, competencia, valor_original, valor_pago)
+values
+ -- (a) um irmao, uma parcela cada: total do responsavel = 310 + 290 = 600
+ ('11111111-1111-1111-1111-111111111111','ENS',9910101,990101,990101,990101,
+  'Parcela ' || to_char(date_trunc('month', current_date)::date,'MM/YYYY') || ' do curso de Violao',
+  'aberta',(date_trunc('month', current_date)::date + 20),null,date_trunc('month', current_date)::date,310.00,null),
+ ('11111111-1111-1111-1111-111111111111','ENS',9910102,990102,990102,990102,
+  'Parcela ' || to_char(date_trunc('month', current_date)::date,'MM/YYYY') || ' do curso de Canto',
+  'aberta',(date_trunc('month', current_date)::date + 20),null,date_trunc('month', current_date)::date,290.00,null),
+ -- (b) trio: parcela 400 + passaporte 150 + taxa de matricula 120 = 670
+ ('11111111-1111-1111-1111-111111111111','ENS',9920001,990200,990200,990200,
+  'Parcela ' || to_char(date_trunc('month', current_date)::date,'MM/YYYY') || ' do curso de Bateria',
+  'aberta',(date_trunc('month', current_date)::date + 20),null,date_trunc('month', current_date)::date,400.00,null),
+ ('11111111-1111-1111-1111-111111111111','ENS',9920002,990200,990200,990200,
+  'Passaporte do curso de Bateria',
+  'aberta',(date_trunc('month', current_date)::date + 20),null,date_trunc('month', current_date)::date,150.00,null),
+ ('11111111-1111-1111-1111-111111111111','ENS',9920003,990200,990200,990200,
+  'Taxa de Matricula do curso de Bateria',
+  'aberta',(date_trunc('month', current_date)::date + 20),null,date_trunc('month', current_date)::date,120.00,null),
+ -- (c) tres competencias: 200 + 210 + 220 = 630
+ ('11111111-1111-1111-1111-111111111111','ENS',9930001,990300,990300,990300,
+  'Parcela ' || to_char(date_trunc('month', current_date - interval '2 months')::date,'MM/YYYY') || ' do curso de Teclado',
+  'aberta',(date_trunc('month', current_date)::date + 20),null,date_trunc('month', current_date - interval '2 months')::date,200.00,null),
+ ('11111111-1111-1111-1111-111111111111','ENS',9930002,990300,990300,990300,
+  'Parcela ' || to_char(date_trunc('month', current_date - interval '1 month')::date,'MM/YYYY') || ' do curso de Teclado',
+  'aberta',(date_trunc('month', current_date)::date + 20),null,date_trunc('month', current_date - interval '1 month')::date,210.00,null),
+ ('11111111-1111-1111-1111-111111111111','ENS',9930003,990300,990300,990300,
+  'Parcela ' || to_char(date_trunc('month', current_date)::date,'MM/YYYY') || ' do curso de Teclado',
+  'aberta',(date_trunc('month', current_date)::date + 20),null,date_trunc('month', current_date)::date,220.00,null);
+
 -- ⚠️ O `ultimo_run_por_competencia` da enriquecedora elege o run de
 --    `completed_at` MAIS RECENTE. As migrations semeiam runs proprios; se um
 --    deles for mais novo que o meu, ele vence, vem SEM itens, e o `tipo_fatura`
@@ -178,8 +233,17 @@ select r.id, f.id, f.competencia, f.unidade_id, f.unidade_codigo,
        f.emusys_fatura_id, f.emusys_matricula_id, f.emusys_contrato_id, f.emusys_student_id,
        f.descricao, f.status, f.data_vencimento, f.data_pagamento,
        f.valor_original, f.valor_pago, 0, 0, 0, 0,
+       -- 🔴 `numero_parcela` NAO PODE SER 1 EM TUDO. E o PRIMEIRO ramo de
+       --    `financeiro_classificar_tipo_fatura_v1`: com ele preenchido, toda
+       --    fatura vira `parcela` e a dimensao `tipo_fatura` nunca e exercitada
+       --    — passaporte, taxa de matricula, lojinha e ingresso ficavam
+       --    indistinguiveis no ensaio. Em producao so mensalidade tem numero de
+       --    parcela; e exatamente assim que o classificador separa as naturezas.
+       --    Descoberto em 10/09 porque a assercao passou a conferir CONTEUDO:
+       --    o trio resolveu as 3 faturas certas e as 3 vieram como `parcela`.
        jsonb_build_object('descricao', f.descricao, 'status', f.status,
-                          'numero_parcela', 1, 'total_parcelas_contrato', 12)
+                          'numero_parcela', case when f.descricao ilike 'Parcela %' then 1 else null end,
+                          'total_parcelas_contrato', 12)
 from public.emusys_faturas f
 join public.sync_runs r on r.competencia = f.competencia and r.trigger_source = 'ensaio';
 
@@ -217,15 +281,18 @@ begin
   --    valer; duas faturas plantadas de proposito nao mudam ordem de grandeza
   --    nenhuma. Afrouxar o limite para caber a fixture seria mexer na regua
   --    para o numero passar — que e o oposto do que a guarda existe para fazer.
+  -- ⚠️ A FAIXA 99xxxx inteira e de fixture deliberada: ambiguidade (990001),
+  --    irmaos (990101/990102), trio de faturas (990200) e tres competencias
+  --    (990300). Todas ficam fora da contagem organica.
   select count(*) into v_faturas_comp from public.emusys_faturas
    where competencia = date_trunc('month', current_date)::date
-     and emusys_student_id <> 990001;
+     and emusys_student_id < 990000;
   select count(*) into v_alunos from public.alunos
    where unidade_id = '11111111-1111-1111-1111-111111111111';
   select count(*) into v_multi from (
     select emusys_student_id from public.emusys_faturas
      where competencia = date_trunc('month', current_date)::date
-       and emusys_student_id <> 990001
+       and emusys_student_id < 990000
      group by 1 having count(*) >= 2) x;
 
   raise notice 'seed: % alunos · % faturas na competencia · % alunos com 2+ faturas',

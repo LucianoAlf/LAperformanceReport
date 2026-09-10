@@ -13,6 +13,7 @@ declare
   r jsonb;
   v_aluno text; v_resp text; v_tot numeric; v_n int;
   v_amb text; v_amb_val numeric;
+  v_soma numeric; v_nomes text[]; v_cats text[]; v_comps text[];
   v_hoje date := (now() at time zone 'America/Sao_Paulo')::date;
 begin
   select a, s, n into v_aluno, v_tot, v_n from (
@@ -121,6 +122,113 @@ begin
      or not has_function_privilege('service_role','public.sol_caixa_resolver_envelope_v1(uuid,jsonb)','EXECUTE')
      or not has_function_privilege('sol_acesso_restrito','public.sol_caixa_resolver_envelope_v1(uuid,jsonb)','EXECUTE') then
     v_falhas := v_falhas || '8. ACL de sol_caixa_resolver_envelope_v1 fora da regua';
+  end if;
+
+
+  -- ── 9) IRMAOS: pagador -> DUAS PESSOAS distintas ──────────────────────────
+  -- ⚠️ O check 2 usa o mesmo aluno com varias matriculas — isso e um filho com
+  --    dois cursos, NAO irmaos. Este aqui exige dois nomes diferentes.
+  v_checks := v_checks + 1;
+  select sum(coalesce((i->'valores'->>'valor_hoje')::numeric,
+                      (i->'valores'->>'valor_pago')::numeric))
+    into v_soma
+    from jsonb_array_elements((sol_faturas_alunos_v1(v_uni,
+           extract(year from v_hoje)::int, extract(month from v_hoje)::int,
+           'janela_3','todas', v_hoje))->'items') i
+   where i->'aluno'->>'nome' in ('Irmao Um 9101','Irma Dois 9102');
+  r := sol_caixa_resolver_envelope_v1(v_uni, jsonb_build_object(
+        'pagador', 'Responsavel Irmaos 9100', 'valor_total', v_soma, 'forma','pix'));
+  if not coalesce((r->>'ok')::boolean,false) then
+    v_falhas := v_falhas || format('9. irmaos: ok=false motivo=%s soma=%s', r->>'motivo', v_soma);
+  else
+    select array_agg(distinct x->>'aluno_nome' order by x->>'aluno_nome')
+      into v_nomes from jsonb_array_elements(r->'itens') x;
+    if v_nomes is distinct from array['Irma Dois 9102','Irmao Um 9101'] then
+      v_falhas := v_falhas || format('9. irmaos: resolveu %s, esperava as DUAS pessoas', v_nomes::text);
+    end if;
+    if (r->>'via') <> 'pagador' or (r->>'alunos')::int <> 2 then
+      v_falhas := v_falhas || format('9. irmaos: via=%s alunos=%s', r->>'via', r->>'alunos');
+    end if;
+  end if;
+
+  -- ── 10) TRIO: parcela + Passaporte + Taxa de Matricula juntos ─────────────
+  -- ⚠️ NAO EXISTE tipo `matricula` no dado: "Taxa de Matricula" e "Passaporte"
+  --    compartilham `passaporte_taxa_matricula`. Sao TRES faturas de naturezas
+  --    distintas e DUAS categorias — e a assercao conta as tres pela DESCRICAO,
+  --    que e onde a distincao existe de verdade.
+  v_checks := v_checks + 1;
+  select sum(coalesce((i->'valores'->>'valor_hoje')::numeric,
+                      (i->'valores'->>'valor_pago')::numeric))
+    into v_soma
+    from jsonb_array_elements((sol_faturas_alunos_v1(v_uni,
+           extract(year from v_hoje)::int, extract(month from v_hoje)::int,
+           'janela_3','todas', v_hoje))->'items') i
+   where i->'aluno'->>'nome' = 'Trio Faturas 9200';
+  r := sol_caixa_resolver_envelope_v1(v_uni, jsonb_build_object(
+        'valor_total', v_soma, 'forma','pix',
+        'itens', jsonb_build_array(jsonb_build_object('aluno','Trio Faturas 9200'))));
+  if not coalesce((r->>'ok')::boolean,false) or jsonb_array_length(r->'itens') <> 3 then
+    v_falhas := v_falhas || format('10. trio: ok=%s linhas=%s motivo=%s',
+      r->>'ok', jsonb_array_length(coalesce(r->'itens','[]'::jsonb)), r->>'motivo');
+  else
+    select array_agg(distinct x->>'categoria' order by x->>'categoria')
+      into v_cats from jsonb_array_elements(r->'itens') x;
+    if v_cats is distinct from array['parcela','passaporte'] then
+      v_falhas := v_falhas || format('10. trio: categorias=%s, esperava parcela+passaporte', v_cats::text);
+    end if;
+    if not (exists (select 1 from jsonb_array_elements(r->'itens') x where x->>'descricao' ilike 'Parcela%')
+        and exists (select 1 from jsonb_array_elements(r->'itens') x where x->>'descricao' ilike 'Passaporte%')
+        and exists (select 1 from jsonb_array_elements(r->'itens') x where x->>'descricao' ilike 'Taxa de Matricula%')) then
+      v_falhas := v_falhas || '10. trio: as tres naturezas nao vieram todas';
+    end if;
+  end if;
+
+  -- ── 11) TRES COMPETENCIAS numa tacada, com os meses EXIGIDOS ──────────────
+  v_checks := v_checks + 1;
+  select sum(coalesce((i->'valores'->>'valor_hoje')::numeric,
+                      (i->'valores'->>'valor_pago')::numeric))
+    into v_soma
+    from jsonb_array_elements((sol_faturas_alunos_v1(v_uni,
+           extract(year from v_hoje)::int, extract(month from v_hoje)::int,
+           'janela_3','todas', v_hoje))->'items') i
+   where i->'aluno'->>'nome' = 'Tres Meses 9300';
+  r := sol_caixa_resolver_envelope_v1(v_uni, jsonb_build_object(
+        'valor_total', v_soma, 'forma','pix',
+        'itens', jsonb_build_array(jsonb_build_object(
+          'aluno','Tres Meses 9300',
+          'competencias', jsonb_build_array(
+            to_char(date_trunc('month', v_hoje - interval '2 months'),'MM/YYYY'),
+            to_char(date_trunc('month', v_hoje - interval '1 month'),'MM/YYYY'),
+            to_char(date_trunc('month', v_hoje),'MM/YYYY'))))));
+  if not coalesce((r->>'ok')::boolean,false) or jsonb_array_length(r->'itens') <> 3 then
+    v_falhas := v_falhas || format('11. tres meses: ok=%s linhas=%s motivo=%s',
+      r->>'ok', jsonb_array_length(coalesce(r->'itens','[]'::jsonb)), r->>'motivo');
+  else
+    select array_agg(distinct x->>'competencia' order by x->>'competencia')
+      into v_comps from jsonb_array_elements(r->'itens') x;
+    if coalesce(array_length(v_comps,1),0) <> 3 then
+      v_falhas := v_falhas || format('11. tres meses: competencias resolvidas=%s', v_comps::text);
+    end if;
+  end if;
+
+  -- ── 12) O FILTRO DE CATEGORIA MORDE (senao categorias[] e enfeite) ────────
+  v_checks := v_checks + 1;
+  select sum(coalesce((i->'valores'->>'valor_hoje')::numeric,
+                      (i->'valores'->>'valor_pago')::numeric))
+    into v_soma
+    from jsonb_array_elements((sol_faturas_alunos_v1(v_uni,
+           extract(year from v_hoje)::int, extract(month from v_hoje)::int,
+           'janela_3','todas', v_hoje))->'items') i
+   where i->'aluno'->>'nome' = 'Trio Faturas 9200' and i->>'descricao' ilike 'Parcela%';
+  r := sol_caixa_resolver_envelope_v1(v_uni, jsonb_build_object(
+        'valor_total', v_soma, 'forma','pix',
+        'itens', jsonb_build_array(jsonb_build_object(
+          'aluno','Trio Faturas 9200', 'categorias', jsonb_build_array('parcela')))));
+  if not coalesce((r->>'ok')::boolean,false) or jsonb_array_length(r->'itens') <> 1
+     or (r->'itens'->0->>'categoria') <> 'parcela' then
+    v_falhas := v_falhas || format('12. filtro de categoria: ok=%s linhas=%s cat=%s motivo=%s',
+      r->>'ok', jsonb_array_length(coalesce(r->'itens','[]'::jsonb)),
+      r->'itens'->0->>'categoria', r->>'motivo');
   end if;
 
   if array_length(v_falhas,1) > 0 then
