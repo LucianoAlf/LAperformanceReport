@@ -49,6 +49,7 @@ import { FunnelPipelineNav } from './FunnelPipelineNav';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { ModalAgendar } from '../PreAtendimento/components/ModalAgendar';
 import { cn } from '@/lib/utils';
 import { copyTextToClipboard, getManualCopyShortcut } from '@/lib/clipboard';
 import { ehMatriculaComercialCanonica } from '@/lib/comercialMatriculasCanonicas';
@@ -230,7 +231,8 @@ function resolverUnidade(valor?: string | null) {
 interface ResumoMes {
   leads: number;
   experimentais: number;
-  visitas: number;
+  /** `null` = nao foi possivel medir (ver buscarVisitasCanonicas). Nunca confundir com 0. */
+  visitas: number | null;
   matriculas: number;
   matriculasPorCanal: { canal: string; quantidade: number }[];
   matriculasPorCurso: { curso: string; quantidade: number }[];
@@ -298,6 +300,71 @@ const buscarTaxaExpMatCanonica = async (
     ),
   };
 };
+
+export interface VisitaCanonica {
+  id: string;
+  lead_id: number | null;
+  unidade_id: string;
+  nome: string;
+  telefone: string | null;
+  data: string;
+  horario: string | null;
+  status: string;
+  criado_por: string | null;
+}
+
+// Fonte canonica de VISITA e a tabela `public.visitas`, filtrada por `visitas.data`
+// (o dia da visita). Vale para as 3 unidades: a Mila so agenda em CG, mas o
+// ModalAgendar cria visita manual em qualquer unidade, na MESMA tabela --
+// `criado_por` e que separa 'mila' de 'manual'.
+//
+// Nao usar `leads.status = 'visita_escola'`: aquilo e o FUNIL, um estado atual que a
+// etapa seguinte sobrescreve e que so tem a data do primeiro contato. Contado assim,
+// o mes ENCOLHE com o tempo (abril mostrava 1 de 5) e a visita cai no mes errado.
+//
+// Regra igual a do KPI canonico `get_kpis_comercial_canonicos_v2`: conta tudo que nao
+// foi cancelado. `agendada` ja e visita marcada -- marcar presenca e outra pergunta.
+//
+// Devolve `null` quando NAO FOI POSSIVEL MEDIR, nunca lista vazia: foi exatamente
+// "ausencia virou zero" que fez o relatorio de agosto dizer `Visitas: 0` com 28
+// visitas no banco. Quem chama tem de distinguir "nao houve" de "nao sei".
+const buscarVisitasCanonicas = async (
+  unidadeId: string | null | undefined,
+  dataInicio: string | null | undefined,
+  dataFim: string | null | undefined
+): Promise<VisitaCanonica[] | null> => {
+  let query = supabase
+    .from('visitas')
+    .select('id, lead_id, unidade_id, nome, telefone, data, horario, status, criado_por')
+    .not('status', 'in', '("cancelada","cancelado")')
+    .order('data', { ascending: false });
+
+  if (dataInicio) query = query.gte('data', dataInicio);
+  if (dataFim) query = query.lte('data', dataFim);
+  if (unidadeId && unidadeId !== 'todos') query = query.eq('unidade_id', unidadeId);
+
+  const { data, error } = await query;
+  if (error) {
+    console.error(
+      `[comercial] visitas canonicas indisponiveis (unidade=${unidadeId ?? 'todas'}, ` +
+      `${dataInicio ?? 'inicio'}..${dataFim ?? 'fim'}): ${error.code || '?'} ${error.message}`
+    );
+    return null;
+  }
+  return (data || []) as VisitaCanonica[];
+};
+
+const contarVisitasCanonicas = async (
+  unidadeId: string | null | undefined,
+  dataInicio: string | null | undefined,
+  dataFim: string | null | undefined
+): Promise<number | null> => {
+  const itens = await buscarVisitasCanonicas(unidadeId, dataInicio, dataFim);
+  return itens === null ? null : itens.length;
+};
+
+// Numero para texto de relatorio: `?` quando a medida falhou, nunca 0.
+const numVisitas = (v: number | null): string => (v === null ? '?' : String(v));
 
 const textoTaxaExpMat = (taxa: TaxaExpMatCanonica) =>
   taxa.liberada
@@ -562,6 +629,10 @@ export function ComercialPage() {
   
   // Registros do dia
   const [registrosHoje, setRegistrosHoje] = useState<LeadDiario[]>([]);
+  /** Visitas marcadas para HOJE, lidas de `public.visitas`. `null` = nao medido. */
+  const [visitasHoje, setVisitasHoje] = useState<number | null>(null);
+  /** Lead a agendar visita: arrastar o card para a etapa Visita abre o modal. */
+  const [leadAgendarVisita, setLeadAgendarVisita] = useState<LeadCRM | null>(null);
 
   useEffect(() => {
     const unidadeCron = unidadeParaSalvar;
@@ -1105,7 +1176,11 @@ export function ComercialPage() {
 
       // Calcular resumo (usa mês inteiro quando filtro é "Hoje")
       const leads = registrosParaResumo.reduce((acc, r) => acc + r.quantidade, 0);
-      const visitas = registrosParaResumo.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0);
+      const visitas = await contarVisitasCanonicas(
+        unidadeResumoId,
+        matriculasResumoStartDate,
+        matriculasResumoEndDate
+      );
       const matriculas = registrosParaResumo.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0);
       const experimentaisConfirmadas = taxaExpMatResumo.realizadasConfirmadas;
 
@@ -1154,6 +1229,9 @@ export function ComercialPage() {
       // Registros de hoje: apenas leads que entraram hoje (por data_contato)
       const registrosEntradaHoje = registros.filter(r => r.data_contato === hoje);
       setRegistrosHoje(registrosEntradaHoje);
+      // Visita de hoje = visita cuja DATA e hoje. Antes contava lead que ENTROU hoje
+      // e ja estava em `visita_escola` -- coisa diferente, e quase sempre zero.
+      setVisitasHoje(await contarVisitasCanonicas(unidadeResumoId, hoje, hoje));
 
       // ════════════════════════════════════════════════════════════════
       // Matrículas do período — FONTE: tabela `alunos` (cada aluno com
@@ -1370,15 +1448,36 @@ export function ComercialPage() {
         })));
       }
 
-      // Visitas do mês (com nomes dos relacionamentos)
-      const visitasDoMes = registros
-        .filter(r => r.status === 'visita_escola')
-        .map(v => ({
-          ...v,
-          canal_nome: (v.canais_origem as any)?.nome || '',
-          curso_nome: (v.cursos as any)?.nome || '',
-        }));
-      setVisitasMes(visitasDoMes);
+      // Visitas do mês: tabela `visitas` por `visitas.data`. Os nomes de canal/curso
+      // vêm do lead vinculado quando existe -- a visita sozinha não os tem.
+      const visitasCanonicas = await buscarVisitasCanonicas(unidadeResumoId, startDate, endDate);
+      const leadPorId = new Map(registros.map(r => [r.id, r]));
+      const visitasDoMes = (visitasCanonicas || []).map(v => {
+        const lead = (v.lead_id ? leadPorId.get(v.lead_id) : undefined) as any;
+        return {
+          // Campos do lead primeiro; os da visita sobrescrevem SO o que e dela.
+          ...(lead || {}),
+          // ⚠️ `id` continua sendo o do LEAD: a aba usa esse id para editar, excluir,
+          // mover etapa e checar procedencia Emusys. Espalhar a visita inteira aqui
+          // trocaria por um uuid e quebraria as quatro coisas em silencio.
+          // Visita orfa (12 hoje, sem lead vinculado) fica com `id` indefinido -- a
+          // linha aparece na lista, e as acoes de lead nao se aplicam a ela.
+          id: v.lead_id ?? undefined,
+          visita_id: v.id,
+          visita_status: v.status,
+          visita_criado_por: v.criado_por,
+          horario_visita: v.horario,
+          // A coluna "Data" desta aba mostra a data da VISITA, nao a de entrada do lead.
+          data_contato: v.data,
+          nome: v.nome || lead?.nome || '',
+          telefone: v.telefone || lead?.telefone || '',
+          unidade_id: v.unidade_id,
+          quantidade: lead?.quantidade ?? 1,
+          canal_nome: lead?.canais_origem?.nome || '',
+          curso_nome: lead?.cursos?.nome || '',
+        };
+      });
+      setVisitasMes(visitasDoMes as any);
 
       // Experimentais AGENDADAS dentro do período (filtra por created_at do agendamento),
       // mas só as cuja AULA (data_experimental) cai FORA do range — pra não duplicar com a
@@ -1642,6 +1741,9 @@ export function ComercialPage() {
     11: null,
   };
 
+  /** Etapa "Visita" no pipeline. Ver `statusFromEtapa`. */
+  const ETAPA_VISITA = 6;
+
   const statusFromEtapa = (etapa: number): string => {
     const map: Record<number, string> = { 1: 'novo', 2: 'novo', 3: 'novo', 4: 'novo', 5: 'experimental_agendada', 6: 'visita_escola', 7: 'experimental_realizada', 8: 'experimental_realizada', 9: 'experimental_faltou', 10: 'convertido', 11: 'arquivado' };
     return map[etapa] || 'novo';
@@ -1669,6 +1771,25 @@ export function ComercialPage() {
   } as LeadCRM);
 
   const handleMoverEtapa = async (leadId: number, novaEtapa: number, extras?: Record<string, any>) => {
+    // Visita tem data e horario proprios -- e nao sao o dia do arrasto. Em vez de
+    // mover o card e adivinhar, abre o modal e PERGUNTA. Quem grava a etapa 6 E a
+    // linha em `public.visitas` (a fonte que o painel conta) e o proprio modal.
+    // Sem excecao: qualquer atalho que movesse para a etapa 6 sem passar por aqui
+    // recriaria a divergencia funil x tabela que este trabalho fechou.
+    if (novaEtapa === ETAPA_VISITA) {
+      // A aba de experimentais e a de visitas chamam com leads que podem nao estar
+      // em `leadsMes` (listas filtradas por datas diferentes) -- procurar nas tres.
+      const lead = [...leadsMes, ...experimentaisMes, ...visitasMes]
+        .find((l: any) => l.id === leadId) as LeadDiario | undefined;
+      if (!lead) {
+        toast.error('Nao foi possivel abrir o agendamento', {
+          description: `Lead ${leadId} nao esta nas listas carregadas -- recarregue a pagina.`,
+        });
+        return;
+      }
+      setLeadAgendarVisita(toLeadCRM(lead));
+      return;
+    }
     try {
       const { error } = await supabase.from('leads').update({
         etapa_pipeline_id: novaEtapa,
@@ -1742,6 +1863,13 @@ export function ComercialPage() {
   const handleBulkMoverEtapa = async (novaEtapa: number, extras?: Record<string, any>) => {
     const ids = Array.from(selecionadosFunil);
     if (ids.length === 0) return;
+    // Cada visita tem data e horario proprios: mover em lote teria de inventar os dois.
+    if (novaEtapa === ETAPA_VISITA) {
+      toast.error('Visita nao pode ser movida em lote', {
+        description: 'Cada visita tem data e horario proprios. Mova um lead por vez para agendar.',
+      });
+      return;
+    }
     try {
       for (const id of ids) {
         const { error } = await supabase.from('leads').update({
@@ -3109,7 +3237,11 @@ export function ComercialPage() {
 
     const leadsSemana = registrosSemana?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const experimentaisSemana = registrosSemana?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const visitasSemana = registrosSemana?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const visitasSemana = await contarVisitasCanonicas(
+      unidadeRelatorioId,
+      seteDiasAtras.toISOString().split('T')[0],
+      hoje.toISOString().split('T')[0]
+    );
     // Matriculas: fonte = alunos por data_matricula (apenas matriculas novas)
     const matriculasSemanaAlunos = (await buscarMatriculasAlunos(unidadeRelatorioId, seteDiasAtras.toISOString().split('T')[0], hoje.toISOString().split('T')[0])).filter(ehMatriculaNova);
     const matriculasSemana = matriculasSemanaAlunos.length;
@@ -3145,7 +3277,7 @@ export function ComercialPage() {
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `🎯 Leads na semana: *${leadsSemana}*\n`;
     texto += `🎸 Experimentais marcadas na semana: *${experimentaisSemana}*\n`;
-    texto += `🏫 Visitas na semana: *${visitasSemana}*\n`;
+    texto += `🏫 Visitas na semana: *${numVisitas(visitasSemana)}*\n`;
     texto += `✅ Matrículas na semana: *${matriculasSemana}*\n\n`;
 
     texto += `📊 *CONVERSÕES*\n`;
@@ -3421,19 +3553,21 @@ export function ComercialPage() {
     // Calcular totais mês atual
     const leadsAtual = dadosMesAtual?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const experimentaisAtual = dadosMesAtual?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const visitasAtual = dadosMesAtual?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const visitasAtual = await contarVisitasCanonicas(unidadeRelatorioId, inicioMesAtual.toISOString().split('T')[0], fimMesAtual.toISOString().split('T')[0]);
     const matriculasAtual = (await buscarMatriculasAlunos(unidadeRelatorioId, inicioMesAtual.toISOString().split('T')[0], fimMesAtual.toISOString().split('T')[0])).filter(ehMatriculaNova).length;
 
     // Calcular totais mês anterior
     const leadsAnterior = dadosMesAnterior?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const experimentaisAnterior = dadosMesAnterior?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const visitasAnterior = dadosMesAnterior?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const visitasAnterior = await contarVisitasCanonicas(unidadeRelatorioId, inicioMesAnterior.toISOString().split('T')[0], fimMesAnterior.toISOString().split('T')[0]);
     const matriculasAnterior = (await buscarMatriculasAlunos(unidadeRelatorioId, inicioMesAnterior.toISOString().split('T')[0], fimMesAnterior.toISOString().split('T')[0])).filter(ehMatriculaNova).length;
 
     // Calcular variações
     const varLeads = leadsAnterior > 0 ? ((leadsAtual - leadsAnterior) / leadsAnterior * 100) : 0;
     const varExp = experimentaisAnterior > 0 ? ((experimentaisAtual - experimentaisAnterior) / experimentaisAnterior * 100) : 0;
-    const varVisitas = visitasAnterior > 0 ? ((visitasAtual - visitasAnterior) / visitasAnterior * 100) : 0;
+    const varVisitas = visitasAtual !== null && visitasAnterior !== null && visitasAnterior > 0
+      ? ((visitasAtual - visitasAnterior) / visitasAnterior * 100)
+      : null;
     const varMat = matriculasAnterior > 0 ? ((matriculasAtual - matriculasAnterior) / matriculasAnterior * 100) : 0;
 
     const mesAtualNome = new Date(anoAtual, mesAtual, 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
@@ -3456,8 +3590,8 @@ export function ComercialPage() {
     texto += `Variação: *${varExp > 0 ? '+' : ''}${varExp.toFixed(1)}%* ${varExp > 0 ? '📈' : varExp < 0 ? '📉' : '➡️'}\n\n`;
     
     texto += `🏫 *VISITAS*\n`;
-    texto += `${mesAtualNome}: *${visitasAtual}* | ${mesAnteriorNome}: *${visitasAnterior}*\n`;
-    texto += `Variação: *${varVisitas > 0 ? '+' : ''}${varVisitas.toFixed(1)}%* ${varVisitas > 0 ? '📈' : varVisitas < 0 ? '📉' : '➡️'}\n\n`;
+    texto += `${mesAtualNome}: *${numVisitas(visitasAtual)}* | ${mesAnteriorNome}: *${numVisitas(visitasAnterior)}*\n`;
+    texto += `Variação: *${varVisitas === null ? 'indisponivel' : `${varVisitas > 0 ? '+' : ''}${varVisitas.toFixed(1)}%`}* ${varVisitas === null ? '' : varVisitas > 0 ? '📈' : varVisitas < 0 ? '📉' : '➡️'}\n\n`;
     
     texto += `✅ *MATRÍCULAS*\n`;
     texto += `${mesAtualNome}: *${matriculasAtual}* | ${mesAnteriorNome}: *${matriculasAnterior}*\n`;
@@ -3523,19 +3657,21 @@ export function ComercialPage() {
     // Calcular totais ano atual
     const leadsAtual = dadosAnoAtual?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const experimentaisAtual = dadosAnoAtual?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const visitasAtual = dadosAnoAtual?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const visitasAtual = await contarVisitasCanonicas(unidadeRelatorioId, inicioMesAtual.toISOString().split('T')[0], fimMesAtual.toISOString().split('T')[0]);
     const matriculasAtual = (await buscarMatriculasAlunos(unidadeRelatorioId, inicioMesAtual.toISOString().split('T')[0], fimMesAtual.toISOString().split('T')[0])).filter(ehMatriculaNova).length;
 
     // Calcular totais ano anterior
     const leadsAnterior = dadosAnoAnterior?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const experimentaisAnterior = dadosAnoAnterior?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const visitasAnterior = dadosAnoAnterior?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const visitasAnterior = await contarVisitasCanonicas(unidadeRelatorioId, inicioMesAnterior.toISOString().split('T')[0], fimMesAnterior.toISOString().split('T')[0]);
     const matriculasAnterior = (await buscarMatriculasAlunos(unidadeRelatorioId, inicioMesAnterior.toISOString().split('T')[0], fimMesAnterior.toISOString().split('T')[0])).filter(ehMatriculaNova).length;
 
     // Calcular variações
     const varLeads = leadsAnterior > 0 ? ((leadsAtual - leadsAnterior) / leadsAnterior * 100) : 0;
     const varExp = experimentaisAnterior > 0 ? ((experimentaisAtual - experimentaisAnterior) / experimentaisAnterior * 100) : 0;
-    const varVisitas = visitasAnterior > 0 ? ((visitasAtual - visitasAnterior) / visitasAnterior * 100) : 0;
+    const varVisitas = visitasAtual !== null && visitasAnterior !== null && visitasAnterior > 0
+      ? ((visitasAtual - visitasAnterior) / visitasAnterior * 100)
+      : null;
     const varMat = matriculasAnterior > 0 ? ((matriculasAtual - matriculasAnterior) / matriculasAnterior * 100) : 0;
 
     const mesNome = new Date(anoAtual, mesAtual, 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
@@ -3557,8 +3693,8 @@ export function ComercialPage() {
     texto += `Variação: *${varExp > 0 ? '+' : ''}${varExp.toFixed(1)}%* ${varExp > 0 ? '📈' : varExp < 0 ? '📉' : '➡️'}\n\n`;
     
     texto += `🏫 *VISITAS*\n`;
-    texto += `${anoAtual}: *${visitasAtual}* | ${anoAnterior}: *${visitasAnterior}*\n`;
-    texto += `Variação: *${varVisitas > 0 ? '+' : ''}${varVisitas.toFixed(1)}%* ${varVisitas > 0 ? '📈' : varVisitas < 0 ? '📉' : '➡️'}\n\n`;
+    texto += `${anoAtual}: *${numVisitas(visitasAtual)}* | ${anoAnterior}: *${numVisitas(visitasAnterior)}*\n`;
+    texto += `Variação: *${varVisitas === null ? 'indisponivel' : `${varVisitas > 0 ? '+' : ''}${varVisitas.toFixed(1)}%`}* ${varVisitas === null ? '' : varVisitas > 0 ? '📈' : varVisitas < 0 ? '📉' : '➡️'}\n\n`;
     
     texto += `✅ *MATRÍCULAS*\n`;
     texto += `${anoAtual}: *${matriculasAtual}* | ${anoAnterior}: *${matriculasAnterior}*\n`;
@@ -3668,9 +3804,7 @@ export function ComercialPage() {
         .reduce((acc, r) => acc + r.quantidade, 0);
     }
     if (tipo === 'visita') {
-      return registrosHoje
-        .filter(r => r.status === 'visita_escola')
-        .reduce((acc, r) => acc + r.quantidade, 0);
+      return visitasHoje ?? 0;
     }
     if (tipo === 'lead') {
       return registrosHoje
@@ -3698,7 +3832,7 @@ export function ComercialPage() {
 
   // Calcular totais de hoje
   const hojeLeads = getContagemHoje('lead');
-  const hojeVisitas = getContagemHoje('visita');
+  const hojeVisitas = visitasHoje;
   const hojeMatriculas = getContagemHoje('matricula');
   const hojeTotalRegistros = registrosHoje.length;
 
@@ -3972,8 +4106,8 @@ export function ComercialPage() {
                     <Building2 className="w-4 h-4 text-amber-400" />
                     <span className="text-xs text-slate-400 font-medium">Visitas</span>
                   </div>
-                  <p className="text-2xl font-bold text-amber-400">{resumo.visitas}</p>
-                  {hojeVisitas > 0 && (
+                  <p className="text-2xl font-bold text-amber-400">{resumo.visitas ?? '—'}</p>
+                  {hojeVisitas !== null && hojeVisitas > 0 && (
                     <p className="text-xs text-emerald-400 mt-1">+{hojeVisitas} hoje</p>
                   )}
                 </div>
@@ -7388,6 +7522,17 @@ export function ComercialPage() {
         textoCancelar="Cancelar"
       />
 
+
+      {/* Agendamento de visita disparado pelo arrasto do card para a etapa Visita.
+          O modal grava a etapa 6 no lead E a linha em `public.visitas`. */}
+      <ModalAgendar
+        aberto={leadAgendarVisita !== null}
+        lead={leadAgendarVisita}
+        tipoInicial="visita"
+        tipoTravado
+        onClose={() => setLeadAgendarVisita(null)}
+        onSalvo={() => { setLeadAgendarVisita(null); loadData(); }}
+      />
     </div>
   );
 }
