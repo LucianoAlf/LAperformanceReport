@@ -513,6 +513,17 @@ def montar(dados, token, hoje):
         # Sem nada vencido, "concluir" mandaria fazer a coisa errada: quem
         # encerra so amanha ainda tem aula hoje.
         rodape.append('*➡️ Concluir a matrícula no Emusys*')
+    if atrasados:
+        # A data de saida pode ser remarcada no Emusys sem que nada chegue aqui:
+        # o webhook `matricula_aviso_previo_editado` existe no catalogo da API
+        # desde 03/08/2026 e, em 41 avisos recebidos, NUNCA foi entregue -- e nao
+        # ha endpoint de pull que exponha o aviso previo. Sem esta linha a
+        # recepcao le "vencido" e vai concluir uma matricula cuja saida a propria
+        # escola ja adiou (caso Perola Reis/CG em 10/09/2026: aqui 07/09, no
+        # Emusys 14/09). So aparece com a secao de vencidos: quem ainda tem aula
+        # nao precisa conferir data nenhuma.
+        rodape.append('_Mudou a data no Emusys? Por favor, corrija também em '
+                      'Administrativo → Avisos Prévios 🙏_')
     if algum_estimado and not misto:
         rodape.append('_Datas estimadas: o aviso não veio do Emusys, '
                       'então considerei o fim do mês. Confira na ficha._')

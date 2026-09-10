@@ -168,7 +168,17 @@ serve(async (req: Request) => {
   const chave = chaveIdempotencia(pesquisaId, analiseVersao);
 
   // --- Estado, lido aqui e nao recebido do chamador --------------------------
-  const [config, classificacaoLog, analise, jaLog, doDia, pesquisa] = await Promise.all([
+  const [
+    config,
+    classificacaoLog,
+    analise,
+    jaLog,
+    jaNaPesquisa,
+    terceiros,
+    doDia,
+    pesquisa,
+  ] = await Promise
+    .all([
     supabase.from("automacoes_config").select("ativo")
       .eq("slug", "auto_agradecimento_evasao").maybeSingle(),
     supabase.from("automacao_log").select("detalhes, created_at")
@@ -179,6 +189,22 @@ serve(async (req: Request) => {
     supabase.from("pesquisa_evasao_analises").select("encerrada_em, status, texto_consolidado")
       .eq("pesquisa_id", pesquisaId).eq("versao", analiseVersao).maybeSingle(),
     supabase.from("automacao_log").select("id").eq("idempotency_key", chave).maybeSingle(),
+    // Um agradecimento por PESQUISA, nao por analise. `status='ok'` de proposito:
+    // so bloqueia quando a mensagem REALMENTE saiu -- reserva orfa (`warn`) ou
+    // envio que falhou (`erro`) nao podem impedir a tentativa legitima.
+    supabase.from("automacao_log").select("id", { count: "exact", head: true })
+      .eq("acao", ACAO_LOG).eq("status", "ok")
+      .eq("detalhes->>pesquisa_id", pesquisaId),
+    // Alguem ja falou com a pessoa depois que a resposta chegou? Os portoes
+    // acima so enxergam `automacao_log` -- ou seja, o que NOS mandamos por
+    // automacao. A Jessy responde pela Caixa de Entrada, e isso nunca chega a
+    // `pesquisa_evasao_mensagens`. A regra mora no banco porque a resolucao de
+    // conversa por telefone e a normalizacao pertencem la; reimplementar aqui
+    // seria a segunda fonte de verdade que ja gerou as duplicatas de renovacao.
+    supabase.rpc("fn_pesquisa_evasao_alguem_respondeu_depois_v1", {
+      p_pesquisa_id: pesquisaId,
+      p_analise_versao: analiseVersao,
+    }),
     supabase.from("automacao_log").select("id", { count: "exact", head: true })
       .eq("acao", ACAO_LOG).not("idempotency_key", "is", null)
       .gte("created_at", inicioDoDiaBrt(agora)),
@@ -199,6 +225,17 @@ serve(async (req: Request) => {
     return json({ ok: true, enviado: false, motivo: "modo_teste" });
   }
 
+  // A RPC falhando vira fail-OPEN (o agradecimento sai), que e a direcao certa
+  // -- mas nao pode ser mudo: sem esta linha, o portao poderia estar quebrado ha
+  // semanas e o sintoma seria justamente a duplicata que ele existe para evitar.
+  if (terceiros.error) {
+    console.error("[agradecimento] portao de terceiros indisponivel:", {
+      pesquisa_id: pesquisaId,
+      analise_versao: analiseVersao,
+      erro: terceiros.error.message,
+    });
+  }
+
   const detalhes = (classificacaoLog.data?.[0]?.detalhes ?? null) as
     | Record<string, unknown>
     | null;
@@ -211,6 +248,8 @@ serve(async (req: Request) => {
       }
       : null,
     jaAgradecido: Boolean(jaLog.data),
+    jaAgradecidoNestaPesquisa: (jaNaPesquisa.count ?? 0) > 0,
+    alguemJaRespondeuDepois: terceiros.data === true,
     analiseEncerradaEm: analise.data?.encerrada_em ?? null,
     enviadosHoje: doDia.count ?? 0,
   }, agora);

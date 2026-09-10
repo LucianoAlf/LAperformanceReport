@@ -20,6 +20,7 @@ import {
   Calendar, Loader2, AlertTriangle, CheckCircle2, Info,
   Users, Clock, Music, MapPin, Eye,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import type { LeadCRM } from '../types';
 
@@ -68,14 +69,26 @@ interface ModalAgendarProps {
   onClose: () => void;
   onSalvo?: () => void;
   lead: LeadCRM | null;
+  /**
+   * Tipo com que o modal abre. O funil do Comercial abre em 'visita' ao arrastar
+   * o card para a etapa Visita -- a data e o horario da visita sao PERGUNTADOS,
+   * nunca adivinhados a partir do dia do arrasto.
+   */
+  tipoInicial?: 'experimental' | 'visita';
+  /** Trava o seletor de tipo (o arrasto ja decidiu qual e). */
+  tipoTravado?: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════════════
-export function ModalAgendar({ aberto, onClose, onSalvo, lead }: ModalAgendarProps) {
+export function ModalAgendar({
+  aberto, onClose, onSalvo, lead,
+  tipoInicial = 'experimental',
+  tipoTravado = false,
+}: ModalAgendarProps) {
   // ── Estado do formulário ────────────────────────────────────────────────
-  const [tipo, setTipo] = useState<'experimental' | 'visita'>('experimental');
+  const [tipo, setTipo] = useState<'experimental' | 'visita'>(tipoInicial);
   const [cursoId, setCursoId] = useState<string>('');
   const [professorId, setProfessorId] = useState<string>('');
   const [data, setData] = useState<Date | undefined>(undefined);
@@ -95,7 +108,7 @@ export function ModalAgendar({ aberto, onClose, onSalvo, lead }: ModalAgendarPro
 
   // ── Limpar ao fechar ────────────────────────────────────────────────────
   const limpar = useCallback(() => {
-    setTipo('experimental');
+    setTipo(tipoInicial);
     setCursoId('');
     setProfessorId('');
     setData(undefined);
@@ -104,9 +117,15 @@ export function ModalAgendar({ aberto, onClose, onSalvo, lead }: ModalAgendarPro
     setDisponibilidade(null);
     setTurmas([]);
     setVisitasAgendadas(0);
-  }, []);
+  }, [tipoInicial]);
 
   const handleClose = () => { limpar(); onClose(); };
+
+  // O modal nao desmonta entre aberturas: sem isto ele reabriria com o tipo da
+  // vez anterior, e o arrasto para "Visita" cairia em "Experimental".
+  useEffect(() => {
+    if (aberto) setTipo(tipoInicial);
+  }, [aberto, tipoInicial]);
 
   // ── Carregar dados base ao abrir ────────────────────────────────────────
   useEffect(() => {
@@ -327,13 +346,21 @@ export function ModalAgendar({ aberto, onClose, onSalvo, lead }: ModalAgendarPro
       const dataISO = data.toISOString().split('T')[0];
       const profNome = professoresUnidade.find(p => p.id === Number(professorId))?.nome;
 
+      const ehVisita = tipo === 'visita';
+
+      // Visita NAO e experimental. Gravar `experimental_agendada: true` + etapa 5 aqui
+      // (como era ate 10/09/2026) fazia a visita ser contada como experimental agendada
+      // no funil e nos KPIs. O caminho do n8n sempre gravou o padrao certo -- etapa 6 e
+      // `experimental_agendada: false` -- e sao os 111 registros que existem hoje.
+      // `data_experimental` continua sendo preenchido nos dois casos: e assim que o n8n
+      // grava, e a AgendaTab separa os dois por `tipo_agendamento`.
       const updates: Record<string, any> = {
         data_experimental: dataISO,
         horario_experimental: horarioSelecionado || null,
-        experimental_agendada: true,
+        experimental_agendada: !ehVisita,
         tipo_agendamento: tipo,
-        professor_experimental_id: professorId ? Number(professorId) : null,
-        etapa_pipeline_id: 5, // Experimental Agendada
+        professor_experimental_id: ehVisita ? null : (professorId ? Number(professorId) : null),
+        etapa_pipeline_id: ehVisita ? 6 : 5, // 6 = Visita | 5 = Experimental Agendada
         data_ultimo_contato: new Date().toISOString(),
       };
 
@@ -344,9 +371,11 @@ export function ModalAgendar({ aberto, onClose, onSalvo, lead }: ModalAgendarPro
       const { error } = await supabase.from('leads').update(updates).eq('id', lead.id);
       if (error) throw error;
 
-      // Se for visita, criar registro na tabela visitas
-      if (tipo === 'visita') {
-        await supabase.from('visitas').insert({
+      // Se for visita, criar registro na tabela `visitas` -- FONTE CANONICA que o
+      // painel Comercial e o KPI mensal contam. Falhar aqui em silencio deixaria o
+      // lead na etapa Visita sem visita nenhuma para contar.
+      if (ehVisita) {
+        const { error: erroVisita } = await supabase.from('visitas').insert({
           unidade_id: lead.unidade_id,
           lead_id: lead.id,
           nome: lead.nome || '',
@@ -357,6 +386,12 @@ export function ModalAgendar({ aberto, onClose, onSalvo, lead }: ModalAgendarPro
           observacoes: observacoes.trim() || null,
           criado_por: 'manual',
         });
+        if (erroVisita) {
+          throw new Error(
+            `lead ${lead.id} (${lead.nome || 'sem nome'}), visita ${dataISO}: ` +
+            `${erroVisita.code || '?'} ${erroVisita.message}`
+          );
+        }
       }
 
       // Registrar no histórico
@@ -371,7 +406,13 @@ export function ModalAgendar({ aberto, onClose, onSalvo, lead }: ModalAgendarPro
       onClose();
       onSalvo?.();
     } catch (err) {
-      console.error('Erro ao agendar:', err);
+      // Falhar em silencio aqui deixaria a consultora achando que agendou. O modal
+      // fica ABERTO com os dados preenchidos para ela tentar de novo.
+      const detalhe = err instanceof Error ? err.message : String(err);
+      console.error(`[agendar] ${tipo} do lead ${lead.id}: ${detalhe}`);
+      toast.error(`Nao foi possivel agendar a ${tipo === 'visita' ? 'visita' : 'experimental'}`, {
+        description: detalhe,
+      });
     } finally {
       setSalvando(false);
     }
@@ -408,6 +449,7 @@ export function ModalAgendar({ aberto, onClose, onSalvo, lead }: ModalAgendarPro
             {/* ── Tipo ───────────────────────────────────────────── */}
             <div className="flex gap-2">
               <button
+                disabled={tipoTravado}
                 onClick={() => setTipo('experimental')}
                 className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all border ${
                   tipo === 'experimental'
@@ -418,6 +460,7 @@ export function ModalAgendar({ aberto, onClose, onSalvo, lead }: ModalAgendarPro
                 🎸 Experimental
               </button>
               <button
+                disabled={tipoTravado}
                 onClick={() => setTipo('visita')}
                 className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all border ${
                   tipo === 'visita'

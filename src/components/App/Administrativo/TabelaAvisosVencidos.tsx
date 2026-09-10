@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Archive, Info, Loader2, RefreshCw } from 'lucide-react';
+import { Archive, Info, Loader2, Pencil, RefreshCw } from 'lucide-react';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
+import type { MovimentacaoAdmin } from './AdministrativoPage';
 
 /**
  * Avisos previos que ja venceram e ninguem resolveu — INDEPENDENTE do mes.
@@ -37,6 +38,18 @@ export interface AvisoVencido {
 
 interface Props {
   unidadeId: string | null;
+  /** Abre o modal de aviso prévio para corrigir a data de saída.
+   *
+   *  Existe porque a saída pode ser remarcada no Emusys sem que nada chegue
+   *  aqui: o webhook `matricula_aviso_previo_editado` está no catálogo da API
+   *  desde 03/08/2026 e, em 41 avisos recebidos, nunca foi entregue — e não há
+   *  endpoint de pull que exponha o aviso. Sem esta correção manual o aluno
+   *  fica cobrado numa data que a escola já mudou (caso Pérola Reis, CG:
+   *  aqui 07/09, no Emusys 14/09). */
+  onEditar?: (item: MovimentacaoAdmin) => void;
+  /** Muda quando a página recarrega os dados, para esta aba (que tem consulta
+   *  própria, fora do período da tela) refletir a correção recém-salva. */
+  versaoDados?: number;
 }
 
 const dia = (iso: string | null) =>
@@ -76,12 +89,13 @@ const SITUACAO = {
   },
 } as const;
 
-export function TabelaAvisosVencidos({ unidadeId }: Props) {
+export function TabelaAvisosVencidos({ unidadeId, onEditar, versaoDados = 0 }: Props) {
   const [itens, setItens] = useState<AvisoVencido[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState<number | null>(null);
   const [arquivando, setArquivando] = useState<number | null>(null);
+  const [abrindo, setAbrindo] = useState<number | null>(null);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -102,7 +116,29 @@ export function TabelaAvisosVencidos({ unidadeId }: Props) {
 
   useEffect(() => {
     void carregar();
-  }, [carregar]);
+  }, [carregar, versaoDados]);
+
+  /**
+   * A RPC devolve a projeção da lista, não a movimentação. Buscamos a linha
+   * inteira para o modal editar o registro real — montar um objeto parcial
+   * aqui gravaria nulo nos campos que a lista não traz.
+   */
+  async function editar(item: AvisoVencido) {
+    if (!onEditar) return;
+    setAbrindo(item.id);
+    setErro(null);
+    const { data, error } = await supabase
+      .from('movimentacoes_admin')
+      .select('*, unidades!movimentacoes_admin_unidade_id_fkey(codigo)')
+      .eq('id', item.id)
+      .maybeSingle();
+    setAbrindo(null);
+    if (error || !data) {
+      setErro(`Não foi possível abrir ${item.aluno_nome}: ${error?.message ?? 'registro não encontrado'}`);
+      return;
+    }
+    onEditar(data as MovimentacaoAdmin);
+  }
 
   async function arquivar(item: AvisoVencido) {
     setArquivando(item.id);
@@ -247,6 +283,28 @@ export function TabelaAvisosVencidos({ unidadeId }: Props) {
                     </div>
                   </td>
                   <td className="py-3 px-4 text-center">
+                    <div className="flex items-center justify-center gap-1">
+                    {onEditar && (
+                      <Tooltip
+                        content="Corrigir a data de saída. Use quando a data foi remarcada no Emusys: ele não avisa o LA Report quando isso acontece."
+                        side="top"
+                      >
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => void editar(item)}
+                          disabled={abrindo === item.id}
+                          className="h-7 px-2 text-slate-400 hover:text-amber-300 text-xs gap-1.5"
+                        >
+                          {abrindo === item.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Pencil className="w-3.5 h-3.5" />
+                          )}
+                          Editar
+                        </Button>
+                      </Tooltip>
+                    )}
                     {item.situacao === 'cancelado' ? (
                       confirmando === item.id ? (
                         <div className="flex items-center justify-center gap-1">
@@ -287,9 +345,8 @@ export function TabelaAvisosVencidos({ unidadeId }: Props) {
                           </Button>
                         </Tooltip>
                       )
-                    ) : (
-                      <span className="text-xs text-slate-600">—</span>
-                    )}
+                    ) : null}
+                    </div>
                   </td>
                 </tr>
               );

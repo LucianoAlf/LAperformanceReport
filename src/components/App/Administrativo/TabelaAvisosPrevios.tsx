@@ -14,11 +14,13 @@ interface TabelaAvisosPreviosProps {
   endDate: string;
   /** null = todas as unidades. Só a aba "Vencidos" usa: ela consulta o banco. */
   unidadeId?: string | null;
+  /** Repassado à aba "Vencidos", que recarrega por conta própria. */
+  versaoDados?: number;
 }
 
 type FiltroAviso = 'todos' | 'registrados' | 'saida' | 'vencidos';
 
-export function TabelaAvisosPrevios({ data, onEdit, onDelete, startDate, endDate, unidadeId = null }: TabelaAvisosPreviosProps) {
+export function TabelaAvisosPrevios({ data, onEdit, onDelete, startDate, endDate, unidadeId = null, versaoDados = 0 }: TabelaAvisosPreviosProps) {
   const { usuario } = useAuth();
   const isAdmin = usuario?.perfil === 'admin' && usuario?.unidade_id === null;
   const [filtro, setFiltro] = useState<FiltroAviso>('todos');
@@ -81,7 +83,9 @@ export function TabelaAvisosPrevios({ data, onEdit, onDelete, startDate, endDate
       </div>
 
       {/* Consulta própria, fora do período da tela — ver TabelaAvisosVencidos. */}
-      {filtro === 'vencidos' && <TabelaAvisosVencidos unidadeId={unidadeId} />}
+      {filtro === 'vencidos' && (
+        <TabelaAvisosVencidos unidadeId={unidadeId} onEditar={onEdit} versaoDados={versaoDados} />
+      )}
 
       {filtro !== 'vencidos' && (
       <table className="w-full">
