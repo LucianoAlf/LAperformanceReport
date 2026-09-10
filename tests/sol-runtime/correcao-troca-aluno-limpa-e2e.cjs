@@ -5,7 +5,7 @@
 // Raiz: `composto || alvoP.composto` ressuscitava enriquecimento do aluno
 // trocado. Agora: aluno MUDOU => composto/canonica/parcela/responsável do
 // anterior morrem juntos. E "calma ai" (Luciano) é conversa, não divisão.
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
+const mod = require('./_alvo.cjs');
 
 const CHAT = '5521981278047-1544204225@g.us';
 const UNIDADE = '2ec861f6-023f-4d7b-9927-3960ad8c2a92';

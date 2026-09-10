@@ -110,3 +110,40 @@ export function getHealthScoreV3PeriodFromCompetencia(
   if (!match) throw new RangeError('Competencia invalida para o Health Score V3.');
   return getHealthScoreV3Period(Number(match[1]), Number(match[2]), periodicidade);
 }
+
+function getSaoPauloYearMonth(reference: Date): { year: number; month: number } {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: 'numeric',
+  }).formatToParts(reference);
+  const year = Number(parts.find((part) => part.type === 'year')?.value);
+  const month = Number(parts.find((part) => part.type === 'month')?.value);
+  if (!Number.isInteger(year) || !Number.isInteger(month)) {
+    throw new RangeError('Data de referencia invalida para o Health Score V3.');
+  }
+  return { year, month };
+}
+
+/**
+ * O seletor de ciclo guarda o primeiro mes como chave estavel do periodo.
+ * Durante o ciclo corrente, porem, a fotografia consultada precisa avancar
+ * junto com o calendario para acumular somente os meses ja transcorridos.
+ */
+export function getHealthScoreV3QueryCompetence(
+  year: number,
+  month: number,
+  periodicidade: HealthScoreV3Periodicidade,
+  reference: Date = new Date(),
+): string {
+  const selected = getHealthScoreV3Period(year, month, periodicidade);
+  if (periodicidade === 'mensal') return selected.inicio.slice(0, 7);
+
+  const current = getSaoPauloYearMonth(reference);
+  const currentCompetence = isoDate(current.year, current.month, 1);
+  if (currentCompetence >= selected.inicio && currentCompetence <= selected.fim) {
+    return currentCompetence.slice(0, 7);
+  }
+
+  return isoDate(year, month, 1).slice(0, 7);
+}

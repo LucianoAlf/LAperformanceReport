@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-06 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-09 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — financeiro
 
-31 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+33 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## caixa_categorias
 
@@ -109,6 +109,9 @@
 **Únicos:**
 - `caixa_reaberturas_log_pkey`
 
+**Triggers:**
+- `trg_audit_caixa_reaberturas_log → fn_audit_log()`
+
 ## caixas_diarios
 
 > Cabecalho do fechamento de caixa diario por unidade. Fase 1 manual.
@@ -140,6 +143,7 @@
 
 **Triggers:**
 - `tr_caixas_diarios_updated_at → set_updated_at_caixa()`
+- `trg_audit_caixas_diarios → fn_audit_log()`
 
 ## contrato_assinatura_sync_execucoes
 
@@ -260,6 +264,7 @@
 
 **Triggers:**
 - `trg_fechamento_mensal_snapshot_imutavel → proteger_fechamento_mensal_snapshot_imutavel_v1()`
+- `trg_relatorio_coordenacao_final_v4 → proteger_relatorio_coordenacao_final_v4()`
 
 ## fechamento_snapshots_backup_20260808
 
@@ -722,4 +727,34 @@
 | `dias_ate_venc_fatura` | integer | sim |  |  |
 | `faturas_vencidas_abertas` | integer | sim |  |  |
 | `nr_faturas` | integer | sim |  |  |
+
+## vw_maria_caixa_pontos_cegos
+
+> O que a porta da receita sem fatura NAO enxerga, por competencia: entrada em categoria fora do vocabulario (some dos dois lados) e estorno (a venda original continua sendo exportada, e nao ha coluna ligando os dois). Alarme, nunca recusa.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `competencia` | date | sim |  |  |
+| `entradas_categoria_desconhecida` | bigint | sim |  |  |
+| `valor_categoria_desconhecida` | numeric(14,2) | sim |  |  |
+| `quais_categorias` | text | sim |  |  |
+| `estornos` | bigint | sim |  |  |
+| `valor_estornado` | numeric(14,2) | sim |  |  |
+
+## vw_maria_export_receitas_sem_fatura
+
+> Criterio unico da receita sem fatura do Emusys, exportada para o Super Folha (RPC receitas_sem_fatura_aplicar). Entrada de lojinha/outro sem fatura_id. A vigencia mora do lado do Super Folha (2026-09-09); quem empurra filtra. criado_por sai normalizado - telefone nao atravessa.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `origem_id` | uuid | sim |  |  |
+| `la_report_unidade_id` | uuid | sim |  |  |
+| `competencia` | date | sim |  |  |
+| `data_movimento` | date | sim |  |  |
+| `categoria` | text | sim |  |  |
+| `descricao` | text | sim |  |  |
+| `valor` | numeric(12,2) | sim |  |  |
+| `fatura_id` | uuid | sim |  |  |
+| `forma_pagamento` | text | sim |  |  |
+| `registrado_por_origem` | text | sim |  |  |
 

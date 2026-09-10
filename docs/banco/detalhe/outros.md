@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-06 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-09 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — outros
 
-6 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+7 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## comunidade_wa_grupos
 
@@ -85,6 +85,22 @@
 
 **Únicos:**
 - `google_ads_metricas_diarias_pkey`
+
+## sol_grants_revogados_fatia0
+
+> O que a Fatia 0.1 revogou de sol_acesso_restrito, para o rollback ser um comando e nao uma arqueologia. Rollback: select 'grant '\|\|privilegio\|\|' on '\|\|objeto\|\|' to '\|\|papel\|\|';' from esta tabela.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('sol_grants_revogados_fatia0_id_seq'::regclass) |  |
+| `papel` | text | não |  |  |
+| `objeto` | text | não |  |  |
+| `privilegio` | text | não |  |  |
+| `revogado_em` | timestamp with time zone | não | now() |  |
+| `motivo` | text | não |  |  |
+
+**Únicos:**
+- `sol_grants_revogados_fatia0_pkey`
 
 ## vw_ads_gasto_diario_v1
 

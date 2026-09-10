@@ -14,7 +14,7 @@
 //  R-i: contestação de fatura é uma gramática que não existia. Quando a equipe
 //       diz que a fatura casada está errada/desatualizada, a Sol SOLTA a fatura
 //       e remonta o card sem o bloco de atraso/multa — em vez de repetir.
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
+const mod = require('./_alvo.cjs');
 
 const CHAT = '120363263030561835@g.us';
 const UNIDADE = '368d47f5-2d88-4475-bc14-ba084a9a348e';

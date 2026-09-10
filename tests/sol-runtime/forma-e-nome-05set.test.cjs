@@ -4,7 +4,7 @@
 // um comportamento que ja estava certo e nao pode quebrar.
 //
 //   node forma-e-nome-05set.test.cjs [caminho-do-caixa-financeiro.cjs]
-const path = process.argv[2] || '/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs';
+const path = process.argv[2] || require('./_alvo.cjs').__alvo;
 const M = require(path);
 
 let falhas = 0;

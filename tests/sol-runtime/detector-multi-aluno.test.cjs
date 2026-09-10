@@ -1,7 +1,7 @@
 // Detector de contexto multi-aluno: casos REAIS extraídos dos lançamentos do caixa
 // (últimos 20 dias) + o caso que falhou em 24/08 (Thiago e Matheus, R$350 cada).
 // Roda contra o runtime vivo.
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
+const mod = require('./_alvo.cjs');
 const det = mod.detectarContextoMultiAluno;
 if (typeof det !== 'function') { console.error('detectarContextoMultiAluno nao exportada'); process.exit(1); }
 

@@ -12,7 +12,7 @@
 //       "rótulo humano vence OCR ruim" aplicada ao valor.
 //  R-k: correção ditada de VALOR ("o valor foi R$387,00" / "valor: 387")
 //       atualiza a pendência, recalcula o valor_bate e remonta o card.
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
+const mod = require('./_alvo.cjs');
 
 const CHAT = '5521981278047-1544204225@g.us';
 const UNIDADE = '2ec861f6-023f-4d7b-9927-3960ad8c2a92';

@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-06 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-09 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — integracao
@@ -638,7 +638,7 @@
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
 | `id` | uuid | não | gen_random_uuid() |  |
-| `unidade_id` | uuid | não |  | emusys_disciplinas_catalogo.unidade_id |
+| `unidade_id` | uuid | não |  | unidades.id |
 | `emusys_professor_id` | integer | não |  |  |
 | `emusys_disciplina_id` | integer | não |  | emusys_disciplinas_catalogo.emusys_disciplina_id |
 | `ativo_origem` | boolean | não | true |  |

@@ -22,6 +22,23 @@ const supabase = createClient(
 );
 
 const TETO_LINHAS = 500;
+// 🔴 O TETO DO CALOR PRECISA COBRIR A VIEW INTEIRA (09/09/2026).
+//
+// `fonte=calor` nao paga token nenhum — quem consome e um detector SQL. E com
+// foto truncada o consumidor NAO PODE concluir que quem sumiu foi resolvido:
+// a view tem 1.452 linhas e o teto de 500 deixava 952 fora, entao a conversa
+// encerrada abaixo do corte ficava viva para sempre no estado (caso Hetiene,
+// conv 20181, presa desde 08/09). Com a foto completa, "sumiu" volta a ser
+// prova, e a marca d'agua do consumidor cobre 100% em vez de uma fatia.
+//
+// ⚠️ O teto semantico continua 500 DE PROPOSITO: la cada linha vira chamada de
+//    OpenAI, e o custo e o limite certo.
+// ⚠️ 1.000 e o TETO DO POSTGREST (`max-rows`), nao uma escolha: pedir 3.000
+//    devolvia 1.000 do mesmo jeito e fazia o flag `truncado` MENTIR — ele
+//    compara `total >= limite`, entao com limite 3.000 e 1.000 linhas ele
+//    diria "foto completa" com 452 conversas de fora. O consumidor confia
+//    nesse flag para decidir se pode concluir por ausencia.
+const TETO_CALOR = 1000;
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -54,9 +71,11 @@ Deno.serve(async (req) => {
     return new Response("unauthorized", { status: 401 });
   }
 
+  const ehCalor = url.searchParams.get("fonte") === "calor";
+  const teto = ehCalor ? TETO_CALOR : TETO_LINHAS;
   const limite = Math.min(
-    Number(url.searchParams.get("limite") ?? TETO_LINHAS) || TETO_LINHAS,
-    TETO_LINHAS,
+    Number(url.searchParams.get("limite") ?? teto) || teto,
+    teto,
   );
   const departamento = url.searchParams.get("departamento");
 
@@ -65,7 +84,7 @@ Deno.serve(async (req) => {
   // leitura semantica. Mesmo token, mesmo formato de envelope — o consumidor
   // troca so o parametro. Nao virou edge nova de proposito: seria um 2o
   // transporte com a mesma porta e a mesma auth para manter em dois lugares.
-  const fonte = url.searchParams.get("fonte") === "calor"
+  const fonte = ehCalor
     ? "vw_atendimento_calor_conversa"
     : "vw_atendimento_candidatos_sinal";
 

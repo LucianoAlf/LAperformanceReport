@@ -7,7 +7,8 @@
 // família. E a correção da Mayra ("Sol, a aluna é Soraia da Silveira Duarte e o
 // valor é R$976,00") levou "Não entendi essa" porque o nome-tardio sem citação só
 // aceitava card com aluno vazio/suspeito.
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
+const mod = require('./_alvo.cjs');
+require('./_alvo.cjs').exigeCredenciais('rotulo-vence-casamento-fuzzy');  // usa as RPCs reais
 
 const CHAT = '5521981278047-1544204225@g.us';
 const UNIDADE = '2ec861f6-023f-4d7b-9927-3960ad8c2a92';

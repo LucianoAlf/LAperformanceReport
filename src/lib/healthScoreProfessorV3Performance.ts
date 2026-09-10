@@ -108,14 +108,15 @@ const HEALTH_SCORE_V3_EVIDENCE_MESSAGES: Record<string, string> = {
   presenca_em_auditoria: 'Cobertura de presença insuficiente',
   conversao_em_auditoria: 'Conversão indisponível para o período',
   segmentacao_incompleta: 'Vínculo de curso ou modalidade precisa de revisão',
-  fonte_canonica_indisponivel: 'Sem retrato disponível para o período',
+  fonte_canonica_indisponivel: 'Sem dados disponíveis para o período',
+  fonte_canonica_sem_evidencia: 'Sem dados disponíveis para o período',
   metrica_nao_aplicavel: 'Não aplicável neste período',
   referencia_periodo_anterior: 'Referência temporária do período anterior',
   competencia_em_andamento: 'Competência em andamento',
-  sem_pilares_validos: 'Sem pilares válidos nesta competência',
-  fonte_em_auditoria: 'Sem retrato disponível para o período',
+  sem_pilares_validos: 'Sem dados suficientes para a nota neste período',
+  fonte_em_auditoria: 'Sem dados disponíveis para o período',
   score_observado_indisponivel: 'Desempenho observado ainda indisponível',
-  pilares_insuficientes: 'Em acompanhamento: menos de 3 pilares comparáveis',
+  pilares_insuficientes: 'Em acompanhamento: critérios da nota ainda incompletos',
   cobertura_insuficiente: 'Cobertura insuficiente para comparação',
   sem_pilar_fidelizacao: 'Em acompanhamento: retenção ou permanência ainda indisponível',
   criterios_atendidos: 'Critérios de comparabilidade atendidos',
@@ -396,10 +397,18 @@ function asNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function asNullableNumber(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null;
+export function parseHealthScoreV3DetailNumber(value: unknown): number | null {
+  if (
+    value === null
+    || value === undefined
+    || (typeof value === 'string' && value.trim() === '')
+  ) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function asNullableNumber(value: unknown): number | null {
+  return parseHealthScoreV3DetailNumber(value);
 }
 
 function asMetric(value: unknown): HealthMetricKeyV3 | null {
@@ -572,7 +581,10 @@ export function resolveHealthScoreV3MetricDisplay(
     const observedValue = asNullableNumber(metric.detalhes.valor_observado);
     const publication = String(metric.detalhes.observacao_publicacao || '');
     if (publication === 'em_auditoria') {
-      return { value: null, observedValue, state: 'auditoria', rankable: false, metric, referenceCompetence: null };
+      const value = metric.valorBruto ?? observedValue;
+      return value === null
+        ? { value: null, observedValue: null, state: 'sem_base', rankable: false, metric, referenceCompetence: null }
+        : { value, observedValue: value, state: 'observado', rankable: false, metric, referenceCompetence: null };
     }
     if (metric.valorBruto !== null) {
       return {
@@ -584,7 +596,7 @@ export function resolveHealthScoreV3MetricDisplay(
         referenceCompetence: null,
       };
     }
-    if (publication === 'normal' && observedValue !== null) {
+    if (observedValue !== null) {
       return { value: observedValue, observedValue, state: 'observado', rankable: false, metric, referenceCompetence: null };
     }
     return { value: null, observedValue, state: 'sem_base', rankable: false, metric, referenceCompetence: null };

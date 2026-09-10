@@ -8,7 +8,8 @@
 // `sol_caixa_casar_parcela` devolve vem do match por NOME (limit 1 arbitrário entre as
 // três, nomes idênticos) e apontava **Power Kids** junto com uma fatura de **Canto**.
 // Se alguém "simplificar" o runtime para ler aquele campo, o caso 1 quebra na hora.
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
+const mod = require('./_alvo.cjs');
+require('./_alvo.cjs').exigeCredenciais('vinculo-lancamento');  // usa as RPCs reais
 
 const CHAT = '5521973870998-1583848991@g.us';
 const UNIDADE = '95553e96-971b-4590-a6eb-0201d013c14d';   // Recreio

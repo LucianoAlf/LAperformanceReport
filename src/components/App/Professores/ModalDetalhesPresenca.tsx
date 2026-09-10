@@ -15,9 +15,6 @@ interface AlunoPresenca {
   faltas: number;
   percentual: number | null;
   denominador: number;
-  fonte: string;
-  regra_versao: string;
-  estado_publicacao: 'em_auditoria' | 'publicado';
 }
 
 interface Props {
@@ -35,13 +32,12 @@ interface Props {
 
 const POR_PAGINA = 15;
 
-function formatarPercentualPublicavel(
+function formatarPercentualObservado(
   percentual: number | null,
   denominador: number,
-  estadoPublicacao: AlunoPresenca['estado_publicacao'],
 ): string {
-  if (estadoPublicacao !== 'publicado' || denominador <= 0 || percentual === null) {
-    return 'Cobertura insuficiente';
+  if (denominador <= 0 || percentual === null) {
+    return 'Sem eventos confirmados';
   }
   return `${percentual.toFixed(1)}%`;
 }
@@ -88,9 +84,9 @@ export function ModalDetalhesPresenca({ open, onClose, professorId, professorNom
         const { data, error } = await query;
 
         if (error) {
-          console.warn('Contrato canônico de presença indisponível:', error.message);
+          console.warn('Dados de presença indisponíveis:', error.message);
           setDados([]);
-          setErroPublicacao('A presença não está publicável para este período.');
+          setErroPublicacao('Não foi possível carregar a presença deste período.');
           return;
         }
 
@@ -99,51 +95,39 @@ export function ModalDetalhesPresenca({ open, onClose, professorId, professorNom
           total_aulas: number;
           presencas: number;
           faltas: number;
-          publicavel: boolean;
-          regras: Set<string>;
         }>();
         for (const linha of data || []) {
           const alunoId = Number(linha.aluno_id);
+          const terminal = ['presente', 'falta', 'falta_justificada']
+            .includes(String(linha.resultado_canonico));
+          if (!Number.isInteger(alunoId) || alunoId <= 0 || !terminal) continue;
+
           const atual = porAluno.get(alunoId) || {
             aluno_nome: String(linha.aluno_nome || `Aluno ${alunoId}`),
             total_aulas: 0,
             presencas: 0,
             faltas: 0,
-            publicavel: true,
-            regras: new Set<string>(),
           };
-          const terminal = ['presente', 'falta', 'falta_justificada']
-            .includes(String(linha.resultado_canonico));
-          if (terminal) atual.total_aulas += 1;
+          atual.total_aulas += 1;
           if (linha.resultado_canonico === 'presente') atual.presencas += 1;
           if (linha.resultado_canonico === 'falta' || linha.resultado_canonico === 'falta_justificada') atual.faltas += 1;
-          atual.publicavel = atual.publicavel
-            && linha.estado_publicacao === 'publicado'
-            && terminal;
-          atual.regras.add(String(linha.regra_versao || 'presenca-interface-v2'));
           porAluno.set(alunoId, atual);
         }
-        setDados(Array.from(porAluno.entries()).map(([alunoId, linha]) => {
-          const publicavel = linha.publicavel && linha.total_aulas > 0;
-          return {
+        setDados(Array.from(porAluno.entries()).map(([alunoId, linha]) => ({
             aluno_id: alunoId,
             aluno_nome: linha.aluno_nome,
             total_aulas: linha.total_aulas,
             presencas: linha.presencas,
             faltas: linha.faltas,
-            percentual: publicavel
+            percentual: linha.total_aulas > 0
               ? Math.round((linha.presencas / linha.total_aulas) * 1000) / 10
               : null,
             denominador: linha.total_aulas,
-            fonte: 'get_presenca_ocorrencias_periodo_v2',
-            regra_versao: Array.from(linha.regras).join(', '),
-            estado_publicacao: publicavel ? 'publicado' : 'em_auditoria',
-          } satisfies AlunoPresenca;
-        }));
+          } satisfies AlunoPresenca)));
       } catch (err) {
         console.error('Erro ao buscar presenca:', err);
         setDados([]);
-        setErroPublicacao('Não foi possível validar a fonte canônica da presença.');
+        setErroPublicacao('Não foi possível validar os dados de presença deste período.');
       } finally {
         setLoading(false);
       }
@@ -189,15 +173,9 @@ export function ModalDetalhesPresenca({ open, onClose, professorId, professorNom
   const totalGeral = dadosFiltrados.reduce((acc, d) => acc + d.total_aulas, 0);
   const presencasGeral = dadosFiltrados.reduce((acc, d) => acc + d.presencas, 0);
   const faltasGeral = dadosFiltrados.reduce((acc, d) => acc + d.faltas, 0);
-  const estadoPublicacaoGeral: AlunoPresenca['estado_publicacao'] = dadosFiltrados.length > 0
-    && dadosFiltrados.every(dado => dado.estado_publicacao === 'publicado' && dado.denominador > 0)
-    ? 'publicado'
-    : 'em_auditoria';
-  const mediaGeral = estadoPublicacaoGeral === 'publicado' && totalGeral > 0
+  const mediaGeral = totalGeral > 0
     ? Math.round((presencasGeral / totalGeral) * 1000) / 10
     : null;
-  const fontes = [...new Set(dadosFiltrados.map(dado => dado.fonte))];
-  const regras = [...new Set(dadosFiltrados.map(dado => dado.regra_versao))];
 
   const mesNome = new Date(ano, mes - 1).toLocaleString('pt-BR', { month: 'long' });
   const labelPeriodo = periodoLabel ?? `${mesNome} ${ano}`;
@@ -213,12 +191,10 @@ export function ModalDetalhesPresenca({ open, onClose, professorId, professorNom
         </DialogHeader>
 
         <div className="flex flex-wrap gap-x-4 gap-y-1 rounded-lg border border-slate-700/60 bg-slate-800/30 px-3 py-2 text-[11px] text-slate-400">
-          <span>Denominador: <strong className="font-medium text-slate-200">{totalGeral} aulas{estadoPublicacaoGeral !== 'publicado' ? ' (não publicável)' : ''}</strong></span>
-          <span>Fonte: <strong className="font-medium text-slate-200">{fontes.join(', ') || 'aguardando dados'}</strong></span>
+          <span>Eventos confirmados: <strong className="font-medium text-slate-200">{totalGeral}</strong></span>
           <span>Período: <strong className="font-medium text-slate-200">{periodoInicio} a {periodoFim}</strong></span>
           <span>Equação: <strong className="font-medium text-slate-200">presentes / eventos confirmados</strong></span>
-          <span>regra_versao: <strong className="font-medium text-slate-200">{regras.join(', ') || 'aguardando dados'}</strong></span>
-          <span>estado_publicacao: <strong className="font-medium text-amber-300">{estadoPublicacaoGeral}</strong></span>
+          <span>Leitura: <strong className="font-medium text-slate-200">Presença observada</strong></span>
         </div>
 
         {loading ? (
@@ -259,7 +235,7 @@ export function ModalDetalhesPresenca({ open, onClose, professorId, professorNom
             <div className="flex items-center justify-between px-3 py-2 bg-slate-800/30 rounded-lg mb-3">
               <span className="text-sm text-slate-400">Media geral de presenca</span>
               <span className={cn('text-sm font-bold', classePercentual(mediaGeral))}>
-                {formatarPercentualPublicavel(mediaGeral, totalGeral, estadoPublicacaoGeral)}
+                {formatarPercentualObservado(mediaGeral, totalGeral)}
               </span>
             </div>
 
@@ -322,7 +298,7 @@ export function ModalDetalhesPresenca({ open, onClose, professorId, professorNom
                     <td className="py-2 px-2 text-center text-rose-400">{d.faltas}</td>
                     <td className="py-2 px-2 text-center">
                       <span className={cn('font-medium', classePercentual(d.percentual))}>
-                        {formatarPercentualPublicavel(d.percentual, d.denominador, d.estado_publicacao)}
+                        {formatarPercentualObservado(d.percentual, d.denominador)}
                       </span>
                     </td>
                   </tr>

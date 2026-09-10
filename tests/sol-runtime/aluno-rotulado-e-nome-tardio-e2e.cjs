@@ -15,7 +15,7 @@
 //  R-b: o extrator de nome tira o lixo verbal do início ("foi", "nome do
 //       aluno", "é") — sem isso a guarda de nome-diverge derruba o
 //       enriquecimento certo por causa do prefixo.
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
+const mod = require('./_alvo.cjs');
 
 const CHAT = '120363263030561835@g.us';
 const UNIDADE = '368d47f5-2d88-4475-bc14-ba084a9a348e';

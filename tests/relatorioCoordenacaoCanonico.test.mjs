@@ -56,7 +56,8 @@ test('Edge busca o contrato com o JWT e limita a IA a narrativa', () => {
 
   assert.match(source, /createClient/i);
   assert.match(source, /authorization/i);
-  assert.match(source, /get_relatorio_coordenacao_canonico_v3/i);
+  assert.match(source, /get_relatorio_coordenacao_documento_v4_por_id/i);
+  assert.match(source, /body\?\.documento_id|body\.documento_id/i);
   assert.match(source, /body\?\.unidade|body\.unidade/i);
   assert.match(source, /body\?\.ano|body\.ano/i);
   assert.match(source, /body\?\.mes|body\.mes/i);
@@ -65,6 +66,16 @@ test('Edge busca o contrato com o JWT e limita a IA a narrativa', () => {
   assert.match(source, /resumo[\s\S]*conquistas[\s\S]*pontos_atencao[\s\S]*treinamentos[\s\S]*plano_acao/i);
   assert.match(source, /fallback|narrativaPadrao|narrativaDeterministica/i);
   assert.match(source, /sanitizarTextoPublico|assertPublicReportSafe/i);
+  assert.match(source, /fetchJsonWithDeadline/);
+  assert.match(source, /TEMPO_LIMITE_IA_MS\s*=\s*12_000/);
+  assert.doesNotMatch(source, /fetchOpenAIComRetry/);
+  assert.doesNotMatch(source, /await\s+resposta\.json\(\)/);
+  assert.match(source, /motivo:\s*sanitizarTextoPublico\(prioridade\.direcionamento\)/);
+  assert.doesNotMatch(source, /sanitizarTextoPublico\(String\(item\.motivo/);
+  assert.match(source, /resumo:\s*fallback\.resumo/);
+  assert.match(source, /conquistas:\s*fallback\.conquistas/);
+  assert.match(source, /pontos_atencao:\s*fallback\.pontos_atencao/);
+  assert.match(source, /plano_acao:\s*fallback\.plano_acao/);
 });
 
 test('texto público bloqueia finanças, termos internos e paginação artificial', () => {
@@ -82,6 +93,10 @@ test('texto público bloqueia finanças, termos internos e paginação artificia
   }
 
   assert.doesNotMatch(renderer, /MRR|ticket\s+m[eé]dio|faturamento|parcela|financeiro/i);
+  assert.doesNotMatch(
+    renderer,
+    /professor\.comparabilidade_motivo\s*\|\|\s*["']sem base operacional no período/i,
+  );
   assert.match(renderer, /TODOS OS PROFESSORES|PROFESSORES DA EQUIPE/i);
   assert.match(renderer, /QUALIDADE DOS DADOS/i);
   assert.match(renderer, /PRIORIDADES PEDAGÓGICAS/i);
@@ -108,7 +123,7 @@ test('botão mensal envia somente filtros e mantém cópia robusta', () => {
   assert.notEqual(instantStart, -1);
   const monthly = source.slice(monthlyStart, instantStart);
 
-  assert.match(monthly, /body\s*:\s*\{\s*unidade\s*:\s*unidadeId\s*,\s*ano\s*:\s*anoRelatorio\s*,\s*mes\s*:\s*mesRelatorio\s*,\s*periodicidade\s*,\s*\}/s);
+  assert.match(monthly, /body\s*:\s*\{\s*unidade\s*:\s*unidadeId\s*,\s*ano\s*:\s*anoRelatorio\s*,\s*mes\s*:\s*mesRelatorio\s*,\s*periodicidade\s*,\s*documento_id\s*:\s*documento\.documento\.id\s*,\s*\}/s);
   assert.doesNotMatch(monthly, /dados\s*:/i);
   assert.doesNotMatch(monthly, /buscarDadosRelatorioCoordenacao|buscarKpisHealthV3RelatorioCoordenacao/i);
   assert.match(source, /copyTextToClipboard\(textoRelatorio\)/);
@@ -123,8 +138,14 @@ test('IA e renderer usam a mesma projeção pública do mapa de sinais', () => {
   assert.match(source, /const\s+mapaPublico\s*=\s*projetarMapaSinaisPublico\(contrato\.mapa_sinais\)/i);
   assert.match(source, /gerarNarrativa\(contrato,\s*mapaPublico,/i);
   assert.match(source, /renderizarRelatorio\(contrato,\s*narrativa,\s*mapaPublico\)/i);
-  assert.match(source, /mapa_sinais_publico:\s*\{[\s\S]*prioridades:\s*mapaPublico\.prioridades[\s\S]*oportunidades:\s*mapaPublico\.oportunidades/i);
+  assert.match(source, /prioridades:\s*mapaPublico\.prioridades\.map/i);
+  assert.doesNotMatch(source, /const\s+entrada\s*=\s*\{[\s\S]*resumo_equipe:/i);
+  assert.doesNotMatch(source, /const\s+entrada\s*=\s*\{[\s\S]*qualidade_dados:/i);
+  assert.match(source, /catalogoPermitido/i);
+  assert.match(source, /prioridadesPermitidas/i);
   assert.doesNotMatch(renderer, /dados\.mapa_sinais\.map/i);
+  assert.doesNotMatch(renderer, /sanitizarTextoPublico\(linhas\.join/i);
+  assert.match(renderer, /termosDeNegocioPreservados/i);
   assert.match(renderer, /PRIORIDADES PEDAGÓGICAS/i);
   assert.match(renderer, /OPORTUNIDADES DE DISTRIBUIÇÃO/i);
   assert.match(renderer, /formatarQualidadeCapacidade\(mapaPublico\)/i);

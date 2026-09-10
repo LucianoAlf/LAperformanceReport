@@ -1,8 +1,8 @@
 // Reproduz a sequência exata do Arthur/Barra (26/08, 13:34-13:49) e prova que os dois
 // defeitos foram fechados: (1) reenvio do comprovante não cria uma segunda pendência
 // ambígua; (2) a guarda "não vaza pro LLM" não fala em cima de mensagem que não é pra Sol.
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
-const groupEngagement = require('/home/sol/.hermes/hermes-agent/scripts/whatsapp-bridge/group-engagement.cjs');
+const mod = require('./_alvo.cjs');
+const groupEngagement = require('./_alvo.cjs').groupEngagement();
 
 const CHAT = '120363263030561835@g.us';
 const UNIDADE = '368d47f5-2d88-4475-bc14-ba084a9a348e';

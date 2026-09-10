@@ -11,7 +11,7 @@
 //       só como substantivo com complemento.
 //  R-f: token frouxo de aprovação exige mensagem curta E afirmação que ABRE a
 //       mensagem.
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
+const mod = require('./_alvo.cjs');
 
 const CHAT = '5521981278047-1544204225@g.us';
 const UNIDADE = '2ec861f6-023f-4d7b-9927-3960ad8c2a92';

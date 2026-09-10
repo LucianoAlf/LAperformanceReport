@@ -173,7 +173,8 @@ test('frontend envia periodicidade e distingue comparabilidade de ranking oficia
   assert.match(helper, /scoreExibivel/i);
   assert.match(helper, /rankingHabilitado\s*&&/i);
   assert.match(tab, /Desempenho observado/i);
-  assert.match(tab, /Sem base operacional/i);
+  assert.match(tab, /Sem dados no per[ií]odo/i);
+  assert.doesNotMatch(tab, /Dados em auditoria|Sem base operacional/i);
   assert.match(tab, /ranking[s]?[^\n]*oficial/i);
   assert.match(tab, /getHealthScoreV3Period/i);
   assert.doesNotMatch(tab, /Per[iÃ­]odo N[aÃ£]o Considerado/i);

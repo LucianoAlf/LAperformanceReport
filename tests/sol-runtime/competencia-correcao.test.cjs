@@ -21,13 +21,13 @@ const assert = require('assert');
 const fs = require('fs');
 // ⚠️ resolve contra o CWD, nao contra o diretorio do teste: a suite roda de
 //    /tmp com cwd em caixa-ingestao/ (ver tests/sol-runtime/README.md).
-const mod = require(require('path').resolve('caixa-financeiro.cjs'));
+const mod = require('./_alvo.cjs');
 
 const { extrairCompetenciaTexto, _alunoRotulado } = mod;
 assert.ok(typeof extrairCompetenciaTexto === 'function', 'extrairCompetenciaTexto nao exportada');
 assert.ok(typeof _alunoRotulado === 'function', '_alunoRotulado nao exportada');
 
-const src = fs.readFileSync('caixa-financeiro.cjs', 'utf8');
+const src = fs.readFileSync(require('./_alvo.cjs').__alvo, 'utf8');
 let falhas = 0;
 const ok = (cond, msg) => {
   if (!cond) { falhas++; console.log('FALHOU ' + msg); } else console.log('ok     ' + msg);

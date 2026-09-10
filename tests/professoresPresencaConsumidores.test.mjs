@@ -14,10 +14,11 @@ const edgeIndividual = read('supabase/functions/gemini-relatorio-professor-indiv
 const edgeCoordenacao = read('supabase/functions/gemini-relatorio-coordenacao/index.ts');
 const edgeRanking = read('supabase/functions/gemini-ranking-professores/index.ts');
 
-test('performance bloqueia presenca e health sem confianca alta', () => {
+test('performance preserva a presenca observada sem fabricar zero nem expor linguagem tecnica', () => {
   assert.match(performance, /presenca_publicavel/);
   assert.match(performance, /health_score_confiavel/);
-  assert.match(performance, /Sem base operacional/);
+  assert.match(performance, /Sem dados no per[ií]odo/);
+  assert.doesNotMatch(performance, /Dados em auditoria|Sem base operacional|Fonte can[oô]nica|Faltam retratos materializados|O roster continua/i);
   assert.match(performance, /professor\.presenca_publicavel\s*&&\s*professor\.taxa_presenca\s*!==\s*null/);
 });
 
@@ -47,8 +48,8 @@ test('edges de professores respeitam o bloqueio de publicacao', () => {
   for (const source of [edgeEquipe, edgeProfessor, edgeIndividual, edgeRanking]) {
     assert.match(source, /presenca_publicavel/);
   }
-  assert.match(edgeCoordenacao, /get_relatorio_coordenacao_canonico_v3/);
-  assert.match(edgeCoordenacao, /p_periodicidade:\s*filtros\.periodicidade/);
+  assert.match(edgeCoordenacao, /get_relatorio_coordenacao_documento_v4_por_id/);
+  assert.match(edgeCoordenacao, /documento_id/);
   assert.match(edgeCoordenacao, /estado_evidencia/);
   assert.doesNotMatch(edgeCoordenacao, /presenca_publicavel/);
   assert.doesNotMatch(edgeEquipe, /taxa_presenca:\s*number;/);

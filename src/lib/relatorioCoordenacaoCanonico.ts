@@ -1,3 +1,5 @@
+import { formatarQuantidadeCarteira, linhasAtualizacaoRelatorio } from '../../supabase/functions/_shared/apresentacaoRelatorioCoordenacao.ts';
+
 export type TipoRelatorioCoordenacaoCanonico =
   | 'ranking'
   | 'carteira'
@@ -62,12 +64,20 @@ export interface MovimentoRetencaoCoordenacaoCanonico {
   professor_id?: number | null;
   professor_nome?: string | null;
   motivo?: string | null;
-  valor_mrr: number;
+  valor_mrr: number | null;
   conta_score_professor: boolean;
 }
 
 export interface RelatorioCoordenacaoCanonicoV2 {
-  schema_version: 2 | 3;
+  schema_version: 2 | 3 | 4;
+  documento?: {
+    id: string;
+    versao: number;
+    hash: string;
+    status: string;
+    gerado_em: string;
+    supersede_id?: string | null;
+  };
   periodo: {
     unidade_id: string | null;
     unidade_nome: string;
@@ -100,9 +110,23 @@ export interface RelatorioCoordenacaoCanonicoV2 {
   presenca: {
     presenca_media?: number | null;
     professores_com_evidencia?: number;
+    professores_com_evidencia_equipe?: number;
+    vinculos_historicos?: Array<{
+      professor_id: number;
+      nome: string;
+      valor: number | null;
+      numerador: number | null;
+      denominador: number | null;
+      amostra: number | null;
+    }>;
+    professores_sem_eventos?: number;
+    total_professores?: number;
     pendencias?: number;
     eventos_elegiveis?: number;
     presencas_confirmadas?: number;
+    ocorrencias_fora_calculo?: number;
+    ocorrencias_incompletas?: number;
+    ocorrencias_com_conflito?: number;
   };
   carteira_carga: {
     alunos_na_carteira?: number;
@@ -111,6 +135,7 @@ export interface RelatorioCoordenacaoCanonicoV2 {
     total_turmas_operacionais?: number;
     ocupacoes_elegiveis?: number;
     turmas_elegiveis?: number;
+    turmas_usadas_na_media_individual?: number;
     media_alunos_turma?: number | null;
   };
   retencao_permanencia: {
@@ -124,6 +149,8 @@ export interface RelatorioCoordenacaoCanonicoV2 {
     saidas_atribuiveis_professor?: number;
     mrr_perdido_total?: number;
     mrr_perdido_atribuivel?: number;
+    valores_mrr_pendentes?: number;
+    valores_mrr_atribuiveis_pendentes?: number;
     movimentos?: MovimentoRetencaoCoordenacaoCanonico[];
   };
   ranking_oficial?: Array<{ professor_id?: number; nome: string; score: number }> | null;
@@ -151,6 +178,7 @@ export interface RelatorioCoordenacaoCanonicoV2 {
     config_id?: string;
     regra_fingerprint?: string;
   };
+  origens?: Record<string, unknown>;
 }
 
 interface GerarRelatorioCoordenacaoCanonicoParams {
@@ -158,12 +186,6 @@ interface GerarRelatorioCoordenacaoCanonicoParams {
   contrato: RelatorioCoordenacaoCanonicoV2;
   dataGeracao?: Date;
 }
-
-const moeda = new Intl.NumberFormat('pt-BR', {
-  style: 'currency',
-  currency: 'BRL',
-  minimumFractionDigits: 2,
-});
 
 const inteiro = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 
@@ -178,13 +200,9 @@ function numero(valor: unknown, casas = 1): string {
 }
 
 function numeroInteiro(valor: unknown): string {
-  const convertido = Number(valor ?? 0);
-  return inteiro.format(Number.isFinite(convertido) ? convertido : 0);
-}
-
-function formatarMoeda(valor: unknown): string {
-  const convertido = Number(valor ?? 0);
-  return moeda.format(Number.isFinite(convertido) ? convertido : 0).replace(/[\u00a0\u202f]/g, ' ');
+  if (valor === null || valor === undefined || valor === '') return 'Não informado';
+  const convertido = Number(valor);
+  return Number.isFinite(convertido) ? inteiro.format(convertido) : 'Não informado';
 }
 
 function formatarData(dataIso: string): string {
@@ -194,12 +212,48 @@ function formatarData(dataIso: string): string {
 
 function formatarDataHora(data: Date): string {
   return data.toLocaleString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function escaparRegExp(valor: string): string {
+  return valor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function termosDeNegocioPreservados(contrato: RelatorioCoordenacaoCanonicoV2): string[] {
+  return [
+    contrato.periodo.unidade_nome,
+    contrato.periodo.label,
+    contrato.periodo.ciclo_codigo,
+    ...contrato.professores.map((professor) => professor.nome),
+    ...(contrato.saidas_retencao?.movimentos || []).flatMap((movimento) => [
+      movimento.aluno_nome,
+      movimento.professor_nome,
+      movimento.motivo,
+    ]),
+  ].filter((valor): valor is string => typeof valor === 'string' && valor.trim().length > 0);
+}
+
+function finalizarRelatorio(
+  linhas: string[],
+  contrato: RelatorioCoordenacaoCanonicoV2,
+): string {
+  const texto = linhas.join('\n');
+  const textoParaValidacao = [...new Set(termosDeNegocioPreservados(contrato))]
+    .sort((a, b) => b.length - a.length)
+    .reduce(
+      (acumulado, termo) => acumulado.replace(new RegExp(escaparRegExp(termo), 'giu'), '[dado]'),
+      texto,
+    );
+  if (/can[oô]nic|auditoria|snapshot|\bRPC\b|migration|pilar/i.test(textoParaValidacao)) {
+    throw new Error('O relatório contém linguagem interna e não pode ser exibido.');
+  }
+  return texto;
 }
 
 function metrica(
@@ -215,6 +269,45 @@ function valorMetrica(professor: ProfessorCoordenacaoCanonico, chave: string): n
   return valor === null || valor === undefined || !Number.isFinite(convertido) ? null : convertido;
 }
 
+function isCicloOficialCompleto(contrato: RelatorioCoordenacaoCanonicoV2): boolean {
+  if (
+    contrato.periodo.periodicidade !== 'ciclo'
+    || contrato.periodo.ciclo_estado !== 'fechado'
+    || contrato.periodo.publicacao_oficial !== true
+    || contrato.periodo.ranking_habilitado !== true
+  ) return false;
+
+  const comparaveis = contrato.professores.filter(
+    (professor) => professor.comparabilidade_estado === 'comparavel'
+      && numeroOuNull(professor.score_comparavel) !== null,
+  );
+  const comparaveisEsperados = numeroOuNull(contrato.resumo_equipe.comparaveis);
+  if (comparaveisEsperados === null || comparaveis.length !== comparaveisEsperados) return false;
+  if (!comparaveis.every(
+    (professor) => professor.estado_publicacao === 'oficial'
+      && professor.ranking_habilitado === true,
+  )) return false;
+
+  if (!Array.isArray(contrato.ranking_oficial)
+    || comparaveisEsperados === 0
+    || contrato.ranking_oficial.length !== comparaveisEsperados) return false;
+  const publicados = new Map(contrato.ranking_oficial.map((p) => [p.professor_id, p.score]));
+  return publicados.size === comparaveisEsperados && comparaveis.every(
+    (p) => numeroOuNull(publicados.get(p.professor_id)) === numeroOuNull(p.score_comparavel),
+  );
+}
+
+function linhaDocumento(contrato: RelatorioCoordenacaoCanonicoV2): string | null {
+  const documento = contrato.documento;
+  if (!documento?.versao) return null;
+  const estado = documento.status === 'retificado'
+    ? 'relatório retificado'
+    : documento.status === 'preview'
+      ? 'relatório em acompanhamento'
+      : 'relatório publicado';
+  return `📄 Documento: versão ${documento.versao} — ${estado}`;
+}
+
 function cabecalho(titulo: string, contrato: RelatorioCoordenacaoCanonicoV2): string[] {
   const { periodo } = contrato;
   const mesAno = new Date(periodo.ano, periodo.mes - 1, 1)
@@ -223,9 +316,8 @@ function cabecalho(titulo: string, contrato: RelatorioCoordenacaoCanonicoV2): st
   const visao = periodo.periodicidade === 'ciclo'
     ? `CICLO ${(periodo.label || periodo.ciclo_codigo || mesAno).toUpperCase()}`
     : `EVIDÊNCIAS DO MÊS — ${mesAno}`;
-  const cicloOficial = periodo.periodicidade === 'ciclo'
-    && periodo.publicacao_oficial === true
-    && periodo.ranking_habilitado === true;
+  const cicloOficial = isCicloOficialCompleto(contrato);
+  const documento = linhaDocumento(contrato);
   const estado = periodo.periodicidade === 'ciclo'
     ? cicloOficial
       ? 'Ciclo oficial fechado.'
@@ -237,6 +329,8 @@ function cabecalho(titulo: string, contrato: RelatorioCoordenacaoCanonicoV2): st
     `🏢 *${periodo.unidade_nome.toUpperCase()}*`,
     `📅 *${visao}*`,
     `🗓 Período: ${formatarData(periodo.inicio)} até ${formatarData(periodo.fim)}`,
+    ...(documento ? [documento] : []),
+    ...linhasAtualizacaoRelatorio(periodo.data_corte, contrato.documento?.gerado_em),
     '━━━━━━━━━━━━━━━━━━━━━━',
     '',
     `_Dados oficiais do período selecionado no LA Report. ${estado}_`,
@@ -248,7 +342,7 @@ function rodape(dataGeracao = new Date()): string[] {
   return [
     '',
     '━━━━━━━━━━━━━━━━━━━━━━',
-    `📅 Gerado em: ${formatarDataHora(dataGeracao)}`,
+    `📅 Texto gerado em: ${formatarDataHora(dataGeracao)}`,
     '━━━━━━━━━━━━━━━━━━━━━━',
   ];
 }
@@ -301,7 +395,7 @@ function professoresPorScoreVisivel(contrato: RelatorioCoordenacaoCanonicoV2) {
 }
 
 const indicadoresRanking: IndicadorRanking[] = [
-  { chave: 'numero_alunos', rotulo: '👥 MAIOR CARTEIRA', detalhe: (v) => `${numeroInteiro(v)} alunos na carteira` },
+  { chave: 'numero_alunos', rotulo: '👥 MAIOR CARTEIRA', detalhe: (v) => `${formatarQuantidadeCarteira(v)} alunos na carteira` },
   { chave: 'media_turma', rotulo: '🎸 MÉDIA DE ALUNOS POR TURMA', detalhe: (v, a) => `${numero(v, 1)} alunos/turma${a ? ` (${numeroInteiro(a)} turmas)` : ''}` },
   { chave: 'permanencia', rotulo: '🕰 PERMANÊNCIA DOS ALUNOS', detalhe: (v, a) => `${numero(v, 1)} meses${a ? ` (${numeroInteiro(a)} vínculos)` : ''}` },
   { chave: 'retencao', rotulo: '🔄 RETENÇÃO DE ALUNOS', detalhe: (v, a) => `${numero(v, 1)}%${a ? ` (${numeroInteiro(a)} vínculos)` : ''}` },
@@ -315,6 +409,8 @@ const indicadoresRanking: IndicadorRanking[] = [
   { chave: 'conversao', rotulo: '🎯 CONVERSÃO DE EXPERIMENTAIS', detalhe: (v, a) => `${numero(v, 1)}%${a ? ` (${numeroInteiro(a)} experimentais)` : ''}` },
 ];
 
+const LIMITE_DESTAQUES_POR_INDICADOR = 10;
+
 function linhasRankingPorIndicador(contrato: RelatorioCoordenacaoCanonicoV2): string[] {
   const linhas: string[] = [];
   for (const indicador of indicadoresRanking) {
@@ -326,9 +422,13 @@ function linhasRankingPorIndicador(contrato: RelatorioCoordenacaoCanonicoV2): st
           : valorMetrica(professor, indicador.chave),
         amostra: professor.metricas?.[indicador.metricaChave ?? indicador.chave]?.amostra ?? null,
       }))
-      .filter((item) => item.valor !== null)
+      .filter((item) => {
+        if (item.valor === null) return false;
+        if (indicador.chave === 'matriculador') return Number(item.valor) > 0;
+        return Number(item.amostra) > 0;
+      })
       .sort((a, b) => Number(b.valor) - Number(a.valor) || a.nome.localeCompare(b.nome, 'pt-BR'))
-      .slice(0, 5);
+      .slice(0, LIMITE_DESTAQUES_POR_INDICADOR);
 
     if (!ranqueados.length) {
       linhas.push(`${indicador.rotulo}: sem registros elegíveis no período.`);
@@ -346,26 +446,30 @@ function linhasRankingPorIndicador(contrato: RelatorioCoordenacaoCanonicoV2): st
 function gerarRanking(params: GerarRelatorioCoordenacaoCanonicoParams): string {
   const { contrato } = params;
   const resumo = contrato.resumo_equipe;
-  const oficial = contrato.periodo.periodicidade === 'ciclo'
-    && contrato.periodo.publicacao_oficial === true
-    && contrato.periodo.ranking_habilitado === true;
+  const oficial = isCicloOficialCompleto(contrato);
   const ordemPainel = professoresPorScoreVisivel(contrato);
   const classificadosPainel = ordemPainel.filter(
-    (professor) => scoreVisivelProfessor(professor) !== null,
+    (professor) => scoreVisivelProfessor(professor) !== null
+      && (!oficial || professor.comparabilidade_estado === 'comparavel'),
   );
+  const emAcompanhamento = oficial ? ordemPainel.filter(
+    (p) => p.comparabilidade_estado !== 'comparavel' && scoreVisivelProfessor(p) !== null,
+  ) : [];
   const semNotaPainel = ordemPainel.filter(
     (professor) => scoreVisivelProfessor(professor) === null,
   );
   const linhasOrdemPainel = classificadosPainel.map((professor, indice) => {
     if (professor.comparabilidade_estado === 'comparavel') {
-      return `${indice + 1}. ${professor.nome} — ${numero(professor.score_comparavel, 1)} pontos | Cobertura: ${numero(professor.cobertura, 1)}%`;
+      const usados = numeroInteiro(professor.pilares_validos);
+      const aplicaveis = numeroInteiro(professor.pilares_esperados);
+      return `${indice + 1}. ${professor.nome} — ${numero(professor.score_comparavel, 1)} pontos | Indicadores usados na nota: ${usados}/${aplicaveis} | cobertura dos aplicáveis: ${numero(professor.cobertura, 1)}%`;
     }
     if (professor.comparabilidade_estado === 'em_maturacao') {
       const observado = scoreVisivelProfessor(professor);
       const desempenho = observado === null
         ? 'Desempenho observado indisponível'
         : `Desempenho observado: ${numero(observado, 1)}`;
-      return `${indice + 1}. ${professor.nome} — ${desempenho} | Cobertura: ${numero(professor.cobertura, 1)}% | ${numeroInteiro(professor.pilares_validos)}/${numeroInteiro(professor.pilares_esperados)} pilares válidos`;
+      return `${indice + 1}. ${professor.nome} — ${desempenho} | resultado em acompanhamento`;
     }
     return `${indice + 1}. ${professor.nome} — Sem dados suficientes neste período`;
   });
@@ -380,14 +484,14 @@ function gerarRanking(params: GerarRelatorioCoordenacaoCanonicoParams): string {
       ]
     : [];
 
-  return [
+  return finalizarRelatorio([
     ...cabecalho('RELATÓRIO DE PROFESSORES — HEALTH SCORE', contrato),
     '👨‍🏫 *RESUMO DA EQUIPE*',
     '━━━━━━━━━━━━━━━━━━━━━━',
     `• Professores ativos: *${numeroInteiro(resumo.total_professores)}*`,
     `• Professores comparáveis: *${numeroInteiro(resumo.comparaveis)}*`,
     `• Em maturação: *${numeroInteiro(resumo.em_maturacao)}*`,
-    `• Sem base operacional: *${numeroInteiro(resumo.sem_base_operacional)}*`,
+    `• Sem nota no período: *${numeroInteiro(resumo.sem_base_operacional)}*`,
     `• Média do Health Score comparável: *${numero(resumo.score_medio_comparavel, 1)}*`,
     '',
     oficial ? '🏆 *RANKING DO CICLO — MESMA ORDEM DO PAINEL*' : '📋 *ORDEM DO PAINEL — LEITURA DIAGNÓSTICA*',
@@ -395,6 +499,10 @@ function gerarRanking(params: GerarRelatorioCoordenacaoCanonicoParams): string {
     ...(linhasOrdemPainel.length > 0 || semNotaPainel.length > 0
       ? linhasOrdemPainel
       : ['• Nenhum professor ativo encontrado.']),
+    ...(emAcompanhamento.length > 0 ? [
+      '', '🌱 *EM ACOMPANHAMENTO — FORA DA CLASSIFICAÇÃO*',
+      ...emAcompanhamento.map((p) => `• ${p.nome} — desempenho observado: ${numero(scoreVisivelProfessor(p), 1)}; sem posição oficial.`),
+    ] : []),
     ...linhasSemNota,
     '',
     oficial
@@ -407,7 +515,7 @@ function gerarRanking(params: GerarRelatorioCoordenacaoCanonicoParams): string {
     '',
     ...linhasRankingPorIndicador(contrato),
     ...rodape(params.dataGeracao),
-  ].join('\n');
+  ], contrato);
 }
 
 function gerarCarteira(params: GerarRelatorioCoordenacaoCanonicoParams): string {
@@ -415,38 +523,42 @@ function gerarCarteira(params: GerarRelatorioCoordenacaoCanonicoParams): string 
   const carteira = contrato.carteira_carga;
   const professores = [...contrato.professores];
   const maiores = professores
-    .filter((professor) => valorMetrica(professor, 'numero_alunos') !== null)
-    .sort((a, b) => Number(valorMetrica(b, 'numero_alunos')) - Number(valorMetrica(a, 'numero_alunos')))
-    .slice(0, 5);
+    .filter((professor) => valorMetrica(professor, 'numero_alunos') !== null
+      && Number(metrica(professor, 'numero_alunos')?.amostra) > 0)
+    .sort((a, b) => Number(valorMetrica(b, 'numero_alunos')) - Number(valorMetrica(a, 'numero_alunos'))
+      || a.nome.localeCompare(b.nome, 'pt-BR'))
+    .slice(0, LIMITE_DESTAQUES_POR_INDICADOR);
   const maiorVolume = professores
     .filter((professor) => Number(professor.operacional?.total_turmas || 0) > 0)
-    .sort((a, b) => Number(b.operacional?.total_turmas) - Number(a.operacional?.total_turmas))
-    .slice(0, 5);
+    .sort((a, b) => Number(b.operacional?.total_turmas) - Number(a.operacional?.total_turmas)
+      || a.nome.localeCompare(b.nome, 'pt-BR'))
+    .slice(0, LIMITE_DESTAQUES_POR_INDICADOR);
   const baixaMedia = professores
     .filter((professor) => {
       const media = valorMetrica(professor, 'media_turma');
-      return media !== null && media < 1.5;
+      return media !== null && media < 1.5
+        && Number(metrica(professor, 'media_turma')?.amostra) > 0;
     })
     .sort((a, b) => Number(valorMetrica(a, 'media_turma')) - Number(valorMetrica(b, 'media_turma')))
-    .slice(0, 8);
+    .slice(0, LIMITE_DESTAQUES_POR_INDICADOR);
 
-  return [
+  return finalizarRelatorio([
     ...cabecalho('RELATÓRIO CARTEIRA E CARGA PEDAGÓGICA', contrato),
     '📦 *VISÃO GERAL DA CARTEIRA*',
     '━━━━━━━━━━━━━━━━━━━━━━',
-    `• Vínculos de acompanhamento nas carteiras: *${numeroInteiro(carteira.alunos_na_carteira)}*`,
+    `• Vínculos de acompanhamento nas carteiras: *${formatarQuantidadeCarteira(carteira.alunos_na_carteira)}*`,
     `• Professores com carteira observada: *${numeroInteiro(carteira.professores_com_carteira_observada)}*`,
     `• Média de vínculos por professor: *${numero(carteira.media_por_professor, 1)}*`,
-    `• Turmas operacionais: *${numeroInteiro(carteira.total_turmas_operacionais)}*`,
+    `• Turmas operacionais registradas: *${numeroInteiro(carteira.total_turmas_operacionais)}*`,
     `• Ocupações elegíveis: *${numeroInteiro(carteira.ocupacoes_elegiveis)}*`,
-    `• Turmas elegíveis para a média: *${numeroInteiro(carteira.turmas_elegiveis)}*`,
+    `• Turmas usadas nas médias individuais: *${numeroInteiro(carteira.turmas_usadas_na_media_individual)}*`,
     `• Média ponderada alunos/turma: *${numero(carteira.media_alunos_turma, 2)}*`,
     '',
-    '_A carteira soma os vínculos de acompanhamento por professor; não representa pessoas únicas da unidade._',
+    '_A carteira soma vínculos de acompanhamento, não pessoas únicas. As turmas operacionais e as turmas usadas nas médias individuais pertencem a universos diferentes e não devem ser comparadas como se fossem a mesma contagem._',
     '',
     '👥 *MAIORES CARTEIRAS*',
     ...maiores.map((professor, indice) =>
-      `${indice + 1}. ${professor.nome} — ${numeroInteiro(valorMetrica(professor, 'numero_alunos'))} vínculos`),
+      `${indice + 1}. ${professor.nome} — ${formatarQuantidadeCarteira(valorMetrica(professor, 'numero_alunos'))} vínculos`),
     '',
     '📚 *MAIOR VOLUME DE TURMAS*',
     ...maiorVolume.map((professor, indice) =>
@@ -458,12 +570,14 @@ function gerarCarteira(params: GerarRelatorioCoordenacaoCanonicoParams): string 
         `${indice + 1}. ${professor.nome} — ${numero(valorMetrica(professor, 'media_turma'), 2)} alunos/turma (${numeroInteiro(metrica(professor, 'media_turma')?.amostra)} turmas elegíveis)`)
       : ['• Nenhuma média abaixo de 1,50 nesta competência.']),
     ...rodape(params.dataGeracao),
-  ].join('\n');
+  ], contrato);
 }
 
 function gerarPresenca(params: GerarRelatorioCoordenacaoCanonicoParams): string {
   const { contrato } = params;
   const presenca = contrato.presenca;
+  const totalProfessores = numeroOuNull(presenca.total_professores)
+    ?? numeroOuNull(contrato.resumo_equipe.total_professores);
   const observaveis = contrato.professores
     .filter((professor) => valorMetrica(professor, 'presenca') !== null);
   const prioridade = observaveis
@@ -478,14 +592,26 @@ function gerarPresenca(params: GerarRelatorioCoordenacaoCanonicoParams): string 
     .sort((a, b) => Number(valorMetrica(a, 'presenca')) - Number(valorMetrica(b, 'presenca')))
     .slice(0, 10);
 
-  return [
+  return finalizarRelatorio([
     ...cabecalho('RELATÓRIO PRESENÇA E ALERTAS PEDAGÓGICOS', contrato),
     '✅ *RESUMO DE PRESENÇA*',
     '━━━━━━━━━━━━━━━━━━━━━━',
-    `• Presença média ponderada: *${numero(presenca.presenca_media, 1)}%*`,
+    `• Presença média ponderada: *${numeroOuNull(presenca.presenca_media) === null ? 'não calculável' : `${numero(presenca.presenca_media, 1)}%`}*`,
     `• Presenças confirmadas: *${numeroInteiro(presenca.presencas_confirmadas)}/${numeroInteiro(presenca.eventos_elegiveis)}*`,
-    `• Professores com evidência: *${numeroInteiro(presenca.professores_com_evidencia)}*`,
-    `• Pendências de evidência: *${numeroInteiro(presenca.pendencias)}*`,
+    `• Professores da equipe atual com eventos elegíveis: *${numeroInteiro(presenca.professores_com_evidencia_equipe ?? presenca.professores_com_evidencia)} de ${numeroInteiro(totalProfessores)}*`,
+    `• Professores com eventos elegíveis no período: *${numeroInteiro(presenca.professores_com_evidencia)}*`,
+    `• Ocorrências usadas no percentual: *${numeroInteiro(presenca.eventos_elegiveis)}*`,
+    `• Ocorrências fora do percentual: *${numeroInteiro(presenca.ocorrencias_fora_calculo)}*`,
+    `• Ocorrências com informação incompleta: *${numeroInteiro(presenca.ocorrencias_incompletas)}*`,
+    `• Ocorrências com divergência entre registros: *${numeroInteiro(presenca.ocorrencias_com_conflito)}*`,
+    '_As sinalizações podem se sobrepor; o percentual usa somente eventos elegíveis pela regra do período._',
+    ...((presenca.vinculos_historicos?.length ?? 0) > 0 ? [
+      '',
+      '📚 *VÍNCULOS HISTÓRICOS NO PERÍODO*',
+      '_Incluídos nos totais de presença; não pertencem à equipe atual deste recorte nem à sua classificação._',
+      ...presenca.vinculos_historicos!.map((professor) =>
+        `• ${professor.nome} — ${professor.valor == null ? 'sem eventos elegíveis' : `${numero(professor.valor, 1)}% | Presenças: ${numeroInteiro(professor.numerador)}/${numeroInteiro(professor.denominador)}`}`),
+    ] : []),
     '',
     '🔴 *PRIORIDADE DE ACOMPANHAMENTO*',
     ...(prioridade.length > 0
@@ -501,7 +627,7 @@ function gerarPresenca(params: GerarRelatorioCoordenacaoCanonicoParams): string 
     '',
     '_As faixas orientam acompanhamento pedagógico e não alteram sozinhas a nota do professor._',
     ...rodape(params.dataGeracao),
-  ].join('\n');
+  ], contrato);
 }
 
 function gerarRetencao(params: GerarRelatorioCoordenacaoCanonicoParams): string {
@@ -515,9 +641,10 @@ function gerarRetencao(params: GerarRelatorioCoordenacaoCanonicoParams): string 
       const taxa = valorMetrica(professor, 'retencao');
       return taxa !== null && taxa < 100;
     })
-    .sort((a, b) => Number(valorMetrica(a, 'retencao')) - Number(valorMetrica(b, 'retencao')));
+    .sort((a, b) => Number(valorMetrica(a, 'retencao')) - Number(valorMetrica(b, 'retencao')))
+    .slice(0, LIMITE_DESTAQUES_POR_INDICADOR);
 
-  return [
+  return finalizarRelatorio([
     ...cabecalho('RELATÓRIO RETENÇÃO E EVASÕES POR PROFESSOR', contrato),
     '📉 *RESUMO DE RETENÇÃO*',
     '━━━━━━━━━━━━━━━━━━━━━━',
@@ -527,8 +654,6 @@ function gerarRetencao(params: GerarRelatorioCoordenacaoCanonicoParams): string 
     `• Não renovações válidas: *${numeroInteiro(saidas.nao_renovacoes_validas)}*`,
     `• Saídas válidas totais: *${numeroInteiro(saidas.saidas_validas_total)}*`,
     `• Saídas atribuíveis ao professor: *${numeroInteiro(saidas.saidas_atribuiveis_professor)}*`,
-    `• MRR perdido total: *${formatarMoeda(saidas.mrr_perdido_total)}*`,
-    `• MRR atribuível ao professor: *${formatarMoeda(saidas.mrr_perdido_atribuivel)}*`,
     '',
     '🚪 *MOVIMENTAÇÕES DO PERÍODO*',
     ...(movimentos.length > 0
@@ -540,7 +665,6 @@ function gerarRetencao(params: GerarRelatorioCoordenacaoCanonicoParams): string 
           `${indice + 1}) ${movimento.aluno_nome}`,
           `   • Data: ${formatarData(movimento.data)} | Tipo: ${movimento.tipo === 'nao_renovacao' ? 'Não renovação' : 'Evasão'}`,
           `   • Professor: ${professorNome}`,
-          `   • MRR perdido: ${formatarMoeda(movimento.valor_mrr)}`,
           `   • Impacto no indicador do professor: ${movimento.conta_score_professor ? 'Sim' : 'Não'}`,
           movimento.motivo ? `   • Motivo: ${movimento.motivo}` : '',
           '',
@@ -555,7 +679,7 @@ function gerarRetencao(params: GerarRelatorioCoordenacaoCanonicoParams): string 
     '',
     '_A movimentação total descreve a operação; somente saídas atribuíveis entram no indicador do professor._',
     ...rodape(params.dataGeracao),
-  ].join('\n');
+  ], contrato);
 }
 
 export function gerarRelatorioCoordenacaoCanonico(
@@ -563,7 +687,7 @@ export function gerarRelatorioCoordenacaoCanonico(
 ): string {
   if (
     !params.contrato
-    || (params.contrato.schema_version !== 2 && params.contrato.schema_version !== 3)
+    || ![2, 3, 4].includes(params.contrato.schema_version)
   ) {
     throw new Error('Os dados oficiais da Coordenação estão indisponíveis para esta competência.');
   }

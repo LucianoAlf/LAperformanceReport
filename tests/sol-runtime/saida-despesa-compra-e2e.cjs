@@ -20,7 +20,7 @@
 // contém "COMPRA", "PAGAMENTO" e "TROCO" no próprio corpo. Ler dali transformaria
 // todo comprovante em saída — é a mesma armadilha do "Chave de segurança" no
 // rodapé do PDF do Santander (caso Valentina/Recreio 24/08).
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
+const mod = require('./_alvo.cjs');
 
 const CHAT = '5521973870998-1583848991@g.us';
 const UNIDADE = '95553e96-971b-4590-a6eb-0201d013c14d';

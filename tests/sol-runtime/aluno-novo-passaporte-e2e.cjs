@@ -3,7 +3,8 @@
 //   (b) aluno já matriculado (Emusys sincronizou)  -> card NÃO mostra selo
 // A Giovanna passou de (a) para (b) às 16:32 de 24/08, no meio da própria
 // investigação — por isso o teste valida a coerência, não um estado fixo.
-const mod = require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs');
+const mod = require('./_alvo.cjs');
+require('./_alvo.cjs').exigeCredenciais('aluno-novo-passaporte');  // usa as RPCs reais
 const CHAT = '5521973870998-1583848991@g.us';
 const UNIDADE = '95553e96-971b-4590-a6eb-0201d013c14d';
 const enviadas = []; let lancou = null;

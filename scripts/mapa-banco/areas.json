@@ -114,6 +114,8 @@
     "turmas": "professor",
     "presenca": "professor",
     "health_score": "professor",
+    "montar_rel_coord": "professor",
+    "rel_coord": "professor",
     "config_health_score": "professor",
     "la_teacher": "professor",
     "disponibilidade_professor": "professor",
