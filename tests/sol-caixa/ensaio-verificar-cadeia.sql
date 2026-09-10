@@ -24,6 +24,11 @@
 
 do $manifesto$
 declare
+  -- 🔴 DATA DE NEGOCIO E BRT. `current_date` e UTC e, das 21h a meia-noite, ja e
+  --    o dia seguinte — a canonica recusa com "p_as_of_date nao pode estar no
+  --    futuro" e o check de EFEITO falha por motivo que nao e o defeito. Mesma
+  --    armadilha que a migration 210000 corrige no resolver.
+  v_hoje date := (now() at time zone 'America/Sao_Paulo')::date;
   v_falhas text[] := '{}';
   v_ok     int := 0;
   v_nome   text;
@@ -33,6 +38,15 @@ declare
   -- nome|md5 do corpo em producao (09/09/2026)
   v_cadeia text[] := array[
     'get_faturas_alunos_financeiro_v1|7c4a3ae5e87d042ac3b5c928f8cc181f',
+    -- 🔴 AS DUAS QUE FALTAVAM (09/09). Eu tinha delimitado a cadeia por quem
+    --    aparece nas chamadas diretas, e quem resolve `aluno.id` ficou de fora.
+    --    `_contrato_20260817` e casca fina e ja vinha identica; a CANONICA e
+    --    quem monta o objeto do aluno, e divergia (25.854 no container contra
+    --    28.255 em producao) por estar ANTERIOR ao ramo
+    --    `fallback_cadastro_pre_espelho`. Sem `aluno.id` o composto descarta
+    --    todas as faturas e recusa com `composicao_exige_duas_faturas`.
+    'get_faturas_alunos_financeiro_v1_contrato_20260817|f8601b9288e52b2f1ef45b043ddbdbd5',
+    'get_faturas_alunos_financeiro_v1_canonica_20260817|97fefb3d7f8826f92ceac09c8f2c97d7',
     'get_faturas_alunos_financeiro_v1_contrato_tipo_20260817|b972e914302d47f62ab0be247c101d0a',
     'sol_caixa_aluno_da_fatura_v1|0454a9ab89eb9b1e24ddfbb08f4cc9e8',
     'sol_caixa_autorizar_payload_v1|e70beb9b2740e40ea54d4602cff498a9',
@@ -108,22 +122,40 @@ begin
     select count(*) into v_sem_tipo
       from (select public.sol_faturas_alunos_v1(
                      '11111111-1111-1111-1111-111111111111'::uuid,
-                     extract(year from current_date)::int,
-                     extract(month from current_date)::int,
-                     'janela_3','todas',current_date) as e) x,
+                     extract(year from v_hoje)::int,
+                     extract(month from v_hoje)::int,
+                     'janela_3','todas',v_hoje) as e) x,
            jsonb_array_elements(e->'items') i
      where i->>'tipo_fatura' is null;
     if v_sem_tipo > 0 then
       v_falhas := v_falhas || format('envelope: %s itens SEM tipo_fatura', v_sem_tipo);
     end if;
+
+    -- `aluno.id` e o que o composto exige (`~ '^[0-9]+$'`). Hash igual com este
+    -- campo nulo seria um verde que nao serve — foi exatamente o estado em que
+    -- o ensaio ficou por uma rodada inteira.
+    declare v_sem_aluno int;
+    begin
+      select count(*) into v_sem_aluno
+        from (select public.sol_faturas_alunos_v1(
+                       '11111111-1111-1111-1111-111111111111'::uuid,
+                       extract(year from v_hoje)::int,
+                       extract(month from v_hoje)::int,
+                       'janela_3','todas',v_hoje) as e) x,
+             jsonb_array_elements(e->'items') i
+       where i#>>'{aluno,id}' is null;
+      if v_sem_aluno > 0 then
+        v_falhas := v_falhas || format('envelope: %s itens SEM aluno.id', v_sem_aluno);
+      end if;
+    end;
   exception when others then
     v_falhas := v_falhas || format('envelope nao construiu: %s', left(SQLERRM, 80));
   end;
 
   ------------------------------------------------------------------ veredito
   if array_length(v_falhas,1) > 0 then
-    raise exception E'CADEIA NAO REPRODUZ PRODUCAO (% de 14 iguais):\n  %',
+    raise exception E'CADEIA NAO REPRODUZ PRODUCAO (% de 16 iguais):\n  %',
       v_ok, array_to_string(v_falhas, E'\n  ');
   end if;
-  raise notice 'CADEIA OK — %/14 funcoes identicas a producao, pipeline completo, envelope com tipo', v_ok;
+  raise notice 'CADEIA OK — %/16 funcoes identicas a producao, pipeline completo, envelope com tipo', v_ok;
 end $manifesto$;

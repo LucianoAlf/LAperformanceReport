@@ -5,25 +5,40 @@
 --
 -- 🔴 POR QUE ISTO NÃO PODE SER MOCK. O teste de runtime que eu chamei de "ponta
 --    a ponta" mocka `resolverMultiFn` E `lancarLoteFn` — prova a fiação em
---    JavaScript e mais nada. O Alfredo recusou o gate por isso, e ele tem um
---    precedente do lado dele: em 01/09 um lote aprovado de R$ 1.722 gravou
---    R$ 432 e a Sol anunciou "nenhum item foi lançado parcialmente", justamente
---    porque a validação tinha sido feita com o `lancarLoteFn` mockado.
+--    JavaScript e mais nada. Precedente: em 01/09 um lote aprovado de R$ 1.722
+--    gravou R$ 432 e a Sol anunciou "nenhum item foi lançado parcialmente",
+--    justamente porque a validação tinha sido feita com o `lancarLoteFn` mockado.
 --
 -- Prova, em ordem:
 --   A. resolver → lista plana → `sol_caixa_validar_multi_aluno_snapshot_v1`
 --      (LEITURA: o mesmo caminho que o "pode" percorre)
---   B. o lote grava N movimentações e a soma fecha
---   C. 🔴 lote com um item a menos no payload NÃO grava NADA
---      (a invariante `SOL_LOTE_INCOMPLETO`, que é o coração da atomicidade)
+--   B. CAMINHO FELIZ REAL: evento + preview + approval V3 válidos, o lote grava
+--      N linhas e a soma fecha
+--   C. 🔴 ATOMICIDADE POR FALHA INJETADA no SEGUNDO insert — não por recusa
+--      antes do laço. Recusa pré-laço não prova rollback nenhum: prova que o
+--      portão funciona, que é outra coisa.
 --
--- ⚠️ B e C ESCREVEM. Rodam dentro de uma transação que termina em ROLLBACK, e o
---    ensaio confere no fim que o banco voltou ao estado anterior — não confia,
---    verifica. Só faz sentido em banco isolado; contra produção é proibido.
+-- ⚠️ B e C ESCREVEM. Tudo dentro de uma transação que termina em ROLLBACK, e o
+--    ensaio confere no fim que o banco voltou — não confia, verifica. Só faz
+--    sentido em banco isolado; contra produção é proibido.
 
 \set ON_ERROR_STOP on
 
 begin;
+
+-- Gatilho EXCLUSIVO de teste: derruba o SEGUNDO insert de movimentação.
+-- É o que transforma "o lote recusou" em "o lote gravou metade e voltou tudo".
+create or replace function pg_temp.ensaio_falha_no_segundo() returns trigger
+language plpgsql as $trg$
+declare v_n int;
+begin
+  v_n := coalesce(current_setting('ensaio.inserts', true), '0')::int + 1;
+  perform set_config('ensaio.inserts', v_n::text, true);
+  if v_n = 2 then
+    raise exception 'ENSAIO_FALHA_INJETADA: derrubando o segundo insert de propósito';
+  end if;
+  return new;
+end $trg$;
 
 do $cadeia$
 declare
@@ -34,46 +49,51 @@ declare
   v_snap    jsonb;
   v_total   numeric;
   v_n       int;
-  v_movs_antes  int;
-  v_movs_depois int;
   v_caixa   uuid;
+  v_evento  uuid;
+  v_preview uuid;
+  v_approval uuid;
   v_payload jsonb;
   v_res     jsonb;
   v_erro    text;
+  v_movs_antes int; v_movs_depois int;
+  v_lotes_antes int; v_itens_antes int;
+  -- 🔴 DATA DE NEGOCIO E BRT. `current_date` no banco e UTC: das 21h BRT a
+  --    meia-noite ele ja e o dia seguinte, e a canonica recusa com
+  --    "p_as_of_date nao pode estar no futuro". Foi exatamente o que este
+  --    ensaio pegou as 21h — a MESMA armadilha que a migration 210000 corrige
+  --    no resolver. Quem passar `current_date` como `data` no payload leva o
+  --    mesmo erro em producao, nessa faixa do dia.
+  v_hoje date := (now() at time zone 'America/Sao_Paulo')::date;
 begin
-  select count(*) into v_movs_antes from public.caixa_movimentacoes;
-
   ------------------------------------------------------- A) cadeia de LEITURA
-  -- dois alunos: um com 2+ faturas (composto) e um com 1
-  -- ⚠️ O VALOR DECLARADO E OBRIGATORIO na fixture: sem ele
-  --    `sol_caixa_resolver_composto_aluno_v1` recusa com `valor_total_invalido`,
-  --    a cascata cai na canonica e o caso N x M — que e o ponto do ensaio —
-  --    nunca acontece. Na 1a execucao deste arquivo foi exatamente isso: 2
-  --    alunos viraram 2 linhas em vez de 3, e o ensaio passou sem provar nada.
+  -- ⚠️ O VALOR DECLARADO É OBRIGATÓRIO na fixture: sem ele a composta recusa
+  --    com `valor_total_invalido`, a cascata cai na canônica e o caso N×M —
+  --    que é o ponto do ensaio — nunca acontece.
   select jsonb_agg(jsonb_build_object('aluno_nome', nome, 'valor', soma)) into v_itens
     from (
       (select a.nome,
               (select sum(coalesce(f.valor_pago, f.valor_original))
                  from public.emusys_faturas f
                 where f.emusys_student_id = a.emusys_student_id::bigint
-                  and f.competencia = date_trunc('month', current_date)::date) as soma
+                  and f.competencia = date_trunc('month', v_hoje)::date) as soma
          from public.alunos a
-        where a.unidade_id = v_unidade
+        where a.unidade_id = v_unidade and a.is_segundo_curso is not true
           and (select count(*) from public.emusys_faturas f
                 where f.emusys_student_id = a.emusys_student_id::bigint
-                  and f.competencia = date_trunc('month', current_date)::date) >= 2
+                  and f.competencia = date_trunc('month', v_hoje)::date) >= 2
         order by a.id limit 1)
       union all
       (select a.nome,
               (select sum(coalesce(f.valor_pago, f.valor_original))
                  from public.emusys_faturas f
                 where f.emusys_student_id = a.emusys_student_id::bigint
-                  and f.competencia = date_trunc('month', current_date)::date) as soma
+                  and f.competencia = date_trunc('month', v_hoje)::date) as soma
          from public.alunos a
-        where a.unidade_id = v_unidade
+        where a.unidade_id = v_unidade and a.is_segundo_curso is not true
           and (select count(*) from public.emusys_faturas f
                 where f.emusys_student_id = a.emusys_student_id::bigint
-                  and f.competencia = date_trunc('month', current_date)::date) = 1
+                  and f.competencia = date_trunc('month', v_hoje)::date) = 1
         order by a.id limit 1)) x;
 
   if v_itens is null or jsonb_array_length(v_itens) < 2 then
@@ -88,8 +108,8 @@ begin
   v_total := (v_r->>'soma_itens')::numeric;
   raise notice 'A) resolver: % alunos declarados -> % linhas planas, R$ %',
     jsonb_array_length(v_itens), v_n, v_total;
-  -- 2 alunos com um deles composto TEM de virar 3+ linhas. Se virar 2, a
-  -- composta nao entrou e o ensaio esta medindo o caso facil.
+
+  -- 2 alunos com um deles composto TEM de virar 3+ linhas.
   if v_n <= jsonb_array_length(v_itens) then
     v_falhas := v_falhas || format(
       'A) %s alunos viraram %s linhas — o caso composto (N x M) nao foi exercitado',
@@ -97,8 +117,7 @@ begin
   end if;
 
   -- é ESTE array que o "pode" revalida
-  v_snap := public.sol_caixa_validar_multi_aluno_snapshot_v1(
-              v_unidade, v_r->'itens', v_total, null);
+  v_snap := public.sol_caixa_validar_multi_aluno_snapshot_v1(v_unidade, v_r->'itens', v_total, null);
   if not coalesce((v_snap->>'ok')::boolean, false) then
     v_falhas := v_falhas || format('A) o snapshot RECUSOU a lista plana do resolver: %s',
       coalesce(v_snap->>'motivo','<nulo>'));
@@ -114,83 +133,162 @@ begin
     end if;
   end if;
 
-  ------------------------------------------------------- B) o lote GRAVA certo
+  --------------------------------------------- trilho V3 (o que o "pode" usa)
+  -- ⚠️ O ATOR PRECISA ESTAR NA MATRIZ. `sol_caixa_autorizar_payload_v1` so
+  --    autoriza por grupo financeiro oficial OU por linha explicita em
+  --    `sol_caixa_autorizados` — nao existe "qualquer um que mandou mensagem".
+  --    Sem isso o lote recusa com `ator_nao_autorizado_v3` ANTES do laco, e a
+  --    atomicidade fica sem prova (foi o que aconteceu duas rodadas atras).
+  insert into public.sol_caixa_autorizados (unidade_id, numero, nome, papel, operacoes, ativo)
+  values (v_unidade, '5521999999999', 'Ensaio', 'adm', array['todas'], true)
+  on conflict do nothing;
+
   insert into public.caixas_diarios (unidade_id, data_caixa, status)
-  values (v_unidade, current_date, 'aberto')
-  returning id into v_caixa;
+  values (v_unidade, v_hoje, 'aberto') returning id into v_caixa;
+
+  -- ⚠️ O evento V3 guarda HASHES, nao o chat em claro: `chat_id_hash`,
+  --    `sender_id_hash`. E o desenho certo — o ledger de aprovacao nao precisa
+  --    saber o telefone de ninguem para provar quem autorizou.
+  insert into public.sol_caixa_shadow_eventos_v1
+    (event_id_hash, chat_id_hash, sender_id_hash, unidade_id, source, mode, status)
+  --    ⚠️ `chat_id_hash` e md5 do jid EXATO: a RPC compara
+  --       `v_e.chat_id_hash <> md5(v_chat)`. Hash de fantasia passa na insercao
+  --       e reprova no "pode".
+  values ('EVT-'||gen_random_uuid()::text, md5('ensaio@g.us'), 'ATOR-HASH-ENSAIO',
+          v_unidade, 'ensaio', 'shadow', 'ok')
+  returning id into v_evento;
+
+  -- ⚠️ `pending.itens` tem de ser IDENTICO ao payload: a RPC compara os dois com
+  --    `is distinct from`. É a trava que impede aprovar um card e gravar outro.
+  insert into public.sol_caixa_shadow_previews_v1
+    (evento_id, preview_hash, unidade_id, operacao, categoria, valor_centavos, forma, preview_json)
+  values (v_evento, 'PRV-'||gen_random_uuid()::text, v_unidade, 'entrada', 'parcela',
+          round(v_total*100)::int, 'pix',
+          jsonb_build_object('pending', jsonb_build_object(
+            'tipoOperacao','lancar_recebimento_lote', 'itens', v_r->'itens')))
+  returning id into v_preview;
+
+  insert into public.sol_caixa_shadow_approvals_v1
+    (preview_id, decision, actor_id_hash, approval_event_hash)
+  values (v_preview, 'approved', 'ATOR-HASH-ENSAIO', 'APV-'||gen_random_uuid()::text)
+  returning id into v_approval;
 
   v_payload := jsonb_build_object(
     'unidade_id', v_unidade,
-    'data_caixa', current_date,
+    'data', v_hoje,
     'itens', v_r->'itens',
-    -- a RPC le `valor`; `valor_total` fica junto porque o bridge manda os dois
     'valor', v_total,
-    'valor_total', v_total,
-    'forma_pagamento', 'pix',
+    'forma', 'pix',
     'categoria', 'parcela',
     'chat_id', 'ensaio@g.us',
+    'grupo_jid', 'ensaio@g.us',
     'origem_message_id', 'ENSAIO1',
     'preview_message_id', 'ENSAIOP1',
     'idempotency_key', 'ensaio:' || gen_random_uuid()::text,
     'autorizado_por', 'Ensaio',
-    'ator_numero', '5521999999999');
+    'ator_numero', '5521999999999',
+    'ator_papel', 'adm',
+    'v3_preview_id', v_preview,
+    'v3_approval_id', v_approval,
+    'v3_actor_id_hash', 'ATOR-HASH-ENSAIO',
+    'v3_preview_hash', (select preview_hash from public.sol_caixa_shadow_previews_v1 where id = v_preview),
+    'v3_approval_event_hash', (select approval_event_hash from public.sol_caixa_shadow_approvals_v1 where id = v_approval));
 
+  ------------------------------------------------------- B) caminho feliz REAL
+  select count(*) into v_movs_antes from public.caixa_movimentacoes;
   begin
     v_res := public.sol_caixa_lancar_recebimento_lote_v1(v_payload);
   exception when others then
     v_res := jsonb_build_object('ok', false, 'motivo', 'excecao: ' || SQLERRM);
   end;
-
   select count(*) into v_movs_depois from public.caixa_movimentacoes;
 
-  if coalesce((v_res->>'ok')::boolean, false) then
+  if not coalesce((v_res->>'ok')::boolean, false) then
+    v_falhas := v_falhas || format(
+      'B) o lote nao chegou ao laco: recusado com "%s". A atomicidade (C) so vale se o caminho feliz gravar antes.',
+      coalesce(v_res->>'motivo','<nulo>'));
+    if v_movs_depois <> v_movs_antes then
+      v_falhas := v_falhas || format('B) lote RECUSADO mas gravou %s movimentacoes',
+        v_movs_depois - v_movs_antes);
+    end if;
+  else
     if v_movs_depois - v_movs_antes <> v_n then
       v_falhas := v_falhas || format('B) gravou %s movimentacoes para %s itens',
         v_movs_depois - v_movs_antes, v_n);
     end if;
     if abs((select coalesce(sum(valor),0) from public.caixa_movimentacoes
              where caixa_diario_id = v_caixa) - v_total) > 0.01 then
-      v_falhas := v_falhas || 'B) a soma gravada no caixa nao bate com o total aprovado';
+      v_falhas := v_falhas || 'B) a soma gravada no caixa nao bate com o total aprovado'::text;
     end if;
-    raise notice 'B) lote gravou % movimentacoes, R$ %', v_movs_depois - v_movs_antes, v_total;
-  else
-    -- Recusa por portão de autorização/V3 é ESPERADA num banco sem o trilho do
-    -- WhatsApp montado. O que não pode acontecer é gravar parcial — e é o C que
-    -- prova isso. Registro o motivo para o leitor saber onde parou.
-    v_falhas := v_falhas || format(
-      'B) o lote nao chegou ao laco: recusado com "%s". A atomicidade (C) so vale '
-      'se o caminho feliz gravar antes — senao C passa sem provar nada.',
-      coalesce(v_res->>'motivo','<nulo>'));
-    if v_movs_depois <> v_movs_antes then
-      v_falhas := v_falhas || format(
-        'B) lote RECUSADO mas gravou %s movimentacoes — escrita fora do caminho aprovado',
-        v_movs_depois - v_movs_antes);
-    end if;
+    raise notice 'B) caminho feliz: % movimentacoes, R$ %', v_movs_depois - v_movs_antes, v_total;
   end if;
 
-  --------------------------------- C) payload adulterado NAO grava nada (raiz)
-  -- Tiro UM item do payload mantendo o total: o snapshot vai devolver menos
-  -- itens do que o payload declara e a invariante pos-loop tem de derrubar tudo.
-  v_movs_antes := v_movs_depois;
-  v_payload := jsonb_set(v_payload, '{itens}',
-                 (v_r->'itens') - (v_n - 1));            -- remove o ultimo item
-  v_payload := jsonb_set(v_payload, '{idempotency_key}',
-                 to_jsonb('ensaio:' || gen_random_uuid()::text));
+  ------------------------------- C) ATOMICIDADE por falha injetada no 2º insert
+  -- Novo par preview/approval e nova chave: a idempotencia devolveria o lote
+  -- anterior e o teste passaria sem executar o laco.
+  select count(*), (select count(*) from public.sol_caixa_lotes_v1),
+         (select count(*) from public.sol_caixa_lote_itens_v1)
+    into v_movs_antes, v_lotes_antes, v_itens_antes
+    from public.caixa_movimentacoes;
+
+  insert into public.sol_caixa_shadow_previews_v1
+    (evento_id, preview_hash, unidade_id, operacao, categoria, valor_centavos, forma, preview_json)
+  values (v_evento, 'PRV-'||gen_random_uuid()::text, v_unidade, 'entrada', 'parcela',
+          round(v_total*100)::int, 'pix',
+          jsonb_build_object('pending', jsonb_build_object(
+            'tipoOperacao','lancar_recebimento_lote', 'itens', v_r->'itens')))
+  returning id into v_preview;
+  insert into public.sol_caixa_shadow_approvals_v1
+    (preview_id, decision, actor_id_hash, approval_event_hash)
+  values (v_preview, 'approved', 'ATOR-HASH-ENSAIO', 'APV-'||gen_random_uuid()::text)
+  returning id into v_approval;
+
+  v_payload := v_payload
+    || jsonb_build_object('idempotency_key', 'ensaio:' || gen_random_uuid()::text)
+    || jsonb_build_object('v3_preview_id', v_preview, 'v3_approval_id', v_approval,
+         'v3_preview_hash', (select preview_hash from public.sol_caixa_shadow_previews_v1 where id = v_preview),
+         'v3_approval_event_hash', (select approval_event_hash from public.sol_caixa_shadow_approvals_v1 where id = v_approval));
+
+  perform set_config('ensaio.inserts', '0', true);
+  create trigger ensaio_falha_no_segundo
+    before insert on public.caixa_movimentacoes
+    for each row execute function pg_temp.ensaio_falha_no_segundo();
+
   v_erro := null;
   begin
     v_res := public.sol_caixa_lancar_recebimento_lote_v1(v_payload);
   exception when others then
-    v_erro := SQLERRM;
+    v_erro := SQLERRM;   -- a subtransacao do bloco desfaz tudo o que a RPC fez
   end;
 
-  select count(*) into v_movs_depois from public.caixa_movimentacoes;
-  if v_movs_depois <> v_movs_antes then
+  drop trigger ensaio_falha_no_segundo on public.caixa_movimentacoes;
+
+  if v_erro is null then
     v_falhas := v_falhas || format(
-      'C) 🔴 LOTE PARCIAL: payload adulterado gravou %s movimentacoes (deveria gravar ZERO)',
-      v_movs_depois - v_movs_antes);
-  else
-    raise notice 'C) payload adulterado nao gravou nada%',
-      case when v_erro is null then '' else ' (erro: ' || left(v_erro, 60) || ')' end;
+      'C) a falha injetada NAO derrubou o lote. Resposta da RPC: ok=%s motivo=%s — se recusou, o laco nem rodou e a atomicidade continua sem prova',
+      coalesce(v_res->>'ok','<nulo>'), coalesce(v_res->>'motivo','<nenhum>'));
+  elsif v_erro not like '%ENSAIO_FALHA_INJETADA%' then
+    v_falhas := v_falhas || format('C) caiu por outro motivo: %s', left(v_erro, 90));
+  end if;
+
+  -- zero delta em TUDO: movimentos, lote, itens do lote
+  if (select count(*) from public.caixa_movimentacoes) <> v_movs_antes then
+    v_falhas := v_falhas || format('C) 🔴 LOTE PARCIAL: sobraram %s movimentacoes',
+      (select count(*) from public.caixa_movimentacoes) - v_movs_antes);
+  end if;
+  if (select count(*) from public.sol_caixa_lotes_v1) <> v_lotes_antes then
+    v_falhas := v_falhas || 'C) 🔴 sobrou cabecalho de lote sem itens'::text;
+  end if;
+  if (select count(*) from public.sol_caixa_lote_itens_v1) <> v_itens_antes then
+    v_falhas := v_falhas || 'C) 🔴 sobraram itens de lote'::text;
+  end if;
+  -- e a aprovacao NAO pode ter sido consumida
+  if (select decision from public.sol_caixa_shadow_approvals_v1 where id = v_approval) <> 'approved' then
+    v_falhas := v_falhas || 'C) 🔴 a aprovacao foi consumida por um lote que nao existiu'::text;
+  end if;
+
+  if v_erro is not null and array_length(v_falhas,1) is null then
+    raise notice 'C) falha injetada no 2o insert: zero delta em movimentos, lote, itens e aprovacao';
   end if;
 
   ------------------------------------------------------------------ veredito
@@ -209,6 +307,10 @@ begin
   select count(*) into v_n from public.caixa_movimentacoes;
   if v_n <> 0 then
     raise exception 'ROLLBACK NAO LIMPOU: sobraram % movimentacoes de caixa', v_n;
+  end if;
+  select count(*) into v_n from public.sol_caixa_lotes_v1;
+  if v_n <> 0 then
+    raise exception 'ROLLBACK NAO LIMPOU: sobraram % lotes', v_n;
   end if;
   select count(*) into v_n from public.caixas_diarios;
   if v_n <> 0 then

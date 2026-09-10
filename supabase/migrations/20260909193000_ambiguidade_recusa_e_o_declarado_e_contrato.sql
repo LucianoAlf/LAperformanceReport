@@ -33,6 +33,15 @@
 --    repetida dentro dos três ramos. Assim ramo novo nasce coberto — repetir a
 --    condição em cada ramo é a causa-raiz das duplicatas de renovação.
 --
+-- 🔴 E ELA COMPARA CONTRA A FATURA, NUNCA CONTRA O CAMPO `valor` DO ITEM. Os
+--    ramos fazem `coalesce(valor_pago, valor_da_parcela, v_valor)`: quando não
+--    conseguem ler o valor da fatura, ECOAM o valor declarado. Comparar o
+--    declarado com esse eco é comparar o número com ele mesmo — a conferência
+--    passava sempre. Medido no ensaio isolado: pedindo R$ 1.277,77 para quem
+--    tem uma fatura de R$ 500,00, a função devolvia `ok:true`. Agora o valor
+--    resolvido é somado das FATURAS devolvidas; se não há fatura, a soma é zero
+--    e a divergência aparece.
+--
 -- ⚠️ Não muda o que a função SABE fazer: composta, canônica e casador continuam
 --    intactos e na mesma ordem. Muda quando ela tem o direito de dizer "sim".
 
@@ -76,12 +85,22 @@ declare
       select case
         when coalesce((x->>''ok'')::boolean, false)
              and nullif(p_itens->(((x->>''ordem'')::int) - 1)->>''valor'', '''') is not null
-             and abs(coalesce((x->>''valor'')::numeric, 0)
+             and abs(coalesce((select sum(coalesce(
+                     nullif(f->>''valor'','''')::numeric,
+                     nullif(coalesce(f->''fatura'', f)->>''valor_pago'','''')::numeric,
+                     nullif(coalesce(f->''fatura'', f)->>''valor_hoje'','''')::numeric,
+                     nullif(coalesce(f->''fatura'', f)->>''valor_da_parcela'','''')::numeric, 0))
+                   from jsonb_array_elements(coalesce(x->''faturas'', ''[]''::jsonb)) f), 0)
                      - (p_itens->(((x->>''ordem'')::int) - 1)->>''valor'')::numeric) > 0.01
         then x || jsonb_build_object(
                ''ok'', false, ''motivo'', ''valor_declarado_nao_bate'',
                ''valor_declarado'', (p_itens->(((x->>''ordem'')::int) - 1)->>''valor'')::numeric,
-               ''valor_encontrado'', (x->>''valor'')::numeric)
+               ''valor_encontrado'', coalesce((select sum(coalesce(
+                     nullif(f->>''valor'','''')::numeric,
+                     nullif(coalesce(f->''fatura'', f)->>''valor_pago'','''')::numeric,
+                     nullif(coalesce(f->''fatura'', f)->>''valor_hoje'','''')::numeric,
+                     nullif(coalesce(f->''fatura'', f)->>''valor_da_parcela'','''')::numeric, 0))
+                   from jsonb_array_elements(coalesce(x->''faturas'', ''[]''::jsonb)) f), 0))
         else x end as y
       from jsonb_array_elements(v_resolvidos) x) z;
 
@@ -132,7 +151,7 @@ alter function public.sol_caixa_resolver_pagamento_v1(uuid, jsonb, numeric, date
   set statement_timeout = '60s';
 
 revoke execute on function public.sol_caixa_resolver_pagamento_v1(uuid, jsonb, numeric, date)
-  from public, anon;
+  from public, anon, authenticated;
 grant execute on function public.sol_caixa_resolver_pagamento_v1(uuid, jsonb, numeric, date)
   to service_role, sol_acesso_restrito;
 

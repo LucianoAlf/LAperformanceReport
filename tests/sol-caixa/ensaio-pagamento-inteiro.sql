@@ -75,6 +75,11 @@ begin
            where coalesce(i->>'tipo_fatura','') = 'parcela'
              and coalesce(i->>'status','') = 'paga'
              and nullif(i->>'emusys_student_id','') is not null
+             -- ⚠️ SO A COMPETENCIA CORRENTE. O envelope e `janela_3`: contar a
+             --    janela inteira da 3, 6 ou 12 faturas por aluno e "exatamente
+             --    1" nunca acontece — a fixture do caso simples ficava ausente
+             --    e o ensaio abortava sem testar nada.
+             and (i->>'competencia')::date = date_trunc('month', v_as_of)::date
            group by 1) x
    where x.n >= 2 and x.soma > 0
    order by x.n desc, x.soma desc
@@ -90,6 +95,11 @@ begin
            where coalesce(i->>'tipo_fatura','') = 'parcela'
              and coalesce(i->>'status','') = 'paga'
              and nullif(i->>'emusys_student_id','') is not null
+             -- ⚠️ SO A COMPETENCIA CORRENTE. O envelope e `janela_3`: contar a
+             --    janela inteira da 3, 6 ou 12 faturas por aluno e "exatamente
+             --    1" nunca acontece — a fixture do caso simples ficava ausente
+             --    e o ensaio abortava sem testar nada.
+             and (i->>'competencia')::date = date_trunc('month', v_as_of)::date
            group by 1) x
    where x.n = 1 and x.soma > 0
    limit 1;

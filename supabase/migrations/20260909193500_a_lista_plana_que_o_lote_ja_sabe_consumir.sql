@@ -194,7 +194,7 @@ begin
 end $function$;
 
 revoke execute on function public.sol_caixa_resolver_pagamento_itens_v1(uuid, jsonb, numeric, date)
-  from public, anon;
+  from public, anon, authenticated;
 grant execute on function public.sol_caixa_resolver_pagamento_itens_v1(uuid, jsonb, numeric, date)
   to service_role, sol_acesso_restrito;
 

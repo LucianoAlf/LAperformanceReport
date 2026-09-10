@@ -36,6 +36,12 @@ scp -q /tmp/ensaio-migs.tgz "$AQUI"/ensaio-*.sql "$HOST:$REMOTO/"
 #    14 funções estavam diferentes quando 8 eram idênticas.
 ssh -n "$HOST" "cd $REMOTO && sed -i 's/\r\$//' ensaio-*.sql
   rm -rf migrations && tar xzf ensaio-migs.tgz
+  # ⚠️ O CRLF TEM DE SAIR DAS MIGRATIONS TAMBEM, nao so dos ensaios. Migration
+  #    que patcha funcao com \`pg_get_functiondef\` + \`replace\` compara ancoras
+  #    MULTILINHA: com \r no meio, a ancora nao casa e a migration aborta pela
+  #    propria guarda. Foi o que derrubou a 20260909193000 no primeiro replay
+  #    limpo — defeito do meu transporte (tar de arquivos Windows), nao do repo.
+  sed -i 's/\$//' migrations/*.sql
   for f in \$(ls migrations/*.sql | sort); do
     echo \"\\echo === \$(basename \$f)\"; cat \"\$f\"; echo
   done > todas.sql
@@ -55,5 +61,13 @@ echo "== 6/6 seed sintético"
 ssh -n "$HOST" "docker exec $NOME psql -U postgres -d ensaio -q -v ON_ERROR_STOP=1 -f /tmp/ensaio-seed.sql 2>&1 | grep -E 'NOTICE:  seed|ERROR' | head -3"
 
 echo
-echo "== verificação da cadeia (14/14 ou falha)"
+echo "== verificação da cadeia (16/16 ou falha)"
 ssh -n "$HOST" "docker exec $NOME psql -U postgres -d ensaio -v ON_ERROR_STOP=1 -f /tmp/ensaio-verificar-cadeia.sql 2>&1 | tail -20"
+
+echo
+echo "== ensaio do pagamento inteiro (fail-stop)"
+ssh -n "$HOST" "docker exec $NOME psql -U postgres -d ensaio -v ON_ERROR_STOP=1 -f /tmp/ensaio-pagamento-inteiro.sql 2>&1 | grep -viE '^DO$|Timing' | tail -12"
+
+echo
+echo "== cadeia real + atomicidade por falha injetada (escreve e faz ROLLBACK)"
+ssh -n "$HOST" "docker exec $NOME psql -U postgres -d ensaio -v ON_ERROR_STOP=1 -f /tmp/ensaio-cadeia-e-atomicidade.sql 2>&1 | grep -viE '^BEGIN|^DO$|^ROLLBACK|^CREATE|^DROP|^INSERT|audit_log' | tail -12"
