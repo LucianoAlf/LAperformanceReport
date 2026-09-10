@@ -9,6 +9,7 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { AutocompleteAluno, type Aluno } from '@/components/ui/AutocompleteAluno';
 import { AlertTriangle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { derivarSaidaAvisoPrevio, paraISO } from '@/lib/avisoPrevioSaida';
 import type { MovimentacaoAdmin } from './AdministrativoPage';
 
 interface MotivoSaida {
@@ -32,6 +33,9 @@ export function ModalAvisoPrevio({ open, onOpenChange, onSave, editingItem, prof
   const [formData, setFormData] = useState({
     data: new Date(),
     mes_saida: '',
+    // Dia exato em que o aluno para. É o campo que a aba Vencidos e a lista da
+    // Sol leem; o mês de saída só vale quando ele está vazio.
+    data_prevista_saida: '',
     aluno_nome: '',
     aluno_id: null as number | null,
     valor_parcela: '',
@@ -71,6 +75,7 @@ export function ModalAvisoPrevio({ open, onOpenChange, onSave, editingItem, prof
         setFormData({
           data: new Date(editingItem.data),
           mes_saida: editingItem.mes_saida || '',
+          data_prevista_saida: editingItem.data_prevista_saida?.slice(0, 10) || '',
           aluno_nome: editingItem.aluno_nome,
           valor_parcela: editingItem.valor_parcela_novo?.toString() || editingItem.valor_parcela_anterior?.toString() || '',
           professor_id: editingItem.professor_id?.toString() || '',
@@ -84,6 +89,9 @@ export function ModalAvisoPrevio({ open, onOpenChange, onSave, editingItem, prof
         setFormData({
           data: dataAvisoPadrao,
           mes_saida: `${proximoMes.getFullYear()}-${String(proximoMes.getMonth() + 1).padStart(2, '0')}-01`,
+          // Vazia no lançamento manual: quem registra pelo LA Report costuma
+          // saber só o mês. A tela marca esse caso com "~" de data estimada.
+          data_prevista_saida: '',
           aluno_nome: '',
           aluno_id: null,
           valor_parcela: '',
@@ -100,16 +108,25 @@ export function ModalAvisoPrevio({ open, onOpenChange, onSave, editingItem, prof
     if (!formData.aluno_nome.trim() || !formData.motivo_saida_id) return;
 
     const motivoSelecionado = motivosSaida.find(m => m.id.toString() === formData.motivo_saida_id);
-    
+
+    // Fonte única da derivação (src/lib/avisoPrevioSaida.ts): com data
+    // preenchida ela manda e o mês vem dela. Reimplementar aqui é o que fez
+    // este formulário divergir do que a tela lê.
+    const saida = derivarSaidaAvisoPrevio(
+      formData.data_prevista_saida || null,
+      formData.mes_saida || null,
+    );
+
     setLoading(true);
     const success = await onSave({
       tipo: 'aviso_previo',
-      data: formData.data.toISOString().split('T')[0],
+      data: paraISO(formData.data),
       aluno_nome: formData.aluno_nome.trim(),
       aluno_id: formData.aluno_id,
       valor_parcela_novo: parseFloat(formData.valor_parcela) || null,
       professor_id: formData.professor_id ? parseInt(formData.professor_id) : null,
-      mes_saida: formData.mes_saida || null,
+      mes_saida: saida.mes_saida,
+      data_prevista_saida: saida.data_prevista_saida,
       motivo: motivoSelecionado?.nome || '',
       motivo_saida_id: parseInt(formData.motivo_saida_id),
       observacoes: formData.observacoes.trim() || null,
@@ -134,7 +151,7 @@ export function ModalAvisoPrevio({ open, onOpenChange, onSave, editingItem, prof
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <Label className="text-slate-300">Data do Aviso</Label>
               <DatePicker
@@ -148,10 +165,29 @@ export function ModalAvisoPrevio({ open, onOpenChange, onSave, editingItem, prof
               />
             </div>
             <div>
+              <Label className="text-slate-300">Data prevista de saída</Label>
+              <DatePicker
+                date={formData.data_prevista_saida ? new Date(`${formData.data_prevista_saida}T00:00:00`) : undefined}
+                placeholder="Sem dia exato"
+                onDateChange={(date) => {
+                  const iso = date ? paraISO(date) : '';
+                  const derivado = derivarSaidaAvisoPrevio(iso || null, formData.mes_saida || null);
+                  setFormData({
+                    ...formData,
+                    data_prevista_saida: iso,
+                    // O mês acompanha na hora: se ficasse para trás, a tela
+                    // seguiria mostrando a data velha (caso André, 03/09).
+                    mes_saida: derivado.mes_saida || formData.mes_saida,
+                  });
+                }}
+              />
+            </div>
+            <div>
               <Label className="text-slate-300">Mês de Saída</Label>
               <Select
                 value={formData.mes_saida}
                 onValueChange={(value) => setFormData({ ...formData, mes_saida: value })}
+                disabled={Boolean(formData.data_prevista_saida)}
               >
                 <SelectTrigger className="bg-slate-800 border-slate-700">
                   <SelectValue placeholder="Selecione..." />
@@ -166,6 +202,12 @@ export function ModalAvisoPrevio({ open, onOpenChange, onSave, editingItem, prof
               </Select>
             </div>
           </div>
+          {/* Sem esta frase o campo desabilitado lê como bug. */}
+          <p className="-mt-2 text-xs text-slate-400">
+            {formData.data_prevista_saida
+              ? 'O vencimento do aviso é a data prevista de saída; o mês vem dela.'
+              : 'Sem data prevista, o vencimento vira o fim do mês anterior ao de saída (marcado com “~” na lista).'}
+          </p>
 
           <div>
             <Label className="text-slate-300">Nome do Aluno *</Label>

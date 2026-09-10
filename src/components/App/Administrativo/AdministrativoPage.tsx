@@ -144,6 +144,10 @@ export interface MovimentacaoAdmin {
   cursos?: { nome?: string | null; is_projeto_banda?: boolean | null } | null;
   motivo?: string | null;
   mes_saida?: string | null;
+  /** Dia exato da saída. Tem precedência sobre `mes_saida` em toda leitura:
+   *  a aba Vencidos e a lista da Sol usam `coalesce(data_prevista_saida, mes_saida - 1)`. */
+  data_prevista_saida?: string | null;
+  motivo_saida_id?: number | null;
   tipo_evasao?: string | null;
   tempo_permanencia_meses?: number | null;
   valor_parcela_evasao?: number | null;
@@ -264,6 +268,8 @@ export function AdministrativoPage() {
 
   // Estado
   const [loading, setLoading] = useState(true);
+  /** Incrementa a cada `loadData`. Só as abas com consulta própria usam. */
+  const [versaoDados, setVersaoDados] = useState(0);
   const [activeTab, setActiveTab] = useState<TabId>('renovacoes');
   const [mainTab, setMainTab] = useState<'lancamentos' | 'contratos' | 'fideliza' | 'lojinha' | 'farmer' | 'caixa_financeiro' | 'caixa_entrada'>('lancamentos');
 
@@ -848,6 +854,10 @@ export function AdministrativoPage() {
       console.error('Erro ao carregar dados:', error);
     } finally {
       setLoading(false);
+      // A aba "Vencidos" tem consulta própria (fora do período da tela), então
+      // não acompanha este array. Sem este sinal, corrigir a data de saída
+      // deixaria a linha corrigida ainda listada como vencida.
+      setVersaoDados((v) => v + 1);
     }
   }
 
@@ -1973,6 +1983,7 @@ export function AdministrativoPage() {
               startDate={startDate}
               endDate={endDate}
               unidadeId={unidade === 'todos' ? null : unidade}
+              versaoDados={versaoDados}
             />
           )}
           {activeTab === 'cancelamentos' && (
