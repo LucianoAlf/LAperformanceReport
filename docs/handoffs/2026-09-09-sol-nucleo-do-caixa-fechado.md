@@ -168,3 +168,66 @@ errado invisível. É a troca certa, mas é uma troca, e quem decide é o Alf.
 refactor do envelope, e a **credencial exposta em argumento de processo** que
 você reencontrou — essa merece frente curta e própria, sem se misturar com
 dinheiro.
+
+---
+
+## Adendo (10/09): por que o `ensaio-sql` ficava vermelho no Actions e verde na la-hq
+
+O job novo reprovou em três SHAs seguidos. Não era o ensaio: era a **diferença de
+um byte por linha** entre os dois ambientes, e três armadilhas de escape minhas
+pelo caminho.
+
+**A causa, provada e não suposta.** Os blobs das migrations carregam **4.673
+bytes CR** — medidos com `git cat-file`, que não aplica `autocrlf` —
+concentrados em cinco migrations de agosto/2026 (1772 + 1246 + 830 + 716 + 108)
+mais um byte solto na `20260909210000`. Em Linux isso sai do checkout como está e
+chega ao `psql`. A la-hq removia o CR desde sempre, dentro do preparador remoto;
+o CI, não.
+
+A prova é um A/B com **uma** variável: mesmos arquivos (os blobs LF exatos do
+checkout do CI), mesma imagem `postgres:17`, mesmo bootstrap e mesmo schema base.
+
+| | erros no replay | cadeia |
+|---|---|---|
+| **sem** `tr -d '\015'` | **2.553** | 3 de 16 |
+| **com** `tr -d '\015'` | **2.544** | **16 de 16** |
+
+São exatamente os dois números que o Actions e a la-hq vinham dando. Os 9 de
+diferença são um `syntax error at or near "\`"` mais oito consequências dele,
+**nas mesmas nove linhas** do log do Actions (343569, 343577, 343588, 343601,
+343603, 343606, 343608, 343620, 343623). Mecanismo: migration que patcha função
+com `pg_get_functiondef` + `replace` compara **âncora multilinha**; com CR no
+meio a âncora não casa e o bloco aborta — os dois `_env_v1` não nascem e as
+cascas que os chamam caem atrás.
+
+**O que mudou.** A concatenação virou um script único, `ensaio-montar-todas.sh`,
+usado pelo CI e pela la-hq, com a normalização dentro. Era lógica **duplicada**,
+e a cópia do YAML tinha `printf '\echo ...'` com uma barra só — o `printf` do
+bash lê `\e` como ESCAPE, cada marcador virou `ESC+"cho"` e grudou na **primeira
+instrução de cada migration**. Pior: sem o marcador `=== arquivo`, a trava do
+replay ficou **cega** e respondeu "nenhuma migration falhou" com 13 das 16
+funções fora do banco — um falso-verde dentro da trava que existe para matar
+falso-verde. O script agora confere os marcadores contra a contagem de arquivos
+e falha alto.
+
+Também entrou `tests/sol-caixa/** text eol=lf` no `.gitattributes`: depois de um
+merge o checkout no Windows gravou os scripts com CRLF, o tar levou o CR e o bash
+da la-hq respondeu `set: pipefail\r: invalid option name`. É a mesma regra que
+`vps/**` já tinha, pelo mesmo motivo.
+
+**E a branch estava atrás da `main`.** O CI de PR testa o **merge**: ele replayava
+2.141 migrations e o ensaio local 2.131. Comparar vermelho remoto com verde local
+nessas condições não prova nada. Depois do merge os dois leem o mesmo conjunto e
+dão o mesmo número.
+
+⚠️ **Três armadilhas de escape na mesma frente, e a terceira foi a cara.**
+`printf '\echo'` interpretou o `\e`; `grep -c '^\echo === '` devolveu ZERO no
+arquivo certo (conforme o grep, `\` não vira barra literal — virou `[\]`); e o
+`\1` do `sed` sumiu duas vezes, deixando `tr -d ''` e `sed 's|...||'` —
+sintaticamente válidos, semanticamente vazios. As duas primeiras quebravam alto.
+A terceira, `grep -c $'\r'`, **devolveu um número plausível**: o grep recebeu o
+padrão `\r` e casou a letra "r", então "linhas com CR" era na verdade "linhas que
+contêm a letra r". Foi por causa dela que eu declarei que não havia CRLF nenhum e
+fui perseguir a causa errada — e depois tive de me retratar da retratação.
+**Onde dá, usar ferramenta que não precisa de barra** (`awk` no lugar de `sed`,
+`[\]` no lugar de `\`), e conferir o comando, não o comentário.

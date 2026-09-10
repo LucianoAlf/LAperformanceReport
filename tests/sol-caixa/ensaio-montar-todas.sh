@@ -23,10 +23,21 @@ SAIDA="${2:?arquivo de saida}"
 : > "$SAIDA"
 for f in $(ls "$DIR"/*.sql | sort); do
   printf '%s\n' "\echo === $(basename "$f")" >> "$SAIDA"
-  # ⚠️ O tar sai de uma maquina Windows, e ancora multilinha nao casa com CR no
-  #    meio: migration que patcha funcao com `pg_get_functiondef` + `replace`
-  #    aborta pela propria guarda e a regra financeira fica FORA do banco.
-  #    Vinha do preparador da la-hq; mora aqui para os dois herdarem igual.
+  # 🔴 O `tr -d` E O QUE FAZ CI E la-hq DAREM O MESMO RESULTADO. Medido sem
+  #    filtro (`git cat-file`, que nao aplica autocrlf): os blobs das migrations
+  #    carregam 4.673 bytes CR, concentrados em CINCO migrations de agosto/2026
+  #    (1772+1246+830+716+108) mais um byte solto na 20260909210000. Em Linux
+  #    isso sai do checkout como esta e chega ao psql.
+  # ⚠️ PROVA, nao suposicao: mesmo arquivo, mesma imagem postgres:17, unica
+  #    variavel trocada — replay SEM `tr` da 2.553 erros, COM `tr` da 2.544.
+  #    Sao exatamente os dois numeros que o Actions e a la-hq vinham dando, e a
+  #    diferenca de 9 e o `syntax error` mais as oito consequencias dele: 13 das
+  #    16 funcoes da cadeia ficavam fora do banco, com o CI vermelho e a la-hq
+  #    verde lendo o MESMO conteudo.
+  # ⚠️ Migration que patcha funcao com `pg_get_functiondef` + `replace` compara
+  #    ancora MULTILINHA: um CR no meio faz a ancora nao casar e a guarda
+  #    abortar. Por isso a normalizacao mora aqui, no unico lugar por onde os
+  #    dois chamadores passam.
   tr -d '\015' < "$f" >> "$SAIDA"
   echo >> "$SAIDA"
 done
