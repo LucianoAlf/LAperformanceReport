@@ -113,13 +113,18 @@ jobs:
       - name: schema base
         run: psql -q -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-schema-base.sql
 
+      # 🔴 A CONCATENAÇÃO É DO SCRIPT COMPARTILHADO, NÃO DAQUI. Esta lógica já
+      #    existia no preparador da la-hq e foi reescrita à mão neste YAML com
+      #    `printf '\echo ...'` — UMA barra, que o printf do bash lê como
+      #    ESCAPE. Cada migration perdeu a PRIMEIRA instrução (o ESC grudou
+      #    nela) e a trava do passo seguinte ficou CEGA, sem marcador para
+      #    atribuir erro: respondeu "nenhuma" com 13 das 16 funções fora do
+      #    banco. Duplicar a lógica foi o defeito; o script confere os
+      #    marcadores e falha alto se faltar um.
       - name: replay ÚNICO das migrations
         run: |
           set -euo pipefail
-          for f in $(ls supabase/migrations/*.sql | sort); do
-            printf '\echo === %s\n' "$(basename "$f")"
-            cat "$f"; echo
-          done > /tmp/todas.sql
+          bash tests/sol-caixa/ensaio-montar-todas.sh supabase/migrations /tmp/todas.sql
           psql -f /tmp/todas.sql > /tmp/replay.log 2>&1 || true
           echo "erros no replay: $(grep -c ': ERROR:' /tmp/replay.log || true)"
 

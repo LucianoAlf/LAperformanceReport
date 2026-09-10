@@ -32,7 +32,7 @@ until ssh -n "$HOST" "docker exec $NOME pg_isready -U postgres" >/dev/null 2>&1;
 
 echo "== 2/7 arquivos do ensaio + migrations"
 tar czf /tmp/ensaio-migs.tgz -C "$RAIZ/supabase" migrations
-scp -q /tmp/ensaio-migs.tgz "$AQUI"/ensaio-*.sql "$AQUI"/ensaio-preparar-remoto.sh "$HOST:$REMOTO/"
+scp -q /tmp/ensaio-migs.tgz "$AQUI"/ensaio-*.sql "$AQUI"/ensaio-preparar-remoto.sh "$AQUI"/ensaio-montar-todas.sh "$HOST:$REMOTO/"
 ssh -n "$HOST" "bash $REMOTO/ensaio-preparar-remoto.sh $NOME"
 
 echo "== 3/7 papéis, extensões e stubs"

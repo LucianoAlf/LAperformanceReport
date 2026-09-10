@@ -24,14 +24,10 @@ for f in ensaio-*.sql migrations/*.sql; do
   tr -d '\015' < "$f" > "$f.tmp" && mv "$f.tmp" "$f"
 done
 
-# Um arquivo só, em ordem determinística, com marcador por migration para o
-# log dizer QUAL falhou.
-: > todas.sql
-for f in $(ls migrations/*.sql | sort); do
-  printf '\\echo === %s\n' "$(basename "$f")" >> todas.sql
-  cat "$f" >> todas.sql
-  echo >> todas.sql
-done
+# Um arquivo só, em ordem determinística. A concatenação e a conferência dos
+# marcadores vivem em `ensaio-montar-todas.sh`, compartilhado com o CI: era
+# lógica duplicada, e a cópia do YAML tinha um `\e` que virava ESCAPE.
+bash ./ensaio-montar-todas.sh migrations todas.sql
 
 for f in ensaio-*.sql todas.sql; do
   docker cp "$f" "$NOME:/tmp/" >/dev/null
