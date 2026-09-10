@@ -72,7 +72,10 @@ declare
   -- foram exatamente o que a âncora antiga não enxergava.
 begin
   ------------------------------------------------------------------- composta
-  v_def := pg_get_functiondef('public.sol_caixa_resolver_composto_aluno_v1(jsonb)'::regprocedure);
+  -- ⚠️ NORMALIZA CRLF ANTES DE CASAR ANCORA. Arquivo que passou por Windows
+  --    injeta `` no corpo da funcao; ancora multilinha entao nao casa e a
+  --    migration aborta pela propria guarda. Foi exatamente isso na 193000.
+  v_def := replace(pg_get_functiondef('public.sol_caixa_resolver_composto_aluno_v1(jsonb)'::regprocedure), chr(13), '');
   v_n := (length(v_def) - length(replace(v_def, v_anc, ''))) / length(v_anc);
   if v_n <> 1 then raise exception 'composta: ancora do envelope %x, esperava 1', v_n; end if;
 
@@ -97,8 +100,8 @@ begin
   execute v_def;
 
   ------------------------------------------------------------------- canônica
-  v_def := pg_get_functiondef(
-    'public.sol_caixa_parcela_canonica(uuid,text,numeric,date)'::regprocedure);
+  v_def := replace(pg_get_functiondef(
+    'public.sol_caixa_parcela_canonica(uuid,text,numeric,date)'::regprocedure), chr(13), '');
   v_n := (length(v_def) - length(replace(v_def, v_anc, ''))) / length(v_anc);
   if v_n <> 1 then raise exception 'canonica: ancora do envelope %x, esperava 1', v_n; end if;
 
@@ -140,49 +143,12 @@ set search_path to 'public', 'pg_temp'
 as $$ select public.sol_caixa_parcela_canonica_env_v1(
          null::jsonb, p_unidade_id, p_aluno, p_valor, p_as_of) $$;
 
---------------------------------------------------- 3) o resolver monta UMA vez
-do $mig$
-declare
-  v_def text;
-  v_n   int;
-  v_a1 text := '  v_composto    jsonb;';
-  v_n1 text := '  v_composto    jsonb;
-  -- 🔴 UM envelope para a chamada inteira (09/09/2026). Antes: 2 por aluno.
-  v_envelope    jsonb;
-  -- data de NEGOCIO e BRT. `current_date` e UTC e vira o dia seguinte as 21h.
-  v_as_of_brt   date := (now() at time zone ''America/Sao_Paulo'')::date;';
-  v_a2 text := '    v_composto := sol_caixa_resolver_composto_aluno_v1(jsonb_build_object(';
-  v_n2 text := '    v_composto := sol_caixa_resolver_composto_aluno_env_v1(v_envelope, jsonb_build_object(';
-  v_a3 text := 'v_canon := sol_caixa_parcela_canonica(p_unidade_id, v_nome, v_valor, current_date);';
-  v_n3 text := 'v_canon := sol_caixa_parcela_canonica_env_v1(v_envelope, p_unidade_id, v_nome, v_valor, v_as_of_brt);';
-  v_a4 text := '  for v_item in select * from jsonb_array_elements(p_itens) loop';
-  v_n4 text := '  -- Monta o envelope UMA vez, antes do laco. As duas funcoes de regra pedem
-  -- exatamente este (conferido no texto vivo delas), entao compartilhar nao
-  -- muda o que nenhuma enxerga — so para de refazer o mesmo trabalho N vezes.
-  v_envelope := public.sol_faturas_alunos_v1(
-    p_unidade_id, extract(year from v_as_of_brt)::int, extract(month from v_as_of_brt)::int,
-    ''janela_3'', ''todas'', v_as_of_brt);
-
-  for v_item in select * from jsonb_array_elements(p_itens) loop';
-begin
-  v_def := pg_get_functiondef(
-    'public.sol_caixa_resolver_pagamento_v1(uuid,jsonb,numeric,date)'::regprocedure);
-
-  v_n := (length(v_def) - length(replace(v_def, v_a1, ''))) / length(v_a1);
-  if v_n <> 1 then raise exception 'declare do resolver %x, esperava 1', v_n; end if;
-  v_n := (length(v_def) - length(replace(v_def, v_a2, ''))) / length(v_a2);
-  if v_n <> 1 then raise exception 'chamada da composta %x, esperava 1', v_n; end if;
-  v_n := (length(v_def) - length(replace(v_def, v_a3, ''))) / length(v_a3);
-  if v_n <> 1 then raise exception 'chamada da canonica %x, esperava 1', v_n; end if;
-  v_n := (length(v_def) - length(replace(v_def, v_a4, ''))) / length(v_a4);
-  if v_n <> 1 then raise exception 'laco de itens %x, esperava 1', v_n; end if;
-
-  v_def := replace(v_def, v_a1, v_n1);
-  v_def := replace(v_def, v_a2, v_n2);
-  v_def := replace(v_def, v_a3, v_n3);
-  v_def := replace(v_def, v_a4, v_n4);
-  execute v_def;
-end $mig$;
+-- ⚠️ O RESOLVER SAIU DAQUI. Ele era patchado por `pg_get_functiondef` +
+--    `replace` neste arquivo; hoje a definicao FINAL dele e autocontida em
+--    `20260909232000_resolver_pagamento_autocontido.sql`, que roda depois e ja
+--    chama as variantes `_env_v1` criadas aqui. Patch que depende do estado em
+--    que encontra a funcao nao reproduz num banco novo — foi o que derrubou a
+--    20260909193000 e deixou a regra financeira FORA do banco sem ninguem ver.
 
 -------------------------------------------------------------------- 4) acesso
 -- `CREATE OR REPLACE` preserva ACL, mas função NOVA nasce com EXECUTE para
@@ -219,3 +185,15 @@ comment on function public.sol_caixa_parcela_canonica_env_v1(jsonb, uuid, text, 
 --   20260909193000), e depois:
 --     drop function public.sol_caixa_resolver_composto_aluno_env_v1(jsonb,jsonb);
 --     drop function public.sol_caixa_parcela_canonica_env_v1(jsonb,uuid,text,numeric,date);
+
+-- 🔴 POR QUE AS DUAS `_env_v1` CONTINUAM DERIVADAS, e nao autocontidas.
+--    Elas TEM de andar em lockstep com `sol_caixa_resolver_composto_aluno_v1` e
+--    `sol_caixa_parcela_canonica`: sao a MESMA regra, com o envelope recebido em
+--    vez de construido. Copiar os corpos para ca criaria uma segunda fonte de
+--    verdade que envelhece em silencio — exatamente a doenca que esta frente
+--    inteira diagnosticou. Derivar garante que nunca divergem.
+--    O que fragilizava a derivacao era o CRLF, e isso agora e normalizado; as
+--    guardas de saida acima recusam executar se o rename nao aconteceu ou se a
+--    definicao ainda aponta para a funcao original.
+--    ⚠️ A base delas e reproduzivel: as duas funcoes de origem estao no
+--       manifesto 16/16, conferidas contra producao.
