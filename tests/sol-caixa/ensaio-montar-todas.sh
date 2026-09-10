@@ -21,7 +21,16 @@ SAIDA="${2:?arquivo de saida}"
 : > "$SAIDA"
 for f in $(ls "$DIR"/*.sql | sort); do
   printf '%s\n' "\echo === $(basename "$f")" >> "$SAIDA"
-  cat "$f" >> "$SAIDA"
+  # 🔴 `tr -d` NAO E PARANOIA DE WINDOWS. 2.132 migrations estao no repositorio
+  #    com CRLF DENTRO DO BLOB — commitadas assim antes de existir regra de
+  #    normalizacao, entao em Linux elas saem do checkout COM CR. E migration que
+  #    patcha funcao com `pg_get_functiondef` + `replace` compara ancora
+  #    MULTILINHA: com CR no meio a ancora nao casa, a guarda aborta e a regra
+  #    financeira fica FORA do banco. Foi isto, exatamente: la-hq 16/16 porque
+  #    removia o CR, CI 3/16 porque nao removia.
+  # ⚠️ Renormalizar as 2.132 no git seria um diff sobre a historia inteira do
+  #    repositorio; remover na leitura resolve para os dois chamadores de uma vez.
+  tr -d '' < "$f" >> "$SAIDA"
   echo >> "$SAIDA"
 done
 

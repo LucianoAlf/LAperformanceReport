@@ -20,7 +20,9 @@ rm -rf migrations && tar xzf ensaio-migs.tgz
 # ⚠️ `tr -d` em vez de `sed`: sem padrão para escapar, não há como errar.
 #    O CRLF precisa sair porque migration que patcha função com
 #    `pg_get_functiondef` + `replace` compara âncoras MULTILINHA.
-for f in ensaio-*.sql migrations/*.sql; do
+# ⚠️ Migrations NAO entram aqui: quem as normaliza e `ensaio-montar-todas.sh`,
+#    o mesmo script que o CI usa. Um dono por coisa.
+for f in ensaio-*.sql; do
   tr -d '\015' < "$f" > "$f.tmp" && mv "$f.tmp" "$f"
 done
 
