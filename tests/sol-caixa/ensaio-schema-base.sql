@@ -337,3 +337,109 @@ alter table public.alunos
 -- ganhar coluna, esta acompanha sem eu ter que lembrar.
 create table if not exists public.alunos_arquivados
   (like public.alunos including defaults);
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- O RUN PUBLICADO — `sync_runs` + `sync_run_items`.
+--
+-- 🔴 POR QUE ELAS ESTAVAM FALTANDO. Duas migrations do repo criam `sync_runs`
+--    (`20260718174455` e `20260718230000`), mas a segunda aborta no replay com
+--    `relation "cron.job" does not exist` — este ensaio não tem pg_cron. No
+--    container da la-hq elas existiam por herança de execuções anteriores; num
+--    checkout limpo do CI, não. O ensaio manual passava e o GitHub Actions
+--    ficava vermelho: `relation "public.sync_runs" does not exist`, no seed.
+--
+--    É a mesma lição de novo, agora do outro lado: **ensaio que só passa na
+--    máquina de quem o escreveu não prova nada.**
+--
+-- ⚠️ NÃO É MOCK. Colunas, tipos, defaults, NOT NULL e índices vêm de
+--    `pg_attribute`/`pg_indexes` de produção por SELECT. O contrato importa:
+--    é daqui que o envelope de faturas lê, e a eleição do run compara
+--    `run_type`, `status`, `snapshot_complete`, `unidades_concluidas` e
+--    `completed_at`. Um default errado aqui inventaria comportamento.
+create table if not exists public.sync_runs (
+  id uuid not null default gen_random_uuid(),
+  competencia date not null,
+  run_type text not null default 'live'::text,
+  status text not null default 'running'::text,
+  trigger_source text not null,
+  requested_by text,
+  started_at timestamp with time zone not null default now(),
+  completed_at timestamp with time zone,
+  stale_after timestamp with time zone not null,
+  unidades_concluidas integer not null default 0,
+  units_summary jsonb not null default '[]'::jsonb,
+  snapshot_complete boolean not null default false,
+  total_emusys integer not null default 0,
+  total_inseridos integer not null default 0,
+  total_atualizados integer not null default 0,
+  total_ausentes_marcados integer not null default 0,
+  baseline_source text,
+  erro_detalhe text,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now(),
+  primary key (id)
+);
+
+create table if not exists public.sync_run_items (
+  id uuid not null default gen_random_uuid(),
+  run_id uuid not null,
+  canonical_fatura_id uuid not null,
+  competencia date not null,
+  unidade_id uuid not null,
+  unidade_codigo text not null,
+  emusys_fatura_id bigint not null,
+  emusys_matricula_id bigint,
+  emusys_contrato_id bigint,
+  emusys_student_id bigint,
+  descricao text not null default ''::text,
+  status text not null default 'desconhecido'::text,
+  data_vencimento date not null,
+  data_pagamento date,
+  valor_original numeric(12,2) not null default 0,
+  valor_pago numeric(12,2),
+  juros_e_multa numeric(12,2) not null default 0,
+  desconto_aplicado numeric(12,2) not null default 0,
+  desconto_fixo numeric(12,2) not null default 0,
+  desconto_condicional numeric(12,2) not null default 0,
+  payload jsonb not null default '{}'::jsonb,
+  source_missing boolean not null default false,
+  source_missing_reason text,
+  source_last_seen_at timestamp with time zone,
+  source_missing_detected_at timestamp with time zone,
+  source_missing_resolved_at timestamp with time zone,
+  created_at timestamp with time zone not null default now(),
+  primary key (id)
+);
+
+-- A FK é o que faz o `truncate ... cascade` do seed alcançar os itens; sem ela
+-- o seed deixaria itens órfãos de runs antigos e a eleição leria lixo.
+do $fk$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'sync_run_items_run_id_fkey') then
+    alter table public.sync_run_items
+      add constraint sync_run_items_run_id_fkey
+      foreign key (run_id) references public.sync_runs(id) on delete cascade;
+  end if;
+end $fk$;
+
+-- Índices de produção. O `sync_runs_competencia_sucesso_idx` é o que sustenta a
+-- eleição do run mais recente por competência, que é feita a cada leitura.
+create unique index if not exists sync_run_items_identidade_uniq
+  on public.sync_run_items (run_id, competencia, unidade_id, emusys_fatura_id);
+create index if not exists sync_run_items_run_idx
+  on public.sync_run_items (run_id, unidade_id, emusys_fatura_id);
+create index if not exists sync_run_items_run_canonical_fatura_idx
+  on public.sync_run_items (run_id, canonical_fatura_id, unidade_id, competencia, created_at desc, id desc)
+  where canonical_fatura_id is not null;
+create index if not exists sync_run_items_run_unidade_fatura_idx
+  on public.sync_run_items (run_id, unidade_id, emusys_fatura_id, competencia, created_at desc, id desc)
+  where emusys_fatura_id is not null;
+create index if not exists sync_runs_competencia_sucesso_idx
+  on public.sync_runs (competencia, completed_at desc) where status = 'succeeded';
+create unique index if not exists sync_runs_baseline_competencia_uniq
+  on public.sync_runs (competencia) where run_type = 'baseline';
+-- ⚠️ Singleton global de run em andamento. Não é usado por este ensaio (o seed
+--    publica runs `succeeded`), mas faz parte do contrato: se um dia alguém
+--    semear dois runs `running`, é melhor descobrir aqui do que em produção.
+create unique index if not exists sync_runs_global_running_uniq
+  on public.sync_runs (status) where status = 'running';
