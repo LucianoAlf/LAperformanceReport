@@ -139,7 +139,9 @@ jobs:
         if: always()
         run: |
           grep -n 'syntax error' /tmp/replay.log | head -3 | while IFS= read -r l; do
-            ln=$(sed -E 's|.*/tmp/todas[.]sql:([0-9]+):.*||' <<<"$l")
+            # awk em vez de sed: o \1 do sed some quando este arquivo
+            # atravessa camadas de escape. Aqui nao ha barra nenhuma a perder.
+            ln=$(awk -F'todas.sql:' '{split($2,a,":"); print a[1]}' <<<"$l")
             case "$ln" in ''|*[!0-9]*) echo "$l"; continue;; esac
             ini=$(( ln > 25 ? ln - 25 : 1 ))
             echo "=== $l"
