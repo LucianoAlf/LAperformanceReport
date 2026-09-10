@@ -161,9 +161,9 @@ begin
   -- ⚠️ `pending.itens` tem de ser IDENTICO ao payload: a RPC compara os dois com
   --    `is distinct from`. É a trava que impede aprovar um card e gravar outro.
   insert into public.sol_caixa_shadow_previews_v1
-    (evento_id, preview_hash, unidade_id, operacao, categoria, valor_centavos, forma, preview_json)
+    (evento_id, preview_hash, unidade_id, operacao, categoria, valor_centavos, forma, status, preview_json)
   values (v_evento, 'PRV-'||gen_random_uuid()::text, v_unidade, 'entrada', 'parcela',
-          round(v_total*100)::int, 'pix',
+          round(v_total*100)::int, 'pix', 'public_preview_sent',
           jsonb_build_object('pending', jsonb_build_object(
             'tipoOperacao','lancar_recebimento_lote', 'itens', v_r->'itens')))
   returning id into v_preview;
@@ -232,9 +232,9 @@ begin
     from public.caixa_movimentacoes;
 
   insert into public.sol_caixa_shadow_previews_v1
-    (evento_id, preview_hash, unidade_id, operacao, categoria, valor_centavos, forma, preview_json)
+    (evento_id, preview_hash, unidade_id, operacao, categoria, valor_centavos, forma, status, preview_json)
   values (v_evento, 'PRV-'||gen_random_uuid()::text, v_unidade, 'entrada', 'parcela',
-          round(v_total*100)::int, 'pix',
+          round(v_total*100)::int, 'pix', 'public_preview_sent',
           jsonb_build_object('pending', jsonb_build_object(
             'tipoOperacao','lancar_recebimento_lote', 'itens', v_r->'itens')))
   returning id into v_preview;

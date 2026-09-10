@@ -64,7 +64,8 @@ echo "== 5b/7 nenhuma migration do caixa desta frente pode ter falhado"
 ssh -n "$HOST" "docker exec $NOME cat /tmp/replay.log" > /tmp/replay-ensaio.log
 awk '/^=== /{arq=$2; next}
      /: ERROR:/{
-       if (arq ~ /^20260909/ && arq ~ /caixa|pagamento|reconciliacao|envelope|resolver_pagamento|lista_plana/)
+       if ((arq ~ /^20260909/ && arq ~ /caixa|pagamento|reconciliacao|envelope|resolver_pagamento|lista_plana/) ||
+           arq ~ /^20260910213000_preview_v3_tem_estado_terminal/)
          print "   " arq ": " $0
      }' \
   /tmp/replay-ensaio.log | sort -u > /tmp/criticas.txt || true
@@ -82,6 +83,10 @@ echo "-- cadeia reproduz produção (16/16)"
 roda -v ON_ERROR_STOP=1 -f /tmp/ensaio-verificar-cadeia.sql 2>&1 | grep -viE '^DO$' | tail -8
 echo "-- pagamento inteiro (10/10, fail-stop)"
 roda -v ON_ERROR_STOP=1 -f /tmp/ensaio-pagamento-inteiro.sql 2>&1 | grep -viE '^DO$|Timing' | tail -8
+echo "-- orquestrador: envelope estruturado -> combinacao unica"
+roda -v ON_ERROR_STOP=1 -f /tmp/ensaio-envelope-estruturado.sql 2>&1 | grep -viE '^DO$' | tail -4
+echo "-- preview V3: supersede, descarte e expiracao sao terminais"
+roda -v ON_ERROR_STOP=1 -f /tmp/ensaio-preview-estado-v3.sql 2>&1 | grep -viE '^BEGIN|^DO$|^ROLLBACK' | tail -4
 echo "-- cadeia real, caminho feliz V3 e atomicidade"
 roda -v ON_ERROR_STOP=1 -f /tmp/ensaio-cadeia-e-atomicidade.sql 2>&1 \
   | grep -viE '^BEGIN|^DO$|^ROLLBACK|^CREATE|^DROP|^INSERT|audit_log' | tail -8

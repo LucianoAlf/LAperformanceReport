@@ -1004,6 +1004,10 @@ function registrarApprovalV3(payload, env) {
   return chamarRpcCaixaParam('sol_caixa_shadow_registrar_approval', 'payload', payload, env);
 }
 
+function finalizarPreviewV3(payload, env) {
+  return chamarRpcCaixa('sol_caixa_v3_finalizar_preview_v1', payload, env);
+}
+
 function buscarMovimentosCaixa(payload, env) {
   return chamarRpcCaixa('sol_caixa_buscar_movimentos_v1', payload, env);
 }
@@ -1051,6 +1055,27 @@ function resolverMultiAlunoCaixaV1(payload, { url, key } = carregarEnv()) {
 //    unidade. A RPC ganhou `statement_timeout` próprio de 60s (o do PostgREST é
 //    8s); 15s aqui desistiria antes do banco responder e a Sol diria "fonte
 //    indisponível" para um caso que ia dar certo.
+// Orquestrador: envelope estruturado -> combinacao unica. E a RPC que fecha o
+// buraco medido em 10/09 — a ferramenta sabia responder, ninguem perguntava
+// direito. Timeout maior porque ela monta o envelope e varre subconjuntos.
+function resolverEnvelopeCaixaV1(payload, { url, key } = carregarEnv()) {
+  return new Promise((resolve, reject) => {
+    if (!key) return reject(new Error('missing SUPABASE service key'));
+    const body = JSON.stringify({
+      p_unidade_id: payload.unidade_id,
+      p_envelope: payload.envelope,
+    });
+    const u = new URL(`${url}/rest/v1/rpc/sol_caixa_resolver_envelope_v1`);
+    const req = https.request({ hostname: u.hostname, path: u.pathname, method: 'POST', headers: {
+      apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body),
+    }}, (res) => {
+      let data = ''; res.on('data', (c) => { data += c; });
+      res.on('end', () => { try { resolve(data ? JSON.parse(data) : null); } catch (e) { reject(new Error(`resposta invalida (${res.statusCode})`)); } });
+    });
+    req.on('error', reject); req.setTimeout(45000, () => req.destroy(new Error('timeout resolver envelope'))); req.write(body); req.end();
+  });
+}
+
 function resolverPagamentoItensV1(payload, { url, key } = carregarEnv()) {
   return new Promise((resolve, reject) => {
     if (!key) return reject(new Error('missing SUPABASE service key'));
@@ -1088,6 +1113,24 @@ function extrairCorrecaoForma(text) {
   if (!/\b(pix|dinheiro|cartao|debito|credito|cheque|transferencia|transfer)\b/i.test(t)) return null;
   const querCorrigir = /(foi|era|corrig|muda|troca|nao e|não é|entrou como|lancou como|lançou como)/i.test(t);
   if (!querCorrigir) return null;
+  // 🔴 DUAS FORMAS NA MESMA FRASE NAO E CORRECAO, E EXPLICACAO. Recreio,
+  //    10/09 15:27: a Vitoria escreveu ao Luciano "essa aluna faz dois cursos,
+  //    1 foi pago no cartao de credito e outro no pix". O extrator via "foi",
+  //    achava cartao primeiro e virava `corrigir_forma` -> o card voltou para
+  //    cartao e a competencia que ela tinha acabado de corrigir se perdeu.
+  //    Frase que cita DUAS formas nao esta mandando usar uma delas — esta
+  //    contando o caso. Quem cita duas, pergunta.
+  // ⚠️ Sem `\b` de proposito: este arquivo atravessa camadas de escape e a
+  //    barra some — a primeira versao virou BACKSPACE literal e a guarda
+  //    nunca disparou. Padding com espaco faz o mesmo trabalho sem barra.
+  const _pad = ' ' + t.replace(/[^a-z0-9]+/gi, ' ') + ' ';
+  const _formas = new Set();
+  if (_pad.includes(' pix ')) _formas.add('pix');
+  if (_pad.includes(' dinheiro ')) _formas.add('dinheiro');
+  if (_pad.includes(' cartao ') || _pad.includes(' credito ') || _pad.includes(' debito ')) _formas.add('cartao');
+  if (_pad.includes(' cheque ')) _formas.add('cheque');
+  if (_pad.includes(' transferencia ') || _pad.includes(' transfer ')) _formas.add('transferencia');
+  if (_formas.size >= 2) return { forma: null, ambigua: true, formas: Array.from(_formas) };
   const cartao = extrairCartao(t);
   if (cartao && !/\bnao\s+(?:e|eh|é)\s+cartao\b/.test(t)) {
     return { forma: 'cartao', cartaoModalidade: cartao.modalidade || null, cartaoParcelas: cartao.parcelas || null };
@@ -2165,6 +2208,131 @@ function valorConfereComTexto(valor, ...textos) {
   return { ok: false, motivo: 'nao_esta_no_texto' };
 }
 
+// A DECISAO DO ROTEADOR VIRA ENVELOPE ESTRUTURADO — nunca frase.
+//
+// 🔴 O QUE ESTA FUNCAO EXISTE PARA IMPEDIR. A tentacao obvia era transformar a
+//    decisao do LLM de volta numa frase canonica e re-passar pelo parser legado
+//    (foi o que o fallback de dialogo de 31/08 faz). Isso recria exatamente o
+//    defeito: quem monta a pergunta ao banco continua sendo a gramatica, e ela
+//    entrega nome contaminado e primeiro valor. Aqui o payload vai DIRETO ao
+//    Core, no formato que ele consome.
+//
+// ⚠️ NAO INVENTA NADA. Se o modelo nao deu identidade (nem aluno, nem pagador)
+//    ou nao deu total, devolve recusa com motivo. Preencher por conta propria
+//    seria o LLM decidindo dinheiro, que e o invariante que esta frente inteira
+//    protege.
+// ⚠️ `valor`/`valor_total` ja chegam aqui PENEIRADOS por valorConfereComTexto.
+function montarEnvelopeV4(dec) {
+  if (!dec || typeof dec !== 'object') return { ok: false, motivo: 'sem_decisao' };
+  if (!['lancamento_por_texto', 'lancamento_multi_aluno'].includes(dec.intencao)) {
+    return { ok: false, motivo: 'intencao_nao_lanca', intencao: dec.intencao };
+  }
+  // 🔴 TOTAL RECUSADO NAO CAI PARA O PARCIAL. Se `valorConfereComTexto` anulou
+  //    o total, cair no `valor` reabre exatamente o defeito da Lis: numa frase
+  //    com 357 + 300 e total 657, um total invalido ao lado de valor=357
+  //    produziria de novo o card parcial de R$ 357. Prefiro nao responder.
+  if (dec.valor_total_recusado) {
+    return { ok: false, motivo: 'valor_total_recusado', recusado: dec.valor_total_recusado };
+  }
+  const total = (dec.valor_total != null) ? dec.valor_total : dec.valor;
+  if (total == null || !(Number(total) > 0)) return { ok: false, motivo: 'sem_valor_total' };
+
+  let itens = Array.isArray(dec.itens) ? dec.itens.filter((i) => i && i.aluno) : [];
+  // singular -> plural: o contrato antigo continua valendo como entrada
+  if (!itens.length && dec.aluno_nome) {
+    itens = [{ aluno: dec.aluno_nome,
+               categorias: dec.categoria ? [dec.categoria] : [],
+               competencias: dec.competencia ? [dec.competencia] : [] }];
+  }
+  // pagador SOZINHO e legitimo: quem expande a familia e o Core, com as RPCs
+  // de identidade. O que nao pode e' seguir sem identidade nenhuma.
+  if (!itens.length && !dec.pagador) return { ok: false, motivo: 'sem_identidade' };
+
+  return { ok: true, envelope: {
+    pagador: dec.pagador || null,
+    valor_total: Number(total),
+    forma: dec.forma || null,
+    itens: itens.map((i) => ({
+      aluno: String(i.aluno).trim(),
+      // ⚠️ `matricula` -> `passaporte`: o banco canoniza "Taxa de Matricula" e
+      //    "Passaporte" no mesmo tipo. Sem esta normalizacao, um item que o
+      //    modelo classifique como `matricula` filtraria para ZERO faturas e a
+      //    Sol recusaria um pagamento que ela sabia resolver. Prompt e banco
+      //    tem de falar a mesma lingua; onde nao falam, quem traduz e o codigo.
+      categorias: (Array.isArray(i.categorias) ? i.categorias : [])
+        .map((c) => (String(c).toLowerCase() === 'matricula' ? 'passaporte' : String(c).toLowerCase())),
+      competencias: Array.isArray(i.competencias) ? i.competencias : [],
+    })),
+  } };
+}
+
+// CORRECAO NO SEGUNDO TURNO — muda o ENVELOPE, nunca remonta a frase.
+//
+// 🔴 POR QUE NAO VIRA FRASE. O fallback de dialogo de 31/08 traduz a intencao do
+//    LLM para uma frase canonica e re-passa pelo `handle()`. Ali fazia sentido,
+//    porque o destino era a gramatica. Aqui seria o defeito de volta: quem
+//    montaria a pergunta ao banco seria de novo o parser. A correcao incide
+//    sobre o objeto estruturado, e o Core resolve outra vez.
+//
+// ⚠️ Correcao NAO inventa: campo que o modelo nao trouxe fica como estava.
+//    E `corrigir_valor` so vale com valor que sobreviveu a guarda de texto.
+function aplicarCorrecaoEnvelope(envelope, dec) {
+  if (!envelope || !dec) return { ok: false, motivo: 'sem_base' };
+  const e = JSON.parse(JSON.stringify(envelope));
+  const itens = Array.isArray(e.itens) ? e.itens : [];
+  switch (dec.intencao) {
+    case 'corrigir_competencia': {
+      const c = dec.competencia && String(dec.competencia).trim();
+      if (!c) return { ok: false, motivo: 'correcao_sem_competencia' };
+      // competencia declarada vale para TODOS os itens do envelope: o humano
+      // esta corrigindo o comprovante, nao um aluno especifico.
+      itens.forEach((it) => { it.competencias = [c]; });
+      break;
+    }
+    case 'corrigir_valor': {
+      if (dec.valor_recusado || dec.valor == null || !(Number(dec.valor) > 0)) {
+        return { ok: false, motivo: 'correcao_sem_valor' };
+      }
+      e.valor_total = Number(dec.valor);
+      break;
+    }
+    case 'corrigir_aluno': {
+      const n = dec.aluno_nome && String(dec.aluno_nome).trim();
+      if (!n) return { ok: false, motivo: 'correcao_sem_aluno' };
+      // um item -> troca; varios -> nao adivinha QUAL, devolve para perguntar
+      if (itens.length === 1) { itens[0].aluno = n; e.pagador = null; }
+      else if (itens.length === 0) { e.itens = [{ aluno: n, categorias: [], competencias: [] }]; e.pagador = null; }
+      else return { ok: false, motivo: 'correcao_aluno_ambigua' };
+      break;
+    }
+    case 'corrigir_categoria': {
+      const c = dec.categoria && String(dec.categoria).toLowerCase().trim();
+      if (!c) return { ok: false, motivo: 'correcao_sem_categoria' };
+      itens.forEach((it) => { it.categorias = [c]; });
+      break;
+    }
+    case 'corrigir_forma': {
+      const f = dec.forma && String(dec.forma).toLowerCase().trim();
+      if (!f) return { ok: false, motivo: 'correcao_sem_forma' };
+      e.forma = f;
+      break;
+    }
+    default:
+      return { ok: false, motivo: 'intencao_nao_corrige', intencao: dec.intencao };
+  }
+  e.itens = itens;
+  return { ok: true, envelope: e };
+}
+
+// PORTAO DO CANARIO — desligado por padrao, e por LISTA, nunca global.
+// `SOL_CAIXA_V4_CANARIO` recebe chatIds separados por virgula. Vazio = ninguem.
+// ⚠️ Lista, e nao booleano: flip global em dinheiro nao e canario, e aposta.
+function _v4CanarioLigado(chatId) {
+  const lista = String(process.env.SOL_CAIXA_V4_CANARIO || '')
+    .split(',').map((s) => s.trim()).filter(Boolean);
+  return lista.length > 0 && lista.includes(String(chatId || ''));
+}
+
 function rotearMensagemV4(texto, contexto, { timeout = 30000 } = {}) {
   return new Promise((resolve) => {
     const t = String(texto || '').trim();
@@ -2174,7 +2342,25 @@ function rotearMensagemV4(texto, contexto, { timeout = 30000 } = {}) {
       + JSON.stringify(contexto).slice(0, 1200)
       + '. Classifique a INTENCAO da mensagem. Responda SOMENTE JSON valido, sem markdown: '
       + '{"intencao":"aprovar|descartar|corrigir_aluno|corrigir_valor|corrigir_categoria|corrigir_forma|corrigir_competencia|sem_aluno|contestar_fatura|saida_dinheiro|lancamento_por_texto|lancamento_multi_aluno|corrigir_lancamento_gravado|estornar_lancamento|reabrir_caixa|abrir_caixa|fechar_caixa|consulta_caixa|conversa|nada",'
-      + '"aluno_nome":null,"valor":null,"forma":null,"categoria":null,"competencia":null,"entidade":null,"confianca":0.0}. '
+      + '"aluno_nome":null,"valor":null,"forma":null,"categoria":null,"competencia":null,"entidade":null,'
+      // 🔴 O CONTRATO PLURAL (10/09). O singular nao comportava familia nem
+      //    varios meses: um `aluno_nome`, um `valor`, uma `competencia`.
+      //    Mesmo invertendo o bridge, esses dois casos ficariam
+      //    estruturalmente incompletos. Os campos antigos FICAM porque o
+      //    placar do shadow os le — quebrar o log seria perder a serie.
+      + '"pagador":null,"valor_total":null,'
+      + '"itens":[{"aluno":null,"categorias":[],"competencias":[]}],"confianca":0.0}. '
+      + 'CAMPOS PLURAIS: "pagador" e quem PAGOU quando a mensagem nomeia o responsavel em vez do aluno '
+      + '("a mae da Lis mandou", "pagamento da Gisele"); deixe null se quem aparece e o proprio aluno. '
+      + '"valor_total" e o total do comprovante — quando a mensagem traz parciais E um total, valor_total e o TOTAL. '
+      + '"itens" tem UMA entrada por ALUNO citado (nao por fatura): itens[].categorias em '
+      + '[parcela,passaporte,lojinha,venda,outro] e itens[].competencias em MM/AAAA, ambas listas, vazias quando a mensagem nao diz. '
+      // ⚠️ NAO EXISTE categoria `matricula`. No banco, "Taxa de Matricula" e
+      //    "Passaporte" compartilham `passaporte_taxa_matricula` — pedir ao
+      //    modelo uma categoria que o filtro nao sustenta faria a Sol prometer
+      //    um recorte que nao existe, e o item viria sem casar com fatura nenhuma.
+      + 'TAXA DE MATRICULA e categoria "passaporte" — o sistema trata as duas juntas. '
+      + 'Um aluno com dois cursos e UM item; dois irmaos sao DOIS itens. Varios meses do mesmo aluno vao em competencias[]. '
       + 'REGRAS: "conversa" = papo de equipe/elogio/despedida; "nada" = assunto alheio ao caixa. '
       + '"aprovar" quando autorizam lancar o que ja esta num card do contexto — inclusive so com "pode", "pode sim", "ok", "isso", "manda", respondendo a pergunta da Sol. Exige card no contexto: sem card, "pode" sozinho e "conversa". '
       + '"lancamento_por_texto" quando a mensagem DITA um pagamento novo, sem comprovante e sem card aberto: traz aluno e/ou valor e/ou competencia ("PG parcela 09/26 Aluno: Fulano LA CG - R$377,00"). Nao confundir com "aprovar" — aqui nao ha card para aprovar, ha um lancamento sendo criado. '
@@ -2186,16 +2372,54 @@ function rotearMensagemV4(texto, contexto, { timeout = 30000 } = {}) {
       + '"reabrir_caixa" quando pedem para abrir NOVAMENTE um caixa fechado ("pode abrir novamente", "reabre o caixa"). '
       + '"lancamento_multi_aluno" quando um pagamento cobre DOIS OU MAIS alunos (divisao por aluno). '
       + 'NUNCA invente nome ou valor que nao esteja na mensagem. confianca entre 0 e 1.\n\nMENSAGEM:\n' + t.slice(0, 900);
-    const normaliza = (o) => (!o || typeof o !== 'object') ? null : ({
-      intencao: String(o.intencao || 'nada'),
-      aluno_nome: (o.aluno_nome && String(o.aluno_nome).trim()) || null,
-      valor: o.valor != null ? parseBRMoney(String(o.valor)) : null,
-      forma: (o.forma && String(o.forma).toLowerCase().trim()) || null,
-      categoria: (o.categoria && String(o.categoria).toLowerCase().trim()) || null,
-      competencia: (o.competencia && String(o.competencia).trim()) || null,
-      entidade: (o.entidade && String(o.entidade).trim()) || null,
-      confianca: Number(o.confianca) || null,
-    });
+    // 🔴 A GUARDA DE VALOR VALE NO CAMINHO PRINCIPAL, NAO SO NO FALLBACK.
+    //    Ate 10/09 `valorConfereComTexto` so era aplicada no ramo `execFile`,
+    //    que hoje quase nunca roda — o caminho vivo e o HTTPS, e ele passava o
+    //    numero do modelo direto. Foi assim que R$ 2.034,90 virou 20.349.
+    //    Anula o VALOR, nunca a decisao: a intencao pode estar certa e o fluxo
+    //    pergunta o numero, que e o caminho seguro.
+    const _guardar = (v, ...ts) => {
+      if (v == null) return { valor: null, recusado: null };
+      const g = valorConfereComTexto(v, ...ts);
+      return g.ok ? { valor: v, recusado: null } : { valor: null, recusado: { valor: v, motivo: g.motivo } };
+    };
+    const normaliza = (o) => {
+      if (!o || typeof o !== 'object') return null;
+      const _v  = o.valor != null ? parseBRMoney(String(o.valor)) : null;
+      const _vt = o.valor_total != null ? parseBRMoney(String(o.valor_total)) : null;
+      const gv  = _guardar(_v, texto);
+      const gvt = _guardar(_vt, texto);
+      // itens[]: uma entrada por ALUNO. Listas sempre listas — `null` aqui
+      // obrigaria todo consumidor a repetir a mesma checagem.
+      const itens = Array.isArray(o.itens) ? o.itens.map((it) => {
+        if (!it || typeof it !== 'object') return null;
+        const aluno = (it.aluno && String(it.aluno).trim()) || null;
+        if (!aluno) return null;
+        const lista = (x) => (Array.isArray(x) ? x : (x == null ? [] : [x]))
+          .map((y) => String(y || '').trim()).filter(Boolean);
+        const gi = _guardar(it.valor != null ? parseBRMoney(String(it.valor)) : null, texto);
+        return {
+          aluno,
+          categorias: lista(it.categorias).map((c) => c.toLowerCase()),
+          // competencia sai do modelo como "09/2026", "9/26", "setembro"…
+          competencias: lista(it.competencias).map((c) => extrairCompetenciaTexto(c) || c).filter(Boolean),
+          valor: gi.valor, valor_recusado: gi.recusado,
+        };
+      }).filter(Boolean) : [];
+      return {
+        intencao: String(o.intencao || 'nada'),
+        aluno_nome: (o.aluno_nome && String(o.aluno_nome).trim()) || null,
+        valor: gv.valor, valor_recusado: gv.recusado,
+        forma: (o.forma && String(o.forma).toLowerCase().trim()) || null,
+        categoria: (o.categoria && String(o.categoria).toLowerCase().trim()) || null,
+        competencia: (o.competencia && String(o.competencia).trim()) || null,
+        entidade: (o.entidade && String(o.entidade).trim()) || null,
+        pagador: (o.pagador && String(o.pagador).trim()) || null,
+        valor_total: gvt.valor, valor_total_recusado: gvt.recusado,
+        itens,
+        confianca: Number(o.confianca) || null,
+      };
+    };
     // Caminho normal: HTTPS direto.
     if (_v4ChaveZen()) {
       return _v4Http(prompt, timeout).then((txt) => resolve(normaliza(_parseVisionJson(txt || ''))));
@@ -2546,7 +2770,7 @@ function categoriaEhSaida(categoria) {
   return ['seguranca', 'despesa', 'retirada', 'troco'].includes(String(categoria || '').toLowerCase());
 }
 
-function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, log = () => {}, janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
+function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, finalizarPreviewV3Fn = finalizarPreviewV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, resolverEnvelopeFn = resolverEnvelopeCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, log = () => {}, janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
   // SOL_CAIXA_V3_LEDGER_FAKE=1 (suite de testes): fiacao V3 ativa, banco intacto.
   // Sem isto, teste que nao mocka os registradores grava preview/approval REAL
   // no ledger de producao — 62% dos previews de 24-31/08 eram artefato de teste.
@@ -2556,6 +2780,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     let _fakeSeq = 0;
     if (registrarPreviewV3Fn === registrarPreviewV3) registrarPreviewV3Fn = async () => ({ ok: true, preview_id: 'fake-prev-' + (++_fakeSeq) });
     if (registrarApprovalV3Fn === registrarApprovalV3) registrarApprovalV3Fn = async () => ({ ok: true, approval_id: 'fake-appr-' + (++_fakeSeq) });
+    if (finalizarPreviewV3Fn === finalizarPreviewV3) finalizarPreviewV3Fn = async () => ({ ok: true });
   }
   // grupos: { [chatId]: { unidade_id, nome } }
   const pendentes = new Map();   // chatId -> [ {previewId, unidade_id, nome, valor, forma, categoria, aluno, idemKey, origem, ts} ]
@@ -2569,7 +2794,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   const v3LedgerAtivo = ['production', 'prod', 'on', '1'].includes(v3LedgerMode);
   const v3LedgerStrict = process.env.SOL_CAIXA_V3_LEDGER_STRICT === '1';
 
-  async function registrarPreviewPublicoV3({ event, grupo, previewId, texto, pendencia, result }) {
+  async function registrarPreviewPublicoV3({ event, grupo, previewId, texto, pendencia, result, previewStatus = 'public_preview_sent' }) {
     if (!v3LedgerAtivo) return null;
     const previewJson = {
       public_preview_sent: true,
@@ -2587,6 +2812,9 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       observed_at: event.ts || new Date(Number(event.timestamp || Math.floor(Date.now() / 1000)) * 1000).toISOString(),
       source: 'sol_caixa_whatsapp_production',
       mode: 'v3_production_public_preview',
+      // O evento foi observado/publicado; quem controla se o card pode ser
+      // aprovado e o preview_status abaixo. Na correcao, o card novo nasce
+      // awaiting_supersede ate o banco trocar os dois estados atomicamente.
       status: 'public_preview_sent',
       raw_ref: {
         message_id_sha256: sha256(event.messageId),
@@ -2606,7 +2834,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       categoria: pendencia.categoria || 'unknown',
       valor_centavos: pendencia.valor != null ? String(Math.round(Number(pendencia.valor) * 100)) : '',
       forma: pendencia.forma || 'unknown',
-      preview_status: 'public_preview_sent',
+      preview_status: previewStatus,
       preview_json: previewJson,
     };
     try {
@@ -2671,7 +2899,187 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     }
   }
 
-  async function abrirFluxoMultiAluno({ event, grupo, textoFonte, textoHumano, intent, agora, origemMessageId }) {
+  async function finalizarPreviewSeguroV3({ alvo, status, substituto = null, motivo = null }) {
+    if (!v3LedgerAtivo || !alvo || !alvo.v3PreviewId) return { ok: true, sem_ledger: true };
+    const payload = {
+      preview_id: alvo.v3PreviewId,
+      preview_hash: alvo.v3PreviewHash || null,
+      status,
+      motivo: motivo || status,
+      replacement_preview_id: substituto && substituto.v3PreviewId || null,
+      replacement_preview_hash: substituto && substituto.v3PreviewHash || null,
+    };
+    try {
+      const r = await finalizarPreviewV3Fn(payload);
+      const ok = !!(r && r.ok);
+      log({ acao: 'v3_preview_finalizado', ok, status, preview_ledger_id: alvo.v3PreviewId,
+            substituto_ledger_id: substituto && substituto.v3PreviewId || null,
+            motivo: ok ? null : (r && r.motivo) || 'resposta_invalida' });
+      return r || { ok: false, motivo: 'resposta_invalida' };
+    } catch (e) {
+      log({ acao: 'v3_preview_finalizacao_erro', status, preview_ledger_id: alvo.v3PreviewId,
+            erro: String(e && e.message) });
+      if (v3LedgerStrict) throw e;
+      return { ok: false, motivo: 'erro_rpc_finalizacao' };
+    }
+  }
+
+  // ── CAMINHO AGENT-FIRST ────────────────────────────────────────────────────
+  //
+  // 🔴 A INVERSAO MORA AQUI, NO ARTEFATO VERSIONADO — nao no bridge. O bridge
+  //    nao esta sob hash no RUNTIME_BASELINE: trocar a ordem la seria uma
+  //    mudanca de comportamento de dinheiro sem teste, sem paridade e sem
+  //    rollback por hash. Aqui ela tem as tres coisas.
+  //
+  // 🔴 O QUE ELE FAZ DE DIFERENTE. O legado le a frase com gramatica e entrega
+  //    ao banco `nome = "PG parcelas aluna Lis Dal Mora Mello curso canto e
+  //    curso de violao Kids CG"` e `valor = 357` (medido, 10/09). Aqui o LLM
+  //    entende, vira ENVELOPE ESTRUTURADO e o Core resolve. A frase nunca e
+  //    remontada para o parser antigo — fazer isso recriaria o defeito.
+  //
+  // ⚠️ FAIL-SAFE, SEMPRE PARA O LADO DE NAO RESPONDER. Sem decisao, sem
+  //    envelope, sem combinacao ou com erro: devolve null e o caminho de hoje
+  //    assume. O agent-first pode nao responder; nao pode responder errado.
+  // ⚠️ TIMEOUT CURTO (12s, nao 30s). Em SOMBRA esperar era melhor que desistir,
+  //    porque um null custava uma observacao. Na FRENTE o custo se inverte: a
+  //    consultora esta olhando a tela.
+  // ⚠️ NAO APROVA NADA. Termina em preview + pendencia; o "pode" segue humano e
+  //    passando pelo cofre V3, e a escrita segue no lote atomico.
+  // Envelope vivo por chat: e o que permite corrigir no SEGUNDO TURNO sem
+  // remontar frase. Guardado ao lado da pendencia, com o mesmo tempo de vida.
+  const envelopesV4 = new Map();
+
+  function limparEnvelopeDaPendencia(chatId, pendencia, motivo) {
+    const guardado = envelopesV4.get(chatId);
+    if (!guardado || !pendencia || guardado.previewId !== pendencia.previewId) return;
+    envelopesV4.delete(chatId);
+    log({ acao: 'agent_first_envelope_descartado', chatId, motivo,
+          previewId: pendencia.previewId || null });
+  }
+
+  async function tratarAgentFirst(event, grupo, agora) {
+    const texto = bodyLimpo(event.body);
+    if (!texto) return null;
+    const arr = limparVelhos(event.chatId, agora);
+    const contexto = arr.slice(0, 3).map((p, i) => ({
+      card: i + 1, valor: p.valor || null, forma: p.forma || null,
+      categoria: p.categoria || null, aluno: p.aluno || null, competencia: p.competencia || null,
+    }));
+    const t0 = Date.now();
+    let dec = null;
+    try { dec = await rotearV4Fn(texto, contexto, { timeout: 12000 }); } catch (e) { dec = null; }
+    if (!dec) { log({ acao: 'agent_first_sem_decisao', chatId: event.chatId, ms: Date.now() - t0 }); return null; }
+
+    // ── SEGUNDO TURNO: corrige o ENVELOPE guardado, nunca remonta frase ──────
+    // 🔴 O ENVELOPE VIVE ENQUANTO A PENDENCIA DELE VIVER. Amarrar os dois numa
+    //    regra so resolve aprovacao, descarte, expiracao e falha de persistencia
+    //    V3 de uma vez: aprovou ou descartou, a pendencia sai do array; expirou,
+    //    `limparVelhos` a tira; e se o V3 nao registrou, ela nunca nasceu. Um
+    //    envelope orfao seria estado invisivel decidindo dinheiro.
+    const guardado = envelopesV4.get(event.chatId);
+    const pendGuardada = guardado && guardado.previewId
+      ? arr.find((p) => p.previewId === guardado.previewId) || null
+      : null;
+    const pendVivo = !!pendGuardada;
+    if (guardado && !pendVivo) {
+      envelopesV4.delete(event.chatId);
+      log({ acao: 'agent_first_envelope_descartado', chatId: event.chatId, motivo: 'pendencia_nao_existe_mais' });
+    }
+    const vivo = pendVivo && (agora - guardado.ts) < janelaMs;
+    let env;
+    if (vivo && String(dec.intencao || '').startsWith('corrigir_')) {
+      const corr = aplicarCorrecaoEnvelope(guardado.envelope, dec);
+      if (!corr.ok) {
+        log({ acao: 'agent_first_correcao_recusada', chatId: event.chatId,
+              motivo: corr.motivo, intencao: dec.intencao });
+        return null;
+      }
+      env = corr;
+      log({ acao: 'agent_first_correcao', chatId: event.chatId, intencao: dec.intencao });
+    } else {
+      env = montarEnvelopeV4(dec);
+    }
+    if (!env.ok) {
+      // 🔴 TOTAL RECUSADO E TERMINAL — NUNCA `null`. Devolver null aqui deixava o
+      //    parser legado assumir a MESMA mensagem, e ele produz exatamente o
+      //    card parcial de R$ 357 com o nome contaminado. Ou seja: a guarda de
+      //    valor bloqueava o caminho novo e liberava o antigo, que e o caminho
+      //    errado. O F11 nao pegava porque so olhava se o Core foi chamado.
+      //    Quando o modelo inventou o total, ninguem responde: pergunta-se.
+      if (env.motivo === 'valor_total_recusado') {
+        await sendFn(event.chatId,
+          'Recebi o comprovante, mas o valor total que li não confere com o que está escrito na mensagem. '
+          + 'Não vou lançar por conta própria. Me manda o total exato, por favor.');
+        log({ acao: 'agent_first_valor_total_recusado', chatId: event.chatId,
+              recusado: env.recusado && env.recusado.motivo });
+        return { acao: 'agent_first_valor_total_recusado' };
+      }
+      log({ acao: 'agent_first_sem_envelope', chatId: event.chatId, motivo: env.motivo,
+            intencao: dec.intencao, confianca: dec.confianca });
+      return null;
+    }
+
+    let res = null;
+    try { res = await resolverEnvelopeFn({ unidade_id: grupo.unidade_id, envelope: env.envelope }); }
+    catch (e) { log({ acao: 'agent_first_erro_resolver', chatId: event.chatId, erro: String(e && e.message) }); return null; }
+    if (!res) return null;
+
+    // PERGUNTA, nunca escolhe: e a mesma regra que matou o `limit 1` do casador.
+    if (res.motivo === 'combinacao_ambigua') {
+      const alts = (Array.isArray(res.alternativas) ? res.alternativas : []).map((a, i) =>
+        `*${i + 1})* ` + (Array.isArray(a) ? a : []).map((f) =>
+          `${f.aluno_nome} · ${f.categoria} ${f.competencia} — ${fmtBRL(Number(f.valor))}`).join(' + '))
+        .join(String.fromCharCode(10));
+      await sendFn(event.chatId,
+        `❓ Achei *mais de uma* combinação de faturas que fecha ${fmtBRL(Number(res.valor_total))}. `
+        + 'Não vou escolher por você — me diz qual é:' + String.fromCharCode(10) + alts);
+      log({ acao: 'agent_first_pergunta', chatId: event.chatId, motivo: 'combinacao_ambigua', combinacoes: res.combinacoes });
+      return { acao: 'agent_first_pergunta', motivo: 'combinacao_ambigua' };
+    }
+    if (res.motivo === 'nome_ambiguo') {
+      const c = Array.isArray(res.candidatos) ? res.candidatos : [];
+      await sendFn(event.chatId,
+        `❓ Tem *${c.length}* alunos com esse nome nesta unidade${c.length ? ': ' + c.slice(0, 6).map((x) => x.aluno_nome || x.nome).filter(Boolean).join(', ') : ''}. `
+        + 'Me diz o nome completo de quem pagou.');
+      log({ acao: 'agent_first_pergunta', chatId: event.chatId, motivo: 'nome_ambiguo', candidatos: c.length });
+      return { acao: 'agent_first_pergunta', motivo: 'nome_ambiguo' };
+    }
+    if (!res.ok || !Array.isArray(res.itens) || res.itens.length === 0) {
+      log({ acao: 'agent_first_nao_resolveu', chatId: event.chatId, motivo: res.motivo || 'sem_itens' });
+      return null;
+    }
+
+    log({ acao: 'agent_first_resolveu', chatId: event.chatId, via: res.via,
+          linhas: res.itens.length, alunos: res.alunos, ms: Date.now() - t0 });
+
+    // Daqui para baixo e o fluxo de sempre: preview, cofre V3, "pode" humano,
+    // lote atomico. O agent-first so troca QUEM montou a pergunta.
+    const anterior = vivo && guardado ? guardado.previewId : null;
+    const saida = await abrirFluxoMultiAluno({
+      event, grupo, textoFonte: texto, textoHumano: texto, agora,
+      // A correcao conserva a origem do comprovante. Alem de preservar a
+      // idempotencia, isto faz a reidratacao escolher somente o preview mais
+      // novo mesmo se um runtime antigo ainda enxergar os dois por instantes.
+      origemMessageId: (vivo && pendGuardada && pendGuardada.origem) || event.messageId,
+      resolvidoPronto: res, agentFirstEnvelope: env.envelope,
+      supersedePreviewId: anterior,
+      intent: { ok: true, valor_total: Number(res.valor_total), forma: env.envelope.forma,
+                categoria: null,
+                itens: res.itens.map((i) => ({ aluno_nome: i.aluno_nome, valor: Number(i.valor), categoria: i.categoria })) },
+    });
+    // So guarda o envelope se a pendencia FOI persistida (previewId de volta).
+    // V3 que nao registrou nao deixa pendencia — e nao pode deixar envelope.
+    if (saida && saida.previewId) {
+      envelopesV4.set(event.chatId, { envelope: env.envelope, ts: agora, previewId: saida.previewId });
+    } else if (!(saida && saida.preservarEnvelope)) {
+      envelopesV4.delete(event.chatId);
+      log({ acao: 'agent_first_envelope_descartado', chatId: event.chatId,
+            motivo: (saida && saida.acao) || 'sem_preview' });
+    }
+    return saida;
+  }
+
+  async function abrirFluxoMultiAluno({ event, grupo, textoFonte, textoHumano, intent, agora, origemMessageId, resolvidoPronto = null, agentFirstEnvelope = null, supersedePreviewId = null }) {
     const arr = limparVelhos(event.chatId, agora);
     // Janela de reenvio: OCR lento (frequente, ~45s de timeout) leva a equipe a mandar o
     // MESMO comprovante de novo. Sem isto, cada reenvio empilha outra pendencia MANUAL
@@ -2760,11 +3168,18 @@ _Não lanço nada pela metade._`);
       return { acao: 'manual_review_multi_student' };
     }
 
-    let resolvido = null;
-    try {
-      resolvido = await resolverMultiFn({ unidade_id: grupo.unidade_id, itens: itensParaResolver, valor_total: intent.valor_total });
-    } catch (e) {
-      log({ acao: 'resolver_multi_aluno_erro', chatId: event.chatId, erro: String(e && e.message) });
+    // ⚠️ `resolvidoPronto` e o caminho AGENT-FIRST: quem ja resolveu foi o
+    //    orquestrador do envelope (pagador -> pessoas -> faturas -> combinacao
+    //    unica). Daqui para baixo NADA muda — preview, cofre V3, aprovacao
+    //    humana e lote atomico sao os mesmos. Duplicar esse trecho para o
+    //    caminho novo seria criar a segunda fonte de verdade do lancamento.
+    let resolvido = resolvidoPronto || null;
+    if (!resolvido) {
+      try {
+        resolvido = await resolverMultiFn({ unidade_id: grupo.unidade_id, itens: itensParaResolver, valor_total: intent.valor_total });
+      } catch (e) {
+        log({ acao: 'resolver_multi_aluno_erro', chatId: event.chatId, erro: String(e && e.message) });
+      }
     }
     if (!resolvido || !resolvido.ok || !Array.isArray(resolvido.itens)) {
       await colocarEmRevisao(resolvido && resolvido.motivo || 'itens_nao_validados');
@@ -2839,9 +3254,17 @@ _Não lanço nada pela metade._`);
       origem: origemMessageId || event.messageId, idemKey: `${event.chatId}:${origemMessageId || event.messageId}:lote-multi`,
       enviadoPor: nomeParaCarimbo(idEnviou, event), ts: agora,
     };
+    // O envelope faz parte do estado persistido do preview V3. Guardar apenas
+    // num Map resolvia o segundo turno ate o primeiro restart; depois o bridge
+    // reidratava o card sem os fatos que o LLM tinha estruturado.
+    if (agentFirstEnvelope) pendencia.agentFirstEnvelope = agentFirstEnvelope;
     const v3 = await registrarPreviewPublicoV3({
       event, grupo, previewId, texto, pendencia,
       result: { acao: 'preview_multi_aluno_enviado', itens: itens.length, valor_total: intent.valor_total },
+      // A correcao nasce NAO APROVAVEL. A mesma transacao que encerra o card
+      // antigo promove este para public_preview_sent. Se a troca falhar, o
+      // novo nunca fica aberto no ledger — nao ha janela com dois aprovaveis.
+      previewStatus: supersedePreviewId ? 'awaiting_supersede' : 'public_preview_sent',
     });
     if (!v3 || !v3.preview_id || !v3.preview_hash) {
       await sendFn(event.chatId, '⚠️ Não deixei esse lote pendente porque o preview seguro não foi registrado. Não responda *pode*; tenta de novo em instantes.');
@@ -2863,6 +3286,48 @@ _Não lanço nada pela metade._`);
     if (mortas.length) {
       log({ acao: 'manual_review_encerrada_por_preview', chatId: event.chatId,
             quantas: mortas.length, valor: intent.valor_total });
+    }
+    // 🔴 CORRECAO SUCEDE O PREVIEW ANTERIOR, NAO EMPILHA OUTRO. Sem isto, o 2o
+    //    turno do agent-first deixava DUAS pendencias vivas: a corrigida e a
+    //    antiga — e a antiga continua citavel, entao um "pode" nela lancaria o
+    //    card velho. Duas pendencias para um comprovante e a receita da
+    //    duplicidade. So morre o preview que ESTA funcao criou antes, indicado
+    //    explicitamente por quem chama; nunca uma pendencia alheia.
+    if (supersedePreviewId) {
+      const velhas = arr.filter((p) => p.previewId === supersedePreviewId);
+      if (velhas.length !== 1) {
+        await finalizarPreviewSeguroV3({
+          alvo: pendencia, status: 'rejected', motivo: 'preview_anterior_nao_unico',
+        });
+        await sendFn(event.chatId,
+          '⚠️ Preparei a correção, mas o preview anterior não está mais disponível com segurança. '
+          + 'Ignore o card novo e refaça o lançamento.');
+        log({ acao: 'preview_correcao_bloqueada', chatId: event.chatId,
+              anterior: supersedePreviewId, motivo: 'preview_anterior_nao_unico' });
+        return { acao: 'preview_correcao_bloqueada', preservarEnvelope: false };
+      }
+      for (const velha of velhas) {
+        const fim = await finalizarPreviewSeguroV3({
+          alvo: velha, status: 'superseded', substituto: pendencia,
+          motivo: 'correcao_agent_first',
+        });
+        if (!fim || !fim.ok) {
+          // O novo nasceu `awaiting_supersede`, portanto ja e inaprovavel. O
+          // antigo continua sendo o unico aberto; nenhuma compensacao remota e
+          // necessaria e uma queda entre duas RPCs nao cria estado intermediario.
+          await sendFn(event.chatId,
+            '⚠️ Preparei a correção, mas não consegui substituir o preview antigo com segurança. '
+            + 'Ignore o card novo e não responda *pode* nele; o card anterior continua valendo. Tenta a correção de novo em instantes.');
+          log({ acao: 'preview_correcao_bloqueada', chatId: event.chatId,
+                anterior: supersedePreviewId, motivo: fim && fim.motivo });
+          return { acao: 'preview_correcao_bloqueada', preservarEnvelope: true };
+        }
+      }
+      for (const v of velhas) arr.splice(arr.indexOf(v), 1);
+      if (velhas.length) {
+        log({ acao: 'preview_sucedido_por_correcao', chatId: event.chatId,
+              quantas: velhas.length, anterior: supersedePreviewId });
+      }
     }
     arr.push(pendencia); pendentes.set(event.chatId, arr);
     log({ acao: 'preview_multi_aluno_enviado', chatId: event.chatId, itens: itens.length, valor_total: intent.valor_total });
@@ -2955,7 +3420,14 @@ _Não lanço nada pela metade._`);
   function limparVelhos(chatId, agora) {
     const arr = pendentes.get(chatId) || [];
     const vivos = arr.filter((p) => agora - p.ts < janelaMs);
+    const expirados = arr.filter((p) => agora - p.ts >= janelaMs);
     pendentes.set(chatId, vivos);
+    for (const p of expirados) {
+      limparEnvelopeDaPendencia(chatId, p, 'expirou');
+      // A aprovacao vence no mesmo limite do card. A RPC tambem confere a idade,
+      // portanto esta escrita e trilha/auditoria — nao a unica barreira.
+      void finalizarPreviewSeguroV3({ alvo: p, status: 'expired', motivo: 'janela_runtime_expirou' });
+    }
     return vivos;
   }
 
@@ -2966,6 +3438,27 @@ _Não lanço nada pela metade._`);
     // A foto sai aqui, antes de qualquer coisa consumir pendencia (P2).
     fotografarContextoV4(event, chatId, agora);
     const senderNum = String(event.senderPhone || event.senderId || '').replace(/@.*/, '').replace(/\D/g, '');
+
+    // CANARIO AGENT-FIRST — DESLIGADO por padrao, por LISTA de grupo.
+    // ⚠️ Antes de tudo, de proposito: se o legado responder primeiro, o
+    //    canario nao mede nada (foi o diagnostico do caso Lis/Mayra).
+    // ⚠️ Nao vale para midia nesta rodada: o caminho de comprovante tem OCR e
+    //    visao, e misturar as duas inversoes no mesmo canario impede saber qual
+    //    delas moveu o numero.
+    // 🔴 LEGENDA DE MIDIA TAMBEM PASSA AQUI — foi o buraco do gate anterior. O
+    //    comprovante da Lis chegou como MIDIA COM LEGENDA, e eu tinha gatado em
+    //    `!event.hasMedia`: o caso que originou a frente ficava justamente fora
+    //    dela, e o meu teste, sendo de texto puro, nao representava o evento
+    //    real. O OCR NAO MUDA: sem legenda, ou se o agent-first nao resolver, o
+    //    fluxo de comprovante de hoje assume inteiro.
+    // ⚠️ Quando resolve, o valor NAO vem do OCR — vem do total escrito pelo
+    //    humano, conferido contra as FATURAS pelo Core. E' criterio mais forte
+    //    que o OCR, nao mais fraco: este caminho nunca lanca sem vinculo de
+    //    fatura, enquanto a legenda no fluxo legado pode.
+    if (!event._sintetico && _v4CanarioLigado(chatId)) {
+      const rAgent = await tratarAgentFirst(event, grp, agora);
+      if (rAgent) return rAgent;
+    }
 
     // 0) pergunta sobre o caixa do dia -> resposta com DADO (nunca LLM)
     if (process.env.SOL_RESUMO_SHORTCUT !== '0' && !event.hasMedia && ehPerguntaDeCaixa(event.body)) {
@@ -4077,6 +4570,14 @@ _Não lanço nada pela metade._`);
         }
         if (corrForma) {
           if (!corrForma.forma) {
+            if (corrForma.ambigua) {
+              await sendFn(chatId,
+                'Você citou *' + corrForma.formas.join('* e *')
+                + '* na mesma mensagem, então não sei qual é a deste comprovante. '
+                + 'Me diz só a forma dele: *pix*, *dinheiro*, *cartão débito* ou *cartão crédito*.');
+              log({ acao: 'correcao_forma_ambigua', chatId, formas: corrForma.formas });
+              return { acao: 'correcao_forma_ambigua' };
+            }
             await sendFn(chatId, 'Me diz a forma certa pra eu corrigir: *pix*, *dinheiro*, *cartão débito* ou *cartão crédito*.');
             log({ acao: 'correcao_forma_sem_destino', chatId });
             return { acao: 'correcao_forma_sem_destino' };
@@ -4102,7 +4603,15 @@ _Não lanço nada pela metade._`);
               responsavelFinanceiro: alvoP.responsavelFinanceiro, formaIncerta: false,
               cartaoModalidade: alvoP.cartaoModalidade, cartaoParcelas: alvoP.cartaoParcelas,
               multiplas: alvoP.multiplas, alunoViaPagador: null, pagadorNome: null, candidatosAluno: null,
-              canonica: null, duplicata: null, quitacao: alvoP.quitacao || null,
+              // 🔴 A FATURA JA FIXADA TEM DE SOBREVIVER A CORRECAO DE FORMA.
+              //    Aqui estava `canonica: null` fixo, e o card era remontado SEM
+              //    a fatura que a humana tinha acabado de corrigir — em Recreio,
+              //    10/09, "sol, pagamento foi pix" desfez a competencia 09/2026
+              //    e o card voltou para 10/2026. Duas vezes. Trocar a FORMA nao
+              //    reabre QUAL fatura foi escolhida; sao decisoes diferentes.
+              //    A pendencia ja guardava `alvoP.canonica` (as correcoes de
+              //    aluno/competencia gravam ali); so a renderizacao a jogava fora.
+              canonica: alvoP.canonica || null, duplicata: null, quitacao: alvoP.quitacao || null,
               faturaIndisponivel: false, composto: alvoP.composto || null,
               bloqueiaLancamento: alvoP.bloqueiaLancamento, itemLojinha: alvoP.itemLojinha,
             });
@@ -4233,7 +4742,18 @@ _Não lanço nada pela metade._`);
         if (event.quotedMessageId) alvoD = arrD.find((p) => p.previewId === event.quotedMessageId) || null;
         if (!alvoD && arrD.length === 1) alvoD = arrD[0];
         if (alvoD) {
+          const fimD = await finalizarPreviewSeguroV3({
+            alvo: alvoD, status: 'rejected', motivo: 'descartado_pelo_operador',
+          });
+          if (!fimD || !fimD.ok) {
+            await sendFn(chatId,
+              '⚠️ Não consegui descartar esse preview com segurança agora. Ele continua pendente; tenta de novo em instantes.');
+            log({ acao: 'preview_descarte_bloqueado', chatId, previewId: alvoD.previewId,
+                  motivo: fimD && fimD.motivo });
+            return { acao: 'preview_descarte_bloqueado' };
+          }
           pendentes.set(chatId, arrD.filter((p) => p !== alvoD));
+          limparEnvelopeDaPendencia(chatId, alvoD, 'descartado');
           // 🔴 ANTES DE AFIRMAR, OLHAR. "Nada foi gravado no caixa" e afirmacao
           // sobre o CAIXA; descartar o preview so autoriza a falar do PREVIEW.
           // Em 08/09 ela disse as duas como se fossem uma, e a entrada das 11:24
@@ -5054,6 +5574,16 @@ _Não lanço nada pela metade._`);
       if (arr.length === 0) return { acao: 'pode_sem_pendencia' };
       let alvo = null;
       if (event.quotedMessageId) alvo = arr.find((p) => _citaPend(p, event.quotedMessageId)) || null;
+      // Citar um card velho/estranho NAO pode cair na unica pendencia atual.
+      // Depois de uma correcao existe exatamente um card vigente; antes desta
+      // guarda, responder "pode" citando o antigo lancava o novo — a interface
+      // dizia uma coisa e a autorizacao valia para outra.
+      if (event.quotedMessageId && !alvo) {
+        await sendFn(chatId,
+          '⚠️ Esse card não está mais pendente. Responde *pode* citando o preview mais recente.');
+        log({ acao: 'pode_preview_invalido', chatId, quotedMessageId: event.quotedMessageId });
+        return { acao: 'pode_preview_invalido' };
+      }
       if (!alvo) {
         if (arr.length === 1) alvo = arr[0];
         else {
@@ -5079,6 +5609,7 @@ _Não lanço nada pela metade._`);
       if (alvo.tipoOperacao === 'estornar_movimento' || alvo.tipoOperacao === 'corrigir_movimento') {
         if (dryRun) {
           pendentes.set(chatId, arr.filter((p) => p !== alvo));
+          limparEnvelopeDaPendencia(chatId, alvo, 'dryrun');
           await sendFn(chatId, `🧪 (teste) Eu ${alvo.tipoOperacao === 'estornar_movimento' ? 'estornaria' : 'corrigiria'} o lançamento ${alvo.movimentacao_id}.`);
           return { acao: `dryrun_${alvo.tipoOperacao}` };
         }
@@ -5114,6 +5645,7 @@ _Não lanço nada pela metade._`);
           try { rOp = await estornarMovimentoFn(payloadOperacao); }
           catch (e) { await sendFn(chatId, '⚠️ Deu erro técnico ao estornar. Já registrei o problema.'); log({ acao: 'erro_rpc_estornar_movimento', erro: String(e && e.message) }); return { acao: 'erro_estornar_movimento' }; }
           pendentes.set(chatId, arr.filter((p) => p !== alvo));
+          limparEnvelopeDaPendencia(chatId, alvo, 'estornado');
           if (rOp && rOp.ok) {
             await sendFn(chatId, `Estornei no caixa: ${fmtBRL(rOp.valor || alvo.valor)}. Não apaguei o original; criei o movimento inverso auditado.`);
             log({ acao: 'movimento_estornado', movimentacao_id: alvo.movimentacao_id, estorno_id: rOp.movimentacao_estorno_id });
@@ -5125,6 +5657,7 @@ _Não lanço nada pela metade._`);
         try { rOp = await corrigirMovimentoFn({ ...payloadOperacao, correcoes: alvo.correcoes || {} }); }
         catch (e) { await sendFn(chatId, '⚠️ Deu erro técnico ao corrigir. Já registrei o problema.'); log({ acao: 'erro_rpc_corrigir_movimento', erro: String(e && e.message) }); return { acao: 'erro_corrigir_movimento' }; }
         pendentes.set(chatId, arr.filter((p) => p !== alvo));
+        limparEnvelopeDaPendencia(chatId, alvo, 'movimento_corrigido');
         if (rOp && rOp.ok) {
           const depois = rOp.depois || {};
           await sendFn(chatId, `Corrigi no caixa: ${fmtBRL(depois.valor || alvo.valor)} · ${depois.categoria || alvo.categoria || 'lançamento'} · ${depois.forma_pagamento || alvo.forma || ''}.`);
@@ -5170,6 +5703,7 @@ _Não lanço nada pela metade._`);
           return { acao: 'lote_multi_rpc_erro' };
         }
         pendentes.set(chatId, arr.filter((p) => p !== alvo));
+        limparEnvelopeDaPendencia(chatId, alvo, 'aprovado_lote');
         if (lote && lote.ok) {
           const movsLote = lote.movimentacoes || [];
           if (movsLote.length !== alvo.itens.length) {
@@ -5272,6 +5806,7 @@ _Não lanço nada pela metade._`);
       }
       if (dryRun) {
         pendentes.set(chatId, arr.filter((p) => p !== alvo));
+        limparEnvelopeDaPendencia(chatId, alvo, 'dryrun');
         await sendFn(chatId, `🧪 (teste) Eu lançaria na ${alvo.nome}: ${cap(alvo.categoria || 'parcela')} — ${fmtBRL(valor)} (${forma}). Nada foi gravado.`);
         log({ acao: 'dryrun', valor });
         return { acao: 'dryrun' };
@@ -5325,6 +5860,7 @@ _Não lanço nada pela metade._`);
       catch (e) { await sendFn(chatId, '⚠️ Deu erro técnico ao lançar. Já registrei o problema; tenta de novo em instantes.'); log({ acao: 'erro_rpc', erro: String(e && e.message) }); return { acao: 'erro' }; }
       // remove a pendência alvo
       pendentes.set(chatId, arr.filter((p) => p !== alvo));
+      limparEnvelopeDaPendencia(chatId, alvo, 'aprovado');
       if (r && r.ok && r.ja_lancado) { await sendFn(chatId, 'Esse comprovante já tinha sido lançado ✅.'); return { acao: 'ja_lancado' }; }
       if (r && r.ok) {
         const quem = (alvo.enviadoPor && alvo.enviadoPor !== autorizadoPor)
@@ -5425,6 +5961,13 @@ _Não lanço nada pela metade._`);
         pend.reidratada = true;
         arr.push(pend);
         pendentes.set(chatId, arr);
+        if (pend.agentFirstEnvelope && pend.previewId) {
+          envelopesV4.set(chatId, {
+            envelope: pend.agentFirstEnvelope,
+            ts: Number(pend.ts) || new Date(a.criado_em).getTime() || agora,
+            previewId: pend.previewId,
+          });
+        }
         n++;
       }
       log({ acao: 'reidratacao_pendencias', total: n });
@@ -5562,7 +6105,8 @@ _Não lanço nada pela metade._`);
   // _fh.ehConversaSemComando(body) desde 25/08, mas o handler nunca a expos —
   // o guard de "elogio nao leva nao-entendi" estava morto por undefined.
   return { handle, temPendencia, citaAlgumaPendencia, ehConversaSemComando,
-    reidratarPendencias, tratarNaoEntendida, observarRoteadorV4, _pendentes: pendentes };
+    reidratarPendencias, tratarNaoEntendida, observarRoteadorV4, tratarAgentFirst,
+    _pendentes: pendentes, _envelopesV4: envelopesV4 };
 }
 
 function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
@@ -5572,9 +6116,10 @@ module.exports = {
   _saidaExplicitaFromCaption, _nomeHumanoTardio, extrairValorOcr, _vendedorRotulado, _mesmaPessoa,
   _alunoRotulado, _limparAlunoRotulado, _semAlunoDeclarado, extrairCategoriaCorrecao,
   _ehDitadoDeCaixa, classificarCorrecaoPendencia, listarPreviewsAbertosV3, _contestaFatura, rotearMensagemV4,
+  montarEnvelopeV4, aplicarCorrecaoEnvelope, _v4CanarioLigado, resolverEnvelopeCaixaV1, valorConfereComTexto,
   casarNao, ehConversaSemComando,
   montarPreview, montarPreviewMultiAluno, fmtBRL, carregarEnv, lancarRecebimento, lancarRecebimentoLote, resolverMultiAlunoCaixaV1, resolverPagamentoItensV1, resolverCompostoAlunoCaixaV1, lancarSaidaCaixa, buscarLancamentoParaCorrecao,
-  buscarMovimentosCaixa, corrigirMovimentoCaixa, estornarMovimentoCaixa, registrarPreviewV3, registrarApprovalV3, criarHandlerFinanceiro,
+  buscarMovimentosCaixa, corrigirMovimentoCaixa, estornarMovimentoCaixa, registrarPreviewV3, registrarApprovalV3, finalizarPreviewV3, criarHandlerFinanceiro,
   confirmacaoLimpa, classificarMidia, bodyLimpo, nomeDoAtor, buscarResponsavel, mesmaPessoa, pagamentoMultiplo,
   extrairDivisaoPagamento, extrairSomaAditivaPagamento, extrairAdicionalPagamento, detectarLojinhaProduto, detectarContextoMultiAluno, validarIntencaoMultiAluno,
   identificarPessoa, nomeParaCarimbo, ehPerguntaDeCaixa, resumoDoDia, montarResumoCaixa,
