@@ -2250,7 +2250,13 @@ function montarEnvelopeV4(dec) {
     forma: dec.forma || null,
     itens: itens.map((i) => ({
       aluno: String(i.aluno).trim(),
-      categorias: Array.isArray(i.categorias) ? i.categorias : [],
+      // ⚠️ `matricula` -> `passaporte`: o banco canoniza "Taxa de Matricula" e
+      //    "Passaporte" no mesmo tipo. Sem esta normalizacao, um item que o
+      //    modelo classifique como `matricula` filtraria para ZERO faturas e a
+      //    Sol recusaria um pagamento que ela sabia resolver. Prompt e banco
+      //    tem de falar a mesma lingua; onde nao falam, quem traduz e o codigo.
+      categorias: (Array.isArray(i.categorias) ? i.categorias : [])
+        .map((c) => (String(c).toLowerCase() === 'matricula' ? 'passaporte' : String(c).toLowerCase())),
       competencias: Array.isArray(i.competencias) ? i.competencias : [],
     })),
   } };
@@ -2344,7 +2350,12 @@ function rotearMensagemV4(texto, contexto, { timeout = 30000 } = {}) {
       + '("a mae da Lis mandou", "pagamento da Gisele"); deixe null se quem aparece e o proprio aluno. '
       + '"valor_total" e o total do comprovante — quando a mensagem traz parciais E um total, valor_total e o TOTAL. '
       + '"itens" tem UMA entrada por ALUNO citado (nao por fatura): itens[].categorias em '
-      + '[parcela,passaporte,matricula,lojinha,venda,outro] e itens[].competencias em MM/AAAA, ambas listas, vazias quando a mensagem nao diz. '
+      + '[parcela,passaporte,lojinha,venda,outro] e itens[].competencias em MM/AAAA, ambas listas, vazias quando a mensagem nao diz. '
+      // ⚠️ NAO EXISTE categoria `matricula`. No banco, "Taxa de Matricula" e
+      //    "Passaporte" compartilham `passaporte_taxa_matricula` — pedir ao
+      //    modelo uma categoria que o filtro nao sustenta faria a Sol prometer
+      //    um recorte que nao existe, e o item viria sem casar com fatura nenhuma.
+      + 'TAXA DE MATRICULA e categoria "passaporte" — o sistema trata as duas juntas. '
       + 'Um aluno com dois cursos e UM item; dois irmaos sao DOIS itens. Varios meses do mesmo aluno vao em competencias[]. '
       + 'REGRAS: "conversa" = papo de equipe/elogio/despedida; "nada" = assunto alheio ao caixa. '
       + '"aprovar" quando autorizam lancar o que ja esta num card do contexto — inclusive so com "pode", "pode sim", "ok", "isso", "manda", respondendo a pergunta da Sol. Exige card no contexto: sem card, "pode" sozinho e "conversa". '
@@ -2919,8 +2930,19 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     if (!dec) { log({ acao: 'agent_first_sem_decisao', chatId: event.chatId, ms: Date.now() - t0 }); return null; }
 
     // ── SEGUNDO TURNO: corrige o ENVELOPE guardado, nunca remonta frase ──────
+    // 🔴 O ENVELOPE VIVE ENQUANTO A PENDENCIA DELE VIVER. Amarrar os dois numa
+    //    regra so resolve aprovacao, descarte, expiracao e falha de persistencia
+    //    V3 de uma vez: aprovou ou descartou, a pendencia sai do array; expirou,
+    //    `limparVelhos` a tira; e se o V3 nao registrou, ela nunca nasceu. Um
+    //    envelope orfao seria estado invisivel decidindo dinheiro.
     const guardado = envelopesV4.get(event.chatId);
-    const vivo = guardado && (agora - guardado.ts) < janelaMs;
+    const pendVivo = !!(guardado && guardado.previewId
+      && arr.some((p) => p.previewId === guardado.previewId));
+    if (guardado && !pendVivo) {
+      envelopesV4.delete(event.chatId);
+      log({ acao: 'agent_first_envelope_descartado', chatId: event.chatId, motivo: 'pendencia_nao_existe_mais' });
+    }
+    const vivo = pendVivo && (agora - guardado.ts) < janelaMs;
     let env;
     if (vivo && String(dec.intencao || '').startsWith('corrigir_')) {
       const corr = aplicarCorrecaoEnvelope(guardado.envelope, dec);
@@ -2935,6 +2957,20 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       env = montarEnvelopeV4(dec);
     }
     if (!env.ok) {
+      // 🔴 TOTAL RECUSADO E TERMINAL — NUNCA `null`. Devolver null aqui deixava o
+      //    parser legado assumir a MESMA mensagem, e ele produz exatamente o
+      //    card parcial de R$ 357 com o nome contaminado. Ou seja: a guarda de
+      //    valor bloqueava o caminho novo e liberava o antigo, que e o caminho
+      //    errado. O F11 nao pegava porque so olhava se o Core foi chamado.
+      //    Quando o modelo inventou o total, ninguem responde: pergunta-se.
+      if (env.motivo === 'valor_total_recusado') {
+        await sendFn(event.chatId,
+          'Recebi o comprovante, mas o valor total que li não confere com o que está escrito na mensagem. '
+          + 'Não vou lançar por conta própria. Me manda o total exato, por favor.');
+        log({ acao: 'agent_first_valor_total_recusado', chatId: event.chatId,
+              recusado: env.recusado && env.recusado.motivo });
+        return { acao: 'agent_first_valor_total_recusado' };
+      }
       log({ acao: 'agent_first_sem_envelope', chatId: event.chatId, motivo: env.motivo,
             intencao: dec.intencao, confianca: dec.confianca });
       return null;
@@ -2972,19 +3008,31 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
 
     log({ acao: 'agent_first_resolveu', chatId: event.chatId, via: res.via,
           linhas: res.itens.length, alunos: res.alunos, ms: Date.now() - t0 });
-    envelopesV4.set(event.chatId, { envelope: env.envelope, ts: agora });
+
     // Daqui para baixo e o fluxo de sempre: preview, cofre V3, "pode" humano,
     // lote atomico. O agent-first so troca QUEM montou a pergunta.
-    return abrirFluxoMultiAluno({
+    const anterior = vivo && guardado ? guardado.previewId : null;
+    const saida = await abrirFluxoMultiAluno({
       event, grupo, textoFonte: texto, textoHumano: texto, agora,
       origemMessageId: event.messageId, resolvidoPronto: res,
+      supersedePreviewId: anterior,
       intent: { ok: true, valor_total: Number(res.valor_total), forma: env.envelope.forma,
                 categoria: null,
                 itens: res.itens.map((i) => ({ aluno_nome: i.aluno_nome, valor: Number(i.valor), categoria: i.categoria })) },
     });
+    // So guarda o envelope se a pendencia FOI persistida (previewId de volta).
+    // V3 que nao registrou nao deixa pendencia — e nao pode deixar envelope.
+    if (saida && saida.previewId) {
+      envelopesV4.set(event.chatId, { envelope: env.envelope, ts: agora, previewId: saida.previewId });
+    } else {
+      envelopesV4.delete(event.chatId);
+      log({ acao: 'agent_first_envelope_descartado', chatId: event.chatId,
+            motivo: (saida && saida.acao) || 'sem_preview' });
+    }
+    return saida;
   }
 
-  async function abrirFluxoMultiAluno({ event, grupo, textoFonte, textoHumano, intent, agora, origemMessageId, resolvidoPronto = null }) {
+  async function abrirFluxoMultiAluno({ event, grupo, textoFonte, textoHumano, intent, agora, origemMessageId, resolvidoPronto = null, supersedePreviewId = null }) {
     const arr = limparVelhos(event.chatId, agora);
     // Janela de reenvio: OCR lento (frequente, ~45s de timeout) leva a equipe a mandar o
     // MESMO comprovante de novo. Sem isto, cada reenvio empilha outra pendencia MANUAL
@@ -3183,6 +3231,20 @@ _Não lanço nada pela metade._`);
     if (mortas.length) {
       log({ acao: 'manual_review_encerrada_por_preview', chatId: event.chatId,
             quantas: mortas.length, valor: intent.valor_total });
+    }
+    // 🔴 CORRECAO SUCEDE O PREVIEW ANTERIOR, NAO EMPILHA OUTRO. Sem isto, o 2o
+    //    turno do agent-first deixava DUAS pendencias vivas: a corrigida e a
+    //    antiga — e a antiga continua citavel, entao um "pode" nela lancaria o
+    //    card velho. Duas pendencias para um comprovante e a receita da
+    //    duplicidade. So morre o preview que ESTA funcao criou antes, indicado
+    //    explicitamente por quem chama; nunca uma pendencia alheia.
+    if (supersedePreviewId) {
+      const velhas = arr.filter((p) => p.previewId === supersedePreviewId);
+      for (const v of velhas) arr.splice(arr.indexOf(v), 1);
+      if (velhas.length) {
+        log({ acao: 'preview_sucedido_por_correcao', chatId: event.chatId,
+              quantas: velhas.length, anterior: supersedePreviewId });
+      }
     }
     arr.push(pendencia); pendentes.set(event.chatId, arr);
     log({ acao: 'preview_multi_aluno_enviado', chatId: event.chatId, itens: itens.length, valor_total: intent.valor_total });

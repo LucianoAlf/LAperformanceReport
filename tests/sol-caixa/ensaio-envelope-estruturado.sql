@@ -231,6 +231,39 @@ begin
       r->'itens'->0->>'categoria', r->>'motivo');
   end if;
 
+
+  -- ── 13) TAXA DE MATRICULA PELO CAMINHO EXPLICITO ──────────────────────────
+  -- ⚠️ O check 10 pede o trio SEM filtro de categoria — prova que as tres vem
+  --    juntas, nao que o recorte que o ROTEADOR vai emitir funciona. Aqui o
+  --    envelope pede `categorias: ["passaporte"]`, que e o que a V4 produz para
+  --    "taxa de matricula": o banco canoniza "Taxa de Matricula" e "Passaporte"
+  --    no mesmo tipo, entao as DUAS tem de vir e a parcela ficar fora.
+  v_checks := v_checks + 1;
+  select sum(coalesce((i->'valores'->>'valor_hoje')::numeric,
+                      (i->'valores'->>'valor_pago')::numeric))
+    into v_soma
+    from jsonb_array_elements((sol_faturas_alunos_v1(v_uni,
+           extract(year from v_hoje)::int, extract(month from v_hoje)::int,
+           'janela_3','todas', v_hoje))->'items') i
+   where i->'aluno'->>'nome' = 'Trio Faturas 9200'
+     and (i->>'descricao' ilike 'Passaporte%' or i->>'descricao' ilike 'Taxa de Matricula%');
+  r := sol_caixa_resolver_envelope_v1(v_uni, jsonb_build_object(
+        'valor_total', v_soma, 'forma','pix',
+        'itens', jsonb_build_array(jsonb_build_object(
+          'aluno','Trio Faturas 9200', 'categorias', jsonb_build_array('passaporte')))));
+  if not coalesce((r->>'ok')::boolean,false) or jsonb_array_length(r->'itens') <> 2 then
+    v_falhas := v_falhas || format('13. taxa de matricula explicita: ok=%s linhas=%s motivo=%s',
+      r->>'ok', jsonb_array_length(coalesce(r->'itens','[]'::jsonb)), r->>'motivo');
+  else
+    if exists (select 1 from jsonb_array_elements(r->'itens') x where x->>'descricao' ilike 'Parcela%') then
+      v_falhas := v_falhas || '13. o filtro `passaporte` deixou entrar a PARCELA';
+    end if;
+    if not (exists (select 1 from jsonb_array_elements(r->'itens') x where x->>'descricao' ilike 'Taxa de Matricula%')
+        and exists (select 1 from jsonb_array_elements(r->'itens') x where x->>'descricao' ilike 'Passaporte%')) then
+      v_falhas := v_falhas || '13. o filtro `passaporte` nao trouxe as duas (taxa + passaporte)';
+    end if;
+  end if;
+
   if array_length(v_falhas,1) > 0 then
     raise exception 'ENSAIO ENVELOPE FALHOU — % de % verificacoes: %',
       array_length(v_falhas,1), v_checks, array_to_string(v_falhas, ' | ');

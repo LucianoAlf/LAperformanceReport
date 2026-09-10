@@ -63,7 +63,11 @@ function novo(over = {}) {
     lancarFn: async () => { throw new Error('ESCRITA PROIBIDA'); },
     lancarLoteFn: async () => { throw new Error('ESCRITA PROIBIDA'); },
     lancarSaidaFn: async () => { throw new Error('ESCRITA PROIBIDA'); },
-    registrarPreviewV3Fn: async () => ({ ok: true }), registrarApprovalV3Fn: async () => ({ ok: true }),
+    // 🔴 MOCK FIEL: o fluxo exige `preview_id` E `preview_hash`; sem os dois ele
+    //    responde "preview seguro nao registrado" e NAO cria pendencia — foi
+    //    assim que o F10 antigo passou sem exercitar nada.
+    registrarPreviewV3Fn: async () => ({ ok: true, preview_id: 'prev-' + (++seq), preview_hash: 'hash-' + seq }),
+    registrarApprovalV3Fn: async () => ({ ok: true, approval_id: 'appr-' + (++seq) }),
     log: (o) => logs.push(o),
     ...over,
   });
@@ -232,6 +236,25 @@ const junta = (a) => a.join(' || ');
     'F10: nao registrou que foi correcao de envelope');
   checar(r2 && String(r2.acao) !== 'nada', 'F10: 2o turno caiu no vazio');
 
+  // 🔴 UMA PENDENCIA, NAO DUAS. O F10 antigo usava mock V3 sem `preview_id`,
+  //    entao NENHUMA pendencia nascia e o teste nao media nada. Com mock fiel,
+  //    a correcao empilhava um 2o preview e o ANTIGO continuava citavel — um
+  //    "pode" nele lancaria o card velho.
+  const pends = C.h._pendentes.get(CHAT) || [];
+  checar(pends.length === 1,
+    'F10: ficaram ' + pends.length + ' pendencias depois da correcao — o preview antigo continua aprovavel');
+  const prevAntigo = C.logs.filter((l) => l.acao === 'preview_multi_aluno_enviado').length;
+  checar(prevAntigo === 2, 'F10: esperava dois previews enviados (1o turno e correcao), veio ' + prevAntigo);
+  checar(C.logs.some((l) => l.acao === 'preview_sucedido_por_correcao'),
+    'F10: a correcao nao sucedeu o preview anterior');
+  checar(pends[0] && pends[0].itens && Number(pends[0].valor) === 657,
+    'F10: a pendencia sobrevivente nao e a corrigida -> ' + JSON.stringify(pends[0] && pends[0].valor));
+
+  // o preview ANTIGO nao pode mais aprovar; o NOVO pode
+  const idNovo = pends[0].previewId;
+  const idAntigo = C.enviadas.length && null;
+  checar(!!idNovo, 'F10: pendencia sobrevivente sem previewId');
+
   // e as guardas da correcao, como funcao pura
   const corrVr = mod.aplicarCorrecaoEnvelope(
     { valor_total: 657, forma: 'pix', itens: [{ aluno: 'X', categorias: [], competencias: [] }] },
@@ -243,7 +266,11 @@ const junta = (a) => a.join(' || ');
     { intencao: 'corrigir_aluno', aluno_nome: 'C' });
   checar(corrA.motivo === 'correcao_aluno_ambigua', 'F10: trocou aluno sem saber QUAL de dois');
 
-  // ── F11: MUTANTE 357 + 300 + 657 — total recusado NAO pode virar parcial ───
+  // ── F11: MUTANTE 357 + 300 + 657 — total recusado ENCERRA, nao cede ────────
+  //    O F11 antigo era falso-verde: provava so que o Core novo nao foi chamado.
+  //    Como o agent-first devolvia null, o handle() seguia para o parser legado
+  //    — e ELE produz exatamente o card parcial de R$ 357 com o nome
+  //    contaminado. A guarda bloqueava o caminho certo e liberava o errado.
   const decMut = { intencao: 'lancamento_por_texto', aluno_nome: 'Lis Dal Mora Mello',
     valor: 357, valor_total: null,
     valor_total_recusado: { valor: 657000, motivo: 'nao_esta_no_texto' },
@@ -252,12 +279,28 @@ const junta = (a) => a.join(' || ');
   const envMut = mod.montarEnvelopeV4(decMut);
   checar(envMut.ok === false && envMut.motivo === 'valor_total_recusado',
     'F11: com total recusado caiu para o valor PARCIAL -> ' + JSON.stringify(envMut));
+
   const MUT = novo({ rotearV4Fn: async () => decMut });
   const rMut = await MUT.h.handle({ chatId: CHAT, senderPhone: ADM, messageId: 'MUT',
     body: TEXTO_LIS, hasMedia: true, mediaType: 'image', downloadMedia: async () => Buffer.from('x') });
   checar(MUT.pedidos.length === 0, 'F11: chamou o Core com total recusado');
-  checar(!(rMut && String(rMut.acao).startsWith('agent_first')),
-    'F11: agent-first respondeu com total recusado');
+  checar(rMut && rMut.acao === 'agent_first_valor_total_recusado',
+    'F11: acao=' + JSON.stringify(rMut && rMut.acao) + ' — o agent-first tinha de ENCERRAR, nao ceder');
+  const tudo = MUT.enviadas.join(' || ');
+  checar(!/357/.test(tudo),
+    'F11: saiu card com R$ 357 (o legado assumiu) -> ' + JSON.stringify(tudo.slice(0, 260)));
+  checar(/total exato/i.test(tudo), 'F11: nao pediu o total -> ' + JSON.stringify(tudo.slice(0, 200)));
+  checar((MUT.h._pendentes.get(CHAT) || []).length === 0,
+    'F11: deixou pendencia aberta com total recusado');
+
+  // ── F12: categoria `matricula` e normalizada para a canonica do banco ──────
+  //    O prompt nao pede mais `matricula`, mas se o modelo emitir, o item nao
+  //    pode filtrar para zero faturas: no banco "Taxa de Matricula" e
+  //    `passaporte_taxa_matricula`.
+  const eCat = mod.montarEnvelopeV4({ intencao: 'lancamento_por_texto', valor_total: 500, forma: 'pix',
+    itens: [{ aluno: 'Fulano', categorias: ['matricula', 'PARCELA'], competencias: [] }] });
+  checar(eCat.ok && eCat.envelope.itens[0].categorias.join(',') === 'passaporte,parcela',
+    'F12: categorias nao normalizadas -> ' + JSON.stringify(eCat.envelope && eCat.envelope.itens));
 
   if (CAN === undefined) delete process.env.SOL_CAIXA_V4_CANARIO; else process.env.SOL_CAIXA_V4_CANARIO = CAN;
   if (falhas.length) { console.error('FALHOU:'); falhas.forEach((f) => console.error('  - ' + f)); process.exit(1); }
