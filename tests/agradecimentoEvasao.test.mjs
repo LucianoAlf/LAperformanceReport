@@ -247,3 +247,70 @@ test('estado sem o campo novo continua enviando (compatibilidade)', () => {
   delete semCampo.jaAgradecidoNestaPesquisa;
   assert.deepEqual(decidirEnvioAgradecimento(semCampo, AGORA), { acao: 'enviar' });
 });
+
+// --- Portao 4c: alguem ja falou com a pessoa depois da resposta -------------
+//
+// Cenario levantado pelo Hugo (10/09/2026): a Jessy ve a resposta na Caixa e
+// agradece na mao ANTES de o robo agradecer. Os portoes acima nao alcancam --
+// todos leem `automacao_log`, que e o registro do que o ROBO mandou; a resposta
+// dela vai para `admin_mensagens` e nunca chega a `pesquisa_evasao_mensagens`
+// (medido: as 25 saidas de la sao 21 repescagens + 4 agradecimentos, zero
+// manuais). A janela de risco e de ~16 min -- medida em producao entre a
+// chegada da resposta e o envio: 15,5 · 15,6 · 15,8 · 18,3.
+//
+// A pergunta e "saiu alguma mensagem NOSSA depois da resposta?", nunca "um
+// humano agradeceu?". Duas razoes medidas:
+//   1. `admin_mensagens.remetente='admin'` NAO quer dizer humano -- o robo da
+//      pesquisa de 1a aula grava como admin/`Fabi`, e ha `Notificacao
+//      (automatico)` e `Boas-vindas (automatico)` no mesmo balde. A tabela nao
+//      tem coluna de autor, entao "foi humano?" so se responde por lista de
+//      nomes, que envelhece mal.
+//   2. Julgar se o texto foi um agradecimento seria classificar texto de novo,
+//      com o mesmo risco de errar que o classificador ja tem.
+// De quebra cobre o caso oposto: a Jessy responde "vou verificar isso com a
+// coordenacao" e o robo emenda um "muito obrigada mesmo!" por cima.
+
+test('nao agradece quando alguem ja respondeu a pessoa depois da resposta', () => {
+  assert.deepEqual(
+    decidirEnvioAgradecimento({ ...base, alguemJaRespondeuDepois: true }, AGORA),
+    { acao: 'nao_enviar', motivo: 'alguem_ja_respondeu' },
+  );
+});
+
+test('o portao de terceiros vem DEPOIS dos de idempotencia', () => {
+  // Quando os dois valem, o log tem de dizer que a mensagem ja saiu por nossa
+  // conta -- e o fato mais forte, e o unico que explica por que nao vai sair de
+  // novo nunca mais. "alguem_ja_respondeu" sugeriria uma condicao passageira.
+  assert.deepEqual(
+    decidirEnvioAgradecimento(
+      { ...base, jaAgradecidoNestaPesquisa: true, alguemJaRespondeuDepois: true },
+      AGORA,
+    ),
+    { acao: 'nao_enviar', motivo: 'ja_agradecido_nesta_pesquisa' },
+  );
+});
+
+test('o portao de terceiros barra ANTES da janela e do teto', () => {
+  // Mesmo motivo do portao da pesquisa: relatar "fora_da_janela" faria quem le
+  // o log concluir que ninguem falou com a pessoa, quando alguem falou.
+  assert.deepEqual(
+    decidirEnvioAgradecimento(
+      {
+        ...base,
+        alguemJaRespondeuDepois: true,
+        analiseEncerradaEm: '2026-08-31T10:38:00Z',
+        enviadosHoje: TETO_DIARIO_AGRADECIMENTO,
+      },
+      AGORA,
+    ),
+    { acao: 'nao_enviar', motivo: 'alguem_ja_respondeu' },
+  );
+});
+
+test('estado sem o campo de terceiros continua enviando (compatibilidade)', () => {
+  // Mesma razao do campo anterior: chamador desatualizado nao pode desligar o
+  // agradecimento inteiro em silencio.
+  const semCampo = { ...base };
+  delete semCampo.alguemJaRespondeuDepois;
+  assert.deepEqual(decidirEnvioAgradecimento(semCampo, AGORA), { acao: 'enviar' });
+});

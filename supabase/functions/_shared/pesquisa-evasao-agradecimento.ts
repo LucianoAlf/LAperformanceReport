@@ -56,6 +56,27 @@ export interface EstadoAgradecimento {
    * Ausente = false: chamador desatualizado nao pode desligar o agradecimento.
    */
   jaAgradecidoNestaPesquisa?: boolean;
+  /**
+   * Alguem do nosso lado ja falou com a pessoa depois que a resposta chegou.
+   *
+   * ⚠️ A pergunta e "saiu mensagem nossa?", nunca "um humano agradeceu?". Os
+   * portoes acima so enxergam `automacao_log`, que e o que o ROBO mandou -- a
+   * resposta manual da Jessy vai para `admin_mensagens` e nunca chega a
+   * `pesquisa_evasao_mensagens`. A janela em que ela pode ganhar a corrida e de
+   * ~16 min (medido em 10/09/2026: 15,5 · 15,6 · 15,8 · 18,3 entre a chegada da
+   * resposta e o envio) e 12,4% das entradas do sucesso_aluno sao respondidas
+   * dentro dela.
+   *
+   * Nao tenta distinguir robo de humano de proposito: `remetente='admin'` nao
+   * quer dizer humano (o robo da pesquisa de 1a aula grava como admin/`Fabi`),
+   * e a tabela nao tem coluna de autor. Tambem nao julga o texto -- isso seria
+   * classificar de novo. Se alguem ja falou, a pessoa nao esta no vacuo, que e
+   * o que o agradecimento existe para evitar.
+   *
+   * Ausente = false, como o campo acima: chamador desatualizado nao pode
+   * desligar o agradecimento inteiro em silencio.
+   */
+  alguemJaRespondeuDepois?: boolean;
   /** `pesquisa_evasao_analises.encerrada_em` da versao em questao. */
   analiseEncerradaEm: string | null;
   /** Agradecimentos enviados hoje, em toda a base. */
@@ -104,6 +125,11 @@ export function decidirEnvioAgradecimento(
   // segue aparecendo na fila da Jessy e merece resposta humana -- repetir a
   // mesma frase pronta e a "conversa esquisita" que a feature existe para evitar.
   if (estado.jaAgradecidoNestaPesquisa) return nao("ja_agradecido_nesta_pesquisa");
+
+  // Vem DEPOIS dos dois de cima: "ja saiu por nossa conta" e fato definitivo,
+  // enquanto este portao descreve uma corrida perdida -- reportar o segundo
+  // quando o primeiro tambem vale sugeriria uma condicao passageira.
+  if (estado.alguemJaRespondeuDepois) return nao("alguem_ja_respondeu");
 
   const fechamento = estado.analiseEncerradaEm
     ? Date.parse(estado.analiseEncerradaEm)
