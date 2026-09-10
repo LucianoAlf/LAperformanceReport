@@ -1109,6 +1109,24 @@ function extrairCorrecaoForma(text) {
   if (!/\b(pix|dinheiro|cartao|debito|credito|cheque|transferencia|transfer)\b/i.test(t)) return null;
   const querCorrigir = /(foi|era|corrig|muda|troca|nao e|não é|entrou como|lancou como|lançou como)/i.test(t);
   if (!querCorrigir) return null;
+  // 🔴 DUAS FORMAS NA MESMA FRASE NAO E CORRECAO, E EXPLICACAO. Recreio,
+  //    10/09 15:27: a Vitoria escreveu ao Luciano "essa aluna faz dois cursos,
+  //    1 foi pago no cartao de credito e outro no pix". O extrator via "foi",
+  //    achava cartao primeiro e virava `corrigir_forma` -> o card voltou para
+  //    cartao e a competencia que ela tinha acabado de corrigir se perdeu.
+  //    Frase que cita DUAS formas nao esta mandando usar uma delas — esta
+  //    contando o caso. Quem cita duas, pergunta.
+  // ⚠️ Sem `\b` de proposito: este arquivo atravessa camadas de escape e a
+  //    barra some — a primeira versao virou BACKSPACE literal e a guarda
+  //    nunca disparou. Padding com espaco faz o mesmo trabalho sem barra.
+  const _pad = ' ' + t.replace(/[^a-z0-9]+/gi, ' ') + ' ';
+  const _formas = new Set();
+  if (_pad.includes(' pix ')) _formas.add('pix');
+  if (_pad.includes(' dinheiro ')) _formas.add('dinheiro');
+  if (_pad.includes(' cartao ') || _pad.includes(' credito ') || _pad.includes(' debito ')) _formas.add('cartao');
+  if (_pad.includes(' cheque ')) _formas.add('cheque');
+  if (_pad.includes(' transferencia ') || _pad.includes(' transfer ')) _formas.add('transferencia');
+  if (_formas.size >= 2) return { forma: null, ambigua: true, formas: Array.from(_formas) };
   const cartao = extrairCartao(t);
   if (cartao && !/\bnao\s+(?:e|eh|é)\s+cartao\b/.test(t)) {
     return { forma: 'cartao', cartaoModalidade: cartao.modalidade || null, cartaoParcelas: cartao.parcelas || null };
@@ -4400,6 +4418,14 @@ _Não lanço nada pela metade._`);
         }
         if (corrForma) {
           if (!corrForma.forma) {
+            if (corrForma.ambigua) {
+              await sendFn(chatId,
+                'Você citou *' + corrForma.formas.join('* e *')
+                + '* na mesma mensagem, então não sei qual é a deste comprovante. '
+                + 'Me diz só a forma dele: *pix*, *dinheiro*, *cartão débito* ou *cartão crédito*.');
+              log({ acao: 'correcao_forma_ambigua', chatId, formas: corrForma.formas });
+              return { acao: 'correcao_forma_ambigua' };
+            }
             await sendFn(chatId, 'Me diz a forma certa pra eu corrigir: *pix*, *dinheiro*, *cartão débito* ou *cartão crédito*.');
             log({ acao: 'correcao_forma_sem_destino', chatId });
             return { acao: 'correcao_forma_sem_destino' };
@@ -4425,7 +4451,15 @@ _Não lanço nada pela metade._`);
               responsavelFinanceiro: alvoP.responsavelFinanceiro, formaIncerta: false,
               cartaoModalidade: alvoP.cartaoModalidade, cartaoParcelas: alvoP.cartaoParcelas,
               multiplas: alvoP.multiplas, alunoViaPagador: null, pagadorNome: null, candidatosAluno: null,
-              canonica: null, duplicata: null, quitacao: alvoP.quitacao || null,
+              // 🔴 A FATURA JA FIXADA TEM DE SOBREVIVER A CORRECAO DE FORMA.
+              //    Aqui estava `canonica: null` fixo, e o card era remontado SEM
+              //    a fatura que a humana tinha acabado de corrigir — em Recreio,
+              //    10/09, "sol, pagamento foi pix" desfez a competencia 09/2026
+              //    e o card voltou para 10/2026. Duas vezes. Trocar a FORMA nao
+              //    reabre QUAL fatura foi escolhida; sao decisoes diferentes.
+              //    A pendencia ja guardava `alvoP.canonica` (as correcoes de
+              //    aluno/competencia gravam ali); so a renderizacao a jogava fora.
+              canonica: alvoP.canonica || null, duplicata: null, quitacao: alvoP.quitacao || null,
               faturaIndisponivel: false, composto: alvoP.composto || null,
               bloqueiaLancamento: alvoP.bloqueiaLancamento, itemLojinha: alvoP.itemLojinha,
             });
