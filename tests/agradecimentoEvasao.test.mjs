@@ -188,3 +188,62 @@ test('idempotencia vence janela e teto', () => {
     { acao: 'nao_enviar', motivo: 'ja_agradecido' },
   );
 });
+
+// --- Portao 4b: um agradecimento por PESQUISA, nao por analise -------------
+//
+// Medido em producao (10/09/2026): o Renan foi agradecido as 11:02 e respondeu
+// "Muito obrigado 🙏🏾" as 11:10. Isso abriu a analise VERSAO 2 -- e a chave de
+// idempotencia carrega a versao, entao `jaAgradecido` (portao 4) nao alcanca a
+// v2. So nao saiu um segundo "muito obrigada mesmo!" porque a mensagem era
+// `indeterminado` e nao fechou analise; com um texto substantivo ("esqueci de
+// falar: o professor foi excelente") a v2 teria fechado, o classificador teria
+// aprovado, e o ex-aluno receberia a MESMA frase 25 minutos depois.
+//
+// Decisao do Hugo (10/09): nunca um segundo agradecimento automatico na mesma
+// pesquisa. Feedback que chega depois merece resposta humana da Jessy, e a
+// pesquisa segue aparecendo na fila dela.
+
+test('nao agradece de novo quando outra analise da MESMA pesquisa ja foi agradecida', () => {
+  assert.deepEqual(
+    decidirEnvioAgradecimento({ ...base, jaAgradecidoNestaPesquisa: true }, AGORA),
+    { acao: 'nao_enviar', motivo: 'ja_agradecido_nesta_pesquisa' },
+  );
+});
+
+test('a idempotencia da versao e reportada antes do portao da pesquisa', () => {
+  // Quando os dois valem, o log precisa dizer "esta versao ja saiu" -- e o fato
+  // mais especifico, e o que responde "por que este caso nao rodou de novo?".
+  assert.deepEqual(
+    decidirEnvioAgradecimento(
+      { ...base, jaAgradecido: true, jaAgradecidoNestaPesquisa: true },
+      AGORA,
+    ),
+    { acao: 'nao_enviar', motivo: 'ja_agradecido' },
+  );
+});
+
+test('o portao da pesquisa barra ANTES da janela e do teto', () => {
+  // Sem isso, uma pesquisa ja agradecida cujo envio caiu fora da janela seria
+  // relatada como "fora_da_janela" -- e quem le o log concluiria que o caso
+  // ainda esta para acontecer, quando ja aconteceu.
+  assert.deepEqual(
+    decidirEnvioAgradecimento(
+      {
+        ...base,
+        jaAgradecidoNestaPesquisa: true,
+        analiseEncerradaEm: '2026-08-31T10:38:00Z',
+        enviadosHoje: TETO_DIARIO_AGRADECIMENTO,
+      },
+      AGORA,
+    ),
+    { acao: 'nao_enviar', motivo: 'ja_agradecido_nesta_pesquisa' },
+  );
+});
+
+test('estado sem o campo novo continua enviando (compatibilidade)', () => {
+  // Chamador que ainda nao passa o campo nao pode virar fail-closed silencioso:
+  // isso desligaria o agradecimento inteiro em vez de so evitar o duplicado.
+  const semCampo = { ...base };
+  delete semCampo.jaAgradecidoNestaPesquisa;
+  assert.deepEqual(decidirEnvioAgradecimento(semCampo, AGORA), { acao: 'enviar' });
+});

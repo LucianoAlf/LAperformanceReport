@@ -46,6 +46,16 @@ export interface EstadoAgradecimento {
   classificacao: VeredictoAgradecimento | null;
   /** Ja existe registro de agradecimento para esta (pesquisa, versao). */
   jaAgradecido: boolean;
+  /**
+   * Ja saiu agradecimento para esta pesquisa em QUALQUER versao de analise.
+   *
+   * ⚠️ Nao e redundante com `jaAgradecido`: a chave de idempotencia carrega a
+   * versao, entao responder ao proprio agradecimento abre uma analise nova cuja
+   * chave e diferente -- e o portao acima nao alcanca. Medido em 10/09/2026 com
+   * o Renan (agradecido 11:02, respondeu "Muito obrigado" 11:10, criando a v2).
+   * Ausente = false: chamador desatualizado nao pode desligar o agradecimento.
+   */
+  jaAgradecidoNestaPesquisa?: boolean;
   /** `pesquisa_evasao_analises.encerrada_em` da versao em questao. */
   analiseEncerradaEm: string | null;
   /** Agradecimentos enviados hoje, em toda a base. */
@@ -88,6 +98,12 @@ export function decidirEnvioAgradecimento(
   }
 
   if (estado.jaAgradecido) return nao("ja_agradecido");
+
+  // Um agradecimento por PESQUISA, decisao do Hugo em 10/09/2026. A pesquisa e
+  // sobre uma saida especifica: um obrigada basta. Feedback que chegue depois
+  // segue aparecendo na fila da Jessy e merece resposta humana -- repetir a
+  // mesma frase pronta e a "conversa esquisita" que a feature existe para evitar.
+  if (estado.jaAgradecidoNestaPesquisa) return nao("ja_agradecido_nesta_pesquisa");
 
   const fechamento = estado.analiseEncerradaEm
     ? Date.parse(estado.analiseEncerradaEm)

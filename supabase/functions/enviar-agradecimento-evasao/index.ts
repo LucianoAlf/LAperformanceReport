@@ -168,7 +168,8 @@ serve(async (req: Request) => {
   const chave = chaveIdempotencia(pesquisaId, analiseVersao);
 
   // --- Estado, lido aqui e nao recebido do chamador --------------------------
-  const [config, classificacaoLog, analise, jaLog, doDia, pesquisa] = await Promise.all([
+  const [config, classificacaoLog, analise, jaLog, jaNaPesquisa, doDia, pesquisa] = await Promise
+    .all([
     supabase.from("automacoes_config").select("ativo")
       .eq("slug", "auto_agradecimento_evasao").maybeSingle(),
     supabase.from("automacao_log").select("detalhes, created_at")
@@ -179,6 +180,12 @@ serve(async (req: Request) => {
     supabase.from("pesquisa_evasao_analises").select("encerrada_em, status, texto_consolidado")
       .eq("pesquisa_id", pesquisaId).eq("versao", analiseVersao).maybeSingle(),
     supabase.from("automacao_log").select("id").eq("idempotency_key", chave).maybeSingle(),
+    // Um agradecimento por PESQUISA, nao por analise. `status='ok'` de proposito:
+    // so bloqueia quando a mensagem REALMENTE saiu -- reserva orfa (`warn`) ou
+    // envio que falhou (`erro`) nao podem impedir a tentativa legitima.
+    supabase.from("automacao_log").select("id", { count: "exact", head: true })
+      .eq("acao", ACAO_LOG).eq("status", "ok")
+      .eq("detalhes->>pesquisa_id", pesquisaId),
     supabase.from("automacao_log").select("id", { count: "exact", head: true })
       .eq("acao", ACAO_LOG).not("idempotency_key", "is", null)
       .gte("created_at", inicioDoDiaBrt(agora)),
@@ -211,6 +218,7 @@ serve(async (req: Request) => {
       }
       : null,
     jaAgradecido: Boolean(jaLog.data),
+    jaAgradecidoNestaPesquisa: (jaNaPesquisa.count ?? 0) > 0,
     analiseEncerradaEm: analise.data?.encerrada_em ?? null,
     enviadosHoje: doDia.count ?? 0,
   }, agora);
