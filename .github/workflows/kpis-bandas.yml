@@ -1,0 +1,25 @@
+name: KPI bandas - PostgreSQL
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - 'tests/kpisAdminBandasMatriculasDistintasPostgres.test.mjs'
+      - '.github/workflows/kpis-bandas.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'tests/kpisAdminBandasMatriculasDistintasPostgres.test.mjs'
+      - '.github/workflows/kpis-bandas.yml'
+permissions:
+  contents: read
+jobs:
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/kpisAdminBandasMatriculasDistintasPostgres.test.mjs tests/relatorioAdminCanonicoMulticursoTrancamento.test.mjs tests/kpisAlunosSnapshotFechadoContract.test.mjs tests/kpisAlunosDadosMensaisNullSafety.test.mjs
