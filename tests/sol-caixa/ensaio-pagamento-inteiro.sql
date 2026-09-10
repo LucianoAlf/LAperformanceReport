@@ -213,40 +213,66 @@ begin
   end if;
 
   ------------------------------------------------------ 9) ACL das funcoes
-  -- Recriar funcao reabre EXECUTE para `anon` por causa do ALTER DEFAULT
-  -- PRIVILEGES do schema. Isto ja mordeu 3x neste projeto; aqui vira asserção.
+  -- 🔴 Recriar funcao reabre EXECUTE para `anon` E PARA `authenticated`: o
+  --    ALTER DEFAULT PRIVILEGES do schema concede aos tres papeis. Isto ja
+  --    mordeu 4x neste projeto, e a ultima foi aqui: as duas `_env_v1`
+  --    nasceram executaveis por `authenticated` e o CI ficou VERDE, porque
+  --    esta lista nao continha as assinaturas delas.
+  --    Asserção que nao lista a funcao nova nao protege a funcao nova.
+  -- ⚠️ PROVA OS QUATRO PAPEIS, nao dois: anon e authenticated NAO podem ter
+  --    EXECUTE; service_role e sol_acesso_restrito PRECISAM ter. Faltar grant
+  --    ao papel de servico quebra a Sol em producao — e o oposto do vazamento,
+  --    mas tambem so aparece tarde.
+  -- ⚠️ Papel inexistente agora FALHA, nao pula. O `exception when
+  --    undefined_object` que estava aqui transformava "nao consegui medir" em
+  --    silencio verde — mesma familia da guarda que passa vazia.
   v_checks := v_checks + 1;
   declare
-    v_fn text;
-    v_faltou text[] := '{}';
-    v_sobrou text[] := '{}';
+    v_fn    text;
+    v_papel text;
+    v_falta text[] := '{}';
+    v_sobra text[] := '{}';
+    v_linha text;
   begin
+    foreach v_papel in array array['anon','authenticated','service_role','sol_acesso_restrito'] loop
+      if to_regrole(v_papel) is null then
+        v_falhas := v_falhas || format('9. ACL: papel %s nao existe — impossivel provar', v_papel);
+      end if;
+    end loop;
+
     foreach v_fn in array array[
       'public.sol_caixa_resolver_pagamento_v1(uuid,jsonb,numeric,date)',
       'public.sol_caixa_resolver_pagamento_itens_v1(uuid,jsonb,numeric,date)',
       'public.sol_caixa_resolver_composto_aluno_v1(jsonb)',
-      'public.sol_caixa_parcela_canonica(uuid,text,numeric,date)']
+      'public.sol_caixa_parcela_canonica(uuid,text,numeric,date)',
+      'public.sol_caixa_resolver_composto_aluno_env_v1(jsonb,jsonb)',
+      'public.sol_caixa_parcela_canonica_env_v1(jsonb,uuid,text,numeric,date)']
     loop
-      if has_function_privilege('anon', v_fn, 'EXECUTE') then
-        v_sobrou := v_sobrou || v_fn;
-      end if;
-      if has_function_privilege('authenticated', v_fn, 'EXECUTE') then
-        v_sobrou := v_sobrou || (v_fn || ' [authenticated]');
-      end if;
-      if not has_function_privilege('service_role', v_fn, 'EXECUTE') then
-        v_faltou := v_faltou || v_fn;
-      end if;
+      v_linha := '';
+      foreach v_papel in array array['anon','authenticated','service_role','sol_acesso_restrito'] loop
+        if has_function_privilege(v_papel, v_fn, 'EXECUTE') then
+          v_linha := v_linha || format('%s=SIM ', v_papel);
+          if v_papel in ('anon','authenticated') then
+            v_sobra := v_sobra || format('%s [%s]', v_fn, v_papel);
+          end if;
+        else
+          v_linha := v_linha || format('%s=nao ', v_papel);
+          if v_papel in ('service_role','sol_acesso_restrito') then
+            v_falta := v_falta || format('%s [%s]', v_fn, v_papel);
+          end if;
+        end if;
+      end loop;
+      raise notice '   ACL % -> %', v_fn, v_linha;
     end loop;
-    if array_length(v_sobrou,1) > 0 then
+
+    if array_length(v_sobra,1) > 0 then
       v_falhas := v_falhas || format('9. ACL: executavel por anon/authenticated: %s',
-        array_to_string(v_sobrou, ', '));
+        array_to_string(v_sobra, ', '));
     end if;
-    if array_length(v_faltou,1) > 0 then
-      v_falhas := v_falhas || format('9. ACL: service_role SEM execute em: %s',
-        array_to_string(v_faltou, ', '));
+    if array_length(v_falta,1) > 0 then
+      v_falhas := v_falhas || format('9. ACL: papel de servico SEM execute em: %s',
+        array_to_string(v_falta, ', '));
     end if;
-  exception when undefined_object then
-    raise notice '9. ACL: papel anon/authenticated inexistente neste banco — check pulado';
   end;
 
   ------------------------------------- 10) as cascas nao guardam regra propria

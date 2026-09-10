@@ -151,15 +151,23 @@ as $$ select public.sol_caixa_parcela_canonica_env_v1(
 --    20260909193000 e deixou a regra financeira FORA do banco sem ninguem ver.
 
 -------------------------------------------------------------------- 4) acesso
--- `CREATE OR REPLACE` preserva ACL, mas função NOVA nasce com EXECUTE para
--- `anon` por causa do ALTER DEFAULT PRIVILEGES do schema. Nominal, sempre.
+-- 🔴 `CREATE OR REPLACE` preserva ACL, mas função NOVA nasce com EXECUTE para
+--    `anon` E PARA `authenticated` — o ALTER DEFAULT PRIVILEGES do schema
+--    concede aos três papéis. Revogar só de `public, anon` deixa toda a base
+--    autenticada executando uma função SECURITY DEFINER de dinheiro. As duas
+--    `_env_v1` nasceram assim e o CI ficou VERDE: a asserção de ACL do ensaio
+--    não listava estas assinaturas. Verde que não olha não é prova.
+-- ⚠️ As duas de baixo são `CREATE OR REPLACE` de funções que já existiam, então
+--    herdam a ACL antiga — e o ensaio prova que `authenticated` não tem EXECUTE
+--    nelas. Por isso o revoke delas fica como está: alargar sem medir seria
+--    mexer em permissão de consumidor vivo às cegas.
 revoke execute on function public.sol_caixa_resolver_composto_aluno_env_v1(jsonb, jsonb)
-  from public, anon;
+  from public, anon, authenticated;
 grant  execute on function public.sol_caixa_resolver_composto_aluno_env_v1(jsonb, jsonb)
   to service_role, sol_acesso_restrito;
 
 revoke execute on function public.sol_caixa_parcela_canonica_env_v1(jsonb, uuid, text, numeric, date)
-  from public, anon;
+  from public, anon, authenticated;
 grant  execute on function public.sol_caixa_parcela_canonica_env_v1(jsonb, uuid, text, numeric, date)
   to service_role, sol_acesso_restrito;
 
