@@ -68,7 +68,7 @@ awk '/^=== /{arq=$2; next}
        if ((arq ~ /^20260909/ && arq ~ /caixa|pagamento|reconciliacao|envelope|resolver_pagamento|lista_plana/) ||
            arq ~ /^20260910213000_preview_v3_tem_estado_terminal/ ||
            arq ~ /^20260910234500_dinheiro_de_venda_atualiza_cofre/ ||
-           arq ~ /^20260911020000_sol_porta_localizar_lancamento_caixa/)
+           arq ~ /^2026091102/ && arq ~ /sol_porta_localizar_lancamento/)
          print "   " arq ": " $0
      }' \
   /tmp/replay-ensaio.log | sort -u > /tmp/criticas.txt || true
@@ -79,6 +79,9 @@ echo "   nenhuma"
 
 echo "== 6/7 seed sintético"
 roda -q -v ON_ERROR_STOP=1 -f /tmp/ensaio-seed.sql 2>&1 | grep -E 'NOTICE:  seed|ERROR' | head -3
+
+echo "-- porta localizar contra schema real"
+roda -q -v ON_ERROR_STOP=1 -f /tmp/ensaio-porta-localizar-lancamento.sql
 
 echo
 echo "== 7/7 provas"

@@ -173,7 +173,7 @@ jobs:
           # manifesto 16/16 no passo seguinte) e as do RADAR/Mila do mesmo dia,
           # que dependem de tabelas fora deste schema base — cobrar delas aqui
           # seria vermelho permanente e falso.
-          awk '/^=== /{arq=$2; next} /: ERROR:/{if ((arq ~ /^20260909/ && arq ~ /caixa|pagamento|reconciliacao|envelope|resolver_pagamento|lista_plana/) || arq ~ /^20260910213000_preview_v3_tem_estado_terminal/ || arq ~ /^20260910234500_dinheiro_de_venda_atualiza_cofre/ || arq ~ /^20260911020000_sol_porta_localizar_lancamento_caixa/) print arq": "$0}' \
+          awk '/^=== /{arq=$2; next} /: ERROR:/{if ((arq ~ /^20260909/ && arq ~ /caixa|pagamento|reconciliacao|envelope|resolver_pagamento|lista_plana/) || arq ~ /^20260910213000_preview_v3_tem_estado_terminal/ || arq ~ /^20260910234500_dinheiro_de_venda_atualiza_cofre/ || arq ~ /^2026091102/ && arq ~ /sol_porta_localizar_lancamento/) print arq": "$0}' \
             /tmp/replay.log | sort -u | head -20 > /tmp/criticas.txt || true
           if [ -s /tmp/criticas.txt ]; then
             echo "::error::migration crítica falhou no replay"; cat /tmp/criticas.txt; exit 1
@@ -182,6 +182,9 @@ jobs:
 
       - name: seed sintético
         run: psql -q -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-seed.sql
+
+      - name: porta localizar executa contra o schema real da auditoria
+        run: psql -q -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-porta-localizar-lancamento.sql
 
       - name: cadeia reproduz produção (16/16)
         run: psql -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-verificar-cadeia.sql

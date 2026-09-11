@@ -32,6 +32,8 @@ assert(migration.includes("sol_cracha_verificar_v1(p_cracha, p_chat_id)"));
 assert(migration.includes("cracha_assinado_obrigatorio"));
 assert(migration.includes("i.item - 'criado_por'"));
 assert(migration.includes("recibo_persistido"));
+assert(migration.includes('order by a.criado_em desc'));
+assert(!migration.includes('order by a.created_at desc'));
 assert(migration.includes("Não lance novamente"));
 assert(!/grant execute[\s\S]{0,200}to\s+(?:anon|authenticated)/i.test(migration));
 
