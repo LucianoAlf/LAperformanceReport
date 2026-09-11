@@ -46,7 +46,12 @@ fs.writeFileSync(bridge, [
   "    .split(';').map(function (x) { return (x.split('|')[0] || '').trim(); }).filter(Boolean)",
   ');',
   'if (SOL_CAIXA_LIVE && FINANCE_GROUPS.has(chatId)) {',
-  '  legacyFinanceHandler();',
+  '            const _fh = await financeHandler();',
+  '            let _tratouCaixa = true;',
+  '            if (_fh) _tratouCaixa = true;',
+  '            if (_tratouCaixa) { typingStop(chatId); continue; }   // dinheiro e deterministico: nunca vai pro LLM',
+  '          } catch (e) {',
+  '            continue;',
   '}',
   'if (event.senderPhone) {',
   '  try {',
@@ -61,6 +66,8 @@ assert(patched.includes('[chat_caixa: ${chatId}]'));
 assert.strictEqual((patched.match(/\[chat_caixa:/g) || []).length, 1);
 assert(patched.includes('const SOL_CAIXA_TOOLS_GROUPS = new Set('));
 assert(patched.includes('SOL_CAIXA_TOOLS_GROUPS.has(chatId) && !event.hasMedia'));
+assert(patched.includes("step: 'agent_first_text_handoff_pos_abf'"));
+assert(!patched.includes('&& !(SOL_CAIXA_TOOLS_GROUPS.has(chatId) && !event.hasMedia)'));
 cp.execFileSync(process.execPath, [path.join(root, 'vps/la-hq/sol/scripts/_patch-bridge-contexto-caixa-11set.cjs'), bridge]);
 assert.strictEqual(fs.readFileSync(bridge, 'utf8'), patched);
 

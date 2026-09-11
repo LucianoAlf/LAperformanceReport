@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Expõe o chat assinado e, no canário, deixa TEXTO financeiro chegar ao LLM.
-// Mídia continua no OCR/bridge atual nesta etapa: não misturamos a inversão de
-// decisão com uma troca de extrator de comprovante.
+// Abertura/fechamento continuam determinísticos e rodam ANTES desse handoff:
+// o preview automático nasce fora da conversa e precisa aceitar "pode/não"
+// mesmo quando nenhuma janela do grupo foi aberta. Mídia continua no trilho
+// atual nesta etapa.
 const fs = require('fs');
 
 const alvo = process.argv[2] || '/home/sol/.hermes/hermes-agent/scripts/whatsapp-bridge/bridge.js';
@@ -38,17 +40,49 @@ if (!src.includes('const SOL_CAIXA_TOOLS_GROUPS = new Set(')) {
   src = src.replace(ancoraGrupos, comTools);
 }
 
-const condAntiga = 'if (SOL_CAIXA_LIVE && FINANCE_GROUPS.has(chatId)) {';
-const condNova = 'if (SOL_CAIXA_LIVE && FINANCE_GROUPS.has(chatId)\n'
+const condBase = 'if (SOL_CAIXA_LIVE && FINANCE_GROUPS.has(chatId)) {';
+const condBugCanario = 'if (SOL_CAIXA_LIVE && FINANCE_GROUPS.has(chatId)\n'
   + '            && !(SOL_CAIXA_TOOLS_GROUPS.has(chatId) && !event.hasMedia)) {';
-if (!src.includes('SOL_CAIXA_TOOLS_GROUPS.has(chatId) && !event.hasMedia')) {
-  const n = src.split(condAntiga).length - 1;
-  if (n !== 1) {
-    console.error(`ancora do roteamento: esperava 1 ocorrencia, achei ${n}`);
-    process.exit(1);
+
+// Migra também o runtime já canariado pelo patch anterior. A condição antiga
+// pulava o bloco inteiro e, junto com o parser legado, pulava o tratador
+// determinístico de abertura/fechamento.
+if (src.includes(condBugCanario)) src = src.replace(condBugCanario, condBase);
+
+const marcadorHandoff = "step: 'agent_first_text_handoff_pos_abf'";
+if (!src.includes(marcadorHandoff)) {
+  const inicioLegado = [
+    '            const _fh = await financeHandler();',
+    '            let _tratouCaixa = true;',
+  ].join('\n');
+  const inicioComHandoff = [
+    '            // Abertura/fechamento fica determinístico acima. Só depois',
+    '            // o texto restante do canário pula o parser financeiro legado.',
+    '            const _textoVaiParaAgentTools = SOL_CAIXA_TOOLS_GROUPS.has(chatId) && !event.hasMedia;',
+    '            if (_textoVaiParaAgentTools) {',
+    "              _caixaLog({ step: 'agent_first_text_handoff_pos_abf', chatId: chatId });",
+    '            } else {',
+    inicioLegado,
+  ].join('\n');
+  const fimLegado = [
+    '            if (_tratouCaixa) { typingStop(chatId); continue; }   // dinheiro e deterministico: nunca vai pro LLM',
+    '          } catch (e) {',
+  ].join('\n');
+  const fimComHandoff = [
+    '            if (_tratouCaixa) { typingStop(chatId); continue; }   // dinheiro e deterministico: nunca vai pro LLM',
+    '            }',
+    '          } catch (e) {',
+  ].join('\n');
+
+  for (const [ancora, rotulo] of [[condBase, 'bloco financeiro'], [inicioLegado, 'inicio legado'], [fimLegado, 'fim legado']]) {
+    const n = src.split(ancora).length - 1;
+    if (n !== 1) {
+      console.error(`ancora ${rotulo}: esperava 1 ocorrencia, achei ${n}`);
+      process.exit(1);
+    }
   }
-  src = src.replace(condAntiga, condNova);
+  src = src.replace(inicioLegado, inicioComHandoff).replace(fimLegado, fimComHandoff);
 }
 
 fs.writeFileSync(alvo, src, 'utf8');
-console.log('contexto chat-bound + texto agent-tools do Caixa injetados');
+console.log('contexto chat-bound + ABF deterministico + texto agent-tools do Caixa injetados');
