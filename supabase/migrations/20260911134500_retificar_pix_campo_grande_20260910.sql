@@ -24,16 +24,25 @@ begin
   end if;
 
   select id
-    into strict v_unidade_id
+    into v_unidade_id
   from public.unidades
   where nome = 'Campo Grande';
 
+  -- Ambientes novos/efemeros nao possuem o incidente historico.
+  if v_unidade_id is null then
+    return;
+  end if;
+
   select *
-    into strict v_caixa
+    into v_caixa
   from public.caixas_diarios
   where unidade_id = v_unidade_id
     and data_caixa = date '2026-09-10'
   for update;
+
+  if v_caixa.id is null then
+    return;
+  end if;
 
   if v_caixa.status <> 'fechado'
      or v_caixa.saldo_inicial_cofre <> 276.20
