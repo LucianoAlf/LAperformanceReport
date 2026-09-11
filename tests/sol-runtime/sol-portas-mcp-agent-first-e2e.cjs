@@ -67,8 +67,9 @@ const server = http.createServer((req, res) => {
   });
   chamar(2, 'caixa_preparar_lancamento', {
     p_cracha: CRACHA, p_chat_id: CHAT,
-    p_texto_original: 'Pagamento de Ana R$ 500,00 no pix', p_valor_total: 500,
-    p_forma: 'pix', p_itens: [{ aluno: 'Ana', categorias: ['parcela'], competencias: [] }],
+    p_texto_original: 'Pagamento de Ana R$ 500,00 no cartão 2x', p_valor_total: 500,
+    p_forma: 'cartao', p_cartao_modalidade: 'credito', p_cartao_parcelas: 2,
+    p_itens: [{ aluno: 'Ana', categorias: ['parcela'], competencias: [] }],
   });
   const limite = Date.now() + 5000;
   while ((out.match(/"jsonrpc"/g) || []).length < 2 && Date.now() < limite) {
@@ -82,5 +83,7 @@ const server = http.createServer((req, res) => {
   assert.strictEqual(calls[0].ev.caixaToolCommand.correcoes.forma_pagamento, 'dinheiro');
   assert.strictEqual(calls[1].ev.caixaToolDecision.valor_total, 500);
   assert.strictEqual(calls[1].ev.caixaToolDecision.itens[0].aluno, 'Ana');
+  assert.strictEqual(calls[1].ev.caixaToolDecision.cartao_modalidade, 'credito');
+  assert.strictEqual(calls[1].ev.caixaToolDecision.cartao_parcelas, 2);
   console.log('sol-portas MCP agent-first: contexto, alvo e envelope OK');
 })().finally(() => { server.close(); });

@@ -103,6 +103,8 @@ const PORTAS = [
       p_texto_original: { type: 'string', description: 'Mensagem humana exata que contém o pagamento e o total. Não reescreva.' },
       p_valor_total: { type: 'number', description: 'Total declarado explicitamente pela pessoa.' },
       p_forma: { type: 'string', description: 'dinheiro | pix | cartao | cheque | transferencia | outro.' },
+      p_cartao_modalidade: { type: 'string', description: 'credito | debito. Só quando a pessoa declarou.' },
+      p_cartao_parcelas: { type: 'number', description: 'Número de parcelas (1 a 24). Só quando a pessoa declarou.' },
       p_pagador: { type: 'string', description: 'Nome do pagador, se foi informado.' },
       p_itens: { type: 'array', description: 'Alunos/cursos citados. Não invente item.', items: { type: 'object', properties: {
         aluno: { type: 'string' }, categorias: { type: 'array', items: { type: 'string' } },
@@ -299,6 +301,8 @@ async function executarRuntimeCaixa(p, args) {
       intencao: Array.isArray(args.p_itens) && args.p_itens.length > 1
         ? 'lancamento_multi_aluno' : 'lancamento_por_texto',
       valor_total: valor, forma: args.p_forma || null, pagador: args.p_pagador || null,
+      cartao_modalidade: args.p_cartao_modalidade || null,
+      cartao_parcelas: Number(args.p_cartao_parcelas) || null,
       itens: Array.isArray(args.p_itens) ? args.p_itens : [],
     } }, gruposCaixa[ctx._chat], Date.now());
   } else if (p.action === 'preparar_saida') {

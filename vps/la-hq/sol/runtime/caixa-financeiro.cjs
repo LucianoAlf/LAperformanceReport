@@ -948,8 +948,8 @@ function _httpGetJson(pathQuery, { url, key } = carregarEnv(), timeout = 15000) 
 async function listarPreviewsAbertosV3(janelaMs) {
   const desde = new Date(Date.now() - janelaMs).toISOString();
   const previews = await _httpGetJson('/rest/v1/sol_caixa_shadow_previews_v1'
-    + '?select=id,evento_id,preview_hash,criado_em,operacao,preview_json'
-    + '&status=eq.public_preview_sent&criado_em=gte.' + encodeURIComponent(desde)
+    + '?select=id,evento_id,preview_hash,criado_em,operacao,status,preview_json'
+    + '&status=in.(public_preview_sent,draft_missing_fields)&criado_em=gte.' + encodeURIComponent(desde)
     + '&order=criado_em.asc&limit=100');
   if (!Array.isArray(previews) || !previews.length) return [];
   const idsEv = [...new Set(previews.map((p) => p.evento_id).filter(Boolean))];
@@ -965,6 +965,7 @@ async function listarPreviewsAbertosV3(janelaMs) {
     .filter((p) => !consumidos.has(p.id))
     .map((p) => ({
       id: p.id, preview_hash: p.preview_hash, criado_em: p.criado_em, operacao: p.operacao,
+      status: p.status,
       chat_id_hash: chatPorEvento[p.evento_id] || null,
       pending: p.preview_json && p.preview_json.pending,
       preview_message_id: p.preview_json && p.preview_json.preview_message_id,
@@ -2794,16 +2795,21 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   const v3LedgerAtivo = ['production', 'prod', 'on', '1'].includes(v3LedgerMode);
   const v3LedgerStrict = process.env.SOL_CAIXA_V3_LEDGER_STRICT === '1';
 
-  async function registrarPreviewPublicoV3({ event, grupo, previewId, texto, pendencia, result, previewStatus = 'public_preview_sent' }) {
+  async function registrarPreviewPublicoV3({ event, grupo, previewId, texto, pendencia, result,
+    previewStatus = 'public_preview_sent', previewHashFixo = null,
+    publicPreviewSent = true, eventStatus = 'public_preview_sent', mode = 'v3_production_public_preview' }) {
     if (!v3LedgerAtivo) return null;
     const previewJson = {
-      public_preview_sent: true,
-      preview_message_id: previewId,
+      public_preview_sent: !!publicPreviewSent,
+      preview_message_id: previewId || null,
       text: String(texto || '').slice(0, 5000),
       pending: pendencia,
       handler_result: result || null,
     };
-    const previewHash = sha256(JSON.stringify(previewJson));
+    // O hash pode ser fixado antes da publicacao. Assim o ledger ganha uma
+    // linha inaprovavel (`prepared_private`) ANTES de o WhatsApp exibir o card;
+    // depois a mesma linha e promovida, via upsert, com o message id real.
+    const previewHash = previewHashFixo || sha256(JSON.stringify(previewJson));
     const payload = {
       event_id_hash: sha256(event.messageId),
       chat_id_hash: md5(event.chatId),
@@ -2811,11 +2817,11 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       unidade_id: grupo.unidade_id,
       observed_at: event.ts || new Date(Number(event.timestamp || Math.floor(Date.now() / 1000)) * 1000).toISOString(),
       source: 'sol_caixa_whatsapp_production',
-      mode: 'v3_production_public_preview',
+      mode,
       // O evento foi observado/publicado; quem controla se o card pode ser
       // aprovado e o preview_status abaixo. Na correcao, o card novo nasce
       // awaiting_supersede ate o banco trocar os dois estados atomicamente.
-      status: 'public_preview_sent',
+      status: eventStatus,
       raw_ref: {
         message_id_sha256: sha256(event.messageId),
         body_sha256: sha256(event.body || ''),
@@ -2948,6 +2954,11 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   // Envelope vivo por chat: e o que permite corrigir no SEGUNDO TURNO sem
   // remontar frase. Guardado ao lado da pendencia, com o mesmo tempo de vida.
   const envelopesV4 = new Map();
+  // Rascunho incompleto NAO e pendencia aprovavel. Ele vive separado para que
+  // um "pode" jamais seja aproximado a um estado que ainda nao tem forma,
+  // categoria ou vinculo seguro. Tambem e persistido no ledger para sobreviver
+  // a restart sem depender da memoria do processo.
+  const rascunhosV4 = new Map();
 
   function limparEnvelopeDaPendencia(chatId, pendencia, motivo) {
     const guardado = envelopesV4.get(chatId);
@@ -2957,10 +2968,144 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
           previewId: pendencia.previewId || null });
   }
 
+  function formaExplicitaV4(texto, dec) {
+    if (dec && dec.forma) {
+      const f = String(dec.forma).toLowerCase().trim();
+      if (['pix', 'dinheiro', 'cartao', 'cheque', 'transferencia'].includes(f)) {
+        const cartao = f === 'cartao' ? extrairCartao(texto) : null;
+        const p = f === 'cartao' ? String(texto || '').match(/\b(\d{1,2})\s*x\b/i) : null;
+        return {
+          forma: f,
+          cartaoModalidade: dec.cartao_modalidade || dec.cartaoModalidade || (cartao && cartao.modalidade) || null,
+          cartaoParcelas: Number(dec.cartao_parcelas || dec.cartaoParcelas)
+            || (cartao && cartao.parcelas) || (p && Number(p[1]) >= 1 && Number(p[1]) <= 24 ? Number(p[1]) : null),
+        };
+      }
+    }
+    const cartao = extrairCartao(texto);
+    if (cartao) {
+      const p = String(texto || '').match(/\b(\d{1,2})\s*x\b/i);
+      const parcelas = cartao.parcelas || (p && Number(p[1]) >= 1 && Number(p[1]) <= 24 ? Number(p[1]) : null);
+      return { forma: 'cartao', cartaoModalidade: cartao.modalidade || null, cartaoParcelas: parcelas };
+    }
+    if (/\bpix\b/i.test(texto)) return { forma: 'pix', cartaoModalidade: null, cartaoParcelas: null };
+    if (/\bdinheiro\b/i.test(texto)) return { forma: 'dinheiro', cartaoModalidade: null, cartaoParcelas: null };
+    if (/\bcheque\b/i.test(texto)) return { forma: 'cheque', cartaoModalidade: null, cartaoParcelas: null };
+    if (/\btransfer[eê]ncia\b|\btransfer\b/i.test(texto)) return { forma: 'transferencia', cartaoModalidade: null, cartaoParcelas: null };
+    return { forma: null, cartaoModalidade: null, cartaoParcelas: null };
+  }
+
+  function categoriaDosItensV4(itens) {
+    const lista = Array.isArray(itens) ? itens : [];
+    const cats = lista.map((i) => String(i && i.categoria || '').toLowerCase().trim());
+    if (!lista.length || cats.some((c) => !c)) return { ok: false, motivo: 'categoria_item_ausente' };
+    const unicas = [...new Set(cats)];
+    // A categoria de cada item continua no item. O topo existe para o contrato
+    // do ledger/lote; quando o pagamento mistura naturezas, "outro" e mais
+    // honesto que escolher silenciosamente a primeira.
+    return { ok: true, categoria: unicas.length === 1 ? unicas[0] : 'outro' };
+  }
+
+  function mesclarRascunhoV4(base, dec, texto) {
+    if (!base) return { ok: false, motivo: 'rascunho_sem_base' };
+    if (String(dec && dec.intencao || '').startsWith('corrigir_')) {
+      const corrigido = aplicarCorrecaoEnvelope(base, dec);
+      if (corrigido.ok) return corrigido;
+      // "cartao 2x" pode chegar como lancamento estruturado, e nao como
+      // corrigir_forma. Nesse caso ainda aceitamos SOMENTE a forma explicita.
+      if (dec.intencao !== 'corrigir_forma') return corrigido;
+    }
+    const forma = formaExplicitaV4(texto, dec);
+    if (!forma.forma) return { ok: false, motivo: 'rascunho_ainda_sem_forma' };
+    const envelope = JSON.parse(JSON.stringify(base));
+    envelope.forma = forma.forma;
+    return { ok: true, envelope, ...forma };
+  }
+
+  async function registrarRascunhoV4({ event, grupo, envelope, agora }) {
+    if (!v3LedgerAtivo) return null;
+    const origem = event.messageId;
+    const previewHash = sha256(JSON.stringify({ tipo: 'agent_first_draft', chat: md5(event.chatId), origem: sha256(origem), envelope }));
+    const pending = {
+      tipoOperacao: 'agent_first_draft', unidade_id: grupo.unidade_id, nome: grupo.nome,
+      valor: envelope.valor_total, forma: envelope.forma || null, categoria: null,
+      origem, ts: agora, agentFirstEnvelope: envelope, missingFields: ['forma'],
+      v3Operacao: 'agent_first_draft',
+    };
+    let v3 = null;
+    try {
+      v3 = await registrarPreviewPublicoV3({
+        event, grupo, previewId: null, texto: 'rascunho agent-first aguardando forma', pendencia: pending,
+        result: { acao: 'agent_first_draft', missing_fields: ['forma'] },
+        previewStatus: 'draft_missing_fields', previewHashFixo: previewHash,
+        publicPreviewSent: false, eventStatus: 'draft_missing_fields', mode: 'v4_agent_first_draft',
+      });
+    } catch (e) {
+      log({ acao: 'agent_first_draft_erro', chatId: event.chatId, erro: String(e && e.message) });
+    }
+    if (!v3 || !v3.ok || !v3.preview_id) return null;
+    const draft = { envelope, origem, ts: agora, v3PreviewId: v3.preview_id,
+      v3PreviewHash: previewHash, grupo, event: { ...event, body: '' } };
+    rascunhosV4.set(event.chatId, draft);
+    log({ acao: 'agent_first_draft_persistido', chatId: event.chatId, preview_ledger_id: v3.preview_id });
+    return draft;
+  }
+
+  async function finalizarRascunhoV4(chatId, status, motivo) {
+    const draft = rascunhosV4.get(chatId);
+    if (!draft) return;
+    rascunhosV4.delete(chatId);
+    try {
+      await registrarPreviewPublicoV3({
+        event: draft.event, grupo: draft.grupo, previewId: null,
+        texto: `rascunho ${status}`, pendencia: {
+          tipoOperacao: 'agent_first_draft', unidade_id: draft.grupo.unidade_id,
+          valor: draft.envelope.valor_total, forma: draft.envelope.forma || null,
+          categoria: null, origem: draft.origem, ts: draft.ts,
+          agentFirstEnvelope: draft.envelope, missingFields: [], v3Operacao: 'agent_first_draft',
+        },
+        result: { acao: 'agent_first_draft_finalizado', motivo },
+        previewStatus: status, previewHashFixo: draft.v3PreviewHash,
+        publicPreviewSent: false, eventStatus: status, mode: 'v4_agent_first_draft',
+      });
+    } catch (e) {
+      log({ acao: 'agent_first_draft_finalizacao_erro', chatId, erro: String(e && e.message) });
+    }
+    log({ acao: 'agent_first_draft_finalizado', chatId, status, motivo });
+  }
+
+  async function limparEstadoDaOrigemV4(chatId, origem, motivo) {
+    const arr = pendentes.get(chatId) || [];
+    const afetadas = arr.filter((p) => p && p.origem === origem);
+    pendentes.set(chatId, arr.filter((p) => !p || p.origem !== origem));
+    for (const p of afetadas) {
+      limparEnvelopeDaPendencia(chatId, p, motivo);
+      await finalizarPreviewSeguroV3({ alvo: p, status: 'rejected', motivo });
+    }
+    const draft = rascunhosV4.get(chatId);
+    if (draft && draft.origem === origem) await finalizarRascunhoV4(chatId, 'rejected', motivo);
+    log({ acao: 'agent_first_estado_origem_limpo', chatId, origem_hash: sha256(origem || ''), motivo, pendencias: afetadas.length });
+  }
+
   async function tratarAgentFirst(event, grupo, agora) {
     const texto = bodyLimpo(event.body);
     if (!texto) return null;
     const arr = limparVelhos(event.chatId, agora);
+    let draft = rascunhosV4.get(event.chatId) || null;
+    if (draft && (agora - draft.ts) >= janelaMs) {
+      await finalizarRascunhoV4(event.chatId, 'expired', 'janela_runtime_expirou');
+      draft = null;
+    }
+    if (draft && casarNao(texto)) {
+      await finalizarRascunhoV4(event.chatId, 'rejected', 'descartado_pelo_humano');
+      await sendFn(event.chatId, 'Tudo bem — descartei esse rascunho. Nada foi lançado.');
+      return { acao: 'agent_first_draft_descartado' };
+    }
+    const formaDireta = draft ? formaExplicitaV4(texto, event && event.caixaToolDecision) : null;
+    if (draft && casarPode(texto, { respondeuPreview: false }).pode && !(formaDireta && formaDireta.forma)) {
+      await sendFn(event.chatId, 'Ainda falta a forma de pagamento. Me diz: *pix*, *dinheiro*, *cartão*, *cheque* ou *transferência*. Só depois eu preparo o card que aceita *pode*.');
+      return { acao: 'agent_first_draft_ainda_sem_forma' };
+    }
     const contexto = arr.slice(0, 3).map((p, i) => ({
       card: i + 1, valor: p.valor || null, forma: p.forma || null,
       categoria: p.categoria || null, aluno: p.aluno || null, competencia: p.competencia || null,
@@ -2992,8 +3137,19 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       log({ acao: 'agent_first_envelope_descartado', chatId: event.chatId, motivo: 'pendencia_nao_existe_mais' });
     }
     const vivo = pendVivo && (agora - guardado.ts) < janelaMs;
+    const draftVivo = !!(draft && (agora - draft.ts) < janelaMs);
     let env;
-    if (vivo && String(dec.intencao || '').startsWith('corrigir_')) {
+    let formaComplementada = formaExplicitaV4(texto, dec);
+    if (draftVivo) {
+      env = mesclarRascunhoV4(draft.envelope, dec, texto);
+      formaComplementada = formaExplicitaV4(texto, dec);
+      if (!env.ok) {
+        await sendFn(event.chatId, 'Guardei o restante, mas ainda preciso da forma: *pix*, *dinheiro*, *cartão*, *cheque* ou *transferência*.');
+        log({ acao: 'agent_first_draft_ainda_incompleto', chatId: event.chatId, motivo: env.motivo });
+        return { acao: 'agent_first_draft_ainda_sem_forma' };
+      }
+      log({ acao: 'agent_first_draft_completado', chatId: event.chatId, forma: env.envelope.forma });
+    } else if (vivo && String(dec.intencao || '').startsWith('corrigir_')) {
       const corr = aplicarCorrecaoEnvelope(guardado.envelope, dec);
       if (!corr.ok) {
         log({ acao: 'agent_first_correcao_recusada', chatId: event.chatId,
@@ -3023,6 +3179,17 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       log({ acao: 'agent_first_sem_envelope', chatId: event.chatId, motivo: env.motivo,
             intencao: dec.intencao, confianca: dec.confianca });
       return null;
+    }
+
+    if (!env.envelope.forma) {
+      const salvo = await registrarRascunhoV4({ event, grupo, envelope: env.envelope, agora });
+      if (!salvo) {
+        await sendFn(event.chatId, '⚠️ Entendi os dados, mas não consegui guardar o rascunho com segurança. Nada foi lançado; tenta de novo em instantes.');
+        log({ acao: 'agent_first_draft_nao_persistido', chatId: event.chatId });
+        return { acao: 'agent_first_draft_nao_persistido' };
+      }
+      await sendFn(event.chatId, 'Entendi o aluno, o valor e a fatura. Falta só a forma de pagamento: *pix*, *dinheiro*, *cartão*, *cheque* ou *transferência*. Guardei o restante; não precisa repetir.');
+      return { acao: 'agent_first_aguardando_forma' };
     }
 
     let res = null;
@@ -3055,34 +3222,185 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       return null;
     }
 
+    const categoria = categoriaDosItensV4(res.itens);
+    if (!categoria.ok) {
+      await limparEstadoDaOrigemV4(event.chatId, (draftVivo && draft.origem) || event.messageId, categoria.motivo);
+      await sendFn(event.chatId, '⚠️ Não preparei o lançamento porque a categoria da fatura não veio completa da fonte oficial. Nada foi lançado; tenta de novo em instantes.');
+      return { acao: 'agent_first_categoria_invalida', motivo: categoria.motivo };
+    }
+
     log({ acao: 'agent_first_resolveu', chatId: event.chatId, via: res.via,
           linhas: res.itens.length, alunos: res.alunos, ms: Date.now() - t0 });
 
     // Daqui para baixo e o fluxo de sempre: preview, cofre V3, "pode" humano,
     // lote atomico. O agent-first so troca QUEM montou a pergunta.
     const anterior = vivo && guardado ? guardado.previewId : null;
-    const saida = await abrirFluxoMultiAluno({
+    const origem = (draftVivo && draft.origem)
+      || (vivo && pendGuardada && pendGuardada.origem) || event.messageId;
+    const comum = {
       event, grupo, textoFonte: texto, textoHumano: texto, agora,
       // A correcao conserva a origem do comprovante. Alem de preservar a
       // idempotencia, isto faz a reidratacao escolher somente o preview mais
       // novo mesmo se um runtime antigo ainda enxergar os dois por instantes.
-      origemMessageId: (vivo && pendGuardada && pendGuardada.origem) || event.messageId,
-      resolvidoPronto: res, agentFirstEnvelope: env.envelope,
+      origemMessageId: origem, resolvidoPronto: res, agentFirstEnvelope: env.envelope,
       supersedePreviewId: anterior,
       intent: { ok: true, valor_total: Number(res.valor_total), forma: env.envelope.forma,
-                categoria: null,
+                categoria: categoria.categoria,
                 itens: res.itens.map((i) => ({ aluno_nome: i.aluno_nome, valor: Number(i.valor), categoria: i.categoria })) },
-    });
+      cartaoModalidade: formaComplementada.cartaoModalidade || null,
+      cartaoParcelas: formaComplementada.cartaoParcelas || null,
+    };
+    const saida = res.itens.length === 1
+      ? await abrirFluxoAgentFirstSingular(comum)
+      : await abrirFluxoMultiAluno(comum);
     // So guarda o envelope se a pendencia FOI persistida (previewId de volta).
     // V3 que nao registrou nao deixa pendencia — e nao pode deixar envelope.
     if (saida && saida.previewId) {
       envelopesV4.set(event.chatId, { envelope: env.envelope, ts: agora, previewId: saida.previewId });
+      if (draftVivo) await finalizarRascunhoV4(event.chatId, 'superseded', 'preview_completo_criado');
     } else if (!(saida && saida.preservarEnvelope)) {
-      envelopesV4.delete(event.chatId);
+      await limparEstadoDaOrigemV4(event.chatId, origem, (saida && saida.acao) || 'sem_preview');
       log({ acao: 'agent_first_envelope_descartado', chatId: event.chatId,
             motivo: (saida && saida.acao) || 'sem_preview' });
     }
     return saida;
+  }
+
+  async function prepararEPublicarPreviewV4({ event, grupo, texto, pendencia, result, previewStatus }) {
+    if (!v3LedgerAtivo) return { ok: false, motivo: 'v3_indisponivel' };
+    const origem = pendencia.origem || event.messageId;
+    const previewHash = sha256(JSON.stringify({
+      tipo: pendencia.tipoOperacao || 'lancamento_singular', chat: md5(event.chatId),
+      origem: sha256(origem), valor: pendencia.valor, forma: pendencia.forma,
+      categoria: pendencia.categoria, itens: pendencia.itens || null,
+      aluno: pendencia.aluno || null, competencia: pendencia.competencia || null,
+    }));
+    let preparado = null;
+    try {
+      preparado = await registrarPreviewPublicoV3({
+        event, grupo, previewId: null, texto, pendencia,
+        result: { ...(result || {}), fase: 'prepared_private' },
+        previewStatus: 'prepared_private', previewHashFixo: previewHash,
+        publicPreviewSent: false, eventStatus: 'prepared_private', mode: 'v4_agent_first_two_phase',
+      });
+    } catch (e) {
+      log({ acao: 'agent_first_preview_prepare_erro', chatId: event.chatId, erro: String(e && e.message) });
+    }
+    if (!preparado || !preparado.ok || !preparado.preview_id) {
+      await limparEstadoDaOrigemV4(event.chatId, origem, 'preview_prepare_falhou');
+      return { ok: false, motivo: 'preview_prepare_falhou' };
+    }
+
+    // O card que pede "pode" so sai depois de o registro seguro existir.
+    let previewId = null;
+    try { previewId = await sendFn(event.chatId, texto); }
+    catch (e) {
+      try {
+        await registrarPreviewPublicoV3({
+          event, grupo, previewId: null, texto: 'preview rejeitado antes da publicacao', pendencia,
+          result: { acao: 'agent_first_preview_rejected', motivo: 'envio_card_falhou' },
+          previewStatus: 'rejected', previewHashFixo: previewHash,
+          publicPreviewSent: false, eventStatus: 'rejected', mode: 'v4_agent_first_two_phase',
+        });
+      } catch (e2) { /* continua fail-closed */ }
+      await limparEstadoDaOrigemV4(event.chatId, origem, 'envio_card_falhou');
+      log({ acao: 'agent_first_preview_envio_erro', chatId: event.chatId, erro: String(e && e.message) });
+      return { ok: false, motivo: 'envio_card_falhou' };
+    }
+    pendencia.previewId = previewId;
+    pendencia.v3PreviewId = preparado.preview_id;
+    pendencia.v3PreviewHash = previewHash;
+    let publicado = null;
+    try {
+      publicado = await registrarPreviewPublicoV3({
+        event, grupo, previewId, texto, pendencia,
+        result: { ...(result || {}), fase: 'public_preview_sent' },
+        previewStatus, previewHashFixo: previewHash,
+        publicPreviewSent: true, eventStatus: 'public_preview_sent', mode: 'v4_agent_first_two_phase',
+      });
+    } catch (e) {
+      log({ acao: 'agent_first_preview_publish_erro', chatId: event.chatId, erro: String(e && e.message) });
+    }
+    if (!publicado || !publicado.ok || !publicado.preview_id) {
+      try {
+        await registrarPreviewPublicoV3({
+          event, grupo, previewId, texto: 'preview rejeitado por falha de ativacao', pendencia,
+          result: { acao: 'agent_first_preview_rejected', motivo: 'preview_publish_falhou' },
+          previewStatus: 'rejected', previewHashFixo: previewHash,
+          publicPreviewSent: false, eventStatus: 'rejected', mode: 'v4_agent_first_two_phase',
+        });
+      } catch (e) { /* a trava principal continua sendo nao criar pendencia local */ }
+      await limparEstadoDaOrigemV4(event.chatId, origem, 'preview_publish_falhou');
+      await sendFn(event.chatId, '⚠️ O card apareceu, mas não consegui ativá-lo no cofre seguro. Ignore esse card e não responda *pode*; nada foi lançado.');
+      return { ok: false, motivo: 'preview_publish_falhou' };
+    }
+    pendencia.v3PreviewId = publicado.preview_id;
+    pendencia.v3PreviewHash = previewHash;
+    return { ok: true, previewId, pendencia };
+  }
+
+  async function abrirFluxoAgentFirstSingular({ event, grupo, intent, agora, origemMessageId,
+    resolvidoPronto, agentFirstEnvelope, supersedePreviewId = null,
+    cartaoModalidade = null, cartaoParcelas = null }) {
+    const arr = limparVelhos(event.chatId, agora);
+    const item = resolvidoPronto && Array.isArray(resolvidoPronto.itens) ? resolvidoPronto.itens[0] : null;
+    if (!item || !item.aluno_nome || !(Number(item.valor) > 0) || !intent.forma || !intent.categoria) {
+      await limparEstadoDaOrigemV4(event.chatId, origemMessageId || event.messageId, 'singular_incompleto');
+      return { acao: 'agent_first_singular_incompleto' };
+    }
+    const fatura = item.fatura ? {
+      ...item.fatura,
+      canonical_fatura_id: item.canonical_fatura_id || item.fatura.canonical_fatura_id || null,
+      descricao: item.descricao || item.fatura.descricao || null,
+      competencia: item.fatura.competencia || (item.competencia ? String(item.competencia).split('/').reverse().join('-') + '-01' : null),
+      valor_da_parcela: item.fatura.valor_da_parcela || item.fatura.valor_pago || item.fatura.valor_hoje || Number(item.valor),
+    } : {
+      canonical_fatura_id: item.canonical_fatura_id || null, descricao: item.descricao || null,
+      competencia: item.competencia || null, valor_da_parcela: Number(item.valor), status: 'paga',
+    };
+    const canonica = { ok: true, fatura };
+    const texto = montarPreview({
+      unidadeNome: grupo.nome, valor: Number(item.valor), forma: intent.forma,
+      categoria: intent.categoria, aluno: item.aluno_nome, competencia: item.competencia || null,
+      responsavelFinanceiro: item.responsavel_financeiro || null, canonica,
+      cartaoModalidade, cartaoParcelas, formaIncerta: false, multiplas: false,
+    });
+    let idEnviou = null;
+    try { idEnviou = await identidadeFn(event.senderPhone, grupo.unidade_id); } catch (e) { /* melhor esforco */ }
+    const origem = origemMessageId || event.messageId;
+    const pendencia = {
+      previewId: null, unidade_id: grupo.unidade_id, nome: grupo.nome,
+      valor: Number(item.valor), forma: intent.forma, categoria: intent.categoria,
+      aluno: item.aluno_nome, competencia: item.competencia || null,
+      descricao: item.descricao || null, responsavelFinanceiro: item.responsavel_financeiro || null,
+      cartaoModalidade, cartaoParcelas, formaIncerta: false, canonica,
+      origem, idemKey: `${event.chatId}:${origem}:agent-first-singular`,
+      enviadoPor: nomeParaCarimbo(idEnviou, event), ts: agora,
+      agentFirstEnvelope,
+    };
+    const seguro = await prepararEPublicarPreviewV4({
+      event, grupo, texto, pendencia,
+      result: { acao: 'preview_agent_first_singular', valor: pendencia.valor, categoria: pendencia.categoria },
+      previewStatus: supersedePreviewId ? 'awaiting_supersede' : 'public_preview_sent',
+    });
+    if (!seguro.ok) return { acao: seguro.motivo };
+
+    if (supersedePreviewId) {
+      const velhas = arr.filter((p) => p.previewId === supersedePreviewId);
+      if (velhas.length !== 1) {
+        await finalizarPreviewSeguroV3({ alvo: pendencia, status: 'rejected', motivo: 'preview_anterior_nao_unico' });
+        return { acao: 'preview_correcao_bloqueada' };
+      }
+      const fim = await finalizarPreviewSeguroV3({
+        alvo: velhas[0], status: 'superseded', substituto: pendencia, motivo: 'correcao_agent_first',
+      });
+      if (!fim || !fim.ok) return { acao: 'preview_correcao_bloqueada', preservarEnvelope: true };
+      arr.splice(arr.indexOf(velhas[0]), 1);
+    }
+    arr.push(pendencia);
+    pendentes.set(event.chatId, arr);
+    log({ acao: 'preview_agent_first_singular', chatId: event.chatId, valor: pendencia.valor, categoria: pendencia.categoria });
+    return { acao: 'preview_agent_first_singular', previewId: pendencia.previewId };
   }
 
   async function abrirFluxoMultiAluno({ event, grupo, textoFonte, textoHumano, intent, agora, origemMessageId, resolvidoPronto = null, agentFirstEnvelope = null, supersedePreviewId = null }) {
@@ -3250,11 +3568,10 @@ _Não lanço nada pela metade._`);
       sem_vinculo_fatura: !!item.sem_vinculo_fatura, declarado_pelo_humano: !!item.declarado_pelo_humano,
     }));
     const texto = montarPreviewMultiAluno({ unidadeNome: grupo.nome, valorTotal: intent.valor_total, forma: intent.forma, categoria: intent.categoria, itens });
-    const previewId = await sendFn(event.chatId, texto);
     let idEnviou = null;
     try { idEnviou = await identidadeFn(event.senderPhone, grupo.unidade_id); } catch (e) { /* melhor esforço */ }
     const pendencia = {
-      previewId, tipoOperacao: 'lancar_recebimento_lote', unidade_id: grupo.unidade_id, nome: grupo.nome,
+      previewId: null, tipoOperacao: 'lancar_recebimento_lote', unidade_id: grupo.unidade_id, nome: grupo.nome,
       valor: intent.valor_total, forma: intent.forma, categoria: intent.categoria, itens,
       descricao: `Lote multi-aluno (${itens.length} itens)`, aluno: null, competencia: null,
       origem: origemMessageId || event.messageId, idemKey: `${event.chatId}:${origemMessageId || event.messageId}:lote-multi`,
@@ -3263,22 +3580,40 @@ _Não lanço nada pela metade._`);
     // O envelope faz parte do estado persistido do preview V3. Guardar apenas
     // num Map resolvia o segundo turno ate o primeiro restart; depois o bridge
     // reidratava o card sem os fatos que o LLM tinha estruturado.
-    if (agentFirstEnvelope) pendencia.agentFirstEnvelope = agentFirstEnvelope;
-    const v3 = await registrarPreviewPublicoV3({
-      event, grupo, previewId, texto, pendencia,
-      result: { acao: 'preview_multi_aluno_enviado', itens: itens.length, valor_total: intent.valor_total },
-      // A correcao nasce NAO APROVAVEL. A mesma transacao que encerra o card
-      // antigo promove este para public_preview_sent. Se a troca falhar, o
-      // novo nunca fica aberto no ledger — nao ha janela com dois aprovaveis.
-      previewStatus: supersedePreviewId ? 'awaiting_supersede' : 'public_preview_sent',
-    });
-    if (!v3 || !v3.preview_id || !v3.preview_hash) {
-      await sendFn(event.chatId, '⚠️ Não deixei esse lote pendente porque o preview seguro não foi registrado. Não responda *pode*; tenta de novo em instantes.');
-      log({ acao: 'preview_multi_aluno_sem_v3', chatId: event.chatId });
-      return { acao: 'preview_multi_aluno_sem_v3' };
+    let previewId = null;
+    if (agentFirstEnvelope) {
+      pendencia.agentFirstEnvelope = agentFirstEnvelope;
+      const seguro = await prepararEPublicarPreviewV4({
+        event, grupo, texto, pendencia,
+        result: { acao: 'preview_multi_aluno_enviado', itens: itens.length, valor_total: intent.valor_total },
+        // A correcao nasce NAO APROVAVEL. A mesma transacao que encerra o card
+        // antigo promove este para public_preview_sent. Se a troca falhar, o
+        // novo nunca fica aberto no ledger — nao ha janela com dois aprovaveis.
+        previewStatus: supersedePreviewId ? 'awaiting_supersede' : 'public_preview_sent',
+      });
+      if (!seguro.ok) {
+        log({ acao: 'preview_multi_aluno_sem_v3', chatId: event.chatId });
+        return { acao: seguro.motivo || 'preview_multi_aluno_sem_v3' };
+      }
+      previewId = pendencia.previewId;
+    } else {
+      // Compatibilidade: o trilho deterministico/legado permanece exatamente
+      // no contrato anterior. O two-phase novo pertence apenas ao agent-first.
+      previewId = await sendFn(event.chatId, texto);
+      pendencia.previewId = previewId;
+      const v3 = await registrarPreviewPublicoV3({
+        event, grupo, previewId, texto, pendencia,
+        result: { acao: 'preview_multi_aluno_enviado', itens: itens.length, valor_total: intent.valor_total },
+        previewStatus: supersedePreviewId ? 'awaiting_supersede' : 'public_preview_sent',
+      });
+      if (!v3 || !v3.preview_id || !v3.preview_hash) {
+        await sendFn(event.chatId, '⚠️ Não deixei esse lote pendente porque o preview seguro não foi registrado. Não responda *pode*; tenta de novo em instantes.');
+        log({ acao: 'preview_multi_aluno_sem_v3', chatId: event.chatId });
+        return { acao: 'preview_multi_aluno_sem_v3' };
+      }
+      pendencia.v3PreviewId = v3.preview_id;
+      pendencia.v3PreviewHash = v3.preview_hash;
     }
-    pendencia.v3PreviewId = v3.preview_id;
-    pendencia.v3PreviewHash = v3.preview_hash;
     // 🔴 UM COMPROVANTE, UMA PENDENCIA. A revisao manual do mesmo valor tem de
     //    morrer aqui: em 08/09 ela ficou aberta ao lado deste preview, e a
     //    correcao de competencia da ADM grudou NELA — reprocessando a legenda
@@ -3433,6 +3768,10 @@ _Não lanço nada pela metade._`);
       // A aprovacao vence no mesmo limite do card. A RPC tambem confere a idade,
       // portanto esta escrita e trilha/auditoria — nao a unica barreira.
       void finalizarPreviewSeguroV3({ alvo: p, status: 'expired', motivo: 'janela_runtime_expirou' });
+    }
+    const draft = rascunhosV4.get(chatId);
+    if (draft && agora - draft.ts >= janelaMs) {
+      void finalizarRascunhoV4(chatId, 'expired', 'janela_runtime_expirou');
     }
     return vivos;
   }
@@ -5962,6 +6301,16 @@ _Não lanço nada pela metade._`);
         if (!a || !a.pending || !a.pending.origem) continue;
         const chatId = mapaChat[a.chat_id_hash];
         if (!chatId) continue;
+        if (a.operacao === 'agent_first_draft' && a.status === 'draft_missing_fields'
+            && a.pending.agentFirstEnvelope) {
+          const ts = Number(a.pending.ts) || new Date(a.criado_em).getTime() || Date.now();
+          rascunhosV4.set(chatId, {
+            envelope: a.pending.agentFirstEnvelope, origem: a.pending.origem, ts,
+            v3PreviewId: a.id, v3PreviewHash: a.preview_hash, grupo: grupos[chatId],
+            event: { messageId: a.pending.origem, chatId, senderId: 'rehydrated', body: '', ts: a.criado_em },
+          });
+          continue;
+        }
         if (!['entrada', 'saida', 'correcao_forma', 'correcao_movimento', 'estorno'].includes(String(a.operacao || ''))) continue;
         porOrigem.set(chatId + '::' + a.pending.origem, { a, chatId });
       }
@@ -5986,8 +6335,8 @@ _Não lanço nada pela metade._`);
         }
         n++;
       }
-      log({ acao: 'reidratacao_pendencias', total: n });
-      return { ok: true, total: n };
+      log({ acao: 'reidratacao_pendencias', total: n, rascunhos: rascunhosV4.size });
+      return { ok: true, total: n, rascunhos: rascunhosV4.size };
     } catch (e) {
       log({ acao: 'reidratacao_pendencias_erro', erro: String(e && e.message) });
       return { ok: false };
@@ -6149,7 +6498,7 @@ _Não lanço nada pela metade._`);
   return { handle, temPendencia, citaAlgumaPendencia, ehConversaSemComando,
     reidratarPendencias, tratarNaoEntendida, observarRoteadorV4, tratarAgentFirst,
     deveTratarConfirmacaoDeterministica,
-    _pendentes: pendentes, _envelopesV4: envelopesV4 };
+    _pendentes: pendentes, _envelopesV4: envelopesV4, _rascunhosV4: rascunhosV4 };
 }
 
 function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
