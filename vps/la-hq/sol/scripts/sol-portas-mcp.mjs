@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // AS PORTAS DA SOL — servidor MCP do time administrativo (07/09/2026).
 //
-// Substitui, para o time, a porta larga `query` do `sol-acesso-restrito`. Doze
+// Substitui, para o time, a porta larga `query` do `sol-acesso-restrito`.
 // ferramentas nomeadas por TRABALHO, todas visiveis em todo turno.
 //
 // 🔴 "TUDO VISIVEL E CABE". E a licao que o agente do TOM mediu e que derrubou
@@ -27,6 +27,9 @@
 // ⚠️ ESM: o arquivo e .mjs, entao `require` nao existe — a 1a versao usou
 //    require e morreu no arranque com ReferenceError.
 import fs from 'node:fs';
+import crypto from 'node:crypto';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 
 // ⚠️ Os nomes reais no ambiente da Sol, conferidos no host: `gateway.systemd.env`
 //    traz SUPABASE_URL/SUPABASE_SERVICE_KEY e `/opt/LA-Organizer/.env` traz
@@ -53,6 +56,11 @@ const KEY = process.env.LA_REPORT_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVI
 //    o processo MCP recebe env estatico e e UM so para todas as conversas, entao
 //    fixar o numero aqui faria toda conversa se passar pela mesma pessoa.
 const TEL_ENSAIO = process.env.SOL_SOLICITANTE_TELEFONE || '';
+const CAIXA_RUNTIME = process.env.SOL_CAIXA_RUNTIME
+  || '/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs';
+const CAIXA_ABF_RUNTIME = process.env.SOL_CAIXA_ABF_RUNTIME
+  || '/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-abertura-fechamento.cjs';
+const BRIDGE_URL = (process.env.SOL_WHATSAPP_BRIDGE_URL || 'http://127.0.0.1:3000').replace(/\/$/, '');
 
 async function rpc(fn, args) {
   const r = await fetch(`${URL}/rest/v1/rpc/${fn}`, {
@@ -68,11 +76,87 @@ async function rpc(fn, args) {
 // ⚠️ `Q` (quem) entra em TODA porta; `U` (unidade) so onde faz sentido.
 const Q = { p_solicitante_telefone: { type: 'string', description: 'Quem está perguntando. 🔴 Se a mensagem trouxer `[cracha: SOL1....]`, cole o CRACHÁ INTEIRO aqui — ele é assinado e é a prova de quem falou. Só se não houver crachá, use o número de `[telefone_remetente: ...]`, só os dígitos. Não é opcional e não é para inventar: decide qual unidade você enxerga, e toda chamada fica registrada. Sem saber quem falou, pergunte em vez de chutar.' } };
 const U = { ...Q, p_unidade: { type: 'string', description: 'Só a diretoria escolhe unidade. Para os demais, deixe vazio — eu já sei qual é a sua.' } };
+const C = {
+  p_cracha: { type: 'string', description: 'Crachá SOL1 completo da linha `[cracha: ...]`. Obrigatório: não use o telefone como substituto.' },
+  p_chat_id: { type: 'string', description: 'Chat oficial da linha `[chat_caixa: ...]`. O crachá foi assinado para este chat; copie exatamente e não invente.' },
+};
 
 const PORTAS = [
-  { name: 'caixa_do_dia', fn: 'sol_porta_caixa_do_dia_v1',
+  { name: 'caixa_do_dia', fn: 'sol_porta_caixa_do_dia_assinado_v1', auth: 'caixa_assinado',
     description: 'O caixa de HOJE da unidade: aberto ou fechado, quanto entrou, quanto saiu, por forma de pagamento. Use quando perguntarem "como tá o caixa?", "já fechou?", "quanto entrou hoje?". 🔴 É a FONTE do caixa — nunca monte esse número somando comprovantes do grupo por conta própria: comprovante repetido e estorno não aparecem na soma e o total sai maior que o real. Para o que ainda não foi lançado, é o grupo que manda, não eu.',
-    schema: { ...U, p_data: { type: 'string', description: 'YYYY-MM-DD. Vazio = hoje.' } } },
+    schema: { ...C, p_data: { type: 'string', description: 'YYYY-MM-DD. Vazio = hoje.' } } },
+
+  { name: 'caixa_localizar_lancamento', fn: 'sol_porta_caixa_localizar_lancamento_v1', auth: 'caixa_assinado',
+    description: 'Procura um lançamento REAL do Caixa e informa se o recibo foi persistido. Use antes de responder “já entrou?”, “isso foi lançado?”, “cadê o recibo?”, “lanço de novo?” ou ao suspeitar de duplicidade. Caso real: um recebimento já tinha sido lançado e confirmado no grupo, mas a consulta genérica não o encontrou e a Sol mandou repetir o processo. Esta porta existe para impedir exatamente isso. 🔴 Se encontrar item compatível, diga que já entrou e NÃO prepare novo lançamento. Para Caixa coberto por esta porta, nunca use SQL genérico.',
+    schema: { ...C,
+      p_data_inicio: { type: 'string', description: 'YYYY-MM-DD. Vazio = ontem.' },
+      p_data_fim: { type: 'string', description: 'YYYY-MM-DD. Vazio = hoje.' },
+      p_valor: { type: 'number', description: 'Valor exato, quando conhecido.' },
+      p_categoria: { type: 'string', description: 'parcela | matricula | passaporte | lojinha | seguranca | outro. Opcional.' },
+      p_forma: { type: 'string', description: 'dinheiro | pix | cartao | cheque | transferencia | outro. Opcional.' },
+      p_texto: { type: 'string', description: 'Nome ou trecho curto da descrição/responsável. Não cole a conversa inteira.' },
+    } },
+
+  { name: 'caixa_preparar_lancamento', auth: 'caixa_runtime', action: 'preparar_lancamento',
+    description: 'Prepara o lançamento de um RECEBIMENTO a partir dos fatos que você interpretou da mensagem humana. A ferramenta consulta as faturas oficiais, resolve homônimos/combinações, publica um único card e espera “pode”; não escreve dinheiro agora. Use para pagamento por texto ou legenda. O texto original e o valor declarado são obrigatórios e o Core recusa total/fatura que não fechem. A ferramenta já publica no grupo: depois de sucesso, não repita o card.',
+    schema: { ...C,
+      p_texto_original: { type: 'string', description: 'Mensagem humana exata que contém o pagamento e o total. Não reescreva.' },
+      p_valor_total: { type: 'number', description: 'Total declarado explicitamente pela pessoa.' },
+      p_forma: { type: 'string', description: 'dinheiro | pix | cartao | cheque | transferencia | outro.' },
+      p_pagador: { type: 'string', description: 'Nome do pagador, se foi informado.' },
+      p_itens: { type: 'array', description: 'Alunos/cursos citados. Não invente item.', items: { type: 'object', properties: {
+        aluno: { type: 'string' }, categorias: { type: 'array', items: { type: 'string' } },
+        competencias: { type: 'array', items: { type: 'string' } },
+      } } },
+    } },
+
+  { name: 'caixa_preparar_saida', auth: 'caixa_runtime', action: 'preparar_saida',
+    description: 'Prepara uma SAÍDA do Caixa (segurança, despesa, retirada ou troco). Publica o card auditado e espera “pode”; não escreve agora. Use apenas quando valor, forma, categoria e descrição foram ditos pela pessoa. A ferramenta já publica no grupo: não repita o card.',
+    schema: { ...C,
+      p_texto_original: { type: 'string', description: 'Mensagem humana exata que pediu a saída.' },
+      p_valor: { type: 'number' }, p_forma: { type: 'string' },
+      p_categoria: { type: 'string', description: 'seguranca | despesa | retirada | troco.' },
+      p_descricao: { type: 'string', description: 'Descrição humana da saída.' },
+    } },
+
+  { name: 'caixa_preparar_correcao', auth: 'caixa_runtime', action: 'preparar_correcao',
+    description: 'Prepara um card auditado para CORRIGIR um lançamento que já existe. Use somente depois de `caixa_localizar_lancamento` devolver exatamente um item e a pessoa disser claramente o que está errado. Não altera dinheiro agora: publica a prévia e espera um “pode” posterior. Passe o ID e os dados ATUAIS devolvidos pela localização; nunca invente o alvo. A ferramenta já publica no grupo: não repita o card.',
+    schema: { ...C,
+      p_movimentacao_id: { type: 'string', description: 'ID exato devolvido por caixa_localizar_lancamento.' },
+      p_valor_atual: { type: 'number' }, p_categoria_atual: { type: 'string' }, p_forma_atual: { type: 'string' },
+      p_novo_valor: { type: 'number' }, p_nova_categoria: { type: 'string' }, p_nova_forma: { type: 'string' },
+      p_motivo: { type: 'string', description: 'Motivo humano da correção, sem inventar.' },
+    } },
+
+  { name: 'caixa_preparar_estorno', auth: 'caixa_runtime', action: 'preparar_estorno',
+    description: 'Prepara um card auditado de ESTORNO para um lançamento real. Use somente depois de `caixa_localizar_lancamento` devolver exatamente um item e a pessoa pedir cancelamento/estorno explicitamente. Não apaga o original e não escreve agora: publica a prévia do movimento inverso e espera “pode”. A ferramenta já publica no grupo: não repita o card.',
+    schema: { ...C,
+      p_movimentacao_id: { type: 'string' }, p_valor_atual: { type: 'number' },
+      p_categoria_atual: { type: 'string' }, p_forma_atual: { type: 'string' },
+      p_motivo: { type: 'string', description: 'Motivo humano do estorno. Obrigatório.' },
+    } },
+
+  { name: 'caixa_preparar_abertura', auth: 'caixa_runtime', action: 'preparar_abertura',
+    description: 'Publica a prévia oficial para ABRIR o Caixa da unidade do grupo. Não abre ainda; espera “pode”. Use quando pedirem para abrir o caixa. A ferramenta já publica no grupo: não repita o card.',
+    schema: { ...C } },
+
+  { name: 'caixa_preparar_fechamento', auth: 'caixa_runtime', action: 'preparar_fechamento',
+    description: 'Publica o demonstrativo oficial e a prévia para FECHAR o Caixa. Não fecha ainda; espera “pode”. Use quando pedirem fechamento, nunca calcule o saldo por conta própria. A ferramenta já publica no grupo: não repita o demonstrativo.',
+    schema: { ...C } },
+
+  { name: 'caixa_aprovar_preview', auth: 'caixa_runtime', action: 'aprovar_preview',
+    description: 'Executa a prévia financeira vigente SOMENTE quando a mensagem humana atual for uma aprovação explícita (“pode”, “confirmo”, “autoriza”). O banco valida preview, hash, ator, grupo, idade, consumo único e atomicidade; a ferramenta publica o recibo. Não chame para pergunta de capacidade (“você consegue?”) nem sem um “pode” humano atual. Depois do sucesso, não envie outro recibo.',
+    schema: { ...C,
+      p_aprovacao: { type: 'string', description: 'Texto exato da aprovação humana atual.' },
+      p_preview_message_id: { type: 'string', description: 'ID do card citado, quando houver mais de uma prévia. Vazio só se houver exatamente uma.' },
+    } },
+
+  { name: 'caixa_descartar_preview', auth: 'caixa_runtime', action: 'descartar_preview',
+    description: 'Descarta a prévia vigente quando a pessoa responde “não”, “cancela” ou pede para não lançar. Torna o card terminal no banco; não mexe no Caixa.',
+    schema: { ...C,
+      p_recusa: { type: 'string', description: 'Texto exato da recusa humana.' },
+      p_preview_message_id: { type: 'string' },
+    } },
 
   { name: 'inadimplencia', fn: 'sol_porta_inadimplencia_v1',
     description: 'Quem está devendo na unidade, com quanto e há quantos dias. Use para "quem tá inadimplente?", "quanto temos a receber atrasado?", "o Fulano pagou?". ⚠️ O espelho de faturas cobre a competência atual e a anterior, então aluno com dívida mais velha aparece com valor MENOR que o real — diga "pelo menos X", nunca "exatamente X". Para a lista de quem tem aula e nenhuma fatura emitida, a irmã é `alunos_sem_fatura`; são coisas diferentes e confundi-las já gerou cobrança indevida.',
@@ -134,9 +218,172 @@ const PORTAS = [
 // ── protocolo MCP ───────────────────────────────────────────────────────────
 const j = (o) => ({ content: [{ type: 'text', text: JSON.stringify(o) }] });
 
+const gruposCaixa = {};
+let handlerCaixa = null;
+let abfCaixa = null;
+
+function chatNoCanario(chat) {
+  const lista = String(process.env.SOL_CAIXA_TOOLS_CANARIO || '')
+    .split(',').map((x) => x.trim()).filter(Boolean);
+  return lista.includes(chat);
+}
+
+async function contextoCaixa(args) {
+  const cracha = String((args && args.p_cracha) || '').trim().replace(/[^A-Za-z0-9.]/g, '');
+  const chat = String((args && args.p_chat_id) || '').trim().replace(/[^A-Za-z0-9@._:-]/g, '');
+  if (!/^SOL1\.[0-9]+\.[0-9a-f]{32}$/.test(cracha)) return { ok: false, motivo: 'cracha_assinado_obrigatorio' };
+  if (!chat.endsWith('@g.us')) return { ok: false, motivo: 'chat_oficial_obrigatorio' };
+  if (!chatNoCanario(chat)) return { ok: false, motivo: 'caixa_agent_tools_fora_do_canario' };
+  const ctx = await rpc('sol_porta_caixa_contexto_v1', { p_cracha: cracha, p_chat_id: chat });
+  return { ...(ctx || {}), _chat: chat, _cracha: cracha };
+}
+
+async function enviarPeloBridge(chatId, texto) {
+  const r = await fetch(`${BRIDGE_URL}/send`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Host: 'localhost' },
+    body: JSON.stringify({ chatId, message: texto }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || !data.success) throw new Error(`bridge_send_${r.status}`);
+  return data.messageId || (data.messageIds || []).at(-1) || null;
+}
+
+function carregarRuntimeCaixa() {
+  if (handlerCaixa && abfCaixa) return;
+  const fin = require(CAIXA_RUNTIME);
+  abfCaixa = require(CAIXA_ABF_RUNTIME);
+  handlerCaixa = fin.criarHandlerFinanceiro({
+    grupos: gruposCaixa,
+    sendFn: enviarPeloBridge,
+    log: (evento) => {
+      const limpo = { ...(evento || {}) };
+      delete limpo.chatId; delete limpo.senderId; delete limpo.senderPhone;
+      process.stderr.write(JSON.stringify({ origem: 'sol_caixa_tool', ...limpo }) + '\n');
+    },
+  });
+}
+
+function textoContemValor(texto, valor) {
+  const alvo = Math.round(Number(valor) * 100);
+  if (!Number.isFinite(alvo) || alvo <= 0) return false;
+  const encontrados = String(texto || '').match(/\d{1,3}(?:\.\d{3})*(?:,\d{1,2})|\d+(?:[.,]\d{1,2})?/g) || [];
+  return encontrados.some((bruto) => {
+    const n = Number(bruto.includes(',') ? bruto.replace(/\./g, '').replace(',', '.') : bruto);
+    return Number.isFinite(n) && Math.round(n * 100) === alvo;
+  });
+}
+function idMensagem(ctx, action, args) {
+  return 'tool-' + crypto.createHash('sha256').update([
+    ctx._chat, action, JSON.stringify(args || {}), Math.floor(Date.now() / 30000),
+  ].join('|')).digest('hex').slice(0, 24);
+}
+
+async function executarRuntimeCaixa(p, args) {
+  const ctx = await contextoCaixa(args);
+  if (!ctx.ok) return j(ctx);
+  carregarRuntimeCaixa();
+  gruposCaixa[ctx._chat] = { unidade_id: ctx.unidade_id, nome: ctx.unidade_nome || 'unidade' };
+  await handlerCaixa.reidratarPendencias();
+  const base = {
+    chatId: ctx._chat, senderPhone: ctx._ator_numero, senderId: ctx._ator_numero + '@s.whatsapp.net',
+    senderName: ctx.quem || 'Equipe', hasMedia: false, mediaUrls: [],
+    messageId: idMensagem(ctx, p.action, args), quotedMessageId: args.p_preview_message_id || null,
+  };
+  let resultado;
+  if (p.action === 'preparar_lancamento') {
+    const texto = String(args.p_texto_original || '').trim();
+    const valor = Number(args.p_valor_total);
+    if (!texto || !(valor > 0)) return j({ ok: false, motivo: 'texto_e_total_declarado_obrigatorios' });
+    if (!textoContemValor(texto, valor)) return j({ ok: false, motivo: 'valor_total_nao_aparece_no_texto_original' });
+    resultado = await handlerCaixa.tratarAgentFirst({ ...base, body: texto, caixaToolDecision: {
+      intencao: Array.isArray(args.p_itens) && args.p_itens.length > 1
+        ? 'lancamento_multi_aluno' : 'lancamento_por_texto',
+      valor_total: valor, forma: args.p_forma || null, pagador: args.p_pagador || null,
+      itens: Array.isArray(args.p_itens) ? args.p_itens : [],
+    } }, gruposCaixa[ctx._chat], Date.now());
+  } else if (p.action === 'preparar_saida') {
+    const valor = Number(args.p_valor);
+    const categoria = String(args.p_categoria || '').trim().toLowerCase();
+    const forma = String(args.p_forma || '').trim().toLowerCase();
+    const descricao = String(args.p_descricao || '').trim();
+    const textoOriginal = String(args.p_texto_original || '').trim();
+    if (!(valor > 0) || !['seguranca', 'despesa', 'retirada', 'troco'].includes(categoria)
+        || !forma || !descricao || !textoOriginal) {
+      return j({ ok: false, motivo: 'saida_incompleta' });
+    }
+    // A escolha foi da ferramenta. A frase abaixo e apenas o adaptador canonico
+    // do schema para o runtime legado que continua montando o mesmo preview V3.
+    const body = `saída ${categoria} R$ ${valor.toFixed(2).replace('.', ',')} ${forma} ${descricao}`;
+    resultado = await handlerCaixa.handle({ ...base, body });
+  } else if (p.action === 'preparar_abertura') {
+    resultado = await abfCaixa.postarAbertura({ chat_id: ctx._chat, unidade_id: ctx.unidade_id, nome: ctx.unidade_nome }, { sendFn: enviarPeloBridge });
+  } else if (p.action === 'preparar_fechamento') {
+    resultado = await abfCaixa.tratarPedidoDiretoFechamento(
+      { ...base, body: 'Sol, vamos fechar o caixa agora' },
+      { grupo: gruposCaixa[ctx._chat], sendFn: enviarPeloBridge });
+  } else if (p.action === 'aprovar_preview') {
+    const texto = String(args.p_aprovacao || '').trim();
+    if (!/^(pode(?:\s+sim)?|confirmo|autorizo|pode\s+(?:lançar|corrigir|estornar|abrir|fechar))\b/i.test(texto)) {
+      return j({ ok: false, motivo: 'aprovacao_explicita_obrigatoria' });
+    }
+    const ev = { ...base, body: texto };
+    const abf = await abfCaixa.tratarConfirmacao(ev, { sendFn: enviarPeloBridge,
+      temComprovantePendente: (cid) => handlerCaixa.temPendencia(cid) });
+    resultado = abf ? { acao: 'abertura_fechamento_tratado' } : await handlerCaixa.handle(ev);
+  } else if (p.action === 'descartar_preview') {
+    const texto = String(args.p_recusa || '').trim();
+    if (!/^(não|nao|cancela|cancelar|descarta|descartar)\b/i.test(texto)) return j({ ok: false, motivo: 'recusa_explicita_obrigatoria' });
+    resultado = await handlerCaixa.handle({ ...base, body: texto });
+  } else {
+    const alvo = {
+      movimentacao_id: String(args.p_movimentacao_id || '').trim(),
+      unidade_id: ctx.unidade_id,
+      valor: Number(args.p_valor_atual),
+      forma_pagamento: String(args.p_forma_atual || ''),
+      categoria: String(args.p_categoria_atual || ''),
+    };
+    if (!alvo.movimentacao_id || !(alvo.valor > 0)) return j({ ok: false, motivo: 'alvo_exato_obrigatorio' });
+    let cmd;
+    if (p.action === 'preparar_estorno') {
+      const motivo = String(args.p_motivo || '').trim();
+      if (!motivo) return j({ ok: false, motivo: 'motivo_obrigatorio' });
+      cmd = { tipo: 'estornar', motivo, correcoes: {} };
+    } else {
+      const correcoes = {};
+      if (args.p_novo_valor != null) correcoes.valor = Number(args.p_novo_valor);
+      if (args.p_nova_forma) correcoes.forma_pagamento = String(args.p_nova_forma);
+      if (args.p_nova_categoria) correcoes.categoria = String(args.p_nova_categoria);
+      if (!Object.keys(correcoes).length) return j({ ok: false, motivo: 'correcao_vazia' });
+      cmd = { tipo: 'corrigir', motivo: String(args.p_motivo || 'correção solicitada no grupo'), correcoes };
+    }
+    resultado = await handlerCaixa.handle({ ...base,
+      body: cmd.tipo === 'estornar' ? 'estornar lançamento' : 'corrigir lançamento',
+      caixaToolCommand: cmd, caixaToolTarget: alvo,
+    });
+  }
+  return j({ ok: true, ja_publicado_no_grupo: true, resultado });
+}
+
 async function despachar(name, args) {
   const p = PORTAS.find((x) => x.name === name);
   if (!p) return j({ ok: false, motivo: 'porta_desconhecida', porta: name });
+  if (p.auth === 'caixa_runtime') return executarRuntimeCaixa(p, args || {});
+  if (p.auth === 'caixa_assinado') {
+    const cracha = String((args && args.p_cracha) || '').trim().replace(/[^A-Za-z0-9.]/g, '');
+    const chat = String((args && args.p_chat_id) || '').trim().replace(/[^A-Za-z0-9@._:-]/g, '');
+    if (!/^SOL1\.[0-9]+\.[0-9a-f]{32}$/.test(cracha)) {
+      return j({ ok: false, motivo: 'cracha_assinado_obrigatorio' });
+    }
+    if (!chat.endsWith('@g.us')) {
+      return j({ ok: false, motivo: 'chat_oficial_obrigatorio' });
+    }
+    if (!chatNoCanario(chat)) return j({ ok: false, motivo: 'caixa_agent_tools_fora_do_canario' });
+    const limpos = { p_cracha: cracha, p_chat_id: chat };
+    for (const [k, v] of Object.entries(args || {})) {
+      if (k !== 'p_cracha' && k !== 'p_chat_id' && v !== null && v !== undefined && v !== '') limpos[k] = v;
+    }
+    return j(await rpc(p.fn, limpos));
+  }
   // 🔴 CRACHA NAO PODE SER LIMPO. O strip de nao-digitos estava certo quando o
   //    valor era so telefone; com cracha ele destroi a assinatura — medido:
   //    "SOL1.5521970183684.d2f0f55a..." virou "155219701836842055105...", que

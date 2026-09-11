@@ -140,6 +140,16 @@ const junta = (a) => a.join(' || ');
   checar(!/357,00\*/.test(card.split('TOTAL')[0] || ''), 'F2: card lideranca com 357 (defeito antigo)');
   checar(String(rA && rA.acao) !== 'nada', 'F2: acao=nada, o agent-first nao assumiu');
 
+  // ── F2b: ferramenta escolheu — classificador interno não roda ────────────
+  const TOOL = novo({ rotearV4Fn: async () => { throw new Error('roteador nao deveria rodar'); } });
+  const rTool = await TOOL.h.tratarAgentFirst({
+    chatId: CHAT, senderPhone: ADM, messageId: 'TOOL-LIS', body: TEXTO_LIS,
+    caixaToolDecision: DEC_LIS,
+  }, { grupo_jid: CHAT, unidade_id: UNIDADE, nome: 'Campo Grande' }, Date.now());
+  checar(TOOL.pedidos.length === 1, 'F2b: tool estruturada nao chegou ao Core');
+  checar(rTool && rTool.acao === 'preview_multi_aluno_enviado',
+    'F2b: tool estruturada nao abriu preview -> ' + JSON.stringify(rTool));
+
   // ── F3: FAIL-SAFE — sem decisao, sem envelope, erro no Core: cai para o legado
   for (const [rot, res, nome] of [
     [async () => null, async () => RES_LIS, 'sem_decisao'],

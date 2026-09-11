@@ -1,0 +1,6 @@
+# Artefatos esperados no canário agent-first do Caixa após a promoção.
+# Bridge e AGENTS são verificados pelo efeito idempotente dos patches; o hash
+# exato deles depende do estado vivo anterior e não deve ser forçado pelo Git.
+
+ac7622f35c93cb593681bc867fcf1797e59353aa9f476ed43ed5f0ebfd487e5c  sol-portas-mcp.mjs  /home/sol/.openclaw/workspace/scripts/sol-portas-mcp.mjs
+bd662c206acdd3af277da79c699dd92bb80b14d083c90e750aecba1af6ad234e  SKILL.md  /home/sol/.hermes/profiles/sol/skills/sol-caixa-agent-first/SKILL.md

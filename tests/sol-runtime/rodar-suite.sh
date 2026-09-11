@@ -20,7 +20,7 @@ export SOL_CAIXA_V3_LEDGER_FAKE=1
 export SOL_CAIXA_V4_SHADOW=0
 
 verdes=0; pulados=0; vermelhos=()
-for t in *e2e.cjs *.test.cjs; do
+for t in *e2e.cjs *.test.cjs porta-caixa-localizar-e-contexto.cjs; do
   saida="$(node "$t" 2>&1)"; rc=$?
   if grep -q 'PULADO' <<<"$saida"; then
     pulados=$((pulados + 1)); printf '  ⏭  %s\n' "$t"
