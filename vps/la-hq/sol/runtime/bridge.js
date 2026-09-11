@@ -1019,6 +1019,7 @@ async function caixaAbf() {
             _caixaLog({ step: 'msg', chatId: chatId, hasMedia: event.hasMedia, mediaType: event.mediaType });
             if (event.hasMedia) typingStart(chatId);
             const _abf = await caixaAbf();
+            let _fhPrio = null;
             if (_abf) {
               const _sf = async (cid, txt) => {
                 const s2 = await sendWithTimeout(cid, { text: txt });
@@ -1037,17 +1038,26 @@ async function caixaAbf() {
                 ? await _abf.tratarPedidoDiretoReabertura(event, { grupo: _grupoCaixa, sendFn: _sf, log: _caixaLog })
                 : false;
               if (_reab) { typingStop(chatId); _caixaLog({ step: 'abf_reabertura_direta' }); continue; }
-              const _fhPrio = await financeHandler();
+              _fhPrio = await financeHandler();
               const _tratou = await _abf.tratarConfirmacao(event, { sendFn: _sf, log: _caixaLog,
                 temComprovantePendente: (cid) => !!(_fhPrio && _fhPrio.temPendencia && _fhPrio.temPendencia(cid)) });
               if (_tratou) { _caixaLog({ step: 'abf_tratou' }); continue; }
             }
-            // Abertura/fechamento fica determinístico acima. Só depois
-            // o texto restante do canário pula o parser financeiro legado.
-            const _textoVaiParaAgentTools = SOL_CAIXA_TOOLS_GROUPS.has(chatId) && !event.hasMedia;
+            // Abertura/fechamento fica determinístico acima. Confirmação de
+            // preview criado por mídia também fica no handler determinístico;
+            // somente texto novo (ou confirmação de preview das tools) segue
+            // para o agent-first.
+            const _confirmacaoDeterministica = !!(_fhPrio
+              && _fhPrio.deveTratarConfirmacaoDeterministica
+              && _fhPrio.deveTratarConfirmacaoDeterministica(event));
+            const _textoVaiParaAgentTools = SOL_CAIXA_TOOLS_GROUPS.has(chatId)
+              && !event.hasMedia && !_confirmacaoDeterministica;
             if (_textoVaiParaAgentTools) {
               _caixaLog({ step: 'agent_first_text_handoff_pos_abf', chatId: chatId });
             } else {
+            if (_confirmacaoDeterministica) {
+              _caixaLog({ step: 'preview_deterministico_priorizado', chatId: chatId });
+            }
             const _fh = await financeHandler();
             let _tratouCaixa = true;
             if (_fh) {

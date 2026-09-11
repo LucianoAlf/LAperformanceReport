@@ -6117,11 +6117,38 @@ _Não lanço nada pela metade._`);
     }
   }
 
+  // No canario textual, uma confirmacao de preview criado pelo trilho
+  // deterministico (comprovante/midia) precisa continuar neste handler. Um
+  // preview criado pelas tools leva agentFirstEnvelope e permanece no fluxo
+  // agent-first. Esta consulta nao aprova nem descarta nada; apenas decide a
+  // rota antes do LLM.
+  function deveTratarConfirmacaoDeterministica(event) {
+    if (!event || event.hasMedia) return false;
+    const chatId = event.chatId;
+    const arr = limparVelhos(chatId, Date.now());
+    if (!arr.length) return false;
+
+    const _citaPend = (p, id) => p.previewId === id || p.origem === id
+      || (Array.isArray(p.msgIds) && p.msgIds.includes(id));
+    const citado = event.quotedMessageId
+      ? arr.find((p) => _citaPend(p, event.quotedMessageId)) || null
+      : null;
+    // Citar card velho/estranho nao ganha outra pendencia por aproximacao.
+    if (event.quotedMessageId && !citado) return false;
+    const respondeuPreview = !!citado;
+    const confirma = casarPode(event.body, { respondeuPreview }).pode || casarNao(event.body);
+    if (!confirma) return false;
+
+    if (citado) return !citado.agentFirstEnvelope;
+    return arr.some((p) => !p.agentFirstEnvelope);
+  }
+
   // ⚠️ ehConversaSemComando no retorno conserta bug LATENTE: o bridge chama
   // _fh.ehConversaSemComando(body) desde 25/08, mas o handler nunca a expos —
   // o guard de "elogio nao leva nao-entendi" estava morto por undefined.
   return { handle, temPendencia, citaAlgumaPendencia, ehConversaSemComando,
     reidratarPendencias, tratarNaoEntendida, observarRoteadorV4, tratarAgentFirst,
+    deveTratarConfirmacaoDeterministica,
     _pendentes: pendentes, _envelopesV4: envelopesV4 };
 }
 

@@ -84,5 +84,48 @@ if (!src.includes(marcadorHandoff)) {
   src = src.replace(inicioLegado, inicioComHandoff).replace(fimLegado, fimComHandoff);
 }
 
+// Hotfix 11/09: o canario nao pode sequestrar `pode/nao` quando existe um
+// preview deterministico de comprovante. O proprio handler conhece a origem
+// do preview e decide a rota sem executar efeito financeiro.
+const linhaHandoffAntiga = '            const _textoVaiParaAgentTools = SOL_CAIXA_TOOLS_GROUPS.has(chatId) && !event.hasMedia;';
+const marcadorPreviewDeterministico = "step: 'preview_deterministico_priorizado'";
+const ancoraAbf = '            const _abf = await caixaAbf();';
+if (!src.includes(marcadorPreviewDeterministico) && src.includes(ancoraAbf)) {
+  const ancoraPrio = '              const _fhPrio = await financeHandler();';
+  const declaracaoPrio = ancoraAbf + '\n            let _fhPrio = null;';
+  if (!src.includes('            let _fhPrio = null;')) {
+    for (const [ancora, rotulo] of [[ancoraAbf, 'carregamento ABF'], [ancoraPrio, 'handler prioritario']]) {
+      const n = src.split(ancora).length - 1;
+      if (n !== 1) {
+        console.error(`ancora ${rotulo}: esperava 1 ocorrencia, achei ${n}`);
+        process.exit(1);
+      }
+    }
+    src = src.replace(ancoraAbf, declaracaoPrio)
+      .replace(ancoraPrio, '              _fhPrio = await financeHandler();');
+  }
+  const blocoHandoffNovo = [
+    '            const _confirmacaoDeterministica = !!(_fhPrio',
+    '              && _fhPrio.deveTratarConfirmacaoDeterministica',
+    '              && _fhPrio.deveTratarConfirmacaoDeterministica(event));',
+    '            const _textoVaiParaAgentTools = SOL_CAIXA_TOOLS_GROUPS.has(chatId)',
+    '              && !event.hasMedia && !_confirmacaoDeterministica;',
+  ].join('\n');
+  const linhaLogHandoff = "              _caixaLog({ step: 'agent_first_text_handoff_pos_abf', chatId: chatId });\n            } else {";
+  const blocoLogNovo = "              _caixaLog({ step: 'agent_first_text_handoff_pos_abf', chatId: chatId });\n"
+    + "            } else {\n"
+    + "            if (_confirmacaoDeterministica) {\n"
+    + "              _caixaLog({ step: 'preview_deterministico_priorizado', chatId: chatId });\n"
+    + '            }';
+  for (const [ancora, rotulo] of [[linhaHandoffAntiga, 'handoff textual'], [linhaLogHandoff, 'log do handoff']]) {
+    const n = src.split(ancora).length - 1;
+    if (n !== 1) {
+      console.error(`ancora ${rotulo}: esperava 1 ocorrencia, achei ${n}`);
+      process.exit(1);
+    }
+  }
+  src = src.replace(linhaHandoffAntiga, blocoHandoffNovo).replace(linhaLogHandoff, blocoLogNovo);
+}
+
 fs.writeFileSync(alvo, src, 'utf8');
-console.log('contexto chat-bound + ABF deterministico + texto agent-tools do Caixa injetados');
+console.log('contexto chat-bound + ABF + preview deterministico + texto agent-tools do Caixa injetados');
