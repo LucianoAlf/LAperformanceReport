@@ -44,7 +44,7 @@ versionada e contagens explícitas de presença/indicadores. Ver
 | `/app/pre-atendimento` | Pré-Atendimento (CRM/WhatsApp) | [comercial](sistema/comercial.md) |
 | `/app/campanhas` | Campanhas (Meta) | [comercial](sistema/comercial.md) |
 | `/app/campanhas/:campanhaId` | Detalhe de campanha | [comercial](sistema/comercial.md) |
-| `/app/trafego-pago` | Tráfego Pago (Meta Ads) | [comercial](sistema/comercial.md) |
+| `/app/trafego-pago` | Tráfego Pago (Meta Ads + Google Ads) | [comercial](sistema/comercial.md) |
 | `/app/alunos` | Alunos | [aluno](sistema/aluno.md) |
 | `/app/bandas` | Bandas | [aluno](sistema/aluno.md) |
 | `/app/sucesso-aluno` | Sucesso do Aluno | [aluno](sistema/aluno.md) |

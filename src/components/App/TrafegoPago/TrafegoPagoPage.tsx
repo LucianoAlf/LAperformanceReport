@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
+import { SecaoGoogleAds } from './SecaoGoogleAds';
 
 // ============================================================================
 // Tipos
@@ -90,6 +91,17 @@ const PRESETS: { value: Preset; label: string }[] = [
   { value: 'last_30d', label: '30 dias' },
   { value: 'last_90d', label: '90 dias' },
   { value: 'maximum', label: 'Tudo' },
+];
+
+// Meta e Google viram abas em vez de empilhar: as duas metades juntas passariam de
+// 1.500px de rolagem, e ninguém compara plataformas rolando. O período é
+// compartilhado de propósito — trocar de aba mantendo a janela é o que permite
+// comparar as duas.
+type Plataforma = 'meta' | 'google';
+
+const PLATAFORMAS: { value: Plataforma; label: string; cor: string }[] = [
+  { value: 'meta', label: 'Meta Ads', cor: 'bg-pink-600' },
+  { value: 'google', label: 'Google Ads', cor: 'bg-blue-600' },
 ];
 
 // ============================================================================
@@ -215,7 +227,7 @@ function BarraRanking({ label, valor, max, extra }: { label: string; valor: numb
 export function TrafegoPagoPage() {
   useSetPageTitle({
     titulo: 'Tráfego Pago',
-    subtitulo: 'Investimento e atribuição de anúncios pagos — Meta Ads hoje, Google Ads no futuro',
+    subtitulo: 'Investimento e atribuição de anúncios pagos — Meta Ads e Google Ads',
     icone: MousePointerClick,
     iconeCor: 'text-pink-400',
     iconeWrapperCor: 'bg-pink-500/20',
@@ -223,6 +235,7 @@ export function TrafegoPagoPage() {
   const sentinelRef = useWidgetOverlapSentinel();
 
   const [preset, setPreset] = useState<Preset>('last_30d');
+  const [plataforma, setPlataforma] = useState<Plataforma>('meta');
   const [insights, setInsights] = useState<InsightsResponse | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(true);
   const [erroInsights, setErroInsights] = useState<string | null>(null);
@@ -233,7 +246,10 @@ export function TrafegoPagoPage() {
   const paginacaoLeads = usePaginacaoTabela(leadsAtribuidos, 15);
 
   // ----- Insights (via edge function meta-ads-insights, token fica no servidor) -----
+  // Só consulta quando a aba do Meta está à vista: cada chamada custa requisição
+  // na Graph API, e buscar o que ninguém vai olhar é gasto sem retorno.
   useEffect(() => {
+    if (plataforma !== 'meta') return;
     let ativo = true;
     (async () => {
       setLoadingInsights(true);
@@ -253,7 +269,7 @@ export function TrafegoPagoPage() {
       }
     })();
     return () => { ativo = false; };
-  }, [preset]);
+  }, [preset, plataforma]);
 
   // ----- Leads atribuídos + cache de anúncios -----
   const carregarLeads = async () => {
@@ -345,6 +361,23 @@ export function TrafegoPagoPage() {
   // ============================================================================
   return (
     <div className="space-y-6">
+      {/* Plataforma — o período fica compartilhado entre as duas abas */}
+      <div className="flex gap-1 bg-slate-900/60 p-1 rounded-xl w-fit">
+        {PLATAFORMAS.map(p => (
+          <button
+            key={p.value}
+            onClick={() => setPlataforma(p.value)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              plataforma === p.value
+                ? `${p.cor} text-white`
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
       {/* Seletor de período */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex gap-2">
@@ -372,6 +405,8 @@ export function TrafegoPagoPage() {
           Atualizar
         </Button>
       </div>
+
+      {plataforma === 'google' ? <SecaoGoogleAds preset={preset} /> : <>
 
       {erroInsights && (
         <div className="bg-rose-900/20 border border-rose-700/50 rounded-2xl p-4 flex items-center gap-3">
@@ -753,6 +788,8 @@ export function TrafegoPagoPage() {
           labelItem="leads"
         />
       </div>
+
+      </>}
       <div ref={sentinelRef} aria-hidden="true" className="h-px" />
     </div>
   );

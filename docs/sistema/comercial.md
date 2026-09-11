@@ -29,12 +29,16 @@ Disparo de templates Meta (WhatsApp Cloud API) + conversas + agentes IA. `Campan
 
 ## Tráfego Pago (`/app/trafego-pago`)
 
-Atribuição de anúncio Meta Ads. **Não confundir com Campanhas** (WhatsApp Cloud API).
+Atribuição de anúncio Meta Ads **e desempenho de mídia do Google Ads**, em duas abas
+que dividem o mesmo seletor de período. **Não confundir com Campanhas** (WhatsApp Cloud API).
 
-- **Componentes:** `TrafegoPagoPage.tsx`
+- **Componentes:** `TrafegoPagoPage.tsx` (aba Meta + seletor) e `SecaoGoogleAds.tsx` (aba Google)
 - **Hooks:** `usePaginacaoTabela`, `useWidgetOverlapSentinel`, `useSetPageTitle`
 - **Edge functions:** `meta-ads-insights` (proxy read-only da Graph API; gasto, CTR,
   alcance, funil, tendência diária, por anúncio, por posicionamento, demográfico e região)
+  e `google-ads-insights` (proxy read-only da API do Google Ads, 9 consultas GAQL em
+  paralelo: conta, campanhas, tendência diária, conversões por ação, dispositivo, rede,
+  idade, gênero, grupos de ativos)
 - **Alimentado por:** `registrar-atribuicao-meta-ads` (tempo real, via n8n),
   `varrer-atribuicao-meta-ads` (rede de segurança, de hora em hora) e
   `enriquecer-meta-ads` (cron 05:10 BRT, popula `meta_ads_cache`)
@@ -45,3 +49,43 @@ Atribuição de anúncio Meta Ads. **Não confundir com Campanhas** (WhatsApp Cl
 edge** — este último protege o custo de mídia contra chamada direta à API.
 
 ⚠️ Métricas vivas (gasto) **nunca** são persistidas por lead — sempre consulta na hora.
+
+### Google Ads na aba (desde 2026-09-11)
+
+⚠️ **`google-ads-insights` ≠ `capturar-google-ads-diario`.** A primeira é proxy ao vivo e
+não grava nada; a segunda GRAVA em `google_ads_metricas_diarias` e é a **memória** do gasto,
+usada pelo radar de tráfego para dividir custo por leads. Reusam os **mesmos secrets**, então
+trocar o refresh token num lugar conserta os dois — não há credencial duplicada.
+
+⚠️ **A conta do Google é UMA para as três unidades.** O recorte por unidade sai do NOME da
+campanha (`[CG]`, `[BARRA]`, `[RECREIO]`), e é informação que só existe desse lado — a
+campanha do Meta é "Todas as unidades". Campanha sem marca reconhecível aparece como
+"Sem unidade", nunca atribuída por chute.
+
+🔴 **Conversão do Google NÃO é comparável com conversa do Meta** e o aviso é permanente na
+tela, não tooltip: no Meta é conversa de WhatsApp, no Google é a ação configurada na conta
+(que inclui rotas, visita à loja e view no YouTube). Como as duas viraram abas do mesmo
+layout, o convite a comparar é imediato. Cada plataforma serve para acompanhar a si mesma.
+
+⚠️ **O KPI conta metas primárias; o painel "por ação" soma TODAS** (779,7 × 1.545,7 em
+30 dias). Não fecham por construção — a API não oferece o recorte por ação dentro de
+`conversions`. A tela declara os dois números lado a lado em vez de esconder a diferença.
+
+⚠️ **Não existe detalhe por criativo no Performance Max.** O grão mais fino é o grupo de
+ativos, e o painel diz isso — rotular de "criativo" faria parecer comparável com o Meta.
+
+⚠️ **Nunca mandar `login-customer-id`.** A API responde `403 USER_PERMISSION_DENIED` com
+mensagem que sugere o contrário. Medido duas vezes por caminhos independentes (03/09 e
+11/09): `listAccessibleCustomers` devolve só `customers/7179097170` e a conta é alcançada
+**direto**. O secret `GOOGLE_ADS_LOGIN_CUSTOMER_ID` não existe, e o código só envia o header
+se existir. O MCC `164-091-0901` do registro de governança **não gerencia** essa conta.
+
+⚠️ **Versões da API são tentadas em ordem** (`v25,v24,v23,v22`). Medido em 11/09: v22-v25
+vivas, v17-v21 devolvem **404**. Versão fixa aposentada viraria "a aba do Google parou".
+
+⚠️ **KPI e gráfico podem divergir por centavos no dia corrente** — são consultas paralelas e
+o gasto de hoje sobe entre elas (medido: R$ 0,16 em R$ 3.130). Com `campaign.id` na consulta
+o total fecha **exato** contra a soma das campanhas. Não é bug; não "consertar".
+
+⚠️ A aba do Meta **só consulta quando está à vista** (`plataforma !== 'meta'` sai do efeito):
+cada chamada custa requisição na Graph API.
