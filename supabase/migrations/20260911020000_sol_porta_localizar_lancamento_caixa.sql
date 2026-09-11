@@ -179,7 +179,7 @@ begin
         select a.resultado
           from public.sol_caixa_lancamento_auditoria a
          where a.movimentacao_id = nullif(i.item->>'movimentacao_id', '')::uuid
-         order by a.created_at desc
+         order by a.criado_em desc
          limit 1
       )
     )
