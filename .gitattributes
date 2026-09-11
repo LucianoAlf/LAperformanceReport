@@ -7,3 +7,7 @@ vps/** text eol=lf
 # da regra de `vps/**` acima. Medido em 10/09, depois de um merge reescrever os
 # arquivos: o ensaio parou no passo 2 de 7.
 tests/sol-caixa/** text eol=lf
+
+# Baseline direto do bridge vivo no Gate 1; preservar bytes até a próxima
+# alteração funcional deliberada.
+vps/la-hq/sol/runtime/bridge.js text eol=lf -whitespace

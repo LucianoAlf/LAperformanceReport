@@ -1,0 +1,58 @@
+{
+  "artifact_set": "sol-lahq-runtime",
+  "artifacts": [
+    {
+      "class": "bridge",
+      "mode": "0644",
+      "sha256": "e4784fb1e93780281bff80bac0ff9808cbec0c43efc4da49796ed330933d80d2",
+      "size": 62973,
+      "source": "vps/la-hq/sol/runtime/bridge.js",
+      "target": "/home/sol/.hermes/hermes-agent/scripts/whatsapp-bridge/bridge.js"
+    },
+    {
+      "class": "bridge-module",
+      "mode": "0644",
+      "sha256": "a720c73c99a0556197affd7b830b5af57f4b3fb9a33d24f18db8abc455fb2bf5",
+      "size": 5882,
+      "source": "vps/la-hq/sol/runtime/group-engagement.cjs",
+      "target": "/home/sol/.hermes/hermes-agent/scripts/whatsapp-bridge/group-engagement.cjs"
+    },
+    {
+      "class": "caixa-runtime",
+      "mode": "0644",
+      "sha256": "cb9b47f4862011ccf3584f6c546bebd4d1f23e536df053141bb4ba437f49f630",
+      "size": 362366,
+      "source": "vps/la-hq/sol/runtime/caixa-financeiro.cjs",
+      "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs"
+    },
+    {
+      "class": "caixa-runtime",
+      "mode": "0644",
+      "sha256": "448130f82d5071530b511508744144d3c2a6fda26b86336070559d27926f872f",
+      "size": 21172,
+      "source": "vps/la-hq/sol/runtime/caixa-abertura-fechamento.cjs",
+      "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-abertura-fechamento.cjs"
+    },
+    {
+      "class": "mcp-runtime",
+      "mode": "0644",
+      "sha256": "ac7622f35c93cb593681bc867fcf1797e59353aa9f476ed43ed5f0ebfd487e5c",
+      "size": 33659,
+      "source": "vps/la-hq/sol/scripts/sol-portas-mcp.mjs",
+      "target": "/home/sol/.openclaw/workspace/scripts/sol-portas-mcp.mjs"
+    }
+  ],
+  "excluded": [
+    "secrets, environment e config efetiva",
+    "logs, sessões, caches, offsets e bancos locais",
+    "constituição e skills, custodiadas no sol-openclaw-backup",
+    "patches históricos que não são o artefato final carregado"
+  ],
+  "schema_version": 1,
+  "service": {
+    "manager": "user-systemd",
+    "name": "hermes-gateway-sol.service",
+    "user": "sol"
+  },
+  "source_repository": "LucianoAlf/LAperformanceReport"
+}
