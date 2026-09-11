@@ -18,7 +18,7 @@ const bridge = path.join(tmp, 'bridge.js');
 fs.writeFileSync(bridge, `
 'use strict';
 const chatId = 'canario@g.us';
-const event = { chatId, senderId: 'operadora@s.whatsapp.net', senderPhone: '5521999999999', body: 'pode', hasMedia: process.env.MEDIA === '1' };
+const event = { chatId, senderId: 'operadora@s.whatsapp.net', senderPhone: '5521999999999', body: process.env.TEXTO || 'pode', hasMedia: process.env.MEDIA === '1' };
 const SOL_CAIXA_LIVE = true;
 const FINANCE_GROUPS = new Set(
   String(process.env.SOL_CAIXA_FINANCE_GROUPS || '')
@@ -33,7 +33,9 @@ const sendWithTimeout = async () => ({ key: { id: 'm1' } });
 const recentlySentIds = new Set();
 const abrirJanelaGrupo = () => {};
 const financeHandler = async () => ({
-  temPendencia: () => false,
+  temPendencia: () => process.env.PENDENTE === '1',
+  deveTratarConfirmacaoDeterministica: (ev) => process.env.PENDENTE_DETERMINISTICO === '1'
+    && /^(pode|não|nao)$/i.test(String(ev.body || '').trim()),
   handle: async () => { passos.push('legado'); return { acao: 'tratado' }; },
 });
 const caixaAbf = async () => ({
@@ -113,6 +115,12 @@ function executar(env) {
 assert.deepStrictEqual(executar({ SOL_CAIXA_TOOLS_CANARIO: 'canario@g.us', ABF_TRATA: '1' }),
   ['msg', 'abf_confirmacao', 'abf_tratou']);
 assert.deepStrictEqual(executar({ SOL_CAIXA_TOOLS_CANARIO: 'canario@g.us', ABF_TRATA: '0' }),
+  ['msg', 'abf_confirmacao', 'agent_first_text_handoff_pos_abf', 'llm']);
+assert.deepStrictEqual(executar({ SOL_CAIXA_TOOLS_CANARIO: 'canario@g.us', ABF_TRATA: '0', PENDENTE: '1', PENDENTE_DETERMINISTICO: '1' }),
+  ['msg', 'abf_confirmacao', 'preview_deterministico_priorizado', 'legado']);
+assert.deepStrictEqual(executar({ SOL_CAIXA_TOOLS_CANARIO: 'canario@g.us', ABF_TRATA: '0', PENDENTE: '1', PENDENTE_DETERMINISTICO: '1', TEXTO: 'não' }),
+  ['msg', 'abf_confirmacao', 'preview_deterministico_priorizado', 'legado']);
+assert.deepStrictEqual(executar({ SOL_CAIXA_TOOLS_CANARIO: 'canario@g.us', ABF_TRATA: '0', PENDENTE: '1', PENDENTE_DETERMINISTICO: '1', TEXTO: 'corrige o aluno para Maria Silva' }),
   ['msg', 'abf_confirmacao', 'agent_first_text_handoff_pos_abf', 'llm']);
 assert.deepStrictEqual(executar({ SOL_CAIXA_TOOLS_CANARIO: '', ABF_TRATA: '0' }),
   ['msg', 'abf_confirmacao', 'legado']);
