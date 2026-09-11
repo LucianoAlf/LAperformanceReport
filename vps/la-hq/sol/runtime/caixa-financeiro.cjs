@@ -2966,8 +2966,14 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       categoria: p.categoria || null, aluno: p.aluno || null, competencia: p.competencia || null,
     }));
     const t0 = Date.now();
-    let dec = null;
-    try { dec = await rotearV4Fn(texto, contexto, { timeout: 12000 }); } catch (e) { dec = null; }
+    // A ferramenta MCP ja e a escolha do LLM. Quando ela entrega uma decisao
+    // estruturada, o runtime nao chama o classificador interno outra vez: daqui
+    // para baixo ficam apenas validacao do envelope, Core, preview e cofre V3.
+    // Sem essa propriedade, o canario antigo continua funcionando sem mudanca.
+    let dec = event && event.caixaToolDecision ? event.caixaToolDecision : null;
+    if (!dec) {
+      try { dec = await rotearV4Fn(texto, contexto, { timeout: 12000 }); } catch (e) { dec = null; }
+    }
     if (!dec) { log({ acao: 'agent_first_sem_decisao', chatId: event.chatId, ms: Date.now() - t0 }); return null; }
 
     // ── SEGUNDO TURNO: corrige o ENVELOPE guardado, nunca remonta frase ──────
@@ -3647,7 +3653,12 @@ _Não lanço nada pela metade._`);
     // descrição passa pela RPC de correção controlada. O alvo precisa vir de
     // mensagem citada, memória recente do lançamento ou busca que retorne item único.
     if (!event.hasMedia && !casarPode(event.body).pode) {
-      let cmdMov = extrairComandoMovimento(event.body);
+      // Mesma separacao da entrada agent-first: a ferramenta escolhe a acao e
+      // entrega o comando estruturado; a gramatica continua apenas como
+      // compatibilidade do bridge legado.
+      let cmdMov = event && event.caixaToolCommand
+        ? event.caixaToolCommand
+        : extrairComandoMovimento(event.body);
       if (cmdMov && bodyLimpo(event.body).length > 250) {
         log({ acao: 'comando_movimento_ignorado_prosa', chatId, len: bodyLimpo(event.body).length });
         cmdMov = null;
@@ -3658,7 +3669,12 @@ _Não lanço nada pela metade._`);
         (!event.quotedBody && pendentesAtivos.length === 1)
       );
       if (cmdMov && !corrigePreviewAtivo) {
-        let alvo = alvoLancado(chatId, event.quotedMessageId, agora);
+        // A tool `caixa_localizar_lancamento` devolve o ID exato. Quando a LLM
+        // passa esse alvo, nao reabrimos busca por texto/valor e nunca escolhemos
+        // outro movimento parecido.
+        let alvo = event && event.caixaToolTarget
+          ? event.caixaToolTarget
+          : alvoLancado(chatId, event.quotedMessageId, agora);
         const citado = event.quotedBody ? extrairLancamentoCitado(event.quotedBody) : null;
         if (!alvo && citado) {
           let rBusca = null;

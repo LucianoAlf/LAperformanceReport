@@ -67,7 +67,8 @@ awk '/^=== /{arq=$2; next}
      /: ERROR:/{
        if ((arq ~ /^20260909/ && arq ~ /caixa|pagamento|reconciliacao|envelope|resolver_pagamento|lista_plana/) ||
            arq ~ /^20260910213000_preview_v3_tem_estado_terminal/ ||
-           arq ~ /^20260910234500_dinheiro_de_venda_atualiza_cofre/)
+           arq ~ /^20260910234500_dinheiro_de_venda_atualiza_cofre/ ||
+           arq ~ /^20260911020000_sol_porta_localizar_lancamento_caixa/)
          print "   " arq ": " $0
      }' \
   /tmp/replay-ensaio.log | sort -u > /tmp/criticas.txt || true
