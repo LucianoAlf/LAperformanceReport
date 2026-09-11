@@ -62,7 +62,7 @@ function resumoCaixa(caixa: any, movimentos: any[]) {
     movimentos.filter(predicate).reduce((total, mov) => total + n(mov.valor), 0);
 
   const entradasDinheiroCofre = soma((mov) =>
-    mov.ambiente === 'cofre' && mov.tipo === 'entrada' && mov.forma_pagamento === 'dinheiro'
+    mov.tipo === 'entrada' && mov.forma_pagamento === 'dinheiro'
   );
   const saidasDinheiroCofre = soma((mov) =>
     mov.ambiente === 'cofre' && mov.tipo === 'saida' && mov.forma_pagamento === 'dinheiro'
@@ -90,7 +90,9 @@ function resumoCaixa(caixa: any, movimentos: any[]) {
 
 function linhasCofre(movimentos: any[], tipo: 'entrada' | 'saida'): string {
   const linhas = movimentos
-    .filter((mov) => mov.ambiente === 'cofre' && mov.tipo === tipo && mov.forma_pagamento === 'dinheiro')
+    .filter((mov) => mov.tipo === tipo
+      && mov.forma_pagamento === 'dinheiro'
+      && (tipo === 'entrada' || mov.ambiente === 'cofre'))
     .map((mov) => `- ${moeda(n(mov.valor))} - ${mov.descricao}`);
 
   return linhas.length ? linhas.join('\n') : '- R$ 0,00 -';

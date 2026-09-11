@@ -116,6 +116,68 @@ test('envio real do WhatsApp usa a mesma regra do preview', async () => {
   assert.match(texto, /Athos e Joao/);
 });
 
+const caixaComVendaEmDinheiro = {
+  data_caixa: '2026-09-10',
+  saldo_inicial_cofre: 62.8,
+};
+
+const movimentosComVendaEmDinheiro = [
+  {
+    id: 'pix-190',
+    ambiente: 'venda',
+    tipo: 'entrada',
+    forma_pagamento: 'pix',
+    descricao: 'Parcela 09/2026',
+    valor: 190,
+  },
+  {
+    id: 'dinheiro-450',
+    ambiente: 'venda',
+    tipo: 'entrada',
+    forma_pagamento: 'dinheiro',
+    descricao: 'Parcela 09/2026 do curso de Canto',
+    valor: 450,
+  },
+];
+
+test('venda em dinheiro entra no saldo fisico sem sair do resumo de vendas', async () => {
+  const { calcularResumoCaixa, formatarRelatorioCaixaWhatsApp } = await carregarFormatadorFrontend();
+  const resumo = calcularResumoCaixa(caixaComVendaEmDinheiro, movimentosComVendaEmDinheiro);
+  const texto = formatarRelatorioCaixaWhatsApp({
+    caixa: caixaComVendaEmDinheiro,
+    movimentos: movimentosComVendaEmDinheiro,
+    unidadeNome: 'Barra',
+    unidadeCodigo: 'BARRA',
+    conferidoPor: 'Arthur',
+  });
+
+  assert.equal(resumo.entradasDinheiroCofre, 450);
+  assert.equal(resumo.vendasDinheiro, 450);
+  assert.equal(resumo.saldoFinalCalculado, 512.8);
+  assert.match(texto, /Entrada do dia:[\s\S]*R\$\s?450,00/);
+  assert.match(texto, /Dinheiro: R\$\s?450,00/);
+  assert.match(texto, /Saldo final caixa dia 10\/09\/2026:\* R\$\s?512,80/);
+});
+
+test('edge de envio aplica a mesma regra para venda em dinheiro', async () => {
+  const { resumoCaixa, formatarRelatorioCaixaWhatsApp } = await carregarFormatadorEdge();
+  const resumo = resumoCaixa(caixaComVendaEmDinheiro, movimentosComVendaEmDinheiro);
+  const texto = formatarRelatorioCaixaWhatsApp({
+    caixa: caixaComVendaEmDinheiro,
+    movimentos: movimentosComVendaEmDinheiro,
+    unidadeNome: 'Barra',
+    unidadeCodigo: 'BARRA',
+    conferidoPor: 'Arthur',
+  });
+
+  assert.equal(resumo.entradasDinheiroCofre, 450);
+  assert.equal(resumo.vendasDinheiro, 450);
+  assert.equal(resumo.saldoFinalCalculado, 512.8);
+  assert.match(texto, /Entrada do dia:[\s\S]*R\$\s?450,00/);
+  assert.match(texto, /Dinheiro: R\$\s?450,00/);
+  assert.match(texto, /Saldo final caixa dia 10\/09\/2026:\* R\$\s?512,80/);
+});
+
 test('banco e formulario impedem novos pagamentos nao fisicos no cofre', () => {
   const migrationPath = path.join(
     repoRoot,

@@ -17,6 +17,7 @@ set -euo pipefail
 
 HOST="${SOL_HOST:-lahq}"
 NOME="${ENSAIO_CONTAINER:-sol-ensaio}"
+PORTA="${ENSAIO_PORT:-55432}"
 AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RAIZ="$(cd "$AQUI/../.." && pwd)"
 REMOTO=/tmp/sol-ensaio
@@ -26,7 +27,7 @@ roda() { ssh -n "$HOST" "docker exec $NOME psql -U postgres -d ensaio $*"; }
 echo "== 1/7 container novo (o antigo é DESCARTADO, nunca remendado)"
 ssh -n "$HOST" "docker rm -f $NOME >/dev/null 2>&1 || true
   docker run -d --name $NOME -e POSTGRES_PASSWORD=ensaio -e POSTGRES_DB=ensaio \
-    -p 127.0.0.1:55432:5432 --memory=2g --cpus=2 postgres:17 >/dev/null
+    -p 127.0.0.1:$PORTA:5432 --memory=2g --cpus=2 postgres:17 >/dev/null
   mkdir -p $REMOTO"
 until ssh -n "$HOST" "docker exec $NOME pg_isready -U postgres" >/dev/null 2>&1; do sleep 2; done
 
@@ -65,7 +66,8 @@ ssh -n "$HOST" "docker exec $NOME cat /tmp/replay.log" > /tmp/replay-ensaio.log
 awk '/^=== /{arq=$2; next}
      /: ERROR:/{
        if ((arq ~ /^20260909/ && arq ~ /caixa|pagamento|reconciliacao|envelope|resolver_pagamento|lista_plana/) ||
-           arq ~ /^20260910213000_preview_v3_tem_estado_terminal/)
+           arq ~ /^20260910213000_preview_v3_tem_estado_terminal/ ||
+           arq ~ /^20260910234500_dinheiro_de_venda_atualiza_cofre/)
          print "   " arq ": " $0
      }' \
   /tmp/replay-ensaio.log | sort -u > /tmp/criticas.txt || true
@@ -87,6 +89,8 @@ echo "-- orquestrador: envelope estruturado -> combinacao unica"
 roda -v ON_ERROR_STOP=1 -f /tmp/ensaio-envelope-estruturado.sql 2>&1 | grep -viE '^DO$' | tail -4
 echo "-- preview V3: supersede, descarte e expiracao sao terminais"
 roda -v ON_ERROR_STOP=1 -f /tmp/ensaio-preview-estado-v3.sql 2>&1 | grep -viE '^BEGIN|^DO$|^ROLLBACK' | tail -4
+echo "-- venda em dinheiro atualiza o saldo fisico sem duplicar o ledger"
+roda -v ON_ERROR_STOP=1 -f /tmp/ensaio-dinheiro-atualiza-cofre.sql 2>&1 | grep -viE '^BEGIN|^DO$|^ROLLBACK' | tail -4
 echo "-- cadeia real, caminho feliz V3 e atomicidade"
 roda -v ON_ERROR_STOP=1 -f /tmp/ensaio-cadeia-e-atomicidade.sql 2>&1 \
   | grep -viE '^BEGIN|^DO$|^ROLLBACK|^CREATE|^DROP|^INSERT|audit_log' | tail -8

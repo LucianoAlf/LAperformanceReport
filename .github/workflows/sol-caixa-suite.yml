@@ -25,6 +25,9 @@ on:
       - '.github/workflows/sol-caixa-suite.yml'
       # 🔴 O CI ficava verde sem observar NADA disto. Adicionado em 09/09.
       - 'supabase/migrations/**'
+      - 'supabase/functions/caixa-financeiro-whatsapp/**'
+      - 'src/lib/caixaFinanceiro.ts'
+      - 'tests/caixaPixCofreCompat.test.mjs'
       - 'tests/sol-caixa/**'
   push:
     branches: [main]
@@ -32,6 +35,9 @@ on:
       - 'vps/la-hq/sol/runtime/**'
       - 'tests/sol-runtime/**'
       - 'supabase/migrations/**'
+      - 'supabase/functions/caixa-financeiro-whatsapp/**'
+      - 'src/lib/caixaFinanceiro.ts'
+      - 'tests/caixaPixCofreCompat.test.mjs'
       - 'tests/sol-caixa/**'
 
 jobs:
@@ -49,6 +55,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
+
+      - name: dependências do teste de paridade
+        run: npm ci --ignore-scripts
 
       # A paridade Git↔runtime não roda aqui: ela precisa de SSH para a la-hq.
       # O que o CI garante é que o ARTEFATO CANÔNICO passa sozinho — que era
@@ -71,6 +81,9 @@ jobs:
             echo "::error::apenas $verdes testes verdes — piso é 30. Teste deixou de rodar?"
             exit 1
           fi
+
+      - name: paridade do fechamento — app e Edge
+        run: node --test tests/caixaPixCofreCompat.test.mjs
 
   # 🔴 O JOB QUE FALTAVA. Até 09/09/2026 o CI só olhava o runtime JS: ficou VERDE
   #    enquanto a regra financeira do resolver nem estava instalada no banco,
@@ -160,7 +173,7 @@ jobs:
           # manifesto 16/16 no passo seguinte) e as do RADAR/Mila do mesmo dia,
           # que dependem de tabelas fora deste schema base — cobrar delas aqui
           # seria vermelho permanente e falso.
-          awk '/^=== /{arq=$2; next} /: ERROR:/{if ((arq ~ /^20260909/ && arq ~ /caixa|pagamento|reconciliacao|envelope|resolver_pagamento|lista_plana/) || arq ~ /^20260910213000_preview_v3_tem_estado_terminal/) print arq": "$0}' \
+          awk '/^=== /{arq=$2; next} /: ERROR:/{if ((arq ~ /^20260909/ && arq ~ /caixa|pagamento|reconciliacao|envelope|resolver_pagamento|lista_plana/) || arq ~ /^20260910213000_preview_v3_tem_estado_terminal/ || arq ~ /^20260910234500_dinheiro_de_venda_atualiza_cofre/) print arq": "$0}' \
             /tmp/replay.log | sort -u | head -20 > /tmp/criticas.txt || true
           if [ -s /tmp/criticas.txt ]; then
             echo "::error::migration crítica falhou no replay"; cat /tmp/criticas.txt; exit 1
@@ -181,6 +194,9 @@ jobs:
 
       - name: preview V3 — estado terminal e aprovação única
         run: psql -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-preview-estado-v3.sql
+
+      - name: venda em dinheiro atualiza o cofre sem duplicar o ledger
+        run: psql -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-dinheiro-atualiza-cofre.sql
 
       - name: cadeia real, caminho feliz V3 e atomicidade
         run: psql -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-cadeia-e-atomicidade.sql

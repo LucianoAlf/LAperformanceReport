@@ -81,7 +81,10 @@ export function calcularResumoCaixa(
   const saldoInicialCofre = caixa?.saldo_inicial_cofre ?? 0;
 
   const entradasDinheiroCofre = movimentos
-    .filter((m) => m.ambiente === 'cofre' && m.tipo === 'entrada' && m.forma_pagamento === 'dinheiro')
+    // Uma venda recebida em dinheiro continua sendo venda para o resumo,
+    // mas o dinheiro fisico tambem entrou no cofre. A mesma linha participa
+    // das duas visoes sem duplicar o lancamento no ledger.
+    .filter((m) => m.tipo === 'entrada' && m.forma_pagamento === 'dinheiro')
     .reduce((total, m) => total + Number(m.valor || 0), 0);
 
   const saidasDinheiroCofre = movimentos
@@ -121,7 +124,9 @@ export function calcularResumoCaixa(
 
 function linhasMovimentos(movimentos: CaixaMovimentacao[], tipo: 'entrada' | 'saida'): string {
   const linhas = movimentos
-    .filter((m) => m.ambiente === 'cofre' && m.tipo === tipo && m.forma_pagamento === 'dinheiro')
+    .filter((m) => m.tipo === tipo
+      && m.forma_pagamento === 'dinheiro'
+      && (tipo === 'entrada' || m.ambiente === 'cofre'))
     .map((m) => `- ${formatarMoedaCaixa(Number(m.valor))} - ${m.descricao}`);
 
   return linhas.length > 0 ? linhas.join('\n') : '- R$ 0,00 -';
