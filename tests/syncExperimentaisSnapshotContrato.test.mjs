@@ -16,6 +16,7 @@ import {
   SnapshotUpstreamError,
   validarParametrosExperimentais,
 } from "../supabase/functions/_shared/sync-experimentais-mode.ts";
+import { selecionarCandidatoExperimental } from "../supabase/functions/_shared/experimental-reconciliacao.ts";
 
 const UNIDADE = {
   id: "368d47f5-2d88-4475-bc14-ba084a9a348e",
@@ -828,6 +829,70 @@ for (const statusTerminal of ["convertido", "matriculado"]) {
     });
   });
 }
+
+test("reconciliacao troca a referencia de evento pela aula real", () => {
+  const resultado = montarPatchReconciliacaoExperimental({
+    atual: {
+      status: "experimental_agendada",
+      cursoId: 9,
+      professorId: 12,
+      // ID de evento do webhook, nao uma aula de aulas_emusys.
+      emusysAulaId: 105644,
+      emusysLeadId: 8501,
+      alunoId: null,
+    },
+    desejado: {
+      status: "experimental_realizada",
+      etapaPipelineId: 7,
+      cursoId: 9,
+      professorId: 12,
+      // ID real da aula retornada pelo Emusys.
+      emusysAulaId: 859556,
+      emusysLeadId: 8501,
+      alunoId: null,
+    },
+    atualizadoEm: "2026-09-12T13:00:00.000Z",
+  });
+
+  assert.equal(resultado.patch.emusys_aula_id, 859556);
+});
+
+test("fallback por lead nao cruza experimental reagendada em outro horario", () => {
+  const candidato = selecionarCandidatoExperimental({
+    unidadeId: UNIDADE.id,
+    emusysAulaId: null,
+    emusysLeadId: 8501,
+    data: "2026-09-12",
+    horario: "10:00:00",
+    cursoId: 9,
+  }, [{
+    id: 2883,
+    status: "experimental_agendada",
+    unidadeId: UNIDADE.id,
+    emusysAulaId: 105640,
+    emusysLeadId: 8501,
+    dataAula: "2026-09-12",
+    horarioBanco: "09:00:00",
+    cursoId: 9,
+  }]);
+
+  assert.equal(candidato, null);
+});
+
+test("webhook nao grava o ID do evento como se fosse o ID da aula", () => {
+  const source = readFileSync(
+    new URL(
+      "../supabase/functions/debug-webhook-emusys-observador/index.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+
+  assert.doesNotMatch(
+    source,
+    /p_emusys_aula_id:\s*body\?\.id\s*!=\s*null\s*\?\s*Number\(body\.id\)\s*:\s*null/,
+  );
+});
 
 test("mesmo ID de aula pertence a chaves distintas em unidades diferentes", () => {
   assert.notEqual(

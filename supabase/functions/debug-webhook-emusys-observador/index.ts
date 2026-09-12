@@ -607,17 +607,48 @@ async function processarLead(sb: any, body: any, unidadeId: string, escrever: bo
  *
  *  Gravamos como delta DEPOIS da RPC, em vez de mudar a RPC: ela é compartilhada com o
  *  n8n e ganhar um parâmetro novo mexeria num objeto com consumidor ativo em produção.
- *  Só preenche quando está vazia — nunca sobrescreve o que já existir. */
-async function aplicarDeltaExperimental(sb: any, expId: number, observacoes: string | null) {
-  if (!expId || !observacoes) return null;
-  const { data: atual } = await sb
+ *  Só preenche observações quando estão vazias. O `body.id` do webhook é preservado
+ *  separadamente como identificador do evento/agendamento: ele nunca é a aula física
+ *  retornada por GET /aulas. */
+async function aplicarDeltaExperimental(
+  sb: any,
+  expId: number,
+  input: { observacoes: string | null; emusysAgendamentoId: number | null },
+) {
+  if (!expId || (!input.observacoes && input.emusysAgendamentoId === null)) return null;
+  const { data: atual, error: erroLeitura } = await sb
     .from('lead_experimentais')
-    .select('observacoes')
+    .select('observacoes, emusys_agendamento_id')
     .eq('id', expId)
     .maybeSingle();
-  if (atual && String(atual.observacoes ?? '').trim()) return { observacoes: 'preservada (ja tinha)' };
-  await sb.from('lead_experimentais').update({ observacoes }).eq('id', expId);
-  return { observacoes };
+  if (erroLeitura) throw erroLeitura;
+
+  const patch: Record<string, unknown> = {};
+  const resultado: Record<string, unknown> = {};
+  if (input.observacoes) {
+    if (atual && String(atual.observacoes ?? '').trim()) {
+      resultado.observacoes = 'preservada (ja tinha)';
+    } else {
+      patch.observacoes = input.observacoes;
+      resultado.observacoes = 'gravada';
+    }
+  }
+  if (
+    input.emusysAgendamentoId !== null &&
+    Number(atual?.emusys_agendamento_id ?? 0) !== input.emusysAgendamentoId
+  ) {
+    patch.emusys_agendamento_id = input.emusysAgendamentoId;
+    resultado.emusys_agendamento_id = input.emusysAgendamentoId;
+  }
+
+  if (Object.keys(patch).length > 0) {
+    const { error: erroAtualizacao } = await sb
+      .from('lead_experimentais')
+      .update(patch)
+      .eq('id', expId);
+    if (erroAtualizacao) throw erroAtualizacao;
+  }
+  return resultado;
 }
 
 /** ⚠️⚠️ NÃO CHAMAR — DESLIGADA EM 07/08/2026 (v9). Mantida só como registro do que foi
@@ -820,7 +851,6 @@ async function processarExperimental(sb: any, body: any, unidadeId: string, even
     p_professor_id: professor.id,
     p_emusys_lead_id: emusysLeadId,
     p_curso: cancelamento ? null : textoOuNulo(aula?.curso),
-    p_emusys_aula_id: body?.id != null ? Number(body.id) : null,
   };
   const criadoEm = dataHoraBRT(body?.data_hora_criacao);
   // omitir p_created_at deixa a RPC aplicar o default now(), como o n8n faz com ''
@@ -884,9 +914,16 @@ async function processarExperimental(sb: any, body: any, unidadeId: string, even
   // Delta: só o que a RPC não conhece. Nunca bloqueia o resultado principal.
   let delta: unknown = null;
   const expId = data?.experimental_id ?? null;
-  if (expId && observacoes) {
+  const idEventoBruto = Number(body?.id);
+  const emusysAgendamentoId = Number.isSafeInteger(idEventoBruto) && idEventoBruto > 0
+    ? idEventoBruto
+    : null;
+  if (expId && (observacoes || emusysAgendamentoId !== null)) {
     try {
-      delta = await aplicarDeltaExperimental(sb, Number(expId), observacoes);
+      delta = await aplicarDeltaExperimental(sb, Number(expId), {
+        observacoes,
+        emusysAgendamentoId,
+      });
     } catch (e: any) {
       delta = { erro_delta: String(e?.message ?? e) };
     }

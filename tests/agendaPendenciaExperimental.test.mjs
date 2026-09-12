@@ -8,6 +8,8 @@ const migrationPath =
   'supabase/migrations/20260815140235_agenda_dedup_lead_convertido_presenca.sql';
 const fixMigrationPath =
   'supabase/migrations/20260912123606_agenda_experimental_aula_canonica.sql';
+const identidadeMigrationPath =
+  'supabase/migrations/20260912153000_experimentais_identidade_aula_horario.sql';
 const read = (path) => fs.readFileSync(path, 'utf8');
 
 test('lead convertido representado no roster não abre uma pendência duplicada', () => {
@@ -88,6 +90,30 @@ test('experimental com aula Emusys propria nao e deduplicada pelo roster regular
     sql,
     /update\s+public\.(?:aluno_presenca|aula_alunos_emusys|alunos)/iu,
   );
+});
+
+test('identidade de experimental separa evento de agenda, aula real e horario', () => {
+  assert.equal(
+    fs.existsSync(identidadeMigrationPath),
+    true,
+    `${identidadeMigrationPath} deve existir`,
+  );
+  const sql = read(identidadeMigrationPath);
+
+  assert.match(sql, /create or replace function public\.fn_experimental_normaliza_referencia_aula/i);
+  assert.match(sql, /new\.emusys_agendamento_id/i);
+  assert.match(sql, /new\.emusys_aula_id\s*:=\s*null/i);
+  assert.match(sql, /create or replace view public\.vw_experimental_aula_canonica/i);
+  assert.match(sql, /le\.emusys_aula_id\s*=\s*ae\.emusys_id/i);
+  assert.match(sql, /le\.data_experimental\s*=\s*ae\.data_aula/i);
+  assert.match(
+    sql,
+    /le\.horario_experimental\s*=\s*\(ae\.data_hora_inicio at time zone 'America\/Sao_Paulo'\)::time/i,
+  );
+  assert.match(sql, /get_agenda_dia\(date,uuid\)/i);
+  assert.match(sql, /get_agenda_semana\(date,uuid\)/i);
+  assert.match(sql, /fn_reconciliar_experimental_por_lead/i);
+  assert.match(sql, /fn_reconciliar_experimental_aulas/i);
 });
 
 test('consumidores da Agenda usam a mesma identidade do lead experimental', () => {
