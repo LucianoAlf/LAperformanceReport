@@ -91,11 +91,13 @@ export async function resolverConversaDaCaixa(
         aluno_id: null,
         telefone_externo: numero,
         nome_externo: nomeExterno || numero,
-        // ⚠️ unidade_id FICA NULL em conversa externa, de propósito. A caixa consolidada
-        // faz `webhook-whatsapp-inbox` procurar a conversa externa com `unidade_id IS NULL`
-        // (processExternalAdminMessage); com a unidade preenchida ele não a encontra, tenta
-        // inserir, esbarra em uq_admin_conversas_jid_depto e DESCARTA a mensagem recebida.
-        // Só se preenche unidade junto com aluno_id, quando a conversa deixa de ser externa.
+        // Conversa externa fica SEM unidade: a caixa do Sucesso do Aluno e consolidada e,
+        // sem dono, nao ha de quem herdar a unidade — chutar uma entregaria a conversa para
+        // a ADM errada (a unidade e o que a RLS usa). A unidade entra junto com o aluno_id.
+        // (Ate 12/09/2026 havia um motivo mais grave: o webhook procurava a conversa externa
+        // exigindo `unidade_id IS NULL`, entao unidade preenchida aqui fazia ele nao achar,
+        // colidir no indice unico e DESCARTAR a mensagem recebida. Hoje ele casa por
+        // whatsapp_jid, que e a chave real — a armadilha nao existe mais.)
         unidade_id: null,
         departamento,
         caixa_id: caixaId,

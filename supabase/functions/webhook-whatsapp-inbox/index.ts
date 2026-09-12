@@ -7,6 +7,7 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getUazapiCredentials } from '../_shared/uazapi.ts';
+import { decidirRotaDoNumero } from '../_shared/caixa-dono-do-numero.ts';
 import { autenticarWebhookInbound } from './auth.ts';
 import { registrarDiagnosticoWebhook } from './diagnostics.ts';
 import {
@@ -685,46 +686,102 @@ async function handleAdminInboxMessage(
       }
     }
 
-    // Buscar aluno pelo telefone (whatsapp ou telefone)
-    // Tenta match com e sem prefixo 55
-    const phoneSuffix = phone.slice(-11); // DDD + número
+    // De quem e este numero? A regra — normalizar antes de comparar, olhar tambem
+    // `responsavel_telefone` e colapsar as matriculas da mesma pessoa — mora na RPC
+    // `resolver_aluno_caixa_por_telefone_v1`. A busca que existia aqui comparava um sufixo
+    // de digitos contra o campo CRU: 446 cadastros ativos guardam o telefone com mascara,
+    // entao metade dos numeros do proprio aluno ja nao era reconhecida, e o do responsavel
+    // nunca era lido. Era o que fazia a conversa nascer EXTERNO / SEM UNIDADE / NAO
+    // CADASTRADO e a mensagem ficar sem `aluno_id` (sem dono, nao ha selo a exibir).
+    const { data: dono, error: erroDono } = await supabase
+      .rpc('resolver_aluno_caixa_por_telefone_v1', {
+        p_telefone: phone,
+        p_unidade_id: unidadeId,
+      });
 
-    // Caixa "Todas as unidades" (unidadeId null): pula a busca filtrada e vai direto à global.
-    // Caixa de unidade fixa: prioriza aluno da unidade, com fallback global.
-    let aluno = null;
-    if (unidadeId) {
-      const { data } = await supabase
-        .from('alunos')
-        .select('id, nome, unidade_id, telefone, whatsapp')
-        .or(`telefone.like.%${phoneSuffix},whatsapp.like.%${phoneSuffix}`)
-        .eq('unidade_id', unidadeId)
-        .limit(1)
-        .maybeSingle();
-      aluno = data;
+    if (erroDono) {
+      // Falha de resolucao NUNCA pode descartar a mensagem: ela segue como contato externo,
+      // que e recuperavel. Mas tem de deixar rastro — sem isso um numero conhecido vira
+      // "nao cadastrado" em silencio e ninguem descobre que houve erro.
+      console.error('[admin-inbox] falha ao resolver dono do numero', {
+        phone,
+        departamento,
+        caixaId,
+        erro: erroDono.message,
+        codigo: erroDono.code ?? null,
+      });
     }
 
-    if (!aluno) {
-      // Tentar sem filtro de unidade (caixa "todas" ou aluno de outra unidade)
-      const { data: alunoGlobal } = await supabase
-        .from('alunos')
-        .select('id, nome, unidade_id, telefone, whatsapp')
-        .or(`telefone.like.%${phoneSuffix},whatsapp.like.%${phoneSuffix}`)
-        .limit(1)
-        .maybeSingle();
+    const rota = decidirRotaDoNumero(dono, Boolean(erroDono));
 
-      if (!alunoGlobal) {
-        // Nao é aluno cadastrado — criar conversa como contato externo.
-        // Em caixa "todas", unidadeId é null: conversa fica sem unidade (visível só p/ admin).
-        return await processExternalAdminMessage(msg, phone, whatsappMessageId, caixaId, unidadeId, departamento, supabase, uazapiCreds);
-      }
-
-      // Aluno encontrado em outra unidade — usar a unidade do aluno
-      return await processAdminMessage(msg, phone, whatsappMessageId, caixaId, alunoGlobal, departamento, supabase, uazapiCreds);
+    if (rota.rota === 'aluno') {
+      return await processAdminMessage(
+        msg,
+        phone,
+        whatsappMessageId,
+        caixaId,
+        rota.aluno,
+        departamento,
+        supabase,
+        uazapiCreds,
+      );
     }
 
-    return await processAdminMessage(msg, phone, whatsappMessageId, caixaId, aluno, departamento, supabase, uazapiCreds);
-  } catch {
+    if (rota.motivo === 'ambiguo') {
+      // Irmaos no numero do responsavel: nao ha como saber de qual filho a mensagem fala
+      // sem le-la, e carimbar um deles fixa o dono da conversa para sempre (o bloco do topo
+      // passa a rotear por ele). A busca antiga pegava o primeiro que aparecesse — sorteio.
+      // Segue como contato externo, e o caso fica registrado para ser medido.
+      await registrarNumeroAmbiguo(supabase, phone, departamento, rota.candidatos ?? null);
+    }
+
+    // Numero que nao pertence a aluno nenhum — ou pertence a mais de um. Em caixa "todas",
+    // unidadeId e null: a conversa fica sem unidade (visivel so p/ admin).
+    return await processExternalAdminMessage(msg, phone, whatsappMessageId, caixaId, unidadeId, departamento, supabase, uazapiCreds);
+  } catch (e) {
+    // Aqui a mensagem recebida SE PERDE — o retorno false faz o webhook desistir dela.
+    // Sem esta linha nao ha como saber depois que houve perda, nem de qual numero.
+    console.error('[admin-inbox] mensagem recebida descartada por excecao', {
+      phone,
+      departamento,
+      caixaId,
+      whatsappMessageId,
+      erro: e instanceof Error ? e.message : String(e),
+    });
     return false;
+  }
+}
+
+// Numero que pertence a mais de um aluno (irmaos): o dono fica indefinido de proposito.
+// Registrado em automacao_log para dar tamanho ao caso — a decisao de como tratar depende
+// de saber com que frequencia acontece de verdade, e log de edge expira.
+async function registrarNumeroAmbiguo(
+  supabase: any,
+  phone: string,
+  departamento: string,
+  candidatos: any,
+): Promise<void> {
+  try {
+    const dia = new Date().toISOString().slice(0, 10);
+    const { error } = await supabase.from('automacao_log').insert({
+      aluno_nome: '(numero compartilhado)',
+      evento: 'caixa_entrada',
+      acao: 'numero_ambiguo',
+      status: 'warn',
+      detalhes: { telefone: phone, departamento, candidatos },
+      // Um registro por numero por dia: o mesmo responsavel manda varias mensagens seguidas.
+      idempotency_key: `caixa_numero_ambiguo:${departamento}:${phone}:${dia}`,
+    });
+    // 23505 = ja registrado hoje, esperado. Qualquer outro erro precisa aparecer.
+    if (error && error.code !== '23505') {
+      console.error('[admin-inbox] falha ao registrar numero ambiguo', {
+        phone, departamento, erro: error.message, codigo: error.code ?? null,
+      });
+    }
+  } catch (e) {
+    console.error('[admin-inbox] excecao ao registrar numero ambiguo', {
+      phone, departamento, erro: e instanceof Error ? e.message : String(e),
+    });
   }
 }
 
@@ -856,18 +913,20 @@ async function processExternalAdminMessage(
   supabase: any,
   uazapiCreds: { baseUrl: string; token: string } | null = null
 ): Promise<boolean> {
-  // Buscar ou criar conversa externa por telefone_externo + unidade + departamento.
-  // Caixa "todas": unidadeId null → conversa externa sem unidade (IS NULL, não eq).
-  let conversaQuery = supabase
+  // A chave real da conversa e (whatsapp_jid, departamento) — e o que o indice unico
+  // `uq_admin_conversas_jid_depto` garante. A busca era por (telefone_externo, unidade_id),
+  // que so funciona enquanto TODA conversa externa tiver unidade nula: bastava uma ganhar
+  // unidade para deixar de ser encontrada aqui, colidir no indice ao inserir e a mensagem
+  // recebida ser DESCARTADA. Hoje as duas colunas guardam o mesmo numero em 100% das
+  // conversas externas, entao a troca e equivalente — e deixa de depender disso.
+  const { data: conversaExistente } = await supabase
     .from('admin_conversas')
     .select('id')
-    .eq('telefone_externo', phone)
+    .eq('whatsapp_jid', phone)
     .eq('departamento', departamento)
-    .is('aluno_id', null);
-  conversaQuery = unidadeId
-    ? conversaQuery.eq('unidade_id', unidadeId)
-    : conversaQuery.is('unidade_id', null);
-  let { data: conversa } = await conversaQuery.maybeSingle();
+    .is('aluno_id', null)
+    .maybeSingle();
+  let conversa = conversaExistente;
 
   if (!conversa) {
     const { data: novaConversa, error: criarErr } = await supabase
@@ -886,9 +945,25 @@ async function processExternalAdminMessage(
       .single();
 
     if (criarErr) {
-      return false;
+      // O indice unico recusa quando a conversa nasceu entre o select e o insert (o
+      // contato escreveu duas vezes seguidas, e um disparo de cron vira 2-4 execucoes).
+      // Reaproveitar a que venceu e o que impede a mensagem de ser perdida aqui.
+      const { data: porJid } = await supabase
+        .from('admin_conversas')
+        .select('id')
+        .eq('whatsapp_jid', phone)
+        .eq('departamento', departamento)
+        .maybeSingle();
+      if (!porJid?.id) {
+        console.error('[admin-inbox] conversa externa nao criada, mensagem perdida', {
+          phone, departamento, caixaId, erro: criarErr.message, codigo: criarErr.code ?? null,
+        });
+        return false;
+      }
+      conversa = porJid;
+    } else {
+      conversa = novaConversa;
     }
-    conversa = novaConversa;
   } else {
     // Mantem o nome do contato sempre igual ao configurado no WhatsApp (pushName).
     // Atualiza sempre que vier, refletindo trocas de nome — sem criar nova conversa.

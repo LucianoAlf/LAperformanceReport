@@ -147,9 +147,9 @@ test('resolverConversaDaCaixa', async (t) => {
   });
 
   await t.test('conversa externa NUNCA recebe unidade_id — senão o webhook perde a resposta', async () => {
-    // processExternalAdminMessage procura a conversa externa com `unidade_id IS NULL`
-    // (a caixa do Sucesso do Aluno é consolidada). Com a unidade preenchida ele não acha,
-    // tenta inserir, bate em uq_admin_conversas_jid_depto e DESCARTA a mensagem recebida.
+    // Sem dono nao ha de quem herdar a unidade, e a caixa do Sucesso do Aluno e
+    // consolidada: chutar uma entregaria a conversa para a ADM errada (a unidade e o que a
+    // RLS usa). A unidade so entra junto com o aluno_id.
     const { client, linhas } = criarSupabaseFake();
 
     await resolverConversaDaCaixa(client, {
