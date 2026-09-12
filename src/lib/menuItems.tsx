@@ -2,7 +2,7 @@ import {
   LayoutDashboard, BarChart3, Target, Settings,
   Phone, Megaphone, MousePointerClick, Briefcase, CalendarClock,
   ClipboardList, Users, Guitar, ReceiptText, Heart, GraduationCap,
-  Building2, FolderKanban,
+  Building2, FolderKanban, UserCog, Shield, Activity, FolderArchive,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -40,6 +40,20 @@ export const MENU_OPERACIONAL: ItemMenu[] = [
   { path: '/app/time', label: 'Time', icon: Users },
   { path: '/app/salas', label: 'Salas', icon: Building2 },
   { path: '/app/projetos', label: 'Projetos', icon: FolderKanban },
+];
+
+/**
+ * Os 4 destinos hoje hardcoded em JSX no AppSidebar (bloco "Admin" + o item
+ * "Apresentacoes 2025" de "Historico"), duplicados aqui de proposito — a
+ * folha "Mais" nao tinha como enxerga-los. NAO editar o AppSidebar para
+ * consumir esta lista: ele continua com o JSX dele, a duplicacao aqui e
+ * temporaria (ver teste de paridade em tests/mobileVisibilidadeParidadeDesktop.test.mjs).
+ */
+export const MENU_ADMIN: ItemMenu[] = [
+  { path: '/app/admin/usuarios', label: 'Gerenciar Usuários', labelCurto: 'Usuários', icon: UserCog, visibilidade: 'admin' },
+  { path: '/app/admin/permissoes', label: 'Permissões', icon: Shield, visibilidade: 'admin' },
+  { path: '/app/automacoes', label: 'Saúde das Automações', labelCurto: 'Automações', icon: Activity, visibilidade: 'admin' },
+  { path: '/app/apresentacoes-2025', label: 'Apresentações 2025', labelCurto: 'Apresentações', icon: FolderArchive, visibilidade: 'admin' },
 ];
 
 /**

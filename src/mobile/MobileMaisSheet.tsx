@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 
-import { MENU_OPERACIONAL, MENU_PRINCIPAL, type ItemMenu } from '@/lib/menuItems';
+import { MENU_ADMIN, MENU_OPERACIONAL, MENU_PRINCIPAL, type ItemMenu } from '@/lib/menuItems';
 import { filtrarVisiveis, type ContextoVisibilidade } from '@/lib/menuVisibilidade';
 
 interface Props {
@@ -55,6 +55,7 @@ export function MobileMaisSheet({ aberto, onFechar, contexto }: Props) {
 
   const principal = filtrarVisiveis(MENU_PRINCIPAL, contexto);
   const operacional = filtrarVisiveis(MENU_OPERACIONAL, contexto);
+  const admin = filtrarVisiveis(MENU_ADMIN, contexto);
 
   return (
     <>
@@ -77,6 +78,7 @@ export function MobileMaisSheet({ aberto, onFechar, contexto }: Props) {
 
         <Grupo titulo="Principal" itens={principal} onFechar={onFechar} />
         <Grupo titulo="Operacional" itens={operacional} onFechar={onFechar} />
+        <Grupo titulo="Administração" itens={admin} onFechar={onFechar} />
       </div>
     </>
   );
