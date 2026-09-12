@@ -607,11 +607,17 @@ Esperado: FALHA — `ENOENT` em `src/mobile/MobileLayout.tsx`.
 
 Criar `src/mobile/MobileHeader.tsx`:
 
+⚠️ O título vem do `PageTitleContext`, lido **dentro** do `MobileHeader` — igual ao
+`AppHeader` do desktop ([AppHeader.tsx:21](src/components/App/Layout/AppHeader.tsx)).
+Não pode ser lido no `MobileLayout`: é ele quem monta o `PageTitleProvider`, e um
+componente não enxerga o provider que ele próprio renderiza.
+
 ```tsx
 import { ChevronDown } from 'lucide-react';
 
+import { usePageTitle } from '@/contexts/PageTitleContext';
+
 interface Props {
-  titulo: string;
   unidadeNome: string | null;
   onAbrirUnidades: () => void;
   iniciais: string;
@@ -621,7 +627,10 @@ interface Props {
  * Cabecalho compacto (56px). O seletor de unidade fica sempre a vista:
  * sem ele, todo numero na tela e ambiguo entre as tres unidades.
  */
-export function MobileHeader({ titulo, unidadeNome, onAbrirUnidades, iniciais }: Props) {
+export function MobileHeader({ unidadeNome, onAbrirUnidades, iniciais }: Props) {
+  const { pageTitle } = usePageTitle();
+  const titulo = pageTitle?.titulo || 'LA Report';
+
   return (
     <header className="flex h-14 flex-none items-center gap-2 border-b border-slate-800 bg-slate-900 px-3">
       <h1 className="min-w-0 flex-1 truncate font-grotesk text-base font-bold text-slate-50">
@@ -687,7 +696,6 @@ export function MobileLayout() {
     <PageTitleProvider>
       <div className="flex h-[100dvh] flex-col bg-slate-950">
         <MobileHeader
-          titulo={periodoLabelOverride ?? 'LA Report'}
           unidadeNome={unidadeNome}
           onAbrirUnidades={() => { /* Task 6 liga a folha de unidades */ }}
           iniciais={iniciaisDoNome(usuario?.nome ?? usuario?.email ?? null)}
@@ -1339,8 +1347,16 @@ Criar `src/mobile/rotasPortadas.ts`:
  */
 export const ROTAS_PORTADAS: readonly string[] = [];
 
+/** A raiz do app e a rota index (Dashboard) — suas "sub-rotas" sao outros modulos. */
+const RAIZ_APP = '/app';
+
 export function rotaFoiPortada(pathname: string, portadas: readonly string[] = ROTAS_PORTADAS): boolean {
-  return portadas.some((rota) => pathname === rota || pathname.startsWith(`${rota}/`));
+  return portadas.some((rota) => {
+    if (pathname === rota) return true;
+    // Portar o Dashboard nao pode apagar a faixa de Alunos, Agenda e mais 15.
+    if (rota === RAIZ_APP) return false;
+    return pathname.startsWith(`${rota}/`);
+  });
 }
 ```
 
