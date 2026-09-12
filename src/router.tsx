@@ -32,7 +32,7 @@ function lazyLoad(importFn: () => Promise<{ default: React.ComponentType<any> }>
 // =============================================================================
 
 // Layout e Autenticação (sempre necessários)
-import { AppLayout } from './components/App/Layout';
+import { ResponsiveLayout } from './components/App/Layout';
 import { LoginPage, PrivateRoute } from './components/App/Auth';
 import { useAuth } from './contexts/AuthContext';
 import { useState, useEffect } from 'react';
@@ -182,7 +182,7 @@ export const router = createBrowserRouter([
     element: <PrivateRoute />,
     children: [
       {
-        element: <AppLayout />,
+        element: <ResponsiveLayout />,
         children: [
           {
             index: true,
