@@ -326,7 +326,12 @@ function extrairCartao(text) {
   if (/\bpix\b/i.test(t) && !SINAL_CARTAO_FORTE.test(t)) return null;
   const debito = /(d[eé]bito)/i.test(t) && !/(cr[eé]dito)/i.test(t);
   let parcelas = null;
-  const m = t.match(/em\s+(\d{1,2})\s*(?:x|parcelas?|vezes)/i) || t.match(/(\d{1,2})\s*x\s*(?:de|sem juros)/i);
+  // A legenda humana costuma vir como "cartão de crédito 2x", sem "em" nem
+  // "sem juros". O sinal de cartão já foi provado acima; só aqui o `2x` pode
+  // virar parcela, para não capturar quantidade solta em Pix/dinheiro.
+  const m = t.match(/em\s+(\d{1,2})\s*(?:x|parcelas?|vezes)/i)
+    || t.match(/(\d{1,2})\s*x\s*(?:de|sem juros)/i)
+    || t.match(/\b(\d{1,2})\s*x\b/i);
   if (m) { const n = parseInt(m[1], 10); if (n >= 1 && n <= 24) parcelas = n; }
   return { forma: 'cartao', modalidade: debito ? 'debito' : 'credito', parcelas: debito ? null : parcelas };
 }
@@ -2845,10 +2850,11 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     };
     try {
       const registered = await registrarPreviewV3Fn(payload);
-      log({ acao: 'v3_preview_ledger_registrado', ok: !!(registered && registered.ok), preview_ledger_id: registered && registered.preview_id });
+      log({ acao: 'v3_preview_ledger_registrado', chatId: event.chatId,
+            ok: !!(registered && registered.ok), preview_ledger_id: registered && registered.preview_id });
       return { ...(registered || {}), preview_hash: previewHash };
     } catch (e) {
-      log({ acao: 'v3_preview_ledger_erro', erro: String(e && e.message) });
+      log({ acao: 'v3_preview_ledger_erro', chatId: event.chatId, erro: String(e && e.message) });
       if (v3LedgerStrict) throw e;
       return null;
     }
@@ -2896,10 +2902,11 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     };
     try {
       const registered = await registrarApprovalV3Fn(payload);
-      log({ acao: 'v3_approval_ledger_registrado', ok: !!(registered && registered.ok), approval_id: registered && registered.approval_id });
+      log({ acao: 'v3_approval_ledger_registrado', chatId: event.chatId,
+            ok: !!(registered && registered.ok), approval_id: registered && registered.approval_id });
       return { ...(registered || {}), approval_event_hash: approvalEventHash, actor_id_hash: actorIdHash };
     } catch (e) {
-      log({ acao: 'v3_approval_ledger_erro', erro: String(e && e.message) });
+      log({ acao: 'v3_approval_ledger_erro', chatId: event.chatId, erro: String(e && e.message) });
       if (v3LedgerStrict) throw e;
       return null;
     }
@@ -3196,6 +3203,56 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     try { res = await resolverEnvelopeFn({ unidade_id: grupo.unidade_id, envelope: env.envelope }); }
     catch (e) { log({ acao: 'agent_first_erro_resolver', chatId: event.chatId, erro: String(e && e.message) }); return null; }
     if (!res) return null;
+
+    // Passaporte pode ser recebido antes de existir uma fatura aberta no
+    // Emusys. Isso não autoriza um fallback genérico: o resgate usa a porta
+    // canônica que já sabe validar valor declarado e identidade, e só abre
+    // quando há UM aluno, UMA categoria explicitamente `passaporte`, total
+    // positivo e nenhum pagador/família para expandir. Parcela, lote, categoria
+    // ausente e identidade ambígua continuam recusados/fallback.
+    if (res.motivo === 'nenhuma_fatura_aberta') {
+      const itensEnv = Array.isArray(env.envelope.itens) ? env.envelope.itens : [];
+      const itemEnv = itensEnv.length === 1 ? itensEnv[0] : null;
+      const cats = itemEnv && Array.isArray(itemEnv.categorias) ? itemEnv.categorias : [];
+      const total = Number(env.envelope.valor_total);
+      const passaporteDeclarado = !env.envelope.pagador && itemEnv
+        && typeof itemEnv.aluno === 'string' && itemEnv.aluno.trim()
+        && cats.length === 1 && String(cats[0]).toLowerCase() === 'passaporte'
+        && Number.isFinite(total) && total > 0;
+      if (passaporteDeclarado) {
+        const comp = Array.isArray(itemEnv.competencias) && itemEnv.competencias.length === 1
+          ? String(itemEnv.competencias[0]) : '';
+        const mm = comp.match(/^(0?[1-9]|1[0-2])\/(\d{4})$/);
+        let declarado = null;
+        try {
+          declarado = await resolverMultiFn({
+            unidade_id: grupo.unidade_id,
+            itens: [{ aluno_nome: itemEnv.aluno.trim(), valor: total,
+              categoria: 'passaporte', declarado_pelo_humano: true }],
+            valor_total: total,
+            competencia: mm ? `${mm[2]}-${String(mm[1]).padStart(2, '0')}-01` : null,
+          });
+        } catch (e) {
+          log({ acao: 'agent_first_passaporte_sem_fatura_erro', chatId: event.chatId,
+                erro: String(e && e.message) });
+        }
+        const linhas = declarado && Array.isArray(declarado.itens) ? declarado.itens : [];
+        const unico = linhas.length === 1 ? linhas[0] : null;
+        const seguro = declarado && declarado.ok && unico
+          && String(unico.categoria || '').toLowerCase() === 'passaporte'
+          && unico.declarado_pelo_humano === true && unico.sem_vinculo_fatura === true
+          && !unico.canonical_fatura_id
+          && Math.abs(Number(unico.valor) - total) <= 0.01;
+        if (seguro) {
+          res = { ...declarado, valor_total: total, via: 'passaporte_declarado_sem_fatura' };
+          log({ acao: 'agent_first_passaporte_sem_fatura_resgatado', chatId: event.chatId,
+                linhas: 1 });
+        } else {
+          log({ acao: 'agent_first_passaporte_sem_fatura_bloqueado', chatId: event.chatId,
+                motivo: (declarado && declarado.motivo) || 'resposta_fora_do_contrato' });
+        }
+      }
+    }
 
     // PERGUNTA, nunca escolhe: e a mesma regra que matou o `limit 1` do casador.
     if (res.motivo === 'combinacao_ambigua') {
@@ -6168,7 +6225,7 @@ _Não lanço nada pela metade._`);
       }
       let idAut = null;
       try { idAut = await identidadeFn(event.senderPhone, alvo.unidade_id); } catch (e) { /* best-effort */ }
-      log({ acao: 'identidade_autorizacao', identificado: !!(idAut && idAut.identificado) });
+      log({ acao: 'identidade_autorizacao', chatId, identificado: !!(idAut && idAut.identificado) });
       const autorizadoPor = nomeParaCarimbo(idAut, event);
       const payload = {
         unidade_id: alvo.unidade_id, valor: String(valor), forma, categoria: alvo.categoria || 'parcela',
@@ -6186,20 +6243,20 @@ _Não lanço nada pela metade._`);
       if (alvo.faturaContestada) { vinculo.fatura_id = null; vinculo.fonte = 'fatura_contestada'; }
       if (vinculo.aluno_id) payload.aluno_id = vinculo.aluno_id;
       if (vinculo.fatura_id) payload.fatura_id = vinculo.fatura_id;
-      log({ acao: 'vinculo_lancamento', fonte: vinculo.fonte,
+      log({ acao: 'vinculo_lancamento', chatId, fonte: vinculo.fonte,
             aluno_id: vinculo.aluno_id || null, tem_fatura: !!vinculo.fatura_id });
       let v3Approval = null;
       try {
         v3Approval = await registrarApprovalPublicoV3({ event, alvo, decision: 'approved' });
       } catch (e) {
         await sendFn(chatId, '⚠️ Não lancei: não consegui registrar a aprovação do preview. Tenta de novo em instantes.');
-        log({ acao: 'v3_approval_bloqueou_lancamento', erro: String(e && e.message) });
+        log({ acao: 'v3_approval_bloqueou_lancamento', chatId, erro: String(e && e.message) });
         return { acao: 'v3_approval_bloqueou_lancamento' };
       }
       if (v3LedgerAtivo) {
         if (!alvo.v3PreviewId || !alvo.v3PreviewHash || !v3Approval || !v3Approval.approval_id) {
           await sendFn(chatId, '⚠️ Não lancei: faltou vínculo V3 entre preview e aprovação. Reenvia o comprovante para gerar um preview novo.');
-          log({ acao: 'v3_approval_bloqueou_lancamento', erro: 'vinculo_v3_incompleto' });
+          log({ acao: 'v3_approval_bloqueou_lancamento', chatId, erro: 'vinculo_v3_incompleto' });
           return { acao: 'v3_approval_bloqueou_lancamento' };
         }
         payload.v3_preview_id = alvo.v3PreviewId;
@@ -6212,7 +6269,7 @@ _Não lanço nada pela metade._`);
       let r;
       const ehSaida = categoriaEhSaida(payload.categoria);
       try { r = await (ehSaida ? lancarSaidaFn(payload) : lancarFn(payload)); }
-      catch (e) { await sendFn(chatId, '⚠️ Deu erro técnico ao lançar. Já registrei o problema; tenta de novo em instantes.'); log({ acao: 'erro_rpc', erro: String(e && e.message) }); return { acao: 'erro' }; }
+      catch (e) { await sendFn(chatId, '⚠️ Deu erro técnico ao lançar. Já registrei o problema; tenta de novo em instantes.'); log({ acao: 'erro_rpc', chatId, erro: String(e && e.message) }); return { acao: 'erro' }; }
       // remove a pendência alvo
       pendentes.set(chatId, arr.filter((p) => p !== alvo));
       limparEnvelopeDaPendencia(chatId, alvo, 'aprovado');
@@ -6239,7 +6296,8 @@ _Não lanço nada pela metade._`);
         if (_aindaAbertas.length) {
           await sendFn(chatId, '📌 Ainda aguardando: ' + _aindaAbertas.map((p) => (p.aluno || p.descricao || cap(p.categoria || 'lançamento')) + (p.valor ? ' — ' + fmtBRL(p.valor) : '')).join(' · ') + '. Responde *pode* citando o card.');
         }
-        log({ acao: ehSaida ? 'saida_lancada' : 'lancado', movimentacao_id: r.movimentacao_id, valor: r.valor });
+        log({ acao: ehSaida ? 'saida_lancada' : 'lancado', chatId,
+              movimentacao_id: r.movimentacao_id, valor: r.valor });
         return { acao: ehSaida ? 'saida_lancada' : 'lancado', movimentacao_id: r.movimentacao_id };
       }
       const motivos = {
@@ -6253,7 +6311,7 @@ _Não lanço nada pela metade._`);
       // devolve a pendência (pode reabrir caixa e tentar de novo)
       if (r && r.motivo === 'caixa_nao_aberto') { arr.push(alvo); pendentes.set(chatId, arr); }
       await sendFn(chatId, `⚠️ Não lancei: ${msg}.`);
-      log({ acao: 'recusado', motivo: r && r.motivo });
+      log({ acao: 'recusado', chatId, motivo: r && r.motivo });
       return { acao: 'recusado', motivo: r && r.motivo };
     }
     // Mensagem humana "solta" (nao era pergunta de caixa, nem "pode", nem completou preview):

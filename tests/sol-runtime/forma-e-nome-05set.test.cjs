@@ -49,6 +49,9 @@ const c3 = M.extrairCartao('PG passaporte ( cartao de debito) Aluno: Hugo Sobrin
 ok(!!c3 && c3.modalidade === 'debito', 'legenda "( cartao de debito)" continua cartao', c3);
 const c4 = M.extrairCartao('pagou no cartao de credito, nao foi pix');
 ok(!!c4 && c4.modalidade === 'credito', 'sinal FORTE vence mesmo com a palavra pix no texto', c4);
+const c5 = M.extrairCartao('Passaporte Beatriz R$ 440,00 — cartão de crédito 2x');
+ok(!!c5 && c5.modalidade === 'credito' && c5.parcelas === 2,
+   'legenda humana "cartão de crédito 2x" preserva modalidade e parcelas', c5);
 
 // ── F2 · multi-aluno: apostrofo e traco opcional ────────────────────────────
 console.log('\n=== F2 · a linha "Nome R$ valor" (caso Vitoria/Recreio 05/09) ===');
