@@ -100,9 +100,8 @@ begin
         x.soma,
         null
       ) resultado
-    ) prova
+   ) prova
    where coalesce((prova.resultado->>'ok')::boolean, false)
-   order by x.n desc, x.soma desc
    limit 1;
 
   -- aluno com exatamente 1 (caso canônica/casador)
