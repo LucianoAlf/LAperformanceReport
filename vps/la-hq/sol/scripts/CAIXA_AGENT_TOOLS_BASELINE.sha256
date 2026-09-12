@@ -2,5 +2,5 @@
 # Bridge e AGENTS são verificados pelo efeito idempotente dos patches; o hash
 # exato deles depende do estado vivo anterior e não deve ser forçado pelo Git.
 
-ac7622f35c93cb593681bc867fcf1797e59353aa9f476ed43ed5f0ebfd487e5c  sol-portas-mcp.mjs  /home/sol/.openclaw/workspace/scripts/sol-portas-mcp.mjs
+32e1fae9ea2b72e6322be97045138d4b90cd14211d4c2ea863f23c3bfe80ac55  sol-portas-mcp.mjs  /home/sol/.openclaw/workspace/scripts/sol-portas-mcp.mjs
 bd662c206acdd3af277da79c699dd92bb80b14d083c90e750aecba1af6ad234e  SKILL.md  /home/sol/.hermes/profiles/sol/skills/sol-caixa-agent-first/SKILL.md
