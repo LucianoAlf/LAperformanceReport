@@ -388,6 +388,251 @@ function extrairFormaHumana(text) {
     ambigua: false, formas: forma ? [forma] : [] };
 }
 
+// ENVELOPE DE EVIDENCIAS V1 — evolui o envelope que ja existe; nao cria um
+// segundo transporte nem uma segunda fonte de verdade do lancamento.
+//
+// O defeito que esta camada impede e sutil: legenda, OCR, visao, banco e LLM
+// ja chegam ao mesmo fluxo, mas historicamente cada campo escolhia sua fonte
+// em um bloco diferente. Isso deixa a precedencia virar uma colecao de guards
+// locais. Aqui todas as fontes falam o mesmo contrato e UM resolvedor decide,
+// em shadow, qual evidencia venceria e por que.
+const PRIORIDADE_EVIDENCIA_V1 = Object.freeze({
+  correcao_humana_explicita: 110,
+  texto_humano_explicito: 100,
+  documento_inequivoco: 90,
+  banco_canonico: 80,
+  ocr: 60,
+  visao: 50,
+  llm: 40,
+});
+
+const CONFIANCA_EVIDENCIA_V1 = Object.freeze({
+  correcao_humana_explicita: 1,
+  texto_humano_explicito: 1,
+  documento_inequivoco: 0.99,
+  banco_canonico: 1,
+  ocr: 0.55,
+  visao: 0.65,
+  llm: 0.6,
+});
+
+function _normalizarConfiancaEvidencia(v, fallback) {
+  let n = (v === null || v === undefined || v === '') ? Number.NaN : Number(v);
+  if (!Number.isFinite(n)) n = Number(fallback);
+  if (n > 1) n /= 100;
+  return Math.max(0, Math.min(1, Number.isFinite(n) ? n : 0));
+}
+
+function _normalizarValorEvidencia(campo, valor) {
+  if (valor === null || valor === undefined || valor === '') return null;
+  if (campo === 'valor_total') {
+    const n = Number(valor);
+    return Number.isFinite(n) && n > 0 ? Number(n.toFixed(2)) : null;
+  }
+  if (campo === 'cartao_parcelas') {
+    const n = Number(valor);
+    return Number.isInteger(n) && n >= 1 && n <= 24 ? n : null;
+  }
+  const s = String(valor).trim();
+  if (!s) return null;
+  if (['forma', 'cartao_modalidade', 'categoria'].includes(campo)) return _normConf(s);
+  if (campo === 'competencia') {
+    const m = s.match(/^(0?[1-9]|1[0-2])\/(\d{4})$/);
+    if (m) return String(m[1]).padStart(2, '0') + '/' + m[2];
+    const iso = s.match(/^(\d{4})-(0[1-9]|1[0-2])(?:-\d{2})?$/);
+    return iso ? iso[2] + '/' + iso[1] : s;
+  }
+  return s.replace(/\s+/g, ' ');
+}
+
+function criarCandidatoEvidencia(campo, valor, fonte, opcoes = {}) {
+  const normalizado = _normalizarValorEvidencia(campo, valor);
+  if (normalizado === null) return null;
+  const prioridade = PRIORIDADE_EVIDENCIA_V1[fonte];
+  if (!Number.isFinite(prioridade)) return null;
+  return {
+    campo,
+    valor: normalizado,
+    fonte,
+    prioridade,
+    confianca: _normalizarConfiancaEvidencia(
+      opcoes.confianca,
+      CONFIANCA_EVIDENCIA_V1[fonte]
+    ),
+    evidencia_id: opcoes.evidencia_id || null,
+  };
+}
+
+function resolverCampoEvidencia(campo, candidatos = []) {
+  const validos = (Array.isArray(candidatos) ? candidatos : [])
+    .map((c) => criarCandidatoEvidencia(
+      campo,
+      c && c.valor,
+      c && c.fonte,
+      { confianca: c && c.confianca, evidencia_id: c && c.evidencia_id }
+    ))
+    .filter(Boolean)
+    .sort((a, b) => b.prioridade - a.prioridade || b.confianca - a.confianca);
+  if (!validos.length) {
+    return { campo, status: 'ausente', valor: null, fonte: null, confianca: 0, candidatos: [] };
+  }
+  const topo = validos.filter((c) => c.prioridade === validos[0].prioridade);
+  const valoresTopo = [...new Set(topo.map((c) => JSON.stringify(c.valor)))];
+  if (valoresTopo.length > 1) {
+    return { campo, status: 'conflito', valor: null, fonte: topo[0].fonte,
+      confianca: Math.max(...topo.map((c) => c.confianca)), candidatos: validos };
+  }
+  const vencedor = topo[0];
+  const discordancias = validos.filter((c) => JSON.stringify(c.valor) !== JSON.stringify(vencedor.valor));
+  return { campo, status: 'resolvido', valor: vencedor.valor, fonte: vencedor.fonte,
+    confianca: vencedor.confianca, candidatos: validos, discordancias: discordancias.length };
+}
+
+function _valorHumanoInequivoco(texto) {
+  const soma = extrairSomaAditivaPagamento(texto);
+  if (soma && soma.total) return soma.total;
+  const vals = valoresMonetarios(texto).map((x) => Number(x.valor));
+  if (vals.length === 1) return vals[0];
+  if (!vals.length) return null;
+  const totalRotulado = String(texto || '').match(/\b(?:valor\s+)?total\b[^\d]{0,20}r\$\s*([\d.]+(?:,\d{1,2})?)/i);
+  if (totalRotulado) return parseBRMoney(totalRotulado[1]);
+  const ultimo = vals[vals.length - 1];
+  const somaAnteriores = Number(vals.slice(0, -1).reduce((a, b) => a + b, 0).toFixed(2));
+  return vals.length >= 3 && Math.abs(ultimo - somaAnteriores) < 0.01 ? ultimo : null;
+}
+
+function construirEnvelopeEvidenciasV1({ textoHumano = '', ocrText = '', ocrMeta = null,
+  visao = null, llm = null, banco = null, extras = [] } = {}) {
+  const porCampo = new Map();
+  const add = (campo, valor, fonte, opcoes = {}) => {
+    const c = criarCandidatoEvidencia(campo, valor, fonte, opcoes);
+    if (!c) return;
+    if (!porCampo.has(campo)) porCampo.set(campo, []);
+    porCampo.get(campo).push(c);
+  };
+  const humano = bodyLimpo(textoHumano);
+  const fh = extrairFormaHumana(humano);
+  if (fh.ambigua) fh.formas.forEach((f) => add('forma', f, 'texto_humano_explicito'));
+  else {
+    add('forma', fh.forma, 'texto_humano_explicito');
+    add('cartao_modalidade', fh.cartaoModalidade, 'texto_humano_explicito');
+    add('cartao_parcelas', fh.cartaoParcelas, 'texto_humano_explicito');
+  }
+  add('valor_total', _valorHumanoInequivoco(humano), 'texto_humano_explicito');
+  add('competencia', extrairCompetenciaTexto(humano), 'texto_humano_explicito');
+  add('categoria', _categoriaExplicitaFromCaption(humano) || _categoriaFromCaption(humano), 'texto_humano_explicito');
+  add('aluno', _alunoRotulado(humano), 'texto_humano_explicito');
+
+  const correcao = String(llm && llm.intencao || '');
+  if (correcao.startsWith('corrigir_')) {
+    if (correcao === 'corrigir_forma') add('forma', llm.forma, 'correcao_humana_explicita');
+    if (correcao === 'corrigir_valor') add('valor_total', llm.valor, 'correcao_humana_explicita');
+    if (correcao === 'corrigir_competencia') add('competencia', llm.competencia, 'correcao_humana_explicita');
+    if (correcao === 'corrigir_categoria') add('categoria', llm.categoria, 'correcao_humana_explicita');
+    if (correcao === 'corrigir_aluno') add('aluno', llm.aluno_nome, 'correcao_humana_explicita');
+  }
+
+  const confOcr = ocrMeta && ocrMeta.ocr_confidence;
+  const fo = extrairForma(ocrText, null);
+  const co = extrairCartao(ocrText);
+  add('forma', co ? 'cartao' : fo, 'ocr', { confianca: confOcr });
+  add('cartao_modalidade', co && co.modalidade, 'ocr', { confianca: confOcr });
+  add('cartao_parcelas', co && co.parcelas, 'ocr', { confianca: confOcr });
+  add('valor_total', extrairValorOcr(ocrText), 'ocr', { confianca: confOcr });
+  add('competencia', extrairCompetenciaTexto(ocrText), 'ocr', { confianca: confOcr });
+
+  if (visao && typeof visao === 'object') {
+    add('forma', visao.forma, 'visao', { confianca: visao.confianca });
+    add('valor_total', visao.valor, 'visao', { confianca: visao.confianca });
+    add('aluno', visao.aluno, 'visao', { confianca: visao.confianca });
+    add('pagador', visao.pagador_nome, 'visao', { confianca: visao.confianca });
+  }
+  if (llm && typeof llm === 'object') {
+    const conf = llm.confianca;
+    add('forma', llm.forma, 'llm', { confianca: conf });
+    add('valor_total', llm.valor_total != null ? llm.valor_total : llm.valor, 'llm', { confianca: conf });
+    add('competencia', llm.competencia, 'llm', { confianca: conf });
+    add('categoria', llm.categoria, 'llm', { confianca: conf });
+    add('aluno', llm.aluno_nome || llm.aluno, 'llm', { confianca: conf });
+    add('pagador', llm.pagador, 'llm', { confianca: conf });
+  }
+  if (banco && typeof banco === 'object') {
+    const f = banco.fatura || banco.parcela || {};
+    add('forma', banco.forma || f.forma, 'banco_canonico');
+    add('valor_total', banco.valor_total || banco.valor || f.valor_da_parcela, 'banco_canonico');
+    add('competencia', banco.competencia || f.competencia, 'banco_canonico');
+    add('categoria', banco.categoria || categoriaDaFatura(banco), 'banco_canonico');
+    add('aluno', banco.aluno_nome || banco.aluno, 'banco_canonico');
+    add('pagador', banco.pagador || banco.responsavel_financeiro, 'banco_canonico');
+  }
+  for (const e of (Array.isArray(extras) ? extras : [])) {
+    add(e && e.campo, e && e.valor, e && e.fonte, e || {});
+  }
+
+  const fields = {};
+  for (const [campo, candidatos] of porCampo.entries()) {
+    fields[campo] = resolverCampoEvidencia(campo, candidatos);
+  }
+  return {
+    schema_version: 1,
+    policy: 'correcao_humana>texto_humano>documento>cadastro>ocr>visao>llm',
+    source_refs: {
+      texto_humano_sha256: humano ? sha256(humano) : null,
+      ocr_sha256: String(ocrText || '').trim() ? sha256(String(ocrText)) : null,
+      ocr_status: ocrMeta && ocrMeta.status || null,
+    },
+    fields,
+  };
+}
+
+function mesclarEnvelopesEvidenciasV1(base, novo) {
+  const todos = {};
+  for (const env of [base, novo]) {
+    for (const [campo, resolvido] of Object.entries(env && env.fields || {})) {
+      if (!todos[campo]) todos[campo] = [];
+      todos[campo].push(...(Array.isArray(resolvido.candidatos) ? resolvido.candidatos : []));
+    }
+  }
+  const fields = {};
+  for (const [campo, candidatos] of Object.entries(todos)) {
+    const unicos = [];
+    const vistos = new Set();
+    for (const c of candidatos) {
+      const chave = JSON.stringify([c && c.fonte, c && c.valor, c && c.evidencia_id]);
+      if (!vistos.has(chave)) { vistos.add(chave); unicos.push(c); }
+    }
+    fields[campo] = resolverCampoEvidencia(campo, unicos);
+  }
+  const refsNovas = Object.fromEntries(Object.entries(novo && novo.source_refs || {})
+    .filter(([, valor]) => valor !== null && valor !== undefined && valor !== ''));
+  return {
+    schema_version: 1,
+    policy: 'correcao_humana>texto_humano>documento>cadastro>ocr>visao>llm',
+    source_refs: { ...(base && base.source_refs || {}), ...refsNovas },
+    fields,
+  };
+}
+
+function compararEnvelopeEvidenciasV1(envelope, atual = {}) {
+  const divergencias = [];
+  const conflitos = [];
+  for (const [campo, r] of Object.entries(envelope && envelope.fields || {})) {
+    if (r.status === 'conflito') conflitos.push(campo);
+    if (r.status !== 'resolvido' || atual[campo] === undefined || atual[campo] === null) continue;
+    const a = _normalizarValorEvidencia(campo, atual[campo]);
+    if (a !== null && JSON.stringify(a) !== JSON.stringify(r.valor)) divergencias.push(campo);
+  }
+  return { divergencias, conflitos, ok: divergencias.length === 0 && conflitos.length === 0 };
+}
+
+function _evidenciaShadowLigado(chatId) {
+  const bruto = process.env.SOL_CAIXA_EVIDENCE_SHADOW;
+  if (bruto === '0') return false;
+  const lista = String(bruto || process.env.SOL_CAIXA_V4_CANARIO || '')
+    .split(',').map((s) => s.trim()).filter(Boolean);
+  return lista.includes(String(chatId || ''));
+}
+
 // ---- PORTA 2: o que a mídia REALMENTE é (fix 17/08/2026) -------------------
 // Print de tela do LA Report/Emusys tem valor e nome do aluno escritos nele:
 // sem esta porta, a Sol lê o próprio relatório como comprovante e lança dinheiro
@@ -3277,6 +3522,31 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       return null;
     }
 
+    // O mesmo envelope de negocio passa a carregar a trilha de evidencias.
+    // Nesta fase ela e SHADOW: compara a decisao atual sem trocar valor, forma,
+    // aluno, categoria ou competencia que chegam ao Core.
+    const evidenciaTurno = construirEnvelopeEvidenciasV1({ textoHumano: texto, llm: dec });
+    env.envelope.evidencias = mesclarEnvelopesEvidenciasV1(
+      env.envelope.evidencias || null,
+      evidenciaTurno
+    );
+    if (_evidenciaShadowLigado(event.chatId)) {
+      const itemUnico = Array.isArray(env.envelope.itens) && env.envelope.itens.length === 1
+        ? env.envelope.itens[0] : null;
+      const cmp = compararEnvelopeEvidenciasV1(env.envelope.evidencias, {
+        valor_total: env.envelope.valor_total,
+        forma: env.envelope.forma,
+        aluno: itemUnico && itemUnico.aluno,
+        categoria: itemUnico && Array.isArray(itemUnico.categorias) && itemUnico.categorias.length === 1
+          ? itemUnico.categorias[0] : null,
+        competencia: itemUnico && Array.isArray(itemUnico.competencias) && itemUnico.competencias.length === 1
+          ? itemUnico.competencias[0] : null,
+        pagador: env.envelope.pagador,
+      });
+      log({ acao: 'evidence_resolver_shadow', trilho: 'agent_first', chatId: event.chatId,
+        divergencias: cmp.divergencias, conflitos: cmp.conflitos, ok: cmp.ok });
+    }
+
     if (!env.envelope.forma) {
       const salvo = await registrarRascunhoV4({ event, grupo, envelope: env.envelope, agora });
       if (!salvo) {
@@ -3549,7 +3819,9 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     return { acao: 'preview_agent_first_singular', previewId: pendencia.previewId };
   }
 
-  async function abrirFluxoMultiAluno({ event, grupo, textoFonte, textoHumano, intent, agora, origemMessageId, resolvidoPronto = null, agentFirstEnvelope = null, supersedePreviewId = null }) {
+  async function abrirFluxoMultiAluno({ event, grupo, textoFonte, textoHumano, intent, agora,
+    origemMessageId, resolvidoPronto = null, agentFirstEnvelope = null,
+    evidenceEnvelope = null, supersedePreviewId = null }) {
     const arr = limparVelhos(event.chatId, agora);
     // Janela de reenvio: OCR lento (frequente, ~45s de timeout) leva a equipe a mandar o
     // MESMO comprovante de novo. Sem isto, cada reenvio empilha outra pendencia MANUAL
@@ -3564,7 +3836,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
         valor: (intent && (intent.valor_total || intent.total)) || extra.valor || null,
         forma: intent && intent.forma || extra.forma || null, categoria: intent && intent.categoria || extra.categoria || null,
         origem: origemMessageId || event.messageId, idemKey: `${event.chatId}:${origemMessageId || event.messageId}:multi`,
-        ts: agora, motivoMulti: motivo,
+        ts: agora, motivoMulti: motivo, evidenceEnvelope,
       };
       const duplicada = pendencia.valor != null && arr.find((p) =>
         p.tipoOperacao === 'manual_review_multi_student'
@@ -3722,6 +3994,7 @@ _Não lanço nada pela metade._`);
       descricao: `Lote multi-aluno (${itens.length} itens)`, aluno: null, competencia: null,
       origem: origemMessageId || event.messageId, idemKey: `${event.chatId}:${origemMessageId || event.messageId}:lote-multi`,
       enviadoPor: nomeParaCarimbo(idEnviou, event), ts: agora,
+      evidenceEnvelope,
     };
     // O envelope faz parte do estado persistido do preview V3. Guardar apenas
     // num Map resolvia o segundo turno ate o primeiro restart; depois o bridge
@@ -4518,12 +4791,14 @@ _Não lanço nada pela metade._`);
       }
       // Camada 3: INTERPRETACAO FLUIDA (categoria/aluno/competencia via LLM texto; humano confirma)
       let categoria = null, aluno = null, competencia = null;
+      let interpretacaoLLM = null;
       // ⚠️ fora do try de proposito: `it` morre no fim do bloco, e o portao do
       //    pagamento inteiro (mais abaixo) precisa da lista de pessoas.
       let pagamentosLLM = [];
       try {
         log({ acao: 'interpretar_attempt', chatId });
         const it = await interpretarFn((legendaEfetiva + '\n' + ocrText).trim());
+        interpretacaoLLM = it || null;
         log({ acao: 'interpretar_result', categoria: it && it.categoria });
         if (it) { categoria = it.categoria; aluno = it.aluno; competencia = it.competencia; if (!forma && !formaHumanaAmbigua && it.forma) forma = it.forma;
           pagamentosLLM = Array.isArray(it.pagamentos) ? it.pagamentos : []; }
@@ -4559,6 +4834,16 @@ _Não lanço nada pela metade._`);
       // Competência escrita pela equipe na legenda é evidência explícita e
       // vence qualquer palpite do LLM. O LLM não pode trocar 09/2026 por 08/2026.
       competencia = competenciaHumana || competencia;
+      // Este e o MESMO envelope de midia+legenda que ja existia, agora com a
+      // arbitragem dos campos formalizada. Ainda nao manda no dinheiro: serve
+      // de sombra auditavel ate o corpus e os casos vivos fecharem.
+      let evidenceEnvelope = construirEnvelopeEvidenciasV1({
+        textoHumano: legendaEfetiva,
+        ocrText,
+        ocrMeta,
+        visao,
+        llm: interpretacaoLLM,
+      });
       // Antes de qualquer casador singular: pluralidade contextual abre um
       // contrato próprio. Regex só roteia; LLM extrai; banco confirma itens.
       // ⚠️ Multi-aluno e' decisao de QUEM ESCREVEU, nunca do OCR: todo comprovante
@@ -4614,7 +4899,19 @@ _Não lanço nada pela metade._`);
           if (!intentMulti.categoria) intentMulti.categoria = categoria || null;
           if (!intentMulti.forma) intentMulti.forma = forma || null;
         }
-        return abrirFluxoMultiAluno({ event, grupo: grp, textoFonte: textoClassificacao, textoHumano: legendaEfetiva, intent: intentMulti, agora, origemMessageId: event.messageId });
+        if (_evidenciaShadowLigado(chatId)) {
+          const cmp = compararEnvelopeEvidenciasV1(evidenceEnvelope, {
+            valor_total: intentMulti.valor_total || intentMulti.total,
+            forma: intentMulti.forma,
+            categoria: intentMulti.categoria,
+            competencia: intentMulti.competencia,
+          });
+          log({ acao: 'evidence_resolver_shadow', trilho: 'legado_midia_multi', chatId,
+            divergencias: cmp.divergencias, conflitos: cmp.conflitos, ok: cmp.ok });
+        }
+        return abrirFluxoMultiAluno({ event, grupo: grp, textoFonte: textoClassificacao,
+          textoHumano: legendaEfetiva, intent: intentMulti, agora,
+          origemMessageId: event.messageId, evidenceEnvelope });
       }
       if (!nomePlausivel(aluno)) aluno = null;              // "image received" nao e' aluno
       const _rotuloHumano = _alunoRotulado(legendaEfetiva);
@@ -4890,12 +5187,31 @@ _Não lanço nada pela metade._`);
           alunoNovoId = null; alunoNovoOrigem = null; alunoViaPagador = null; candidatosAluno = null;
         }
       }
+      const _bancoEvidencia = canonica && canonica.ok ? {
+        fatura: canonica.fatura || null,
+        aluno_nome: canonica.aluno_nome || aluno || null,
+        categoria: categoriaDaFatura(canonica),
+        competencia: canonica.fatura && canonica.fatura.competencia,
+      } : null;
+      evidenceEnvelope = mesclarEnvelopesEvidenciasV1(
+        evidenceEnvelope,
+        construirEnvelopeEvidenciasV1({ banco: _bancoEvidencia })
+      );
+      if (_evidenciaShadowLigado(chatId)) {
+        const cmp = compararEnvelopeEvidenciasV1(evidenceEnvelope, {
+          valor_total: valor, forma, cartao_modalidade: cartaoModalidade,
+          cartao_parcelas: cartaoParcelas, categoria, aluno, competencia,
+          pagador: pagadorNome,
+        });
+        log({ acao: 'evidence_resolver_shadow', trilho: 'legado_midia', chatId,
+          divergencias: cmp.divergencias, conflitos: cmp.conflitos, ok: cmp.ok });
+      }
       let texto = montarPreview({ unidadeNome: grp.nome, valor, forma, categoria, aluno, competencia, parcela, confiancaBaixa, alunoNovoOrigem, responsavelFinanceiro, formaIncerta, cartaoModalidade, cartaoParcelas, multiplas, alunoViaPagador, pagadorNome, candidatosAluno, canonica, duplicata, quitacao, faturaIndisponivel: canonicaIndisponivel, composto, bloqueiaLancamento, itemLojinha: lojinhaInfo && lojinhaInfo.item, valorMaiorNaLegenda });
       if (dryRun) texto += '\n\n_(modo teste — nada será gravado no caixa)_';
       const previewId = await sendFn(chatId, texto);
       const arr = limparVelhos(chatId, agora);
       log({ acao: 'identidade_envio', identificado: !!(idEnviou && idEnviou.identificado) });
-      const pendencia = { previewId, unidade_id: grp.unidade_id, nome: grp.nome, valor, forma, categoria, aluno, competencia, descricao, parcela, responsavelFinanceiro, cartaoModalidade, cartaoParcelas, formaIncerta, quitacao, multiplas, composto, canonica, alunoNovoId, itemLojinha: lojinhaInfo && lojinhaInfo.item, bloqueiaLancamento, faturaIndisponivel: canonicaIndisponivel, bloqueiaFonteIndisponivel, categoriaInterpretada: _categoriaAntesDaFatura || null, enviadoPor: nomeParaCarimbo(idEnviou, event), idemKey, origem: event.messageId,
+      const pendencia = { previewId, unidade_id: grp.unidade_id, nome: grp.nome, valor, forma, categoria, aluno, competencia, descricao, parcela, responsavelFinanceiro, cartaoModalidade, cartaoParcelas, formaIncerta, quitacao, multiplas, composto, canonica, alunoNovoId, itemLojinha: lojinhaInfo && lojinhaInfo.item, bloqueiaLancamento, faturaIndisponivel: canonicaIndisponivel, bloqueiaFonteIndisponivel, categoriaInterpretada: _categoriaAntesDaFatura || null, enviadoPor: nomeParaCarimbo(idEnviou, event), idemKey, origem: event.messageId, evidenceEnvelope,
         msgIds: [previewId], autorPhone: event.senderPhone || null, autorId: event.senderId || null,
         toquePor: String(event.senderPhone || event.senderId || ''), toqueTs: agora,
         arquivoBytes: (ocrMeta && ocrMeta.file_bytes) || null, ts: agora };
@@ -6773,6 +7089,9 @@ module.exports = {
   _alunoRotulado, _limparAlunoRotulado, _semAlunoDeclarado, extrairCategoriaCorrecao,
   _ehDitadoDeCaixa, classificarCorrecaoPendencia, listarPreviewsAbertosV3, _contestaFatura, rotearMensagemV4,
   montarEnvelopeV4, aplicarCorrecaoEnvelope, _v4CanarioLigado, resolverEnvelopeCaixaV1, valorConfereComTexto,
+  PRIORIDADE_EVIDENCIA_V1, criarCandidatoEvidencia, resolverCampoEvidencia,
+  construirEnvelopeEvidenciasV1, mesclarEnvelopesEvidenciasV1,
+  compararEnvelopeEvidenciasV1, _evidenciaShadowLigado,
   casarNao, ehConversaSemComando,
   montarPreview, montarPreviewMultiAluno, descricaoParcelaCoerente, fmtBRL, carregarEnv, lancarRecebimento, lancarRecebimentoLote, resolverMultiAlunoCaixaV1, resolverPagamentoItensV1, resolverCompostoAlunoCaixaV1, lancarSaidaCaixa, buscarLancamentoParaCorrecao,
   buscarMovimentosCaixa, corrigirMovimentoCaixa, estornarMovimentoCaixa, registrarPreviewV3, registrarApprovalV3, finalizarPreviewV3, criarHandlerFinanceiro,
