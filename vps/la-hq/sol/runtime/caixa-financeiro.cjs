@@ -349,6 +349,45 @@ function extrairForma(text, dflt = 'pix') {
   return w; // pix | dinheiro | cheque
 }
 
+// A forma escrita pela pessoa que enviou o comprovante e evidencia de negocio,
+// enquanto OCR/visao sao apenas leitura probabilistica do documento. Mantemos
+// essa distincao explicita para que um ruido de maquininha, bandeira ou palavra
+// "credito" na imagem nunca sobrescreva "PG PIX" escrito pela equipe.
+//
+// Se a legenda humana citar duas formas, nao escolhemos nenhuma: o preview fica
+// incompleto e pede confirmacao. A unica excecao e o rotulo bancario comum
+// "transferencia Pix", que continua sendo Pix.
+function extrairFormaHumana(text) {
+  const bruto = bodyLimpo(text);
+  if (!bruto) return { forma: null, cartaoModalidade: null, cartaoParcelas: null, ambigua: false, formas: [] };
+
+  const t = _normConf(bruto)
+    .replace(/\b(debito|credito)\s+(?:em|na|no|de|da|do)\s+(?:c\/c|conta|cc)\b/gi, ' ');
+  const formas = new Set();
+  if (/\bpix\b/i.test(t)) formas.add('pix');
+  if (/\bdinheiro\b/i.test(t)) formas.add('dinheiro');
+  if (/\bcheque\b/i.test(t)) formas.add('cheque');
+
+  const cartao = extrairCartao(t);
+  if (cartao && /\b(cartao|credito|debito|visa|master(?:card)?|elo|amex|hipercard)\b/i.test(t)) {
+    formas.add('cartao');
+  }
+  // Bancos chamam Pix de "transferencia Pix". Nesse par, Pix e a forma real.
+  if (!formas.has('pix') && /\btransfer(?:encia|ir|ido|ida)?\b/i.test(t)) formas.add('transferencia');
+
+  if (formas.size > 1) {
+    return { forma: null, cartaoModalidade: null, cartaoParcelas: null,
+      ambigua: true, formas: Array.from(formas) };
+  }
+  const forma = formas.size === 1 ? Array.from(formas)[0] : null;
+  if (forma === 'cartao') {
+    return { forma, cartaoModalidade: cartao && cartao.modalidade || null,
+      cartaoParcelas: cartao && cartao.parcelas || null, ambigua: false, formas: [forma] };
+  }
+  return { forma, cartaoModalidade: null, cartaoParcelas: null,
+    ambigua: false, formas: forma ? [forma] : [] };
+}
+
 // ---- PORTA 2: o que a mídia REALMENTE é (fix 17/08/2026) -------------------
 // Print de tela do LA Report/Emusys tem valor e nome do aluno escritos nele:
 // sem esta porta, a Sol lê o próprio relatório como comprovante e lança dinheiro
@@ -4332,9 +4371,8 @@ _Não lanço nada pela metade._`);
         });
         if (!valor) { const vv = extrairValorOcr(ocrText); if (vv) valor = vv; }
         if (!forma) { const ff = extrairForma(ocrText, null); if (ff) forma = ff; }
-        // ⚠️ Este ramo SOBRESCREVE a forma sem olhar o que ja foi lido. Com pix
-        // explicito no comprovante, so sinal FORTE de maquininha desbanca — e
-        // nesse caso extrairCartao ja devolve null (F1a, 05/09/2026).
+        // Neste ponto so existe evidencia da IMAGEM. A legenda humana (inclusive
+        // a bolha irma) sera aplicada depois e sempre tera precedencia.
         const cc = extrairCartao(ocrText);
         if (cc) { forma = 'cartao'; cartaoModalidade = cc.modalidade; cartaoParcelas = cc.parcelas; }
       }
@@ -4413,6 +4451,7 @@ _Não lanço nada pela metade._`);
       // Legenda EFETIVA: costura a legenda da propria midia com a mensagem IRMA (o nome do
       // aluno que veio em bolha separada ~0,1s). Igual a Maria: o texto adjacente NAO se perde.
       let legendaEfetiva = bodyLimpo(event.body);
+      let formaHumanaAmbigua = false;
       {
         const _kTextoIrmao = textoIrmaoKey(event);
         const _buf = textosRecentes.get(_kTextoIrmao);
@@ -4427,6 +4466,28 @@ _Não lanço nada pela metade._`);
           // legenda e o card saiu "valor nao identificado". Backfill do que falta.
           if (!valor) { const _vIrma = extrairValor(legendaEfetiva); if (_vIrma) valor = _vIrma; }
           if (!forma) { const _fIrma = extrairForma(legendaEfetiva, null); if (_fIrma) forma = _fIrma; }
+        }
+      }
+      // A legenda da propria midia e a bolha irma sao a fala humana efetiva.
+      // Elas vencem OCR e visao para a forma, assim como ja vencem o OCR para o
+      // valor. Caso Sarah/CG 12/09: "PG PIX" foi lido corretamente pelo shadow,
+      // mas o OCR forte de cartao sobrescreveu o preview antes desta costura.
+      {
+        const _fh = extrairFormaHumana(legendaEfetiva);
+        if (_fh.ambigua) {
+          formaHumanaAmbigua = true;
+          forma = null; cartaoModalidade = null; cartaoParcelas = null;
+          log({ acao: 'forma_humana_ambigua', chatId, formas: _fh.formas });
+        } else if (_fh.forma) {
+          if (forma && (forma !== _fh.forma
+              || cartaoModalidade !== _fh.cartaoModalidade
+              || cartaoParcelas !== _fh.cartaoParcelas)) {
+            log({ acao: 'forma_humana_vence_inferencia', chatId,
+              inferida: forma, humana: _fh.forma });
+          }
+          forma = _fh.forma;
+          cartaoModalidade = _fh.cartaoModalidade;
+          cartaoParcelas = _fh.cartaoParcelas;
         }
       }
       // R-j (31/08): a legenda humana com R$ explicito VENCE o valor do OCR.
@@ -4464,7 +4525,7 @@ _Não lanço nada pela metade._`);
         log({ acao: 'interpretar_attempt', chatId });
         const it = await interpretarFn((legendaEfetiva + '\n' + ocrText).trim());
         log({ acao: 'interpretar_result', categoria: it && it.categoria });
-        if (it) { categoria = it.categoria; aluno = it.aluno; competencia = it.competencia; if (!forma && it.forma) forma = it.forma;
+        if (it) { categoria = it.categoria; aluno = it.aluno; competencia = it.competencia; if (!forma && !formaHumanaAmbigua && it.forma) forma = it.forma;
           pagamentosLLM = Array.isArray(it.pagamentos) ? it.pagamentos : []; }
       } catch (e) { /* best-effort */ }
       const textoClassificacao = legendaEfetiva + '\n' + ocrText;
@@ -6707,7 +6768,7 @@ _Não lanço nada pela metade._`);
 function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
 
 module.exports = {
-  parseBRMoney, extrairValor, extrairForma, detectarComprovante, casarPode,
+  parseBRMoney, extrairValor, extrairForma, extrairFormaHumana, detectarComprovante, casarPode,
   _saidaExplicitaFromCaption, _nomeHumanoTardio, extrairValorOcr, _vendedorRotulado, _mesmaPessoa,
   _alunoRotulado, _limparAlunoRotulado, _semAlunoDeclarado, extrairCategoriaCorrecao,
   _ehDitadoDeCaixa, classificarCorrecaoPendencia, listarPreviewsAbertosV3, _contestaFatura, rotearMensagemV4,
