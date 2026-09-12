@@ -66,7 +66,7 @@ test('PostgreSQL 17: OFF, ON, OFF e linha ausente sao provados', { timeout: 120_
       create table public.automacoes_config (
         slug text primary key,
         ativo boolean not null,
-        descricao text
+        updated_at timestamptz not null default now()
       );
       create table public.gate4_sinais_fixture (
         id uuid primary key,
