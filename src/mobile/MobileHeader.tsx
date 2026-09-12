@@ -2,10 +2,10 @@ import { ChevronDown } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 
 import { usePageTitle } from '@/contexts/PageTitleContext';
-import { MENU_ADMIN, MENU_OPERACIONAL, MENU_PRINCIPAL } from '@/lib/menuItems';
+import { MENU_ADMIN, MENU_HISTORICO, MENU_OPERACIONAL, MENU_PRINCIPAL } from '@/lib/menuItems';
 import { tituloDaRota } from './tituloRota';
 
-const TODOS_OS_ITENS = [...MENU_PRINCIPAL, ...MENU_OPERACIONAL, ...MENU_ADMIN];
+const TODOS_OS_ITENS = [...MENU_PRINCIPAL, ...MENU_OPERACIONAL, ...MENU_ADMIN, ...MENU_HISTORICO];
 
 interface Props {
   unidadeNome: string;

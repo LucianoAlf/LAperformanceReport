@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 
-import { MENU_ADMIN, MENU_OPERACIONAL, MENU_PRINCIPAL, type ItemMenu } from '@/lib/menuItems';
+import { MENU_ADMIN, MENU_HISTORICO, MENU_OPERACIONAL, MENU_PRINCIPAL, type ItemMenu } from '@/lib/menuItems';
 import { filtrarVisiveis, type ContextoVisibilidade } from '@/lib/menuVisibilidade';
 
 interface Props {
@@ -56,6 +56,10 @@ export function MobileMaisSheet({ aberto, onFechar, contexto }: Props) {
   const principal = filtrarVisiveis(MENU_PRINCIPAL, contexto);
   const operacional = filtrarVisiveis(MENU_OPERACIONAL, contexto);
   const admin = filtrarVisiveis(MENU_ADMIN, contexto);
+  // MENU_HISTORICO nao declara `visibilidade` — filtrarVisiveis nao filtra
+  // nada aqui, e e' o comportamento certo: no desktop este bloco fica FORA
+  // do gate de admin, visivel a todo mundo.
+  const historico = filtrarVisiveis(MENU_HISTORICO, contexto);
 
   return (
     <>
@@ -79,6 +83,7 @@ export function MobileMaisSheet({ aberto, onFechar, contexto }: Props) {
         <Grupo titulo="Principal" itens={principal} onFechar={onFechar} />
         <Grupo titulo="Operacional" itens={operacional} onFechar={onFechar} />
         <Grupo titulo="Administração" itens={admin} onFechar={onFechar} />
+        <Grupo titulo="Histórico" itens={historico} onFechar={onFechar} />
       </div>
     </>
   );

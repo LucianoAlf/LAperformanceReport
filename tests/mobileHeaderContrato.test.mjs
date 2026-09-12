@@ -17,10 +17,11 @@ test('o titulo usa a rota como fallback, nao so o literal morto', () => {
   );
 });
 
-test('o fallback por rota enxerga os 3 grupos de menu, inclusive Admin', () => {
+test('o fallback por rota enxerga os 4 grupos de menu, inclusive Admin e Historico', () => {
   assert.match(header, /MENU_PRINCIPAL/u);
   assert.match(header, /MENU_OPERACIONAL/u);
   assert.match(header, /MENU_ADMIN/u);
+  assert.match(header, /MENU_HISTORICO/u);
 });
 
 test('onAbrirUnidades e opcional — sem folha, o seletor nao pode parecer clicavel', () => {
