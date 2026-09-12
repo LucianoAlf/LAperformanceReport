@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { PageTitleProvider } from '@/contexts/PageTitleContext';
 import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 import { useUnidadeFiltro } from '@/hooks/useUnidadeFiltro';
+import { MobileBottomNav } from './MobileBottomNav';
 import { MobileHeader } from './MobileHeader';
 
 function iniciaisDoNome(nome: string | null | undefined): string {
@@ -23,6 +24,8 @@ export function MobileLayout() {
   const [periodoLabelOverride, setPeriodoLabelOverride] = useState<string | null>(null);
   const setPeriodoLabel = useCallback((label: string | null) => setPeriodoLabelOverride(label), []);
 
+  const [maisAberto, setMaisAberto] = useState(false);
+
   const unidadeNome =
     unidadesDisponiveis.find((u) => u.id === unidadeSelecionada)?.nome ?? null;
 
@@ -38,6 +41,8 @@ export function MobileLayout() {
         <main className="min-h-0 flex-1 overflow-y-auto p-3">
           <Outlet context={{ filtroAtivo, unidadeSelecionada, setUnidadeSelecionada, competencia, setPeriodoLabel }} />
         </main>
+
+        <MobileBottomNav onAbrirMais={() => setMaisAberto(true)} />
       </div>
     </PageTitleProvider>
   );
