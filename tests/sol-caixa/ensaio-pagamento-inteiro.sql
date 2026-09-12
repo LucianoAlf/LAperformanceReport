@@ -94,14 +94,19 @@ begin
            limit 12) x
     join alunos a on a.unidade_id = v_unidade and a.emusys_student_id = x.sid
     cross join lateral (
-      select public.sol_caixa_resolver_pagamento_itens_v1(
-        v_unidade,
-        jsonb_build_array(jsonb_build_object('aluno_nome', a.nome, 'valor', x.soma)),
-        x.soma,
-        null
+      select public.sol_caixa_resolver_composto_aluno_env_v1(
+        v_env,
+        jsonb_build_object(
+          'unidade_id', v_unidade,
+          'aluno_nome', a.nome,
+          'competencia', date_trunc('month', v_as_of)::date,
+          'valor_total', x.soma
+        )
       ) resultado
-   ) prova
+    ) prova
    where coalesce((prova.resultado->>'ok')::boolean, false)
+     and jsonb_array_length(coalesce(prova.resultado->'itens', '[]'::jsonb)) >= 2
+     and abs(coalesce((prova.resultado->>'soma_itens')::numeric, 0) - x.soma) <= 0.01
    limit 1;
 
   -- aluno com exatamente 1 (caso canônica/casador)
