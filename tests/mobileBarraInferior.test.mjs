@@ -15,7 +15,11 @@ test('monta os destinos a partir da fonte unica, sem lista propria', () => {
 });
 
 test('ciano marca navegacao ativa', () => {
-  assert.match(nav, /isActive[\s\S]{0,200}cyan-400/u);
+  // Ancorado no proprio ternario: inverter isActive ? cyan : slate tem que
+  // derrubar este teste. Um match generico "isActive...cyan-400" passaria
+  // mesmo invertido, porque a classe focus-visible:outline-cyan-400 e
+  // incondicional e aparece antes do ternario.
+  assert.match(nav, /isActive\s*\?\s*'text-cyan-400'/u);
 });
 
 test('alvo de toque tem no minimo 44px de altura', () => {
