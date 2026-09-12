@@ -65,7 +65,7 @@ begin
       coalesce(v_env->>'status','<nulo>');
   end if;
 
-  -- aluno com 2+ parcelas PAGAS na competência (caso composto)
+  -- aluno com 2+ faturas ABERTAS na competência (caso composto a pagar)
   -- A fixture composta precisa ser uma entrada ACEITA pelo resolvedor atual.
   -- Contar 2+ faturas no envelope nao basta: um mesmo nome pode ter historico
   -- adicional, colisao ou outra regra canonica que faça o valor declarado ser
@@ -81,7 +81,7 @@ begin
                                       nullif(i->'valores'->>'valor_hoje','')::numeric,0)) as soma
                     from jsonb_array_elements(v_env->'items') i
                    where coalesce(i->>'tipo_fatura','') = 'parcela'
-                     and coalesce(i->>'status','') = 'paga'
+                     and coalesce(i->>'status','') = 'aberta'
                      and nullif(i->>'emusys_student_id','') is not null
                      -- ⚠️ SO A COMPETENCIA CORRENTE. O envelope e `janela_3`: contar a
                      --    janela inteira da 3, 6 ou 12 faturas por aluno e "exatamente
