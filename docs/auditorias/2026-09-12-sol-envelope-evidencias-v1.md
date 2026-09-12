@@ -1,6 +1,6 @@
 # Sol — auditoria do envelope de mídia e resolvedor de evidências V1
 
-Data: 12/09/2026  
+Data: 12/09/2026
 Escopo: runtime do Caixa da Sol, sem escrita financeira, sem ampliação de unidade e sem ativação do 3º andar.
 
 ## Conclusão da auditoria
