@@ -1,14 +1,16 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { PageTitleProvider } from '@/contexts/PageTitleContext';
 import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 import { useUnidadeFiltro } from '@/hooks/useUnidadeFiltro';
 import { supabase } from '@/lib/supabase';
+import { AvisoNaoOtimizado } from './AvisoNaoOtimizado';
 import { MobileBottomNav } from './MobileBottomNav';
 import { MobileHeader } from './MobileHeader';
 import { MobileMaisSheet } from './MobileMaisSheet';
+import { rotaFoiPortada } from './rotasPortadas';
 
 // Copiado de AppSidebar.tsx — mesma lista, mesma consulta.
 // Unificar num useMenuVisibilidade() compartilhado é trabalho da etapa 2 (LAPE-32).
@@ -27,6 +29,7 @@ export function MobileLayout() {
   const { unidadeSelecionada, setUnidadeSelecionada, filtroAtivo, unidadesDisponiveis } = useUnidadeFiltro();
   const competencia = useCompetenciaFiltro();
   const { usuario, isAdmin } = useAuth();
+  const location = useLocation();
 
   const [periodoLabelOverride, setPeriodoLabelOverride] = useState<string | null>(null);
   const setPeriodoLabel = useCallback((label: string | null) => setPeriodoLabelOverride(label), []);
@@ -58,7 +61,8 @@ export function MobileLayout() {
           iniciais={iniciaisDoNome(usuario?.nome ?? usuario?.email ?? null)}
         />
 
-        <main className="min-h-0 flex-1 overflow-y-auto p-3">
+        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-auto p-3">
+          {!rotaFoiPortada(location.pathname) && <AvisoNaoOtimizado />}
           <Outlet context={{ filtroAtivo, unidadeSelecionada, setUnidadeSelecionada, competencia, setPeriodoLabel }} />
         </main>
 
