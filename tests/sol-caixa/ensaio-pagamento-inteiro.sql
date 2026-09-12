@@ -65,24 +65,47 @@ begin
       coalesce(v_env->>'status','<nulo>');
   end if;
 
-  -- aluno com 2+ parcelas PAGAS na competência (caso composto)
-  select x.sid, x.soma into v_sid_multi, v_soma_multi
-    from (select i->>'emusys_student_id' as sid,
-                 count(*) as n,
-                 sum(coalesce(nullif(i->'valores'->>'valor_pago','')::numeric,
-                              nullif(i->'valores'->>'valor_hoje','')::numeric,0)) as soma
-            from jsonb_array_elements(v_env->'items') i
-           where coalesce(i->>'tipo_fatura','') = 'parcela'
-             and coalesce(i->>'status','') = 'paga'
-             and nullif(i->>'emusys_student_id','') is not null
-             -- ⚠️ SO A COMPETENCIA CORRENTE. O envelope e `janela_3`: contar a
-             --    janela inteira da 3, 6 ou 12 faturas por aluno e "exatamente
-             --    1" nunca acontece — a fixture do caso simples ficava ausente
-             --    e o ensaio abortava sem testar nada.
-             and (i->>'competencia')::date = date_trunc('month', v_as_of)::date
-           group by 1) x
-   where x.n >= 2 and x.soma > 0
-   order by x.n desc, x.soma desc
+  -- aluno com 2+ faturas ABERTAS na competência (caso composto a pagar)
+  -- A fixture composta precisa ser uma entrada ACEITA pelo resolvedor atual.
+  -- Contar 2+ faturas no envelope nao basta: um mesmo nome pode ter historico
+  -- adicional, colisao ou outra regra canonica que faça o valor declarado ser
+  -- recusado. Antes, a escolha dependia da ordem do planner e o mesmo codigo
+  -- ficava verde ou vermelho conforme o catalogo ganhava uma migration nova.
+  -- O ensaio agora escolhe uma testemunha que satisfaz o proprio contrato que
+  -- sera exercitado abaixo; ausencia dela continua sendo falha alta.
+  select x.sid, x.soma, a.nome into v_sid_multi, v_soma_multi, v_nome_multi
+    from (select agregado.*
+            from (select i->>'emusys_student_id' as sid,
+                         count(*) as n,
+                         sum(coalesce(nullif(i->'valores'->>'valor_pago','')::numeric,
+                                      nullif(i->'valores'->>'valor_hoje','')::numeric,0)) as soma
+                    from jsonb_array_elements(v_env->'items') i
+                   where coalesce(i->>'tipo_fatura','') in ('parcela', 'passaporte_taxa_matricula')
+                     and coalesce(i->>'status','') = 'aberta'
+                     and nullif(i->>'emusys_student_id','') is not null
+                     -- ⚠️ SO A COMPETENCIA CORRENTE. O envelope e `janela_3`: contar a
+                     --    janela inteira da 3, 6 ou 12 faturas por aluno e "exatamente
+                     --    1" nunca acontece — a fixture do caso simples ficava ausente
+                     --    e o ensaio abortava sem testar nada.
+                     and (i->>'competencia')::date = date_trunc('month', v_as_of)::date
+                   group by 1) agregado
+           where agregado.n >= 2 and agregado.soma > 0
+           order by agregado.n desc, agregado.soma desc) x
+    join alunos a on a.unidade_id = v_unidade and a.emusys_student_id = x.sid
+    cross join lateral (
+      select public.sol_caixa_resolver_composto_aluno_env_v1(
+        v_env,
+        jsonb_build_object(
+          'unidade_id', v_unidade,
+          'aluno_nome', a.nome,
+          'competencia', date_trunc('month', v_as_of)::date,
+          'valor_total', x.soma
+        )
+      ) resultado
+    ) prova
+   where coalesce((prova.resultado->>'ok')::boolean, false)
+     and jsonb_array_length(coalesce(prova.resultado->'itens', '[]'::jsonb)) >= 2
+     and abs(coalesce((prova.resultado->>'soma_itens')::numeric, 0) - x.soma) <= 0.01
    limit 1;
 
   -- aluno com exatamente 1 (caso canônica/casador)
@@ -105,12 +128,10 @@ begin
    limit 1;
 
   if v_sid_multi is null or v_sid_uni is null then
-    raise exception 'FIXTURE AUSENTE: preciso de 1 aluno com 2+ parcelas pagas e 1 com exatamente 1 (achei multi=% uni=%)',
+    raise exception 'FIXTURE AUSENTE: preciso de 1 aluno com 2+ faturas abertas e 1 com exatamente 1 paga (achei multi=% uni=%)',
       coalesce(v_sid_multi,'<nenhum>'), coalesce(v_sid_uni,'<nenhum>');
   end if;
 
-  select a.nome into v_nome_multi from alunos a
-   where a.unidade_id = v_unidade and a.emusys_student_id = v_sid_multi limit 1;
   select a.nome into v_nome_uni from alunos a
    where a.unidade_id = v_unidade and a.emusys_student_id = v_sid_uni limit 1;
   if v_nome_multi is null or v_nome_uni is null then

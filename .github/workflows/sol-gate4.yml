@@ -1,0 +1,36 @@
+name: sol-gate4
+
+on:
+  pull_request:
+    paths:
+      - 'vps/la-hq/sol/scripts/sol-portas-mcp.mjs'
+      - 'supabase/migrations/20260912043000_sol_gate4_*'
+      - 'supabase/rollbacks/20260912043000_sol_gate4_*'
+      - 'tests/solGate4*'
+      - '.github/workflows/sol-gate4.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'vps/la-hq/sol/scripts/sol-portas-mcp.mjs'
+      - 'supabase/migrations/20260912043000_sol_gate4_*'
+      - 'supabase/rollbacks/20260912043000_sol_gate4_*'
+      - 'tests/solGate4*'
+      - '.github/workflows/sol-gate4.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  gate4:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: contrato das 13 portas e prova PostgreSQL 17
+        run: |
+          node --test tests/solGate4PortasMcpContract.test.mjs
+          node --test tests/solGate4RegistrarDesfechoPostgres.test.mjs
+          node --test tests/solGate4TerceiroAndarPostgres.test.mjs
