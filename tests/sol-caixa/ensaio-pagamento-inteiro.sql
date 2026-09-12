@@ -66,7 +66,14 @@ begin
   end if;
 
   -- aluno com 2+ parcelas PAGAS na competência (caso composto)
-  select x.sid, x.soma into v_sid_multi, v_soma_multi
+  -- A fixture composta precisa ser uma entrada ACEITA pelo resolvedor atual.
+  -- Contar 2+ faturas no envelope nao basta: um mesmo nome pode ter historico
+  -- adicional, colisao ou outra regra canonica que faça o valor declarado ser
+  -- recusado. Antes, a escolha dependia da ordem do planner e o mesmo codigo
+  -- ficava verde ou vermelho conforme o catalogo ganhava uma migration nova.
+  -- O ensaio agora escolhe uma testemunha que satisfaz o proprio contrato que
+  -- sera exercitado abaixo; ausencia dela continua sendo falha alta.
+  select x.sid, x.soma, a.nome into v_sid_multi, v_soma_multi, v_nome_multi
     from (select i->>'emusys_student_id' as sid,
                  count(*) as n,
                  sum(coalesce(nullif(i->'valores'->>'valor_pago','')::numeric,
@@ -81,7 +88,17 @@ begin
              --    e o ensaio abortava sem testar nada.
              and (i->>'competencia')::date = date_trunc('month', v_as_of)::date
            group by 1) x
+    join alunos a on a.unidade_id = v_unidade and a.emusys_student_id = x.sid
+    cross join lateral (
+      select public.sol_caixa_resolver_pagamento_itens_v1(
+        v_unidade,
+        jsonb_build_array(jsonb_build_object('aluno_nome', a.nome, 'valor', x.soma)),
+        x.soma,
+        null
+      ) resultado
+    ) prova
    where x.n >= 2 and x.soma > 0
+     and coalesce((prova.resultado->>'ok')::boolean, false)
    order by x.n desc, x.soma desc
    limit 1;
 
@@ -109,8 +126,6 @@ begin
       coalesce(v_sid_multi,'<nenhum>'), coalesce(v_sid_uni,'<nenhum>');
   end if;
 
-  select a.nome into v_nome_multi from alunos a
-   where a.unidade_id = v_unidade and a.emusys_student_id = v_sid_multi limit 1;
   select a.nome into v_nome_uni from alunos a
    where a.unidade_id = v_unidade and a.emusys_student_id = v_sid_uni limit 1;
   if v_nome_multi is null or v_nome_uni is null then
