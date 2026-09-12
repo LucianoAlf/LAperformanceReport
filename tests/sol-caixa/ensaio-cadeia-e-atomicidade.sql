@@ -76,24 +76,28 @@ begin
               (select sum(coalesce(f.valor_pago, f.valor_original))
                  from public.emusys_faturas f
                 where f.emusys_student_id = a.emusys_student_id::bigint
-                  and f.competencia = date_trunc('month', v_hoje)::date) as soma
+                  and f.competencia = date_trunc('month', v_hoje)::date
+                  and f.status = 'aberta') as soma
          from public.alunos a
         where a.unidade_id = v_unidade and a.is_segundo_curso is not true
           and (select count(*) from public.emusys_faturas f
                 where f.emusys_student_id = a.emusys_student_id::bigint
-                  and f.competencia = date_trunc('month', v_hoje)::date) >= 2
+                  and f.competencia = date_trunc('month', v_hoje)::date
+                  and f.status = 'aberta') >= 2
         order by a.id limit 1)
       union all
       (select a.nome,
               (select sum(coalesce(f.valor_pago, f.valor_original))
                  from public.emusys_faturas f
                 where f.emusys_student_id = a.emusys_student_id::bigint
-                  and f.competencia = date_trunc('month', v_hoje)::date) as soma
+                  and f.competencia = date_trunc('month', v_hoje)::date
+                  and f.status = 'paga') as soma
          from public.alunos a
         where a.unidade_id = v_unidade and a.is_segundo_curso is not true
           and (select count(*) from public.emusys_faturas f
                 where f.emusys_student_id = a.emusys_student_id::bigint
-                  and f.competencia = date_trunc('month', v_hoje)::date) = 1
+                  and f.competencia = date_trunc('month', v_hoje)::date
+                  and f.status = 'paga') = 1
         order by a.id limit 1)) x;
 
   if v_itens is null or jsonb_array_length(v_itens) < 2 then
