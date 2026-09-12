@@ -8,16 +8,11 @@
 -- `SINAIS DO DIA — ACAO` obedecer a um switch proprio, fail-closed e nascido
 -- desligado. Ausencia da linha tambem equivale a desligado.
 
-insert into public.automacoes_config (slug, ativo, descricao)
-values (
-  'radar_bloco_sinais_comercial',
-  false,
-  'Interruptor do bloco SINAIS DO DIA dentro do relatorio comercial das 20h05. '
-  'Separado de radar_pauta_grupo; desligar aqui nao interrompe o relatorio.'
-)
+insert into public.automacoes_config (slug, ativo)
+values ('radar_bloco_sinais_comercial', false)
 on conflict (slug) do update
    set ativo = false,
-       descricao = excluded.descricao;
+       updated_at = now();
 
 create or replace function public.radar_bloco_comercial_grupo_v1(
   p_unidade_id uuid,
