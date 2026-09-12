@@ -90,8 +90,7 @@ begin
                      and (i->>'competencia')::date = date_trunc('month', v_as_of)::date
                    group by 1) agregado
            where agregado.n >= 2 and agregado.soma > 0
-           order by agregado.n desc, agregado.soma desc
-           limit 12) x
+           order by agregado.n desc, agregado.soma desc) x
     join alunos a on a.unidade_id = v_unidade and a.emusys_student_id = x.sid
     cross join lateral (
       select public.sol_caixa_resolver_composto_aluno_env_v1(
