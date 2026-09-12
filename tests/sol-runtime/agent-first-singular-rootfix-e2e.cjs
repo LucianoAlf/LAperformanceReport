@@ -19,13 +19,16 @@ function carregarRuntime() {
 }
 
 function fixture({ falharPrepare = false, falharPublicar = false,
-  janelaMs = 30 * 60 * 1000, resolverItens = 1, abertos = [] } = {}) {
+  janelaMs = 30 * 60 * 1000, resolverItens = 1, resolverSemFatura = false,
+  abertos = [] } = {}) {
   const { criarHandlerFinanceiro } = carregarRuntime();
   const envios = [];
   const ledger = [];
   const lancamentos = [];
   const lotes = [];
   const timeline = [];
+  const logs = [];
+  const resgates = [];
   const porHash = new Map();
   let mid = 0;
   const registrarPreviewV3Fn = async (payload) => {
@@ -54,7 +57,18 @@ function fixture({ falharPrepare = false, falharPublicar = false,
     registrarPreviewV3Fn,
     registrarApprovalV3Fn: async () => ({ ok: true, approval_id: 'approval-1' }),
     finalizarPreviewV3Fn: async () => ({ ok: true }),
-    resolverEnvelopeFn: async ({ envelope }) => ({ ok: true, valor_total: envelope.valor_total, itens }),
+    resolverEnvelopeFn: async ({ envelope }) => resolverSemFatura
+      ? ({ ok: false, motivo: 'nenhuma_fatura_aberta' })
+      : ({ ok: true, valor_total: envelope.valor_total, itens }),
+    resolverMultiFn: async (payload) => {
+      resgates.push(JSON.parse(JSON.stringify(payload)));
+      return { ok: true, valor_total: payload.valor_total, soma_itens: payload.valor_total,
+        alunos: 1, itens: [{ aluno_nome: payload.itens[0].aluno_nome,
+          responsavel_financeiro: 'Responsável Teste', valor: payload.valor_total,
+          categoria: payload.itens[0].categoria, competencia: '09/2026',
+          canonical_fatura_id: null, descricao: null, fatura: null,
+          sem_vinculo_fatura: true, declarado_pelo_humano: true }] };
+    },
     rotearV4Fn: async (texto) => {
       if (/^pode$/i.test(texto)) return { intencao: 'aprovar' };
       if (/cart[aã]o/i.test(texto)) return { intencao: 'lancamento_por_texto', forma: 'cartao' };
@@ -64,9 +78,10 @@ function fixture({ falharPrepare = false, falharPublicar = false,
     lancarFn: async (payload) => { lancamentos.push(payload); return { ok: true, valor: Number(payload.valor), forma: payload.forma, movimentacao_id: 'mov-1' }; },
     lancarLoteFn: async (payload) => { lotes.push(payload); return { ok: true, lote_id: 'lote-1', movimentacoes: payload.itens.map((i, n) => ({ ...i, id: `m-${n}` })) }; },
     listarPreviewsAbertosFn: async () => abertos,
+    log: (linha) => logs.push(JSON.parse(JSON.stringify(linha))),
     janelaMs,
   });
-  return { h, envios, ledger, lancamentos, lotes, timeline };
+  return { h, envios, ledger, lancamentos, lotes, timeline, logs, resgates };
 }
 
 function evento(messageId, body, extra = {}) {
@@ -75,7 +90,7 @@ function evento(messageId, body, extra = {}) {
 }
 
 test('caso real: rascunho duravel -> cartao 2x -> singular -> pode -> uma escrita', async () => {
-  const { h, envios, ledger, lancamentos, lotes, timeline } = fixture();
+  const { h, envios, ledger, lancamentos, lotes, timeline, logs } = fixture();
   const inicio = 1_789_160_000_000;
   const primeira = evento('origem-1', 'Pagamento Beatriz R$ 590,00 passaporte', {
     caixaToolDecision: { intencao: 'lancamento_por_texto', aluno_nome: 'Beatriz Teste',
@@ -113,11 +128,71 @@ test('caso real: rascunho duravel -> cartao 2x -> singular -> pode -> uma escrit
   assert.equal(lancamentos.length, 1);
   assert.equal(lotes.length, 0);
   assert.equal(lancamentos[0].categoria, 'passaporte');
+  assert.equal(lancamentos[0].cartao_modalidade, 'credito');
   assert.equal(lancamentos[0].cartao_parcelas, 2);
   assert.equal(lancamentos[0].fatura_id, FATURA);
 
   await h.handle(evento('aprova-2', 'pode', { quotedMessageId: r2.previewId }), inicio + 3000);
   assert.equal(lancamentos.length, 1, 'redelivery/segundo pode nao duplica');
+
+  for (const acao of ['preview_agent_first_singular', 'v3_approval_ledger_registrado', 'lancado']) {
+    const linha = logs.find((x) => x.acao === acao);
+    assert.equal(linha && linha.chatId, CHAT, `${acao} precisa carregar chatId para o vigia`);
+  }
+});
+
+test('passaporte singular sem fatura aberta usa resgate canônico estreito e preserva crédito 2x', async () => {
+  const { h, lancamentos, lotes, resgates, logs } = fixture({ resolverSemFatura: true });
+  const inicio = 1_789_161_000_000;
+  const ev = evento('passaporte-sem-fatura', 'Passaporte Beatriz Teste R$ 440,00 cartão de crédito 2x', {
+    caixaToolDecision: { intencao: 'lancamento_por_texto', aluno_nome: 'Beatriz Teste',
+      valor_total: 440, forma: 'cartao', categoria: 'passaporte', competencia: '09/2026' },
+  });
+  const preview = await h.tratarAgentFirst(ev, { unidade_id: UNIDADE, nome: 'Recreio' }, inicio);
+  assert.equal(preview.acao, 'preview_agent_first_singular');
+  assert.equal(resgates.length, 1);
+  assert.deepEqual(resgates[0].itens, [{ aluno_nome: 'Beatriz Teste', valor: 440,
+    categoria: 'passaporte', declarado_pelo_humano: true }]);
+  assert.equal(resgates[0].competencia, '2026-09-01');
+
+  const pend = h._pendentes.get(CHAT)[0];
+  assert.equal(pend.categoria, 'passaporte');
+  assert.equal(pend.canonica.fatura.canonical_fatura_id, null);
+  assert.equal(pend.cartaoModalidade, 'credito');
+  assert.equal(pend.cartaoParcelas, 2);
+
+  const aprovado = await h.handle(evento('pode-passaporte', 'pode', {
+    quotedMessageId: preview.previewId,
+  }), inicio + 1000);
+  assert.equal(aprovado.acao, 'lancado');
+  assert.equal(lancamentos.length, 1);
+  assert.equal(lotes.length, 0);
+  assert.equal(lancamentos[0].categoria, 'passaporte');
+  assert.equal(lancamentos[0].cartao_modalidade, 'credito');
+  assert.equal(lancamentos[0].cartao_parcelas, 2);
+  assert.equal(Object.hasOwn(lancamentos[0], 'fatura_id'), false);
+  assert.equal(logs.some((x) => x.acao === 'agent_first_passaporte_sem_fatura_resgatado'
+    && x.chatId === CHAT), true);
+});
+
+test('resgate sem fatura nunca abre para parcela, categoria ausente ou lote', async () => {
+  for (const [nome, decisao] of [
+    ['parcela', { intencao: 'lancamento_por_texto', aluno_nome: 'Beatriz Teste',
+      valor_total: 440, forma: 'pix', categoria: 'parcela' }],
+    ['categoria ausente', { intencao: 'lancamento_por_texto', aluno_nome: 'Beatriz Teste',
+      valor_total: 440, forma: 'pix' }],
+    ['lote', { intencao: 'lancamento_multi_aluno', valor_total: 880, forma: 'pix',
+      itens: [{ aluno: 'Ana Teste', categorias: ['passaporte'] },
+        { aluno: 'Bia Teste', categorias: ['passaporte'] }] }],
+  ]) {
+    const { h, resgates, lancamentos } = fixture({ resolverSemFatura: true });
+    const r = await h.tratarAgentFirst(evento(`neg-${nome}`, 'caso negativo', {
+      caixaToolDecision: decisao,
+    }), { unidade_id: UNIDADE, nome: 'Recreio' }, 1_789_162_000_000);
+    assert.equal(r, null, `${nome} deve voltar ao fallback seguro`);
+    assert.equal(resgates.length, 0, `${nome} não pode chamar resgate declarado`);
+    assert.equal(lancamentos.length, 0);
+  }
 });
 
 test('pode nao aprova rascunho incompleto; nao cancela e expiracao remove', async () => {
