@@ -1,10 +1,9 @@
 // Prova a cadeia da correcao de COMPETENCIA sem mandar WhatsApp e sem gravar.
 //
-// Existe por causa do incidente Mayra/CG de 03/09/2026 20:37-20:38 (Lucas
-// Nunes): o card saiu com "Parcela 10/2026" e a Mayra escreveu "Sol, a parcela
-// e 09/2026". A Sol respondeu "Nao entendi essa" — o bloco de correcao colhia o
-// VALOR declarado no texto mas nao a COMPETENCIA, e so rodava quando havia um
-// NOME. O classificador LLM tambem nao tinha a intencao `corrigir_competencia`.
+// Existe por causa dos incidentes Mayra/CG de 03/09 e 12/09/2026. No segundo,
+// a Sol entendeu a competencia, mas a transformou numa frase sintetica com o
+// nome do card e alegou que tinha corrigido o ALUNO. A competencia agora e um
+// campo proprio, do detector ate o ledger.
 //
 // ⚠️ A competencia errada NAO foi bug de codigo: a fatura 09/2026 foi baixada
 //    no Emusys e o espelho a viu 4 min antes do card; naquele instante ela
@@ -23,9 +22,10 @@ const fs = require('fs');
 //    /tmp com cwd em caixa-ingestao/ (ver tests/sol-runtime/README.md).
 const mod = require('./_alvo.cjs');
 
-const { extrairCompetenciaTexto, _alunoRotulado } = mod;
+const { extrairCompetenciaTexto, extrairCorrecaoCompetencia,
+  normalizarCorrecaoCompetenciaRoteador } = mod;
 assert.ok(typeof extrairCompetenciaTexto === 'function', 'extrairCompetenciaTexto nao exportada');
-assert.ok(typeof _alunoRotulado === 'function', '_alunoRotulado nao exportada');
+assert.ok(typeof extrairCorrecaoCompetencia === 'function', 'extrairCorrecaoCompetencia nao exportada');
 
 const src = fs.readFileSync(require('./_alvo.cjs').__alvo, 'utf8');
 let falhas = 0;
@@ -40,22 +40,21 @@ ok(extrairCompetenciaTexto('essa e a de setembro') === '09/' + new Date().getFul
    'mes por extenso -> 09/ano corrente');
 ok(extrairCompetenciaTexto('nao entendi nada') === null, 'texto sem competencia -> null');
 
-// (2) a frase SINTETICA que o fallback monta tem de render NOME e COMPETENCIA
-//     ao mesmo tempo — e o nome NAO pode arrastar o sufixo "parcela ...".
-// ⚠️ competencia ANTES do rotulo: com `aluno: Nome parcela MM/AAAA` o
-//    captador de nome devolve "Lucas Nunes de Salles parcela" — a classe
-//    de caracteres dele nao aceita digito, entao para no "09" e deixa a
-//    palavra colada. Este teste pegou isso ANTES de ir para producao.
-const sint = 'parcela 09/2026 aluno: Lucas Nunes de Salles';
-const nome = _alunoRotulado(sint);
-ok(/^lucas nunes de salles$/i.test(String(nome || '')),
-   `sintetica -> nome limpo sem o sufixo parcela (got ${JSON.stringify(nome)})`);
-ok(extrairCompetenciaTexto(sint) === '09/2026', 'sintetica -> competencia 09/2026');
+// (2) detector de campo: corrige a frase humana, mas nao sequestra uma legenda
+// nova que apenas informa a competencia do pagamento.
+ok(extrairCorrecaoCompetencia('Sol, a parcela e 09/2026') === '09/2026',
+   'frase corretiva -> campo competencia 09/2026');
+ok(extrairCorrecaoCompetencia('PG pix parcela 09/2026 aluno Lucas Nunes R$500') === null,
+   'pagamento novo com competencia nao vira correcao');
+const normalizada = normalizarCorrecaoCompetenciaRoteador(
+  { intencao: 'aprovar', competencia: '09/2026' }, 'Sol, a parcela e 09/2026', true);
+ok(normalizada.intencao === 'corrigir_competencia',
+   'palpite aprovar do modelo e corrigido pela evidencia explicita');
 
 // (3) o patch esta mesmo no fonte vivo
-ok(/_competenciaDitada/.test(src), 'fonte tem _competenciaDitada');
-ok(/competencia_do_texto_na_correcao/.test(src), 'fonte loga a competencia colhida do texto');
-ok(/competencia_ditada_vence_fatura/.test(src), 'fonte tem o guard de fatura divergente');
+ok(/preview_competencia_corrigida/.test(src), 'fonte tem acao propria de competencia');
+ok(/Corrigi a competência para/.test(src), 'fonte narra o campo realmente corrigido');
+ok(/descricaoParcelaCoerente/.test(src), 'fonte prioriza competencia estruturada sobre descricao velha');
 ok(/corrigir_competencia/.test(src), 'fonte tem a intencao corrigir_competencia');
 
 assert.strictEqual(falhas, 0, `${falhas} caso(s) falharam`);
