@@ -28,11 +28,26 @@
 export const JANELA_FRESCOR_MS = 6 * 60 * 60 * 1000;
 
 /**
- * Teto por dia. Com 6-12 respostas/mes ele nunca estorva o uso real -- existe
- * para que um bug de reprocessamento custe 3 mensagens em vez da base inteira.
- * O kill switch e a reacao humana depois que alguem ve; o teto age sozinho antes.
+ * Teto por dia, em toda a base (nao por unidade).
+ *
+ * Existe para que um bug que feche analises em LOTE custe algumas mensagens em
+ * vez da base inteira, e e a UNICA guarda que cobre esse caso: a idempotencia
+ * so alcanca a mesma pesquisa, a janela de frescor so alcanca analise antiga
+ * (num bug assim o fechamento seria "agora"), e o kill switch so age depois que
+ * um humano le o log. O teto age sozinho, antes.
+ *
+ * ⚠️ Bater no teto NAO adia o agradecimento, CANCELA: nao ha retentativa, e no
+ * dia seguinte a analise ja estaria `fora_da_janela`. Quem respondeu a pesquisa
+ * fica no vacuo -- exatamente o que esta automacao existe para evitar. Por isso
+ * o numero e folgado: ele protege contra o lote, nao raciona mensagem legitima.
+ *
+ * ⚠️ Era 3 ate 12/09/2026, dimensionado para as 6-12 respostas/mes de 02/09. Em
+ * 11/09 o dia bateu exatamente em 3/3 -- primeira vez que a rede encostou no
+ * chao, depois de a Jessy passar a disparar em outro ritmo (65 pesquisas em 3
+ * dias, 9 respostas em 4). Com ~14% de resposta sobre um lote de 32, o pior dia
+ * plausivel fica em ~5; 15 cobre com folga e ainda limita o estrago de um lote.
  */
-export const TETO_DIARIO_AGRADECIMENTO = 3;
+export const TETO_DIARIO_AGRADECIMENTO = 15;
 
 export interface VeredictoAgradecimento {
   agradecer: boolean;

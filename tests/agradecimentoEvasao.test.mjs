@@ -152,10 +152,21 @@ test('um abaixo do teto ainda envia', () => {
   );
 });
 
-test('o teto e baixo de proposito -- 3 por dia', () => {
-  // Com 6-12 respostas/mes o teto nunca estorva o uso real; ele existe para
-  // que um reprocessamento em lote custe 3 mensagens, nao a base inteira.
-  assert.equal(TETO_DIARIO_AGRADECIMENTO, 3);
+test('o teto e dimensionado pelo volume real -- 15 por dia', () => {
+  // O teto existe para que um bug que feche analises em LOTE custe algumas
+  // mensagens em vez da base inteira -- e e a unica guarda que cobre esse caso
+  // (idempotencia so alcanca a mesma pesquisa; a janela de 6h so alcanca
+  // analise antiga; o kill switch so age depois que um humano ve).
+  //
+  // ⚠️ Ele nao adia o agradecimento, CANCELA: nao ha retentativa, e no dia
+  // seguinte a analise ja estaria `fora_da_janela`. Por isso o numero tem de
+  // ser folgado o bastante para nunca barrar caso legitimo.
+  //
+  // O 3 original supunha 6-12 respostas/mes (02/09/2026). Em 11/09/2026 o dia
+  // bateu exatamente em 3/3 -- a rede encostou no chao pela primeira vez, com
+  // 65 pesquisas disparadas em 3 dias e 9 respostas em 4. Com ~14% de resposta
+  // sobre um lote de 32, o pior dia plausivel fica em ~5.
+  assert.equal(TETO_DIARIO_AGRADECIMENTO, 15);
 });
 
 // --- Ordem dos portoes -----------------------------------------------------
