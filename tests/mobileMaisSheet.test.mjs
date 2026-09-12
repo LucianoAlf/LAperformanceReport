@@ -29,5 +29,7 @@ test('fecha no Esc e tem rotulo de dialogo', () => {
 
 test('navegar fecha a folha', () => {
   // Sem isto a folha fica por cima da tela nova.
-  assert.match(sheet, /onClick=\{onFechar\}/u);
+  // Ancorado no NavLink: o onClick do botao-scrim (fechar ao tocar fora) e
+  // um requisito diferente e nao pode fazer este teste passar sozinho.
+  assert.match(sheet, /<NavLink[^>]*onClick=\{onFechar\}/u);
 });
