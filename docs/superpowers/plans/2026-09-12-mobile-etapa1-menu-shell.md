@@ -550,7 +550,7 @@ A peça que mais pode quebrar coisa: se o shell mobile entregar um objeto de con
 - Consumes: `useIsMobile` (Task 3); `useUnidadeFiltro`, `useCompetenciaFiltro` (já existem)
 - Produces:
   - `MobileLayout` — componente, entrega `{ filtroAtivo, unidadeSelecionada, setUnidadeSelecionada, competencia, setPeriodoLabel }` no `Outlet context`
-  - `MobileHeader` — props `{ titulo: string; unidadeSelecionada: string | null; onUnidadeChange: (id: string | null) => void }`
+  - `MobileHeader` — props `{ unidadeNome: string | null; onAbrirUnidades: () => void; iniciais: string }`. Sem prop `titulo`: ele lê o `PageTitleContext` por conta própria, como o `AppHeader` faz.
 
 - [ ] **Step 1: Escrever o teste de contrato que falha**
 
@@ -1149,16 +1149,21 @@ test('a bifurcacao usa a decisao pura, sem reimplementar o corte', () => {
   assert.doesNotMatch(responsive, /1023/u, 'o corte mora em shellMobile.ts, nao aqui');
 });
 
-test('o kill switch chega pela env e o override pelo localStorage', () => {
-  assert.match(responsive, /VITE_MOBILE_SHELL/u);
-  assert.match(responsive, /shell-override/u);
+test('o kill switch e o override ALIMENTAM resolverShell, nao ficam soltos', () => {
+  // Casar so a string deixaria o teste verde com a env citada num comentario.
+  assert.match(responsive, /flagDesligada[\s\S]{0,90}VITE_MOBILE_SHELL/u);
+  assert.match(responsive, /getItem\('shell-override'\)/u);
+  assert.match(responsive, /resolverShell\(\{[\s\S]{0,220}flagDesligada[\s\S]{0,220}override/u);
 });
 
-test('os dois shells continuam existindo', () => {
-  assert.match(responsive, /AppLayout/u);
-  assert.match(responsive, /MobileLayout/u);
+test('a bifurcacao RENDERIZA os dois shells conforme a decisao', () => {
+  // Nao basta o nome aparecer no arquivo: um import solto passaria, e o
+  // teste diria "os dois shells existem" com a bifurcacao quebrada.
+  assert.match(responsive, /shell === 'mobile'\s*\?\s*<MobileLayout \/>\s*:\s*<AppLayout \/>/u);
 });
 ```
+
+⚠️ Estes dois testes foram endurecidos depois que o mesmo padrão de asserção frouxa foi reprovado nas tarefas 5 e 6: casar uma string que aparece em qualquer lugar do arquivo não prova comportamento. O critério é o de sempre — **quebrar o comportamento tem que fazer o teste falhar**.
 
 - [ ] **Step 2: Rodar e ver falhar**
 
@@ -1219,7 +1224,19 @@ Em `src/router.tsx`:
    `import { ResponsiveLayout } from './components/App/Layout';`
 2. Trocar `element: <AppLayout />,` por `element: <ResponsiveLayout />,` (uma ocorrência, dentro de `path: '/app'`).
 
-- [ ] **Step 5: Rodar a suíte toda e o typecheck**
+- [ ] **Step 5: Ligar os testes do mobile ao `npm test`**
+
+⚠️ Os 6 arquivos de teste criados nesta etapa **não estão no script `test` do `package.json`** — então `npm test` não os executa, e o Step 6 abaixo seria uma verificação vazia quanto a este trabalho. É o mesmo defeito que o `CLAUDE.md` já registra: `tests/agradecimentoEvasao.test.mjs` ficou fora do `npm test` e seus 19 testes nunca rodaram no fluxo normal.
+
+Acrescentar ao final da lista de arquivos do script `"test"` em `package.json`:
+
+```
+tests/mobileMenuVisibilidade.test.mjs tests/mobileMenuFonteUnica.test.mjs tests/mobileShellDecisao.test.mjs tests/mobileContratoOutletContext.test.mjs tests/mobileBarraInferior.test.mjs tests/mobileMaisSheet.test.mjs
+```
+
+⚠️ `tests/mobileAvisoNaoOtimizado.test.mjs` entra na Task 8, que é quem o cria.
+
+- [ ] **Step 6: Rodar a suíte toda e o typecheck**
 
 ```bash
 node --test tests/mobileBifurcacaoRouter.test.mjs
