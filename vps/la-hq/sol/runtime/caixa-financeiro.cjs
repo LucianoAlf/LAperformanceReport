@@ -518,6 +518,29 @@ function tituloNome(raw) {
   }).join(' ');
 }
 
+// A competencia estruturada e' a fonte de verdade. A descricao importada do
+// Emusys e' texto historico e pode carregar o mes anterior (caso CG 12/09:
+// competencia=09/2026, descricao="Parcela 08/2026"). Nunca deixamos esse texto
+// velho contradizer o campo canonico no card nem na descricao do lancamento.
+function _competenciaParaExibicao(raw) {
+  const s = String(raw || '').trim();
+  const iso = s.match(/^(20\d{2})-(0[1-9]|1[0-2])(?:-\d{2})?$/);
+  if (iso) return `${iso[2]}/${iso[1]}`;
+  return extrairCompetenciaTexto(s);
+}
+
+function descricaoParcelaCoerente(parcela, competencia) {
+  const descricao = String(parcela && parcela.descricao || '').trim();
+  if (!descricao) return descricao;
+  const correta = _competenciaParaExibicao(competencia)
+    || _competenciaParaExibicao(parcela && parcela.competencia);
+  if (!correta) return descricao;
+  const noTexto = descricao.match(/\b(0?[1-9]|1[0-2])\s*\/\s*(20\d{2})\b/);
+  if (!noTexto) return descricao;
+  const atual = `${String(Number(noTexto[1])).padStart(2, '0')}/${noTexto[2]}`;
+  return atual === correta ? descricao : descricao.replace(noTexto[0], correta);
+}
+
 function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competencia, parcela, confiancaBaixa, alunoNovoOrigem, responsavelFinanceiro, formaIncerta, cartaoModalidade, cartaoParcelas, multiplas, alunoViaPagador, pagadorNome, candidatosAluno, canonica, duplicata, quitacao, faturaIndisponivel, composto, bloqueiaLancamento, itemLojinha, semAlunoDeclarado, entidade, valorMaiorNaLegenda }) {
   // forma legível
   let formaTxt;
@@ -616,7 +639,7 @@ function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competenci
     blocos.push(['*FATURA*'].concat(linhasCan));
   } else if (parcela && parcela.descricao) {
     const b = ['*FATURA*'];
-    let l = parcela.descricao;
+    let l = descricaoParcelaCoerente(parcela, competencia);
     if (parcela.vencimento) l += ` · vence ${parcela.vencimento}`;
     b.push(l);
     if (parcela.valor !== null && parcela.valor !== undefined) b.push(`Valor: ${fmtBRL(parcela.valor)}`);
@@ -2412,7 +2435,7 @@ function rotearMensagemV4(texto, contexto, { timeout = 30000 } = {}) {
           valor: gi.valor, valor_recusado: gi.recusado,
         };
       }).filter(Boolean) : [];
-      return {
+      const normalizada = {
         intencao: String(o.intencao || 'nada'),
         aluno_nome: (o.aluno_nome && String(o.aluno_nome).trim()) || null,
         valor: gv.valor, valor_recusado: gv.recusado,
@@ -2425,6 +2448,11 @@ function rotearMensagemV4(texto, contexto, { timeout = 30000 } = {}) {
         itens,
         confianca: Number(o.confianca) || null,
       };
+      // Classificacao probabilistica nao pode transformar uma correcao de
+      // campo em aprovacao. O caso real "a parcela e 09/2026" veio como
+      // `aprovar` no roteador, embora nao tivesse o gesto financeiro "pode".
+      // A evidencia explicita do texto vence o palpite do modelo.
+      return normalizarCorrecaoCompetenciaRoteador(normalizada, texto, !!(contexto && contexto.length));
     };
     // Caminho normal: HTTPS direto.
     if (_v4ChaveZen()) {
@@ -2630,6 +2658,27 @@ function extrairCompetenciaTexto(texto) {
   return null;
 }
 
+// Correcao de competencia e um comando de CAMPO, nao uma correcao de aluno.
+// Exige linguagem corretiva; uma legenda nova como "PG parcela 09/2026" nao
+// pode sequestrar um card aberto, e "pode" continua sendo o unico gesto de
+// aprovacao financeira.
+function extrairCorrecaoCompetencia(texto) {
+  const competencia = extrairCompetenciaTexto(texto);
+  if (!competencia) return null;
+  const t = _normConf(texto);
+  const explicita = /\b(?:parcela|mensalidade|competencia)\s*(?:correta?\s*)?(?:e|eh|foi|seria)\s*(?:a\s+)?(?:de\s+)?(?:0?[1-9]|1[0-2]|janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\b/.test(t);
+  const imperativa = /\b(?:corrig|troca|muda|ajusta|altera)\w*\b[\s\S]{0,80}\b(?:parcela|mensalidade|competencia|0?[1-9]\s*[\/. -]\s*(?:20)?\d{2})\b/.test(t);
+  const deMes = /\b(?:essa|esta|isso)\s+(?:e|eh)\s+(?:a\s+)?de\s+(?:janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\b/.test(t);
+  return (explicita || imperativa || deMes) ? competencia : null;
+}
+
+function normalizarCorrecaoCompetenciaRoteador(decisao, texto, temContexto) {
+  if (!decisao || !temContexto) return decisao;
+  const competencia = extrairCorrecaoCompetencia(texto);
+  if (!competencia) return decisao;
+  return { ...decisao, intencao: 'corrigir_competencia', competencia };
+}
+
 function competenciaIso(competencia) {
   const c = extrairCompetenciaTexto(competencia) || String(competencia || '');
   const m = c.match(/\b(0[1-9]|1[0-2])\/(20\d{2})\b/);
@@ -2758,7 +2807,8 @@ function derivarVinculo({ canonica, parcela, composto, alunoNovoId } = {}) {
 
 function _descricaoLancamento(categoria, competencia, aluno, parcela) {
   if (parcela && parcela.descricao) {
-    return aluno ? `${parcela.descricao} - ${aluno}` : parcela.descricao;
+    const descricao = descricaoParcelaCoerente(parcela, competencia);
+    return aluno ? `${descricao} - ${aluno}` : descricao;
   }
   const cat = String(categoria || 'parcela');
   let s2 = cat.charAt(0).toUpperCase() + cat.slice(1);
@@ -5398,6 +5448,102 @@ _Não lanço nada pela metade._`);
           }
         }
 
+        // ── correcao de COMPETENCIA: operacao propria, sem fingir que o aluno
+        // mudou. Resolve novamente a fatura pelo mesmo aluno/valor e pela
+        // competencia declarada; os demais campos da pendencia sobrevivem.
+        const _competenciaCorrigida = (!event.hasMedia && !casarPode(txt).pode && !_alunoRotulado(txt))
+          ? (event._correcaoCompetencia || extrairCorrecaoCompetencia(txt))
+          : null;
+        if (_competenciaCorrigida) {
+          const _citaComp = (x, id) => x.previewId === id || x.origem === id
+            || (Array.isArray(x.msgIds) && x.msgIds.includes(id));
+          const elegiveisComp = arrP.filter((x) => !categoriaEhSaida(x.categoria)
+            && x.tipoOperacao !== 'manual_review_multi_student'
+            && x.tipoOperacao !== 'lancar_recebimento_lote');
+          let alvoComp = null;
+          if (event.quotedMessageId) alvoComp = elegiveisComp.find((x) => _citaComp(x, event.quotedMessageId)) || null;
+          if (!event.quotedMessageId && elegiveisComp.length === 1) alvoComp = elegiveisComp[0];
+          if (!alvoComp) {
+            const motivo = event.quotedMessageId ? 'card_citado_nao_encontrado' : 'mais_de_um_card';
+            await sendFn(chatId, motivo === 'mais_de_um_card'
+              ? 'Entendi a competência, mas há mais de um card aberto. Cita o card certo e manda de novo.'
+              : 'Entendi a competência, mas esse card não está mais ativo. Reenvia o comprovante para eu remontar com segurança.');
+            log({ acao: 'correcao_competencia_sem_alvo', chatId, competencia: _competenciaCorrigida, motivo });
+            return { acao: 'correcao_competencia_sem_alvo', motivo };
+          }
+
+          const competenciaAnterior = alvoComp.competencia || null;
+          let canonicaComp = null;
+          let parcelaComp = null;
+          let compostoComp = null;
+          let falhasFonte = 0;
+          if (alvoComp.aluno) {
+            try {
+              const c = await canonicaFn(alvoComp.unidade_id, alvoComp.aluno, alvoComp.valor);
+              const compC = _competenciaParaExibicao(c && c.fatura && c.fatura.competencia)
+                || _competenciaParaExibicao(c && c.parcela && c.parcela.competencia);
+              if (c && c.ok && (!c.aluno_nome || _mesmaPessoa(c.aluno_nome, alvoComp.aluno))
+                  && compC === _competenciaCorrigida) canonicaComp = c;
+            } catch (_) { falhasFonte++; }
+            try {
+              const m = await casarFn(alvoComp.unidade_id, alvoComp.aluno, alvoComp.valor, _competenciaCorrigida);
+              const compM = _competenciaParaExibicao(m && m.parcela && m.parcela.competencia);
+              if (m && m.ok && m.parcela && (!m.aluno_nome || _mesmaPessoa(m.aluno_nome, alvoComp.aluno))
+                  && compM === _competenciaCorrigida) parcelaComp = m.parcela;
+            } catch (_) { falhasFonte++; }
+            try {
+              const cm = await faturasMesFn(alvoComp.unidade_id, alvoComp.aluno, _competenciaCorrigida, alvoComp.valor);
+              if (cm && cm.ok && Array.isArray(cm.partes) && cm.partes.length >= 2
+                  && (!cm.aluno_nome || _mesmaPessoa(cm.aluno_nome, alvoComp.aluno))) compostoComp = cm;
+            } catch (_) { /* composto e best-effort */ }
+          }
+
+          // A declaracao humana vence o texto descritivo e qualquer fatura de
+          // outro mes. Sem casamento exato, soltamos o vinculo: e mais seguro
+          // lancar sem fatura do que baixar a fatura errada.
+          alvoComp.competencia = _competenciaCorrigida;
+          alvoComp.canonica = compostoComp ? null : canonicaComp;
+          alvoComp.parcela = compostoComp ? null : parcelaComp;
+          alvoComp.composto = compostoComp;
+          alvoComp.faturaIndisponivel = falhasFonte >= 2;
+          alvoComp.bloqueiaFonteIndisponivel = falhasFonte >= 2;
+          alvoComp.bloqueiaLancamento = !!(parcelaComp && parcelaComp.multiplas_no_mes && parcelaComp.valor_bate === false);
+          alvoComp.descricao = descricaoDoComposto(compostoComp, alvoComp.aluno)
+            || descricaoDaFatura(canonicaComp, alvoComp.aluno)
+            || _descricaoLancamento(alvoComp.categoria, _competenciaCorrigida, alvoComp.aluno, parcelaComp);
+          alvoComp.ts = agora;
+
+          let textoComp = `Corrigi a competência para *${_competenciaCorrigida}*:\n\n` + montarPreview({
+            unidadeNome: alvoComp.nome, valor: alvoComp.valor, forma: alvoComp.forma,
+            categoria: alvoComp.categoria, aluno: alvoComp.aluno, competencia: alvoComp.competencia,
+            parcela: alvoComp.parcela, confiancaBaixa: false,
+            responsavelFinanceiro: alvoComp.responsavelFinanceiro,
+            formaIncerta: alvoComp.formaIncerta, cartaoModalidade: alvoComp.cartaoModalidade,
+            cartaoParcelas: alvoComp.cartaoParcelas, multiplas: alvoComp.multiplas,
+            alunoViaPagador: null, pagadorNome: null, candidatosAluno: null,
+            canonica: alvoComp.canonica, duplicata: null, quitacao: alvoComp.quitacao,
+            faturaIndisponivel: alvoComp.faturaIndisponivel, composto: alvoComp.composto,
+            bloqueiaLancamento: alvoComp.bloqueiaLancamento,
+            semAlunoDeclarado: alvoComp.semAluno, entidade: alvoComp.entidade,
+          });
+          if (dryRun) textoComp += '\n\n_(modo teste — nada será gravado no caixa)_';
+          alvoComp.previewId = await sendFn(chatId, textoComp);
+          (alvoComp.msgIds = alvoComp.msgIds || []).push(alvoComp.previewId);
+          alvoComp.toquePor = String(event.senderPhone || event.senderId || '') || alvoComp.toquePor;
+          alvoComp.toqueTs = agora;
+          const resultadoComp = {
+            acao: 'preview_competencia_corrigida',
+            de: competenciaAnterior, para: _competenciaCorrigida,
+            fatura_vinculada: !!(canonicaComp || parcelaComp || compostoComp),
+          };
+          if (!await vincularPreviewRemontadoV3({
+            event, grupo: grp, pendencia: alvoComp, previewId: alvoComp.previewId,
+            texto: textoComp, result: resultadoComp,
+          })) return { acao: 'preview_competencia_corrigida_sem_v3', competencia: _competenciaCorrigida };
+          log({ ...resultadoComp, chatId });
+          return { ...resultadoComp, competencia: _competenciaCorrigida };
+        }
+
         // ── correcao ditada de categoria SEM aprovacao ("coloca a categoria
         // como venda"): atualiza a pendencia e remonta o card — antes caia no
         // limbo (nem correcao, nem aprovacao, nem resposta).
@@ -6483,23 +6629,22 @@ _Não lanço nada pela metade._`);
       else if (cls.intencao === 'corrigir_categoria' && cls.categoria) sintetico = 'coloca a categoria como ' + cls.categoria;
       else if (cls.intencao === 'corrigir_valor' && cls.valor) sintetico = 'o valor é R$ ' + String(cls.valor).replace('.', ',');
       else if (cls.intencao === 'corrigir_forma' && cls.forma) sintetico = 'a forma é ' + cls.forma;
-      // A gramatica de correcao exige um NOME para entrar no bloco. Reusamos o
-      // nome que JA esta no card e anexamos a competencia — `_limparAlunoRotulado`
-      // corta o sufixo "parcela ..." do nome, e a competencia e' colhida do mesmo
-      // texto pelo passo 1. Nenhuma regex nova.
       else if (cls.intencao === 'corrigir_competencia' && cls.competencia) {
-        const _alvoNome = (arrP.find((p) => p.aluno) || {}).aluno || null;
-        // A competencia vem ANTES do rotulo: com `aluno: Nome parcela MM/AAAA` o
-        // captador de nome engole o "parcela" (a classe de caracteres dele nao
-        // aceita digito, entao para no "09" e deixa a palavra colada no nome).
-        sintetico = _alvoNome
-          ? ('parcela ' + cls.competencia + ' aluno: ' + _alvoNome)
-          : null;
-        if (!sintetico) {
-          await sendFn(chatId, 'Entendi que a competência é ' + cls.competencia
-            + ' — mas ainda não sei de qual aluno é. Me manda *aluno: Nome Completo* citando o card.');
-          return { tratou: true, acao: 'fallback_llm_pede_aluno_p_competencia', intencao: cls.intencao };
+        // Campo estruturado, nunca frase sintetica com o nome do card. A frase
+        // era o motivo de uma correcao de mes aparecer como correcao de aluno.
+        const r = await handle({
+          ...event,
+          _sintetico: true,
+          _correcaoCompetencia: cls.competencia,
+          hasMedia: false,
+          messageId: String(event.messageId || '') + '#llm',
+          quotedMessageId: event.quotedMessageId || (arrP.length === 1 ? arrP[0].previewId : null),
+        });
+        if (r && r.acao && r.acao !== 'nada') {
+          log({ acao: 'fallback_llm_tratou', chatId, intencao: cls.intencao, acao_final: r.acao });
+          return { tratou: true, acao: r.acao, intencao: cls.intencao };
         }
+        return null;
       }
       else if (cls.intencao === 'sem_aluno') sintetico = (cls.entidade ? ('é de banda, nome ' + cls.entidade + ', ') : '') + 'não tem aluno específico';
       else if (cls.intencao === 'descartar') sintetico = 'não';
@@ -6568,7 +6713,7 @@ module.exports = {
   _ehDitadoDeCaixa, classificarCorrecaoPendencia, listarPreviewsAbertosV3, _contestaFatura, rotearMensagemV4,
   montarEnvelopeV4, aplicarCorrecaoEnvelope, _v4CanarioLigado, resolverEnvelopeCaixaV1, valorConfereComTexto,
   casarNao, ehConversaSemComando,
-  montarPreview, montarPreviewMultiAluno, fmtBRL, carregarEnv, lancarRecebimento, lancarRecebimentoLote, resolverMultiAlunoCaixaV1, resolverPagamentoItensV1, resolverCompostoAlunoCaixaV1, lancarSaidaCaixa, buscarLancamentoParaCorrecao,
+  montarPreview, montarPreviewMultiAluno, descricaoParcelaCoerente, fmtBRL, carregarEnv, lancarRecebimento, lancarRecebimentoLote, resolverMultiAlunoCaixaV1, resolverPagamentoItensV1, resolverCompostoAlunoCaixaV1, lancarSaidaCaixa, buscarLancamentoParaCorrecao,
   buscarMovimentosCaixa, corrigirMovimentoCaixa, estornarMovimentoCaixa, registrarPreviewV3, registrarApprovalV3, finalizarPreviewV3, criarHandlerFinanceiro,
   confirmacaoLimpa, classificarMidia, bodyLimpo, nomeDoAtor, buscarResponsavel, mesmaPessoa, pagamentoMultiplo,
   extrairDivisaoPagamento, extrairSomaAditivaPagamento, extrairAdicionalPagamento, detectarLojinhaProduto, detectarContextoMultiAluno, validarIntencaoMultiAluno,
@@ -6577,7 +6722,7 @@ module.exports = {
   _cursoRotulado, _confirmacaoManualFatura,
   derivarVinculo, casarParcelaCanonica, linhasDaFatura, categoriaDaFatura, descricaoDaFatura, jaLancadoHoje,
   periodoQuitacao, extrairPeriodoMeses,
-  extrairCompetenciaTexto, compostoDeFaturas, buscarCompostoFaturasMes, descricaoDoComposto,
+  extrairCompetenciaTexto, extrairCorrecaoCompetencia, normalizarCorrecaoCompetenciaRoteador, compostoDeFaturas, buscarCompostoFaturasMes, descricaoDoComposto,
   extrairComprovanteVisao, interpretarComprovante, interpretarMultiAluno, extrairItensNomeValor, casarParcela,
   guardaFinanceiraV4,
   ocrLocal,
