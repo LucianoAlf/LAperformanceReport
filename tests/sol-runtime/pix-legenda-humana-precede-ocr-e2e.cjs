@@ -11,6 +11,7 @@ process.env.SOL_CAIXA_V3_LEDGER_MODE = 'production';
 process.env.SOL_CAIXA_V3_LEDGER_STRICT = '0';
 process.env.SOL_CAIXA_V3_LEDGER_FAKE = '1';
 process.env.SOL_CAIXA_V4_SHADOW = '0';
+process.env.SOL_CAIXA_EVIDENCE_SHADOW = '5521981278047-1544204225@g.us';
 
 const mod = require('./_alvo.cjs');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -88,11 +89,17 @@ const ultimo = (a) => String(a[a.length - 1] || '');
   checar(pendA && pendA.forma === 'pix', 'a pendencia ficou ' + JSON.stringify(pendA && pendA.forma));
   checar(pendA && pendA.cartaoModalidade === null && pendA.cartaoParcelas === null,
     'metadados de cartao vazaram para Pix');
+  checar(pendA && pendA.evidenceEnvelope && pendA.evidenceEnvelope.fields.forma
+    && pendA.evidenceEnvelope.fields.forma.fonte === 'texto_humano_explicito',
+    'o preview legado nao persistiu a proveniencia da forma');
   checar(/R\$\s*190,00\*?\s*·\s*pix/i.test(cardA), 'o card nao mostra R$190 Pix');
   checar(!/cart[aã]o\s+cr[eé]dito/i.test(cardA), 'o card ainda inventou cartao de credito');
   checar(A.logs.some((x) => x.acao === 'forma_humana_vence_inferencia'
     && x.inferida === 'cartao' && x.humana === 'pix'),
     'faltou evidencia auditavel de que a legenda venceu o OCR');
+  checar(A.logs.some((x) => x.acao === 'evidence_resolver_shadow'
+    && x.trilho === 'legado_midia'),
+    'o resolvedor unico nao observou o trilho legado de midia');
 
   // 2) Legenda na propria midia tem a mesma precedencia.
   const B = novo();

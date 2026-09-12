@@ -135,6 +135,11 @@ const junta = (a) => a.join(' || ');
     'F2: valor_total enviado ao Core = ' + (env && env.valor_total) + ', esperava 657 (o legado mandava 357)');
   checar(env && env.itens.length === 1 && env.itens[0].aluno === 'Lis Dal Mora Mello',
     'F2: aluno enviado ao Core = ' + JSON.stringify(env && env.itens) + ' (o legado mandava a frase inteira)');
+  checar(env && env.evidencias && env.evidencias.fields.forma
+    && env.evidencias.fields.forma.fonte === 'texto_humano_explicito',
+    'F2: envelope agent-first nao carregou proveniencia da forma');
+  checar(A.logs.some((l) => l.acao === 'evidence_resolver_shadow' && l.trilho === 'agent_first'),
+    'F2: resolvedor unico nao observou o trilho agent-first');
   const card = A.enviadas.find((x) => /R\$/.test(x)) || '';
   checar(/657/.test(card), 'F2: card sem 657 -> ' + JSON.stringify(card.slice(0, 160)));
   checar(!/357,00\*/.test(card.split('TOTAL')[0] || ''), 'F2: card lideranca com 357 (defeito antigo)');

@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "description": "Casos sanitizados de Sol e Maria para a politica unica de evidencias; nenhum ID, telefone, nome real ou texto bruto de comprovante.",
+  "cases": [
+    {
+      "id": "sol_forma_humana_pix_vence_ocr_cartao",
+      "origin": "sol",
+      "field": "forma",
+      "candidates": [
+        { "value": "pix", "source": "texto_humano_explicito", "confidence": 1 },
+        { "value": "cartao", "source": "ocr", "confidence": 0.82 },
+        { "value": "cartao", "source": "llm", "confidence": 0.91 }
+      ],
+      "expected": { "status": "resolvido", "value": "pix", "source": "texto_humano_explicito" }
+    },
+    {
+      "id": "sol_valor_humano_vence_ocr_fator_cem",
+      "origin": "sol",
+      "field": "valor_total",
+      "candidates": [
+        { "value": 387, "source": "texto_humano_explicito", "confidence": 1 },
+        { "value": 38700, "source": "ocr", "confidence": 0.44 }
+      ],
+      "expected": { "status": "resolvido", "value": 387, "source": "texto_humano_explicito" }
+    },
+    {
+      "id": "sol_competencia_humana_vence_llm",
+      "origin": "sol",
+      "field": "competencia",
+      "candidates": [
+        { "value": "09/2026", "source": "texto_humano_explicito", "confidence": 1 },
+        { "value": "08/2026", "source": "llm", "confidence": 0.88 }
+      ],
+      "expected": { "status": "resolvido", "value": "09/2026", "source": "texto_humano_explicito" }
+    },
+    {
+      "id": "sol_correcao_humana_supera_estado_anterior",
+      "origin": "sol",
+      "field": "forma",
+      "candidates": [
+        { "value": "cartao", "source": "texto_humano_explicito", "confidence": 1 },
+        { "value": "pix", "source": "correcao_humana_explicita", "confidence": 1 }
+      ],
+      "expected": { "status": "resolvido", "value": "pix", "source": "correcao_humana_explicita" }
+    },
+    {
+      "id": "maria_data_ocr_cabecalho_conflita_com_corpo",
+      "origin": "maria",
+      "field": "data_operacional",
+      "candidates": [
+        { "value": "02/09/2026", "source": "ocr", "confidence": 0.76, "evidence_id": "cabecalho" },
+        { "value": "12/09/2026", "source": "ocr", "confidence": 0.76, "evidence_id": "corpo" }
+      ],
+      "expected": { "status": "conflito", "value": null, "source": "ocr" }
+    },
+    {
+      "id": "sol_duas_formas_humanas_travam",
+      "origin": "sol",
+      "field": "forma",
+      "candidates": [
+        { "value": "pix", "source": "texto_humano_explicito", "confidence": 1 },
+        { "value": "cartao", "source": "texto_humano_explicito", "confidence": 1 }
+      ],
+      "expected": { "status": "conflito", "value": null, "source": "texto_humano_explicito" }
+    },
+    {
+      "id": "llm_preenche_somente_campo_vazio",
+      "origin": "shared",
+      "field": "categoria",
+      "candidates": [
+        { "value": "passaporte", "source": "llm", "confidence": 0.84 }
+      ],
+      "expected": { "status": "resolvido", "value": "passaporte", "source": "llm" }
+    }
+  ]
+}
