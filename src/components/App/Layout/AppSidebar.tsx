@@ -1,36 +1,20 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useCallback } from 'react';
 import {
-  LayoutDashboard,
-  Target,
-  Settings,
   LogOut,
   FolderArchive,
-  BarChart3,
-  Briefcase,
-  ClipboardList,
-  Phone,
-  Users,
   Shield,
   UserCog,
-  GraduationCap,
   Wrench,
   ChevronLeft,
   ChevronRight,
-  Building2,
-  FolderKanban,
   Pencil,
   Key,
   Camera,
   TrendingUp,
-  Megaphone,
-  Activity,
-  Heart,
-  MousePointerClick,
-  CalendarClock,
-  Guitar,
-  ReceiptText
+  Activity
 } from 'lucide-react';
+import { MENU_PRINCIPAL as menuItems, MENU_OPERACIONAL as operacional } from '@/lib/menuItems';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Tooltip } from '../../ui/Tooltip';
@@ -71,30 +55,6 @@ const prefetchMap: Record<string, () => Promise<any>> = {
 
 // Cache para evitar prefetch duplicado
 const prefetchedPages = new Set<string>();
-
-const menuItems = [
-  { path: '/app', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { path: '/app/gestao-mensal', label: 'Analytics', icon: BarChart3 },
-  { path: '/app/metas', label: 'Metas', icon: Target },
-  { path: '/app/config', label: 'Configurações', icon: Settings },
-];
-
-const operacional = [
-  { path: '/app/pre-atendimento', label: 'Pré-Atendimento', icon: Phone },
-  { path: '/app/campanhas', label: 'Campanhas', icon: Megaphone },
-  { path: '/app/trafego-pago', label: 'Tráfego Pago', icon: MousePointerClick },
-  { path: '/app/comercial', label: 'Comercial', icon: Briefcase },
-  { path: '/app/agenda', label: 'Agenda', icon: CalendarClock },
-  { path: '/app/administrativo', label: 'Administrativo', icon: ClipboardList },
-  { path: '/app/alunos', label: 'Alunos', icon: Users },
-  { path: '/app/bandas', label: 'Bandas', icon: Guitar },
-  { path: '/app/faturas', label: 'Faturas', icon: ReceiptText },
-  { path: '/app/sucesso-aluno', label: 'Sucesso do Aluno', icon: Heart },
-  { path: '/app/professores', label: 'Professores', icon: GraduationCap },
-  { path: '/app/time', label: 'Time', icon: Users },
-  { path: '/app/salas', label: 'Salas', icon: Building2 },
-  { path: '/app/projetos', label: 'Projetos', icon: FolderKanban },
-];
 
 export function AppSidebar() {
   const navigate = useNavigate();
