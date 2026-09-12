@@ -74,20 +74,24 @@ begin
   -- O ensaio agora escolhe uma testemunha que satisfaz o proprio contrato que
   -- sera exercitado abaixo; ausencia dela continua sendo falha alta.
   select x.sid, x.soma, a.nome into v_sid_multi, v_soma_multi, v_nome_multi
-    from (select i->>'emusys_student_id' as sid,
-                 count(*) as n,
-                 sum(coalesce(nullif(i->'valores'->>'valor_pago','')::numeric,
-                              nullif(i->'valores'->>'valor_hoje','')::numeric,0)) as soma
-            from jsonb_array_elements(v_env->'items') i
-           where coalesce(i->>'tipo_fatura','') = 'parcela'
-             and coalesce(i->>'status','') = 'paga'
-             and nullif(i->>'emusys_student_id','') is not null
-             -- ⚠️ SO A COMPETENCIA CORRENTE. O envelope e `janela_3`: contar a
-             --    janela inteira da 3, 6 ou 12 faturas por aluno e "exatamente
-             --    1" nunca acontece — a fixture do caso simples ficava ausente
-             --    e o ensaio abortava sem testar nada.
-             and (i->>'competencia')::date = date_trunc('month', v_as_of)::date
-           group by 1) x
+    from (select agregado.*
+            from (select i->>'emusys_student_id' as sid,
+                         count(*) as n,
+                         sum(coalesce(nullif(i->'valores'->>'valor_pago','')::numeric,
+                                      nullif(i->'valores'->>'valor_hoje','')::numeric,0)) as soma
+                    from jsonb_array_elements(v_env->'items') i
+                   where coalesce(i->>'tipo_fatura','') = 'parcela'
+                     and coalesce(i->>'status','') = 'paga'
+                     and nullif(i->>'emusys_student_id','') is not null
+                     -- ⚠️ SO A COMPETENCIA CORRENTE. O envelope e `janela_3`: contar a
+                     --    janela inteira da 3, 6 ou 12 faturas por aluno e "exatamente
+                     --    1" nunca acontece — a fixture do caso simples ficava ausente
+                     --    e o ensaio abortava sem testar nada.
+                     and (i->>'competencia')::date = date_trunc('month', v_as_of)::date
+                   group by 1) agregado
+           where agregado.n >= 2 and agregado.soma > 0
+           order by agregado.n desc, agregado.soma desc
+           limit 12) x
     join alunos a on a.unidade_id = v_unidade and a.emusys_student_id = x.sid
     cross join lateral (
       select public.sol_caixa_resolver_pagamento_itens_v1(
@@ -97,8 +101,7 @@ begin
         null
       ) resultado
     ) prova
-   where x.n >= 2 and x.soma > 0
-     and coalesce((prova.resultado->>'ok')::boolean, false)
+   where coalesce((prova.resultado->>'ok')::boolean, false)
    order by x.n desc, x.soma desc
    limit 1;
 
