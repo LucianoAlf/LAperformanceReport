@@ -80,7 +80,7 @@ begin
                          sum(coalesce(nullif(i->'valores'->>'valor_pago','')::numeric,
                                       nullif(i->'valores'->>'valor_hoje','')::numeric,0)) as soma
                     from jsonb_array_elements(v_env->'items') i
-                   where coalesce(i->>'tipo_fatura','') = 'parcela'
+                   where coalesce(i->>'tipo_fatura','') in ('parcela', 'passaporte_taxa_matricula')
                      and coalesce(i->>'status','') = 'aberta'
                      and nullif(i->>'emusys_student_id','') is not null
                      -- ⚠️ SO A COMPETENCIA CORRENTE. O envelope e `janela_3`: contar a
@@ -128,7 +128,7 @@ begin
    limit 1;
 
   if v_sid_multi is null or v_sid_uni is null then
-    raise exception 'FIXTURE AUSENTE: preciso de 1 aluno com 2+ parcelas pagas e 1 com exatamente 1 (achei multi=% uni=%)',
+    raise exception 'FIXTURE AUSENTE: preciso de 1 aluno com 2+ faturas abertas e 1 com exatamente 1 paga (achei multi=% uni=%)',
       coalesce(v_sid_multi,'<nenhum>'), coalesce(v_sid_uni,'<nenhum>');
   end if;
 
