@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { resolverConversaDaCaixa } from '../_shared/caixa-conversa.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -53,35 +54,20 @@ async function registrarNaCaixa(supabase, { numero, conteudo, tipo, whatsappMess
     let conversaId = null;
     let alunoIdMsg = null;
 
-    if (aluno) {
-      alunoIdMsg = aluno.id;
-      const { data: conv } = await supabase
-        .from('admin_conversas').select('id')
-        .eq('aluno_id', aluno.id).eq('departamento', DEPARTAMENTO).maybeSingle();
-      if (conv) conversaId = conv.id;
-      else {
-        const { data: nova } = await supabase
-          .from('admin_conversas')
-          .insert({ aluno_id: aluno.id, unidade_id: aluno.unidade_id, departamento: DEPARTAMENTO, caixa_id: CAIXA_SUCESSO_ID, whatsapp_jid: soNumero, status: 'aberta' })
-          .select('id').single();
-        conversaId = nova?.id || null;
-      }
-    } else {
-      // unidade_id NULL: a caixa é consolidada; o webhook só casa conversa externa com unidade_id NULL.
-      // Busca por telefone_externo (formato estável) e não por whatsapp_jid (que varia de formato).
-      const { data: conv } = await supabase
-        .from('admin_conversas').select('id')
-        .eq('telefone_externo', soNumero).eq('departamento', DEPARTAMENTO).is('aluno_id', null)
-        .maybeSingle();
-      if (conv) conversaId = conv.id;
-      else {
-        const { data: nova } = await supabase
-          .from('admin_conversas')
-          .insert({ aluno_id: null, unidade_id: null, departamento: DEPARTAMENTO, caixa_id: CAIXA_SUCESSO_ID, whatsapp_jid: soNumero, telefone_externo: soNumero, nome_externo: nomeExterno || null, status: 'aberta' })
-          .select('id').single();
-        conversaId = nova?.id || null;
-      }
-    }
+    // Resolução pela fonte única: a chave é o NÚMERO (uq_admin_conversas_jid_depto), nunca
+    // o aluno. A busca antiga filtrava por `aluno_id` com `.maybeSingle()` e quebrava com
+    // aluno que tem duas conversas (a do telefone dele e a do responsável) — hoje 16 estão
+    // nessa situação. Conversa sem aluno continua sem unidade: ver o porquê no módulo.
+    const resolucao = await resolverConversaDaCaixa(supabase, {
+      jid: soNumero,
+      departamento: DEPARTAMENTO,
+      caixaId: CAIXA_SUCESSO_ID,
+      alunoId: aluno?.id ?? null,
+      unidadeId: aluno?.unidade_id ?? null,
+      nomeExterno: nomeExterno || null,
+    });
+    conversaId = resolucao.conversaId;
+    alunoIdMsg = resolucao.alunoId;
     if (!conversaId) return;
 
     await supabase.from('admin_mensagens').insert({

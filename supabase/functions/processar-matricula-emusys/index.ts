@@ -1441,6 +1441,10 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
         },
         body: JSON.stringify({
           telefone_responsavel: p.telefoneResponsavel || p.telefoneAluno,
+          // A mensagem vai para o responsável, cujo número mora em `responsavel_telefone` —
+          // coluna que a busca por telefone da edge não lia. Mandar o id do aluno que acabou
+          // de ser criado aqui é o que faz a conversa nascer com aluno e unidade na Caixa.
+          aluno_id: alunoId ?? null,
           nome_responsavel: p.nomeResponsavel,
           nome_aluno: p.nomeAluno,
           nome_professor: p.professorNome,
