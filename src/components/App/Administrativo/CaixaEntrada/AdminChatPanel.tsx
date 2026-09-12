@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Users, Phone, Mic, X, Play, Pause, Settings, Trash2, Pencil, Zap, MapPin, Bot, Smile } from 'lucide-react';
+import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Users, Phone, Mic, X, Play, Pause, Settings, Trash2, Pencil, Zap, MapPin, Bot, Smile, GraduationCap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -320,7 +320,7 @@ function agruparPorData(mensagens: AdminMensagem[]): (SeparadorItem | MensagemIt
   return resultado;
 }
 
-function ChatBubble({ msg, onApagar, onEditar, nomeAgente }: { msg: AdminMensagem; onApagar?: (id: string) => void; onEditar?: (msg: AdminMensagem) => void; nomeAgente?: string }) {
+function ChatBubble({ msg, onApagar, onEditar, nomeAgente, alunoDaConversaId }: { msg: AdminMensagem; onApagar?: (id: string) => void; onEditar?: (msg: AdminMensagem) => void; nomeAgente?: string; alunoDaConversaId?: number | null }) {
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
   // Fala do agente/bot: enviada pelo nosso lado (remetente='sistema'), mas NÃO é aviso de sistema.
   // O aviso de sistema legítimo usa tipo='sistema' e segue como pílula centralizada.
@@ -328,6 +328,13 @@ function ChatBubble({ msg, onApagar, onEditar, nomeAgente }: { msg: AdminMensage
   const isSaida = msg.direcao === 'saida';
   const isSistema = msg.tipo === 'sistema';
   const podeEditar = isSaida && msg.tipo === 'texto' && !!msg.whatsapp_message_id;
+  // Selo só quando a mensagem é de OUTRO aluno — um responsável com dois filhos recebe as
+  // pesquisas dos dois no mesmo número. Sem isso as duas parecem a mesma mensagem reenviada.
+  // Marcar a exceção, não o caso normal: carimbar todas as bolhas viraria ruído.
+  const alunoDaMensagem =
+    msg.aluno_id && alunoDaConversaId && msg.aluno_id !== alunoDaConversaId
+      ? msg.aluno?.nome ?? null
+      : null;
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -432,6 +439,22 @@ function ChatBubble({ msg, onApagar, onEditar, nomeAgente }: { msg: AdminMensage
           ? 'bg-violet-600/80 text-white rounded-br-md'
           : 'bg-slate-700/70 text-slate-200 rounded-bl-md'
       )}>
+        {/* Sobre qual aluno é esta mensagem — só quando difere do dono da conversa.
+            Âmbar é o vocabulário de exceção do app (mesmo tom do badge de irmãos no card). */}
+        {alunoDaMensagem && (
+          <span className={cn(
+            // inline-flex + w-fit: acompanha o texto, não atravessa a bolha como uma faixa.
+            'inline-flex w-fit max-w-full items-center gap-1 mb-1 rounded-full px-1.5 py-[1px]',
+            'text-[10px] font-medium leading-none',
+            isSaida && !isAgente
+              ? 'bg-black/20 text-amber-200'
+              : 'bg-amber-500/15 text-amber-300'
+          )}>
+            <GraduationCap className="w-2.5 h-2.5 flex-shrink-0" />
+            <span className="truncate">{alunoDaMensagem}</span>
+          </span>
+        )}
+
         {/* Nome do remetente */}
         {isAgente ? (
           <p className="text-[10px] font-semibold text-cyan-300 mb-0.5 flex items-center gap-1">
@@ -1073,6 +1096,7 @@ export function AdminChatPanel({
                 onApagar={onApagarMensagem}
                 onEditar={handleIniciarEdicao}
                 nomeAgente={nomeAgente}
+                alunoDaConversaId={conversa.aluno_id}
               />
             );
           })

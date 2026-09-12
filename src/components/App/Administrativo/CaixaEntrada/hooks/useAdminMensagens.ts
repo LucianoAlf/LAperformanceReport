@@ -41,7 +41,11 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
 
       const { data, error } = await supabase
         .from('admin_mensagens')
-        .select('*')
+        // `aluno:aluno_id(nome)` porque a mensagem tem dono PRÓPRIO, que pode diferir do dono
+        // da conversa: um responsável com dois filhos recebe as pesquisas dos dois no mesmo
+        // número, e a conversa é uma só. Sem isso a tela mostra duas mensagens idênticas e
+        // parece reenvio duplicado (caso real: Isabela e Gabriel Corrêa Pena, ago/2026).
+        .select('*, aluno:aluno_id(nome)')
         .eq('conversa_id', conversaId)
         .order('created_at', { ascending: false })
         .range(offset, offset + MENSAGENS_POR_PAGINA - 1);

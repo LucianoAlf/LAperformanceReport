@@ -51,7 +51,14 @@ export type StatusEntrega = 'enviando' | 'enviada' | 'entregue' | 'lida' | 'erro
 export interface AdminMensagem {
   id: string;
   conversa_id: string;
+  /**
+   * Dono da MENSAGEM, que pode diferir do dono da conversa: um responsável com dois filhos
+   * recebe as pesquisas dos dois no mesmo número, e a conversa é uma só (índice
+   * `uq_admin_conversas_jid_depto`). É o que permite dizer sobre qual aluno a mensagem fala.
+   */
   aluno_id: number | null;
+  /** Nome do aluno da mensagem (join `aluno:aluno_id(nome)`), só para exibição. */
+  aluno?: { nome: string } | null;
   direcao: DirecaoMensagem;
   tipo: TipoMensagemAdmin;
   conteudo: string | null;
