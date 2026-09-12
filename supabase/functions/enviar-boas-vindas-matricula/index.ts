@@ -6,6 +6,7 @@
 // @ts-nocheck
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { resolverConversaDaCaixa } from '../_shared/caixa-conversa.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -71,61 +72,24 @@ async function enviarUazapi(baseUrl, token, body) {
 }
 
 // Registra a mensagem enviada na Caixa de Entrada (admin_conversas/admin_mensagens).
-// Se achar aluno pelo telefone, vincula a conversa ao aluno; senao cria conversa externa.
-async function registrarNaCaixa(supabase, { numero, tipo, conteudo, midiaUrl, midiaMimetype, whatsappMessageId, status, nomeContatoFallback, remetenteNome }) {
+//
+// `alunoId` vem de quem chamou (o webhook de matrícula já sabe de quem é a matrícula que
+// acabou de nascer) — e é o que faz a conversa do RESPONSÁVEL nascer vinculada ao aluno.
+// Sem ele, procurar o dono pelo telefone nunca acharia: o número do responsável mora em
+// `alunos.responsavel_telefone`, coluna que a busca antiga não lia.
+// Sem `alunoId` a conversa fica como contato externo — é o caso da notificação interna
+// que esta mesma função registra para a equipe.
+async function registrarNaCaixa(supabase, { numero, tipo, conteudo, midiaUrl, midiaMimetype, whatsappMessageId, status, nomeContatoFallback, remetenteNome, alunoId = null, unidadeId = null }) {
   try {
-    const phoneSuffix = numero.slice(-11);
-    const { data: aluno } = await supabase
-      .from('alunos')
-      .select('id, nome, unidade_id')
-      .or(`telefone.like.%${phoneSuffix},whatsapp.like.%${phoneSuffix}`)
-      .limit(1)
-      .maybeSingle();
-
-    let conversaId = null;
-    let alunoIdMsg = null;
-
-    if (aluno) {
-      alunoIdMsg = aluno.id;
-      const { data: conv } = await supabase
-        .from('admin_conversas')
-        .select('id')
-        .eq('aluno_id', aluno.id)
-        .eq('unidade_id', aluno.unidade_id)
-        .eq('departamento', DEPARTAMENTO)
-        .maybeSingle();
-      if (conv) {
-        conversaId = conv.id;
-      } else {
-        const { data: nova } = await supabase
-          .from('admin_conversas')
-          .insert({ aluno_id: aluno.id, unidade_id: aluno.unidade_id, departamento: DEPARTAMENTO, caixa_id: CAIXA_SUCESSO_ID, whatsapp_jid: numero, status: 'aberta' })
-          .select('id')
-          .single();
-        conversaId = nova?.id || null;
-      }
-    } else {
-      // unidade_id = null: a caixa e consolidada e o webhook-whatsapp-inbox so casa
-      // conversa externa com unidade_id NULL. Setar unidade aqui faria o webhook nao
-      // reconhecer a conversa e DUPLICAR quando o contato respondesse.
-      const { data: conv } = await supabase
-        .from('admin_conversas')
-        .select('id')
-        .eq('telefone_externo', numero)
-        .eq('departamento', DEPARTAMENTO)
-        .is('aluno_id', null)
-        .maybeSingle();
-      if (conv) {
-        conversaId = conv.id;
-      } else {
-        const { data: nova } = await supabase
-          .from('admin_conversas')
-          .insert({ aluno_id: null, telefone_externo: numero, nome_externo: nomeContatoFallback || numero, unidade_id: null, departamento: DEPARTAMENTO, caixa_id: CAIXA_SUCESSO_ID, whatsapp_jid: numero, status: 'aberta' })
-          .select('id')
-          .single();
-        conversaId = nova?.id || null;
-      }
-    }
+    const { conversaId, alunoId: donoDaConversa } = await resolverConversaDaCaixa(supabase, {
+      jid: numero,
+      departamento: DEPARTAMENTO,
+      caixaId: CAIXA_SUCESSO_ID,
+      alunoId,
+      unidadeId,
+      nomeExterno: nomeContatoFallback || numero,
+    });
+    const alunoIdMsg = donoDaConversa;
 
     if (!conversaId) { console.error('[boas-vindas] registro: sem conversa para', numero); return; }
 
@@ -178,6 +142,9 @@ serve(async (req) => {
       nome_curso = '',
       unidade = '',
       tipo = 'matricula',
+      // Id interno do LA Report, mandado por quem já o conhece (processar-matricula-emusys).
+      // É o que permite reconhecer a conversa do responsável sem depender de telefone.
+      aluno_id = null,
     } = body;
 
     if (!telefone_responsavel) {
@@ -229,6 +196,27 @@ serve(async (req) => {
     const numeroReal = formatPhoneNumber(telefone_responsavel);
     const numeroDestino = MODO_TESTE ? NUMERO_TESTE : numeroReal;
 
+    // Aluno da conversa: só quando a mensagem vai mesmo para o contato dele. Em MODO_TESTE
+    // o destino é o número de teste — vincular ali carimbaria um aluno real numa conversa
+    // de teste. `unidade_id` sai do cadastro, não do nome que veio no corpo.
+    let alunoDaConversa = null;
+    let unidadeDaConversa = null;
+    if (aluno_id && !MODO_TESTE) {
+      const { data: alunoConv, error: erroAluno } = await supabase
+        .from('alunos')
+        .select('id, unidade_id')
+        .eq('id', aluno_id)
+        .maybeSingle();
+      if (erroAluno) {
+        console.error(`[boas-vindas] aluno ${aluno_id}: falha ao ler unidade —`, erroAluno.message);
+      } else if (!alunoConv) {
+        console.error(`[boas-vindas] aluno ${aluno_id} nao encontrado; conversa seguira como contato externo`);
+      } else {
+        alunoDaConversa = alunoConv.id;
+        unidadeDaConversa = alunoConv.unidade_id;
+      }
+    }
+
     // Busca video do professor (mesma regra do n8n)
     const { data: videoUrl } = await supabase.rpc('buscar_video_professor', {
       p_nome_professor: nome_professor,
@@ -267,6 +255,8 @@ serve(async (req) => {
       status: resultBoasVindas.ok ? 'enviada' : 'erro',
       nomeContatoFallback: nome_responsavel || nome_aluno,
       remetenteNome: 'Boas-vindas (automático)',
+      alunoId: alunoDaConversa,
+      unidadeId: unidadeDaConversa,
     });
 
     // Idempotencia: se a boas-vindas falhou, libera a reserva para permitir nova tentativa.
@@ -299,6 +289,9 @@ serve(async (req) => {
         status: result.ok ? 'enviada' : 'erro',
         nomeContatoFallback: MODO_TESTE ? `Teste (${membro.nome})` : membro.nome,
         remetenteNome: 'Notificação (automático)',
+        // SEM alunoId de propósito: este destino é o número da equipe, não o do contato do
+        // aluno. Vincular aqui transformaria a conversa da Jessyca na conversa do aluno
+        // recém-matriculado.
       });
       notificacoes.push({ nome: membro.nome, destino, ok: result.ok, erro: result.ok ? null : result.data?.error });
     }
