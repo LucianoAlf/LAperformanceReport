@@ -49,18 +49,41 @@ test('os 2 valores monetarios passam por formatCurrency(dados.<campo>) — nao p
   assert.doesNotMatch(cartao, /toLocaleString/, 'dinheiro formatado por toLocaleString solto, fora de formatCurrency');
 });
 
-test('lista de alertas some quando nao ha alerta — nao mostra caixa vazia', () => {
-  assert.match(alertas, /alertas\.length === 0[\s\S]{0,80}return null/);
+// A frase do vazio sai do DESKTOP, como os mapas acima. O `catch` do fetch de
+// alertas so faz console.error, entao `alertas` chega [] tanto quando nao ha
+// alerta quanto quando a consulta falhou: sumir com o bloco tornaria os dois
+// casos a MESMA tela — nada (CLAUDE.md, "Falha tem que ser diagnosticavel").
+// O bloco de unidades, no mesmo commit, ja tinha escolhido o oposto.
+const FRASES_DO_VAZIO = ['Tudo sob controle!', 'Nenhum alerta ativo no momento'];
+
+test('lista vazia AFIRMA que esta vazia — a mesma frase do desktop, nao um bloco sumido', () => {
+  for (const frase of FRASES_DO_VAZIO) {
+    assert.ok(desktop.includes(frase), `a frase "${frase}" mudou no desktop — resincronizar as duas telas`);
+  }
+  assert.doesNotMatch(
+    alertas,
+    /return null/,
+    'o bloco volta a sumir em silencio: "sem alerta" e "a consulta falhou" viram a mesma tela',
+  );
 });
 
-test('o guard de lista vazia vem ANTES da renderizacao — nao e um trecho morto depois do map', () => {
-  // Sem isto, um "alertas.length === 0 ... return null" dentro de um bloco
-  // inalcancavel (ex.: `if (false) { ... }`) satisfaria o teste anterior sem
-  // que o componente de fato deixasse de renderizar quando a lista e vazia.
-  const posGuard = alertas.search(/alertas\.length === 0[\s\S]{0,80}return null/);
-  const posMap = alertas.search(/alertas\.map\(/);
-  assert.ok(posGuard >= 0 && posMap >= 0, 'nao achei o guard e/ou o .map(...) no arquivo');
-  assert.ok(posGuard < posMap, 'o guard de lista vazia vem depois do .map — nao protege a renderizacao');
+test('as frases estao no ramo VAZIO do ternario — nao soltas, aparecendo sempre', () => {
+  // Solta no arquivo, a frase apareceria tambem com alertas na tela, e o teste
+  // acima aprovaria justamente o defeito que ele existe para pegar. Mesmo
+  // padrao do ternario de resumoUnidades em tests/mobileDashboardTela.test.mjs.
+  const ternario = alertas.match(/\{alertas\.length > 0 \? \(([\s\S]*?)\) : \(([\s\S]*?)\)\}/);
+  assert.ok(ternario, 'nao achei o ternario de alertas.length — o bloco mudou de forma');
+  const [, ramoComDados, ramoVazio] = ternario;
+  assert.match(ramoComDados, /alertas\.map\(/, 'o ramo com dados nao renderiza a lista');
+  for (const frase of FRASES_DO_VAZIO) {
+    assert.ok(ramoVazio.includes(frase), `a frase "${frase}" nao esta no ramo vazio`);
+    // Uma ocorrencia no ARQUIVO INTEIRO, nao so fora do ramo com dados: uma
+    // copia solta ANTES do ternario nao esta em ramo nenhum, e passaria por
+    // um assert que so olhasse os dois ramos — apareceria sempre, inclusive
+    // com alertas na tela. (Medido: esta mutacao passava antes deste assert.)
+    const ocorrencias = alertas.split(frase).length - 1;
+    assert.equal(ocorrencias, 1, `a frase "${frase}" aparece ${ocorrencias}x — fora do ramo vazio ela aparece sempre`);
+  }
 });
 
 test('cada alerta mostra titulo (descricao) e detalhe — os mesmos 2 campos do card do desktop', () => {
