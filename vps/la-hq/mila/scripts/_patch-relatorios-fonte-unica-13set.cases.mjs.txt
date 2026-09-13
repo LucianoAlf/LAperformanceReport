@@ -1,0 +1,40 @@
+    case 'relatorio_diario_comercial': {
+      const u = await unidadeAlvo(a, { obrigatoria: true });
+      const hojeBrt = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const r = await edgeRelatorio('dry_run_comercial', { unidade: u.id, data_referencia: a.data || hojeBrt });
+      return j(await entregarNaConversa(r.texto, `O relatório diário comercial de ${u.nome}`));
+    }
+    case 'relatorio_mensal_comercial': {
+      const u = await unidadeAlvo(a, { obrigatoria: true });
+      const { ano, mes } = competenciaPadrao(a, { mesAnterior: true });
+      const comp = `${String(mes).padStart(2, '0')}/${ano}`;
+      try {
+        const r = await edgeRelatorio('dry_run_mensal_comercial', { unidade: u.id, ano, mes });
+        return j(await entregarNaConversa(r.texto, `O relatório mensal comercial de ${u.nome} (${comp})`));
+      } catch (e) {
+        if (e.detalhe && e.detalhe.motivo === 'fechamento_indisponivel') {
+          return j({ ok: false, motivo: 'fechamento_indisponivel', competencia: comp, fallback: e.detalhe.fallback || null,
+                     nota: 'esse mês não tem fechamento oficial — diga isso; para o mês corrente ofereça numeros_do_mes ou relatorio_matriculas' });
+        }
+        throw e;
+      }
+    }
+    case 'relatorio_matriculas': {
+      const u = await unidadeAlvo(a);
+      const { ano, mes } = competenciaPadrao(a);
+      const texto = await rpc('relatorio_matriculas_texto_v1', { p_unidade_id: u.id, p_ano: ano, p_mes: mes,
+        p_gerado_por: QUEM.nome, p_solicitante_telefone: tel });
+      return j(await entregarNaConversa(String(texto || ''), `O relatório de matrículas de ${u.nome} (${String(mes).padStart(2, '0')}/${ano})`));
+    }
+    case 'relatorio_comparativo': {
+      const u = await unidadeAlvo(a);
+      const { ano, mes } = competenciaPadrao(a);
+      const anual = a.base === 'ano_anterior';
+      const anoBase = anual ? ano - 1 : (mes === 1 ? ano - 1 : ano);
+      const mesBase = anual ? mes : (mes === 1 ? 12 : mes - 1);
+      const texto = await rpc('relatorio_comparativo_texto_v1', { p_unidade_id: u.id, p_ano: ano, p_mes: mes,
+        p_ano_base: anoBase, p_mes_base: mesBase, p_gerado_por: QUEM.nome, p_solicitante_telefone: tel });
+      return j(await entregarNaConversa(String(texto || ''), `O comparativo ${anual ? 'anual' : 'mensal'} de ${u.nome}`));
+    }
+    case 'link_la_report':
+      return j(await rpc('mila_acesso_la_report_v1', { p_solicitante_telefone: tel }));

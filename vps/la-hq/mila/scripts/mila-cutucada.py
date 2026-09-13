@@ -33,6 +33,10 @@ mp = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(mp)
 
 TETO_DIA = 5
+# Laço 1/2/3 (13/09/2026): a consultora responde um dígito e o bridge fecha o sinal
+# sem modelo (mila_responder_cutucada_v1). A legenda é acrescentada AQUI, fora do
+# modelo, para nunca faltar.
+LEGENDA_123 = "_Responda *1* já resolvi · *2* vou agora · *3* não é comigo_"
 HORA_ABRE, HORA_FECHA = 9, 19
 
 MOLDE = """\
@@ -138,11 +142,20 @@ def main():
                 mp.log(f"{c['apelido']}: a Mila decidiu nao cutucar")
                 continue
             if a.dry_run:
-                mp.log(f"--- {c['apelido']} ({c['unidade_nome']}) [DRY-RUN] ---\n{texto}\n")
+                mp.log(f"--- {c['apelido']} ({c['unidade_nome']}) [DRY-RUN] ---\n{texto.rstrip()}\n\n{LEGENDA_123}\n")
                 continue
+            texto = texto.rstrip() + "\n\n" + LEGENDA_123
             r = mp.enviar(c["telefone"], c["unidade_nome"], texto)
             for lid in log_ids:
                 mp.concluir(lid, "ok", {"fase": "enviado", "texto": texto, "chatwoot": r})
+            # radar_entregas: o registro canônico do que saiu — é a que o "1/2/3" se refere.
+            try:
+                reg = mp.rpc("mila_registrar_entrega_dm_v1", {
+                    "p_solicitante_telefone": c["telefone"], "p_origem": "cutucada",
+                    "p_itens": [{"sinal_id": it["sinal_id"], "quem": it.get("quem")} for it in novos]})
+                mp.log(f"{c['apelido']}: entregas registradas: {reg}")
+            except Exception as e:  # noqa: BLE001 — registro falho nao desfaz o envio
+                mp.log(f"{c['apelido']}: entrega NAO registrada: {e}")
             mp.log(f"{c['apelido']}: cutucada com {len(novos)} item(ns)")
         except Exception as e:  # noqa: BLE001 — uma consultora nao derruba as outras
             falhas += 1

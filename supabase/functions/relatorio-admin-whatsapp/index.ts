@@ -1776,7 +1776,7 @@ async function gerarRelatorioComercialDiario(
     leadsHojeResponse,
     experimentaisHojeResponse,
     matriculasHojeResponse,
-    matriculasMes,
+    resumoMatriculasResponse,
   ] = await aguardarLeituraSnapshotComTimeout(Promise.all([
     supabase.from('unidades').select('id, nome, hunter_nome').eq('id', unidadeId).single(),
     supabase.rpc('get_kpis_comercial_canonicos_v2', {
@@ -1832,7 +1832,17 @@ async function gerarRelatorioComercialDiario(
     supabase.from('leads').select('id', { count: 'exact', head: true }).eq('unidade_id', unidadeId).gte('created_at', inicioDiaBRT).lt('created_at', fimDiaBRTExclusivo),
     supabase.from('lead_experimentais').select('id', { count: 'exact', head: true }).eq('unidade_id', unidadeId).gte('created_at', inicioDiaBRT).lt('created_at', fimDiaBRTExclusivo),
     supabase.from('alunos').select('id', { count: 'exact', head: true }).eq('unidade_id', unidadeId).gte('created_at', inicioDiaBRT).lt('created_at', fimDiaBRTExclusivo),
-    buscarMatriculasComerciaisAlunos(supabase, unidadeId, dataInicioSnapshot, dataRelatorio),
+    // FONTE ÚNICA (13/09/2026): lista, contagem e tickets (§6.6) vêm da MESMA RPC que o
+    // builder mensal, o relatório de matrículas, o comparativo e a Mila leem. Até aqui a
+    // edge carregava a própria cópia do predicado + agrupamento + ticket em TypeScript —
+    // e divergia do mensal e da Mila no mesmo rótulo.
+    supabase.rpc('get_matriculas_comerciais_resumo_v1', {
+      p_unidade_id: unidadeId,
+      p_de: dataInicioSnapshot,
+      // o dia do relatório entra; o seguinte não
+      p_ate_exclusivo: new Date(Date.parse(`${dataRelatorio}T12:00:00Z`) + 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+      p_criado_ate: null,
+    }),
   ]), 45_000);
 
   for (const resposta of [
@@ -1847,6 +1857,7 @@ async function gerarRelatorioComercialDiario(
     leadsHojeResponse,
     experimentaisHojeResponse,
     matriculasHojeResponse,
+    resumoMatriculasResponse,
   ]) {
     if (resposta.error) throw resposta.error;
   }
@@ -1897,15 +1908,22 @@ async function gerarRelatorioComercialDiario(
   }
   const vinculosCurso = await buscarVinculosCursoProximas(supabase, unidadeId, linhasFuturas);
   const proximas = enriquecerProximasExperimentais(linhasFuturas, vinculosCurso);
-  const matriculasNovas = agruparMatriculasComerciais(matriculasMes)
-    .filter(ehMatriculaComercialCanonicaEdge)
-    .sort((a, b) => String(a.data_matricula || '').localeCompare(String(b.data_matricula || '')));
-  const tickets = calcularTicketsMatriculas(
-    matriculasNovas.map((mat) => ({
-      valorParcela: parcelasDoGrupo(mat),
-      valorPassaporte: passaporteDoGrupo(mat),
-    })),
-  );
+  // A lista já vem agrupada por pessoa+dia e ordenada; os tickets já vêm calculados
+  // pela régua §6.6 (soma das parcelas positivas / pessoas com parcela positiva).
+  const resumoMatriculas = (resumoMatriculasResponse.data || {}) as Record<string, unknown>;
+  const matriculasNovas = (Array.isArray(resumoMatriculas.lista) ? resumoMatriculas.lista : []) as Array<Record<string, unknown>>;
+  const tickets = {
+    parcelas: {
+      soma: n(resumoMatriculas.total_parcelas),
+      denominador: n(resumoMatriculas.qtd_parcelas),
+      media: n(resumoMatriculas.ticket_medio_parcela),
+    },
+    passaportes: {
+      soma: n(resumoMatriculas.total_passaportes),
+      denominador: n(resumoMatriculas.qtd_passaportes),
+      media: n(resumoMatriculas.ticket_medio_passaporte),
+    },
+  };
 
   const dadosKpisMes = (kpisMesResponse.data || {}) as KpisComercialPayload;
   const dadosKpisDia = (kpisDiaResponse.data || {}) as KpisComercialPayload;
@@ -1916,12 +1934,31 @@ async function gerarRelatorioComercialDiario(
     ((metasResponse.data || []) as MetaKpiRow[]).map((meta): [string, number] => [String(meta.tipo), n(meta.valor)]),
   );
   const pendencias = n(resumoConciliacaoMes.pendencias_taxa_exp_mat);
-  const gapsSemPresenca = n(dadosKpisDia.gaps?.experimental_status_realizada_sem_presenca);
+  // O alerta publicava o gap DO DIA ao lado dos contadores DO MÊS — laranja com maçã.
+  // Agora o recorte é declarado: o do mês, e o de hoje entre parênteses quando houver.
+  const gapsSemPresencaDia = n(dadosKpisDia.gaps?.experimental_status_realizada_sem_presenca);
+  const gapsSemPresencaMes = n(dadosKpisMes.gaps?.experimental_status_realizada_sem_presenca);
   const alertas: string[] = [];
-  if (gapsSemPresenca > 0) {
-    alertas.push(`${gapsSemPresenca} experimental(is) com status de realizada sem presença individual confirmada`);
+  if (gapsSemPresencaMes > 0) {
+    alertas.push(
+      `${gapsSemPresencaMes} experimental(is) realizada(s) no mês sem presença individual confirmada`
+      + (gapsSemPresencaDia > 0 ? ` (${gapsSemPresencaDia} hoje)` : ''),
+    );
   }
   if (pendencias > 0) alertas.push(`${pendencias} pendência(s) de conciliação em auditoria`);
+  // A contagem do cabeçalho é a canônica (v2); a lista vem da fonte única. Divergirem é
+  // cadastro duplicado (duas linhas principais da mesma pessoa no mesmo dia) — aparece, não some.
+  const matriculasCanonicasMes = n(kpisMes.matriculas_comerciais_principais);
+  if (matriculasNovas.length !== matriculasCanonicasMes) {
+    alertas.push(`contagem canônica de matrículas (${matriculasCanonicasMes}) ≠ lista detalhada (${matriculasNovas.length})`);
+  }
+  // CRM x agenda do Emusys: o número publicado é o do CRM (status operacional, a mesma
+  // chave do mensal e da Mila); a agenda entra aqui como conciliação, não como headline.
+  const realizadasEmusysMes = n(resumoEmusysMes.realizadas_emusys);
+  const realizadasCrmMes = n(kpisMes.experimentais_realizadas_status_operacional);
+  if (realizadasEmusysMes !== realizadasCrmMes) {
+    alertas.push(`experimentais realizadas no mês: CRM ${realizadasCrmMes} × agenda Emusys ${realizadasEmusysMes}`);
+  }
 
   // Mapa de Sinais (fatia comercial): as linhas de ACAO do dia para a unidade.
   // Falha aqui nao derruba o relatorio — o bloco simplesmente nao entra.
@@ -1951,20 +1988,24 @@ async function gerarRelatorioComercialDiario(
     },
     dia: {
       leads: n(kpisDia.leads_entrantes),
+      // "previstas" é a agenda do Emusys (o CRM não sabe o que estava marcado);
+      // realizadas/faltas/canceladas de hoje vêm da v2 canônica diária — a mesma
+      // leitura do bloco `hoje` da Mila.
       experimentaisPrevistas: n(resumoEmusysDia.linhas_raw),
-      experimentaisRealizadas: n(resumoEmusysDia.realizadas_emusys),
-      faltas: n(resumoEmusysDia.faltas),
-      canceladas: n(resumoEmusysDia.canceladas),
+      experimentaisRealizadas: n(kpisDia.experimentais_realizadas_status_operacional),
+      faltas: n(kpisDia.experimentais_no_show),
+      canceladas: n(kpisDia.experimentais_canceladas),
       visitas: n(kpisDia.visitas),
       matriculas: n(kpisDia.matriculas_comerciais_principais),
       passaportes: n(kpisDia.passaportes_total),
     },
     mes: {
+      // FONTE ÚNICA: status operacional (v2 canônica) — a mesma chave do mensal e da Mila.
       leads: n(kpisMes.leads_entrantes),
-      experimentaisRealizadas: n(resumoEmusysMes.realizadas_emusys),
+      experimentaisRealizadas: realizadasCrmMes,
       presencasVinculadas: n(resumoConciliacaoMes.experimentais_realizadas_confirmadas),
-      faltas: n(resumoEmusysMes.faltas),
-      matriculas: matriculasNovas.length,
+      faltas: n(kpisMes.experimentais_no_show),
+      matriculas: matriculasCanonicasMes,
     },
     metas: {
       leads: metas.get('leads') || 0,
@@ -1990,20 +2031,21 @@ async function gerarRelatorioComercialDiario(
     alertas,
     sinais: sinaisRadar,
     matriculasDetalhadas: matriculasNovas.map((mat) => ({
-      data: String(mat.data_matricula || mat.data_contato || ''),
+      data: String(mat.data_matricula || ''),
       aluno: String(mat.nome || ''),
-      idade: mat.idade ?? null,
-      curso: String(mat.cursos_relatorio || mat.curso_nome || ''),
-      professor: String(mat.professores_relatorio || mat.professor_fixo_nome || ''),
-      professorExperimental: String(mat.professores_exp_relatorio || mat.professor_exp_nome || ''),
-      canal: String(mat.canal_nome || ''),
-      hunter: mat.hunter_nome || unidadeResponse.data?.hunter_nome || null,
-      valorPassaporte: passaporteDoGrupo(mat),
-      formaPagamentoPassaporte: mat.forma_pagamento_passaporte_nome || null,
-      parcelas: Array.isArray(mat.parcelas_relatorio) && mat.parcelas_relatorio.length > 0
-        ? mat.parcelas_relatorio
-        : [mat.valor_parcela],
-      formaPagamentoParcelas: mat.formas_pagamento_relatorio || mat.forma_pagamento_nome || null,
+      idade: typeof mat.idade === 'number' ? mat.idade : null,
+      curso: String(mat.cursos || ''),
+      professor: String(mat.professores || ''),
+      professorExperimental: String(mat.professores_experimentais || ''),
+      canal: String(mat.canal || ''),
+      hunter: (typeof mat.hunter === 'string' && mat.hunter) || unidadeResponse.data?.hunter_nome || null,
+      valorPassaporte: n(mat.valor_passaporte),
+      // a busca antiga nunca preenchia este campo (não existe coluna no cadastro)
+      formaPagamentoPassaporte: null,
+      parcelas: Array.isArray(mat.parcelas) && mat.parcelas.length > 0
+        ? (mat.parcelas as number[])
+        : [n(mat.valor_parcela)],
+      formaPagamentoParcelas: (typeof mat.formas_pagamento === 'string' && mat.formas_pagamento) || null,
     })),
     snapshot: {
       atualizadoEm: String(resumoEmusysMes.snapshot_atualizado_em),
@@ -2012,6 +2054,32 @@ async function gerarRelatorioComercialDiario(
   };
 
   return validarTextoPublicoRelatorio(formatarRelatorioComercialDiario(dados));
+}
+
+/**
+ * A Mila (servidor de tools, crachá = service key) pede o MESMO texto que o grupo
+ * recebe — pelos modos dry_run. JWT de usuário ela não tem; o service key ela já usa
+ * em toda RPC. Quem responde "este bearer é service_role?" é o PostgREST, que valida a
+ * assinatura e fixa o papel (`papel_da_sessao_v1`). ⚠️ Não comparar strings de chave:
+ * a VPS usa `sb_secret_…` e o runtime tem o JWT legado — o mesmo direito em dois
+ * formatos, e a comparação dizia "não" para um crachá válido (medido em 13/09).
+ */
+async function bearerEhServiceRole(authHeader: string | null): Promise<boolean> {
+  if (!authHeader?.startsWith('Bearer ')) return false;
+  try {
+    const url = Deno.env.get('SUPABASE_URL')?.replace(/\/+$/, '');
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    if (!url || !anonKey) return false;
+    const client = createClient(url, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const { data, error } = await client.rpc('papel_da_sessao_v1');
+    if (error) return false;
+    return String(data || '') === 'service_role';
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -2231,12 +2299,16 @@ serve(async (req) => {
         global: { headers: { Authorization: authHeader } },
         auth: { autoRefreshToken: false, persistSession: false },
       });
-      const { data: authData, error: authError } = await userClient.auth.getUser();
-      if (authError || !authData.user) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Token inválido para o relatório mensal.' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-        );
+      // crachá da Mila (service key) passa direto; o `userClient` abaixo segue valendo,
+      // porque com esse bearer ele age como service_role na RPC.
+      if (!(await bearerEhServiceRole(authHeader))) {
+        const { data: authData, error: authError } = await userClient.auth.getUser();
+        if (authError || !authData.user) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Token inválido para o relatório mensal.' }),
+            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
       }
 
       const tipo = payload.modo === 'dry_run_mensal_admin' ? 'administrativo' : 'comercial';
@@ -2367,28 +2439,31 @@ serve(async (req) => {
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         );
       }
-      const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-      if (!anonKey) throw new Error('SUPABASE_ANON_KEY_AUSENTE');
-      const userClient = createClient(supabaseUrl, anonKey, {
-        global: { headers: { Authorization: authHeader } },
-        auth: { autoRefreshToken: false, persistSession: false },
-      });
-      const { data: authData, error: authError } = await userClient.auth.getUser();
-      const { data: autorizado, error: autorizacaoError } = await userClient.rpc(
-        'pode_gerar_relatorio_admin_v1',
-        { p_unidade_id: payload.unidade },
-      );
-      if (autorizacaoError || autorizado !== true) {
-        const status = authError || !authData.user ? 401 : 403;
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: status === 401
-              ? 'Token inválido para dry_run'
-              : 'Unidade não autorizada para dry_run',
-          }),
-          { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      // crachá da Mila (service key) passa direto; usuário do app segue pela RPC de permissão
+      if (!(await bearerEhServiceRole(authHeader))) {
+        const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+        if (!anonKey) throw new Error('SUPABASE_ANON_KEY_AUSENTE');
+        const userClient = createClient(supabaseUrl, anonKey, {
+          global: { headers: { Authorization: authHeader } },
+          auth: { autoRefreshToken: false, persistSession: false },
+        });
+        const { data: authData, error: authError } = await userClient.auth.getUser();
+        const { data: autorizado, error: autorizacaoError } = await userClient.rpc(
+          'pode_gerar_relatorio_admin_v1',
+          { p_unidade_id: payload.unidade },
         );
+        if (autorizacaoError || autorizado !== true) {
+          const status = authError || !authData.user ? 401 : 403;
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: status === 401
+                ? 'Token inválido para dry_run'
+                : 'Unidade não autorizada para dry_run',
+            }),
+            { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
       }
 
       let dataReferencia: string;
@@ -2432,28 +2507,31 @@ serve(async (req) => {
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-      if (!anonKey) throw new Error('SUPABASE_ANON_KEY_AUSENTE');
-      const userClient = createClient(supabaseUrl, anonKey, {
-        global: { headers: { Authorization: authHeader } },
-        auth: { autoRefreshToken: false, persistSession: false },
-      });
-      const { data: authData, error: authError } = await userClient.auth.getUser();
-      const { data: autorizado, error: autorizacaoError } = await userClient.rpc(
-        'pode_gerar_relatorio_comercial_v1',
-        { p_unidade_id: payload.unidade },
-      );
-      if (autorizacaoError || autorizado !== true) {
-        const status = authError || !authData.user ? 401 : 403;
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: status === 401
-              ? 'Token inválido para dry_run_comercial'
-              : 'Unidade não autorizada para dry_run_comercial',
-          }),
-          { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      // crachá da Mila (service key) passa direto; usuário do app segue pela RPC de permissão
+      if (!(await bearerEhServiceRole(authHeader))) {
+        const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+        if (!anonKey) throw new Error('SUPABASE_ANON_KEY_AUSENTE');
+        const userClient = createClient(supabaseUrl, anonKey, {
+          global: { headers: { Authorization: authHeader } },
+          auth: { autoRefreshToken: false, persistSession: false },
+        });
+        const { data: authData, error: authError } = await userClient.auth.getUser();
+        const { data: autorizado, error: autorizacaoError } = await userClient.rpc(
+          'pode_gerar_relatorio_comercial_v1',
+          { p_unidade_id: payload.unidade },
         );
+        if (autorizacaoError || autorizado !== true) {
+          const status = authError || !authData.user ? 401 : 403;
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: status === 401
+                ? 'Token inválido para dry_run_comercial'
+                : 'Unidade não autorizada para dry_run_comercial',
+            }),
+            { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
       }
 
       let dataReferencia: string;

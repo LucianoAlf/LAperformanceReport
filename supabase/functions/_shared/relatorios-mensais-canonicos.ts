@@ -565,7 +565,13 @@ export function formatarRelatorioComercialMensalCanonico(
     LINHA,
     ...(alunosPagantes == null ? [] : [`• Alunos pagantes: *${alunosPagantes}*`]),
     `• Leads: *${inteiro(r.leads)}*`,
+    // "Experimentais realizadas" = status operacional do CRM (a MESMA chave do diário e
+    // da Mila). O denominador da taxa exp→mat é a presença confirmada + vínculo — sai na
+    // linha seguinte, como no diário, para o leitor não somar laranja com maçã.
     `• Experimentais realizadas: *${inteiro(r.experimentais)}*`,
+    ...(r.experimentais_confirmadas == null
+      ? []
+      : [`• Presença + vínculo confirmados: *${inteiro(r.experimentais_confirmadas)}*`]),
     `• Faltas: *${inteiro(r.faltas)}*`,
     `• Visitas: *${inteiro(r.visitas)}*`,
     `• Matrículas comerciais: *${inteiro(r.matriculas)}*`,
@@ -577,7 +583,7 @@ export function formatarRelatorioComercialMensalCanonico(
     "📊 *FUNIL DO MÊS*",
     LINHA,
     `• Lead → Experimental: *${percentual(r.taxa_lead_exp)}* (${inteiro(r.experimentais)}/${inteiro(r.leads)})`,
-    `• Experimental → Matrícula: *${percentual(r.taxa_exp_mat)}* (${inteiro(r.conversoes_exp_mat)}/${inteiro(r.experimentais)})`,
+    `• Experimental → Matrícula: *${percentual(r.taxa_exp_mat)}* (${inteiro(r.conversoes_exp_mat)}/${inteiro(r.experimentais_confirmadas ?? r.experimentais)})`,
     `• Lead → Matrícula: *${percentual(r.taxa_lead_mat)}* (${inteiro(r.matriculas)}/${inteiro(r.leads)})`,
     `• Pendências de conciliação: *${inteiro(r.pendencias_conciliacao)}*`,
     "",

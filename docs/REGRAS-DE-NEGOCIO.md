@@ -713,6 +713,10 @@ Ticket médio dos passaportes = soma dos passaportes positivos / grupos com pass
 
 ⚠️ Esta regra é específica da coorte de novas matrículas do **relatório comercial** e não substitui a regra financeira por fatura/competência do ticket da base ativa (§4.4).
 
+✅ **Implementação única (13/09/2026):** `get_matriculas_comerciais_resumo_v1` (sobre `matriculas_comerciais_lista_v1`). Relatório diário, builder mensal, relatório de matrículas, comparativo e Mila leem dela — não reimplementar em consumidor novo. Até essa data a Mila e o builder mensal tiravam a média por linha `conta` (o 2º curso ficava fora do numerador: 407,14 × 464,29 em Recreio/set).
+
+**"Experimentais realizadas"** (mesma data): uma definição só para diário, mensal, comparativo e Mila — status operacional do CRM (`experimentais_realizadas_status_operacional`, v2 canônica). A presença confirmada + vínculo é publicada à parte ("Presença + vínculo confirmados") e é o denominador da taxa experimental→matrícula. Detalhe em `docs/METRICAS.md` → "Fonte única do comercial".
+
 ### 6.7 Famílias e irmãos ⚠️ GAP CONHECIDO
 
 O Emusys cria 1 registro por **pessoa**; `matricula.lead_id` identifica o **aluno**, não a família. A família só é ligada pelos campos de responsável, idênticos entre irmãos.
