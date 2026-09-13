@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { LucideIcon, TrendingUp, TrendingDown, Minus, HelpCircle } from 'lucide-react';
 import { cn, formatCurrency } from '@/lib/utils';
 
@@ -132,6 +132,9 @@ export function KPICard({
   // No mobile não existe hover: sem estado próprio, o "?" aparecia e nunca
   // abria o tooltip com a regra de negócio do indicador.
   const [tooltipAberto, setTooltipAberto] = useState(false);
+  // Um id por instancia: a mesma tela monta ate 13 KPICard, e id repetido
+  // faria o leitor de tela anunciar sempre o balao do primeiro.
+  const tooltipId = useId();
   
   // Calcular tendência automaticamente se previousValue fornecido
   let trend = propTrend;
@@ -266,16 +269,34 @@ export function KPICard({
             {displayLabel}
             {tooltip && (
               <span className="relative group inline-flex">
+                {/* O icone e o UNICO filho em fluxo: o wrapper mede 12x12, como
+                    antes de existir alvo de toque. O alvo vive fora do fluxo
+                    (absolute), entao nao estica a linha do rotulo nem quebra
+                    linha em grade densa. */}
+                <HelpCircle
+                  size={12}
+                  aria-hidden="true"
+                  className="text-slate-500 group-hover:text-slate-300 cursor-help flex-shrink-0"
+                />
+                {/* 44px SO no ponteiro grosso. No mouse o alvo e 12x12 — a
+                    caixa exata do glifo: o que se ve e o que se clica, e todo
+                    o resto do cartao continua abrindo o drill-down. Era essa
+                    faixa que a margem negativa de 44px tomava em 14 cartoes,
+                    8 deles fora do Dashboard. O botao esta VAZIO, entao sem
+                    min-* ele encolheria a zero e o "?" ficaria inclicavel no
+                    desktop — falha silenciosa, nao erro. */}
                 <button
                   type="button"
                   aria-label="Explicação do indicador"
                   aria-expanded={tooltipAberto}
-                  className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center -m-3"
+                  aria-controls={tooltipId}
+                  className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-h-[12px] min-w-[12px] [@media(pointer:coarse)]:min-h-[44px] [@media(pointer:coarse)]:min-w-[44px] cursor-help"
                   onClick={(e) => { e.stopPropagation(); setTooltipAberto((v) => !v); }}
-                >
-                  <HelpCircle size={12} className="text-slate-500 hover:text-slate-300 cursor-help flex-shrink-0" />
-                </button>
-                <span className={cn(
+                ></button>
+                <span
+                  id={tooltipId}
+                  role="tooltip"
+                  className={cn(
                   "absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-200 whitespace-normal w-[220px] text-center transition-all duration-200 z-50 shadow-xl pointer-events-none",
                   tooltipAberto ? "opacity-100 visible" : "opacity-0 invisible",
                   "group-hover:opacity-100 group-hover:visible",

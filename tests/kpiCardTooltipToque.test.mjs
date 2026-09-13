@@ -81,3 +81,90 @@ test('o wrapper do "?" e do balão mantém a classe "group" — sem ela, group-h
   // que nunca é acionada por nenhum hover real.
   assert.match(fonte, /className="relative group[^"]*"/, 'nenhum wrapper com classe "group" envolve o botão e o balão');
 });
+
+// ---------------------------------------------------------------------------
+// Revisao final da etapa 2 (C2 + M5).
+//
+// O assert de cima ("tem min-h-[44px] e min-w-[44px]") era satisfeito por
+// `min-h-[44px] min-w-[44px] ... -m-3`, que e o defeito: margem negativa muda
+// o LAYOUT, nao a border box. O botao ficava com 44x44 clicaveis transbordando
+// 12px em cada direcao da caixa de 20x20 que ele ocupava — e, como o
+// stopPropagation e dele, essa faixa parava de abrir o drill-down em 14
+// cartoes (8 deles fora do Dashboard, fora do escopo desta frente).
+// ---------------------------------------------------------------------------
+
+function classesDoBotao(src) {
+  const botao = extrairBotaoAjuda(src);
+  assert.ok(botao, 'nao ha <button> para inspecionar');
+  const achado = botao.match(/className="([^"]*)"/);
+  assert.ok(achado, 'o botao precisa de um className literal para ser auditavel');
+  return achado[1];
+}
+
+test('C2: o alvo de 44px NAO participa do fluxo — e nao ha margem negativa mentindo sobre a caixa', () => {
+  const classe = classesDoBotao(fonte);
+  const classes = classe.split(/\s+/).filter(Boolean);
+
+  assert.ok(
+    classes.includes('absolute'),
+    'o alvo precisa ser absolute: so fora do fluxo ele deixa de esticar a linha do rotulo',
+  );
+  assert.doesNotMatch(
+    classe,
+    /(^|\s)-m[trblxy]?-/,
+    'margem negativa de volta: ela encolhe o espaco de layout e deixa a border box transbordando',
+  );
+});
+
+test('C2: 44px so no dedo — no mouse o alvo nao pode passar do que o cartao pode ceder', () => {
+  const classes = classesDoBotao(fonte).split(/\s+/).filter(Boolean);
+
+  const de44 = classes.filter((c) => /min-[wh]-\[44px\]$/.test(c));
+  assert.equal(de44.length, 2, `esperava min-w-[44px] e min-h-[44px], achei ${de44.length}`);
+  for (const c of de44) {
+    assert.match(
+      c,
+      /^\[@media\(pointer:coarse\)\]:/,
+      `"${c}" vale tambem para mouse — e ai o alvo rouba o clique de drill-down do cartao no desktop`,
+    );
+  }
+
+  // E o tamanho do ponteiro fino tem de ser a caixa EXATA do glifo (size=12):
+  // e o que faz "o que se ve" e "o que se clica" coincidirem, devolvendo ao
+  // cartao todo o resto da area. Sem min-* o botao vazio encolheria a zero e o
+  // "?" ficaria inclicavel no desktop — falha silenciosa, nao erro.
+  assert.ok(
+    classes.includes('min-h-[12px]') && classes.includes('min-w-[12px]'),
+    'o alvo do ponteiro fino precisa ser a caixa do icone (min-h-[12px] / min-w-[12px])',
+  );
+  assert.match(fonte, /<HelpCircle[\s\S]{0,80}size=\{12\}/, 'o icone deixou de ter 12px — o alvo do mouse desalinhou do glifo');
+});
+
+test('C2: o que fica no fluxo e o icone, nao o alvo — senao a linha do rotulo cresce de novo', () => {
+  const botao = extrairBotaoAjuda(fonte);
+  assert.doesNotMatch(
+    botao,
+    /HelpCircle/,
+    'o icone voltou para DENTRO do botao: a caixa em fluxo passa a ser a do alvo',
+  );
+  assert.match(fonte, /<HelpCircle\b/, 'o icone sumiu da tela');
+});
+
+test('M5: o balao e anunciado — role="tooltip" e aria-controls apontando para o id dele', () => {
+  const botao = extrairBotaoAjuda(fonte);
+  const controls = botao.match(/aria-controls=\{(\w+)\}/);
+  assert.ok(controls, 'aria-expanded sem aria-controls nao diz QUAL elemento expande');
+
+  const balao = fonte.match(/<span\s+id=\{(\w+)\}\s+role="tooltip"/);
+  assert.ok(balao, 'o balao nao declara id + role="tooltip"');
+  assert.equal(controls[1], balao[1], 'o aria-controls aponta para outro id que nao o do balao');
+
+  // Id unico por instancia: ha ate 13 KPICard na mesma tela, e id repetido
+  // faz o leitor de tela anunciar sempre o primeiro balao.
+  assert.match(fonte, /import \{[^}]*useId[^}]*\} from 'react'/, 'useId nao foi importado');
+  assert.match(fonte, new RegExp(`const ${balao[1]} = useId\(\)`), `${balao[1]} precisa vir de useId()`);
+});
+
+test('M5: o icone e decorativo — aria-hidden, senao o leitor de tela le o "?" duas vezes', () => {
+  assert.match(fonte, /<HelpCircle[^>]*aria-hidden="true"/, 'HelpCircle sem aria-hidden="true"');
+});
