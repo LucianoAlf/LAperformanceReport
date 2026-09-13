@@ -648,6 +648,18 @@ function _caixaLog(o) {
   try { appendFileSync(CAIXA_LOG, JSON.stringify(Object.assign({ ts: new Date().toISOString() }, o)) + '\n'); } catch (e) {}
 }
 let _caixaHandler = null;
+let _caixaGovernanca = null;
+async function caixaGovernanca() {
+  if (_caixaGovernanca) return _caixaGovernanca;
+  try {
+    const mod = (await import('file:///home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-governanca-shadow.cjs')).default;
+    _caixaGovernanca = mod.criarInstrumento();
+  } catch (e) {
+    _caixaLog({ step: 'governanca_shadow_load_erro', msg: e.message });
+    _caixaGovernanca = null;
+  }
+  return _caixaGovernanca;
+}
 const SOL_CAIXA_CLASSIFICADOR_V3_SHADOW = process.env.SOL_CAIXA_CLASSIFICADOR_V3_SHADOW === '1';
 let _classificadorV3Shadow = null;
 async function classificadorV3Shadow() {
@@ -676,6 +688,11 @@ async function financeHandler() {
         return id;
       },
       log: function (o) { _caixaLog(o); },
+      governanceFn: function (event, eventType, details) {
+        const episodio = event && event.caixaGovernancaEpisode;
+        if (!_caixaGovernanca || !episodio) return Promise.resolve({ ok: false, sem_episodio: true });
+        return _caixaGovernanca.record(episodio, eventType, details);
+      },
     });
     _caixaLog({ step: 'init', grupos: Object.keys(grupos) });
     // A3 (31/08): restart nao engole pendencia — reconstruir do ledger V3.
@@ -1009,6 +1026,7 @@ async function caixaAbf() {
         quotedBody,
         botIds,
         timestamp: msg.messageTimestamp,
+        caixaGovernancaEpisode: null,
       };
 
       if (isGroup) {
@@ -1016,6 +1034,19 @@ async function caixaAbf() {
         observeGroupMessage(event);
         if (SOL_CAIXA_LIVE && FINANCE_GROUPS.has(chatId)) {
           try {
+            const _grupoCaixa = financeGroupMap()[chatId];
+            const _gov = await caixaGovernanca();
+            const _episodio = _gov ? _gov.beginEpisode({
+              chatId, messageId: event.messageId, unitName: _grupoCaixa && _grupoCaixa.nome,
+              hasMedia: event.hasMedia, mediaType: event.mediaType,
+            }) : null;
+            event.caixaGovernancaEpisode = _episodio;
+            const _govRecord = (tipo, detalhes) => {
+              if (_gov && _episodio) void _gov.record(_episodio, tipo, detalhes || {});
+            };
+            const _govFn = (ev, tipo, detalhes) => (_gov && ev && ev.caixaGovernancaEpisode)
+              ? _gov.record(ev.caixaGovernancaEpisode, tipo, detalhes || {})
+              : Promise.resolve({ ok: false, sem_episodio: true });
             _caixaLog({ step: 'msg', chatId: chatId, hasMedia: event.hasMedia, mediaType: event.mediaType });
             if (event.hasMedia) typingStart(chatId);
             const _abf = await caixaAbf();
@@ -1029,19 +1060,18 @@ async function caixaAbf() {
                 abrirJanelaGrupo(cid, event.senderId, 'financeiro_abertura_fechamento');
                 return id;
               };
-              const _grupoCaixa = financeGroupMap()[chatId];
-              const _direto = await _abf.tratarPedidoDiretoFechamento(event, { grupo: _grupoCaixa, sendFn: _sf, log: _caixaLog });
-              if (_direto) { typingStop(chatId); _caixaLog({ step: 'abf_fechamento_direto' }); continue; }
+              const _direto = await _abf.tratarPedidoDiretoFechamento(event, { grupo: _grupoCaixa, sendFn: _sf, log: _caixaLog, governanceFn: _govFn });
+              if (_direto) { _govRecord('route_decided', { route: 'deterministic_abf', engine: 'abf', action: 'fechamento_direto' }); _govRecord('episode_closed', { terminal_state: 'handled', outcome: 'ok' }); typingStop(chatId); _caixaLog({ step: 'abf_fechamento_direto' }); continue; }
               // Reabertura do caixa fechado do dia (31/08: "Pode abrir novamente"
               // vazava para o LLM de leitura e morria em "banco bloqueou").
               const _reab = _abf.tratarPedidoDiretoReabertura
-                ? await _abf.tratarPedidoDiretoReabertura(event, { grupo: _grupoCaixa, sendFn: _sf, log: _caixaLog })
+                ? await _abf.tratarPedidoDiretoReabertura(event, { grupo: _grupoCaixa, sendFn: _sf, log: _caixaLog, governanceFn: _govFn })
                 : false;
-              if (_reab) { typingStop(chatId); _caixaLog({ step: 'abf_reabertura_direta' }); continue; }
+              if (_reab) { _govRecord('route_decided', { route: 'deterministic_abf', engine: 'abf', action: 'reabertura_direta' }); _govRecord('episode_closed', { terminal_state: 'handled', outcome: 'ok' }); typingStop(chatId); _caixaLog({ step: 'abf_reabertura_direta' }); continue; }
               _fhPrio = await financeHandler();
-              const _tratou = await _abf.tratarConfirmacao(event, { sendFn: _sf, log: _caixaLog,
+              const _tratou = await _abf.tratarConfirmacao(event, { sendFn: _sf, log: _caixaLog, governanceFn: _govFn,
                 temComprovantePendente: (cid) => !!(_fhPrio && _fhPrio.temPendencia && _fhPrio.temPendencia(cid)) });
-              if (_tratou) { _caixaLog({ step: 'abf_tratou' }); continue; }
+              if (_tratou) { _govRecord('route_decided', { route: 'deterministic_abf', engine: 'abf', action: 'confirmacao' }); _govRecord('episode_closed', { terminal_state: 'handled', outcome: 'ok' }); _caixaLog({ step: 'abf_tratou' }); continue; }
             }
             // Abertura/fechamento fica determinístico acima. Confirmação de
             // preview criado por mídia também fica no handler determinístico;
@@ -1053,15 +1083,21 @@ async function caixaAbf() {
             const _textoVaiParaAgentTools = SOL_CAIXA_TOOLS_GROUPS.has(chatId)
               && !event.hasMedia && !_confirmacaoDeterministica;
             if (_textoVaiParaAgentTools) {
+              _govRecord('route_decided', { route: 'agent_first', engine: 'agent_tools', outcome: 'pending' });
               _caixaLog({ step: 'agent_first_text_handoff_pos_abf', chatId: chatId });
             } else {
             if (_confirmacaoDeterministica) {
+              _govRecord('route_decided', { route: 'legacy', engine: 'legacy_parser', action: 'confirmacao_preview' });
               _caixaLog({ step: 'preview_deterministico_priorizado', chatId: chatId });
+            } else if (event.hasMedia) {
+              _govRecord('route_decided', { route: 'ocr', engine: 'ocr', outcome: 'pending' });
+            } else {
+              _govRecord('route_decided', { route: 'legacy', engine: 'legacy_parser', outcome: 'pending' });
             }
             const _fh = await financeHandler();
             let _tratouCaixa = true;
+            let _resultadoCaixa = null;
             if (_fh) {
-              const _grupoCaixa = financeGroupMap()[chatId];
               const _shadow = await classificadorV3Shadow();
               let _shadowClassificacao = null;
               if (_shadow) {
@@ -1069,6 +1105,7 @@ async function caixaAbf() {
                 catch (e) { _caixaLog({ step: 'classificador_v3_shadow_erro', msg: e.message }); }
               }
               const _r = await _fh.handle(event);
+              _resultadoCaixa = _r;
               _caixaLog({ step: 'result', r: _r });
               // V4 SHADOW (31/08, go do Luciano): o roteador LLM observa a mesma
               // mensagem em paralelo e loga a decisao ao lado da acao do legado.
@@ -1127,9 +1164,25 @@ async function caixaAbf() {
                 }
               }
             }
-            if (_tratouCaixa) { typingStop(chatId); continue; }   // dinheiro e deterministico: nunca vai pro LLM
+            if (_tratouCaixa) {
+              _govRecord('episode_closed', {
+                terminal_state: (_resultadoCaixa && _resultadoCaixa.acao) || 'handled',
+                outcome: 'ok',
+                action: (_resultadoCaixa && _resultadoCaixa.acao) || 'handled',
+              });
+              typingStop(chatId);
+              continue;
+            }
+            _govRecord('episode_closed', {
+              terminal_state: 'routed_to_group_engagement',
+              outcome: 'contained',
+              action: (_resultadoCaixa && _resultadoCaixa.acao) || 'not_caixa',
+            });
             }
           } catch (e) {
+            if (event.caixaGovernancaEpisode && _caixaGovernanca) {
+              void _caixaGovernanca.record(event.caixaGovernancaEpisode, 'instrument_failure', { reason_code: 'bridge_exception', outcome: 'error' });
+            }
             _caixaLog({ step: 'erro', msg: e.message, stack: String(e.stack || '').slice(0, 400) });
             typingStop(chatId);
             continue;
@@ -1178,7 +1231,10 @@ async function caixaAbf() {
       if (event.senderPhone) {
         try {
           const _cr = crachaDoSolicitante(event.senderPhone, chatId);
-          if (_cr) event.body = `[chat_caixa: ${chatId}]\n[cracha: ${_cr}]\n${event.body || ''}`;
+          if (_cr) {
+            const _ep = event.caixaGovernancaEpisode && event.caixaGovernancaEpisode.episode_id;
+            event.body = `${_ep ? `[episode_caixa: ${_ep}]\n` : ''}[chat_caixa: ${chatId}]\n[cracha: ${_cr}]\n${event.body || ''}`;
+          }
         } catch (_) { /* crachá é reforço; falhar nele não pode derrubar a mensagem */ }
       }
       if (event.senderPhone) {

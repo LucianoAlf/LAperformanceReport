@@ -21,6 +21,7 @@ on:
   pull_request:
     paths:
       - 'vps/la-hq/sol/runtime/**'
+      - 'vps/la-hq/sol/scripts/**'
       - 'tests/sol-runtime/**'
       - '.github/workflows/sol-caixa-suite.yml'
       # 🔴 O CI ficava verde sem observar NADA disto. Adicionado em 09/09.
@@ -29,16 +30,21 @@ on:
       - 'src/lib/caixaFinanceiro.ts'
       - 'tests/caixaPixCofreCompat.test.mjs'
       - 'tests/sol-caixa/**'
+      - 'supabase-sol/migrations/**'
+      - 'supabase-sol/migration-rollbacks/**'
   push:
     branches: [main]
     paths:
       - 'vps/la-hq/sol/runtime/**'
+      - 'vps/la-hq/sol/scripts/**'
       - 'tests/sol-runtime/**'
       - 'supabase/migrations/**'
       - 'supabase/functions/caixa-financeiro-whatsapp/**'
       - 'src/lib/caixaFinanceiro.ts'
       - 'tests/caixaPixCofreCompat.test.mjs'
       - 'tests/sol-caixa/**'
+      - 'supabase-sol/migrations/**'
+      - 'supabase-sol/migration-rollbacks/**'
 
 jobs:
   suite:
@@ -64,7 +70,11 @@ jobs:
       # O que o CI garante é que o ARTEFATO CANÔNICO passa sozinho — que era
       # exatamente o buraco apontado no commit 02b849eb.
       - name: artefato canônico existe e carrega
-        run: node -c vps/la-hq/sol/runtime/caixa-financeiro.cjs
+        run: |
+          node -c vps/la-hq/sol/runtime/caixa-financeiro.cjs
+          node -c vps/la-hq/sol/runtime/caixa-abertura-fechamento.cjs
+          node -c vps/la-hq/sol/runtime/caixa-governanca-shadow.cjs
+          node --check vps/la-hq/sol/scripts/sol-portas-mcp.mjs
 
       - name: suíte do caixa
         run: bash tests/sol-runtime/rodar-suite.sh
@@ -182,6 +192,11 @@ jobs:
 
       - name: seed sintético
         run: psql -q -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-seed.sql
+
+      - name: ledger shadow da governança da Sol é isolado e sanitizado
+        run: |
+          psql -q -v ON_ERROR_STOP=1 -f supabase-sol/migrations/20260913193000_sol_caixa_governanca_shadow_ledger_v1.sql
+          psql -q -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-governanca-shadow.sql
 
       - name: porta localizar executa contra o schema real da auditoria
         run: psql -q -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-porta-localizar-lancamento.sql

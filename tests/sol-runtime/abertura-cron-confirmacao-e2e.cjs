@@ -14,6 +14,7 @@ const abf = require(path.join(root, 'vps/la-hq/sol/runtime/caixa-abertura-fecham
 (async () => {
   const chamadas = [];
   const enviadas = [];
+  const governanca = [];
   const identificarOriginal = fin.identificarPessoa;
   fin.identificarPessoa = async () => ({ identificado: true, nome: 'Operadora Teste' });
   try {
@@ -21,8 +22,10 @@ const abf = require(path.join(root, 'vps/la-hq/sol/runtime/caixa-abertura-fecham
       chatId: 'recreio@g.us', senderId: '5521999999999@s.whatsapp.net',
       senderPhone: '5521999999999', senderName: 'Operadora', body: 'Pode',
       hasMedia: false, quotedMessageId: null,
+      caixaGovernancaEpisode: { episode_id: 'ep1.teste.' + 'a'.repeat(64) },
     }, {
       sendFn: async (_chatId, texto) => { enviadas.push(texto); return 'MSG-RECIBO'; },
+      governanceFn: async (_event, eventType, details) => { governanca.push({ eventType, details }); },
       temComprovantePendente: () => false,
       rpcFn: async (nome, args) => {
         chamadas.push({ nome, args });
@@ -44,6 +47,9 @@ const abf = require(path.join(root, 'vps/la-hq/sol/runtime/caixa-abertura-fecham
     assert(resolveu, 'pendência não foi resolvida');
     assert.strictEqual(resolveu.args.p_status, 'confirmado');
     assert(enviadas.some((x) => /Caixa aberto!/.test(x) && /R\$ 109,10/.test(x)));
+    for (const tipo of ['approval_observed', 'write_applied', 'approval_consumed', 'receipt_sent', 'readback_failed']) {
+      assert(governanca.some((x) => x.eventType === tipo), `evento de governança ausente: ${tipo}`);
+    }
 
     // Se também há preview de lançamento, o "pode" seco pertence a ele. A
     // abertura só ganha prioridade quando a pessoa cita o card de abertura.

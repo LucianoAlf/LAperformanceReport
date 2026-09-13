@@ -28,6 +28,7 @@ function fixture({ falharPrepare = false, falharPublicar = false,
   const lotes = [];
   const timeline = [];
   const logs = [];
+  const governanca = [];
   const resgates = [];
   const porHash = new Map();
   let mid = 0;
@@ -76,21 +77,24 @@ function fixture({ falharPrepare = false, falharPublicar = false,
     },
     identidadeFn: async () => ({ identificado: true, nome: 'Fefê Teste' }),
     lancarFn: async (payload) => { lancamentos.push(payload); return { ok: true, valor: Number(payload.valor), forma: payload.forma, movimentacao_id: 'mov-1' }; },
+    buscarMovimentosFn: async () => ({ ok: true, items: [{ movimentacao_id: 'mov-1' }] }),
     lancarLoteFn: async (payload) => { lotes.push(payload); return { ok: true, lote_id: 'lote-1', movimentacoes: payload.itens.map((i, n) => ({ ...i, id: `m-${n}` })) }; },
     listarPreviewsAbertosFn: async () => abertos,
     log: (linha) => logs.push(JSON.parse(JSON.stringify(linha))),
+    governanceFn: async (_event, eventType, details) => { governanca.push({ eventType, details: { ...(details || {}) } }); return { ok: true }; },
     janelaMs,
   });
-  return { h, envios, ledger, lancamentos, lotes, timeline, logs, resgates };
+  return { h, envios, ledger, lancamentos, lotes, timeline, logs, resgates, governanca };
 }
 
 function evento(messageId, body, extra = {}) {
   return { chatId: CHAT, messageId, senderId: '5521999999999@c.us', senderPhone: '5521999999999',
-    body, hasMedia: false, timestamp: 1789160000, ...extra };
+    body, hasMedia: false, timestamp: 1789160000,
+    caixaGovernancaEpisode: { episode_id: 'ep1.teste.' + 'a'.repeat(64) }, ...extra };
 }
 
 test('caso real: rascunho duravel -> cartao 2x -> singular -> pode -> uma escrita', async () => {
-  const { h, envios, ledger, lancamentos, lotes, timeline, logs } = fixture();
+  const { h, envios, ledger, lancamentos, lotes, timeline, logs, governanca } = fixture();
   const inicio = 1_789_160_000_000;
   const primeira = evento('origem-1', 'Pagamento Beatriz R$ 590,00 passaporte', {
     caixaToolDecision: { intencao: 'lancamento_por_texto', aluno_nome: 'Beatriz Teste',
@@ -131,6 +135,13 @@ test('caso real: rascunho duravel -> cartao 2x -> singular -> pode -> uma escrit
   assert.equal(lancamentos[0].cartao_modalidade, 'credito');
   assert.equal(lancamentos[0].cartao_parcelas, 2);
   assert.equal(lancamentos[0].fatura_id, FATURA);
+  await new Promise((resolve) => setImmediate(resolve));
+  for (const tipo of ['preview_prepared', 'preview_sent', 'approval_observed',
+    'approval_consumed', 'write_applied', 'receipt_sent', 'readback_confirmed']) {
+    assert.equal(governanca.some((x) => x.eventType === tipo), true, `evento de governança ausente: ${tipo}`);
+  }
+  const recibo = governanca.find((x) => x.eventType === 'receipt_sent');
+  assert.equal(recibo.details.movement_ref, 'mov-1');
 
   await h.handle(evento('aprova-2', 'pode', { quotedMessageId: r2.previewId }), inicio + 3000);
   assert.equal(lancamentos.length, 1, 'redelivery/segundo pode nao duplica');
