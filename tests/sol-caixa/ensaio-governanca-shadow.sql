@@ -30,6 +30,14 @@ begin
   if coalesce((v_r->>'ok')::boolean,true) then raise exception 'campo bruto foi aceito'; end if;
 
   select public.sol_caixa_governanca_registrar_v1(jsonb_build_object(
+    'schema_version',1,'episode_id',v_ep,'event_key','evt1.k1.'||repeat('e',64),
+    'event_type','write_refused','occurred_at',now(),'unit_code','recreio',
+    'source','whatsapp_group','message_kind','text','key_id','k1',
+    'details',jsonb_build_object('reason_code','texto humano não pode atravessar')
+  )) into v_r;
+  if coalesce((v_r->>'ok')::boolean,true) then raise exception 'texto em valor permitido foi aceito'; end if;
+
+  select public.sol_caixa_governanca_registrar_v1(jsonb_build_object(
     'schema_version',1,'episode_id',v_ep,'event_key','evt1.k1.'||repeat('d',64),
     'event_type','redelivery_observed','occurred_at',now(),'unit_code','recreio',
     'source','whatsapp_group','message_kind','text','key_id','k1',

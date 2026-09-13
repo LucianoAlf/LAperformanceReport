@@ -32,6 +32,7 @@ const { criarInstrumento } = require('../../vps/la-hq/sol/runtime/caixa-governan
   await instrumento.record(a, 'tool_selected', {
     tool_name: 'caixa_preparar_lancamento', engine: 'agent_tools',
     preview_ref: 'PREVIEW-REAL', raw_text: entrada.body, phone: entrada.senderPhone,
+    reason_code: entrada.body,
   });
   await instrumento.record(a, 'receipt_sent', {
     receipt_ref: 'RECIBO-REAL', movement_ref: 'MOVIMENTO-REAL', outcome: 'ok',
@@ -48,6 +49,7 @@ const { criarInstrumento } = require('../../vps/la-hq/sol/runtime/caixa-governan
   assert(linhas.some((x) => x.event_type === 'redelivery_observed'));
   assert(linhas.some((x) => x.event_type === 'tool_selected'));
   assert(linhas.every((x) => !x.details || !('raw_text' in x.details)));
+  assert(linhas.some((x) => x.event_type === 'tool_selected' && x.details.reason_code === 'unknown'));
   assert(linhas.some((x) => x.details && /^ref1\.teste\.[0-9a-f]{64}$/.test(x.details.receipt_ref || '')));
   assert(chamadas.length >= 4, 'eventos remotos não foram emitidos');
 

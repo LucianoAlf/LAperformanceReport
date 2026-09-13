@@ -106,7 +106,12 @@ begin
           'terminal_state','readback_status','correlation_status','duplicate','preview_ref','approval_ref',
           'movement_ref','receipt_ref','readback_ref','tool_call_ref']) <> '{}'::jsonb
      or length(v_details::text) > 3000
-     or exists (select 1 from jsonb_each(v_details) e where jsonb_typeof(e.value) not in ('string','boolean')) then
+     or exists (select 1 from jsonb_each(v_details) e where jsonb_typeof(e.value) not in ('string','boolean'))
+     or exists (
+       select 1 from jsonb_each(v_details) e
+        where jsonb_typeof(e.value) = 'string'
+          and (e.value #>> '{}') !~ '^[a-z0-9_.-]{1,180}$'
+     ) then
     return jsonb_build_object('ok', false, 'motivo', 'details_proibidos');
   end if;
 

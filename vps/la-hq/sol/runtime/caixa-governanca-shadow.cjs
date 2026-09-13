@@ -37,6 +37,11 @@ function codigoSeguro(valor, fallback = 'unknown') {
   return s || fallback;
 }
 
+function tokenEstrito(valor, fallback = 'unknown') {
+  const s = String(valor || '').trim().toLowerCase();
+  return /^[a-z0-9_-]{1,80}$/.test(s) ? s : fallback;
+}
+
 function unidadeCodigo(valor) {
   const s = codigoSeguro(valor);
   if (s.includes('recreio')) return 'recreio';
@@ -119,13 +124,15 @@ function criarInstrumento(opcoes = {}) {
       } else if (chave === 'duplicate') {
         out[chave] = !!valor;
       } else if (chave === 'route') {
-        const v = codigoSeguro(valor); out[chave] = ROTAS.has(v) ? v : 'unknown';
+        const v = tokenEstrito(valor); out[chave] = ROTAS.has(v) ? v : 'unknown';
       } else if (chave === 'engine') {
-        const v = codigoSeguro(valor); out[chave] = MOTORES.has(v) ? v : 'unknown';
+        const v = tokenEstrito(valor); out[chave] = MOTORES.has(v) ? v : 'unknown';
       } else if (chave === 'outcome') {
-        const v = codigoSeguro(valor); out[chave] = RESULTADOS.has(v) ? v : 'inconclusive';
+        const v = tokenEstrito(valor); out[chave] = RESULTADOS.has(v) ? v : 'inconclusive';
       } else {
-        out[chave] = codigoSeguro(valor);
+        // Campos sem enum fechado continuam sendo tokens, nunca texto
+        // normalizado. Uma frase, e-mail ou telefone acidental vira unknown.
+        out[chave] = tokenEstrito(valor);
       }
     }
     return out;
