@@ -58,11 +58,18 @@ function criarInstrumento(opcoes = {}) {
   const logPath = opcoes.logPath || process.env.SOL_CAIXA_GOVERNANCA_LOG
     || path.join(process.env.HERMES_HOME || '/home/sol/.hermes', 'profiles', 'sol', 'caixa-ingestao', 'governanca-shadow.jsonl');
   const fetchFn = opcoes.fetchFn || global.fetch;
-  // Destino deliberadamente dedicado. Não há fallback para SUPABASE_URL/
-  // SERVICE_ROLE genéricos: uma variável ausente deve desligar o remoto, nunca
-  // apontar telemetria para o banco financeiro por acidente.
-  const remoteUrl = String(opcoes.remoteUrl || process.env.SOL_GOVERNANCA_SUPABASE_URL || '').replace(/\/$/, '');
-  const remoteKey = String(opcoes.remoteKey || process.env.SOL_GOVERNANCA_SERVICE_ROLE_KEY || '');
+  // Destino deliberadamente dedicado. A rota preferida reutiliza o escritor
+  // estreito do control plane da Sol (anon key + token opaco); service_role
+  // fica apenas como compatibilidade explícita. Nunca há fallback para as
+  // variáveis genéricas do banco financeiro.
+  const remoteUrl = String(opcoes.remoteUrl
+    || process.env.SOL_GOVERNANCE_SUPABASE_URL
+    || process.env.SOL_GOVERNANCA_SUPABASE_URL || '').replace(/\/$/, '');
+  const remoteKey = String(opcoes.remoteKey
+    || process.env.SOL_GOVERNANCE_SUPABASE_ANON_KEY
+    || process.env.SOL_GOVERNANCA_SERVICE_ROLE_KEY || '');
+  const remoteTokenId = String(opcoes.remoteTokenId || process.env.SOL_GOVERNANCE_WRITER_TOKEN_ID || '');
+  const remoteWriterToken = String(opcoes.remoteWriterToken || process.env.SOL_GOVERNANCE_WRITER_TOKEN || '');
   const maxLogBytes = Math.max(1024 * 1024, Number(opcoes.maxLogBytes || process.env.SOL_CAIXA_GOVERNANCA_LOG_MAX_BYTES || 10 * 1024 * 1024));
   const keepLogFiles = Math.max(1, Math.min(30, Number(opcoes.keepLogFiles || process.env.SOL_CAIXA_GOVERNANCA_LOG_KEEP || 7)));
   const vistos = new Set();
@@ -100,17 +107,27 @@ function criarInstrumento(opcoes = {}) {
   }
 
   async function enviarRemoto(payload) {
-    if (!remoteEnabled || !remoteUrl || !remoteKey || typeof fetchFn !== 'function') return { ok: false, skipped: true };
+    if (!remoteEnabled) return { ok: false, skipped: true, reason: 'remote_disabled' };
+    if (!remoteUrl || !remoteKey || typeof fetchFn !== 'function') {
+      return { ok: false, skipped: true, reason: 'remote_credentials_missing' };
+    }
+    const escritorEstreito = !!(remoteTokenId && remoteWriterToken);
     try {
-      const r = await fetchFn(`${remoteUrl}/rest/v1/rpc/sol_caixa_governanca_registrar_v1`, {
+      const endpoint = escritorEstreito
+        ? 'sol_caixa_governanca_registrar_v2'
+        : 'sol_caixa_governanca_registrar_v1';
+      const body = escritorEstreito
+        ? { p_token_id: remoteTokenId, p_writer_token: remoteWriterToken, p_payload: payload }
+        : { p_payload: payload };
+      const r = await fetchFn(`${remoteUrl}/rest/v1/rpc/${endpoint}`, {
         method: 'POST',
         headers: { apikey: remoteKey, Authorization: `Bearer ${remoteKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ p_payload: payload }),
+        body: JSON.stringify(body),
       });
-      if (!r.ok) return { ok: false, status: r.status };
+      if (!r.ok) return { ok: false, status: r.status, reason: 'remote_write_failed' };
       return { ok: true };
     } catch (_) {
-      return { ok: false, status: 0 };
+      return { ok: false, status: 0, reason: 'remote_write_failed' };
     }
   }
 
@@ -160,7 +177,15 @@ function criarInstrumento(opcoes = {}) {
     if (!enabled || !episode || !segredoValido) return Promise.resolve({ ok: false, disabled: !enabled, missing_secret: enabled && !segredoValido });
     const payload = payloadEvento(episode, eventType, detalhes);
     const local = appendLocal(payload);
-    return enviarRemoto(payload).then((remote) => ({ ok: local || remote.ok, local, remote }));
+    return enviarRemoto(payload).then((remote) => {
+      if (remoteEnabled && !remote.ok) {
+        appendLocal(payloadEvento(episode, 'instrument_failure', {
+          reason_code: remote.reason || 'remote_write_failed',
+          engine: 'bridge', outcome: 'error',
+        }));
+      }
+      return { ok: local || remote.ok, local, remote };
+    });
   }
 
   function beginEpisode({ chatId, messageId, unitName, hasMedia, mediaType, source = 'whatsapp_group' } = {}) {

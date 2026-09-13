@@ -14,8 +14,9 @@ const { criarInstrumento } = require('../../vps/la-hq/sol/runtime/caixa-governan
   const chamadas = [];
   const instrumento = criarInstrumento({
     enabled: true, remoteEnabled: true, secret, keyId: 'teste', logPath: log,
-    remoteUrl: 'https://sol.invalid', remoteKey: 'chave-de-ensaio',
-    fetchFn: async (_url, opts) => { chamadas.push(JSON.parse(opts.body).p_payload); return { ok: true, status: 200 }; },
+    remoteUrl: 'https://sol.invalid', remoteKey: 'chave-publicavel-de-ensaio',
+    remoteTokenId: 'writer-ensaio', remoteWriterToken: 'token-escritor-de-ensaio',
+    fetchFn: async (url, opts) => { chamadas.push({ url, body: JSON.parse(opts.body) }); return { ok: true, status: 200 }; },
   });
 
   const entrada = {
@@ -52,6 +53,24 @@ const { criarInstrumento } = require('../../vps/la-hq/sol/runtime/caixa-governan
   assert(linhas.some((x) => x.event_type === 'tool_selected' && x.details.reason_code === 'unknown'));
   assert(linhas.some((x) => x.details && /^ref1\.teste\.[0-9a-f]{64}$/.test(x.details.receipt_ref || '')));
   assert(chamadas.length >= 4, 'eventos remotos não foram emitidos');
+  assert(chamadas.every((x) => x.url.endsWith('/rpc/sol_caixa_governanca_registrar_v2')));
+  assert(chamadas.every((x) => x.body.p_token_id === 'writer-ensaio'));
+  assert(chamadas.every((x) => x.body.p_writer_token === 'token-escritor-de-ensaio'));
+  assert(chamadas.every((x) => x.body.p_payload && !('raw_text' in (x.body.p_payload.details || {}))));
+
+  const falhaLog = path.join(dir, 'remote-falhou.jsonl');
+  const falho = criarInstrumento({
+    enabled: true, remoteEnabled: true, secret, keyId: 'teste', logPath: falhaLog,
+    remoteUrl: 'https://sol.invalid', remoteKey: 'publicavel',
+    remoteTokenId: 'writer-ensaio', remoteWriterToken: 'token-escritor-de-ensaio',
+    fetchFn: async () => ({ ok: false, status: 503 }),
+  });
+  const epFalho = falho.beginEpisode({ ...entrada, messageId: 'MENSAGEM-FALHA' });
+  await falho.record(epFalho, 'route_decided', { route: 'legacy', engine: 'legacy_parser' });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const linhasFalha = fs.readFileSync(falhaLog, 'utf8').trim().split('\n').map(JSON.parse);
+  assert(linhasFalha.some((x) => x.event_type === 'instrument_failure'
+    && x.details.reason_code === 'remote_write_failed'));
 
   const semSegredoLog = path.join(dir, 'sem-segredo.jsonl');
   const semSegredo = criarInstrumento({ enabled: true, secret: '', logPath: semSegredoLog });
