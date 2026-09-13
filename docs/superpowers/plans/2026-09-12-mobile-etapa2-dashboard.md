@@ -24,6 +24,13 @@
 - **Nada de PWA:** sem manifest, sem service worker, sem prompt de instalação.
 - **Branch `feat/versao-mobile`, local.** Sem push, sem merge na main.
 - Todo arquivo de teste novo entra no script `test` do `package.json` no mesmo commit.
+- **`npm run build` não confere tipo** (é `vite build` puro, `noUnusedLocals` desligado), e
+  **`npx tsc -p tsconfig.ci.json` tem 336 erros PRÉ-EXISTENTES**. O gate não é "tsc limpo" e sim
+  **saída idêntica antes/depois**, sem erro novo nos arquivos que você tocou.
+- **`npm test` não roda direto**: o `pretest` deste repo exige Docker e o daemon está parado.
+  Execute o comando da chave `"test"` do `package.json` diretamente, sem `pretest`/`posttest`.
+- A suíte tem **1 falha pré-existente** (`faturasAlunosPage`), alheia a este plano. 607 pass / 1 fail
+  é o estado esperado; qualquer falha a mais é sua.
 
 ---
 
@@ -131,7 +138,7 @@ const {
 
    ⚠️ **Limpe os imports que ficaram órfãos** no `DashboardPage`: `useState`, `useEffect`,
    `useMemo`, `useOutletContext`, `useAuth`, `supabase` e os helpers que só o fetch usava saem
-   junto com a lógica. Import não usado quebra o `npm run build` por `noUnusedLocals` — e é o
+   junto com a lógica. Import não usado quebra o `npx tsc -p tsconfig.ci.json && npm run build` por `noUnusedLocals` — e é o
    sinal mais confiável de que algo ficou para trás por engano.
 
 5. **Não toque em nada a partir do `if (loading) {`.** Se o `git diff` mostrar qualquer hunk abaixo dessa linha, a extração está errada — refaça.
@@ -144,7 +151,7 @@ const {
 
 ```
 node --test tests/dashboardDadosContrato.test.mjs
-npm run build
+npx tsc -p tsconfig.ci.json && npm run build
 ```
 Esperado: PASS nos 3 testes; build sem erro de tipo.
 
@@ -250,7 +257,7 @@ const [tooltipAberto, setTooltipAberto] = useState(false);
 
 ```
 node --test tests/kpiCardTooltipToque.test.mjs
-npm run build
+npx tsc -p tsconfig.ci.json && npm run build
 ```
 
 - [ ] **Step 5: Ligar no `npm test` e commitar**
@@ -671,7 +678,7 @@ faixa de Alunos, Agenda e mais 15) já está lá e é justamente o caso que se r
 
 ```
 npm test
-npm run build
+npx tsc -p tsconfig.ci.json && npm run build
 ```
 Esperado: toda a suíte passando (incluindo `mobileAvisoNaoOtimizado`, que prova que os
 outros 17 módulos continuam com a faixa) e build sem erro.
