@@ -457,6 +457,26 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
 
         if (matriculasError) throw matriculasError;
 
+        // FONTE ÚNICA (13/09/2026): tickets e faturamento das novas matrículas vêm da MESMA RPC
+        // que o relatório diário, o mensal, o de matrículas e a Mila leem — REGRAS-DE-NEGOCIO §6.6
+        // (o 2º curso do mesmo dia soma no numerador e não cria denominador). Antes o card tirava
+        // a média por linha canônica, e o 2º curso ficava fora (Recreio/set: 407,14 x 464,29).
+        // A base canônica local segue servindo só a LISTA para os gráficos por curso/canal/idade.
+        const proximoMes = new Date(ano, mesFinal, 1); // 1º dia do mês seguinte a mesFinal
+        const ateExclusivo = `${proximoMes.getFullYear()}-${String(proximoMes.getMonth() + 1).padStart(2, '0')}-01`;
+        const { data: resumoMatriculasData, error: resumoMatriculasError } = await supabase.rpc(
+          'get_matriculas_comerciais_resumo_v1',
+          {
+            p_unidade_id: unidade === 'todos' ? null : unidade,
+            p_de: startDate,
+            p_ate_exclusivo: ateExclusivo,
+            p_criado_ate: null,
+          },
+        );
+        if (resumoMatriculasError) throw resumoMatriculasError;
+        const resumoMatriculas = (resumoMatriculasData || {}) as Record<string, unknown>;
+        const numeroDoResumo = (chave: string) => Number(resumoMatriculas[chave]) || 0;
+
         const leads = leadsData || [];
         const matriculas = matriculasData || [];
         const financeiroMatriculas = calcularFinanceiroMatriculasCanonicas(matriculas);
@@ -573,14 +593,13 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           motivosNaoMatMap.set(motivo, (motivosNaoMatMap.get(motivo) || 0) + (l.quantidade || 1));
         });
 
-        // Faturamento - fonte canonica operacional: alunos.data_matricula
-        const {
-          matriculasComPassaporte,
-          faturamentoPassaportes,
-          faturamentoParcelas,
-          ticketMedioPassaporte,
-          ticketMedioParcela,
-        } = financeiroMatriculas;
+        // Faturamento e tickets — get_matriculas_comerciais_resumo_v1 (REGRAS-DE-NEGOCIO §6.6),
+        // os MESMOS números do relatório diário e da Mila para o mesmo período.
+        const faturamentoPassaportes = numeroDoResumo('total_passaportes');
+        const faturamentoParcelas = numeroDoResumo('total_parcelas');
+        const ticketMedioPassaporte = numeroDoResumo('ticket_medio_passaporte');
+        const ticketMedioParcela = numeroDoResumo('ticket_medio_parcela');
+        const qtdPassaportesVendidos = numeroDoResumo('qtd_passaportes');
 
         setDados({
           // Leads
@@ -634,7 +653,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           ],
           ticket_medio_passaporte: ticketMedioPassaporte,
           ticket_medio_parcela: ticketMedioParcela,
-          qtd_passaportes_vendidos: matriculasComPassaporte.length,
+          qtd_passaportes_vendidos: qtdPassaportesVendidos,
           motivos_nao_matricula: Array.from(motivosNaoMatMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
           
           // Faturamento
