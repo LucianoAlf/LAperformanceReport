@@ -10,6 +10,16 @@ const cartao = readFileSync(new URL('../src/mobile/telas/dashboard/CartaoUnidade
 const alertas = readFileSync(new URL('../src/mobile/telas/dashboard/ListaAlertas.tsx', import.meta.url), 'utf8')
   .replace(/\r\n/g, '\n');
 
+// A fonte dos dois mapas e o DESKTOP. Reescreve-los aqui seria uma TERCEIRA
+// versao da regra: mudar a cor de `critico` no desktop deixaria a suite verde
+// com as duas telas divergindo — que e exatamente o que este arquivo existe
+// para impedir. Mesmo padrao dos testes dos 13 KPIs e dos 4 modais
+// (tests/mobileDashboardTela.test.mjs).
+const desktop = readFileSync(
+  new URL('../src/components/App/Dashboard/DashboardPage.tsx', import.meta.url),
+  'utf8',
+).replace(/\r\n/g, '\n');
+
 test('a tabela de 5 colunas virou cartao — sem <table> no mobile', () => {
   assert.doesNotMatch(cartao, /<table|<thead|<tbody/, 'tabela do desktop vazou para o mobile');
 });
@@ -58,69 +68,93 @@ test('cada alerta mostra titulo (descricao) e detalhe — os mesmos 2 campos do 
   assert.match(alertas, /\{alerta\.detalhe\}/, 'alerta.detalhe nao e renderizado (subtitulo do card)');
 });
 
-// Extrai o VALOR do objeto associado a uma chave especifica de
-// `severidadeConfig` (ex.: "critico: { dot: 'bg-red-500', text: 'text-red-400' }"
-// devolve "dot: 'bg-red-500', text: 'text-red-400'"). Isolar por chave — em
-// vez de casar o objeto inteiro e procurar as 3 cores em qualquer lugar dele —
-// e o que distingue "a cor certa" de "as cores certas, na severidade errada":
-// um regex que so verifica presenca das 3 palavras no bloco inteiro passaria
-// com as cores TROCADAS entre severidades (critico:blue, atencao:red,
-// informativo:amber), que e uma inversao real de urgencia visual.
-function extrairBlocoSeveridade(fonteTxt, chave) {
-  const re = new RegExp(`\\b${chave}:\\s*\\{([^}]*)\\}`);
+// Extrai o corpo de `const <nome>... = { ... };`.
+//
+// O `[^=]*` pula a anotacao de tipo do mobile
+// (`: Record<Alerta['severidade'], { dot: string; text: string }>`), que tem
+// chaves proprias; o fecho e o primeiro `};` — entrada interna fecha com `},`,
+// nunca com `};`. As chaves sao escritas de forma diferente nos dois arquivos
+// (o desktop cita 'CONTRATO_VENCENDO', o mobile nao), entao a aspa e opcional.
+const RE_SEVERIDADE = /severidadeConfig[^=]*=\s*\{([\s\S]*?)\}\s*;/;
+const RE_TIPO_ICONE = /tipoIcone[^=]*=\s*\{([\s\S]*?)\}\s*;/;
+const RE_FALLBACK_ICONE = /tipoIcone\[alerta\.tipo_alerta\]\s*\|\|\s*'([^']*)'/;
+
+function extrairCorpo(fonteTxt, re, nome, onde) {
   const m = fonteTxt.match(re);
-  return m ? m[1] : null;
+  assert.ok(m, `nao achei o mapa ${nome} em ${onde} — a forma do mapa mudou`);
+  return m[1];
 }
 
-test('cor por severidade repete a semantica do desktop — cada severidade com A SUA cor, nao so as 3 cores presentes em algum lugar do objeto', () => {
-  const critico = extrairBlocoSeveridade(alertas, 'critico');
-  const atencao = extrairBlocoSeveridade(alertas, 'atencao');
-  const informativo = extrairBlocoSeveridade(alertas, 'informativo');
-  assert.ok(critico, 'nao achei o bloco de config da severidade critico');
-  assert.ok(atencao, 'nao achei o bloco de config da severidade atencao');
-  assert.ok(informativo, 'nao achei o bloco de config da severidade informativo');
-
-  assert.match(critico, /red/, 'critico nao usa a familia de cor vermelha do desktop');
-  assert.doesNotMatch(critico, /amber|blue/, 'critico usa a cor de outra severidade — inversao de urgencia visual');
-
-  assert.match(atencao, /amber/, 'atencao nao usa a familia de cor amber do desktop');
-  assert.doesNotMatch(atencao, /red|blue/, 'atencao usa a cor de outra severidade — inversao de urgencia visual');
-
-  assert.match(informativo, /blue/, 'informativo nao usa a familia de cor azul do desktop');
-  assert.doesNotMatch(informativo, /red|amber/, 'informativo usa a cor de outra severidade — inversao de urgencia visual');
-});
-
-// Mesmo principio acima, para o mapa emoji-por-tipo: cada uma das 8 chaves do
-// desktop (DashboardPage.tsx:328-337) precisa apontar para o SEU proprio
-// emoji — nao apenas para "um emoji qualquer do conjunto", que passaria com
-// os 8 pares embaralhados entre si.
-function extrairEmojiDoTipo(fonteTxt, chave) {
-  const re = new RegExp(`${chave}:\\s*'([^']*)'`);
-  const m = fonteTxt.match(re);
-  return m ? m[1] : null;
-}
-
-const EMOJI_POR_TIPO_NO_DESKTOP = {
-  CONTRATO_VENCENDO: '📋',
-  RENOVACOES_PENDENTES: '🔄',
-  CONVERSAO_BAIXA: '📉',
-  INADIMPLENCIA_ALTA: '💰',
-  TICKET_CAINDO: '🎫',
-  PROFESSOR_TURMA_BAIXA: '👨‍🏫',
-  CHURN_ALTO: '📤',
-  META_EM_RISCO: '🎯',
-};
-
-test('icone por tipo de alerta repete o mapa do desktop, com o mesmo fallback ⚠️', () => {
-  assert.match(alertas, /tipoIcone\[alerta\.tipo_alerta\]/, 'o icone nao e resolvido por alerta.tipo_alerta');
-  assert.match(alertas, /\|\|\s*'⚠️'/, 'sumiu o fallback ⚠️ para tipo_alerta desconhecido (mesmo do desktop)');
-});
-
-test('cada uma das 8 chaves de tipoIcone aponta para o SEU emoji do desktop — nao emojis embaralhados entre tipos', () => {
-  for (const [chave, emojiEsperado] of Object.entries(EMOJI_POR_TIPO_NO_DESKTOP)) {
-    const emojiReal = extrairEmojiDoTipo(alertas, chave);
-    assert.equal(emojiReal, emojiEsperado, `a chave ${chave} nao aponta para o emoji ${emojiEsperado} do desktop`);
+function mapaDeObjetos(fonteTxt, onde) {
+  const corpo = extrairCorpo(fonteTxt, RE_SEVERIDADE, 'severidadeConfig', onde);
+  const saida = {};
+  for (const [, chave, campos] of corpo.matchAll(/'?(\w+)'?:\s*\{([^}]*)\}/g)) {
+    const obj = {};
+    for (const [, campo, valor] of campos.matchAll(/(\w+):\s*'([^']*)'/g)) obj[campo] = valor;
+    saida[chave] = obj;
   }
+  // Extracao que devolve vazio tem de FALHAR ALTO: dois mapas vazios comparados
+  // entre si passariam com ZERO pares conferidos — que e a forma de um teste
+  // "verde" que nao verifica nada.
+  assert.ok(Object.keys(saida).length > 0, `extrai ZERO severidades em ${onde}`);
+  return saida;
+}
+
+function mapaDeStrings(fonteTxt, onde) {
+  const corpo = extrairCorpo(fonteTxt, RE_TIPO_ICONE, 'tipoIcone', onde);
+  const saida = {};
+  for (const [, chave, valor] of corpo.matchAll(/'?([A-Z_]+)'?:\s*'([^']*)'/g)) saida[chave] = valor;
+  assert.ok(Object.keys(saida).length > 0, `extrai ZERO tipos de alerta em ${onde}`);
+  return saida;
+}
+
+test('cor por severidade sai do DESKTOP — mudanca la avisa aqui, em vez de aprovar duas versoes', () => {
+  const noDesktop = mapaDeObjetos(desktop, 'DashboardPage');
+  const noMobile = mapaDeObjetos(alertas, 'ListaAlertas');
+
+  // A forma esperada do lado do desktop, declarada: se ela mudar, o teste
+  // reprova dizendo o que mudou, em vez de passar comparando menos.
+  assert.deepEqual(
+    Object.keys(noDesktop).sort(),
+    ['atencao', 'critico', 'informativo'],
+    'o desktop mudou o conjunto de severidades — resincronizar as duas telas',
+  );
+  assert.deepEqual(Object.keys(noMobile).sort(), Object.keys(noDesktop).sort());
+
+  // O mobile nao usa bg/border (o cartao dele tem fundo neutro); os campos
+  // COMPARTILHADOS — os que pintam o ponto e o texto — tem de ser identicos.
+  for (const severidade of Object.keys(noDesktop)) {
+    for (const campo of ['dot', 'text']) {
+      assert.ok(
+        noDesktop[severidade][campo],
+        `o desktop nao tem ${severidade}.${campo} — a forma do mapa mudou`,
+      );
+      assert.equal(
+        noMobile[severidade][campo],
+        noDesktop[severidade][campo],
+        `${severidade}.${campo} diverge do desktop`,
+      );
+    }
+  }
+});
+
+test('o fallback de icone e o mesmo do desktop', () => {
+  const noDesktop = desktop.match(RE_FALLBACK_ICONE);
+  assert.ok(noDesktop, 'nao achei o fallback de icone no desktop — a forma mudou');
+  const noMobile = alertas.match(RE_FALLBACK_ICONE);
+  assert.ok(noMobile, 'sumiu o fallback para tipo_alerta desconhecido');
+  assert.equal(noMobile[1], noDesktop[1], 'o fallback de icone diverge do desktop');
+});
+
+test('cada chave de tipoIcone aponta para o emoji que o DESKTOP usa — mapa lido de la, nao reescrito aqui', () => {
+  const noDesktop = mapaDeStrings(desktop, 'DashboardPage');
+  const noMobile = mapaDeStrings(alertas, 'ListaAlertas');
+  assert.equal(
+    Object.keys(noDesktop).length,
+    8,
+    `o desktop mudou de numero de tipos de alerta (${Object.keys(noDesktop).length}) — reavaliar a tela mobile`,
+  );
+  assert.deepEqual(noMobile, noDesktop);
 });
 
 test('badge de quantidade aparece quando quantidade > 1 — mesma condicao do desktop (DashboardPage.tsx:349-353)', () => {
