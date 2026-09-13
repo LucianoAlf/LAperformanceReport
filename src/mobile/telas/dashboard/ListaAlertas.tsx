@@ -55,8 +55,20 @@ export function ListaAlertas({ alertas }: { alertas: Alerta[] }) {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-white">{alerta.descricao}</p>
                 <p className={`mt-1 text-xs ${config.text}`}>{alerta.detalhe}</p>
+                {/* Sem prop de "unidade selecionada" nesta interface (locked
+                    para a Task 5), mostrar sempre — na visao de uma unidade
+                    so e redundante, na consolidada e a unica pista de qual
+                    unidade gerou o alerta (DashboardPage.tsx:358-360). */}
+                <p className="mt-1 text-xs text-gray-500">{alerta.unidade_nome}</p>
               </div>
-              <span className={`mt-1 h-2 w-2 flex-shrink-0 rounded-full ${config.dot}`} />
+              <div className="flex flex-shrink-0 flex-col items-end gap-1">
+                {alerta.quantidade > 1 && (
+                  <span className={`text-xs font-bold ${config.text} bg-slate-900/50 px-2 py-0.5 rounded-full`}>
+                    {alerta.quantidade}
+                  </span>
+                )}
+                <span className={`mt-1 h-2 w-2 flex-shrink-0 rounded-full ${config.dot}`} />
+              </div>
             </div>
           );
         })}

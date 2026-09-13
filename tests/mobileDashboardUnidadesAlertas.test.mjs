@@ -58,24 +58,81 @@ test('cada alerta mostra titulo (descricao) e detalhe — os mesmos 2 campos do 
   assert.match(alertas, /\{alerta\.detalhe\}/, 'alerta.detalhe nao e renderizado (subtitulo do card)');
 });
 
-test('cor por severidade repete a semantica do desktop — 3 severidades, 3 cores distintas', () => {
-  // O desktop (DashboardPage.tsx) usa red/amber/blue para critico/atencao/
-  // informativo. Checar so "existe uma classe de cor" passaria com as 3
-  // severidades pintadas da MESMA cor — o que muda a leitura visual entre as
-  // duas telas (a regra que o brief da task pede para nao quebrar).
-  const configMatch = alertas.match(/critico:[\s\S]*?atencao:[\s\S]*?informativo:[\s\S]{0,200}/);
-  assert.ok(configMatch, 'nao achei um mapa de config com as 3 chaves de severidade, na ordem critico/atencao/informativo');
-  const bloco = configMatch[0];
-  assert.match(bloco, /red/, 'severidade critico nao usa a familia de cor vermelha do desktop');
-  assert.match(bloco, /amber/, 'severidade atencao nao usa a familia de cor amber do desktop');
-  assert.match(bloco, /blue/, 'severidade informativo nao usa a familia de cor azul do desktop');
+// Extrai o VALOR do objeto associado a uma chave especifica de
+// `severidadeConfig` (ex.: "critico: { dot: 'bg-red-500', text: 'text-red-400' }"
+// devolve "dot: 'bg-red-500', text: 'text-red-400'"). Isolar por chave — em
+// vez de casar o objeto inteiro e procurar as 3 cores em qualquer lugar dele —
+// e o que distingue "a cor certa" de "as cores certas, na severidade errada":
+// um regex que so verifica presenca das 3 palavras no bloco inteiro passaria
+// com as cores TROCADAS entre severidades (critico:blue, atencao:red,
+// informativo:amber), que e uma inversao real de urgencia visual.
+function extrairBlocoSeveridade(fonteTxt, chave) {
+  const re = new RegExp(`\\b${chave}:\\s*\\{([^}]*)\\}`);
+  const m = fonteTxt.match(re);
+  return m ? m[1] : null;
+}
+
+test('cor por severidade repete a semantica do desktop — cada severidade com A SUA cor, nao so as 3 cores presentes em algum lugar do objeto', () => {
+  const critico = extrairBlocoSeveridade(alertas, 'critico');
+  const atencao = extrairBlocoSeveridade(alertas, 'atencao');
+  const informativo = extrairBlocoSeveridade(alertas, 'informativo');
+  assert.ok(critico, 'nao achei o bloco de config da severidade critico');
+  assert.ok(atencao, 'nao achei o bloco de config da severidade atencao');
+  assert.ok(informativo, 'nao achei o bloco de config da severidade informativo');
+
+  assert.match(critico, /red/, 'critico nao usa a familia de cor vermelha do desktop');
+  assert.doesNotMatch(critico, /amber|blue/, 'critico usa a cor de outra severidade — inversao de urgencia visual');
+
+  assert.match(atencao, /amber/, 'atencao nao usa a familia de cor amber do desktop');
+  assert.doesNotMatch(atencao, /red|blue/, 'atencao usa a cor de outra severidade — inversao de urgencia visual');
+
+  assert.match(informativo, /blue/, 'informativo nao usa a familia de cor azul do desktop');
+  assert.doesNotMatch(informativo, /red|amber/, 'informativo usa a cor de outra severidade — inversao de urgencia visual');
 });
 
+// Mesmo principio acima, para o mapa emoji-por-tipo: cada uma das 8 chaves do
+// desktop (DashboardPage.tsx:328-337) precisa apontar para o SEU proprio
+// emoji — nao apenas para "um emoji qualquer do conjunto", que passaria com
+// os 8 pares embaralhados entre si.
+function extrairEmojiDoTipo(fonteTxt, chave) {
+  const re = new RegExp(`${chave}:\\s*'([^']*)'`);
+  const m = fonteTxt.match(re);
+  return m ? m[1] : null;
+}
+
+const EMOJI_POR_TIPO_NO_DESKTOP = {
+  CONTRATO_VENCENDO: '📋',
+  RENOVACOES_PENDENTES: '🔄',
+  CONVERSAO_BAIXA: '📉',
+  INADIMPLENCIA_ALTA: '💰',
+  TICKET_CAINDO: '🎫',
+  PROFESSOR_TURMA_BAIXA: '👨‍🏫',
+  CHURN_ALTO: '📤',
+  META_EM_RISCO: '🎯',
+};
+
 test('icone por tipo de alerta repete o mapa do desktop, com o mesmo fallback ⚠️', () => {
-  // Igual ao teste de cor acima: sem checar o FALLBACK, uma implementacao que
-  // sempre mostra o mesmo emoji fixo (ignorando tipo_alerta) passaria por um
-  // assert.match solto em "tipo_alerta" — aqui a expressao de lookup e o
-  // fallback default sao exigidos juntos.
   assert.match(alertas, /tipoIcone\[alerta\.tipo_alerta\]/, 'o icone nao e resolvido por alerta.tipo_alerta');
   assert.match(alertas, /\|\|\s*'⚠️'/, 'sumiu o fallback ⚠️ para tipo_alerta desconhecido (mesmo do desktop)');
+});
+
+test('cada uma das 8 chaves de tipoIcone aponta para o SEU emoji do desktop — nao emojis embaralhados entre tipos', () => {
+  for (const [chave, emojiEsperado] of Object.entries(EMOJI_POR_TIPO_NO_DESKTOP)) {
+    const emojiReal = extrairEmojiDoTipo(alertas, chave);
+    assert.equal(emojiReal, emojiEsperado, `a chave ${chave} nao aponta para o emoji ${emojiEsperado} do desktop`);
+  }
+});
+
+test('badge de quantidade aparece quando quantidade > 1 — mesma condicao do desktop (DashboardPage.tsx:349-353)', () => {
+  // Sem badge de quantidade, um alerta repetido (ex.: 5 contratos vencendo)
+  // parece um unico caso isolado — perda de informacao real, nao so estetica.
+  assert.match(
+    alertas,
+    /alerta\.quantidade > 1[\s\S]{0,200}\{alerta\.quantidade\}/,
+    'nao achei o badge condicional de quantidade (quantidade > 1 seguido do valor renderizado)'
+  );
+});
+
+test('nome da unidade aparece em cada alerta — sem ele, a visao consolidada nao diz de qual unidade e o alerta (DashboardPage.tsx:358-360)', () => {
+  assert.match(alertas, /\{alerta\.unidade_nome\}/, 'alerta.unidade_nome nao e renderizado');
 });
