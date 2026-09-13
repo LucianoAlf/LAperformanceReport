@@ -330,12 +330,22 @@ async function classificar(
  * linha de erro na tabela para dizer qual era. Por isso o log de erro tem
  * função própria, com o campo sempre preenchido.
  */
+// Nome de contato do WhatsApp pode ser só emoji ("🙏😘") — vira o "quem" do sinal e
+// chega assim na pauta da consultora (caso real, Recreio 13/09). Sem letra não é nome:
+// cai para "Contato sem nome (final NNNN)", que ainda deixa a pessoa localizável.
+function nomeExibivel(nome: string | null | undefined, telefone: string | null | undefined): string {
+  const n = String(nome ?? "").trim();
+  if (/\p{L}/u.test(n)) return n;
+  const digitos = String(telefone ?? "").replace(/\D/g, "");
+  return digitos.length >= 4 ? `Contato sem nome (final ${digitos.slice(-4)})` : "Contato sem nome";
+}
+
 async function logErro(sb: SupabaseClient, c: Candidato, erro: string) {
   await sb.from("automacao_log").insert({
     evento: "mapa_sinais",
     acao: "extrator_conversa",
     status: "erro",
-    aluno_nome: c.contato_nome ?? "(contato sem nome)",
+    aluno_nome: nomeExibivel(c.contato_nome, c.telefone),
     unidade_nome: c.unidade,
     detalhes: { conversa_id: c.conversa_id, inbox: c.inbox_nome, erro },
   });
@@ -545,7 +555,7 @@ serve(async (req) => {
       ),
       unidade_nome: c.unidade,
       // NOT NULL na tabela — o fallback não é enfeite
-      aluno_nome: ident?.nome ?? c.contato_nome ?? "(contato sem nome)",
+      aluno_nome: nomeExibivel(ident?.nome ?? c.contato_nome, c.telefone),
       detalhes: {
         conversa_id: c.conversa_id,
         inbox: c.inbox_nome,
@@ -606,7 +616,7 @@ serve(async (req) => {
       .select("severidade_padrao, orientacao_padrao, versao, lastro")
       .eq("codigo", d.regra_codigo).maybeSingle();
 
-    const contexto = (ident.nome ?? c.contato_nome ?? "Contato") + " — " +
+    const contexto = nomeExibivel(ident.nome ?? c.contato_nome, c.telefone) + " — " +
       v.resumo + " Escreveu há " + c.horas_sem_resposta +
       "h e ninguém respondeu: \"" + v.trecho_chave + "\"";
 

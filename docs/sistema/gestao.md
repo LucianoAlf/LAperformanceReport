@@ -27,7 +27,7 @@
 ## Gestão Mensal (`/app/gestao-mensal`)
 Orquestrador `GestaoMensal/GestaoMensalPage.tsx`. Abas: **Gestão**, **Comercial**, **Professores**.
 - **Gestão (`TabGestao.tsx`):** hook `useMetasKPI`, `useCompetenciaMensalStatus`, `fetchKPIsAlunosCanonicos`. **RPC:** `recalcular_dados_mensais`. Tabelas: `alunos`, `movimentacoes_admin`, `dados_mensais`, `motivos_saida`.
-- **Comercial (`TabComercialNew.tsx`):** `fetchComercialOperacionalResumoV2`, `fetchExperimentaisDiagnosticoComercialV2`. RPCs: nenhuma direta. Tabelas: `leads`, `alunos`, `dados_mensais`.
+- **Comercial (`TabComercialNew.tsx`):** `fetchComercialOperacionalResumoV2`, `fetchExperimentaisDiagnosticoComercialV2`. RPCs: `get_matriculas_comerciais_resumo_v1` (desde 14/09/2026 — tickets, faturamento e passaportes vendidos do período, pela mesma regra §6.6 e mesma função do relatório diário e da Mila; a base local `calcularFinanceiroMatriculasCanonicas` só alimenta a lista dos gráficos). Tabelas: `leads`, `alunos`, `dados_mensais`.
 - **Professores (`TabProfessoresNew.tsx`):** **RPCs** `get_experimentais_professor_canonicos_v1`, `get_health_score_professor_v3_performance`. O resumo V3 alterna entre mês e ciclos `Mar-Abr-Mai`, `Jun-Jul-Ago`, `Set-Out-Nov`, `Dez-Jan-Fev`; o ciclo é a leitura principal e rankings ficam reservados ao fechamento oficial comparável. As views V2 permanecem somente para indicadores operacionais ainda não migrados e rollback controlado.
 - **Modal Permanência (`ModalPermanenciaDetalhe.tsx`):** **RPC** `get_historico_ltv`.
 

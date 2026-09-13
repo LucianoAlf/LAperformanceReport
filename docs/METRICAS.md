@@ -496,9 +496,14 @@ individual + vínculo (`denominador_taxa_exp_mat` da conciliação v2), que é o
 denominador da taxa experimental→matrícula e aparece como linha própria
 ("Presença + vínculo confirmados") no diário e no mensal. Mês fechado lê o
 snapshot; o builder mensal publica `resumo.experimentais` (status operacional)
-e `resumo.experimentais_confirmadas`. Agosto/2026 foi retificado (v3 nas 3
-unidades) só nessa definição — lista e tickets ficaram como a foto de 01/09,
-porque uma retificação corrige a definição, não re-fotografa o cadastro.
+e `resumo.experimentais_confirmadas`. Junho, julho e agosto/2026 foram
+retificados (append-only; ago v3, jun/jul v3 via
+`retificar_experimentais_status_operacional_v1`) só nessa definição — lista e
+tickets ficaram como a foto do fechamento, porque uma retificação corrige a
+definição, não re-fotografa o cadastro. O card de tickets do dashboard
+(`GestaoMensal/TabComercialNew`) também lê `get_matriculas_comerciais_resumo_v1`
+para o período selecionado (14/09/2026); a base canônica local
+(`calcularFinanceiroMatriculasCanonicas`) segue servindo só a lista dos gráficos.
 
 ### Tickets do relatório comercial diário
 
