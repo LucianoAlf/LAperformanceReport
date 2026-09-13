@@ -25,6 +25,7 @@ import {
   ValorParcela,
   TextoCurso,
 } from '@/components/App/Dashboard/ModalDetalheKPI';
+import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { EvolutionChart } from '@/components/ui/EvolutionChart';
 import { FunnelChart } from '@/components/ui/FunnelChart';
@@ -44,13 +45,22 @@ import { SecaoKPIs } from './dashboard/SecaoKPIs';
  * uma segunda versao da regra de negocio, que e a causa-raiz documentada das
  * duplicatas de renovacao (CLAUDE.md, "Regras Importantes").
  * tests/mobileDashboardTela.test.mjs compara cartao a cartao com o desktop.
- *
- * O desktop chama useSetPageTitle; aqui nao. O cabecalho do shell mobile ja
- * resolve o titulo pela rota (MobileHeader -> tituloDaRota) e ignora
- * subtitulo e icone — alimentar o PageTitleContext so acrescentaria uma
- * segunda fonte para o mesmo nome de tela.
  */
 export function DashboardMobile() {
+  // Mesma chamada do desktop, e ela e OBRIGATORIA aqui — nao decorativa.
+  // useSetPageTitle nao tem cleanup (PageTitleContext.tsx), o MobileLayout
+  // nao desmonta ao navegar e o MobileHeader da precedencia ao contexto
+  // sobre a rota: sem esta linha, quem abre Alunos (uma das 25 telas que
+  // alimentam o contexto) e volta pra ca fica com "Alunos" no cabecalho
+  // para sempre.
+  useSetPageTitle({
+    titulo: 'Dashboard',
+    subtitulo: 'Visão consolidada de gestão, comercial e professores',
+    icone: BarChart3,
+    iconeCor: 'text-cyan-400',
+    iconeWrapperCor: 'bg-cyan-500/20',
+  });
+
   const {
     loading, alertas, dadosGestao, fonteKpisAlunos, dadosComercial, dadosProfessores,
     evolucaoAlunos, funilComercial, resumoUnidades, metas, labelPeriodo, unidade,
@@ -301,7 +311,7 @@ export function DashboardMobile() {
       {/* ===== GRÁFICOS ===== */}
       <section className="rounded-2xl border border-slate-700/50 bg-slate-800/50 p-3">
         <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">
-          <TrendingUp className="h-4 w-4 text-cyan-400" />
+          <TrendingUp className="h-4 w-4 text-cyan-400" aria-hidden="true" />
           Evolução de Alunos Ativos (12 meses)
         </h3>
         {evolucaoAlunos.length > 0 ? (
@@ -318,7 +328,7 @@ export function DashboardMobile() {
 
       <section className="rounded-2xl border border-slate-700/50 bg-slate-800/50 p-3">
         <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">
-          <BarChart3 className="h-4 w-4 text-violet-400" />
+          <BarChart3 className="h-4 w-4 text-violet-400" aria-hidden="true" />
           Funil Comercial (Mês)
         </h3>
         {funilComercial.length > 0 ? (
@@ -333,21 +343,31 @@ export function DashboardMobile() {
       </section>
 
       {/* ===== RESUMO POR UNIDADE ===== */}
-      {/* So no consolidado: numa unidade so, o bloco repetiria os KPIs de
-          cima. O titulo vem do desktop — sem ele, uma lista de cartoes
-          depois de dois graficos nao diz do que e' o recorte. */}
-      {unidade === 'todos' && resumoUnidades.length > 0 && (
-        <section>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Resumo por Unidade
-          </h3>
+      {/* Sem guarda de consolidado, como no desktop: o cartao traz Ativos,
+          Pagantes, Ticket medio e Faturamento previsto, e ALUNOS ATIVOS e
+          FATURAMENTO PREVISTO nao aparecem em nenhum KPI das duas telas —
+          so aqui. Esconder o bloco de quem ve uma unidade so (que e a maior
+          parte da equipe: useDashboardDados nunca resolve 'todos' para
+          perfil de unidade) tiraria dois numeros que nao tem outra fonte. */}
+      <section>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Resumo por Unidade
+        </h3>
+        {resumoUnidades.length > 0 ? (
           <div className="flex flex-col gap-2">
             {resumoUnidades.map((d) => (
               <CartaoUnidade key={d.unidade_id} dados={d} />
             ))}
           </div>
-        </section>
-      )}
+        ) : (
+          // Mesma frase do desktop. Sumir em silencio deixaria "sem fonte"
+          // e "esta tudo bem" indistinguiveis (CLAUDE.md, "Falha tem que
+          // ser diagnosticavel").
+          <div className="rounded-xl border border-slate-700/50 bg-slate-800/50 p-3 text-sm text-slate-400">
+            Sem fonte canonica disponivel para o periodo selecionado.
+          </div>
+        )}
+      </section>
 
       {/* Modal Matrículas */}
       <ModalDetalheKPI

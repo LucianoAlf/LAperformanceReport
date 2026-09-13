@@ -127,36 +127,42 @@ test('os 13 tooltips sao identicos aos do desktop', () => {
   assert.deepEqual(tooltipsDe(cartoesMobile), tooltipsDe(cartoesDesktop));
 });
 
-test('os cartoes por unidade so aparecem no consolidado', () => {
-  // O brief pedia /unidade === 'todos'[\s\S]{0,400}CartaoUnidade/, que passa
-  // com o CartaoUnidade renderizado SEM guarda nenhuma desde que algum outro
-  // uso de `unidade === 'todos'` caia perto no arquivo — e os quatro modais
-  // usam exatamente essa expressao. Aqui a prova e estrutural: a expressao
-  // JSX aberta pela guarda ainda esta ABERTA quando o cartao aparece.
+test('o bloco por unidade NAO e escondido fora do consolidado — paridade com o desktop', () => {
+  // O brief pedia a guarda `unidade === 'todos'`, e ela foi REVOGADA na
+  // revisao: o desktop renderiza a tabela por unidade sem guarda nenhuma, e
+  // `alunos_ativos` e `faturamento_previsto` do CartaoUnidade nao aparecem
+  // em KPI algum das duas telas. Como useDashboardDados nunca resolve
+  // 'todos' para perfil de unidade, a guarda apagava esses dois numeros
+  // justamente para a maior parte da equipe.
   const usos = [...fonte.matchAll(/<CartaoUnidade\b/g)];
   assert.equal(usos.length, 1, `esperava 1 uso de <CartaoUnidade>, achei ${usos.length}`);
-  const idx = usos[0].index;
-
-  const GUARDA = "{unidade === 'todos' &&";
-  const inicio = fonte.slice(0, idx).lastIndexOf(GUARDA);
-  assert.ok(inicio !== -1, `nao achei a guarda \`${GUARDA}\` antes do <CartaoUnidade>`);
-
-  // Contagem de chaves a partir da guarda: se a profundidade voltar a zero
-  // antes do cartao, a guarda fechou antes e o cartao esta solto na arvore.
-  let profundidade = 0;
-  for (let i = inicio; i < idx; i += 1) {
-    if (fonte[i] === '{') profundidade += 1;
-    else if (fonte[i] === '}') profundidade -= 1;
-    assert.ok(
-      profundidade > 0,
-      `a guarda \`${GUARDA}\` fecha antes do <CartaoUnidade> — o cartao nao esta guardado`,
-    );
-  }
-  assert.match(
-    fonte.slice(inicio, idx),
-    /resumoUnidades\s*\.\s*map/,
-    'o bloco guardado nao mapeia resumoUnidades',
+  assert.doesNotMatch(
+    fonte,
+    /unidade\s*[=!]==?\s*'todos'\s*(?:&&|\?)[\s\S]{0,800}?<CartaoUnidade/,
+    'o bloco por unidade voltou a ser condicionado ao consolidado',
   );
+  assert.match(fonte, /resumoUnidades\s*\.\s*map/, 'o bloco nao mapeia resumoUnidades');
+});
+
+test('bloco de unidades vazio diz POR QUE esta vazio — mesma frase do desktop', () => {
+  // CLAUDE.md, "Falha tem que ser diagnosticavel": sumir em silencio deixa
+  // "sem fonte canonica" e "esta tudo bem" indistinguiveis na tela.
+  const frase = 'Sem fonte canonica disponivel para o periodo selecionado.';
+  assert.ok(desktop.includes(frase), 'a frase mudou no desktop — resincronizar as duas telas');
+  assert.ok(fonte.includes(frase), 'o mobile nao diz nada quando resumoUnidades vem vazio');
+});
+
+test('define o titulo da pagina como o desktop — o PageTitleContext nao tem cleanup', () => {
+  // Sem esta chamada o cabecalho do mobile herda o titulo da tela anterior
+  // para sempre: useSetPageTitle nao faz teardown, o MobileLayout nao
+  // desmonta ao navegar e o MobileHeader da precedencia ao contexto sobre
+  // a rota. Vale so depois que o Dashboard entra em ROTAS_PORTADAS (T6).
+  const chamada = (arquivo, onde) => {
+    const achado = arquivo.match(/useSetPageTitle\(\{[\s\S]*?\}\);/);
+    assert.ok(achado, `nao achei a chamada de useSetPageTitle em ${onde}`);
+    return achado[0].replace(/\s+/g, ' ');
+  };
+  assert.equal(chamada(fonte, 'DashboardMobile'), chamada(desktop, 'DashboardPage'));
 });
 
 test('o drill-down reusa os 4 ModalDetalheKPI do desktop', () => {
@@ -165,4 +171,20 @@ test('o drill-down reusa os 4 ModalDetalheKPI do desktop', () => {
   assert.equal(modais.length, 4, `esperava 4 <ModalDetalheKPI>, achei ${modais.length}`);
   const noDesktop = desktop.match(/<ModalDetalheKPI\b/g) ?? [];
   assert.equal(modais.length, noDesktop.length, 'o mobile tem numero de modais diferente do desktop');
+});
+
+test('os 4 modais sao copia VERBATIM do desktop', () => {
+  // Contar 4 nao basta: e dentro dos modais que mora TODA a aritmetica do
+  // arquivo (somaValor / comValor.length, .toFixed(1), quatro reduce,
+  // Object.entries().sort()). E o melhor esconderijo para um numero
+  // recalculado, que e exatamente o que esta task existe para impedir.
+  const modaisDe = (arquivo) =>
+    (arquivo.match(/<ModalDetalheKPI[\s\S]*?\n {6}\/>/g) ?? []).map((b) => b.replace(/\s+/g, ' ').trim());
+  const noMobile = modaisDe(fonte);
+  const noDesktop = modaisDe(desktop);
+  assert.equal(noDesktop.length, 4, 'nao consegui extrair os 4 modais do desktop');
+  assert.equal(noMobile.length, 4, 'nao consegui extrair os 4 modais do mobile');
+  for (let i = 0; i < 4; i += 1) {
+    assert.equal(noMobile[i], noDesktop[i], `o modal #${i + 1} do mobile difere do desktop`);
+  }
 });
