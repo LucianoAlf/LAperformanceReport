@@ -29,9 +29,12 @@ test('rotaFoiPortada', async (t) => {
   });
 });
 
-test('nesta etapa nenhuma rota foi portada ainda', () => {
+test('nesta etapa apenas o Dashboard foi portado — os outros 17 modulos seguem com a faixa', () => {
+  // Ate a Task 6 da etapa 2, este teste exigia ROTAS_PORTADAS = [] (etapa 1, so o
+  // shell). A Task 6 porta o Dashboard de proposito: a asserção precisa acompanhar
+  // esse fato, senao ela vira falso-negativo permanente a cada novo modulo portado.
   const fonte = readFileSync('src/mobile/rotasPortadas.ts', 'utf8');
-  assert.match(fonte, /ROTAS_PORTADAS[^=]*=\s*\[\s*\]/u, 'a etapa 1 entrega o shell, nenhuma tela');
+  assert.match(fonte, /ROTAS_PORTADAS[^=]*=\s*\['\/app'\]/u, 'etapa 2: so o Dashboard tem tela mobile ligada');
 });
 
 test('a faixa avisa sem bloquear', () => {

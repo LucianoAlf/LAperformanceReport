@@ -68,7 +68,7 @@ function CampanhasGuard({ children }: { children: React.ReactNode }) {
 }
 
 // Dashboard (página inicial - carrega imediatamente)
-import { DashboardPage } from './components/App/Dashboard';
+import { DashboardResponsivo } from './components/App/Dashboard/DashboardResponsivo';
 
 // =============================================================================
 // IMPORTS LAZY - Componentes carregados sob demanda
@@ -186,7 +186,7 @@ export const router = createBrowserRouter([
         children: [
           {
             index: true,
-            element: <DashboardPage />,
+            element: <DashboardResponsivo />,
           },
           {
             path: 'entrada',

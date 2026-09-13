@@ -5,7 +5,7 @@
  * shell mostra a tela do desktop com a faixa de aviso — degradar, nunca
  * bloquear: a equipe usa tudo, todo dia, e hoje essas telas ja abrem.
  */
-export const ROTAS_PORTADAS: readonly string[] = [];
+export const ROTAS_PORTADAS: readonly string[] = ['/app'];
 
 /** A raiz do app e a rota index (Dashboard) — suas "sub-rotas" sao outros modulos. */
 const RAIZ_APP = '/app';
