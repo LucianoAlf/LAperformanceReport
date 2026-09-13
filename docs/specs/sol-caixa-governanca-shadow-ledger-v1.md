@@ -48,11 +48,16 @@ mídia, OCR, prompt, credencial e payload financeiro.
 - `SOL_CAIXA_GOVERNANCA_REMOTE=1`: envia também ao banco dedicado da Sol.
 - `SOL_CAIXA_GOVERNANCA_HMAC_SECRET`: segredo novo, exclusivo e com 32+ bytes.
 - `SOL_CAIXA_GOVERNANCA_HMAC_KEY_ID`: versão pública da chave, por exemplo `k1`.
-- `SOL_GOVERNANCA_SUPABASE_URL` e `SOL_GOVERNANCA_SERVICE_ROLE_KEY` (ou as
-  variáveis já autorizadas do Supabase Sol): destino da telemetria.
+- `SOL_GOVERNANCE_SUPABASE_URL`, `SOL_GOVERNANCE_SUPABASE_ANON_KEY`,
+  `SOL_GOVERNANCE_WRITER_TOKEN_ID` e `SOL_GOVERNANCE_WRITER_TOKEN`: transporte
+  preferencial pelo escritor estreito já governado da Sol.
+- `SOL_GOVERNANCA_SUPABASE_URL` e `SOL_GOVERNANCA_SERVICE_ROLE_KEY`: somente
+  compatibilidade explícita; não são necessárias no rollout estreito.
 
 Sem a flag, não há efeito. Com flag e segredo ausente, o instrumento registra
-`hmac_secret_missing` apenas no log local e não interfere no Caixa.
+`hmac_secret_missing` apenas no log local e não interfere no Caixa. Com remoto
+ligado e transporte ausente/falho, registra `instrument_failure` local; nunca
+transforma falha de telemetria em falha financeira.
 
 ## Plano de aplicação — exige autorização separada
 

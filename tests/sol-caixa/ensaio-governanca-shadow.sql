@@ -1,18 +1,47 @@
 \set ON_ERROR_STOP on
 
+-- Stub do escritor estreito do control plane da Sol. Em produção esta função
+-- já pertence ao schema de governança; o ensaio mantém o banco isolado.
+create or replace function public.sol_governanca_writer_autorizado_v1(
+  p_token_id text,
+  p_writer_token text
+) returns boolean
+language sql
+stable
+as $$
+  select p_token_id = 'writer-ensaio' and p_writer_token = 'token-escritor-ensaio';
+$$;
+
 do $$
 declare
   v_ep text := 'ep1.k1.' || repeat('a',64);
   v_ev text := 'evt1.k1.' || repeat('b',64);
   v_r jsonb;
 begin
-  select public.sol_caixa_governanca_registrar_v1(jsonb_build_object(
+  select public.sol_caixa_governanca_registrar_v2(
+    'writer-ensaio','token-escritor-ensaio',jsonb_build_object(
     'schema_version',1,'episode_id',v_ep,'event_key',v_ev,
     'event_type','message_observed','occurred_at',now(),'unit_code','recreio',
     'source','whatsapp_group','message_kind','text','key_id','k1',
     'details',jsonb_build_object('media_kind','text','duplicate',false)
   )) into v_r;
   if not coalesce((v_r->>'ok')::boolean,false) then raise exception 'registro válido recusado: %',v_r; end if;
+
+  begin
+    perform public.sol_caixa_governanca_registrar_v2(
+      'writer-ensaio','token-incorreto',jsonb_build_object(
+        'schema_version',1,'episode_id',v_ep,'event_key','evt1.k1.'||repeat('f',64),
+        'event_type','route_decided','occurred_at',now(),'unit_code','recreio',
+        'source','whatsapp_group','message_kind','text','key_id','k1','details','{}'::jsonb
+      ));
+    raise exception 'token incorreto foi aceito';
+  exception when insufficient_privilege then null;
+  end;
+
+  if not has_function_privilege('anon', 'public.sol_caixa_governanca_registrar_v2(text,text,jsonb)', 'execute')
+     or has_function_privilege('anon', 'public.sol_caixa_governanca_registrar_v1(jsonb)', 'execute') then
+    raise exception 'grants do escritor estreito estão incorretos';
+  end if;
 
   select public.sol_caixa_governanca_registrar_v1(jsonb_build_object(
     'schema_version',1,'episode_id',v_ep,'event_key',v_ev,

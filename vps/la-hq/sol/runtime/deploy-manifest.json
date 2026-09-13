@@ -36,8 +36,8 @@
     {
       "class": "governance-shadow",
       "mode": "0644",
-      "sha256": "0da1594bb9edfbfaa21430189317a85bb9cb4129dfff2b11bf8f9fbacfa2ed4f",
-      "size": 9171,
+      "sha256": "27bc12004c1e84a9990baa383ed8ac136a6c7a1a2eff509a1572e19ed3731042",
+      "size": 10323,
       "source": "vps/la-hq/sol/runtime/caixa-governanca-shadow.cjs",
       "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-governanca-shadow.cjs"
     },
