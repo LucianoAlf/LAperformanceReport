@@ -60,6 +60,8 @@ const CAIXA_RUNTIME = process.env.SOL_CAIXA_RUNTIME
   || '/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs';
 const CAIXA_ABF_RUNTIME = process.env.SOL_CAIXA_ABF_RUNTIME
   || '/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-abertura-fechamento.cjs';
+const CAIXA_GOVERNANCA_RUNTIME = process.env.SOL_CAIXA_GOVERNANCA_RUNTIME
+  || '/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-governanca-shadow.cjs';
 const BRIDGE_URL = (process.env.SOL_WHATSAPP_BRIDGE_URL || 'http://127.0.0.1:3000').replace(/\/$/, '');
 
 async function rpc(fn, args) {
@@ -79,6 +81,7 @@ const U = { ...Q, p_unidade: { type: 'string', description: 'Só a diretoria esc
 const C = {
   p_cracha: { type: 'string', description: 'Crachá SOL1 completo da linha `[cracha: ...]`. Obrigatório: não use o telefone como substituto.' },
   p_chat_id: { type: 'string', description: 'Chat oficial da linha `[chat_caixa: ...]`. O crachá foi assinado para este chat; copie exatamente e não invente.' },
+  p_episode_id: { type: 'string', description: 'Identificador HMAC da linha `[episode_caixa: ...]`. Copie exatamente. Não derive nem invente; se estiver ausente, a governança registra a lacuna sem bloquear o Caixa.' },
 };
 
 const PORTAS = [
@@ -223,6 +226,7 @@ const j = (o) => ({ content: [{ type: 'text', text: JSON.stringify(o) }] });
 const gruposCaixa = {};
 let handlerCaixa = null;
 let abfCaixa = null;
+let governancaCaixa = null;
 
 function chatNoCanario(chat) {
   const lista = String(process.env.SOL_CAIXA_TOOLS_CANARIO || '')
@@ -237,7 +241,7 @@ async function contextoCaixa(args) {
   if (!chat.endsWith('@g.us')) return { ok: false, motivo: 'chat_oficial_obrigatorio' };
   if (!chatNoCanario(chat)) return { ok: false, motivo: 'caixa_agent_tools_fora_do_canario' };
   const ctx = await rpc('sol_porta_caixa_contexto_v1', { p_cracha: cracha, p_chat_id: chat });
-  return { ...(ctx || {}), _chat: chat, _cracha: cracha };
+  return { ...(ctx || {}), _chat: chat, _cracha: cracha, _episode_id: String((args && args.p_episode_id) || '').trim() };
 }
 
 async function enviarPeloBridge(chatId, texto) {
@@ -250,10 +254,18 @@ async function enviarPeloBridge(chatId, texto) {
   return data.messageId || (data.messageIds || []).at(-1) || null;
 }
 
+function carregarGovernancaCaixa() {
+  if (governancaCaixa) return governancaCaixa;
+  try { governancaCaixa = require(CAIXA_GOVERNANCA_RUNTIME).criarInstrumento(); }
+  catch (_) { governancaCaixa = null; }
+  return governancaCaixa;
+}
+
 function carregarRuntimeCaixa() {
   if (handlerCaixa && abfCaixa) return;
   const fin = require(CAIXA_RUNTIME);
   abfCaixa = require(CAIXA_ABF_RUNTIME);
+  carregarGovernancaCaixa();
   handlerCaixa = fin.criarHandlerFinanceiro({
     grupos: gruposCaixa,
     sendFn: enviarPeloBridge,
@@ -261,6 +273,10 @@ function carregarRuntimeCaixa() {
       const limpo = { ...(evento || {}) };
       delete limpo.chatId; delete limpo.senderId; delete limpo.senderPhone;
       process.stderr.write(JSON.stringify({ origem: 'sol_caixa_tool', ...limpo }) + '\n');
+    },
+    governanceFn: (event, eventType, details) => {
+      if (!governancaCaixa || !event || !event.caixaGovernancaEpisode) return Promise.resolve({ ok: false, sem_episodio: true });
+      return governancaCaixa.record(event.caixaGovernancaEpisode, eventType, details);
     },
   });
 }
@@ -286,11 +302,29 @@ async function executarRuntimeCaixa(p, args) {
   carregarRuntimeCaixa();
   gruposCaixa[ctx._chat] = { unidade_id: ctx.unidade_id, nome: ctx.unidade_nome || 'unidade' };
   await handlerCaixa.reidratarPendencias();
+  const syntheticMessageId = idMensagem(ctx, p.action, args);
+  let episodio = governancaCaixa && governancaCaixa.adoptEpisode(ctx._episode_id, {
+    unitName: ctx.unidade_nome, source: 'whatsapp_group', messageKind: 'text',
+  });
+  if (!episodio && governancaCaixa) {
+    episodio = governancaCaixa.beginEpisode({ chatId: ctx._chat, messageId: syntheticMessageId,
+      unitName: ctx.unidade_nome, hasMedia: false, source: 'agent_tool_uncorrelated' });
+    if (episodio) void governancaCaixa.record(episodio, 'correlation_gap', {
+      correlation_status: 'missing_episode_header', engine: 'agent_tools', outcome: 'inconclusive',
+    });
+  }
+  if (episodio && governancaCaixa) void governancaCaixa.record(episodio, 'tool_selected', {
+    tool_name: p.name, action: p.action, engine: 'agent_tools', tool_call_ref: syntheticMessageId,
+  });
   const base = {
     chatId: ctx._chat, senderPhone: ctx._ator_numero, senderId: ctx._ator_numero + '@s.whatsapp.net',
     senderName: ctx.quem || 'Equipe', hasMedia: false, mediaUrls: [],
-    messageId: idMensagem(ctx, p.action, args), quotedMessageId: args.p_preview_message_id || null,
+    messageId: syntheticMessageId, quotedMessageId: args.p_preview_message_id || null,
+    caixaGovernancaEpisode: episodio,
   };
+  const governanceFn = (event, eventType, details) => (governancaCaixa && event && event.caixaGovernancaEpisode)
+    ? governancaCaixa.record(event.caixaGovernancaEpisode, eventType, details || {})
+    : Promise.resolve({ ok: false, sem_episodio: true });
   let resultado;
   if (p.action === 'preparar_lancamento') {
     const texto = String(args.p_texto_original || '').trim();
@@ -324,14 +358,14 @@ async function executarRuntimeCaixa(p, args) {
   } else if (p.action === 'preparar_fechamento') {
     resultado = await abfCaixa.tratarPedidoDiretoFechamento(
       { ...base, body: 'Sol, vamos fechar o caixa agora' },
-      { grupo: gruposCaixa[ctx._chat], sendFn: enviarPeloBridge });
+      { grupo: gruposCaixa[ctx._chat], sendFn: enviarPeloBridge, governanceFn });
   } else if (p.action === 'aprovar_preview') {
     const texto = String(args.p_aprovacao || '').trim();
     if (!/^(pode(?:\s+sim)?|confirmo|autorizo|pode\s+(?:lançar|corrigir|estornar|abrir|fechar))\b/i.test(texto)) {
       return j({ ok: false, motivo: 'aprovacao_explicita_obrigatoria' });
     }
     const ev = { ...base, body: texto };
-    const abf = await abfCaixa.tratarConfirmacao(ev, { sendFn: enviarPeloBridge,
+    const abf = await abfCaixa.tratarConfirmacao(ev, { sendFn: enviarPeloBridge, governanceFn,
       temComprovantePendente: (cid) => handlerCaixa.temPendencia(cid) });
     resultado = abf ? { acao: 'abertura_fechamento_tratado' } : await handlerCaixa.handle(ev);
   } else if (p.action === 'descartar_preview') {
@@ -365,6 +399,11 @@ async function executarRuntimeCaixa(p, args) {
       caixaToolCommand: cmd, caixaToolTarget: alvo,
     });
   }
+  if (episodio && governancaCaixa) void governancaCaixa.record(episodio, 'episode_closed', {
+    terminal_state: (resultado && resultado.acao) || 'tool_completed',
+    action: (resultado && resultado.acao) || p.action,
+    outcome: (resultado && /^erro|recus|bloquead/.test(String(resultado.acao || ''))) ? 'refused' : 'ok',
+  });
   return j({ ok: true, ja_publicado_no_grupo: true, resultado });
 }
 
@@ -384,9 +423,16 @@ async function despachar(name, args) {
     if (!chatNoCanario(chat)) return j({ ok: false, motivo: 'caixa_agent_tools_fora_do_canario' });
     const limpos = { p_cracha: cracha, p_chat_id: chat };
     for (const [k, v] of Object.entries(args || {})) {
-      if (k !== 'p_cracha' && k !== 'p_chat_id' && v !== null && v !== undefined && v !== '') limpos[k] = v;
+      if (k !== 'p_cracha' && k !== 'p_chat_id' && k !== 'p_episode_id' && v !== null && v !== undefined && v !== '') limpos[k] = v;
     }
-    return j(await rpc(p.fn, limpos));
+    carregarGovernancaCaixa();
+    const ep = governancaCaixa && governancaCaixa.adoptEpisode(args && args.p_episode_id, { source: 'whatsapp_group' });
+    if (ep) void governancaCaixa.record(ep, 'tool_selected', { tool_name: p.name, action: 'readback', engine: 'agent_tools' });
+    const resultado = await rpc(p.fn, limpos);
+    if (ep) void governancaCaixa.record(ep, resultado && resultado.ok ? 'readback_confirmed' : 'readback_failed', {
+      action: p.name, outcome: resultado && resultado.ok ? 'ok' : 'refused', readback_status: resultado && resultado.ok ? 'confirmed' : 'refused',
+    });
+    return j(resultado);
   }
   // 🔴 CRACHA NAO PODE SER LIMPO. O strip de nao-digitos estava certo quando o
   //    valor era so telefone; com cracha ele destroi a assinatura — medido:

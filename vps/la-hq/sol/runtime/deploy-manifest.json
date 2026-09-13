@@ -4,8 +4,8 @@
     {
       "class": "bridge",
       "mode": "0644",
-      "sha256": "e739796366defd0a2d364a6fb8f8a7af1a0786eb9a61c6179c70258c4fe2c421",
-      "size": 63507,
+      "sha256": "fc9dd0561de9e97314f4b82a2ba8f90d506d148e4eb1e94b69a884f1d62b3aed",
+      "size": 67030,
       "source": "vps/la-hq/sol/runtime/bridge.js",
       "target": "/home/sol/.hermes/hermes-agent/scripts/whatsapp-bridge/bridge.js"
     },
@@ -20,24 +20,32 @@
     {
       "class": "caixa-runtime",
       "mode": "0644",
-      "sha256": "eecdf152338f8c5e9a12aa26909f1901e408371d583923ec5405282829bf3359",
-      "size": 413176,
+      "sha256": "a9dc4faf6285e36f360a1204906ab43f628697231f6f29ea27dbecc31c952d31",
+      "size": 419206,
       "source": "vps/la-hq/sol/runtime/caixa-financeiro.cjs",
       "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs"
     },
     {
       "class": "caixa-runtime",
       "mode": "0644",
-      "sha256": "448130f82d5071530b511508744144d3c2a6fda26b86336070559d27926f872f",
-      "size": 21172,
+      "sha256": "2e07f4c11516fa051967570b543e1c78ce6ebc36717da21a59a3c325127999fc",
+      "size": 26370,
       "source": "vps/la-hq/sol/runtime/caixa-abertura-fechamento.cjs",
       "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-abertura-fechamento.cjs"
     },
     {
+      "class": "governance-shadow",
+      "mode": "0644",
+      "sha256": "0da1594bb9edfbfaa21430189317a85bb9cb4129dfff2b11bf8f9fbacfa2ed4f",
+      "size": 9171,
+      "source": "vps/la-hq/sol/runtime/caixa-governanca-shadow.cjs",
+      "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-governanca-shadow.cjs"
+    },
+    {
       "class": "mcp-runtime",
       "mode": "0644",
-      "sha256": "32e1fae9ea2b72e6322be97045138d4b90cd14211d4c2ea863f23c3bfe80ac55",
-      "size": 34013,
+      "sha256": "36c8860950c34d79cb34494f6abaee048fa1031e91ca574aa6c37e16cbe29fa9",
+      "size": 37108,
       "source": "vps/la-hq/sol/scripts/sol-portas-mcp.mjs",
       "target": "/home/sol/.openclaw/workspace/scripts/sol-portas-mcp.mjs"
     }

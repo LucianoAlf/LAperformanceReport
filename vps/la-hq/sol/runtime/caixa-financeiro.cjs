@@ -3110,7 +3110,7 @@ function categoriaEhSaida(categoria) {
   return ['seguranca', 'despesa', 'retirada', 'troco'].includes(String(categoria || '').toLowerCase());
 }
 
-function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, finalizarPreviewV3Fn = finalizarPreviewV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, resolverEnvelopeFn = resolverEnvelopeCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, log = () => {}, janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
+function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, finalizarPreviewV3Fn = finalizarPreviewV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, resolverEnvelopeFn = resolverEnvelopeCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, log = () => {}, governanceFn = () => Promise.resolve({ ok: false, disabled: true }), janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
   // SOL_CAIXA_V3_LEDGER_FAKE=1 (suite de testes): fiacao V3 ativa, banco intacto.
   // Sem isto, teste que nao mocka os registradores grava preview/approval REAL
   // no ledger de producao — 62% dos previews de 24-31/08 eram artefato de teste.
@@ -3133,6 +3133,34 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   const v3LedgerMode = String(process.env.SOL_CAIXA_V3_LEDGER_MODE || '').toLowerCase();
   const v3LedgerAtivo = ['production', 'prod', 'on', '1'].includes(v3LedgerMode);
   const v3LedgerStrict = process.env.SOL_CAIXA_V3_LEDGER_STRICT === '1';
+  function governance(event, eventType, details) {
+    try { return Promise.resolve(governanceFn(event, eventType, details || {})).catch(() => ({ ok: false })); }
+    catch (_) { return Promise.resolve({ ok: false }); }
+  }
+
+  function readbackMovimento(event, grupo, movimentoId, valor, forma, categoria) {
+    if (!event || !event.caixaGovernancaEpisode || !movimentoId || !grupo) return;
+    Promise.resolve().then(async () => {
+      let resposta;
+      try {
+        resposta = await buscarMovimentosFn({
+          unidade_id: grupo.unidade_id, valor: Number(valor), forma: forma || null,
+          categoria: categoria || null, data_inicio: new Date().toISOString().slice(0, 10),
+          data_fim: new Date().toISOString().slice(0, 10), chat_id: event.chatId,
+          grupo_jid: event.chatId, ator_numero: event.senderPhone || '', ator_papel: 'grupo',
+        });
+      } catch (_) {
+        await governance(event, 'readback_failed', { movement_ref: movimentoId, readback_status: 'query_error', outcome: 'inconclusive' });
+        return;
+      }
+      const itens = resposta && Array.isArray(resposta.items) ? resposta.items : [];
+      const confirmou = itens.some((item) => String(item.movimentacao_id || '') === String(movimentoId));
+      await governance(event, confirmou ? 'readback_confirmed' : 'readback_failed', {
+        movement_ref: movimentoId, readback_status: confirmou ? 'confirmed' : 'movement_not_found',
+        outcome: confirmou ? 'ok' : 'inconclusive',
+      });
+    });
+  }
 
   async function registrarPreviewPublicoV3({ event, grupo, previewId, texto, pendencia, result,
     previewStatus = 'public_preview_sent', previewHashFixo = null,
@@ -3184,6 +3212,10 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     };
     try {
       const registered = await registrarPreviewV3Fn(payload);
+      await governance(event, publicPreviewSent ? 'preview_sent' : 'preview_prepared', {
+        preview_ref: (registered && registered.preview_id) || previewId || previewHash,
+        action: result && result.acao || 'preview', outcome: registered && registered.ok ? 'ok' : 'inconclusive',
+      });
       log({ acao: 'v3_preview_ledger_registrado', chatId: event.chatId,
             ok: !!(registered && registered.ok), preview_ledger_id: registered && registered.preview_id });
       return { ...(registered || {}), preview_hash: previewHash };
@@ -3218,6 +3250,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
 
   async function registrarApprovalPublicoV3({ event, alvo, decision = 'approved' }) {
     if (!v3LedgerAtivo || !alvo || !alvo.v3PreviewId) return null;
+    await governance(event, 'approval_observed', { preview_ref: alvo.v3PreviewId, action: decision, outcome: 'pending' });
     const approvalEventHash = sha256(event.messageId);
     const actorIdHash = sha256(event.senderId || event.senderPhone || '');
     const payload = {
@@ -3236,6 +3269,10 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     };
     try {
       const registered = await registrarApprovalV3Fn(payload);
+      await governance(event, 'approval_observed', {
+        preview_ref: alvo.v3PreviewId, approval_ref: registered && registered.approval_id,
+        action: 'registered', outcome: registered && registered.ok ? 'ok' : 'inconclusive',
+      });
       log({ acao: 'v3_approval_ledger_registrado', chatId: event.chatId,
             ok: !!(registered && registered.ok), approval_id: registered && registered.approval_id });
       return { ...(registered || {}), approval_event_hash: approvalEventHash, actor_id_hash: actorIdHash };
@@ -6582,7 +6619,11 @@ _Não lanço nada pela metade._`);
           pendentes.set(chatId, arr.filter((p) => p !== alvo));
           limparEnvelopeDaPendencia(chatId, alvo, 'estornado');
           if (rOp && rOp.ok) {
-            await sendFn(chatId, `Estornei no caixa: ${fmtBRL(rOp.valor || alvo.valor)}. Não apaguei o original; criei o movimento inverso auditado.`);
+            const receipt = await sendFn(chatId, `Estornei no caixa: ${fmtBRL(rOp.valor || alvo.valor)}. Não apaguei o original; criei o movimento inverso auditado.`);
+            await governance(event, 'write_applied', { action: 'estorno', movement_ref: rOp.movimentacao_estorno_id || alvo.movimentacao_id, approval_ref: v3Approval && v3Approval.approval_id, outcome: 'ok' });
+            await governance(event, 'approval_consumed', { approval_ref: v3Approval && v3Approval.approval_id, movement_ref: rOp.movimentacao_estorno_id || alvo.movimentacao_id, outcome: 'ok' });
+            await governance(event, 'receipt_sent', { receipt_ref: receipt, movement_ref: rOp.movimentacao_estorno_id || alvo.movimentacao_id, action: 'estorno', outcome: 'ok' });
+            readbackMovimento(event, grupos[chatId], rOp.movimentacao_estorno_id || alvo.movimentacao_id, rOp.valor || alvo.valor, alvo.forma, alvo.categoria);
             log({ acao: 'movimento_estornado', movimentacao_id: alvo.movimentacao_id, estorno_id: rOp.movimentacao_estorno_id });
             return { acao: 'movimento_estornado', movimentacao_id: alvo.movimentacao_id, movimentacao_estorno_id: rOp.movimentacao_estorno_id };
           }
@@ -6595,7 +6636,11 @@ _Não lanço nada pela metade._`);
         limparEnvelopeDaPendencia(chatId, alvo, 'movimento_corrigido');
         if (rOp && rOp.ok) {
           const depois = rOp.depois || {};
-          await sendFn(chatId, `Corrigi no caixa: ${fmtBRL(depois.valor || alvo.valor)} · ${depois.categoria || alvo.categoria || 'lançamento'} · ${depois.forma_pagamento || alvo.forma || ''}.`);
+          const receipt = await sendFn(chatId, `Corrigi no caixa: ${fmtBRL(depois.valor || alvo.valor)} · ${depois.categoria || alvo.categoria || 'lançamento'} · ${depois.forma_pagamento || alvo.forma || ''}.`);
+          await governance(event, 'write_applied', { action: 'correcao', movement_ref: alvo.movimentacao_id, approval_ref: v3Approval && v3Approval.approval_id, outcome: 'ok' });
+          await governance(event, 'approval_consumed', { approval_ref: v3Approval && v3Approval.approval_id, movement_ref: alvo.movimentacao_id, outcome: 'ok' });
+          await governance(event, 'receipt_sent', { receipt_ref: receipt, movement_ref: alvo.movimentacao_id, action: 'correcao', outcome: 'ok' });
+          readbackMovimento(event, grupos[chatId], alvo.movimentacao_id, depois.valor || alvo.valor, depois.forma_pagamento || alvo.forma, depois.categoria || alvo.categoria);
           log({ acao: 'movimento_corrigido', movimentacao_id: alvo.movimentacao_id });
           return { acao: 'movimento_corrigido', movimentacao_id: alvo.movimentacao_id };
         }
@@ -6642,12 +6687,18 @@ _Não lanço nada pela metade._`);
         if (lote && lote.ok) {
           const movsLote = lote.movimentacoes || [];
           if (movsLote.length !== alvo.itens.length) {
-            await sendFn(chatId, `🚨 ATENÇÃO: o banco confirmou ${movsLote.length} de ${alvo.itens.length} itens do lote. NÃO confia neste lançamento — confere o caixa antes de fechar e chama o suporte.`);
+            const reciboIncompleto = await sendFn(chatId, `🚨 ATENÇÃO: o banco confirmou ${movsLote.length} de ${alvo.itens.length} itens do lote. NÃO confia neste lançamento — confere o caixa antes de fechar e chama o suporte.`);
+            await governance(event, 'write_refused', { action: 'lote_incompleto', movement_ref: lote.lote_id, reason_code: 'item_count_mismatch', outcome: 'error' });
+            await governance(event, 'receipt_sent', { receipt_ref: reciboIncompleto, movement_ref: lote.lote_id, action: 'critical_warning', outcome: 'ok' });
             log({ acao: 'lote_multi_incompleto', chatId, lote_id: lote.lote_id, esperados: alvo.itens.length, gravados: movsLote.length });
             return { acao: 'lote_multi_incompleto', lote_id: lote.lote_id };
           }
           const linhas = movsLote.map((m) => `• ${m.aluno_nome}: ${fmtBRL(m.valor)}`).join('\n');
-          await sendFn(chatId, `✅ Lancei o lote no caixa da ${alvo.nome}: ${fmtBRL(alvo.valor)} (${alvo.forma}).\n${linhas}\n_Operação única e auditada; nenhum item foi lançado parcialmente._`);
+          const reciboLote = await sendFn(chatId, `✅ Lancei o lote no caixa da ${alvo.nome}: ${fmtBRL(alvo.valor)} (${alvo.forma}).\n${linhas}\n_Operação única e auditada; nenhum item foi lançado parcialmente._`);
+          await governance(event, 'write_applied', { action: 'lote_lancado', movement_ref: lote.lote_id, approval_ref: approval.approval_id, preview_ref: alvo.v3PreviewId, outcome: 'ok' });
+          await governance(event, 'approval_consumed', { approval_ref: approval.approval_id, movement_ref: lote.lote_id, outcome: 'ok' });
+          await governance(event, 'receipt_sent', { receipt_ref: reciboLote, movement_ref: lote.lote_id, preview_ref: alvo.v3PreviewId, outcome: 'ok' });
+          for (const mov of movsLote) readbackMovimento(event, grupos[chatId], mov.movimentacao_id, mov.valor, alvo.forma, alvo.categoria);
           log({ acao: 'lote_multi_lancado', chatId, lote_id: lote.lote_id, itens: alvo.itens.length });
           return { acao: 'lote_multi_lancado', lote_id: lote.lote_id };
         }
@@ -6657,6 +6708,7 @@ _Não lanço nada pela metade._`);
           return { acao: 'lote_multi_recusado', motivo: lote.motivo };
         }
         const motivoLote = lote && lote.motivo;
+        await governance(event, 'write_refused', { action: 'lote_lancamento', reason_code: motivoLote || 'unknown', outcome: 'refused' });
         const motivoHumano = {
           snapshot_fatura_nao_encontrada: 'a fatura canônica do preview não está disponível na fonte oficial',
           snapshot_status_fatura_mudou: 'o status de uma fatura mudou desde o preview',
@@ -6796,8 +6848,20 @@ _Não lanço nada pela metade._`);
       // remove a pendência alvo
       pendentes.set(chatId, arr.filter((p) => p !== alvo));
       limparEnvelopeDaPendencia(chatId, alvo, 'aprovado');
-      if (r && r.ok && r.ja_lancado) { await sendFn(chatId, 'Esse comprovante já tinha sido lançado ✅.'); return { acao: 'ja_lancado' }; }
+      if (r && r.ok && r.ja_lancado) {
+        const reciboDuplicado = await sendFn(chatId, 'Esse comprovante já tinha sido lançado ✅.');
+        await governance(event, 'write_refused', { action: 'duplicate', outcome: 'duplicate', movement_ref: r.movimentacao_id });
+        await governance(event, 'receipt_sent', { action: 'duplicate_notice', receipt_ref: reciboDuplicado, movement_ref: r.movimentacao_id, outcome: 'ok' });
+        return { acao: 'ja_lancado' };
+      }
       if (r && r.ok) {
+        await governance(event, 'write_applied', {
+          action: ehSaida ? 'saida_lancada' : 'lancado', movement_ref: r.movimentacao_id,
+          approval_ref: v3Approval && v3Approval.approval_id, preview_ref: alvo.v3PreviewId, outcome: 'ok',
+        });
+        await governance(event, 'approval_consumed', {
+          approval_ref: v3Approval && v3Approval.approval_id, movement_ref: r.movimentacao_id, outcome: 'ok',
+        });
         const quem = (alvo.enviadoPor && alvo.enviadoPor !== autorizadoPor)
           ? `${autorizadoPor} autorizou · ${alvo.enviadoPor} enviou`
           : `${autorizadoPor} autorizou`;
@@ -6808,6 +6872,10 @@ _Não lanço nada pela metade._`);
         const _de = alvo.aluno ? ` · ${alvo.aluno}`
           : (alvo.descricao ? ` · ${alvo.descricao}` : '');
         const confirmMessageId = await sendFn(chatId, `✅ ${verbo} no caixa da ${alvo.nome}: ${cap(payload.categoria)} — ${fmtBRL(r.valor)} (${r.forma})${_de}.\n_${quem} · registrei isso no responsável do lançamento._`);
+        await governance(event, 'receipt_sent', {
+          receipt_ref: confirmMessageId, movement_ref: r.movimentacao_id, preview_ref: alvo.v3PreviewId, outcome: 'ok',
+        });
+        readbackMovimento(event, grp, r.movimentacao_id, r.valor || valor, r.forma || forma, payload.categoria);
         lembrarLancado(chatId, {
           confirmMessageId, previewId: alvo.previewId, movimentacao_id: r.movimentacao_id,
           unidade_id: alvo.unidade_id, nome: alvo.nome, valor: Number(r.valor || valor),
@@ -6831,6 +6899,7 @@ _Não lanço nada pela metade._`);
         ator_sem_numero: 'não consegui identificar seu número',
       };
       const msg = motivos[r && r.motivo] || 'não consegui lançar agora';
+      await governance(event, 'write_refused', { action: 'lancamento', reason_code: (r && r.motivo) || 'unknown', outcome: 'refused' });
       // devolve a pendência (pode reabrir caixa e tentar de novo)
       if (r && r.motivo === 'caixa_nao_aberto') { arr.push(alvo); pendentes.set(chatId, arr); }
       await sendFn(chatId, `⚠️ Não lancei: ${msg}.`);
