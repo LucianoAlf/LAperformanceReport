@@ -149,7 +149,18 @@ test('bloco de unidades vazio diz POR QUE esta vazio — mesma frase do desktop'
   // "sem fonte canonica" e "esta tudo bem" indistinguiveis na tela.
   const frase = 'Sem fonte canonica disponivel para o periodo selecionado.';
   assert.ok(desktop.includes(frase), 'a frase mudou no desktop — resincronizar as duas telas');
-  assert.ok(fonte.includes(frase), 'o mobile nao diz nada quando resumoUnidades vem vazio');
+
+  // Nao basta a frase EXISTIR no arquivo: ela tem de estar no ramo vazio do
+  // ternario. Solta, ela apareceria sempre — inclusive com unidades na tela —
+  // e o teste aprovaria justamente o defeito que ele existe para pegar.
+  const ternario = fonte.match(
+    /\{resumoUnidades\.length > 0 \? \(([\s\S]*?)\) : \(([\s\S]*?)\)\}/,
+  );
+  assert.ok(ternario, 'nao achei o ternario de resumoUnidades — o bloco mudou de forma');
+  const [, ramoComDados, ramoVazio] = ternario;
+  assert.ok(ramoVazio.includes(frase), 'a frase nao esta no ramo vazio do ternario');
+  assert.ok(!ramoComDados.includes(frase), 'a frase aparece tambem com unidades na tela');
+  assert.match(ramoComDados, /<CartaoUnidade/, 'o ramo com dados nao renderiza CartaoUnidade');
 });
 
 test('define o titulo da pagina como o desktop — o PageTitleContext nao tem cleanup', () => {
