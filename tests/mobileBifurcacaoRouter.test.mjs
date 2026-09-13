@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const ler = (p) => readFileSync(p, 'utf8');
 const responsive = ler('src/components/App/Layout/ResponsiveLayout.tsx');
+const hook = ler('src/hooks/useShellMobile.ts');
 const router = ler('src/router.tsx');
 
 test('o router monta o ResponsiveLayout, nao mais o AppLayout direto', () => {
@@ -12,16 +13,20 @@ test('o router monta o ResponsiveLayout, nao mais o AppLayout direto', () => {
 });
 
 test('a bifurcacao usa a decisao pura, sem reimplementar o corte', () => {
-  assert.match(responsive, /resolverShell/u);
-  assert.match(responsive, /useIsMobile/u);
+  // A leitura das 3 entradas mudou de lugar (do shell para o hook) porque a
+  // tela do Dashboard precisava da MESMA decisao; o que nao pode mudar e que
+  // o corte continue morando em shellMobile.ts.
+  assert.match(hook, /resolverShell/u);
+  assert.match(hook, /useIsMobile/u);
+  assert.doesNotMatch(hook, /1023/u, 'o corte mora em shellMobile.ts, nao aqui');
   assert.doesNotMatch(responsive, /1023/u, 'o corte mora em shellMobile.ts, nao aqui');
 });
 
 test('o kill switch e o override ALIMENTAM resolverShell, nao ficam soltos', () => {
   // Casar so a string deixaria o teste verde com a env citada num comentario.
-  assert.match(responsive, /flagDesligada[\s\S]{0,90}VITE_MOBILE_SHELL/u);
-  assert.match(responsive, /getItem\('shell-override'\)/u);
-  assert.match(responsive, /resolverShell\(\{[\s\S]{0,220}flagDesligada[\s\S]{0,220}override/u);
+  assert.match(hook, /flagDesligada[\s\S]{0,90}VITE_MOBILE_SHELL/u);
+  assert.match(hook, /getItem\('shell-override'\)/u);
+  assert.match(hook, /resolverShell\(\{[\s\S]{0,240}flagDesligada[\s\S]{0,240}override/u);
 });
 
 test('a bifurcacao RENDERIZA os dois shells conforme a decisao', () => {

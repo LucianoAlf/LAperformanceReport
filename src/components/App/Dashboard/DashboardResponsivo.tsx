@@ -1,11 +1,13 @@
 import { lazy, Suspense } from 'react';
 
-import { useIsMobile } from '@/hooks/useIsMobile';
+import { useShellMobile } from '@/hooks/useShellMobile';
 
 import DashboardPage from './DashboardPage';
 
 /**
- * Escolhe a tela do Dashboard pelo mesmo corte que escolhe o shell.
+ * Escolhe a tela do Dashboard pela MESMA funcao que escolhe o shell — nao
+ * apenas pelo mesmo breakpoint. Ler so a largura fazia a tela discordar do
+ * shell sob VITE_MOBILE_SHELL=off e sob shell-override.
  *
  * Fica na rota, e nao no MobileLayout, porque a tela precisa do Outlet
  * context (unidade + competencia): quem nasce fora do <Outlet /> le
@@ -15,8 +17,8 @@ import DashboardPage from './DashboardPage';
 const DashboardMobile = lazy(() => import('@/mobile/telas/DashboardMobile'));
 
 export function DashboardResponsivo() {
-  const isMobile = useIsMobile();
-  if (!isMobile) return <DashboardPage />;
+  const shell = useShellMobile();
+  if (shell !== 'mobile') return <DashboardPage />;
 
   return (
     <Suspense

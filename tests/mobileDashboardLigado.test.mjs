@@ -7,6 +7,8 @@ import { rotaFoiPortada } from '../src/mobile/rotasPortadas.ts';
 const le = (caminho) => readFileSync(new URL(caminho, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
 const responsivo = le('../src/components/App/Dashboard/DashboardResponsivo.tsx');
+const shellLayout = le('../src/components/App/Layout/ResponsiveLayout.tsx');
+const hookShell = le('../src/hooks/useShellMobile.ts');
 const router = le('../src/router.tsx');
 const rotas = le('../src/mobile/rotasPortadas.ts');
 
@@ -31,32 +33,80 @@ test('o Dashboard mobile entra por lazy dentro de um Suspense — nao pesa no bu
   assert.match(blocoSuspense[1], /<DashboardMobile\s*\/>/);
 });
 
-test('a escolha usa o mesmo corte do shell, nao um breakpoint proprio', () => {
-  assert.match(responsivo, /useIsMobile\(\)/);
-  assert.doesNotMatch(
-    responsivo,
-    /matchMedia|innerWidth|1023|1024/,
-    'breakpoint duplicado: a decisao tem que vir de useIsMobile',
+// As proibicoes abaixo valem para o CODIGO, nao para a prosa: o comentario que
+// explica por que a tela consome o hook cita VITE_MOBILE_SHELL e localStorage de
+// proposito. Nenhum dos dois arquivos tem string com // ou /*, entao o corte e
+// seguro aqui — e codigo escondido num comentario nao roda, que e o ponto.
+const semComentarios = (fonte) => fonte
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/^[ \t]*\/\/.*$/gm, '');
+
+const CONSUMIDORES_DO_SHELL = [
+  ['DashboardResponsivo', semComentarios(responsivo)],
+  ['ResponsiveLayout', semComentarios(shellLayout)],
+];
+
+test('a tela e o shell decidem pela MESMA funcao — nao apenas pelo mesmo breakpoint', () => {
+  // O assert anterior exigia useIsMobile() aqui e proibia matchMedia/1023/1024.
+  // Ele provava "nao duplicou o corte de LARGURA" e era satisfeito por uma
+  // implementacao que ignora as outras DUAS entradas da decisao: o kill switch
+  // (VITE_MOBILE_SHELL=off) e o override de localStorage. Era assim que a tela
+  // e o shell discordavam — com VITE_MOBILE_SHELL=off o shell voltava para o
+  // desktop e a tela continuava mobile, e com shell-override='mobile' num
+  // desktop acontecia o inverso.
+  const importaHook = /import\s*\{\s*useShellMobile\s*\}\s*from\s*'@\/hooks\/useShellMobile'/;
+  for (const [nome, arquivo] of CONSUMIDORES_DO_SHELL) {
+    assert.match(arquivo, importaHook, `${nome} nao importa useShellMobile`);
+    // Import sozinho nao prova consumo: exigir a chamada.
+    assert.match(arquivo, /useShellMobile\(\)/, `${nome} importa o hook mas nao o chama`);
+  }
+});
+
+test('nenhum dos dois le as entradas da decisao por conta propria', () => {
+  // Uma leitura local de qualquer das 3 entradas e uma segunda versao da regra
+  // — e sao exatamente as 3 versoes locais que produziram a discordancia.
+  for (const [nome, arquivo] of CONSUMIDORES_DO_SHELL) {
+    assert.doesNotMatch(arquivo, /useIsMobile/, `${nome} le a largura por conta propria`);
+    assert.doesNotMatch(arquivo, /VITE_MOBILE_SHELL/, `${nome} le o kill switch por conta propria`);
+    assert.doesNotMatch(arquivo, /localStorage/, `${nome} le o override por conta propria`);
+    assert.doesNotMatch(arquivo, /matchMedia|innerWidth|1023|1024/, `${nome} duplicou o breakpoint`);
+    assert.doesNotMatch(arquivo, /resolverShell/, `${nome} remonta a decisao em vez de consumir o hook`);
+  }
+});
+
+test('useShellMobile e a fonte unica: as 3 entradas alimentam resolverShell', () => {
+  assert.match(hookShell, /useIsMobile\(\)/, 'a largura nao vem de useIsMobile');
+  assert.match(hookShell, /VITE_MOBILE_SHELL === 'off'/, 'o kill switch nao vem de VITE_MOBILE_SHELL');
+  assert.match(hookShell, /getItem\('shell-override'\)/, 'o override nao vem do localStorage');
+  // As 3 entram em resolverShell de fato — nao ficam soltas no arquivo.
+  assert.match(
+    hookShell,
+    /resolverShell\(\{[\s\S]{0,240}larguraMobile[\s\S]{0,240}flagDesligada[\s\S]{0,240}override/,
+    'as 3 entradas nao alimentam resolverShell',
+  );
+  // Storage bloqueado (aba anonima, cookies barrados) nao pode derrubar a tela.
+  assert.match(
+    hookShell,
+    /try\s*\{[\s\S]{0,200}getItem\('shell-override'\)[\s\S]{0,200}\}\s*catch/,
+    'a leitura do localStorage precisa do try/catch',
   );
 });
 
-test('o desktop continua recebendo o DashboardPage intacto, e so quando NAO e mobile', () => {
-  // Regra completa: declara isMobile via useIsMobile(), e SO retorna DashboardPage
+test('o desktop continua recebendo o DashboardPage intacto, e so quando o shell NAO e mobile', () => {
+  // Regra completa: declara shell via useShellMobile(), e SO retorna DashboardPage
   // no ramo "nao mobile" -- nao basta a string existir em algum lugar do arquivo
   // (uma implementacao invertida, ou que sempre renderiza DashboardPage, tambem
   // conteria a substring "return <DashboardPage />").
-  const declaraIsMobile = responsivo.match(/const\s+isMobile\s*=\s*useIsMobile\(\);/);
-  assert.ok(declaraIsMobile, 'isMobile precisa vir direto de useIsMobile()');
+  const declaraShell = responsivo.match(/const\s+shell\s*=\s*useShellMobile\(\);/);
+  assert.ok(declaraShell, 'shell precisa vir direto de useShellMobile()');
 
-  const guardaDesktop = responsivo.match(/if\s*\(!isMobile\)\s*return\s*<DashboardPage\s*\/>;?/);
-  assert.ok(guardaDesktop, 'o ramo desktop precisa ser "if (!isMobile) return <DashboardPage />"');
+  const guardaDesktop = responsivo.match(/if\s*\(shell\s*!==\s*'mobile'\)\s*return\s*<DashboardPage\s*\/>;?/);
+  assert.ok(guardaDesktop, 'o ramo desktop precisa ser "if (shell !== \'mobile\') return <DashboardPage />"');
 
   // E a guarda do desktop precisa vir ANTES do Suspense/DashboardMobile no corpo da
-  // funcao -- senao "if (!isMobile) return <DashboardPage />" poderia estar morto
-  // depois de um return incondicional anterior.
-  const posGuarda = guardaDesktop.index;
+  // funcao -- senao ela poderia estar morta depois de um return incondicional anterior.
   const posSuspense = responsivo.indexOf('<Suspense');
-  assert.ok(posSuspense > posGuarda, 'a guarda do desktop precisa vir antes do ramo mobile');
+  assert.ok(posSuspense > guardaDesktop.index, 'a guarda do desktop precisa vir antes do ramo mobile');
 });
 
 test('a faixa de aviso sumiu do Dashboard e continua nos outros 17 modulos', () => {
