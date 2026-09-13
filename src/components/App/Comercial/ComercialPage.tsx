@@ -3343,368 +3343,58 @@ export function ComercialPage() {
 
   // Gerar relatório de matrículas detalhado
   const gerarRelatorioMatriculas = async () => {
-    const hoje = new Date();
-    const dia = hoje.getDate().toString().padStart(2, '0');
-    const competenciaRelatorioMatriculas = obterCompetenciaRelatorioMensalComercial();
-    const ano = competenciaRelatorioMatriculas.ano;
-    const mesRelatorio = competenciaRelatorioMatriculas.mes;
-    const mesNome = new Date(ano, mesRelatorio - 1, 1).toLocaleString('pt-BR', { month: 'long' });
-    const mesNomeUpper = mesNome.toUpperCase();
-    
-    // Buscar informações da unidade incluindo o Hunter
+    // FONTE ÚNICA (13/09/2026): o texto vem da RPC relatorio_matriculas_texto_v1 — a mesma
+    // que a Mila entrega por DM e que lê get_kpis_comercial_competencia_v1 (fechamento
+    // oficial quando existe, senão ao vivo). Até aqui o front tinha a própria cópia do
+    // predicado, do agrupamento e do ticket, e divergia do diário e do mensal.
+    const { ano, mes } = obterCompetenciaRelatorioMensalComercial();
     const unidadeId = isAdmin ? context?.unidadeSelecionada : usuario?.unidade_id;
     const unidadeRelatorioId = unidadeId && unidadeId !== 'todos' ? unidadeId : null;
-    let unidadeNome = unidadeRelatorioId ? 'Unidade' : 'Consolidado';
-    let hunterNome = unidadeRelatorioId ? (usuario?.nome || 'Usuário') : 'Todos';
-    
-    if (unidadeRelatorioId) {
-      const { data: unidadeData } = await supabase
-        .from('unidades')
-        .select('nome, hunter_nome')
-        .eq('id', unidadeRelatorioId)
-        .single();
-      
-      if (unidadeData) {
-        unidadeNome = unidadeData.nome;
-        hunterNome = unidadeData.hunter_nome || usuario?.nome || 'Usuário';
-      }
-    }
-
-    // Calcular totais e estatísticas — apenas matrículas novas (exclui 2º curso/banda/passaporte zerado)
-    const dataInicioMes = `${ano}-${String(mesRelatorio).padStart(2, '0')}-01`;
-    const dataFimMes = `${ano}-${String(mesRelatorio).padStart(2, '0')}-${new Date(ano, mesRelatorio, 0).getDate()}`;
-    const matriculasNovas = agruparMatriculasParaRelatorio(await buscarMatriculasAlunos(unidadeRelatorioId, dataInicioMes, dataFimMes))
-      .filter(ehMatriculaNova)
-      .sort((a: any, b: any) => (a.data_matricula || '').localeCompare(b.data_matricula || ''));
-    const totalMatriculas = matriculasNovas.length;
-    const lamkCount = matriculasNovas.filter(m => m.idade != null ? m.idade <= 11 : m.tipo_matricula === 'LAMK').length;
-    const emlaCount = matriculasNovas.filter(m => m.idade != null ? m.idade > 11 : m.tipo_matricula === 'EMLA').length;
-
-    // Regra de negócio: matrículas com passaporte zerado (ex: re-matrícula) não entram no ticket médio
-    const matriculasComPassaporte = matriculasNovas.filter(m => (Number(m.valor_passaporte) || 0) > 0);
-    const totalPassaporte = matriculasComPassaporte.reduce((acc, m) => acc + (Number(m.valor_passaporte) || 0), 0);
-    // Regra de negócio: bolsistas não entram no ticket médio da parcela
-    const matriculasPagantes = matriculasNovas.filter(m => !TIPOS_SEM_PAGAMENTO.includes(m.tipo_aluno) && (Number(m.valor_parcela) || 0) > 0);
-    const totalParcela = matriculasPagantes.reduce((acc, m) => {
-      const parcelas = Array.isArray((m as any).parcelas_relatorio)
-        ? (m as any).parcelas_relatorio.filter((valor: number) => Number(valor) > 0)
-        : [];
-      if (parcelas.length > 1) return acc + parcelas.reduce((soma: number, valor: number) => soma + (Number(valor) || 0), 0);
-      return acc + (Number(m.valor_parcela) || 0);
-    }, 0);
-    const ticketMedioPass = matriculasComPassaporte.length > 0 ? totalPassaporte / matriculasComPassaporte.length : 0;
-    const ticketMedioPar = matriculasPagantes.length > 0 ? totalParcela / matriculasPagantes.length : 0;
-
-    // Agrupar por canal
-    const matriculasPorCanal: { [key: string]: number } = {};
-    matriculasNovas.forEach(m => {
-      const canal = m.canal_nome || 'Não informado';
-      matriculasPorCanal[canal] = (matriculasPorCanal[canal] || 0) + 1;
+    const { data, error } = await supabase.rpc('relatorio_matriculas_texto_v1', {
+      p_unidade_id: unidadeRelatorioId,
+      p_ano: ano,
+      p_mes: mes,
+      p_gerado_por: usuario?.nome || null,
     });
+    if (error) throw new Error(`Não foi possível gerar o relatório de matrículas: ${error.message}`);
+    return String(data || '');
+  };
 
-    // Agrupar por curso
-    const matriculasPorCurso: { [key: string]: number } = {};
-    matriculasNovas.forEach(m => {
-      const curso = (m as any).cursos_relatorio || m.curso_nome || 'Não informado';
-      matriculasPorCurso[curso] = (matriculasPorCurso[curso] || 0) + 1;
+  // Comparativos (mensal e anual) saem da MESMA RPC: relatorio_comparativo_texto_v1.
+  // "Experimentais" ali é REALIZADAS (status operacional) — antes o front contava
+  // `experimental_agendada`, que é outra coisa (66 x 27 em Recreio/set).
+  const gerarRelatorioComparativoCanonico = async (
+    ano: number,
+    mes: number,
+    anoBase: number,
+    mesBase: number,
+  ): Promise<string> => {
+    const unidadeId = isAdmin ? context?.unidadeSelecionada : usuario?.unidade_id;
+    const unidadeRelatorioId = unidadeId && unidadeId !== 'todos' ? unidadeId : null;
+    const { data, error } = await supabase.rpc('relatorio_comparativo_texto_v1', {
+      p_unidade_id: unidadeRelatorioId,
+      p_ano: ano,
+      p_mes: mes,
+      p_ano_base: anoBase,
+      p_mes_base: mesBase,
+      p_gerado_por: usuario?.nome || null,
     });
-
-    // Cabeçalho
-    let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `📋 *RELATÓRIO DE MATRÍCULAS*\n`;
-    texto += `🏢 *${unidadeNome.toUpperCase()}*\n`;
-    texto += `📅 *${mesNomeUpper}/${ano}*\n`;
-    texto += `👤 ${hunterNome}\n`;
-    texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-
-    // Resumo Executivo
-    texto += `📊 *RESUMO EXECUTIVO*\n`;
-    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `✅ Total de Matrículas: *${totalMatriculas}*\n`;
-    texto += `🎨 LAMK (Kids): *${lamkCount}*\n`;
-    texto += `🎸 EMLA (Adulto): *${emlaCount}*\n\n`;
-
-    // Valores Financeiros
-    texto += `💰 *VALORES FINANCEIROS*\n`;
-    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `Total Passaportes: *R$ ${fmtBRL(totalPassaporte)}*\n`;
-    texto += `Total Parcelas: *R$ ${fmtBRL(totalParcela)}*\n`;
-    texto += `Ticket Médio Pass.: *R$ ${fmtBRL(ticketMedioPass)}*\n`;
-    texto += `Ticket Médio Parc.: *R$ ${fmtBRL(ticketMedioPar)}*\n\n`;
-
-    // Estatísticas
-    texto += `📊 *ESTATÍSTICAS*\n`;
-    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    
-    // Por Canal
-    texto += `🔥 Por Canal:\n`;
-    if (Object.keys(matriculasPorCanal).length > 0) {
-      Object.entries(matriculasPorCanal)
-        .sort(([, a], [, b]) => b - a)
-        .forEach(([canal, qtd]) => {
-          texto += `• ${canal}: ${qtd}\n`;
-        });
-    } else {
-      texto += `• Nenhuma matrícula\n`;
-    }
-    texto += `\n`;
-
-    // Por Curso
-    texto += `🎸 Por Curso:\n`;
-    if (Object.keys(matriculasPorCurso).length > 0) {
-      Object.entries(matriculasPorCurso)
-        .sort(([, a], [, b]) => b - a)
-        .forEach(([curso, qtd]) => {
-          texto += `• ${curso}: ${qtd}\n`;
-        });
-    } else {
-      texto += `• Nenhuma matrícula\n`;
-    }
-    texto += `\n`;
-
-    // Lista Detalhada
-    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `📝 *LISTA DETALHADA*\n`;
-    texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-
-    matriculasNovas.forEach((mat, i) => {
-      const dataMat = (mat as any).data_matricula || mat.data_contato;
-      const dataFormatada = formatarDataCurtaRelatorio(dataMat);
-
-      texto += `MAT. ${(i + 1).toString().padStart(2, '0')}\n`;
-      texto += `📅 Data: ${dataFormatada}\n`;
-      texto += `👤 Aluno: ${mat.nome || 'Não informado'}`;
-      if (mat.idade) texto += ` (${mat.idade} anos)`;
-      texto += `\n`;
-      texto += `🎵 Curso: ${(mat as any).cursos_relatorio || mat.curso_nome || 'Não informado'}\n`;
-      texto += `👨‍🏫 Professor: ${(mat as any).professores_relatorio || mat.professor_fixo_nome || 'Não informado'}\n`;
-      texto += `🎸 Prof. Experimental: ${(mat as any).professores_exp_relatorio || mat.professor_exp_nome || 'Não teve'}\n`;
-      texto += `📱 Canal: ${mat.canal_nome || 'Não informado'}\n`;
-      texto += `👤 Hunter: ${mat.hunter_nome || hunterNome}\n`;
-      texto += `💵 Pass: R$ ${fmtBRL(Number(mat.valor_passaporte) || 0)}`;
-      if (mat.forma_pagamento_passaporte_nome) texto += ` (${mat.forma_pagamento_passaporte_nome})`;
-      texto += `\n`;
-      texto += `💵 Parc: ${formatarParcelasMatriculaRelatorio(mat)}`;
-      if ((mat as any).formas_pagamento_relatorio || mat.forma_pagamento_nome) texto += ` (${(mat as any).formas_pagamento_relatorio || mat.forma_pagamento_nome})`;
-      texto += `\n\n`;
-    });
-
-    // Rodapé
-    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `📅 Gerado em: ${dia}/${(hoje.getMonth() + 1).toString().padStart(2, '0')}/${hoje.getFullYear()} às ${hoje.getHours()}:${hoje.getMinutes().toString().padStart(2, '0')}\n`;
-    texto += `━━━━━━━━━━━━━━━━━━━━━━`;
-
-    return texto;
+    if (error) throw new Error(`Não foi possível gerar o relatório comparativo: ${error.message}`);
+    return String(data || '');
   };
 
   // Gerar relatório comparativo mensal (mês atual vs mês anterior)
   const gerarRelatorioComparativoMensal = async () => {
-    const hoje = new Date();
-    const competenciaComparativo = obterCompetenciaRelatorioMensalComercial();
-    const mesAtual = competenciaComparativo.mes - 1;
-    const anoAtual = competenciaComparativo.ano;
-    
-    // Mês anterior
-    const mesAnterior = mesAtual === 0 ? 11 : mesAtual - 1;
-    const anoAnterior = mesAtual === 0 ? anoAtual - 1 : anoAtual;
-    
-    const unidadeId = isAdmin ? context?.unidadeSelecionada : usuario?.unidade_id;
-    const unidadeRelatorioId = unidadeId && unidadeId !== 'todos' ? unidadeId : null;
-    let unidadeNome = unidadeRelatorioId ? 'Unidade' : 'Consolidado';
-    let hunterNome = unidadeRelatorioId ? (usuario?.nome || 'Usuário') : 'Todos';
-    
-    if (unidadeRelatorioId) {
-      const { data: unidadeData } = await supabase
-        .from('unidades')
-        .select('nome, hunter_nome')
-        .eq('id', unidadeRelatorioId)
-        .single();
-      
-      if (unidadeData) {
-        unidadeNome = unidadeData.nome;
-        hunterNome = unidadeData.hunter_nome || usuario?.nome || 'Usuário';
-      }
-    }
-
-    // Buscar dados do mês atual
-    const inicioMesAtual = new Date(anoAtual, mesAtual, 1);
-    const fimMesAtual = new Date(anoAtual, mesAtual + 1, 0);
-    
-    let dadosMesAtualQuery = supabase
-      .from('leads')
-      .select('status, quantidade, experimental_agendada')
-      .gte('data_contato', inicioMesAtual.toISOString().split('T')[0])
-      .lte('data_contato', fimMesAtual.toISOString().split('T')[0]);
-    if (unidadeRelatorioId) dadosMesAtualQuery = dadosMesAtualQuery.eq('unidade_id', unidadeRelatorioId);
-    const { data: dadosMesAtual } = await dadosMesAtualQuery;
-
-    // Buscar dados do mês anterior
-    const inicioMesAnterior = new Date(anoAnterior, mesAnterior, 1);
-    const fimMesAnterior = new Date(anoAnterior, mesAnterior + 1, 0); // Último dia do mês
-
-    let dadosMesAnteriorQuery = supabase
-      .from('leads')
-      .select('status, quantidade, experimental_agendada')
-      .gte('data_contato', inicioMesAnterior.toISOString().split('T')[0])
-      .lte('data_contato', fimMesAnterior.toISOString().split('T')[0]);
-    if (unidadeRelatorioId) dadosMesAnteriorQuery = dadosMesAnteriorQuery.eq('unidade_id', unidadeRelatorioId);
-    const { data: dadosMesAnterior } = await dadosMesAnteriorQuery;
-
-    // Calcular totais mês atual
-    const leadsAtual = dadosMesAtual?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const experimentaisAtual = dadosMesAtual?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const visitasAtual = await contarVisitasCanonicas(unidadeRelatorioId, inicioMesAtual.toISOString().split('T')[0], fimMesAtual.toISOString().split('T')[0]);
-    const matriculasAtual = (await buscarMatriculasAlunos(unidadeRelatorioId, inicioMesAtual.toISOString().split('T')[0], fimMesAtual.toISOString().split('T')[0])).filter(ehMatriculaNova).length;
-
-    // Calcular totais mês anterior
-    const leadsAnterior = dadosMesAnterior?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const experimentaisAnterior = dadosMesAnterior?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const visitasAnterior = await contarVisitasCanonicas(unidadeRelatorioId, inicioMesAnterior.toISOString().split('T')[0], fimMesAnterior.toISOString().split('T')[0]);
-    const matriculasAnterior = (await buscarMatriculasAlunos(unidadeRelatorioId, inicioMesAnterior.toISOString().split('T')[0], fimMesAnterior.toISOString().split('T')[0])).filter(ehMatriculaNova).length;
-
-    // Calcular variações
-    const varLeads = leadsAnterior > 0 ? ((leadsAtual - leadsAnterior) / leadsAnterior * 100) : 0;
-    const varExp = experimentaisAnterior > 0 ? ((experimentaisAtual - experimentaisAnterior) / experimentaisAnterior * 100) : 0;
-    const varVisitas = visitasAtual !== null && visitasAnterior !== null && visitasAnterior > 0
-      ? ((visitasAtual - visitasAnterior) / visitasAnterior * 100)
-      : null;
-    const varMat = matriculasAnterior > 0 ? ((matriculasAtual - matriculasAnterior) / matriculasAnterior * 100) : 0;
-
-    const mesAtualNome = new Date(anoAtual, mesAtual, 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
-    const mesAnteriorNome = new Date(anoAnterior, mesAnterior, 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
-
-    let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `📊 *RELATÓRIO COMPARATIVO MENSAL*\n`;
-    texto += `🏢 *${unidadeNome.toUpperCase()}*\n`;
-    texto += `👤 ${hunterNome}\n`;
-    texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-    
-    texto += `📅 *${mesAtualNome}/${anoAtual}* vs *${mesAnteriorNome}/${anoAnterior}*\n\n`;
-    
-    texto += `🎯 *LEADS*\n`;
-    texto += `${mesAtualNome}: *${leadsAtual}* | ${mesAnteriorNome}: *${leadsAnterior}*\n`;
-    texto += `Variação: *${varLeads > 0 ? '+' : ''}${varLeads.toFixed(1)}%* ${varLeads > 0 ? '📈' : varLeads < 0 ? '📉' : '➡️'}\n\n`;
-    
-    texto += `🎸 *EXPERIMENTAIS*\n`;
-    texto += `${mesAtualNome}: *${experimentaisAtual}* | ${mesAnteriorNome}: *${experimentaisAnterior}*\n`;
-    texto += `Variação: *${varExp > 0 ? '+' : ''}${varExp.toFixed(1)}%* ${varExp > 0 ? '📈' : varExp < 0 ? '📉' : '➡️'}\n\n`;
-    
-    texto += `🏫 *VISITAS*\n`;
-    texto += `${mesAtualNome}: *${numVisitas(visitasAtual)}* | ${mesAnteriorNome}: *${numVisitas(visitasAnterior)}*\n`;
-    texto += `Variação: *${varVisitas === null ? 'indisponivel' : `${varVisitas > 0 ? '+' : ''}${varVisitas.toFixed(1)}%`}* ${varVisitas === null ? '' : varVisitas > 0 ? '📈' : varVisitas < 0 ? '📉' : '➡️'}\n\n`;
-    
-    texto += `✅ *MATRÍCULAS*\n`;
-    texto += `${mesAtualNome}: *${matriculasAtual}* | ${mesAnteriorNome}: *${matriculasAnterior}*\n`;
-    texto += `Variação: *${varMat > 0 ? '+' : ''}${varMat.toFixed(1)}%* ${varMat > 0 ? '📈' : varMat < 0 ? '📉' : '➡️'}\n\n`;
-    
-    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `📅 Gerado em: ${hoje.getDate().toString().padStart(2, '0')}/${(hoje.getMonth() + 1).toString().padStart(2, '0')}/${hoje.getFullYear()}\n`;
-    texto += `━━━━━━━━━━━━━━━━━━━━━━`;
-
-    return texto;
+    const { ano, mes } = obterCompetenciaRelatorioMensalComercial();
+    const mesBase = mes === 1 ? 12 : mes - 1;
+    const anoBase = mes === 1 ? ano - 1 : ano;
+    return gerarRelatorioComparativoCanonico(ano, mes, anoBase, mesBase);
   };
 
   // Gerar relatório comparativo anual (mesmo mês ano atual vs ano anterior)
   const gerarRelatorioComparativoAnual = async () => {
-    const hoje = new Date();
-    const competenciaComparativo = obterCompetenciaRelatorioMensalComercial();
-    const mesAtual = competenciaComparativo.mes - 1;
-    const anoAtual = competenciaComparativo.ano;
-    const anoAnterior = anoAtual - 1;
-    
-    const unidadeId = isAdmin ? context?.unidadeSelecionada : usuario?.unidade_id;
-    const unidadeRelatorioId = unidadeId && unidadeId !== 'todos' ? unidadeId : null;
-    let unidadeNome = unidadeRelatorioId ? 'Unidade' : 'Consolidado';
-    let hunterNome = unidadeRelatorioId ? (usuario?.nome || 'Usuário') : 'Todos';
-    
-    if (unidadeRelatorioId) {
-      const { data: unidadeData } = await supabase
-        .from('unidades')
-        .select('nome, hunter_nome')
-        .eq('id', unidadeRelatorioId)
-        .single();
-      
-      if (unidadeData) {
-        unidadeNome = unidadeData.nome;
-        hunterNome = unidadeData.hunter_nome || usuario?.nome || 'Usuário';
-      }
-    }
-
-    // Buscar dados do mês atual no ano atual
-    const inicioMesAtual = new Date(anoAtual, mesAtual, 1);
-    const fimMesAtual = new Date(anoAtual, mesAtual + 1, 0);
-    
-    let dadosAnoAtualQuery = supabase
-      .from('leads')
-      .select('status, quantidade, experimental_agendada')
-      .gte('data_contato', inicioMesAtual.toISOString().split('T')[0])
-      .lte('data_contato', fimMesAtual.toISOString().split('T')[0]);
-    if (unidadeRelatorioId) dadosAnoAtualQuery = dadosAnoAtualQuery.eq('unidade_id', unidadeRelatorioId);
-    const { data: dadosAnoAtual } = await dadosAnoAtualQuery;
-
-    // Buscar dados do mesmo mês no ano anterior
-    const inicioMesAnterior = new Date(anoAnterior, mesAtual, 1);
-    const fimMesAnterior = new Date(anoAnterior, mesAtual + 1, 0);
-
-    let dadosAnoAnteriorQuery = supabase
-      .from('leads')
-      .select('status, quantidade, experimental_agendada')
-      .gte('data_contato', inicioMesAnterior.toISOString().split('T')[0])
-      .lte('data_contato', fimMesAnterior.toISOString().split('T')[0]);
-    if (unidadeRelatorioId) dadosAnoAnteriorQuery = dadosAnoAnteriorQuery.eq('unidade_id', unidadeRelatorioId);
-    const { data: dadosAnoAnterior } = await dadosAnoAnteriorQuery;
-
-    // Calcular totais ano atual
-    const leadsAtual = dadosAnoAtual?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const experimentaisAtual = dadosAnoAtual?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const visitasAtual = await contarVisitasCanonicas(unidadeRelatorioId, inicioMesAtual.toISOString().split('T')[0], fimMesAtual.toISOString().split('T')[0]);
-    const matriculasAtual = (await buscarMatriculasAlunos(unidadeRelatorioId, inicioMesAtual.toISOString().split('T')[0], fimMesAtual.toISOString().split('T')[0])).filter(ehMatriculaNova).length;
-
-    // Calcular totais ano anterior
-    const leadsAnterior = dadosAnoAnterior?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const experimentaisAnterior = dadosAnoAnterior?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const visitasAnterior = await contarVisitasCanonicas(unidadeRelatorioId, inicioMesAnterior.toISOString().split('T')[0], fimMesAnterior.toISOString().split('T')[0]);
-    const matriculasAnterior = (await buscarMatriculasAlunos(unidadeRelatorioId, inicioMesAnterior.toISOString().split('T')[0], fimMesAnterior.toISOString().split('T')[0])).filter(ehMatriculaNova).length;
-
-    // Calcular variações
-    const varLeads = leadsAnterior > 0 ? ((leadsAtual - leadsAnterior) / leadsAnterior * 100) : 0;
-    const varExp = experimentaisAnterior > 0 ? ((experimentaisAtual - experimentaisAnterior) / experimentaisAnterior * 100) : 0;
-    const varVisitas = visitasAtual !== null && visitasAnterior !== null && visitasAnterior > 0
-      ? ((visitasAtual - visitasAnterior) / visitasAnterior * 100)
-      : null;
-    const varMat = matriculasAnterior > 0 ? ((matriculasAtual - matriculasAnterior) / matriculasAnterior * 100) : 0;
-
-    const mesNome = new Date(anoAtual, mesAtual, 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
-
-    let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `📊 *RELATÓRIO COMPARATIVO ANUAL*\n`;
-    texto += `🏢 *${unidadeNome.toUpperCase()}*\n`;
-    texto += `👤 ${hunterNome}\n`;
-    texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-    
-    texto += `📅 *${mesNome}/${anoAtual}* vs *${mesNome}/${anoAnterior}*\n\n`;
-    
-    texto += `🎯 *LEADS*\n`;
-    texto += `${anoAtual}: *${leadsAtual}* | ${anoAnterior}: *${leadsAnterior}*\n`;
-    texto += `Variação: *${varLeads > 0 ? '+' : ''}${varLeads.toFixed(1)}%* ${varLeads > 0 ? '📈' : varLeads < 0 ? '📉' : '➡️'}\n\n`;
-    
-    texto += `🎸 *EXPERIMENTAIS*\n`;
-    texto += `${anoAtual}: *${experimentaisAtual}* | ${anoAnterior}: *${experimentaisAnterior}*\n`;
-    texto += `Variação: *${varExp > 0 ? '+' : ''}${varExp.toFixed(1)}%* ${varExp > 0 ? '📈' : varExp < 0 ? '📉' : '➡️'}\n\n`;
-    
-    texto += `🏫 *VISITAS*\n`;
-    texto += `${anoAtual}: *${numVisitas(visitasAtual)}* | ${anoAnterior}: *${numVisitas(visitasAnterior)}*\n`;
-    texto += `Variação: *${varVisitas === null ? 'indisponivel' : `${varVisitas > 0 ? '+' : ''}${varVisitas.toFixed(1)}%`}* ${varVisitas === null ? '' : varVisitas > 0 ? '📈' : varVisitas < 0 ? '📉' : '➡️'}\n\n`;
-    
-    texto += `✅ *MATRÍCULAS*\n`;
-    texto += `${anoAtual}: *${matriculasAtual}* | ${anoAnterior}: *${matriculasAnterior}*\n`;
-    texto += `Variação: *${varMat > 0 ? '+' : ''}${varMat.toFixed(1)}%* ${varMat > 0 ? '📈' : varMat < 0 ? '📉' : '➡️'}\n\n`;
-    
-    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `📅 Gerado em: ${hoje.getDate().toString().padStart(2, '0')}/${(hoje.getMonth() + 1).toString().padStart(2, '0')}/${hoje.getFullYear()}\n`;
-    texto += `━━━━━━━━━━━━━━━━━━━━━━`;
-
-    return texto;
+    const { ano, mes } = obterCompetenciaRelatorioMensalComercial();
+    return gerarRelatorioComparativoCanonico(ano, mes, ano - 1, mes);
   };
 
   const copiarRelatorio = async () => {

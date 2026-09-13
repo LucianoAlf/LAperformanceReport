@@ -168,6 +168,10 @@ def enviar(telefone, unidade_nome, texto):
     return {"conversation_id": cid, "message_id": r.get("id")}
 
 
+# Laço 1/2/3 (13/09/2026): só os itens com sinal_id (QUENTES AGORA) entram no registro
+# de entregas; a legenda vai fora do modelo, para nunca faltar.
+LEGENDA_123 = "_Responda *1* já resolvi · *2* vou agora · *3* não é comigo_"
+
 MOLDE_MANHA = """\
 ☀️ *BOM DIA, {apelido}* — {unidade}
 _{dia_semana}, {data}_
@@ -372,11 +376,24 @@ def main():
                 if log_id:
                     concluir(log_id, "ok", {"fase": "sem_envio", "motivo": "modelo", "dados": dados})
                 continue
+            itens_123 = ([{"sinal_id": x.get("sinal_id"), "quem": x.get("quem")}
+                          for x in (dados.get("quentes_agora") or []) if x.get("sinal_id")]
+                         if a.tipo == "manha" else [])
+            if itens_123:
+                texto = texto.rstrip() + "\n\n" + LEGENDA_123
             if a.dry_run:
                 log(f"--- {c['apelido']} ({c['unidade_nome']}) [DRY-RUN — nada enviado] ---\n{texto}\n")
                 continue
             r = enviar(c["telefone"], c["unidade_nome"], texto)
             concluir(log_id, "ok", {"fase": "enviado", "texto": texto, "chatwoot": r, "dados": dados})
+            if itens_123:
+                # radar_entregas: o registro canônico do que saiu — é a que o "1/2/3" se refere.
+                try:
+                    reg = rpc("mila_registrar_entrega_dm_v1", {"p_solicitante_telefone": c["telefone"],
+                                                                "p_origem": "briefing", "p_itens": itens_123})
+                    log(f"{c['apelido']}: entregas registradas: {reg}")
+                except Exception as e:  # noqa: BLE001 — registro falho nao desfaz o envio
+                    log(f"{c['apelido']}: entrega NAO registrada: {e}")
             log(f"{c['apelido']}: enviado ({len(texto)} chars)")
         except Exception as e:  # noqa: BLE001 — uma consultora não derruba as outras
             falhas += 1

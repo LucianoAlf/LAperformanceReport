@@ -144,6 +144,87 @@ async function enviarWhatsApp(telefone, unidadeNome, texto) {
 }
 
 // ── tools de LEITURA ─────────────────────────────────────────────────────────
+// ── RELATÓRIOS pela MESMA fonte que o grupo recebe (13/09/2026) ──────────────
+// A edge relatorio-admin-whatsapp gera o texto do diário e do mensal; chamá-la em
+// modo dry_run com o crachá (service key) devolve EXATAMENTE o que o grupo recebe.
+// Matrículas e comparativo saem das RPCs de texto que o botão do LA Report também usa.
+async function edgeRelatorio(modo, corpo) {
+  if (!URL_ || !KEY) throw new Error('lareport_nao_configurado');
+  const res = await fetch(`${URL_}/functions/v1/relatorio-admin-whatsapp`, {
+    method: 'POST',
+    headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ modo, ...corpo }),
+  });
+  const raw = await res.text();
+  let j = null; try { j = raw ? JSON.parse(raw) : null; } catch { j = null; }
+  if (!res.ok || !j || j.success !== true) {
+    const motivo = (j && (j.error || j.motivo)) || raw.slice(0, 200);
+    const err = new Error(`relatorio_${modo}_${res.status}: ${motivo}`);
+    err.detalhe = j;
+    throw err;
+  }
+  return j;
+}
+
+// Relatório é longo (2-4k chars): o modelo não copia isso verbatim sem perder linha.
+// Então o texto vai DIRETO para a conversa de quem pediu, em partes que cabem no
+// WhatsApp, e o modelo recebe só uma prévia para comentar.
+function fatiarTexto(texto, max = 3500) {
+  const partes = []; let atual = '';
+  for (const bloco of String(texto).split('\n\n')) {
+    const cand = atual ? `${atual}\n\n${bloco}` : bloco;
+    if (cand.length > max && atual) { partes.push(atual); atual = bloco; } else { atual = cand; }
+  }
+  if (atual) partes.push(atual);
+  return partes;
+}
+
+async function entregarNaConversa(texto, rotulo) {
+  const partes = fatiarTexto(texto);
+  if (DRY) return { dry_run: true, entregue: false, partes: partes.length, previa: String(texto).slice(0, 600) };
+  let ultimo = null;
+  for (const p of partes) ultimo = await enviarParaPessoa(TEL, QUEM && QUEM.unidade, p);
+  return { ok: true, entregue_na_conversa: true, partes: partes.length, conversa: ultimo && ultimo.conversation_id,
+           previa: String(texto).slice(0, 500),
+           nota: `${rotulo} já foi enviado inteiro na conversa — NÃO repita o texto; comente em 1-2 linhas o que mais importa e pergunte se quer detalhar algo.` };
+}
+
+// Unidade do relatório: quem tem unidade só vê a própria (trava, igual às RPCs);
+// quem lidera a rede diz qual — ou recebe o consolidado quando o relatório aceita.
+async function unidadeAlvo(a, { obrigatoria } = {}) {
+  if (QUEM && QUEM.unidade_id) return { id: QUEM.unidade_id, nome: QUEM.unidade };
+  if (a && a.unidade) return { id: await unidadeIdPorNome(a.unidade), nome: a.unidade };
+  if (obrigatoria) throw new Error('unidade_obrigatoria: este relatório é por unidade — pergunte qual (Barra, Campo Grande ou Recreio)');
+  return { id: null, nome: 'Consolidado' };
+}
+
+function competenciaPadrao(a, { mesAnterior } = {}) {
+  const agora = new Date(Date.now() - 3 * 60 * 60 * 1000); // BRT
+  const base = mesAnterior ? new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth() - 1, 1)) : agora;
+  return { ano: Number(a.ano) || base.getUTCFullYear(), mes: Number(a.mes) || (base.getUTCMonth() + 1) };
+}
+
+const RELATORIOS = [
+  { name: 'relatorio_diario_comercial',
+    description: 'ENTREGA na conversa o RELATÓRIO DIÁRIO COMERCIAL — o MESMO texto, da MESMA fonte, que o grupo da unidade recebe às 20h (até o momento em que for pedido). Use quando pedirem "me manda o relatório de hoje", "relatório diário", "como está o dia" com o texto completo. `data` YYYY-MM-DD (padrão hoje). Quem lidera a rede diz `unidade`. O texto já vai inteiro na conversa: você só comenta.',
+    inputSchema: { type: 'object', properties: { data: { type: 'string', description: 'YYYY-MM-DD (padrão: hoje).' },
+      unidade: { type: 'string', description: 'Barra | Campo Grande | Recreio (só para quem enxerga a rede).' } } } },
+  { name: 'relatorio_mensal_comercial',
+    description: 'ENTREGA na conversa o RELATÓRIO MENSAL COMERCIAL oficial (o fechamento que a equipe recebeu). Só existe para mês FECHADO; para o mês corrente use numeros_do_mes ou relatorio_matriculas. `ano`/`mes` (padrão: mês anterior). Quem lidera a rede diz `unidade`.',
+    inputSchema: { type: 'object', properties: { ano: { type: 'integer' }, mes: { type: 'integer' },
+      unidade: { type: 'string', description: 'Barra | Campo Grande | Recreio (só para quem enxerga a rede).' } } } },
+  { name: 'relatorio_matriculas',
+    description: 'ENTREGA na conversa o RELATÓRIO DE MATRÍCULAS do mês (resumo, LAMK/EMLA, passaportes, parcelas, tickets, por canal, por curso e a lista detalhada) — a MESMA RPC que o botão do LA Report usa. `ano`/`mes` (padrão: mês corrente). Mês fechado sai do fechamento oficial; corrente sai ao vivo. Quem lidera a rede pode pedir `unidade` ou receber o consolidado.',
+    inputSchema: { type: 'object', properties: { ano: { type: 'integer' }, mes: { type: 'integer' }, unidade: { type: 'string' } } } },
+  { name: 'relatorio_comparativo',
+    description: 'ENTREGA na conversa o RELATÓRIO COMPARATIVO (leads, experimentais REALIZADAS, visitas, matrículas e ticket) de um mês contra a base: `base` = "mes_anterior" (padrão) ou "ano_anterior". Mesma RPC do botão do LA Report. `ano`/`mes` (padrão: mês corrente). Quem lidera a rede pode pedir `unidade` ou receber o consolidado.',
+    inputSchema: { type: 'object', properties: { ano: { type: 'integer' }, mes: { type: 'integer' },
+      base: { type: 'string', enum: ['mes_anterior', 'ano_anterior'] }, unidade: { type: 'string' } } } },
+  { name: 'link_la_report',
+    description: 'O LINK OFICIAL do LA Report e como entrar, para quem está falando comigo (colaborador autorizado). Diz se a pessoa já tem usuário (pelo telefone dela) e o que fazer se não tiver. Use quando pedirem "me manda o link do LA Report", "como acesso o sistema", "esqueci a senha". Nunca invente outro endereço.',
+    inputSchema: { type: 'object', properties: {} } },
+];
+
 const LEITURA = [
   { name: 'minha_pauta',
     description: 'O que precisa de ação HOJE na(s) unidade(s) de quem pergunta: sinais abertos do radar comercial (lead sem desfecho, faltou sem remarcar, preso no bot, promessa da escola sem retorno), até 30 dias, já ordenados. Use quando perguntarem "o que tenho pra hoje", "tem pendência?", "quem eu ligo primeiro?".',
@@ -304,7 +385,7 @@ const veBaseComercial = () => !!QUEM
 
 function toolsVisiveis() {
   if (!QUEM) return [];
-  return [...LEITURA, ...(veBaseComercial() ? BASE_COMERCIAL : []),
+  return [...LEITURA, ...RELATORIOS, ...(veBaseComercial() ? BASE_COMERCIAL : []),
           ...(veTudo() ? TRAFEGO : []), ...ESCRITA];
 }
 
@@ -514,6 +595,46 @@ _${ap.de} me pediu para te avisar. Pode me responder por aqui que eu levo a resp
       return j({ ok: true, conversation_id: convId,
         recado: 'Conversa marcada como resolvida. Agora me diz em uma palavra o que houve, que eu registro o motivo.' });
     }
+    case 'relatorio_diario_comercial': {
+      const u = await unidadeAlvo(a, { obrigatoria: true });
+      const hojeBrt = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const r = await edgeRelatorio('dry_run_comercial', { unidade: u.id, data_referencia: a.data || hojeBrt });
+      return j(await entregarNaConversa(r.texto, `O relatório diário comercial de ${u.nome}`));
+    }
+    case 'relatorio_mensal_comercial': {
+      const u = await unidadeAlvo(a, { obrigatoria: true });
+      const { ano, mes } = competenciaPadrao(a, { mesAnterior: true });
+      const comp = `${String(mes).padStart(2, '0')}/${ano}`;
+      try {
+        const r = await edgeRelatorio('dry_run_mensal_comercial', { unidade: u.id, ano, mes });
+        return j(await entregarNaConversa(r.texto, `O relatório mensal comercial de ${u.nome} (${comp})`));
+      } catch (e) {
+        if (e.detalhe && e.detalhe.motivo === 'fechamento_indisponivel') {
+          return j({ ok: false, motivo: 'fechamento_indisponivel', competencia: comp, fallback: e.detalhe.fallback || null,
+                     nota: 'esse mês não tem fechamento oficial — diga isso; para o mês corrente ofereça numeros_do_mes ou relatorio_matriculas' });
+        }
+        throw e;
+      }
+    }
+    case 'relatorio_matriculas': {
+      const u = await unidadeAlvo(a);
+      const { ano, mes } = competenciaPadrao(a);
+      const texto = await rpc('relatorio_matriculas_texto_v1', { p_unidade_id: u.id, p_ano: ano, p_mes: mes,
+        p_gerado_por: QUEM.nome, p_solicitante_telefone: tel });
+      return j(await entregarNaConversa(String(texto || ''), `O relatório de matrículas de ${u.nome} (${String(mes).padStart(2, '0')}/${ano})`));
+    }
+    case 'relatorio_comparativo': {
+      const u = await unidadeAlvo(a);
+      const { ano, mes } = competenciaPadrao(a);
+      const anual = a.base === 'ano_anterior';
+      const anoBase = anual ? ano - 1 : (mes === 1 ? ano - 1 : ano);
+      const mesBase = anual ? mes : (mes === 1 ? 12 : mes - 1);
+      const texto = await rpc('relatorio_comparativo_texto_v1', { p_unidade_id: u.id, p_ano: ano, p_mes: mes,
+        p_ano_base: anoBase, p_mes_base: mesBase, p_gerado_por: QUEM.nome, p_solicitante_telefone: tel });
+      return j(await entregarNaConversa(String(texto || ''), `O comparativo ${anual ? 'anual' : 'mensal'} de ${u.nome}`));
+    }
+    case 'link_la_report':
+      return j(await rpc('mila_acesso_la_report_v1', { p_solicitante_telefone: tel }));
     case 'anotar_lead':
       return escrita('mila_anotar_lead_v1', { p_solicitante_telefone: tel, p_lead_id: a.lead_id, p_texto: a.texto });
     default: throw new Error(`tool_desconhecida: ${name}`);
