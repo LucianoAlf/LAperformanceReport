@@ -74,6 +74,8 @@ test('a busca foi movida para o hook, nao reescrita', () => {
     'fetchExperimentaisDiagnosticoComercialV2(',
     'buscarResumoDashboardProfessoresCanonico(',
     "from('dados_mensais')",
+    "from('alunos')",
+    "from('leads')",
     "from('movimentacoes_admin')",
     'filtrarRetencaoCanonica(',
     'anexarCursosMovimentacoesAdmin(',
