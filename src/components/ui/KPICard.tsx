@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { LucideIcon, TrendingUp, TrendingDown, Minus, HelpCircle } from 'lucide-react';
 import { cn, formatCurrency } from '@/lib/utils';
 
@@ -128,6 +129,9 @@ export function KPICard({
 }: KPICardProps) {
   const displayLabel = title || label || '';
   const effectiveVariant = color || variant;
+  // No mobile não existe hover: sem estado próprio, o "?" aparecia e nunca
+  // abria o tooltip com a regra de negócio do indicador.
+  const [tooltipAberto, setTooltipAberto] = useState(false);
   
   // Calcular tendência automaticamente se previousValue fornecido
   let trend = propTrend;
@@ -261,9 +265,21 @@ export function KPICard({
           )}>
             {displayLabel}
             {tooltip && (
-              <span className="relative group">
-                <HelpCircle size={12} className="text-slate-500 hover:text-slate-300 cursor-help flex-shrink-0" />
-                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-200 whitespace-normal w-[220px] text-center opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-xl pointer-events-none">
+              <span className="relative group inline-flex">
+                <button
+                  type="button"
+                  aria-label="Explicação do indicador"
+                  aria-expanded={tooltipAberto}
+                  className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center -m-3"
+                  onClick={(e) => { e.stopPropagation(); setTooltipAberto((v) => !v); }}
+                >
+                  <HelpCircle size={12} className="text-slate-500 hover:text-slate-300 cursor-help flex-shrink-0" />
+                </button>
+                <span className={cn(
+                  "absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-200 whitespace-normal w-[220px] text-center transition-all duration-200 z-50 shadow-xl pointer-events-none",
+                  tooltipAberto ? "opacity-100 visible" : "opacity-0 invisible",
+                  "group-hover:opacity-100 group-hover:visible",
+                )}>
                   {tooltip}
                 </span>
               </span>
