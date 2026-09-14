@@ -17,10 +17,16 @@ const COMPOSTO_DAVI = {
     { curso: 'Bateria', valor: 380 }, { curso: 'Teclado / Piano', valor: 367 },
     { curso: 'Harmonia', valor: 149 }, { curso: 'Canto T', valor: 394 },
   ],
+  itens: [
+    { aluno_nome: 'Davi Guilherme De Souza Chaves Ribeiro', valor: 380, categoria: 'parcela', competencia: '08/2026', descricao: 'Bateria', canonical_fatura_id: 'aaaaaaaa-0000-0000-0000-000000000001' },
+    { aluno_nome: 'Davi Guilherme De Souza Chaves Ribeiro', valor: 367, categoria: 'parcela', competencia: '08/2026', descricao: 'Teclado / Piano', canonical_fatura_id: 'aaaaaaaa-0000-0000-0000-000000000002' },
+    { aluno_nome: 'Davi Guilherme De Souza Chaves Ribeiro', valor: 149, categoria: 'parcela', competencia: '08/2026', descricao: 'Harmonia', canonical_fatura_id: 'aaaaaaaa-0000-0000-0000-000000000003' },
+    { aluno_nome: 'Davi Guilherme De Souza Chaves Ribeiro', valor: 394, categoria: 'parcela', competencia: '08/2026', descricao: 'Canto T', canonical_fatura_id: 'aaaaaaaa-0000-0000-0000-000000000004' },
+  ],
 };
 
 function novo(overrides = {}) {
-  const enviadas = []; const logs = []; const lancados = []; let seq = 0;
+  const enviadas = []; const logs = []; const lancados = []; let seq = 0; let led = 0;
   const h = mod.criarHandlerFinanceiro({
     grupos: { [CHAT]: { grupo_jid: CHAT, unidade_id: UNIDADE, nome: 'Campo Grande' } },
     sendFn: async (_c, t) => { enviadas.push(t); return 'MSG' + (++seq); },
@@ -36,6 +42,8 @@ function novo(overrides = {}) {
     pagadorFn: async () => null,
     duplicataFn: async () => ({ ja_lancado: false }),
     identidadeFn: async () => ({ identificado: true, nome: 'Jhon' }),
+    registrarPreviewV3Fn: async () => ({ ok: true, preview_id: 'LED-' + (++led) }),
+    finalizarPreviewV3Fn: async () => ({ ok: true }),
     lancarFn: async (p) => { lancados.push(p); return { ok: true, movimentacao_id: 'M1', valor: p.valor, forma: p.forma }; },
     log: (o) => logs.push(o),
     ...overrides,
@@ -53,7 +61,7 @@ const ultimo = (a) => String(a[a.length - 1] || '');
   await A.h.handle({ chatId: CHAT, senderPhone: JHON, messageId: 'C1',
     body: 'Parcela 08/2026 aluno Davi Guilherme', hasMedia: true, mediaType: 'image', mediaUrls: ['fake://pix.jpg'] });
   const card1 = ultimo(A.enviadas);
-  checar(/composto/i.test(card1) && /1\.290|380/.test(card1), 'setup: card do Davi com o composto');
+  checar(/\*PARCELAS\*/i.test(card1) && /1\.290|380/.test(card1), 'setup: card do Davi com o lote de faturas');
 
   // ── a correção real: troca aluno e valor ────────────────────────────────────
   const rC = await A.h.handle({ chatId: CHAT, senderPhone: JHON, messageId: 'C2',
@@ -61,11 +69,10 @@ const ultimo = (a) => String(a[a.length - 1] || '');
   console.log('correção acao:', rC && rC.acao);
   const card2 = ultimo(A.enviadas);
   console.log('card 2:', card2.split('\n').filter(Boolean).slice(0, 8).join(' | ').slice(0, 220));
-  checar(/Thyfany/i.test(card2), 'card com a Thyfany');
-  checar(/432/.test(card2), 'card com os R$ 432 (valor colhido do texto)');
-  checar(!/Pagamento composto — 4/i.test(card2), 'o COMPOSTO do Davi não pode sobreviver à troca de aluno');
-  checar(!/Bateria: R\$ 380/i.test(card2), 'as parcelas do Davi não podem aparecer no card da Thyfany');
-  checar(!/Elisangela/i.test(card2), 'o responsável herdado do Davi não pode sobreviver à troca');
+  checar(rC && rC.acao === 'lote_invalidado_por_item_faltante', 'correcao deveria invalidar o snapshot inteiro');
+  checar(/Thyfany/i.test(card2) && /432/.test(card2), 'aviso identifica o item faltante');
+  checar(/Invalidei o lote anterior/i.test(card2), 'aviso nao declarou a invalidacao');
+  checar((A.h._pendentes.get(CHAT) || []).length === 0, 'lote antigo continuou aprovavel');
 
   // ── mesma pessoa: enriquecimento continua sobrevivendo (regressão) ──────────
   const B = novo();
@@ -73,8 +80,9 @@ const ultimo = (a) => String(a[a.length - 1] || '');
     body: 'Parcela 08/2026 aluno Davi Guilherme', hasMedia: true, mediaType: 'image', mediaUrls: ['fake://pix.jpg'] });
   await B.h.handle({ chatId: CHAT, senderPhone: JHON, messageId: 'C4',
     body: 'aluno: Davi Guilherme De Souza Chaves Ribeiro', hasMedia: false });
-  const cardB = ultimo(B.enviadas);
-  checar(/composto|380/i.test(cardB), 'REGRESSÃO: mesma pessoa mantém o composto');
+  const pendB = (B.h._pendentes.get(CHAT) || [])[0];
+  checar(pendB && pendB.tipoOperacao === 'lancar_recebimento_lote' && pendB.itens.length === 4,
+    'REGRESSÃO: mesma pessoa mantém o lote imutável');
 
   // ── "calma ai" é conversa ───────────────────────────────────────────────────
   for (const t of ['calma ai', 'pera', 'espera', 'calma']) {
