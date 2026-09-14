@@ -1874,7 +1874,7 @@ export function ModalFichaAluno({
             {/* ABA PESSOAL */}
             <TabsContent value="pessoal" className="space-y-4 mt-0">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="col-span-2">
+                <div className="col-span-1 sm:col-span-2">
                   <Label className="mb-2 block">Nome Completo *</Label>
                   <Input
                     value={formData.nome}
@@ -1911,7 +1911,7 @@ export function ModalFichaAluno({
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="col-span-2">
+                <div className="col-span-1 sm:col-span-2">
                   <Label className="mb-2 block">Instagram</Label>
                   <Input
                     value={formData.instagram}
@@ -2334,7 +2334,7 @@ export function ModalFichaAluno({
                   />
                 </div>
 
-                <div className="col-span-2">
+                <div className="col-span-1 sm:col-span-2">
                   <Label className="mb-2 block">Status de Pagamento (mês atual)</Label>
                   <Select
                     value={formData.status_pagamento}
@@ -2395,7 +2395,7 @@ export function ModalFichaAluno({
                   </Select>
                 </div>
 
-                <div className="col-span-2">
+                <div className="col-span-1 sm:col-span-2">
                   <Label className="mb-2 block">Agente Comercial (Hunter)</Label>
                   <Input
                     value={formData.agente_comercial}

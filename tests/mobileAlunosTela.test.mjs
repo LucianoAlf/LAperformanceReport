@@ -233,3 +233,19 @@ test('a faixa de abas DIZ que continua, em vez de cortar seca na borda', () => {
   // pelo Play CDN (`maskImage` != none), nao e' classe morta.
   assert.match(fichaClasses.FICHA_ABAS_CELULAR, /mask-image:linear-gradient/);
 });
+
+test('🔴 col-span-2 dentro de grid de 1 coluna RECRIA a segunda coluna', () => {
+  // Medido no app real: com `grid-cols-1` aplicado e `sm` INATIVO (375px), o
+  // grid computava `112.781px 214.219px` — duas colunas de larguras
+  // diferentes. A causa nao era o grid: um filho pedia `col-span-2`, e um item
+  // que pede duas colunas num grid de uma faz o navegador CRIAR a segunda,
+  // implicita. Por isso "Data de Nascimento" e "Idade" continuavam lado a
+  // lado, com a data ilegivel por baixo do selo.
+  //
+  // ⚠️ Trocar `grid-cols-2` sem olhar os `col-span` dos filhos nao resolve
+  // nada — e o teste anterior (que so contava grids) passava.
+  const spansFixos = ficha.split('className="col-span-2"').length - 1;
+  assert.equal(spansFixos, 0, `sobraram ${spansFixos} col-span-2 fixos, que recriam a 2a coluna`);
+  const spansResponsivos = ficha.split('col-span-1 sm:col-span-2').length - 1;
+  assert.equal(spansResponsivos, 4, `esperava 4 col-span responsivos, achei ${spansResponsivos}`);
+});
