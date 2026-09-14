@@ -286,13 +286,15 @@ test('dois itens continuam no lote e categoria mista nao escolhe a primeira', as
 
 test('rascunho incompleto reidrata depois de restart sem virar pendencia aprovavel', async () => {
   const criado = new Date().toISOString();
+  const autorHash = require('node:crypto').createHash('sha256').update('5521999999999').digest('hex');
   const envelope = { pagador: null, valor_total: 590, forma: null,
     itens: [{ aluno: 'Beatriz Teste', categorias: ['passaporte'], competencias: ['09/2026'] }] };
   const abertos = [{
     id: 'draft-ledger-1', preview_hash: 'hash-draft-1', criado_em: criado,
     operacao: 'agent_first_draft', status: 'draft_missing_fields',
     chat_id_hash: require('node:crypto').createHash('md5').update(CHAT).digest('hex'),
-    pending: { tipoOperacao: 'agent_first_draft', origem: 'origem-restart', ts: Date.now(), agentFirstEnvelope: envelope },
+    pending: { tipoOperacao: 'agent_first_draft', origem: 'origem-restart', ts: Date.now(),
+      agentFirstEnvelope: envelope, rascunhoAutorHash: autorHash, msgIds: ['pergunta-restart'] },
   }];
   const { h } = fixture({ abertos });
   const reidratou = await h.reidratarPendencias();
