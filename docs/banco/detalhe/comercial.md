@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-09 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-14 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — comercial
 
-69 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+70 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## agente_conversas
 
@@ -608,10 +608,10 @@
 - `lead_experimentais_pkey`
 - `uq_lead_exp_aula`
 - `uq_lead_exp_legado`
-- `uq_lead_exp_negocio_novo`
 
 **Triggers:**
 - `trg_audit → fn_audit_log()`
+- `trg_experimental_normaliza_referencia_aula → fn_experimental_normaliza_referencia_aula()`
 - `trg_experimental_preenche_curso → trg_experimental_preenche_curso_do_lead()`
 - `trg_propagar_professor_experimental → fn_propagar_professor_experimental()`
 
@@ -1271,6 +1271,15 @@
 
 **Únicos:**
 - `unidade_contato_comercial_pkey`
+
+## vw_experimental_aula_canonica
+
+> Liga experimental a aula fisica confirmada pelo roster; fallback so aceita mesma unidade, pessoa, data e horario.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `aula_local_id` | integer | sim |  |  |
+| `lead_experimental_id` | integer | sim |  |  |
 
 ## vw_experimental_faltou_sem_afirmacao
 
