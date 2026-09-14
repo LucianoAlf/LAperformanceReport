@@ -2674,16 +2674,18 @@ function _v4CanarioLigado(chatId) {
   return lista.length > 0 && lista.includes(String(chatId || ''));
 }
 
-function rotearMensagemV4(texto, contexto, { timeout = 30000 } = {}) {
+function rotearMensagemV4(texto, contexto, { timeout = 30000, documento = null } = {}) {
   return new Promise((resolve) => {
     const t = String(texto || '').trim();
     if (t.length < 1 || t.length > 1200) return resolve(null);
     const prompt = 'Voce e a Sol, agente do caixa de uma escola de musica, lendo UMA mensagem do grupo financeiro. '
       + 'Contexto atual (pendencias aguardando conferencia humana, pode ser vazio): '
       + JSON.stringify(contexto).slice(0, 1200)
+      + '. Evidencia estruturada do documento (pode ser vazia): '
+      + JSON.stringify(documento || {}).slice(0, 1600)
       + '. Classifique a INTENCAO da mensagem. Responda SOMENTE JSON valido, sem markdown: '
       + '{"intencao":"aprovar|descartar|corrigir_aluno|corrigir_valor|corrigir_categoria|corrigir_forma|corrigir_competencia|sem_aluno|contestar_fatura|saida_dinheiro|lancamento_por_texto|lancamento_multi_aluno|corrigir_lancamento_gravado|estornar_lancamento|reabrir_caixa|abrir_caixa|fechar_caixa|consulta_caixa|conversa|nada",'
-      + '"aluno_nome":null,"valor":null,"forma":null,"categoria":null,"competencia":null,"entidade":null,'
+      + '"aluno_nome":null,"valor":null,"forma":null,"cartao_modalidade":null,"cartao_parcelas":null,"categoria":null,"competencia":null,"entidade":null,'
       // 🔴 O CONTRATO PLURAL (10/09). O singular nao comportava familia nem
       //    varios meses: um `aluno_nome`, um `valor`, uma `competencia`.
       //    Mesmo invertendo o bridge, esses dois casos ficariam
@@ -2701,6 +2703,8 @@ function rotearMensagemV4(texto, contexto, { timeout = 30000 } = {}) {
       //    modelo uma categoria que o filtro nao sustenta faria a Sol prometer
       //    um recorte que nao existe, e o item viria sem casar com fatura nenhuma.
       + 'TAXA DE MATRICULA e categoria "passaporte" — o sistema trata as duas juntas. '
+      + 'A evidencia do documento serve para valor, forma, modalidade e parcelas. Nome lido no documento e pagador, nunca aluno confirmado. '
+      + 'Se a mensagem humana declarar forma ou valor, ela vence a leitura do documento; conflito humano deve ficar nulo para pedir esclarecimento. '
       + 'Um aluno com dois cursos e UM item; dois irmaos sao DOIS itens. Varios meses do mesmo aluno vao em competencias[]. '
       + 'REGRAS: "conversa" = papo de equipe/elogio/despedida; "nada" = assunto alheio ao caixa. '
       + '"aprovar" quando autorizam lancar o que ja esta num card do contexto — inclusive so com "pode", "pode sim", "ok", "isso", "manda", respondendo a pergunta da Sol. Exige card no contexto: sem card, "pode" sozinho e "conversa". '
@@ -2726,10 +2730,15 @@ function rotearMensagemV4(texto, contexto, { timeout = 30000 } = {}) {
     };
     const normaliza = (o) => {
       if (!o || typeof o !== 'object') return null;
+      // Em mídia, o valor pode existir só no comprovante. A guarda continua
+      // exata, mas passa a aceitar também o trecho de OCR já estruturado; sem
+      // isso o modelo copiava R$ 400 do documento e a própria guarda anulava o
+      // número por ele não aparecer na legenda humana.
+      const textoDocumento = documento ? JSON.stringify(documento) : '';
       const _v  = o.valor != null ? parseBRMoney(String(o.valor)) : null;
       const _vt = o.valor_total != null ? parseBRMoney(String(o.valor_total)) : null;
-      const gv  = _guardar(_v, texto);
-      const gvt = _guardar(_vt, texto);
+      const gv  = _guardar(_v, texto, textoDocumento);
+      const gvt = _guardar(_vt, texto, textoDocumento);
       // itens[]: uma entrada por ALUNO. Listas sempre listas — `null` aqui
       // obrigaria todo consumidor a repetir a mesma checagem.
       const itens = Array.isArray(o.itens) ? o.itens.map((it) => {
@@ -2738,7 +2747,8 @@ function rotearMensagemV4(texto, contexto, { timeout = 30000 } = {}) {
         if (!aluno) return null;
         const lista = (x) => (Array.isArray(x) ? x : (x == null ? [] : [x]))
           .map((y) => String(y || '').trim()).filter(Boolean);
-        const gi = _guardar(it.valor != null ? parseBRMoney(String(it.valor)) : null, texto);
+        const gi = _guardar(it.valor != null ? parseBRMoney(String(it.valor)) : null,
+          texto, textoDocumento);
         return {
           aluno,
           categorias: lista(it.categorias).map((c) => c.toLowerCase()),
@@ -2752,6 +2762,8 @@ function rotearMensagemV4(texto, contexto, { timeout = 30000 } = {}) {
         aluno_nome: (o.aluno_nome && String(o.aluno_nome).trim()) || null,
         valor: gv.valor, valor_recusado: gv.recusado,
         forma: (o.forma && String(o.forma).toLowerCase().trim()) || null,
+        cartao_modalidade: (o.cartao_modalidade && String(o.cartao_modalidade).toLowerCase().trim()) || null,
+        cartao_parcelas: Number(o.cartao_parcelas) || null,
         categoria: (o.categoria && String(o.categoria).toLowerCase().trim()) || null,
         competencia: (o.competencia && String(o.competencia).trim()) || null,
         entidade: (o.entidade && String(o.entidade).trim()) || null,
@@ -3381,6 +3393,129 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   // a restart sem depender da memoria do processo.
   const rascunhosV4 = new Map();
 
+  function identidadeRascunhoV4(event) {
+    const bruto = String((event && (event.senderPhone || event.senderId)) || '')
+      .replace(/@.*/, '').replace(/\D/g, '');
+    return bruto ? sha256(bruto) : null;
+  }
+
+  function referenciasRascunhoV4(draft) {
+    return [draft && draft.origem]
+      .concat((draft && Array.isArray(draft.msgIds)) ? draft.msgIds : [])
+      .filter(Boolean).map(String);
+  }
+
+  function eventoPodeCompletarRascunhoV4(event, draft) {
+    if (!event || !draft) return false;
+    const autor = identidadeRascunhoV4(event);
+    if (autor && draft.autorHash && autor === draft.autorHash) return true;
+    const citado = event.quotedMessageId && String(event.quotedMessageId);
+    return !!(citado && referenciasRascunhoV4(draft).includes(citado));
+  }
+
+  async function coletarEvidenciaMidiaV4(event) {
+    if (!event || !event.hasMedia) return null;
+    if (event.caixaMediaEvidence) return event.caixaMediaEvidence;
+    const media = (event.mediaUrls || [])[0];
+    if (!media) return null;
+
+    let ocrText = '';
+    let ocrMeta = { status: 'nao_executado', duration_ms: 0, file_bytes: null };
+    try {
+      log({ acao: 'ocr_attempt', chatId: event.chatId, trilho: 'agent_first_preflight' });
+      const rawOcr = await ocrFn(media, { detailed: true });
+      const textoPrimario = String((rawOcr && rawOcr.text) || rawOcr || '');
+      if (textoPrimario.trim()) {
+        ocrText = textoPrimario;
+        ocrMeta = rawOcr && typeof rawOcr === 'object'
+          ? { ...ocrMeta, ...rawOcr }
+          : { ...ocrMeta, status: 'ok' };
+      } else {
+        const alt = ocrSegundaChance(media);
+        if (alt && String(alt.text || '').trim()) {
+          ocrText = String(alt.text);
+          ocrMeta = {
+            ...ocrMeta, status: 'ok_segunda_chance',
+            ocr_confidence: alt.ocr_confidence,
+            needs_human_confirmation: alt.needs_human_confirmation,
+            qr: alt.qr || [], pix_payloads: alt.pix_payloads || [],
+          };
+        } else {
+          ocrMeta = rawOcr && typeof rawOcr === 'object'
+            ? { ...ocrMeta, ...rawOcr }
+            : { ...ocrMeta, status: 'texto_vazio' };
+        }
+      }
+    } catch (e) {
+      ocrMeta = { ...ocrMeta, status: 'ocr_exception', error_code: e && e.code || null };
+    }
+
+    let valor = extrairValorOcr(ocrText);
+    let forma = extrairForma(ocrText, null);
+    let cartaoModalidade = null;
+    let cartaoParcelas = null;
+    const cartao = extrairCartao(ocrText);
+    if (cartao) {
+      forma = 'cartao';
+      cartaoModalidade = cartao.modalidade || null;
+      cartaoParcelas = cartao.parcelas || null;
+    }
+
+    let visao = null;
+    if (!valor || !forma || ocrText.trim().length < 20) {
+      try {
+        visao = await visaoFn(media);
+        if (visao) {
+          if (!valor && visao.valor) valor = Number(visao.valor);
+          if (!forma && visao.forma) forma = String(visao.forma).toLowerCase();
+          if (forma === 'cartao') {
+            cartaoModalidade = cartaoModalidade || visao.cartao_modalidade || visao.modalidade || null;
+            cartaoParcelas = cartaoParcelas || Number(visao.cartao_parcelas || visao.parcelas) || null;
+          }
+        }
+      } catch (e) {
+        log({ acao: 'fallback_vision_error', chatId: event.chatId,
+          trilho: 'agent_first_preflight', error_code: e && e.code || null });
+      }
+    }
+
+    const evidence = {
+      ocrText, ocrMeta, visao, valor: Number(valor) || null, forma: forma || null,
+      cartaoModalidade, cartaoParcelas,
+      pagador: (visao && (visao.pagador_nome || visao.aluno)) || extrairPagador(ocrText) || null,
+    };
+    event.caixaMediaEvidence = evidence;
+    log({ acao: 'agent_first_midia_estruturada', chatId: event.chatId,
+      ocr_status: ocrMeta.status, forma: evidence.forma,
+      cartao_modalidade: evidence.cartaoModalidade,
+      cartao_parcelas: evidence.cartaoParcelas, valor: evidence.valor });
+    return evidence;
+  }
+
+  function aplicarEvidenciaMidiaV4(decisao, evidence, textoHumano) {
+    if (!decisao || !evidence) return decisao;
+    const dec = { ...decisao };
+    const humana = extrairFormaHumana(textoHumano);
+    if (humana.ambigua) {
+      dec.forma = null;
+      dec.cartao_modalidade = null;
+      dec.cartao_parcelas = null;
+    } else if (humana.forma) {
+      dec.forma = humana.forma;
+      dec.cartao_modalidade = humana.cartaoModalidade || null;
+      dec.cartao_parcelas = humana.cartaoParcelas || null;
+    } else if (evidence.forma) {
+      dec.forma = evidence.forma;
+      dec.cartao_modalidade = evidence.cartaoModalidade || null;
+      dec.cartao_parcelas = evidence.cartaoParcelas || null;
+    }
+    const valorHumano = extrairValor(textoHumano);
+    const valorSeguro = valorHumano || evidence.valor;
+    if (valorSeguro && !(Number(dec.valor_total) > 0)) dec.valor_total = Number(valorSeguro);
+    if (valorSeguro && !(Number(dec.valor) > 0)) dec.valor = Number(valorSeguro);
+    return dec;
+  }
+
   function limparEnvelopeDaPendencia(chatId, pendencia, motivo) {
     const guardado = envelopesV4.get(chatId);
     if (!guardado || !pendencia || guardado.previewId !== pendencia.previewId) return;
@@ -3451,6 +3586,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       tipoOperacao: 'agent_first_draft', unidade_id: grupo.unidade_id, nome: grupo.nome,
       valor: envelope.valor_total, forma: envelope.forma || null, categoria: null,
       origem, ts: agora, agentFirstEnvelope: envelope, missingFields: ['forma'],
+      rascunhoAutorHash: identidadeRascunhoV4(event), msgIds: [],
       v3Operacao: 'agent_first_draft',
     };
     let v3 = null;
@@ -3466,10 +3602,37 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     }
     if (!v3 || !v3.ok || !v3.preview_id) return null;
     const draft = { envelope, origem, ts: agora, v3PreviewId: v3.preview_id,
-      v3PreviewHash: previewHash, grupo, event: { ...event, body: '' } };
+      v3PreviewHash: previewHash, autorHash: identidadeRascunhoV4(event), msgIds: [],
+      grupo, event: { ...event, body: '' } };
     rascunhosV4.set(event.chatId, draft);
     log({ acao: 'agent_first_draft_persistido', chatId: event.chatId, preview_ledger_id: v3.preview_id });
     return draft;
+  }
+
+  async function vincularPerguntaRascunhoV4(draft, perguntaId) {
+    if (!draft || !perguntaId) return;
+    draft.msgIds = [...new Set([...(draft.msgIds || []), String(perguntaId)])];
+    try {
+      await registrarPreviewPublicoV3({
+        event: draft.event, grupo: draft.grupo, previewId: perguntaId,
+        texto: 'rascunho agent-first aguardando forma', pendencia: {
+          tipoOperacao: 'agent_first_draft', unidade_id: draft.grupo.unidade_id,
+          nome: draft.grupo.nome, valor: draft.envelope.valor_total,
+          forma: draft.envelope.forma || null, categoria: null,
+          origem: draft.origem, ts: draft.ts, agentFirstEnvelope: draft.envelope,
+          missingFields: ['forma'], rascunhoAutorHash: draft.autorHash,
+          msgIds: draft.msgIds, v3Operacao: 'agent_first_draft',
+        },
+        result: { acao: 'agent_first_draft_pergunta_vinculada', missing_fields: ['forma'] },
+        previewStatus: 'draft_missing_fields', previewHashFixo: draft.v3PreviewHash,
+        publicPreviewSent: false, eventStatus: 'draft_missing_fields', mode: 'v4_agent_first_draft',
+      });
+    } catch (e) {
+      // O rascunho continua seguro pelo autor. Falhar ao persistir a referencia
+      // apenas impede que outro remetente o complete por citacao apos restart.
+      log({ acao: 'agent_first_draft_pergunta_vinculo_erro', chatId: draft.event.chatId,
+        erro: String(e && e.message) });
+    }
   }
 
   async function finalizarRascunhoV4(chatId, status, motivo) {
@@ -3483,7 +3646,9 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
           tipoOperacao: 'agent_first_draft', unidade_id: draft.grupo.unidade_id,
           valor: draft.envelope.valor_total, forma: draft.envelope.forma || null,
           categoria: null, origem: draft.origem, ts: draft.ts,
-          agentFirstEnvelope: draft.envelope, missingFields: [], v3Operacao: 'agent_first_draft',
+          agentFirstEnvelope: draft.envelope, missingFields: [],
+          rascunhoAutorHash: draft.autorHash || null, msgIds: draft.msgIds || [],
+          v3Operacao: 'agent_first_draft',
         },
         result: { acao: 'agent_first_draft_finalizado', motivo },
         previewStatus: status, previewHashFixo: draft.v3PreviewHash,
@@ -3517,6 +3682,17 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       await finalizarRascunhoV4(event.chatId, 'expired', 'janela_runtime_expirou');
       draft = null;
     }
+    if (draft && !eventoPodeCompletarRascunhoV4(event, draft)) {
+      const pareceComplemento = !!formaExplicitaV4(texto, event && event.caixaToolDecision).forma
+        || casarNao(texto) || casarPode(texto, { respondeuPreview: false }).pode;
+      if (pareceComplemento) {
+        log({ acao: 'agent_first_draft_ignorado_outro_remetente', chatId: event.chatId,
+          citado: event.quotedMessageId || null });
+        return { acao: 'agent_first_draft_ignorado_outro_remetente' };
+      }
+      // Para texto alheio, o rascunho simplesmente nao participa da decisao.
+      draft = null;
+    }
     if (draft && casarNao(texto)) {
       await finalizarRascunhoV4(event.chatId, 'rejected', 'descartado_pelo_humano');
       await sendFn(event.chatId, 'Tudo bem — descartei esse rascunho. Nada foi lançado.');
@@ -3536,10 +3712,23 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     // estruturada, o runtime nao chama o classificador interno outra vez: daqui
     // para baixo ficam apenas validacao do envelope, Core, preview e cofre V3.
     // Sem essa propriedade, o canario antigo continua funcionando sem mudanca.
+    const evidenceMedia = event && event.caixaMediaEvidence ? event.caixaMediaEvidence : null;
     let dec = event && event.caixaToolDecision ? event.caixaToolDecision : null;
     if (!dec) {
-      try { dec = await rotearV4Fn(texto, contexto, { timeout: 12000 }); } catch (e) { dec = null; }
+      try {
+        dec = await rotearV4Fn(texto, contexto, {
+          timeout: 12000,
+          documento: evidenceMedia ? {
+            valor: evidenceMedia.valor, forma: evidenceMedia.forma,
+            cartao_modalidade: evidenceMedia.cartaoModalidade,
+            cartao_parcelas: evidenceMedia.cartaoParcelas,
+            pagador: evidenceMedia.pagador,
+            ocr_excerpt: String(evidenceMedia.ocrText || '').slice(0, 900),
+          } : null,
+        });
+      } catch (e) { dec = null; }
     }
+    dec = aplicarEvidenciaMidiaV4(dec, evidenceMedia, texto);
     if (!dec) { log({ acao: 'agent_first_sem_decisao', chatId: event.chatId, ms: Date.now() - t0 }); return null; }
 
     // ── SEGUNDO TURNO: corrige o ENVELOPE guardado, nunca remonta frase ──────
@@ -3605,7 +3794,13 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     // O mesmo envelope de negocio passa a carregar a trilha de evidencias.
     // Nesta fase ela e SHADOW: compara a decisao atual sem trocar valor, forma,
     // aluno, categoria ou competencia que chegam ao Core.
-    const evidenciaTurno = construirEnvelopeEvidenciasV1({ textoHumano: texto, llm: dec });
+    const evidenciaTurno = construirEnvelopeEvidenciasV1({
+      textoHumano: texto,
+      ocrText: evidenceMedia && evidenceMedia.ocrText || '',
+      ocrMeta: evidenceMedia && evidenceMedia.ocrMeta || null,
+      visao: evidenceMedia && evidenceMedia.visao || null,
+      llm: dec,
+    });
     env.envelope.evidencias = mesclarEnvelopesEvidenciasV1(
       env.envelope.evidencias || null,
       evidenciaTurno
@@ -3634,7 +3829,8 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
         log({ acao: 'agent_first_draft_nao_persistido', chatId: event.chatId });
         return { acao: 'agent_first_draft_nao_persistido' };
       }
-      await sendFn(event.chatId, 'Entendi o aluno, o valor e a fatura. Falta só a forma de pagamento: *pix*, *dinheiro*, *cartão*, *cheque* ou *transferência*. Guardei o restante; não precisa repetir.');
+      const perguntaId = await sendFn(event.chatId, 'Entendi o aluno, o valor e a fatura. Falta só a forma de pagamento: *pix*, *dinheiro*, *cartão*, *cheque* ou *transferência*. Guardei o restante; não precisa repetir.');
+      await vincularPerguntaRascunhoV4(salvo, perguntaId);
       return { acao: 'agent_first_aguardando_forma' };
     }
 
@@ -4382,12 +4578,27 @@ _Não lanço nada pela metade._`);
     fotografarContextoV4(event, chatId, agora);
     const senderNum = String(event.senderPhone || event.senderId || '').replace(/@.*/, '').replace(/\D/g, '');
 
+    // Nova mídia é um novo caso financeiro. Ela nunca pode completar um
+    // rascunho anterior por proximidade temporal; só uma resposta textual do
+    // mesmo remetente ou uma citação explícita pode fazê-lo. Foi assim que o
+    // comprovante da Vitória herdou o rascunho da Daiana no mesmo grupo.
+    const draftNaEntrada = rascunhosV4.get(chatId) || null;
+    if (event.hasMedia && draftNaEntrada && event.messageId !== draftNaEntrada.origem) {
+      await finalizarRascunhoV4(chatId, 'rejected', 'nova_midia_invalida_rascunho_anterior');
+      log({ acao: 'agent_first_draft_invalidado_nova_midia', chatId,
+        origem_hash: sha256(draftNaEntrada.origem || ''), nova_origem_hash: sha256(event.messageId || '') });
+    }
+
+    // O agent-first recebe a mesma evidência estruturada que o trilho
+    // determinístico: OCR/visão, modalidade e parcelas. O documento é lido
+    // uma vez e fica cacheado no evento para o fallback não repetir OCR.
+    if (event.hasMedia && !event._sintetico && _v4CanarioLigado(chatId)) {
+      await coletarEvidenciaMidiaV4(event);
+    }
+
     // CANARIO AGENT-FIRST — DESLIGADO por padrao, por LISTA de grupo.
     // ⚠️ Antes de tudo, de proposito: se o legado responder primeiro, o
     //    canario nao mede nada (foi o diagnostico do caso Lis/Mayra).
-    // ⚠️ Nao vale para midia nesta rodada: o caminho de comprovante tem OCR e
-    //    visao, e misturar as duas inversoes no mesmo canario impede saber qual
-    //    delas moveu o numero.
     // 🔴 LEGENDA DE MIDIA TAMBEM PASSA AQUI — foi o buraco do gate anterior. O
     //    comprovante da Lis chegou como MIDIA COM LEGENDA, e eu tinha gatado em
     //    `!event.hasMedia`: o caso que originou a frente ficava justamente fora
@@ -4778,10 +4989,19 @@ _Não lanço nada pela metade._`);
       let forma = extrairForma(event.body, null);
       let cartaoModalidade = null, cartaoParcelas = null;
       const media = (event.mediaUrls || [])[0];
+      const midiaPreprocessada = event.caixaMediaEvidence || null;
       // Camada 1: OCR LOCAL (igual Maria) -- roda sempre que ha midia (texto p/ valor E interpretacao)
-      let ocrText = '';
-      let ocrMeta = { status: 'nao_executado', duration_ms: 0, file_bytes: null };
-      if (media) {
+      let ocrText = midiaPreprocessada ? String(midiaPreprocessada.ocrText || '') : '';
+      let ocrMeta = midiaPreprocessada
+        ? { ...(midiaPreprocessada.ocrMeta || {}) }
+        : { status: 'nao_executado', duration_ms: 0, file_bytes: null };
+      if (midiaPreprocessada) {
+        if (!valor && midiaPreprocessada.valor) valor = Number(midiaPreprocessada.valor);
+        if (!forma && midiaPreprocessada.forma) forma = midiaPreprocessada.forma;
+        cartaoModalidade = midiaPreprocessada.cartaoModalidade || null;
+        cartaoParcelas = midiaPreprocessada.cartaoParcelas || null;
+      }
+      if (media && !midiaPreprocessada) {
         try {
           log({ acao: 'ocr_attempt', chatId });
           const rawOcr = await ocrFn(media, { detailed: true });
@@ -4831,9 +5051,9 @@ _Não lanço nada pela metade._`);
       // Camada 2: visao OAuth e' fallback do OCR — inclusive quando ele falha.
       // O fluxo antigo recusava a midia antes de chegar aqui justamente no caso
       // de texto vazio/timeout, que e' quando a visao e' mais necessaria.
-      let alunoVis = null;
-      let pagadorVis = null;
-      let visao = null;
+      let alunoVis = midiaPreprocessada && midiaPreprocessada.visao && midiaPreprocessada.visao.aluno || null;
+      let pagadorVis = midiaPreprocessada && midiaPreprocessada.pagador || null;
+      let visao = midiaPreprocessada && midiaPreprocessada.visao || null;
       // ⚠️ Tambem por FORMA ausente. A forma e' tao essencial quanto o valor: sem
       // ela o card trava e pede "pode, pix / pode, dinheiro / pode, cartao" — e
       // convidar a equipe a escolher a forma de cabeca num cupom de CARTAO e' como
@@ -4843,7 +5063,7 @@ _Não lanço nada pela metade._`);
       // e a legenda trazia o valor — entao nada disparava a visao. As 11:27 a MESMA
       // foto, com legenda SEM valor, saiu "cartao credito" certinho: dar mais
       // informacao fazia a Sol saber menos.
-      if (media && (!valor || !forma || ocrText.trim().length < 20)) {
+      if (media && !midiaPreprocessada && (!valor || !forma || ocrText.trim().length < 20)) {
         try {
           log({ acao: 'fallback_vision_attempt', chatId,
                 motivo: ocrText.trim().length < 20 ? (ocrMeta.status || 'ocr_curto')
@@ -7256,6 +7476,8 @@ _Não lanço nada pela metade._`);
           const ts = Number(a.pending.ts) || new Date(a.criado_em).getTime() || Date.now();
           rascunhosV4.set(chatId, {
             envelope: a.pending.agentFirstEnvelope, origem: a.pending.origem, ts,
+            autorHash: a.pending.rascunhoAutorHash || null,
+            msgIds: Array.isArray(a.pending.msgIds) ? a.pending.msgIds : [],
             v3PreviewId: a.id, v3PreviewHash: a.preview_hash, grupo: grupos[chatId],
             event: { messageId: a.pending.origem, chatId, senderId: 'rehydrated', body: '', ts: a.criado_em },
           });
@@ -7442,12 +7664,30 @@ _Não lanço nada pela metade._`);
     return arr.length > 0;
   }
 
+  // Resposta que completa rascunho é parte da mesma máquina de estado do
+  // recebimento. O bridge consulta isto ANTES do handoff ao agente, evitando
+  // que "cartão de crédito" vire um turno probabilístico que pode terminar sem
+  // resposta. Só o mesmo remetente ou uma citação explícita alcança o rascunho.
+  function deveTratarComplementoDeterministico(event, agora = Date.now()) {
+    if (!event || event.hasMedia) return false;
+    let draft = rascunhosV4.get(event.chatId) || null;
+    if (!draft) return false;
+    if (agora - draft.ts >= janelaMs) {
+      void finalizarRascunhoV4(event.chatId, 'expired', 'janela_runtime_expirou');
+      return false;
+    }
+    if (!eventoPodeCompletarRascunhoV4(event, draft)) return false;
+    const texto = bodyLimpo(event.body);
+    return !!formaExplicitaV4(texto, event.caixaToolDecision).forma
+      || casarNao(texto) || casarPode(texto, { respondeuPreview: false }).pode;
+  }
+
   // ⚠️ ehConversaSemComando no retorno conserta bug LATENTE: o bridge chama
   // _fh.ehConversaSemComando(body) desde 25/08, mas o handler nunca a expos —
   // o guard de "elogio nao leva nao-entendi" estava morto por undefined.
   return { handle, temPendencia, citaAlgumaPendencia, ehConversaSemComando,
     reidratarPendencias, tratarNaoEntendida, observarRoteadorV4, tratarAgentFirst,
-    deveTratarConfirmacaoDeterministica,
+    deveTratarConfirmacaoDeterministica, deveTratarComplementoDeterministico,
     _pendentes: pendentes, _envelopesV4: envelopesV4, _rascunhosV4: rascunhosV4 };
 }
 

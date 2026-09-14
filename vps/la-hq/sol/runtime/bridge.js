@@ -1080,8 +1080,11 @@ async function caixaAbf() {
             const _confirmacaoDeterministica = !!(_fhPrio
               && _fhPrio.deveTratarConfirmacaoDeterministica
               && _fhPrio.deveTratarConfirmacaoDeterministica(event));
+            const _complementoDeterministico = !!(_fhPrio
+              && _fhPrio.deveTratarComplementoDeterministico
+              && _fhPrio.deveTratarComplementoDeterministico(event));
             const _textoVaiParaAgentTools = SOL_CAIXA_TOOLS_GROUPS.has(chatId)
-              && !event.hasMedia && !_confirmacaoDeterministica;
+              && !event.hasMedia && !_confirmacaoDeterministica && !_complementoDeterministico;
             if (_textoVaiParaAgentTools) {
               _govRecord('route_decided', { route: 'agent_first', engine: 'agent_tools', outcome: 'pending' });
               _caixaLog({ step: 'agent_first_text_handoff_pos_abf', chatId: chatId });
@@ -1089,6 +1092,9 @@ async function caixaAbf() {
             if (_confirmacaoDeterministica) {
               _govRecord('route_decided', { route: 'legacy', engine: 'legacy_parser', action: 'confirmacao_preview' });
               _caixaLog({ step: 'preview_deterministico_priorizado', chatId: chatId });
+            } else if (_complementoDeterministico) {
+              _govRecord('route_decided', { route: 'legacy', engine: 'legacy_parser', action: 'complemento_rascunho' });
+              _caixaLog({ step: 'complemento_rascunho_deterministico_priorizado', chatId: chatId });
             } else if (event.hasMedia) {
               _govRecord('route_decided', { route: 'ocr', engine: 'ocr', outcome: 'pending' });
             } else {
