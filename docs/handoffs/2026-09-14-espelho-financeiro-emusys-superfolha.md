@@ -53,6 +53,9 @@ Item de lançamento:
 8. **Sem filtro de data, a API devolve o histórico inteiro** (medido: desde 2018).
 9. **Rate limit:** ~120 chamadas em rajada → HTTP **500** com `{"status":"erro","msg":"erro desconhecido."}` (não é 429). Recuo exponencial resolve. ⚠️ O endpoint `/financeiro/contas_financeiras` da unidade CG retorna **esse mesmo 500 de forma persistente** (bug de dados na origem, aberto com o Emusys) — distinguir por repetição.
 10. **IDs são por unidade/token**: o `id=82420` da CG não é o mesmo lançamento da Barra. Chave única de qualquer coisa = `(unidade, id)`.
+11. **A perna de CHEGADA de algumas transferências vem com `natureza = entrada`** (com conta e plano `3.1.x`), não `transferencia`. Somar `natureza = entrada` **NÃO** é receita — dobra. O espelho é fiel à origem; este é um aviso de leitura. Dois casos medidos:
+    - **Repasse de cartão:** entrada `"Repasse…"` com transferência negativa de mesma descrição (sem o prefixo `"Repasse da Operadora (Pgtos em …) - "`). Transferência líquida + `"Taxa da operadora de Cartão"` do mesmo dia = entrada bruta. Medido: 303 de 305 pares jan–ago/2026; os 2 restantes são 1 transferência repartida em 2 entradas (CG `75634` → `75635` + `75919`).
+    - **"Depósito da Tesouraria":** com transferência negativa `"Deposito na conta Conta (de) Cheques"` do mesmo valor e data. Agosto/2026: CG 17/17 (todas como `entrada`); Recreio 13 como `entrada`, restantes como `transferencia`; Barra todas como `transferencia`.
 
 ### 2.2 Tabelas do espelho (banco `public`)
 
@@ -235,14 +238,16 @@ Continua valendo e é o que alimenta a tela de Faturas e a inadimplência.
 O snapshot por vencimento não captura adiantamentos e cheques pré-datados pagos em M com vencimento futuro. Para o DRE caixa do Super Folha (que usa data de pagamento), adicionamos:
 
 - **Tabela:** `faturas_pagas_mes` — chave única `(unidade_id, emusys_fatura_id)`. Colunas: `data_vencimento`, `data_pagamento`, `competencia_vencimento`, `competencia_pagamento`, valores, payload.
-- **Sync:** `sync-faturas-emusys` com `mode: "pagas_no_mes"`. Puxa `status=paga` com janela de vencimento M−2 a M+12, filtra por `data_pagamento` em M no cliente, upsert em `faturas_pagas_mes`. Cron diário às 4h BRT (7h UTC) cobrindo mês corrente + anterior.
+- **Sync:** `sync-faturas-emusys` com `mode: "pagas_no_mes"`. Puxa `status=paga` com janela de vencimento M−12 a M+12 (pagamento atrasado pode ter vencimento até 1 ano atrás; adiantamento até 1 ano à frente), filtra por `data_pagamento` em M no cliente, upsert em `faturas_pagas_mes`. Cron diário às 4h BRT (7h UTC) cobrindo mês corrente + anterior.
 - **Export:** `export-contas-receber` modo `snapshot` agora faz **merge**: snapshot por vencimento + `faturas_pagas_mes` por pagamento, **dedup por `(unidade_id, emusys_fatura_id)`** (a do snapshot vence primeiro; a de pagamento é extra). O manifesto traz `faturas_pagas_mes_extras` = quantas faturas extras por pagamento foram incluídas.
 - **Não muda a regra de abertas:** faturas em aberto continuam só por vencimento. Só PAGAS com data de pagamento em M e vencimento fora de M são adicionadas.
+- **Alerta: a mesma fatura pode aparecer em dois meses diferentes.** Exemplo: vence em setembro e foi paga em 14/08 → vem no export de agosto (pela data de pagamento) e no de setembro (pelo vencimento). No DRE caixa, ela entra pela data de pagamento e só uma vez, pelo número da fatura.
 - **Casos reais validados em agosto/2026:**
-  - Recreio: 10 PIX de R$ 385,20 em 11/08 (parcelas 08/2026 a 07/2027) — `emusys_fatura_id` 30293–30304.
-  - Recreio: 9 cheques de R$ 435,50 em 14/08 (parcelas 09/2026 a 06/2027) — `emusys_fatura_id` 29413–29422.
+  - Recreio: 12 PIX de R$ 385,20 em 11/08 (parcelas 08/2026 a 07/2027) — `emusys_fatura_id` 30293–30304.
+  - Recreio: 10 cheques de R$ 435,50 em 14/08 (parcelas 09/2026 a 06/2027) — `emusys_fatura_id` 29413–29422.
   - Barra: 12 cartões de R$ 475,00 em 17/08 (parcelas 08/2026 a 07/2027) — `emusys_fatura_id` 15034–15045.
-  - CG R$ 4.714 em 13/08 `emusys_fatura_id` 82868: **não encontrado** no espelho do LA Report (nem no snapshot, nem em `faturas_pagas_mes`, nem em `sync_run_items`). Pode ser ID de outra fonte ou incorreto; pedimos confirmação ao Super Folha.
+  - CG: Luiza Pimentel Oliveira Barbosa (matrícula 2465, Canto) — 12 parcelas (08/2026 a 07/2027) pagas em 11/08, total R$ 4.714 (R$ 457 + 11 × R$ 387). `emusys_fatura_id` 48705–48715 e 49114. O id `82868` que o Super Folha passou inicialmente era do lançamento de repasse no fluxo de caixa, não da fatura.
+- **Pagamento atrasado (medição ago/2026):** status=paga com vencimento jan–mai/2026 e data_pagamento em ago/2026: CG 2 faturas (R$ 976), Barra 0, Recreio 0. A janela foi alargada de M−2 para M−12 para capturar esses casos.
 
 ---
 

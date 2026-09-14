@@ -227,8 +227,9 @@ async function processarPagasNoMes(
 ) {
   const ano = Number(competencia.slice(0, 4));
   const mes = Number(competencia.slice(5, 7));
-  // Janela de vencimento: M-2 a M+12 (adiantamentos podem ter vencimento até 1 ano à frente)
-  const inicioVenc = new Date(Date.UTC(ano, mes - 3, 1)).toISOString().slice(0, 10);
+  // Janela de vencimento: M-12 a M+12 (pagamento atrasado pode ter vencimento
+  // até 1 ano atrás; adiantamento pode ter vencimento até 1 ano à frente)
+  const inicioVenc = new Date(Date.UTC(ano, mes - 13, 1)).toISOString().slice(0, 10);
   const fimVenc = new Date(Date.UTC(ano, mes + 11, 0)).toISOString().slice(0, 10);
   // Janela de pagamento: mês M
   const pagInicio = competencia;
