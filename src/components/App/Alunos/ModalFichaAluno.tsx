@@ -1790,9 +1790,9 @@ export function ModalFichaAluno({
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-3">
             {fotoPerfil ? (
-              <img src={fotoPerfil} alt={formData.nome} className="w-14 h-14 rounded-full object-cover border-2 border-purple-500/50" />
+              <img src={fotoPerfil} alt={formData.nome} className={cn('rounded-full object-cover border-2 border-purple-500/50', ehCelular ? 'h-11 w-11 flex-none' : 'w-14 h-14')} />
             ) : (
-              <div className="w-14 h-14 rounded-full bg-purple-500/20 flex items-center justify-center">
+              <div className={cn('rounded-full bg-purple-500/20 flex items-center justify-center', ehCelular ? 'h-11 w-11 flex-none' : 'w-14 h-14')}>
                 <User className="w-6 h-6 text-purple-400" />
               </div>
             )}
@@ -1873,7 +1873,7 @@ export function ModalFichaAluno({
           <div className="flex-1 overflow-y-auto mt-4 pr-2">
             {/* ABA PESSOAL */}
             <TabsContent value="pessoal" className="space-y-4 mt-0">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="col-span-2">
                   <Label className="mb-2 block">Nome Completo *</Label>
                   <Input
@@ -1910,7 +1910,7 @@ export function ModalFichaAluno({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="col-span-2">
                   <Label className="mb-2 block">Instagram</Label>
                   <Input
@@ -1946,7 +1946,7 @@ export function ModalFichaAluno({
 
             {/* ABA ACADÊMICO */}
             <TabsContent value="academico" className="space-y-4 mt-0">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <Label className="mb-2 block">Curso</Label>
                   <Select
@@ -2082,7 +2082,7 @@ export function ModalFichaAluno({
                     A origem é exclusivamente o Emusys e este estado não pode ser editado aqui.
                   </p>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <Label className="mb-2 block text-sm">Início do Contrato</Label>
                     <DatePicker
@@ -2115,7 +2115,7 @@ export function ModalFichaAluno({
                   <div className="space-y-2">
                     {outrosCursos.map((outro) => (
                       <div key={outro.id} className="flex items-center justify-between p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
-                        <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                        <div className="min-w-0 flex-1 grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-2">
                           <div className="flex items-center gap-2">
                             <span className="text-slate-400">Curso: </span>
                             <span className="text-white font-medium">{outro.curso_nome || '-'}</span>
@@ -2227,7 +2227,7 @@ export function ModalFichaAluno({
                   Ver faturas canônicas <ExternalLink className="h-3.5 w-3.5" />
                 </Link>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <Label className="mb-2 block">Tipo de Aluno</Label>
                   <Select
@@ -2360,7 +2360,7 @@ export function ModalFichaAluno({
 
             {/* ABA COMERCIAL */}
             <TabsContent value="comercial" className="space-y-4 mt-0">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <Label className="mb-2 block">Canal de Origem</Label>
                   <Select
@@ -2407,7 +2407,7 @@ export function ModalFichaAluno({
 
               <div className="border-t border-slate-700 pt-4">
                 <Label className="mb-3 block text-slate-400">Dados de Renovação (somente leitura)</Label>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-3">
                     <p className="text-xs text-slate-500 mb-1">Última Renovação</p>
                     <p className="text-sm text-slate-300">
@@ -2933,7 +2933,7 @@ export function ModalFichaAluno({
                 </Select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <Label className="mb-2 block">Dia da Aula</Label>
                   <Select

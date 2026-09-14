@@ -212,3 +212,24 @@ test('a acao de maior valor fica na base, acima da faixa do gesto', () => {
   assert.match(ficha, /ehCelular && 'min-h-\[44px\] flex-\[2\]'/);
   assert.match(ficha, /ehCelular && 'min-h-\[44px\] flex-1'/);
 });
+
+test('🔴 o formulario da ficha vira UMA coluna no celular', () => {
+  // Medido na tela real (print do Hugo, 375px): com `grid-cols-2` fixo cada
+  // coluna fica com ~170px, e o resultado foi "18/01/1972" com o selo EMLA
+  // por cima, "(calculado)" cortado na borda e rolagem horizontal dentro da
+  // ficha. Nenhum teste de classe pegaria isso — foi o print que pegou.
+  //
+  // ⚠️ `sm:grid-cols-2` mantem o desktop identico ao de antes.
+  const doisFixos = ficha.split('grid grid-cols-2').length - 1;
+  assert.equal(doisFixos, 0, `sobraram ${doisFixos} grids de 2 colunas fixas na ficha`);
+  const umaColuna = ficha.split('grid-cols-1').length - 1;
+  assert.ok(umaColuna >= 9, `esperava >= 9 grids de 1 coluna no celular, achei ${umaColuna}`);
+  assert.match(ficha, /sm:grid-cols-2/, 'o desktop perdeu as 2 colunas');
+});
+
+test('a faixa de abas DIZ que continua, em vez de cortar seca na borda', () => {
+  // Faixa que termina reto parece uma lista completa — e ai as 5 abas
+  // seguintes nunca sao descobertas. Medido no navegador: a mascara e' gerada
+  // pelo Play CDN (`maskImage` != none), nao e' classe morta.
+  assert.match(fichaClasses.FICHA_ABAS_CELULAR, /mask-image:linear-gradient/);
+});

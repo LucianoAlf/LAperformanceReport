@@ -40,7 +40,13 @@ export const FICHA_TELA_CHEIA = [
  * 44px, e com o rótulo escondido (`hidden sm:inline`) sobra só um ícone para
  * distinguir "Acadêmico" de "Pedagógico". A faixa deslizante devolve o texto.
  */
-export const FICHA_ABAS_CELULAR = 'flex w-full justify-start gap-1 overflow-x-auto';
+export const FICHA_ABAS_CELULAR = [
+  'flex w-full justify-start gap-1 overflow-x-auto',
+  // A ultima aba visivel some num degrade em vez de terminar seca na borda:
+  // faixa que corta reto parece uma lista completa, e ai a rolagem vira
+  // informacao escondida — as 5 abas seguintes nunca seriam descobertas.
+  '[mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)]',
+].join(' ');
 
 /** Cada aba: largura pelo conteúdo e alvo de toque de verdade. */
 export const FICHA_ABA_CELULAR = 'min-h-[44px] flex-none px-3';
