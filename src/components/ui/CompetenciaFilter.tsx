@@ -74,16 +74,25 @@ export function CompetenciaFilter({
     : TIPOS;
 
   return (
-    <div className={cn("flex items-center gap-3", className)}>
+    // flex-wrap: os 7 tipos mais os seletores de ano/periodo somam ~760px, e a
+    // faixa do celular tem ~350px. Sem quebrar, o que passa do fim da linha
+    // nao some: fica FORA da tela — e era justamente o seletor de ano/mes que
+    // caia ali, ou seja, o controle mais usado do filtro so era alcancavel
+    // rolando para o lado. Em tela larga nada quebra (cabe numa linha), entao
+    // o desktop continua identico.
+    <div className={cn("flex flex-wrap items-center gap-2 sm:gap-3", className)}>
       {/* Seletor de Tipo */}
-      {tiposVisiveis.length > 1 && <div className="bg-slate-800/50 p-1 rounded-lg inline-flex gap-1">
+      {tiposVisiveis.length > 1 && <div className="bg-slate-800/50 p-1 rounded-lg inline-flex flex-wrap gap-1">
         {tiposVisiveis.map((tipo) => (
           <button
             type="button"
             key={tipo.id}
             onClick={() => onTipoChange(tipo.id)}
             className={cn(
-              'px-4 py-2 rounded-md text-sm font-medium transition-all',
+              // px menor no celular cabe mais chip por linha; o alvo de 44px
+              // vale so no ponteiro grosso, para o botao do desktop nao crescer.
+              'px-3 sm:px-4 py-2 rounded-md text-sm font-medium transition-all',
+              '[@media(pointer:coarse)]:min-h-[44px]',
               filtro.tipo === tipo.id
                 ? 'bg-violet-600 text-white shadow-sm'
                 : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
@@ -96,7 +105,7 @@ export function CompetenciaFilter({
 
       {/* Seletores de Período Personalizado */}
       {filtro.tipo === 'personalizado' && (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <DatePicker
             date={filtro.dataInicio}
             onDateChange={onDataInicioChange || (() => {})}
@@ -116,7 +125,7 @@ export function CompetenciaFilter({
       )}
 
       {/* Seletores de Período — ocultos quando filtro é "Hoje" ou "Personalizado" */}
-      {filtro.tipo !== 'diario' && filtro.tipo !== 'personalizado' && <div className="flex items-center gap-2">
+      {filtro.tipo !== 'diario' && filtro.tipo !== 'personalizado' && <div className="flex flex-wrap items-center gap-2">
         {/* Seletor de Ano */}
         <Select
           value={filtro.ano.toString()}
