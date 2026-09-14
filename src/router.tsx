@@ -95,7 +95,7 @@ const AdministrativoPage = lazy(() => import('./components/App/Administrativo').
 const AgendaPage = lazy(() => import('@/components/App/Agenda'));
 // Saúde das Automações (admin)
 const AutomacoesPage = lazy(() => import('./components/App/Automacoes').then(m => ({ default: m.AutomacoesPage })));
-const AlunosResponsivo = lazy(() => import('./components/App/Alunos/AlunosResponsivo'));
+const AlunosPage = lazy(() => import('./components/App/Alunos').then(m => ({ default: m.AlunosPage })));
 const BandasPage = lazy(() => import('./components/App/Bandas').then(m => ({ default: m.BandasPage })));
 const FaturasAlunosPage = lazy(() => import('./components/App/FaturasAlunos'));
 const SucessoClientePage = lazy(() => import('./components/App/SucessoCliente').then(m => ({ default: m.SucessoClientePage })));
@@ -275,7 +275,7 @@ export const router = createBrowserRouter([
           },
           {
             path: 'alunos',
-            element: <Suspense fallback={<PageLoader />}><AlunosResponsivo /></Suspense>,
+            element: <Suspense fallback={<PageLoader />}><AlunosPage /></Suspense>,
           },
           {
             path: 'bandas',

@@ -5,6 +5,12 @@ import { useShellMobile } from '@/hooks/useShellMobile';
 import { AlunosPage } from './AlunosPage';
 
 /**
+ * ⚠️ NAO ESTA LIGADO AO ROUTER (14/09/2026). A rota `/app/alunos` volta a
+ * montar a `AlunosPage` do desktop, com a faixa ambar, porque a tela mobile
+ * cobre 1 das 8 abas da pagina e nenhum dos 6 KPIs. Religar = trocar o
+ * elemento da rota E acrescentar '/app/alunos' a ROTAS_PORTADAS, no mesmo
+ * commit — ha teste travando os dois juntos.
+ *
  * Escolhe a tela de Alunos pela MESMA funcao que escolhe o shell — nao apenas
  * pelo mesmo breakpoint. Ler so a largura faria a tela discordar do shell sob
  * VITE_MOBILE_SHELL=off e sob shell-override.

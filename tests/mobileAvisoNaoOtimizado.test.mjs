@@ -29,16 +29,12 @@ test('rotaFoiPortada', async (t) => {
   });
 });
 
-test('Dashboard e Alunos portados — os outros 16 modulos seguem com a faixa', () => {
-  // A lista e travada de PROPOSITO: portar um modulo tem de ser um ato
-  // consciente, com a tela ligada no router no mesmo commit em que a faixa
-  // some. Etapa 1 exigia [], a etapa 2 passou a ['/app'], e Alunos entra aqui.
+test('so o Dashboard foi portado — os outros 17 modulos seguem com a faixa', () => {
+  // A lista e travada de PROPOSITO: portar um modulo tem de ser ato consciente.
+  // Alunos entrou e SAIU no mesmo dia (14/09): a tela cobre 1 das 8 abas, e sem
+  // a faixa a equipe veria menos sem saber que esta vendo menos.
   const fonte = readFileSync('src/mobile/rotasPortadas.ts', 'utf8');
-  assert.match(
-    fonte,
-    /ROTAS_PORTADAS[^=]*=\s*\['\/app',\s*'\/app\/alunos'\]/u,
-    'so Dashboard e Alunos tem tela mobile ligada',
-  );
+  assert.match(fonte, /ROTAS_PORTADAS[^=]*=\s*\['\/app'\]/u, 'so o Dashboard tem tela mobile ligada');
 });
 
 test('a faixa avisa sem bloquear', () => {

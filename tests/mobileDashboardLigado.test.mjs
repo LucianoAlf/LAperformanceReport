@@ -109,8 +109,8 @@ test('o desktop continua recebendo o DashboardPage intacto, e so quando o shell 
   assert.ok(posSuspense > guardaDesktop.index, 'a guarda do desktop precisa vir antes do ramo mobile');
 });
 
-test('a faixa sumiu do Dashboard e de Alunos, e continua nos outros 16 modulos', () => {
-  assert.match(rotas, /ROTAS_PORTADAS[^=]*=\s*\['\/app',\s*'\/app\/alunos'\]/);
+test('a faixa de aviso sumiu do Dashboard e continua nos outros 17 modulos', () => {
+  assert.match(rotas, /ROTAS_PORTADAS[^=]*=\s*\['\/app'\]/);
 });
 
 test('rotaFoiPortada: a raiz NAO contagia as sub-rotas, e cada porte entra sozinho', () => {
@@ -135,7 +135,6 @@ test('a rota so entra na lista com a tela ligada no router — uma fonte, um com
   // Ao portar o proximo modulo, este teste obriga a ligar a tela no router no
   // mesmo commit em que a faixa some — rota sem tela mostraria o desktop
   // dizendo que foi adaptado.
-  assert.deepEqual(declaradas, ['/app', '/app/alunos']);
+  assert.deepEqual(declaradas, ['/app']);
   assert.match(router, /DashboardResponsivo/);
-  assert.match(router, /AlunosResponsivo/);
 });

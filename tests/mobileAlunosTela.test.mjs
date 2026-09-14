@@ -168,6 +168,31 @@ test('a folha de detalhe existe porque a ficha (arquetipo 3) ainda nao existe', 
   assert.match(folha, /e\.key === 'Escape'/, 'a folha nao fecha no Esc');
 });
 
+test('🔴 a tela existe mas NAO esta ligada — e religar exige cobrir a pagina inteira', () => {
+  // Ela cobre 1 das 8 abas de /app/alunos (lista, turmas, grade, distribuicao,
+  // conciliacao, importar, automacao, historico), nenhum dos 6 KPIs do topo, e
+  // trocou a ficha de 9 abas por uma folha de 9 campos.
+  //
+  // Enquanto for assim, a rota tem de continuar mostrando o desktop COM a faixa
+  // ambar: sem ela, quem abre Alunos no celular ve menos do que ve hoje e nao
+  // tem como saber. Degradar e o combinado; esconder nao e.
+  //
+  // Este teste e o par invertido do "a rota so entra na lista com a tela ligada"
+  // — la a lista nao pode andar sem o router, aqui o router nao pode andar sem a
+  // lista. Ligar os dois no mesmo commit e o que ele obriga.
+  const rotas = ler('src/mobile/rotasPortadas.ts');
+  const router = ler('src/router.tsx');
+  const portada = /ROTAS_PORTADAS[^=]*=\s*\[[^\]]*'\/app\/alunos'/.test(rotas);
+  const montada = /AlunosResponsivo/.test(router);
+  assert.equal(
+    portada,
+    montada,
+    portada
+      ? 'a rota saiu da faixa mas o router nao monta o AlunosResponsivo'
+      : 'o router monta o AlunosResponsivo com a rota ainda na faixa de "nao adaptada"',
+  );
+});
+
 test('o contato cai para o telefone do responsavel, e a tela DIZ que e dele', () => {
   // 392 alunos ativos so tem o numero do responsavel; ligar sem saber disso
   // comeca a conversa errada.
