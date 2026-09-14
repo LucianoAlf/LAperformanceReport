@@ -392,7 +392,9 @@
     "porta_pauta_do_dia_v1": "aluno",
     "porta_registrar_desfecho_v1": "aluno",
     "prazo_retomada": "comercial",
-    "texto_normalizado": "plataforma"
+    "texto_normalizado": "plataforma",
+    "dever_de_casa_regua_desde": "professor",
+    "repertorio_contem": "professor"
   },
   "tokens": {
     "kpis": "gestao"

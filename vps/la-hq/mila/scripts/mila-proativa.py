@@ -547,7 +547,7 @@ def envelope(tipo, dados, c):
         "Responda SOMENTE com o texto da mensagem."
     )
     cab = "[MILA PROATIVA · " + rotulo + " · " + dados["data"] + "]"
-    return cab + "\n" + pedido + "\n" + regras + "\n📋 SE VIER `pendencias_de_cadastro`, cite em UMA linha, com um nome de exemplo, e ofereca preencher na hora — \"o Fulano ta sem canal de origem, lembra de onde ele veio? eu registro\". Nunca liste todos: um nome e o numero bastam. Sao buracos que ela resolve falando com voce, em segundos, sem abrir sistema nenhum.\n🔴 SE VIER `convite_do_dia`, feche a mensagem com ELE e com mais nada: uma linha, com as suas palavras, convidando a pessoa a te pedir aquilo. Nunca liste outras capacidades junto — menu e o que ela pula. O objetivo e ela responder, entao termine em pergunta.\n\nDADOS CANÔNICOS (json):\n" + json.dumps(_com_agenda(dados, c), ensure_ascii=False)
+    return cab + "\n" + pedido + "\n" + regras + "\n🎯 ANAMNESE DO MES: se `pendencias_de_cadastro.matricula_do_mes_sem_anamnese.total` ou `matricula_do_mes_fora_da_comunidade.total` vier > 0, isso vem ANTES das outras pendencias — sao as matriculas que ELA fez neste mes, contam para a estrela HUNTER 360 e so fecham com as DUAS. Cite o numero e UM nome, e ofereca mandar o link da anamnese / o convite da comunidade agora. Nunca cite pendencia de anamnese de mes anterior: nao e dela.\n📋 SE VIER `pendencias_de_cadastro`, cite em UMA linha, com um nome de exemplo, e ofereca preencher na hora — \"o Fulano ta sem canal de origem, lembra de onde ele veio? eu registro\". Nunca liste todos: um nome e o numero bastam. Sao buracos que ela resolve falando com voce, em segundos, sem abrir sistema nenhum.\n🔴 SE VIER `convite_do_dia`, feche a mensagem com ELE e com mais nada: uma linha, com as suas palavras, convidando a pessoa a te pedir aquilo. Nunca liste outras capacidades junto — menu e o que ela pula. O objetivo e ela responder, entao termine em pergunta.\n\nDADOS CANÔNICOS (json):\n" + json.dumps(_com_agenda(dados, c), ensure_ascii=False)
 
 
 # ── O CONVITE DO DIA ────────────────────────────────────────────────────────
@@ -566,6 +566,14 @@ CATALOGO_CONVITES = [
      "material que o Alf escreveu, citando o bloco, nao pelo seu achismo"),
     # ⚠️ Olhava `n_pendencias_de_hoje`, que e SEMPRE 0 (conta pendencia nascida
     #    no dia, nao o acumulado). O convite existia e nunca disparava.
+    # A estrela HUNTER 360 so fecha com anamnese E comunidade das matriculas DO MES:
+    # e o convite mais valioso porque e meta da propria consultora, nao cadastro solto.
+    ("anamnese_do_mes",
+     lambda d: (((d.get("pendencias_de_cadastro") or {}).get("matricula_do_mes_sem_anamnese") or {}).get("total") or 0)
+               + (((d.get("pendencias_de_cadastro") or {}).get("matricula_do_mes_fora_da_comunidade") or {}).get("total") or 0)
+               or None,
+     "ofereca fechar os {ctx} passos que faltam nas matriculas DESTE MES — link da anamnese e "
+     "convite da comunidade — porque e o que fecha a estrela HUNTER 360 dela"),
     ("registrar_pendencia",
      lambda d: (d.get("pendencias_de_cadastro") or {}).get("total") or None,
      "ofereca preencher os {ctx} cadastros incompletos que ela resolve FALANDO "
@@ -651,11 +659,23 @@ def pendencias_de_cadastro(telefone):
                     "exemplos": [x.get("nome") or x.get("nome_aluno")
                                  for x in (b.get("amostra") or [])][:3]}
 
+        # 🔴 ANAMNESE E COMUNIDADE ENTRAM AQUI (14/09/2026). A pendencia mais cara do
+        # comercial nao aparecia no briefing: a Mila so citava canal/curso/desfecho.
+        # Desde 14/09 a RPC devolve so as matriculas DESTE MES — a meta da consultora —,
+        # e as duas juntas sao o que fecha a estrela HUNTER 360.
         out = {"sem_canal_de_origem": bloco("lead_sem_canal_de_origem"),
                "sem_curso_de_interesse": bloco("lead_sem_curso_de_interesse"),
-               "sem_motivo_da_nao_matricula": bloco("experimental_feita_sem_desfecho")}
-        out["total"] = sum(v["total"] for v in out.values() if isinstance(v, dict))
-        return out if out["total"] > 0 else None
+               "sem_motivo_da_nao_matricula": bloco("experimental_feita_sem_desfecho"),
+               "matricula_do_mes_sem_anamnese": bloco("matriculado_sem_anamnese"),
+               "matricula_do_mes_fora_da_comunidade": bloco("matriculado_sem_comunidade")}
+        out["competencia"] = r.get("competencia")
+        # ⚠️ `total` conta SO os buracos de cadastro. Anamnese e comunidade do mes tem
+        # bloco proprio no briefing (sao META, nao cadastro) — somar aqui as mostraria duas vezes.
+        _cadastro = ("sem_canal_de_origem", "sem_curso_de_interesse", "sem_motivo_da_nao_matricula")
+        out["total"] = sum(out[k]["total"] for k in _cadastro)
+        out["total_meta_do_mes"] = (out["matricula_do_mes_sem_anamnese"]["total"]
+                                    + out["matricula_do_mes_fora_da_comunidade"]["total"])
+        return out if (out["total"] + out["total_meta_do_mes"]) > 0 else None
     except Exception as e:  # noqa: BLE001
         log(f"pendencias de cadastro indisponiveis ({e}) — sigo sem elas")
         return None
