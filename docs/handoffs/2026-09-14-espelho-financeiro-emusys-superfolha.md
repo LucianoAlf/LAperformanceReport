@@ -55,7 +55,7 @@ Item de lançamento:
 10. **IDs são por unidade/token**: o `id=82420` da CG não é o mesmo lançamento da Barra. Chave única de qualquer coisa = `(unidade, id)`.
 11. **A perna de CHEGADA de algumas transferências vem com `natureza = entrada`** (com conta e plano `3.1.x`), não `transferencia`. Somar `natureza = entrada` **NÃO** é receita — dobra. O espelho é fiel à origem; este é um aviso de leitura. Dois casos medidos:
     - **Repasse de cartão:** entrada `"Repasse…"` com transferência negativa de mesma descrição (sem o prefixo `"Repasse da Operadora (Pgtos em …) - "`). Transferência líquida + `"Taxa da operadora de Cartão"` do mesmo dia = entrada bruta. Medido: 303 de 305 pares jan–ago/2026; os 2 restantes são 1 transferência repartida em 2 entradas (CG `75634` → `75635` + `75919`).
-    - **"Depósito da Tesouraria":** com transferência negativa `"Deposito na conta Conta (de) Cheques"` do mesmo valor e data. Agosto/2026: CG 17/17 (todas como `entrada`); Recreio 13 como `entrada`, restantes como `transferencia`; Barra todas como `transferencia`.
+    - **"Depósito da Tesouraria":** é o **depósito de cheque pré-datado** no banco. A receita já entrou quando o cheque foi recebido (entrada `"Cheque Pré Datado"`, sem conta); o depósito no banco repete o valor meses depois. Vem com transferência negativa `"Deposito na conta Conta (de) Cheques"` do mesmo valor e data. Agosto/2026: CG 17/17 (todas como `entrada`); Recreio 13 como `entrada`, restantes como `transferencia`; Barra todas como `transferencia`. Medido jan–ago/2026: 440 linhas, R$ 163.128,05. Jun–ago: 108 de 108 com cheque de mesmo valor em 2026. Jan–mai: 189 sem origem porque o espelho começa em 01/01/2026 (cheques recebidos em 2025).
 
 ### 2.2 Tabelas do espelho (banco `public`)
 
@@ -246,7 +246,7 @@ O snapshot por vencimento não captura adiantamentos e cheques pré-datados pago
   - Recreio: 12 PIX de R$ 385,20 em 11/08 (parcelas 08/2026 a 07/2027) — `emusys_fatura_id` 30293–30304.
   - Recreio: 10 cheques de R$ 435,50 em 14/08 (parcelas 09/2026 a 06/2027) — `emusys_fatura_id` 29413–29422.
   - Barra: 12 cartões de R$ 475,00 em 17/08 (parcelas 08/2026 a 07/2027) — `emusys_fatura_id` 15034–15045.
-  - CG: Luiza Pimentel Oliveira Barbosa (matrícula 2465, Canto) — 12 parcelas (08/2026 a 07/2027) pagas em 11/08, total R$ 4.714 (R$ 457 + 11 × R$ 387). `emusys_fatura_id` 48705–48715 e 49114. O id `82868` que o Super Folha passou inicialmente era do lançamento de repasse no fluxo de caixa, não da fatura.
+  - CG: Luiza Pimentel Oliveira Barbosa (matrícula 2465, Canto) — 12 parcelas (08/2026 a 07/2027), total R$ 4.714. A primeira (R$ 457, fatura 48705, venc. 05/08) foi paga em 14/08; as outras 11 (R$ 387 cada, faturas 48706–48715 e 49114) em 11/08. O id `82868` que o Super Folha passou inicialmente era do lançamento de repasse no fluxo de caixa, não da fatura.
 - **Pagamento atrasado (medição ago/2026):** status=paga com vencimento jan–mai/2026 e data_pagamento em ago/2026: CG 2 faturas (R$ 976), Barra 0, Recreio 0. A janela foi alargada de M−2 para M−12 para capturar esses casos.
 
 ---
