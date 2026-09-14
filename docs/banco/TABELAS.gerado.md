@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Tabelas e views
 
-566 objetos. Uma linha cada; colunas e FKs em `detalhe/<dominio>.md`.
+567 objetos. Uma linha cada; colunas e FKs em `detalhe/<dominio>.md`.
 
 | Objeto | Tipo | Domínio | Colunas | Linhas | RLS | FKs | Comentário |
 |---|---|---|---|---|---|---|---|
@@ -155,7 +155,7 @@
 | `agente_orcamento_config` | tabela | comercial | 3 | 0 | sim (1) | 0 | Quantas mensagens por dia um destino aguenta antes de a Sol calar os nudges. Fato operacional (essencial) nunca e cortado — so contado. |
 | `agentes` | tabela | comercial | 22 | 0 | sim (4) | 2 |  |
 | `atendimento_consultor_diario` | tabela | comercial | 15 | 147 | sim (0) | 1 | Instantâneo diário (19:10 BRT) de atendimento_conversa_estado por pessoa. ESTOQUE do que ficou pendurado, não velocidade de resposta — velocidade é do chatwoot-atendimento-insights, ao vivo. |
-| `atendimento_conversa_estado` | tabela | comercial | 22 | 1304 | sim (1) | 0 | T2/1o andar/operacional. Espelho dos FATOS da conversa do Chatwoot (projeto SOL), ingerido pela edge `ingerir-calor-atendimento`. ⚠️ "humano" = agente que nao e Mila. ⚠️ minutos_ate_humano NEGATIVO = nos iniciamos a conversa. ⚠️ departamento comercial so existe desde 03/09/2026. |
+| `atendimento_conversa_estado` | tabela | comercial | 22 | 1303 | sim (1) | 0 | T2/1o andar/operacional. Espelho dos FATOS da conversa do Chatwoot (projeto SOL), ingerido pela edge `ingerir-calor-atendimento`. ⚠️ "humano" = agente que nao e Mila. ⚠️ minutos_ate_humano NEGATIVO = nos iniciamos a conversa. ⚠️ departamento comercial so existe desde 03/09/2026. |
 | `campanha_contatos` | tabela | comercial | 10 | 10040 | sim (1) | 1 |  |
 | `campanhas` | tabela | comercial | 24 | 7 | sim (4) | 4 |  |
 | `campanhas_config` | tabela | comercial | 5 | 0 | sim (2) | 1 |  |
@@ -176,7 +176,7 @@
 | `experimentais_mensal_unidade` | tabela | comercial | 7 | 96 | sim (4) | 1 |  |
 | `experimentais_professor_mensal` | tabela | comercial | 7 | 291 | sim (4) | 2 |  |
 | `google_ads_metricas_diarias` | tabela | comercial | 17 | 292 | sim (1) | 0 | Alicerce/estrategica. Custo diario do Google Ads por CAMPANHA (grao de campanha atravessa Search e Performance Max; anuncio nao). Gemeo de meta_ads_metricas_diarias. Reescrita por janela — o Google revisa conversao por dias. gasto ja vem convertido de cost_micros na ingestao. |
-| `instagram_sessoes` | tabela | comercial | 15 | 117 | sim (1) | 1 | Espelho das sessões da bridge de Instagram (la-hq, instagram-comments-bridge.js). Uma linha por (conta, pessoa). Alimentado pela edge ingerir-instagram-sessoes; a bridge segue sendo a fonte de verdade viva — isto é foto para leitura, relatório e Mapa de Sinais. |
+| `instagram_sessoes` | tabela | comercial | 15 | 118 | sim (1) | 1 | Espelho das sessões da bridge de Instagram (la-hq, instagram-comments-bridge.js). Uma linha por (conta, pessoa). Alimentado pela edge ingerir-instagram-sessoes; a bridge segue sendo a fonte de verdade viva — isto é foto para leitura, relatório e Mapa de Sinais. |
 | `lead_conciliacao_decisoes` | tabela | comercial | 10 | 318 | sim (1) | 1 |  |
 | `lead_experimentais` | tabela | comercial | 19 | 1132 | sim (1) | 6 |  |
 | `lead_experimentais_arquivadas` | tabela | comercial | 23 | 174 | não | 0 | Lixeira de lead_experimentais, no padrao de alunos_arquivados. Guarda a linha inteira + quem absorveu (consolidado_no_id). A duplicata nasceu porque a API do Emusys so passou a devolver id_lead em 21/06/2026. |
@@ -217,6 +217,7 @@
 | `vw_leads_comercial` | view | comercial | 50 | — | não | 0 | View de compatibilidade que emula a estrutura de leads_diarios. Inclui campos resolvidos (nomes) para evitar JOINs via PostgREST. |
 | `vw_leads_por_canal` | view | comercial | 6 | — | não | 0 |  |
 | `vw_leads_sinteticos_por_mes` | view | comercial | 8 | — | não | 0 | Tamanho do lead sintetico (criado pelo gatilho a partir da matricula) por mes e unidade, com a taxa de conversao COM e SEM ele. Insumo da decisao sobre o denominador do funil. |
+| `vw_matriculas_ativas_sem_aluno_local` | view | comercial | 10 | — | não | 0 | Matrícula ATIVA no Emusys que não tem linha correspondente em `alunos` — aluno que existe na escola e não existe no LA Report. Linha aqui é sempre defeito: ou o webhook `matricula_nova` falhou ao gravar, ou o aluno foi apagado sem a matrícula ser encerrada na origem. Deve ficar em ZERO. Nasceu do caso Lara Boldrine/Barra (matrícula 870, 08/09/2026), em que o INSERT foi revertido por um AFTER trigger e nada acusou por 6 dias. Ver migration 20260914210000. |
 | `vw_matriculas_por_canal` | view | comercial | 4 | — | não | 0 |  |
 | `vw_motivos_nao_matricula` | view | comercial | 4 | — | não | 0 |  |
 | `vw_observador_leads_orfaos` | view | comercial | 16 | — | não | 0 | Webhooks de lead recebidos pelo observador, classificados: ok (existe por emusys_lead_id), vinculo_faltando (existe por telefone, so falta o emusys_lead_id) e perdido (nao existe de jeito nenhum — payload salvo, recuperavel via upsert_lead). Alerta = situacao perdido em lead_criado. |
@@ -321,7 +322,7 @@
 | `emusys_experimentais_snapshot_execucoes` | tabela | integracao | 10 | 20778 | não | 1 |  |
 | `emusys_experimentais_snapshot_publicacoes_vigentes` | tabela | integracao | 6 | 3 | sim (0) | 2 | Ponteiro transacional da ultima publicacao completa por unidade para validar leituras admitidas. |
 | `emusys_fatura_source_events` | tabela | integracao | 12 | 5729550 | sim (1) | 4 | Trilha append-only das confirmacoes, ausencias e resolucoes observadas por competencia. |
-| `emusys_faturas` | tabela | integracao | 22 | 5392 | sim (1) | 1 |  |
+| `emusys_faturas` | tabela | integracao | 22 | 5396 | sim (1) | 1 |  |
 | `emusys_historico_backfill_execucoes_v1` | tabela | integracao | 20 | 117 | sim (0) | 2 | Checkpoint retomavel do coletor historico Emusys do Health Score Professor V3. |
 | `emusys_matriculas_estado_atual` | tabela | integracao | 23 | 4929 | sim (1) | 2 | Fonte bruta backend-only do estado atual de cada matricula Emusys, escopada por unidade. |
 | `emusys_matriculas_sync_execucoes` | tabela | integracao | 13 | 178 | sim (1) | 1 | Manifesto auditavel das fotografias Emusys. Somente execucao operacional concluida e fresca pode alimentar KPIs vivos. |
@@ -429,10 +430,10 @@
 | `anotacoes` | tabela | professor | 11 | 0 | sim (2) | 1 |  |
 | `anotacoes_alunos` | tabela | professor | 8 | 6 | sim (4) | 1 | Anotações e observações sobre alunos |
 | `app_audio_preso_no_aparelho` | tabela | professor | 5 | 10 | sim (0) | 1 | Farol do app (20260827170000): estado ATUAL da fila local de audios de cada professor. Uma linha por professor, sobrescrita — e o zero tambem e reportado, senao o alarme de ontem nunca apaga. Sem isto, audio recusado fica so no aparelho e nenhuma auditoria pode ve-lo (caso Valdo/Bruno, 26/08/2026). |
-| `aula_alunos_emusys` | tabela | professor | 16 | 37844 | sim (3) | 3 | Roster operacional de aulas do Emusys, sem contato ou dados financeiros. |
+| `aula_alunos_emusys` | tabela | professor | 16 | 37845 | sim (3) | 3 | Roster operacional de aulas do Emusys, sem contato ou dados financeiros. |
 | `aula_registros_fabio_log` | tabela | professor | 8 | 670 | sim (0) | 1 | Auditoria das gravações do Fábio em aulas_emusys.anotacoes_fabio. É trilha de rastreabilidade, não o lar do registro (o registro vive em anotacoes_fabio). |
 | `aula_roster_sync_estado` | tabela | professor | 9 | 19205 | sim (0) | 2 |  |
-| `aulas_emusys` | tabela | professor | 35 | 64556 | sim (4) | 3 | Metadados completos de cada aula importada do Emusys (turma, curso, sala, professor, horários) |
+| `aulas_emusys` | tabela | professor | 35 | 64560 | sim (4) | 3 | Metadados completos de cada aula importada do Emusys (turma, curso, sala, professor, horários) |
 | `config_health_score` | tabela | professor | 13 | 0 | sim (2) | 1 | Configuração dos pesos e limites do Health Score do Professor |
 | `config_health_score_aluno` | tabela | professor | 11 | 0 | sim (2) | 1 | Configuração de pesos do Health Score de Alunos - ajustável por unidade |
 | `config_health_score_professor` | tabela | professor | 12 | 1 | sim (2) | 1 | Configuração de pesos do Health Score de Professores - ajustável por unidade |

@@ -4,13 +4,14 @@
 <!-- fim do cabecalho gerado -->
 # Funções
 
-1476 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
+1477 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
 chamadas diretas ao PostgREST não são visíveis para o gerador.
 
 ## aluno
 
 | Função | Estado | Segurança | Consumidores |
 |---|---|---|---|
+| `aluno_comunidade_estado_v1(p_aluno_id integer)` | SO-INTERNA | DEFINER | funcao:get_estrelas_matriculador_v1, funcao:radar_pendencias_comerciais_v1 |
 | `app_aluno_ficha(p_aluno_id integer)` | ORFA | DEFINER | sem consumidor conhecido |
 | `app_radar_config()` | ORFA | DEFINER | sem consumidor conhecido |
 | `app_radar_config_salvar(p_chave text, p_valor numeric)` | ORFA | DEFINER | sem consumidor conhecido |
@@ -276,7 +277,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_experimental_tem_registro(p_aula_local_id bigint)` | SO-INTERNA | DEFINER · 🔓 anon | funcao:app_minha_agenda_sessao_canonica_v2, funcao:fn_sessao_tem_registro |
 | `fn_lead_estado_pauta_v1(p_lead_id bigint)` | SO-INTERNA | DEFINER | funcao:radar_detectar_sinais_comercial_v1 |
 | `fn_matriculas_trancadas_do_professor(p_professor_id integer)` | SO-INTERNA | INVOKER | funcao:fabio_contexto_professor |
-| `fn_normalizar_telefone_br_key(p_telefone text)` | ATIVA | INVOKER · 🔓 anon | edge:supabase/functions/sincronizar-comunidade-whatsapp/index.ts, view:vw_jornada_lead_v1, funcao:exec_normalizar_telefone_atendimento, funcao:get_estrelas_matriculador_v1, funcao:get_situacao_alunos_sem_contrato_assinado_core_v1, funcao:get_situacao_lead_v1, +3 outros |
+| `fn_normalizar_telefone_br_key(p_telefone text)` | ATIVA | INVOKER · 🔓 anon | edge:supabase/functions/sincronizar-comunidade-whatsapp/index.ts, view:vw_jornada_lead_v1, funcao:aluno_comunidade_estado_v1, funcao:exec_normalizar_telefone_atendimento, funcao:get_situacao_alunos_sem_contrato_assinado_core_v1, funcao:get_situacao_lead_v1, +2 outros |
 | `fn_propagar_professor_experimental()` | ATIVA | DEFINER | trigger:lead_experimentais.trg_propagar_professor_experimental |
 | `fn_reconciliar_experimental_aulas(p_dias integer, p_limite integer)` | SO-INTERNA | DEFINER | funcao:fn_reconciliar_experimental_tick |
 | `fn_reconciliar_experimental_por_lead(p_dias_atras integer, p_dias_frente integer, p_limite integer)` | SO-INTERNA | DEFINER | funcao:fn_reconciliar_experimental_tick |
@@ -827,11 +828,11 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `get_saude_syncs_emusys()` | ATIVA | DEFINER | front:src/hooks/useSaudeCrons.ts |
 | `get_unidade_usuario()` | ORFA | DEFINER · 🔓 anon | sem consumidor conhecido |
 | `get_user_unidade_id()` | ATIVA | DEFINER · 🔓 anon | front:src/components/App/Agenda/Chamada/ChamadaDrawer.tsx |
-| `get_user_unidade_ids()` | ATIVA | DEFINER · 🔓 anon | view:vw_absenteismo_aluno_canonica_v2, view:vw_alunos_sem_fatura_mes, view:vw_contratos_vencendo, view:vw_radar_aluno_sinais_canonica_v2, view:vw_renovacao_ciclos, funcao:decidir_professor_divergencia_emusys, +20 outros |
+| `get_user_unidade_ids()` | ATIVA | DEFINER · 🔓 anon | view:vw_absenteismo_aluno_canonica_v2, view:vw_alunos_sem_fatura_mes, view:vw_contratos_vencendo, view:vw_matriculas_ativas_sem_aluno_local, view:vw_radar_aluno_sinais_canonica_v2, view:vw_renovacao_ciclos, +21 outros |
 | `get_vault_secret(secret_name text)` | ATIVA | DEFINER | edge:supabase/functions/ficha-criar-pessoa/index.ts, edge:supabase/functions/ficha-export/index.ts |
 | `hash_jsonb_canonico(p_payload jsonb)` | SO-INTERNA | INVOKER | funcao:aplicar_retificacao_relatorio_admin_mensal_renovacoes_v1, funcao:aplicar_retificacao_relatorio_comercial_matricula_tardia_v1, funcao:aplicar_retificacao_relatorio_comercial_mensal_v1, funcao:aplicar_retificacao_relatorio_gerencial_financeiro_v1, funcao:aplicar_retificacao_relatorio_gerencial_retencao_v1, funcao:capturar_relatorio_coordenacao_canonico_v2, +17 outros |
 | `introspect_schema_lamusic(table_names text[])` | ATIVA | DEFINER | edge:supabase/functions/bi-agent-lamusic/index.ts, edge:supabase/functions/bi-agent-lamusic/tools.ts |
-| `is_admin()` | ATIVA | DEFINER · 🔓 anon | front:src/components/App/Agenda/Chamada/ChamadaDrawer.tsx, view:vw_absenteismo_aluno_canonica_v2, view:vw_alunos_sem_fatura_mes, view:vw_contratos_vencendo, view:vw_disponibilidade_professores, view:vw_radar_aluno_sinais_canonica_v2, +26 outros |
+| `is_admin()` | ATIVA | DEFINER · 🔓 anon | front:src/components/App/Agenda/Chamada/ChamadaDrawer.tsx, view:vw_absenteismo_aluno_canonica_v2, view:vw_alunos_sem_fatura_mes, view:vw_contratos_vencendo, view:vw_disponibilidade_professores, view:vw_matriculas_ativas_sem_aluno_local, +27 outros |
 | `is_admin_usuario()` | SO-INTERNA | DEFINER · 🔓 anon | funcao:get_financeiro_espelho_status |
 | `la_os_cota_atual()` | ORFA | DEFINER | sem consumidor conhecido |
 | `la_os_cota_registrar(p_leituras jsonb)` | ORFA | DEFINER | sem consumidor conhecido |
