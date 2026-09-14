@@ -27,7 +27,7 @@ assert.strictEqual(handler.deveTratarConfirmacaoDeterministica({ chatId: CHAT, b
 assert.strictEqual(handler.deveTratarConfirmacaoDeterministica({ chatId: CHAT, body: 'sim', hasMedia: false, quotedMessageId: 'card-antigo' }), false);
 
 handler._pendentes.set(CHAT, [{ ...base, previewId: 'preview-tool', msgIds: ['preview-tool'], agentFirstEnvelope: { operacao: 'entrada' } }]);
-assert.strictEqual(handler.deveTratarConfirmacaoDeterministica({ chatId: CHAT, body: 'pode', hasMedia: false }), false);
-assert.strictEqual(handler.deveTratarConfirmacaoDeterministica({ chatId: CHAT, body: 'não', hasMedia: false }), false);
+assert.strictEqual(handler.deveTratarConfirmacaoDeterministica({ chatId: CHAT, body: 'pode', hasMedia: false }), true);
+assert.strictEqual(handler.deveTratarConfirmacaoDeterministica({ chatId: CHAT, body: 'não', hasMedia: false }), true);
 
-console.log('canário: pode/não de preview determinístico fica no handler; texto novo e preview das tools seguem agent-first — OK');
+console.log('canário: pode/não de qualquer preview persistido fica no gate determinístico; texto novo segue agent-first — OK');

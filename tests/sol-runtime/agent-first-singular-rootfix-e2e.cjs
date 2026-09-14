@@ -126,6 +126,13 @@ test('caso real: rascunho duravel -> cartao 2x -> singular -> pode -> uma escrit
   assert.equal(pend.cartaoParcelas, 2);
   assert.equal(pend.tipoOperacao, undefined, 'um item usa executor singular');
   assert.equal(h._rascunhosV4.size, 0);
+  assert.equal(h.deveTratarConfirmacaoDeterministica(evento('rota-aprova-1', 'pode', {
+    quotedMessageId: r2.previewId, timestamp: Math.floor((inicio + 2000) / 1000),
+  }), inicio + 2000), true, 'pode de preview agent-first precisa ficar fora do LLM');
+  assert.equal(h.deveTratarConfirmacaoDeterministica(evento('rota-aprova-2', 'pode', {
+    timestamp: Math.floor((inicio + 2000) / 1000),
+  }), inicio + 2000), true,
+    'pode sem citacao e com uma pendencia tambem precisa ficar no gate deterministico');
 
   const aprova = await h.handle(evento('aprova-1', 'pode', { quotedMessageId: r2.previewId }), inicio + 2000);
   assert.equal(aprova.acao, 'lancado');
@@ -153,7 +160,7 @@ test('caso real: rascunho duravel -> cartao 2x -> singular -> pode -> uma escrit
 });
 
 test('passaporte singular sem fatura aberta usa resgate canônico estreito e preserva crédito 2x', async () => {
-  const { h, lancamentos, lotes, resgates, logs } = fixture({ resolverSemFatura: true });
+  const { h, envios, lancamentos, lotes, resgates, logs } = fixture({ resolverSemFatura: true });
   const inicio = 1_789_161_000_000;
   const ev = evento('passaporte-sem-fatura', 'Passaporte Beatriz Teste R$ 440,00 cartão de crédito 2x', {
     caixaToolDecision: { intencao: 'lancamento_por_texto', aluno_nome: 'Beatriz Teste',
@@ -171,6 +178,15 @@ test('passaporte singular sem fatura aberta usa resgate canônico estreito e pre
   assert.equal(pend.canonica.fatura.canonical_fatura_id, null);
   assert.equal(pend.cartaoModalidade, 'credito');
   assert.equal(pend.cartaoParcelas, 2);
+  const card = envios.find((e) => e.id === preview.previewId);
+  assert.ok(card, 'preview publico precisa existir');
+  assert.match(card.texto, /Passaporte promocional/i);
+  assert.match(card.texto, /sem v[ií]nculo de fatura no Emusys/i);
+  assert.doesNotMatch(card.texto, /Lançamento\s*[·•]/i);
+  assert.doesNotMatch(card.texto, /Já pago no Emusys/i);
+  assert.equal(h.deveTratarConfirmacaoDeterministica(evento('rota-passaporte', 'pode', {
+    quotedMessageId: preview.previewId, timestamp: Math.floor((inicio + 1000) / 1000),
+  }), inicio + 1000), true);
 
   const aprovado = await h.handle(evento('pode-passaporte', 'pode', {
     quotedMessageId: preview.previewId,

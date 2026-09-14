@@ -1746,6 +1746,9 @@ function linhasDaFatura(can, valorComprovante) {
   if (vp !== null) {
     L.push(`Valor: ${fmtBRL(vp)}${f.vencida ? ' (até o vencimento)' : ''}${bate === true ? '  ✅ confere' : ''}`);
   }
+  if (f.sem_vinculo_fatura === true) {
+    L.push('Valor declarado no comprovante — sem vínculo de fatura no Emusys');
+  }
   if (f.vencida) {
     let l = `🔴 Atrasada há ${f.dias_atraso} dia(s)`;
     if (vh !== null && vp !== null && Math.abs(vh - vp) >= 0.01) l += ` — hoje com multa/mora: *${fmtBRL(vh)}*`;
@@ -3932,6 +3935,9 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       await limparEstadoDaOrigemV4(event.chatId, origemMessageId || event.messageId, 'singular_incompleto');
       return { acao: 'agent_first_singular_incompleto' };
     }
+    const semVinculoFatura = item.sem_vinculo_fatura === true
+      && !item.canonical_fatura_id
+      && !(item.fatura && item.fatura.canonical_fatura_id);
     const fatura = item.fatura ? {
       ...item.fatura,
       canonical_fatura_id: item.canonical_fatura_id || item.fatura.canonical_fatura_id || null,
@@ -3939,8 +3945,13 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       competencia: item.fatura.competencia || (item.competencia ? String(item.competencia).split('/').reverse().join('-') + '-01' : null),
       valor_da_parcela: item.fatura.valor_da_parcela || item.fatura.valor_pago || item.fatura.valor_hoje || Number(item.valor),
     } : {
-      canonical_fatura_id: item.canonical_fatura_id || null, descricao: item.descricao || null,
-      competencia: item.competencia || null, valor_da_parcela: Number(item.valor), status: 'paga',
+      canonical_fatura_id: item.canonical_fatura_id || null,
+      tipo_fatura: semVinculoFatura ? 'passaporte_taxa_matricula' : null,
+      descricao: item.descricao || (semVinculoFatura ? 'Passaporte promocional' : null),
+      competencia: item.competencia || null,
+      valor_da_parcela: Number(item.valor),
+      status: semVinculoFatura ? 'declarada_sem_fatura' : null,
+      sem_vinculo_fatura: semVinculoFatura,
     };
     const canonica = { ok: true, fatura };
     const texto = montarPreview({
@@ -7404,15 +7415,16 @@ _Não lanço nada pela metade._`);
     }
   }
 
-  // No canario textual, uma confirmacao de preview criado pelo trilho
-  // deterministico (comprovante/midia) precisa continuar neste handler. Um
-  // preview criado pelas tools leva agentFirstEnvelope e permanece no fluxo
-  // agent-first. Esta consulta nao aprova nem descarta nada; apenas decide a
-  // rota antes do LLM.
-  function deveTratarConfirmacaoDeterministica(event) {
+  // Confirmacao de QUALQUER preview persistido precisa continuar neste handler.
+  // O preview pode ter sido criado pela midia deterministica ou pelo agent-first;
+  // isso nao muda o gate: "pode" e uma decisao financeira exata, nao uma tarefa
+  // probabilistica do LLM. Esta consulta nao aprova nem descarta nada; apenas
+  // decide a rota antes do LLM. Com mais de uma pendencia, o proprio handler
+  // falha fechado e exige que o humano cite o card correto.
+  function deveTratarConfirmacaoDeterministica(event, agora = Date.now()) {
     if (!event || event.hasMedia) return false;
     const chatId = event.chatId;
-    const arr = limparVelhos(chatId, Date.now());
+    const arr = limparVelhos(chatId, agora);
     if (!arr.length) return false;
 
     const _citaPend = (p, id) => p.previewId === id || p.origem === id
@@ -7426,8 +7438,8 @@ _Não lanço nada pela metade._`);
     const confirma = casarPode(event.body, { respondeuPreview }).pode || casarNao(event.body);
     if (!confirma) return false;
 
-    if (citado) return !citado.agentFirstEnvelope;
-    return arr.some((p) => !p.agentFirstEnvelope);
+    if (citado) return true;
+    return arr.length > 0;
   }
 
   // ⚠️ ehConversaSemComando no retorno conserta bug LATENTE: o bridge chama
