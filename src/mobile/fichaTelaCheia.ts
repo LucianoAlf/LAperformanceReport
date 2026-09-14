@@ -34,22 +34,34 @@ export const FICHA_TELA_CHEIA = [
 ].join(' ');
 
 /**
- * A lista de abas da ficha no celular: deslizante, com rótulo visível.
+ * A lista de seções da ficha no celular, dentro da folha do
+ * `SeletorSecaoMobile`: uma por linha, todas as 9 à vista.
  *
- * `grid-cols-9` em 375px dá **41px por aba** — abaixo do alvo de toque de
- * 44px, e com o rótulo escondido (`hidden sm:inline`) sobra só um ícone para
- * distinguir "Acadêmico" de "Pedagógico". A faixa deslizante devolve o texto.
+ * ⚠️ Aqui havia uma **faixa deslizante**. Medida em 375px, ela mostrava 3
+ * seções e meia: Anamnese, Histórico, Pesquisas, Aulas e Pedagógico ficavam
+ * inteiramente fora da tela, e a máscara em degradê só avisava que havia mais
+ * — não dizia o quê. Numa ficha de edição isso é pior que numa barra de
+ * navegação: quem não sabe que a Anamnese existe não vai arrastar até ela.
+ *
+ * `h-auto`/`bg-transparent`/`p-0` desfazem a barra horizontal que o `TabsList`
+ * traz por padrão (`inline-flex h-10 bg-slate-800 p-1`); pelo twMerge, estas
+ * vêm depois e vencem.
  */
-export const FICHA_ABAS_CELULAR = [
-  'flex w-full justify-start gap-1 overflow-x-auto',
-  // A ultima aba visivel some num degrade em vez de terminar seca na borda:
-  // faixa que corta reto parece uma lista completa, e ai a rolagem vira
-  // informacao escondida — as 5 abas seguintes nunca seriam descobertas.
-  '[mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)]',
-].join(' ');
+export const FICHA_SECOES_CELULAR = 'flex h-auto w-full flex-col items-stretch gap-1 bg-transparent p-0';
 
-/** Cada aba: largura pelo conteúdo e alvo de toque de verdade. */
-export const FICHA_ABA_CELULAR = 'min-h-[44px] flex-none px-3';
+/**
+ * Cada seção: a linha inteira como alvo de toque, texto alinhado à esquerda.
+ *
+ * ⚠️ O estado ativo precisa ser reescrito. O `TabsTrigger` marca a aba atual
+ * com `data-[state=active]:bg-slate-900` — que é a cor DA FOLHA, então dentro
+ * dela a seção em que a pessoa está fica indistinguível das outras oito
+ * (medido no app: fundo e item ativo com o mesmo `rgb`). Pelo twMerge, esta
+ * vem depois e vence.
+ */
+export const FICHA_ABA_CELULAR = [
+  'min-h-[44px] w-full justify-start gap-3 rounded-lg px-3',
+  'data-[state=active]:bg-slate-800 data-[state=active]:text-white',
+].join(' ');
 
 /**
  * O rodapé de ações, fixo na base.

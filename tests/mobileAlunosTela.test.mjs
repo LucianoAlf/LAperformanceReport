@@ -191,16 +191,22 @@ test('a ficha TOMA a tela no celular, e o deslocamento do dialogo e zerado', () 
   assert.match(ficha, /ehCelular && FICHA_TELA_CHEIA/);
 });
 
-test('as 9 abas da ficha deixam de ser 9 colunas de 41px', () => {
+test('as 9 secoes da ficha deixam de ser 9 colunas de 41px', () => {
   // grid-cols-9 em 375px da 41px por aba: abaixo do alvo de 44px, e com o
   // rotulo escondido (`hidden sm:inline`) sobra so um icone para distinguir
   // "Academico" de "Pedagogico".
-  assert.match(ficha, /ehCelular \? FICHA_ABAS_CELULAR : 'grid grid-cols-9'/);
-  const comAlvo = ficha.split('ehCelular && FICHA_ABA_CELULAR').length - 1;
-  assert.equal(comAlvo, 9, `esperava as 9 abas com alvo de toque, achei ${comAlvo}`);
-  // O rotulo aparece no celular em vez de ficar so o icone.
-  const comRotulo = ficha.split("ehCelular ? 'whitespace-nowrap' : 'hidden sm:inline'").length - 1;
-  assert.equal(comRotulo, 9, `esperava as 9 abas com rotulo no celular, achei ${comRotulo}`);
+  assert.match(ficha, /ehCelular \? FICHA_SECOES_CELULAR : 'grid grid-cols-9'/);
+  // As 9 sao DADO, nao 9 blocos de JSX repetidos: o rotulo aparece na pilula e
+  // na linha da folha, e duas copias divergem.
+  const secoes = ficha.slice(ficha.indexOf('const SECOES_FICHA'), ficha.indexOf('] as const;'));
+  const quantas = secoes.split('label:').length - 1;
+  assert.equal(quantas, 9, `esperava 9 secoes declaradas, achei ${quantas}`);
+  for (const nome of ['Pessoal', 'Academico', 'Anamnese', 'Pedagogico']) {
+    assert.ok(secoes.normalize('NFD').replace(/[̀-ͯ]/g, '').includes(nome), `sumiu a secao ${nome}`);
+  }
+  // Alvo de toque e rotulo continuam existindo — agora uma vez so, no map.
+  assert.match(ficha, /ehCelular && FICHA_ABA_CELULAR/);
+  assert.match(ficha, /ehCelular \? 'whitespace-nowrap' : 'hidden sm:inline'/);
 });
 
 test('a acao de maior valor fica na base, acima da faixa do gesto', () => {
@@ -227,11 +233,37 @@ test('🔴 o formulario da ficha vira UMA coluna no celular', () => {
   assert.match(ficha, /sm:grid-cols-2/, 'o desktop perdeu as 2 colunas');
 });
 
-test('a faixa de abas DIZ que continua, em vez de cortar seca na borda', () => {
-  // Faixa que termina reto parece uma lista completa — e ai as 5 abas
-  // seguintes nunca sao descobertas. Medido no navegador: a mascara e' gerada
-  // pelo Play CDN (`maskImage` != none), nao e' classe morta.
-  assert.match(fichaClasses.FICHA_ABAS_CELULAR, /mask-image:linear-gradient/);
+test('🔴 as 9 secoes ficam TODAS a vista, em vez de 3 e meia numa faixa', () => {
+  // Medido em 375px: a faixa deslizante mostrava Pessoal, Academico,
+  // Financeiro e meio Comercial. Anamnese, Historico, Pesquisas, Aulas e
+  // Pedagogico ficavam inteiramente fora da tela — e a Anamnese e' uma das
+  // que a secretaria mais abre. Hoje a pilula diz onde se esta e a folha
+  // lista as 9.
+  assert.ok(!('FICHA_ABAS_CELULAR' in fichaClasses), 'a faixa deslizante voltou');
+  assert.match(fichaClasses.FICHA_SECOES_CELULAR, /flex-col/, 'as secoes precisam empilhar');
+  // ⚠️ O TabsList do projeto e' uma barra horizontal por padrao
+  // (`inline-flex h-10 bg-slate-800 p-1`) — sem desfazer isso, empilhar da
+  // uma barra de 40px com 9 linhas dentro.
+  for (const classe of ['h-auto', 'bg-transparent', 'p-0']) {
+    assert.ok(fichaClasses.FICHA_SECOES_CELULAR.split(' ').includes(classe), `faltou ${classe}`);
+  }
+  // A linha inteira e' o alvo, e o texto comeca na esquerda (uma lista com
+  // rotulos centrados vira uma coluna de textos desalinhados).
+  assert.match(fichaClasses.FICHA_ABA_CELULAR, /min-h-\[44px\]/);
+  assert.match(fichaClasses.FICHA_ABA_CELULAR, /justify-start/);
+
+  const seletor = readFileSync('src/mobile/SeletorSecaoMobile.tsx', 'utf8');
+  // ⚠️ A lista fica montada (`hidden`) quando a folha fecha: `aria-labelledby`
+  // resolve texto de elemento oculto, entao os 9 TabsContent seguem rotulados.
+  // Desmontar deixaria cada um apontando para um id que nao existe.
+  assert.match(seletor, /<div hidden>\{children\}<\/div>/);
+  // Escolher a secao encerra a decisao — a folha fecha no mesmo toque.
+  assert.match(seletor, /closest\('\[role="tab"\]'\)/);
+  // E o gesto e' o MESMO do periodo: uma pilula que diz o estado e uma folha
+  // por baixo. Dois vocabularios de navegacao na mesma tela e' o que a ficha
+  // tinha ate aqui.
+  assert.match(seletor, /aria-haspopup="dialog"/);
+  assert.match(seletor, /env\(safe-area-inset-bottom\)/);
 });
 
 test('🔴 col-span-2 dentro de grid de 1 coluna RECRIA a segunda coluna', () => {

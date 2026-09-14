@@ -15,11 +15,32 @@ import { cn } from '@/lib/utils';
 import { useShellMobile } from '@/hooks/useShellMobile';
 import {
   ESTILO_RODAPE_CELULAR,
-  FICHA_ABAS_CELULAR,
   FICHA_ABA_CELULAR,
   FICHA_RODAPE_CELULAR,
+  FICHA_SECOES_CELULAR,
   FICHA_TELA_CHEIA,
 } from '@/mobile/fichaTelaCheia';
+import { SeletorSecaoMobile } from '@/mobile/SeletorSecaoMobile';
+
+/**
+ * As 9 seções da ficha, em ORDEM — fonte única do rótulo e do ícone.
+ *
+ * Elas eram 9 blocos de JSX repetidos. Viraram dados porque no celular o mesmo
+ * rótulo aparece em dois lugares (a pílula que diz onde se está e a linha na
+ * folha), e manter duas cópias é como "Acadêmico" viraria "Academico" em uma
+ * delas.
+ */
+const SECOES_FICHA = [
+  { id: 'pessoal', label: 'Pessoal', Icone: User },
+  { id: 'academico', label: 'Acadêmico', Icone: GraduationCap },
+  { id: 'financeiro', label: 'Financeiro', Icone: DollarSign },
+  { id: 'comercial', label: 'Comercial', Icone: TrendingUp },
+  { id: 'anamnese', label: 'Anamnese', Icone: Brain },
+  { id: 'historico', label: 'Histórico', Icone: History },
+  { id: 'pesquisas', label: 'Pesquisas', Icone: Star },
+  { id: 'aulas', label: 'Aulas', Icone: BookOpen },
+  { id: 'pedagogico', label: 'Pedagógico', Icone: ClipboardList },
+] as const;
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -1831,44 +1852,23 @@ export function ModalFichaAluno({
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className={cn('flex-shrink-0', ehCelular ? FICHA_ABAS_CELULAR : 'grid grid-cols-9')}>
-            <TabsTrigger value="pessoal" className={cn('flex items-center gap-2', ehCelular && FICHA_ABA_CELULAR)}>
-              <User className="w-4 h-4 flex-none" />
-              <span className={ehCelular ? 'whitespace-nowrap' : 'hidden sm:inline'}>Pessoal</span>
-            </TabsTrigger>
-            <TabsTrigger value="academico" className={cn('flex items-center gap-2', ehCelular && FICHA_ABA_CELULAR)}>
-              <GraduationCap className="w-4 h-4 flex-none" />
-              <span className={ehCelular ? 'whitespace-nowrap' : 'hidden sm:inline'}>Acadêmico</span>
-            </TabsTrigger>
-            <TabsTrigger value="financeiro" className={cn('flex items-center gap-2', ehCelular && FICHA_ABA_CELULAR)}>
-              <DollarSign className="w-4 h-4 flex-none" />
-              <span className={ehCelular ? 'whitespace-nowrap' : 'hidden sm:inline'}>Financeiro</span>
-            </TabsTrigger>
-            <TabsTrigger value="comercial" className={cn('flex items-center gap-2', ehCelular && FICHA_ABA_CELULAR)}>
-              <TrendingUp className="w-4 h-4 flex-none" />
-              <span className={ehCelular ? 'whitespace-nowrap' : 'hidden sm:inline'}>Comercial</span>
-            </TabsTrigger>
-            <TabsTrigger value="anamnese" className={cn('flex items-center gap-2', ehCelular && FICHA_ABA_CELULAR)}>
-              <Brain className="w-4 h-4 flex-none" />
-              <span className={ehCelular ? 'whitespace-nowrap' : 'hidden sm:inline'}>Anamnese</span>
-            </TabsTrigger>
-            <TabsTrigger value="historico" className={cn('flex items-center gap-2', ehCelular && FICHA_ABA_CELULAR)}>
-              <History className="w-4 h-4 flex-none" />
-              <span className={ehCelular ? 'whitespace-nowrap' : 'hidden sm:inline'}>Histórico</span>
-            </TabsTrigger>
-            <TabsTrigger value="pesquisas" className={cn('flex items-center gap-2', ehCelular && FICHA_ABA_CELULAR)}>
-              <Star className="w-4 h-4 flex-none" />
-              <span className={ehCelular ? 'whitespace-nowrap' : 'hidden sm:inline'}>Pesquisas</span>
-            </TabsTrigger>
-            <TabsTrigger value="aulas" className={cn('flex items-center gap-2', ehCelular && FICHA_ABA_CELULAR)}>
-              <BookOpen className="w-4 h-4 flex-none" />
-              <span className={ehCelular ? 'whitespace-nowrap' : 'hidden sm:inline'}>Aulas</span>
-            </TabsTrigger>
-            <TabsTrigger value="pedagogico" className={cn('flex items-center gap-2', ehCelular && FICHA_ABA_CELULAR)}>
-              <ClipboardList className="w-4 h-4 flex-none" />
-              <span className={ehCelular ? 'whitespace-nowrap' : 'hidden sm:inline'}>Pedagógico</span>
-            </TabsTrigger>
-          </TabsList>
+          <SeletorSecaoMobile
+            ehCelular={ehCelular}
+            rotuloAtual={SECOES_FICHA.find((sec) => sec.id === activeTab)?.label ?? 'Seção'}
+          >
+            <TabsList className={cn('flex-shrink-0', ehCelular ? FICHA_SECOES_CELULAR : 'grid grid-cols-9')}>
+              {SECOES_FICHA.map(({ id, label, Icone }) => (
+                <TabsTrigger
+                  key={id}
+                  value={id}
+                  className={cn('flex items-center gap-2', ehCelular && FICHA_ABA_CELULAR)}
+                >
+                  <Icone className="w-4 h-4 flex-none" />
+                  <span className={ehCelular ? 'whitespace-nowrap' : 'hidden sm:inline'}>{label}</span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </SeletorSecaoMobile>
 
           <div className="flex-1 overflow-y-auto mt-4 pr-2">
             {/* ABA PESSOAL */}
