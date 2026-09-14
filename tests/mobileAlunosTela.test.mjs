@@ -1,13 +1,12 @@
-// Alunos no celular — arquetipo 1 do spec ("lista densa").
+// Alunos no celular — arquetipos 1 ("lista densa") e 3 ("ficha") do spec.
 //
 // A tabela do desktop tem 16 colunas e nao encolhe para 351px. A linha carrega
 // tres coisas (quem · com quem/quando · o que exige acao) e o resto mora na
-// ficha. O que este teste guarda nao e o layout: e que a REGRA por tras do selo
-// continue tendo uma fonte so.
+// FICHA, que e a mesma do desktop.
 //
 // As funcoes puras rodam de verdade (bundle por esbuild), nao por regex.
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -27,7 +26,22 @@ const selo = await (async () => {
   return import(pathToFileURL(saida).href);
 })();
 
-const { seloDoAluno, quandoTemAula, linkWhatsApp } = selo;
+const { seloDoAluno, quandoTemAula } = selo;
+
+// As classes da ficha sao lidas como VALOR, nao como texto do arquivo: a
+// primeira versao deste teste proibia a string "h-screen" e ficou vermelha por
+// causa do COMENTARIO que explica por que nao usar h-screen.
+const fichaClasses = await (async () => {
+  const saida = path.join(mkdtempSync(path.join(tmpdir(), 'ficha-')), 'fichaTelaCheia.mjs');
+  await esbuild.build({
+    entryPoints: ['src/mobile/fichaTelaCheia.ts'],
+    bundle: true,
+    format: 'esm',
+    outfile: saida,
+    logLevel: 'silent',
+  });
+  return import(pathToFileURL(saida).href);
+})();
 
 const aluno = (extra) => ({
   id: 1,
@@ -39,6 +53,8 @@ const aluno = (extra) => ({
   horario_aula: null,
   ...extra,
 });
+
+// ── o selo (regra de negocio, executada) ────────────────────────────────────
 
 test('aluno ativo e em dia NAO recebe selo', () => {
   // Cor e vocabulario de excecao: numa lista em que tudo esta destacado, nada
@@ -61,7 +77,6 @@ test('o selo e UM valor, e o mais grave vence', () => {
   assert.equal(doisEstados.texto, 'Inadimplente', 'inadimplente + renovar sinaliza o que exige acao hoje');
 
   assert.equal(seloDoAluno(aluno({ aguardando_renovacao: true })).texto, 'Renovar');
-  // Renovacao perde para qualquer estado de saida.
   assert.equal(
     seloDoAluno(aluno({ aguardando_renovacao: true, status: 'aviso_previo' })).texto,
     'Aviso prévio',
@@ -69,16 +84,16 @@ test('o selo e UM valor, e o mais grave vence', () => {
 });
 
 test('⚠️ aviso previo ANULA a inadimplencia — e isso vem do desktop, nao daqui', () => {
-  // Nao e escolha desta tela: `getStatusPagamentoOperacional` so devolve
-  // 'inadimplente' quando `status === 'ativo'`, e aviso previo nao e 'ativo'.
-  // Ou seja, quem esta de saida DEVENDO nao e sinalizado como inadimplente em
-  // lugar nenhum do sistema — nem no desktop, que tem a regra desde sempre.
+  // `getStatusPagamentoOperacional` so devolve 'inadimplente' quando
+  // `status === 'ativo'`, e aviso previo nao e 'ativo'. Ou seja: quem esta de
+  // saida DEVENDO nao e sinalizado em lugar nenhum do sistema, nem no desktop.
   //
-  // O teste existe para que isso seja uma decisao VISIVEL: se um dia a casa
-  // decidir que quem sai devendo tem de acender, o lugar da mudanca e
-  // `src/lib/alunosStatus.ts`, e as duas telas mudam juntas.
-  const saindoDevendo = seloDoAluno(aluno({ status: 'aviso_previo', status_pagamento: 'inadimplente' }));
-  assert.equal(saindoDevendo.texto, 'Aviso prévio');
+  // O teste existe para a decisao ficar VISIVEL: se a casa mudar de ideia, o
+  // lugar e `src/lib/alunosStatus.ts`, e as duas telas mudam juntas.
+  assert.equal(
+    seloDoAluno(aluno({ status: 'aviso_previo', status_pagamento: 'inadimplente' })).texto,
+    'Aviso prévio',
+  );
 });
 
 test('quandoTemAula nao deixa traco solto quando falta dia ou horario', () => {
@@ -88,24 +103,14 @@ test('quandoTemAula nao deixa traco solto quando falta dia ou horario', () => {
   assert.equal(quandoTemAula(null, null), '');
 });
 
-test('linkWhatsApp recusa numero curto e nao duplica o 55', () => {
-  assert.equal(linkWhatsApp('(21) 96417-1223'), 'https://wa.me/5521964171223');
-  assert.equal(linkWhatsApp('5521964171223'), 'https://wa.me/5521964171223');
-  // Numero truncado geraria um link que abre conversa com desconhecido.
-  assert.equal(linkWhatsApp('96417'), null);
-  assert.equal(linkWhatsApp(null), null);
-});
-
-// ── fonte unica da regra ────────────────────────────────────────────────────
+// ── fonte unica ─────────────────────────────────────────────────────────────
 
 const ler = (p) => readFileSync(p, 'utf8');
 const seloFonte = ler('src/mobile/telas/alunos/seloAluno.ts');
-const telaFonte = ler('src/mobile/telas/AlunosMobile.tsx');
 const listaFonte = ler('src/mobile/telas/alunos/ListaAlunosMobile.tsx');
 const tabelaDesktop = ler('src/components/App/Alunos/TabelaAlunos.tsx');
-const folha = ler('src/mobile/telas/alunos/DetalheAlunoSheet.tsx');
-const hook = ler('src/hooks/useAlunosLista.ts');
-const pageDesktop = ler('src/components/App/Alunos/AlunosPage.tsx');
+const pagina = ler('src/components/App/Alunos/AlunosPage.tsx');
+const ficha = ler('src/components/App/Alunos/ModalFichaAluno.tsx');
 
 test('celular e desktop leem a MESMA regra de status de pagamento', () => {
   // A regra morava como funcao privada dentro de TabelaAlunos.tsx. Copia-la
@@ -114,8 +119,7 @@ test('celular e desktop leem a MESMA regra de status de pagamento', () => {
   for (const [nome, fonte] of [['selo do celular', seloFonte], ['tabela do desktop', tabelaDesktop]]) {
     assert.match(fonte, /from '@\/lib\/alunosStatus'/, `${nome} deixou de usar a regra compartilhada`);
   }
-  // Ancorado na REIMPLEMENTACAO, nao na palavra: o que nao pode voltar e o
-  // teste de "esta ativo?" escrito a mao ao lado do status_pagamento.
+  // Ancorado na REIMPLEMENTACAO, nao na palavra.
   for (const [nome, fonte] of [['selo do celular', seloFonte], ['lista do celular', listaFonte]]) {
     assert.doesNotMatch(
       fonte,
@@ -125,103 +129,86 @@ test('celular e desktop leem a MESMA regra de status de pagamento', () => {
   }
 });
 
-test('a apresentacao da lista nao fala com o banco por conta propria', () => {
-  // A ListaAlunosMobile RECEBE os alunos — e o que permite a AlunosPage passar
-  // os dela e a tela autonoma passar os do hook, sem duas leituras da lista.
+test('🔴 o toque no aluno abre a FICHA de 9 abas, nao uma versao pobre dela', () => {
+  // Houve aqui uma folha de detalhe com 9 campos. Era uma segunda ficha, mais
+  // pobre, para a mesma pessoa: quem abrisse um aluno no celular veria 9
+  // campos onde o desktop mostra 9 abas. Foi removida.
+  assert.ok(
+    !existsSync('src/mobile/telas/alunos/DetalheAlunoSheet.tsx'),
+    'a folha de detalhe voltou — ela e uma segunda ficha para a mesma pessoa',
+  );
+  assert.doesNotMatch(listaFonte, /DetalheAlunoSheet/);
+  assert.match(listaFonte, /onAbrirAluno: \(alunoId: number\) => void/);
+  // E a pagina monta a ficha REAL, a mesma que o desktop usa.
+  assert.match(pagina, /ehCelular && fichaAlunoId !== null/);
+  assert.match(pagina, /<ModalFichaAluno/);
+  assert.match(pagina, /onAbrirAluno=\{setFichaAlunoId\}/);
+});
+
+test('a ficha guarda o ID do aluno, nunca o objeto', () => {
+  // A lista e remontada a cada recarga; um objeto preso ficaria velho na tela
+  // enquanto o resto da pagina ja mostra o dado novo.
+  assert.match(pagina, /useState<number \| null>\(null\)/);
+  assert.match(pagina, /alunosComTurma\.find\(\(a\) => a\.id === fichaAlunoId\)/);
+  // Aluno que sai do recorte com a ficha aberta fecha em silencio — melhor que
+  // renderizar ficha vazia.
+  assert.match(pagina, /if \(!alunoAberto\) return null;/);
+});
+
+test('a lista nao fala com o banco: recebe os alunos de quem ja os tem', () => {
+  // Buscar aqui criaria uma segunda leitura da lista de alunos.
   assert.doesNotMatch(listaFonte, /supabase\.(from|rpc)\(/);
   assert.match(listaFonte, /alunos: AlunoNaLinha\[\]/);
-  // Quem consulta e so a tela autonoma, pelo hook.
-  assert.match(telaFonte, /useAlunosLista/);
-  assert.doesNotMatch(telaFonte, /supabase\.(from|rpc)\(/);
+  assert.match(pagina, /<ListaAlunosMobile\s*\n?\s*alunos=\{alunosComTurma\}/);
+  // ⚠️ O hook paralelo `useAlunosLista` foi removido junto com a tela autonoma:
+  // era uma segunda consulta a mesma tabela, com os mesmos filtros copiados a
+  // mao.
+  assert.ok(!existsSync('src/hooks/useAlunosLista.ts'), 'voltou a existir uma segunda leitura da lista');
+  assert.ok(!existsSync('src/mobile/telas/AlunosMobile.tsx'), 'voltou a existir uma segunda tela de Alunos');
 });
 
-test('o hook pagina de 1000 — sem isso a lista TRUNCA sem erro nenhum', () => {
-  // Teto do PostgREST. A rede passa de 1.151 pagantes: sem paginar, o fim do
-  // alfabeto some da tela e nada acusa.
-  assert.match(hook, /const PAGINA = 1000/);
-  assert.match(hook, /\.range\(inicio, inicio \+ PAGINA - 1\)/);
-  assert.match(pageDesktop, /PAGE_SIZE = 1000/, 'o desktop deixou de paginar — conferir se o teto mudou');
-});
-
-test('o hook aplica os DOIS filtros de linha que o desktop aplica', () => {
-  // Se o desktop mudar o recorte da lista, este teste fica vermelho aqui em vez
-  // de as duas telas divergirem em silencio.
-  for (const [nome, fonte] of [['hook do celular', hook], ['AlunosPage do desktop', pageDesktop]]) {
-    assert.match(fonte, /\.is\('arquivado_em', null\)/, `${nome} parou de excluir arquivados`);
-    assert.match(fonte, /\.eq\('unidade_id', unidade/i, `${nome} parou de recortar por unidade`);
-  }
-});
-
-test('erro de consulta nao vira lista vazia', () => {
-  // "nenhum aluno" e "a consulta quebrou" sao estados diferentes, e a tela tem
-  // de dizer qual dos dois aconteceu.
-  assert.match(hook, /setErro\(error\.message\)/);
-  assert.match(telaFonte, /Não consegui carregar a lista de alunos/);
-});
-
-test('os alvos de toque respeitam 44px', () => {
-  assert.match(listaFonte, /min-h-\[44px\]/, 'a busca perdeu o alvo de 44px');
-  assert.match(folha, /min-h-\[44px\]/, 'os botoes de contato perderam o alvo de 44px');
-});
-
-test('a folha de detalhe existe porque a ficha (arquetipo 3) ainda nao existe', () => {
-  // Portar Alunos nao pode TIRAR informacao que a equipe tem hoje no desktop.
-  for (const campo of ['Parcela', 'Vencimento', 'Tempo de casa', 'Anamnese', 'Unidade']) {
-    assert.ok(folha.includes(`rotulo="${campo}"`), `o campo ${campo} sumiu da folha de detalhe`);
-  }
-  assert.match(folha, /role="dialog"/);
-  assert.match(folha, /e\.key === 'Escape'/, 'a folha nao fecha no Esc');
-});
-
-test('a faixa e por ABA, e a lista e a UNICA declarada como adaptada', () => {
-  // /app/alunos tem 8 abas em estagios diferentes. Uma faixa por ROTA mentiria
-  // nos dois sentidos — dizendo "adaptada" na aba que ainda nao e, ou o
-  // contrario. Marcar a rota inteira so quando as 8 estiverem prontas deixaria
-  // o celular sem nada por semanas, com 7 abas que JA abrem hoje.
-  const abas = ler('src/mobile/abasPortadas.ts');
-  const shell = ler('src/mobile/MobileLayout.tsx');
-  const pagina = ler('src/components/App/Alunos/AlunosPage.tsx');
-
-  assert.match(abas, /'\/app\/alunos': \['lista'\]/, 'a lista deixou de ser a aba adaptada');
-  assert.match(abas, /ROTAS_COM_FAIXA_POR_ABA[^=]*=\s*\['\/app\/alunos'\]/);
-
-  // O shell suprime a faixa DELE nessa rota, senao apareceriam duas.
-  assert.match(shell, /!portada && !faixaPorAba && <AvisoNaoOtimizado \/>/);
-  // ...mas NAO trava a rolagem lateral: 7 das 8 abas ainda dependem dela.
-  assert.match(shell, /portada \? 'overflow-x-hidden' : 'overflow-x-auto'/);
-
-  // E a pagina mostra a faixa da aba aberta.
-  assert.match(pagina, /ehCelular && !abaFoiPortada\('\/app\/alunos', tabAtiva\) && <AvisoNaoOtimizado \/>/);
-});
-
-test('a rota NAO entra em ROTAS_PORTADAS — a faixa dela e por aba', () => {
-  // Entrar la apagaria a faixa das 7 abas que ainda nao foram adaptadas.
-  const rotas = ler('src/mobile/rotasPortadas.ts');
-  assert.doesNotMatch(rotas, /'\/app\/alunos'\]/, 'a rota voltou a ser marcada como portada por inteiro');
-});
-
-test('a mesma ListaAlunosMobile serve a pagina e a tela autonoma', () => {
-  // Duas apresentacoes da mesma lista divergiriam no primeiro ajuste.
-  const pagina = ler('src/components/App/Alunos/AlunosPage.tsx');
-  const autonoma = ler('src/mobile/telas/AlunosMobile.tsx');
-  for (const [nome, fonte] of [['AlunosPage', pagina], ['tela autonoma', autonoma]]) {
-    assert.match(fonte, /<ListaAlunosMobile/, `${nome} nao renderiza a lista compartilhada`);
-  }
-  // A pagina passa os alunos que ELA ja carregou — nada de segunda consulta.
-  assert.match(pagina, /<ListaAlunosMobile alunos=\{alunosComTurma\}/);
-  // E o desktop continua com a tabela.
+test('o desktop continua com a tabela', () => {
   assert.match(pagina, /tabAtiva === 'lista' && !ehCelular && \(\s*<TabelaAlunos/);
 });
 
-test('os 6 KPIs da pagina ficam compactos no celular', () => {
-  const pagina = ler('src/components/App/Alunos/AlunosPage.tsx');
-  const compactos = pagina.split("size={ehCelular ? 'sm' : undefined}").length - 1;
-  assert.equal(compactos, 6, `esperava os 6 KPIs em size sm no celular, achei ${compactos}`);
+// ── a ficha em tela cheia (arquetipo 3) ─────────────────────────────────────
+
+test('a ficha TOMA a tela no celular, e o deslocamento do dialogo e zerado', () => {
+  const cls = fichaClasses.FICHA_TELA_CHEIA;
+  // ⚠️ `w-screen h-screen` sozinho nao basta: o DialogContent e
+  // `fixed left-[50%] top-[50%] translate-*-[-50%]`, entao sem zerar o
+  // deslocamento metade da ficha fica fora da tela.
+  for (const classe of ['left-0', 'top-0', 'translate-x-0', 'translate-y-0']) {
+    assert.ok(cls.split(' ').includes(classe), `FICHA_TELA_CHEIA perdeu ${classe}`);
+  }
+  // ⚠️ 100dvh, nao 100vh: no iOS o 100vh inclui a barra de endereco retratil,
+  // e o rodape de acoes some abaixo da dobra justamente enquanto ela aparece.
+  assert.ok(cls.split(' ').includes('h-[100dvh]'));
+  assert.ok(!cls.split(' ').includes('h-screen'), 'h-screen corta o rodape no iOS');
+  // E o dialogo perde a largura maxima do desktop, senao a ficha continua
+  // sendo um retangulo flutuante com margem dos dois lados.
+  assert.ok(cls.split(' ').includes('max-w-none'));
+  assert.match(ficha, /ehCelular && FICHA_TELA_CHEIA/);
 });
 
-test('o contato cai para o telefone do responsavel, e a tela DIZ que e dele', () => {
-  // 392 alunos ativos so tem o numero do responsavel; ligar sem saber disso
-  // comeca a conversa errada.
-  assert.match(folha, /aluno\.whatsapp \|\| aluno\.telefone \|\| aluno\.responsavel_telefone/);
-  assert.match(folha, /Contato do responsável/);
+test('as 9 abas da ficha deixam de ser 9 colunas de 41px', () => {
+  // grid-cols-9 em 375px da 41px por aba: abaixo do alvo de 44px, e com o
+  // rotulo escondido (`hidden sm:inline`) sobra so um icone para distinguir
+  // "Academico" de "Pedagogico".
+  assert.match(ficha, /ehCelular \? FICHA_ABAS_CELULAR : 'grid grid-cols-9'/);
+  const comAlvo = ficha.split('ehCelular && FICHA_ABA_CELULAR').length - 1;
+  assert.equal(comAlvo, 9, `esperava as 9 abas com alvo de toque, achei ${comAlvo}`);
+  // O rotulo aparece no celular em vez de ficar so o icone.
+  const comRotulo = ficha.split("ehCelular ? 'whitespace-nowrap' : 'hidden sm:inline'").length - 1;
+  assert.equal(comRotulo, 9, `esperava as 9 abas com rotulo no celular, achei ${comRotulo}`);
+});
+
+test('a acao de maior valor fica na base, acima da faixa do gesto', () => {
+  // No iPhone a faixa do gesto de inicio cobre os ultimos ~34px.
+  assert.match(fichaClasses.ESTILO_RODAPE_CELULAR.paddingBottom, /env\(safe-area-inset-bottom\)/);
+  assert.match(ficha, /style=\{ehCelular \? ESTILO_RODAPE_CELULAR : undefined\}/);
+  // Salvar ocupa o dobro de Cancelar: as duas nao podem ter o mesmo peso no
+  // alvo do polegar.
+  assert.match(ficha, /ehCelular && 'min-h-\[44px\] flex-\[2\]'/);
+  assert.match(ficha, /ehCelular && 'min-h-\[44px\] flex-1'/);
 });

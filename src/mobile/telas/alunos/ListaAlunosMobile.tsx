@@ -4,7 +4,6 @@ import { Search, X } from 'lucide-react';
 import { normalizarBusca } from '@/lib/agenda';
 import { getStatusPagamentoOperacional } from '@/lib/alunosStatus';
 
-import { DetalheAlunoSheet } from './DetalheAlunoSheet';
 import { LinhaAluno } from './LinhaAluno';
 import type { AlunoNaLinha } from './tipos';
 
@@ -12,13 +11,16 @@ import type { AlunoNaLinha } from './tipos';
  * A aba Lista em tela de telefone — arquétipo 1 do spec ("lista densa").
  *
  * A tabela do desktop tem 16 colunas e não encolhe para 351px. A linha carrega
- * três coisas (quem · com quem/quando · o que exige ação) e o resto vai para a
- * folha de detalhe.
+ * três coisas (quem · com quem/quando · o que exige ação) e o resto mora na
+ * FICHA — a de 9 abas, a mesma do desktop, que no celular abre em tela cheia.
  *
- * Recebe os alunos JÁ carregados, e é por isso que serve aos dois donos: a
- * `AlunosPage` passa a lista dela (com os filtros do desktop aplicados) e a
- * tela mobile autônoma passa a de `useAlunosLista`. Se ela buscasse por conta
- * própria, existiriam duas leituras da mesma lista.
+ * ⚠️ Houve uma folha de detalhe intermediária aqui, com 9 campos. Ela foi
+ * removida: era uma segunda ficha, mais pobre, para a mesma pessoa — e quem
+ * abrisse um aluno no celular veria 9 campos onde o desktop mostra 9 abas.
+ *
+ * Recebe os alunos JÁ carregados, em vez de buscar: quem chama é a
+ * `AlunosPage`, que já os tem com os filtros do desktop aplicados. Buscar aqui
+ * criaria uma segunda leitura da mesma lista.
  */
 
 /** O recorte de status. Um chip por vez: combinar dois viraria um formulário. */
@@ -59,13 +61,21 @@ interface ListaAlunosMobileProps {
   alunos: AlunoNaLinha[];
   /** Na visão consolidada a unidade importa na linha; dentro de uma, é ruído. */
   mostrarUnidade: boolean;
+  /**
+   * Abre a FICHA do aluno — a de 9 abas, a mesma do desktop.
+   *
+   * Recebe o id, e não o aluno, porque a linha conhece só o mínimo
+   * (`AlunoNaLinha`) enquanto a ficha precisa do registro inteiro. Quem chama
+   * já tem os dois e faz a ponte; devolver o objeto parcial obrigaria a ficha
+   * a lidar com campos ausentes, e ela é de edição.
+   */
+  onAbrirAluno: (alunoId: number) => void;
 }
 
-export function ListaAlunosMobile({ alunos, mostrarUnidade }: ListaAlunosMobileProps) {
+export function ListaAlunosMobile({ alunos, mostrarUnidade, onAbrirAluno }: ListaAlunosMobileProps) {
   const [recorte, setRecorte] = useState<RecorteId>('na_casa');
   const [busca, setBusca] = useState('');
   const [visiveis, setVisiveis] = useState(LOTE);
-  const [aberto, setAberto] = useState<AlunoNaLinha | null>(null);
 
   const filtrados = useMemo(() => {
     const regra = RECORTES.find((r) => r.id === recorte) ?? RECORTES[0];
@@ -149,7 +159,12 @@ export function ListaAlunosMobile({ alunos, mostrarUnidade }: ListaAlunosMobileP
 
       <div className="space-y-2">
         {filtrados.slice(0, visiveis).map((aluno) => (
-          <LinhaAluno key={aluno.id} aluno={aluno} mostrarUnidade={mostrarUnidade} onAbrir={setAberto} />
+          <LinhaAluno
+            key={aluno.id}
+            aluno={aluno}
+            mostrarUnidade={mostrarUnidade}
+            onAbrir={(a) => onAbrirAluno(a.id)}
+          />
         ))}
       </div>
 
@@ -158,8 +173,6 @@ export function ListaAlunosMobile({ alunos, mostrarUnidade }: ListaAlunosMobileP
       {visiveis < filtrados.length && (
         <p className="py-2 text-center text-[11px] text-slate-600">carregando mais…</p>
       )}
-
-      <DetalheAlunoSheet aluno={aberto} onFechar={() => setAberto(null)} />
     </div>
   );
 }

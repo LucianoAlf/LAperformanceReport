@@ -11,6 +11,15 @@ import { copyTextToClipboard } from '@/lib/clipboard';
 import { criarUrlFaturasAlunos } from '@/lib/faturasAlunosCanonicas';
 import { X, Loader2, Save, User, GraduationCap, DollarSign, TrendingUp, History, AlertCircle, Plus, Users, Pencil, Brain, ExternalLink, MessageCircle, Search, Star, BookOpen, ClipboardList, Printer, Copy, Check, RotateCcw, Send, CalendarDays } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
+import { useShellMobile } from '@/hooks/useShellMobile';
+import {
+  ESTILO_RODAPE_CELULAR,
+  FICHA_ABAS_CELULAR,
+  FICHA_ABA_CELULAR,
+  FICHA_RODAPE_CELULAR,
+  FICHA_TELA_CHEIA,
+} from '@/mobile/fichaTelaCheia';
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -976,6 +985,9 @@ export function ModalFichaAluno({
   } = useContratoAssinaturaAluno(aluno.id);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  // Arquetipo 3 do spec: no celular a ficha TOMA a tela, com cabecalho fixo,
+  // abas deslizantes e a acao de maior valor na base (zona do polegar).
+  const ehCelular = useShellMobile() === 'mobile';
   const [activeTab, setActiveTab] = useState('pessoal');
   
   // Dados completos do aluno
@@ -1774,7 +1786,7 @@ export function ModalFichaAluno({
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+      <DialogContent className={cn('flex max-h-[90vh] max-w-4xl flex-col', ehCelular && FICHA_TELA_CHEIA)}>
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-3">
             {fotoPerfil ? (
@@ -1819,42 +1831,42 @@ export function ModalFichaAluno({
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid grid-cols-9 flex-shrink-0">
-            <TabsTrigger value="pessoal" className="flex items-center gap-2">
-              <User className="w-4 h-4" />
-              <span className="hidden sm:inline">Pessoal</span>
+          <TabsList className={cn('flex-shrink-0', ehCelular ? FICHA_ABAS_CELULAR : 'grid grid-cols-9')}>
+            <TabsTrigger value="pessoal" className={cn('flex items-center gap-2', ehCelular && FICHA_ABA_CELULAR)}>
+              <User className="w-4 h-4 flex-none" />
+              <span className={ehCelular ? 'whitespace-nowrap' : 'hidden sm:inline'}>Pessoal</span>
             </TabsTrigger>
-            <TabsTrigger value="academico" className="flex items-center gap-2">
-              <GraduationCap className="w-4 h-4" />
-              <span className="hidden sm:inline">Acadêmico</span>
+            <TabsTrigger value="academico" className={cn('flex items-center gap-2', ehCelular && FICHA_ABA_CELULAR)}>
+              <GraduationCap className="w-4 h-4 flex-none" />
+              <span className={ehCelular ? 'whitespace-nowrap' : 'hidden sm:inline'}>Acadêmico</span>
             </TabsTrigger>
-            <TabsTrigger value="financeiro" className="flex items-center gap-2">
-              <DollarSign className="w-4 h-4" />
-              <span className="hidden sm:inline">Financeiro</span>
+            <TabsTrigger value="financeiro" className={cn('flex items-center gap-2', ehCelular && FICHA_ABA_CELULAR)}>
+              <DollarSign className="w-4 h-4 flex-none" />
+              <span className={ehCelular ? 'whitespace-nowrap' : 'hidden sm:inline'}>Financeiro</span>
             </TabsTrigger>
-            <TabsTrigger value="comercial" className="flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" />
-              <span className="hidden sm:inline">Comercial</span>
+            <TabsTrigger value="comercial" className={cn('flex items-center gap-2', ehCelular && FICHA_ABA_CELULAR)}>
+              <TrendingUp className="w-4 h-4 flex-none" />
+              <span className={ehCelular ? 'whitespace-nowrap' : 'hidden sm:inline'}>Comercial</span>
             </TabsTrigger>
-            <TabsTrigger value="anamnese" className="flex items-center gap-2">
-              <Brain className="w-4 h-4" />
-              <span className="hidden sm:inline">Anamnese</span>
+            <TabsTrigger value="anamnese" className={cn('flex items-center gap-2', ehCelular && FICHA_ABA_CELULAR)}>
+              <Brain className="w-4 h-4 flex-none" />
+              <span className={ehCelular ? 'whitespace-nowrap' : 'hidden sm:inline'}>Anamnese</span>
             </TabsTrigger>
-            <TabsTrigger value="historico" className="flex items-center gap-2">
-              <History className="w-4 h-4" />
-              <span className="hidden sm:inline">Histórico</span>
+            <TabsTrigger value="historico" className={cn('flex items-center gap-2', ehCelular && FICHA_ABA_CELULAR)}>
+              <History className="w-4 h-4 flex-none" />
+              <span className={ehCelular ? 'whitespace-nowrap' : 'hidden sm:inline'}>Histórico</span>
             </TabsTrigger>
-            <TabsTrigger value="pesquisas" className="flex items-center gap-2">
-              <Star className="w-4 h-4" />
-              <span className="hidden sm:inline">Pesquisas</span>
+            <TabsTrigger value="pesquisas" className={cn('flex items-center gap-2', ehCelular && FICHA_ABA_CELULAR)}>
+              <Star className="w-4 h-4 flex-none" />
+              <span className={ehCelular ? 'whitespace-nowrap' : 'hidden sm:inline'}>Pesquisas</span>
             </TabsTrigger>
-            <TabsTrigger value="aulas" className="flex items-center gap-2">
-              <BookOpen className="w-4 h-4" />
-              <span className="hidden sm:inline">Aulas</span>
+            <TabsTrigger value="aulas" className={cn('flex items-center gap-2', ehCelular && FICHA_ABA_CELULAR)}>
+              <BookOpen className="w-4 h-4 flex-none" />
+              <span className={ehCelular ? 'whitespace-nowrap' : 'hidden sm:inline'}>Aulas</span>
             </TabsTrigger>
-            <TabsTrigger value="pedagogico" className="flex items-center gap-2">
-              <ClipboardList className="w-4 h-4" />
-              <span className="hidden sm:inline">Pedagógico</span>
+            <TabsTrigger value="pedagogico" className={cn('flex items-center gap-2', ehCelular && FICHA_ABA_CELULAR)}>
+              <ClipboardList className="w-4 h-4 flex-none" />
+              <span className={ehCelular ? 'whitespace-nowrap' : 'hidden sm:inline'}>Pedagógico</span>
             </TabsTrigger>
           </TabsList>
 
@@ -2735,11 +2747,21 @@ export function ModalFichaAluno({
         </Tabs>
 
         {/* Footer com botões */}
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-700 flex-shrink-0">
-          <Button variant="outline" onClick={onClose} disabled={saving}>
+        <div
+          className={cn(
+            'flex items-center justify-end gap-3 pt-4 border-t border-slate-700 flex-shrink-0',
+            ehCelular && FICHA_RODAPE_CELULAR,
+          )}
+          style={ehCelular ? ESTILO_RODAPE_CELULAR : undefined}
+        >
+          <Button variant="outline" onClick={onClose} disabled={saving} className={cn(ehCelular && 'min-h-[44px] flex-1')}>
             Cancelar
           </Button>
-          <Button onClick={handleSalvar} disabled={saving} className="bg-purple-600 hover:bg-purple-500">
+          <Button
+            onClick={handleSalvar}
+            disabled={saving}
+            className={cn('bg-purple-600 hover:bg-purple-500', ehCelular && 'min-h-[44px] flex-[2]')}
+          >
             {saving ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />

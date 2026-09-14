@@ -16,6 +16,7 @@ import { useShellMobile } from '@/hooks/useShellMobile';
 import { abaFoiPortada } from '@/mobile/abasPortadas';
 import { AvisoNaoOtimizado } from '@/mobile/AvisoNaoOtimizado';
 import { ListaAlunosMobile } from '@/mobile/telas/alunos/ListaAlunosMobile';
+import { ModalFichaAluno } from './ModalFichaAluno';
 import { COMPETENCIA_FECHADA_MESSAGE, useCompetenciaMensalStatus } from '@/hooks/useCompetenciaMensalStatus';
 import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { SeloCompetencia } from '@/components/ui/SeloCompetencia';
@@ -296,6 +297,10 @@ export function AlunosPage() {
   // Mesma decisao que escolhe o shell, nao apenas o mesmo breakpoint: ler so a
   // largura faria a pagina discordar do shell sob VITE_MOBILE_SHELL=off.
   const ehCelular = useShellMobile() === 'mobile';
+  // No desktop quem abre a ficha e' a TabelaAlunos; no celular nao ha tabela,
+  // entao a pagina guarda o aluno aberto. Guarda o ID, nao o objeto: a lista
+  // e' remontada a cada recarga e um objeto preso ficaria velho na tela.
+  const [fichaAlunoId, setFichaAlunoId] = useState<number | null>(null);
 
   const context = useOutletContext<{
     filtroAtivo: boolean;
@@ -2114,7 +2119,11 @@ export function AlunosPage() {
               ja com os filtros do desktop aplicados) — muda so a apresentacao,
               entao nao ha segunda leitura da lista. */}
           {tabAtiva === 'lista' && ehCelular && (
-            <ListaAlunosMobile alunos={alunosComTurma} mostrarUnidade={unidadeAtual === 'todos'} />
+            <ListaAlunosMobile
+              alunos={alunosComTurma}
+              mostrarUnidade={unidadeAtual === 'todos'}
+              onAbrirAluno={setFichaAlunoId}
+            />
           )}
 
           {tabAtiva === 'lista' && !ehCelular && (
@@ -2202,6 +2211,29 @@ export function AlunosPage() {
         </section>
       )}
  
+      {/* Ficha do aluno no celular — a MESMA do desktop, em tela cheia.
+          Resolvida pelo id a cada render: assim ela acompanha o recarregar da
+          lista em vez de segurar uma copia congelada do aluno. */}
+      {ehCelular && fichaAlunoId !== null && (() => {
+        const alunoAberto = alunosComTurma.find((a) => a.id === fichaAlunoId)
+          ?? alunos.find((a) => a.id === fichaAlunoId);
+        // O aluno pode sair do recorte enquanto a ficha esta aberta (mudou de
+        // status, trocou a competencia). Fechar em silencio e' melhor que
+        // renderizar ficha vazia.
+        if (!alunoAberto) return null;
+        return (
+          <ModalFichaAluno
+            aluno={alunoAberto}
+            onClose={() => setFichaAlunoId(null)}
+            onSalvar={carregarDados}
+            professores={professores}
+            cursos={cursos}
+            tiposMatricula={tiposMatricula}
+            onAbrirOutroCurso={(outro) => setFichaAlunoId(outro.id)}
+          />
+        );
+      })()}
+
       {/* Modal Novo Aluno */}
       {modalNovoAluno && (
         <ModalNovoAluno
