@@ -62,16 +62,19 @@ const ultimo = (a) => String(a[a.length - 1] || '');
   checar(/Thuanny/i.test(card), 'a Thuanny está no card');
   checar(!/Pagamento composto — 4 parcelas/.test(card), 'não pode ser o card single do composto');
 
-  // ── F2: single com valor maior na legenda ganha o aviso de parcial ──────────
+  // ── F2: resolver composto incompleto nunca volta ao singular ────────────────
+  // A fixture antiga devolve `partes` sem o snapshot `itens[]`. Depois que
+  // composto passou a ser lote, isso precisa falhar fechado; montar card
+  // singular de R$1.290 manteria exatamente a perda parcial que o teste evita.
   const B = novo({ interpretarMultiFn: async () => ({ itens: [] }) });
   await B.h.handle({ chatId: CHAT, senderPhone: JHON, messageId: 'F2',
     body: 'Parcela 08/2026 aluno Davi Guilherme R$ 1.290,00 total LA CG R$1.722,00',
     hasMedia: true, mediaType: 'image', mediaUrls: ['fake://transf.jpg'] });
   const cardB = ultimo(B.enviadas);
-  if (!/multi|mais de um aluno/i.test(cardB)) {
-    checar(/cita R\$ 1\.722,00 — este card cobre só R\$ 1\.290,00/.test(cardB.replace(/ /g, ' ')) || /cita.*1\.722.*cobre só.*1\.290/.test(cardB),
-      'card single com valor menor avisa o parcial');
-  }
+  checar(/não criei card aprovável|nao criei card aprovavel/i.test(cardB),
+    'composto sem snapshot deveria falhar fechado');
+  checar((B.h._pendentes.get(CHAT) || []).length === 0,
+    'composto sem snapshot deixou card singular aprovavel');
 
   // ── regressões do detector ──────────────────────────────────────────────────
   checar(mod.detectarContextoMultiAluno('Davi Guilherme - R$ 447,00\nLA CG - R$447,00') === false,

@@ -982,9 +982,13 @@ function montarPreviewMultiAluno({ unidadeNome, valorTotal, forma, categoria, it
   const formaTxt = forma === 'cartao' ? 'cartão' : (forma || '❓ forma não identificada');
   const nomes = [...new Set(lista.map((i) => String(i.aluno_nome || '').trim()).filter(Boolean))];
   const mesmoAlunoVariasFaturas = lista.length >= 2 && nomes.length === 1;
+  const categorias = [...new Set(lista.map((i) => String(i.categoria || '').toLowerCase().trim()).filter(Boolean))];
+  const mesmoAlunoCategoriasMistas = mesmoAlunoVariasFaturas && categorias.length >= 2;
   const linhas = lista.map((item) => {
     const rotulo = mesmoAlunoVariasFaturas
-      ? (item.competencia || item.descricao || 'Fatura')
+      ? (mesmoAlunoCategoriasMistas
+        ? (item.descricao || `${cap(item.categoria || 'Fatura')}${item.competencia ? ' ' + item.competencia : ''}`)
+        : (item.competencia || item.descricao || 'Fatura'))
       : item.aluno_nome;
     return `• ${rotulo} — ${fmtBRL(item.valor)}${item.sem_vinculo_fatura ? ' _(valor declarado — sem vínculo de fatura)_' : ''}`;
   });
@@ -1005,7 +1009,7 @@ function montarPreviewMultiAluno({ unidadeNome, valorTotal, forma, categoria, it
     ? `• Já pago no Emusys em ${dataBR}${formasPagas.length === 1 ? ` no ${formasPagas[0]}` : ''} — falta lançar no caixa`
     : '• Faturas validadas individualmente no Emusys';
   const blocoPessoas = mesmoAlunoVariasFaturas
-    ? `*ALUNO*\n\n• ${nomes[0]}${linhaResponsavel}\n\n*PARCELAS*\n\n${linhas.join('\n')}`
+    ? `*ALUNO*\n\n• ${nomes[0]}${linhaResponsavel}\n\n*${mesmoAlunoCategoriasMistas ? 'ITENS' : 'PARCELAS'}*\n\n${linhas.join('\n')}`
     : `*ALUNOS*\n\n${linhas.join('\n')}${linhaResponsavel}`;
   return [
     `📄 *Comprovante recebido — ${unidadeNome}*`,
@@ -5264,21 +5268,82 @@ _Não lanço nada pela metade._`);
       let composto = null;
       const competenciaComposto = competenciaHumana || competencia;
       if (aluno && valor && competenciaComposto && querParcela && !multiplas) {
+        let compMes = null;
         try {
-          const compMes = await faturasMesFn(grp.unidade_id, aluno, competenciaComposto, valor);
-          if (compMes && compMes.ok && Array.isArray(compMes.partes) && compMes.partes.length >= 2
-              && !(_alunoVeioDoRotulo && compMes.aluno_nome && !_mesmaPessoa(compMes.aluno_nome, aluno))) {
+          compMes = await faturasMesFn(grp.unidade_id, aluno, competenciaComposto, valor);
+        } catch (e) {
+          log({ acao: 'composto_mes_resolver_erro', chatId, erro: String(e && e.message) });
+        }
+        if (compMes && compMes.ok && Array.isArray(compMes.partes) && compMes.partes.length >= 2
+            && !(_alunoVeioDoRotulo && compMes.aluno_nome && !_mesmaPessoa(compMes.aluno_nome, aluno))) {
             composto = compMes;
             if (compMes.aluno_nome) aluno = compMes.aluno_nome;
             if (compMes.competencia) competencia = compMes.competencia;
-            categoria = 'parcela';
+            const itensComposto = (Array.isArray(compMes.itens) ? compMes.itens : []).map((item) => ({
+              ...item,
+              aluno_nome: item.aluno_nome || aluno,
+              responsavel_financeiro: item.responsavel_financeiro || compMes.responsavel_financeiro || null,
+              valor: Number(item.valor),
+              categoria: item.categoria || categoriaDaFatura({ fatura: item.fatura }) || null,
+              competencia: item.competencia || competencia || null,
+              canonical_fatura_id: item.canonical_fatura_id
+                || (item.fatura && item.fatura.canonical_fatura_id) || null,
+            }));
+            const categoriasComposto = categoriaDosItensV4(itensComposto);
+            const somaComposto = itensComposto.reduce((s, item) => s + Number(item.valor || 0), 0);
+            const mesmoAluno = itensComposto.length >= 2 && itensComposto.every((item) =>
+              nomePlausivel(item.aluno_nome) && _mesmaPessoa(item.aluno_nome, aluno));
+            const snapshotCompleto = itensComposto.every((item) =>
+              Number(item.valor) > 0 && item.categoria && item.canonical_fatura_id);
+
+            // O resolver ja encontrou duas cobrancas oficiais. A partir daqui
+            // NAO existe fallback singular: um movimento unico perderia a
+            // categoria e o vinculo de uma das faturas. Ou o snapshot inteiro
+            // fecha, ou o episodio falha fechado sem card aprovavel.
+            if (!categoriasComposto.ok || !mesmoAluno || !snapshotCompleto
+                || Math.abs(somaComposto - Number(valor)) > 0.01) {
+              await sendFn(chatId,
+                '⚠️ Encontrei mais de uma cobrança para este aluno, mas não consegui montar '
+                + 'o vínculo completo de todas elas. Não criei card aprovável e não vou lançar tudo em uma categoria só.');
+              log({ acao: 'composto_mes_snapshot_invalido', chatId,
+                partes: itensComposto.length, soma: somaComposto, valor: Number(valor),
+                categorias_ok: categoriasComposto.ok, mesmo_aluno: mesmoAluno,
+                snapshot_completo: snapshotCompleto });
+              return { acao: 'composto_mes_snapshot_invalido' };
+            }
+
+            categoria = categoriasComposto.categoria;
             parcela = null;
             canonica = null;
             confiancaBaixa = false;
             bloqueiaFonteIndisponivel = false;
-            log({ acao: 'composto_mes_result', ok: true, partes: compMes.partes.length, competencia: compMes.competencia });
-          }
-        } catch (e) { /* best-effort */ }
+            log({ acao: 'composto_mes_result', ok: true, partes: itensComposto.length,
+              competencia: compMes.competencia, categorias: itensComposto.map((i) => i.categoria) });
+
+            const envelopeComposto = {
+              pagador: pagadorNome || null,
+              valor_total: Number(valor),
+              forma,
+              itens: [{
+                aluno,
+                categorias: [...new Set(itensComposto.map((i) => i.categoria))],
+                competencias: [...new Set(itensComposto.map((i) => i.competencia).filter(Boolean))],
+              }],
+            };
+            return abrirFluxoMultiAluno({
+              event, grupo: grp, textoFonte: textoClassificacao,
+              textoHumano: legendaEfetiva, agora, origemMessageId: event.messageId,
+              resolvidoPronto: { ...compMes, valor_total: Number(valor), itens: itensComposto },
+              agentFirstEnvelope: envelopeComposto, evidenceEnvelope,
+              intent: {
+                ok: true, valor_total: Number(valor), forma,
+                categoria: categoriasComposto.categoria,
+                itens: itensComposto.map((i) => ({
+                  aluno_nome: i.aluno_nome, valor: Number(i.valor), categoria: i.categoria,
+                })),
+              },
+            });
+        }
       }
 
       // Responsável financeiro do aluno (quem paga) — pedido do Alf/Fernanda.
@@ -6194,6 +6259,41 @@ _Não lanço nada pela metade._`);
         // levou "Nao entendi essa" porque o card ja tinha um aluno (errado).
         const _cita = (x, id) => x.previewId === id || x.origem === id || (Array.isArray(x.msgIds) && x.msgIds.includes(id));
         const _rotuloNaCorrecao = _alunoRotulado(txt);
+
+        // Um lote e um snapshot imutavel. Se a pessoa avisa que FALTA outro
+        // aluno/valor, alterar um item localmente transformaria o mesmo `pode`
+        // em autorizacao para fatos diferentes. Invalida o lote inteiro e pede
+        // a composicao completa; o comprovante nunca continua aprovavel pela
+        // metade depois de uma correcao explicita.
+        const _correcaoAdicionaItem = /\b(?:falta|faltou|inclui|incluir|inclua|adiciona|adicionar|soma|mais)\b/i.test(txt)
+          && !!_rotuloNaCorrecao && Number(extrairValor(txt)) > 0;
+        if (_correcaoAdicionaItem) {
+          let loteAlvo = null;
+          if (event.quotedMessageId) loteAlvo = arrP.find((x) =>
+            x.tipoOperacao === 'lancar_recebimento_lote' && _cita(x, event.quotedMessageId)) || null;
+          if (!loteAlvo) {
+            const lotesAbertos = arrP.filter((x) => x.tipoOperacao === 'lancar_recebimento_lote');
+            if (lotesAbertos.length === 1 && arrP.length === 1) loteAlvo = lotesAbertos[0];
+          }
+          if (loteAlvo) {
+            loteAlvo.bloqueiaLancamento = true;
+            const fim = await finalizarPreviewSeguroV3({
+              alvo: loteAlvo, status: 'rejected',
+              motivo: 'lote_incompleto_informado_pelo_humano',
+            });
+            if (fim && fim.ok) {
+              pendentes.set(chatId, arrP.filter((p) => p !== loteAlvo));
+              limparEnvelopeDaPendencia(chatId, loteAlvo, 'lote_incompleto_informado_pelo_humano');
+            }
+            await sendFn(chatId,
+              `⚠️ Invalidei o lote anterior porque você informou outro item: ${_rotuloNaCorrecao} — ${fmtBRL(extrairValor(txt))}. `
+              + 'Me reenvia a descrição completa com todos os alunos/cobranças e o total. O card anterior não pode mais ser lançado.');
+            log({ acao: 'lote_invalidado_por_item_faltante', chatId,
+              finalizado: !!(fim && fim.ok), aluno: _rotuloNaCorrecao,
+              valor_item: Number(extrairValor(txt)) });
+            return { acao: 'lote_invalidado_por_item_faltante', finalizado: !!(fim && fim.ok) };
+          }
+        }
         const semAluno = arrP.filter((x) => !categoriaEhSaida(x.categoria)
           // Pendencia MULTI tem .itens, nao "um aluno": comentario humano ("ai
           // Jhon ta certo esse", 01/09 18:31) virou nome e mutilou o card do lote.
@@ -6819,6 +6919,11 @@ _Não lanço nada pela metade._`);
         return { acao: 'movimento_correcao_recusada', motivo: rOp && rOp.motivo };
       }
       if (alvo.tipoOperacao === 'lancar_recebimento_lote') {
+        if (alvo.bloqueiaLancamento) {
+          await sendFn(chatId, '⚠️ Não lancei: esse lote foi invalidado por uma correção. Reenvia a composição completa para gerar um preview novo.');
+          log({ acao: 'lote_bloqueado_por_correcao', chatId });
+          return { acao: 'lote_bloqueado_por_correcao' };
+        }
         if (!v3LedgerAtivo || !alvo.v3PreviewId || !alvo.v3PreviewHash || !Array.isArray(alvo.itens) || alvo.itens.length < 2) {
           await sendFn(chatId, '⚠️ Não lancei: esse lote não tem o vínculo seguro completo. Reenvia o comprovante para gerar um preview novo.');
           log({ acao: 'lote_multi_bloqueado_sem_v3', chatId });
@@ -6864,12 +6969,25 @@ _Não lanço nada pela metade._`);
             log({ acao: 'lote_multi_incompleto', chatId, lote_id: lote.lote_id, esperados: alvo.itens.length, gravados: movsLote.length });
             return { acao: 'lote_multi_incompleto', lote_id: lote.lote_id };
           }
-          const linhas = movsLote.map((m) => `• ${m.aluno_nome}: ${fmtBRL(m.valor)}`).join('\n');
+          const nomesLote = [...new Set(alvo.itens.map((i) => String(i.aluno_nome || '').trim()).filter(Boolean))];
+          const mesmoAlunoVariasFaturas = alvo.itens.length >= 2 && nomesLote.length === 1;
+          const linhas = movsLote.map((m, idx) => {
+            const item = alvo.itens[idx] || {};
+            const rotulo = mesmoAlunoVariasFaturas
+              ? (item.descricao || `${cap(item.categoria || 'Fatura')}${item.competencia ? ' ' + item.competencia : ''}`)
+              : (m.aluno_nome || item.aluno_nome || 'Item');
+            return `• ${rotulo}: ${fmtBRL(m.valor)}`;
+          }).join('\n');
           const reciboLote = await sendFn(chatId, `✅ Lancei o lote no caixa da ${alvo.nome}: ${fmtBRL(alvo.valor)} (${alvo.forma}).\n${linhas}\n_Operação única e auditada; nenhum item foi lançado parcialmente._`);
           await governance(event, 'write_applied', { action: 'lote_lancado', movement_ref: lote.lote_id, approval_ref: approval.approval_id, preview_ref: alvo.v3PreviewId, outcome: 'ok' });
           await governance(event, 'approval_consumed', { approval_ref: approval.approval_id, movement_ref: lote.lote_id, outcome: 'ok' });
           await governance(event, 'receipt_sent', { receipt_ref: reciboLote, movement_ref: lote.lote_id, preview_ref: alvo.v3PreviewId, outcome: 'ok' });
-          for (const mov of movsLote) readbackMovimento(event, grupos[chatId], mov.movimentacao_id, mov.valor, alvo.forma, alvo.categoria);
+          for (let idx = 0; idx < movsLote.length; idx += 1) {
+            const mov = movsLote[idx];
+            const item = alvo.itens[idx] || {};
+            readbackMovimento(event, grupos[chatId], mov.movimentacao_id, mov.valor,
+              alvo.forma, item.categoria || alvo.categoria);
+          }
           log({ acao: 'lote_multi_lancado', chatId, lote_id: lote.lote_id, itens: alvo.itens.length });
           return { acao: 'lote_multi_lancado', lote_id: lote.lote_id };
         }
