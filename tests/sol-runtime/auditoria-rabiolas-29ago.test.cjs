@@ -55,8 +55,14 @@ const ultimo = (a) => String(a[a.length - 1] || '');
   console.log('card A:', cardA.split('\n').filter(l => /ALUNO|Resp|Soraia|Rayanne/i.test(l)).join(' | ').slice(0, 140));
   checar(/Soraia/i.test(cardA), 'card mantém a Soraia');
   checar(!/Rayanne/i.test(cardA), 'a responsável da Laura NÃO pode entrar no card da Soraia');
-  checar(A.logs.some(l => l.acao === 'responsavel_rejeitado_nome_diverge'),
-    'deveria logar responsavel_rejeitado_nome_diverge');
+  // Com o contrato multi-competencia de 14/09, esta legenda de 02+05 deixa de
+  // passar pelo enriquecimento singular: ou o Core fecha as duas faturas, ou
+  // termina em conferencia segura. Nos dois caminhos, a responsavel da Laura
+  // continua proibida.
+  checar(A.logs.some(l => l.acao === 'responsavel_rejeitado_nome_diverge'
+      || l.acao === 'parcelas_competencias_divergentes'
+      || l.acao === 'parcelas_competencias_resolvidas'),
+    'deveria rejeitar a responsavel divergente ou assumir o contrato multi-competencia');
 
   // ── 1b. responsável da PRÓPRIA pessoa continua entrando ────────────────────
   const B = novo({

@@ -980,7 +980,14 @@ function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competenci
 function montarPreviewMultiAluno({ unidadeNome, valorTotal, forma, categoria, itens }) {
   const lista = Array.isArray(itens) ? itens : [];
   const formaTxt = forma === 'cartao' ? 'cartão' : (forma || '❓ forma não identificada');
-  const linhas = lista.map((item) => `• ${item.aluno_nome} — ${fmtBRL(item.valor)}${item.sem_vinculo_fatura ? ' _(valor declarado — sem vínculo de fatura)_' : ''}`);
+  const nomes = [...new Set(lista.map((i) => String(i.aluno_nome || '').trim()).filter(Boolean))];
+  const mesmoAlunoVariasFaturas = lista.length >= 2 && nomes.length === 1;
+  const linhas = lista.map((item) => {
+    const rotulo = mesmoAlunoVariasFaturas
+      ? (item.competencia || item.descricao || 'Fatura')
+      : item.aluno_nome;
+    return `• ${rotulo} — ${fmtBRL(item.valor)}${item.sem_vinculo_fatura ? ' _(valor declarado — sem vínculo de fatura)_' : ''}`;
+  });
   const responsaveis = [...new Set(lista.map((i) => String(i.responsavel_financeiro || '').trim()).filter(Boolean))];
   const linhaResponsavel = responsaveis.length === 1 ? `\n• Resp. financeiro: ${responsaveis[0]}`
     : (responsaveis.length > 1 ? `\n• Resp. financeiros: ${responsaveis.join(' · ')}` : '');
@@ -997,10 +1004,13 @@ function montarPreviewMultiAluno({ unidadeNome, valorTotal, forma, categoria, it
   const linhaStatus = faturasPagas.length === lista.length && dataBR
     ? `• Já pago no Emusys em ${dataBR}${formasPagas.length === 1 ? ` no ${formasPagas[0]}` : ''} — falta lançar no caixa`
     : '• Faturas validadas individualmente no Emusys';
+  const blocoPessoas = mesmoAlunoVariasFaturas
+    ? `*ALUNO*\n\n• ${nomes[0]}${linhaResponsavel}\n\n*PARCELAS*\n\n${linhas.join('\n')}`
+    : `*ALUNOS*\n\n${linhas.join('\n')}${linhaResponsavel}`;
   return [
     `📄 *Comprovante recebido — ${unidadeNome}*`,
     `*RECEBIMENTO*\n\n*${fmtBRL(valorTotal)}* · ${formaTxt}`,
-    `*ALUNOS*\n\n${linhas.join('\n')}${linhaResponsavel}`,
+    blocoPessoas,
     `*FATURA*\n\n• ${faturaTexto}\n• Valor: ${fmtBRL(valorTotal)} ✅ confere\n${linhaStatus}${lista.some((i) => i.sem_vinculo_fatura) ? '\n• ⚠️ Item(ns) com desconto negociado — lanço sem vínculo de fatura.' : ''}`,
     '👉 *Posso lançar o lote completo no caixa de hoje?* Responde *pode*',
   ].join('\n\n');
@@ -2137,11 +2147,22 @@ function _semAlunoDeclarado(body) {
 }
 
 function _nomeHumanoTardio(body) {
+  const cru = bodyLimpo(body);
+  // "a aluna faz dois cursos" tambem e metafrasa. Ela contem o rotulo
+  // `aluna`, mas o que vem depois e uma propriedade da matricula, nao um nome.
+  if (/\balun[oa]\s+(?:faz|tem|cursa)\s+(?:dois|duas|tr[eê]s|\d+)\s+cursos?\b/i.test(cru)) return null;
   const rotulado = _alunoRotulado(body);
   if (rotulado) return rotulado;
+  // 🔴 LISTA DE PARCELAS NAO E NOME. Caso Isabella/CG 14/09: a Mayra citou o
+  // card e respondeu "sao duas parcelas 08/2026 e 09/2026". O extrator tirou
+  // os meses e o singular "parcela", deixou "sao duas parcelas e" e substituiu
+  // Isabella por essa metafrasa. Duas competencias explicitas pertencem ao
+  // campo FATURA; nunca podem entrar no caminho de correcao de aluno.
+  if (extrairCompetenciasTexto(body).length >= 2
+      || /\b(?:duas|dois|tr[eê]s|quatro|cinco|seis|\d+)\s+parcelas?\b/i.test(bodyLimpo(body))) return null;
   // Quem fala SOBRE o lancamento nao esta dizendo um nome de aluno.
-  if (META_NAO_E_NOME_RE.test(bodyLimpo(body))) return null;
-  let t = bodyLimpo(body)
+  if (META_NAO_E_NOME_RE.test(cru)) return null;
+  let t = cru
     .replace(/^sol\s*[,!?:-]?\s*/i, ' ')
     .replace(/\b(parcela|mensalidade|compet[eê]ncia|pagamento|comprovante|recibo|pix|dinheiro|cart[ãa]o|transfer[êe]ncia|unidade|campo\s+grande|recreio|barra)\b/gi, ' ')
     .replace(/\b\d{1,2}\s*\/\s*\d{4}\b/g, ' ')
@@ -2942,6 +2963,21 @@ function extrairCompetenciaTexto(texto) {
   return null;
 }
 
+// Todas as competencias que o HUMANO escreveu, preservando ordem e removendo
+// repeticoes. O extrator singular acima continua sendo o contrato legado; este
+// e o contrato de lote para "08/2026 e 09/2026" do mesmo aluno.
+function extrairCompetenciasTexto(texto) {
+  const t = _normConf(texto);
+  if (!t) return [];
+  const achadas = [];
+  const adicionar = (c) => { if (c && !achadas.includes(c)) achadas.push(c); };
+  for (const m of t.matchAll(/\b(0?[1-9]|1[0-2])\s*[\/.-]\s*(20\d{2}|\d{2})\b/g)) {
+    const ano = Number(m[2].length === 2 ? '20' + m[2] : m[2]);
+    adicionar(_mm(Number(m[1]), ano));
+  }
+  return achadas;
+}
+
 // Correcao de competencia e um comando de CAMPO, nao uma correcao de aluno.
 // Exige linguagem corretiva; uma legenda nova como "PG parcela 09/2026" nao
 // pode sequestrar um card aberto, e "pode" continua sendo o unico gesto de
@@ -3717,6 +3753,97 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
             motivo: (saida && saida.acao) || 'sem_preview' });
     }
     return saida;
+  }
+
+  // Mesmo aluno, varias competencias explicitas. E um LOTE DE FATURAS, nao
+  // correcao de nome e nao "quitacao" generica. O Core oficial decide quais
+  // faturas fecham o total; zero combinacoes termina em conferencia humana e
+  // nunca devolve a frase ao parser singular.
+  async function tratarParcelasCompetenciasExplicitas({ event, grupo, agora, texto,
+    aluno, valor, forma, categoria = 'parcela', origemMessageId = null,
+    supersedePreviewId = null, evidenceEnvelope = null }) {
+    const competencias = extrairCompetenciasTexto(texto);
+    const nome = String(aluno || '').trim();
+    const total = Number(valor);
+    if (competencias.length < 2 || !nome || !(total > 0) || !forma) return null;
+
+    const envelope = {
+      pagador: null,
+      valor_total: total,
+      forma,
+      itens: [{ aluno: nome, categorias: [categoria || 'parcela'], competencias }],
+    };
+    let res = null;
+    try {
+      res = await resolverEnvelopeFn({ unidade_id: grupo.unidade_id, envelope });
+    } catch (e) {
+      log({ acao: 'parcelas_competencias_resolver_erro', chatId: event.chatId,
+        competencias, erro: String(e && e.message) });
+    }
+
+    if (res && res.ok && Array.isArray(res.itens) && res.itens.length >= 2) {
+      const cat = categoriaDosItensV4(res.itens);
+      if (!cat.ok) return null;
+      log({ acao: 'parcelas_competencias_resolvidas', chatId: event.chatId,
+        competencias, linhas: res.itens.length, aluno: nome });
+      return abrirFluxoMultiAluno({
+        event, grupo, textoFonte: texto, textoHumano: texto, agora,
+        origemMessageId: origemMessageId || event.messageId,
+        resolvidoPronto: res, agentFirstEnvelope: envelope,
+        supersedePreviewId, evidenceEnvelope,
+        intent: {
+          ok: true, valor_total: Number(res.valor_total), forma,
+          categoria: cat.categoria,
+          itens: res.itens.map((i) => ({
+            aluno_nome: i.aluno_nome, valor: Number(i.valor), categoria: i.categoria,
+          })),
+        },
+      });
+    }
+
+    // O card singular anterior nao pode continuar aprovavel depois que o
+    // humano declarou duas competencias. Se o ledger remoto nao fechar, a
+    // barreira local `bloqueiaLancamento` ainda impede o "pode".
+    if (supersedePreviewId) {
+      const arr = limparVelhos(event.chatId, agora);
+      const alvo = arr.find((p) => p.previewId === supersedePreviewId
+        || (Array.isArray(p.msgIds) && p.msgIds.includes(supersedePreviewId))) || null;
+      if (alvo) {
+        alvo.bloqueiaLancamento = true;
+        alvo.multiplas = true;
+        alvo.competencias = competencias;
+        const fim = await finalizarPreviewSeguroV3({
+          alvo, status: 'rejected', motivo: 'multiplas_competencias_sem_fechamento_exato',
+        });
+        if (fim && fim.ok) {
+          pendentes.set(event.chatId, arr.filter((p) => p !== alvo));
+          limparEnvelopeDaPendencia(event.chatId, alvo, 'multiplas_competencias_sem_fechamento_exato');
+        }
+      }
+    }
+
+    const candidatas = Array.isArray(res && res.faturas) ? res.faturas.filter((f) =>
+      competencias.includes(String(f && f.competencia || ''))) : [];
+    const linhas = candidatas.map((f) => `• ${f.competencia} — ${fmtBRL(Number(f.valor))}`);
+    const soma = candidatas.reduce((s, f) => s + Number(f && f.valor || 0), 0);
+    const cobreTodas = competencias.every((c) => candidatas.some((f) => String(f.competencia) === c));
+    const diferenca = cobreTodas ? total - soma : null;
+    const detalhe = cobreTodas
+      ? (`\n\nNo Emusys encontrei:\n${linhas.join('\n')}\n• Total oficial: *${fmtBRL(soma)}*`
+        + (Math.abs(diferenca) >= 0.005 ? `\n• Diferença para o comprovante: *${fmtBRL(Math.abs(diferenca))}*` : ''))
+      : '\n\nNão consegui confirmar as duas faturas na fonte oficial agora.';
+    const fechoSeguro = supersedePreviewId
+      ? '⚠️ Invalidei o card anterior. Não vou lançar enquanto essa divergência não for conferida.'
+      : '⚠️ Não criei um card aprovável. Não vou lançar enquanto essa divergência não for conferida.';
+    await sendFn(event.chatId,
+      `Entendi a correção: *${nome}*, parcelas *${competencias.join(' e ')}*, `
+      + `comprovante de *${fmtBRL(total)}* via ${forma}.${detalhe}\n\n`
+      + fechoSeguro);
+    log({ acao: 'parcelas_competencias_divergentes', chatId: event.chatId,
+      aluno: nome, competencias, valor: total, soma_oficial: cobreTodas ? soma : null,
+      diferenca: diferenca == null ? null : diferenca, motivo: res && res.motivo || 'fonte_indisponivel' });
+    return { acao: 'parcelas_competencias_divergentes', competencias,
+      motivo: res && res.motivo || 'fonte_indisponivel' };
   }
 
   async function prepararEPublicarPreviewV4({ event, grupo, texto, pendencia, result, previewStatus }) {
@@ -4881,6 +5008,20 @@ _Não lanço nada pela metade._`);
         visao,
         llm: interpretacaoLLM,
       });
+      // Isabella/CG 14/09: "parcelas 08/2026 e 09/2026" e um contrato
+      // deterministico completo. Roteia antes do singular e antes do detector
+      // de multi-ALUNO: um aluno com duas faturas continua sendo um lote.
+      const _competenciasDaLegenda = extrairCompetenciasTexto(legendaEfetiva);
+      const _alunoDaLegenda = _alunoRotulado(legendaEfetiva);
+      if (_competenciasDaLegenda.length >= 2 && _alunoDaLegenda
+          && Number(valor) > 0 && forma && !categoriaEhSaida(categoria)) {
+        const _parcelas = await tratarParcelasCompetenciasExplicitas({
+          event, grupo: grp, agora, texto: legendaEfetiva,
+          aluno: _alunoDaLegenda, valor, forma, categoria: categoria || 'parcela',
+          origemMessageId: event.messageId, evidenceEnvelope,
+        });
+        if (_parcelas) return _parcelas;
+      }
       // Antes de qualquer casador singular: pluralidade contextual abre um
       // contrato próprio. Regex só roteia; LLM extrai; banco confirma itens.
       // ⚠️ Multi-aluno e' decisao de QUEM ESCREVEU, nunca do OCR: todo comprovante
@@ -5860,6 +6001,36 @@ _Não lanço nada pela metade._`);
             })) return { acao: 'preview_valor_corrigido_sem_v3' };
             return { acao: 'preview_valor_corrigido', valor: _valorDitado };
           }
+        }
+
+        // ── correcao para VARIAS COMPETENCIAS do mesmo aluno. Precisa vir
+        // antes da correcao singular e, sobretudo, antes de _nomeHumanoTardio:
+        // "sao duas parcelas ..." descreve faturas, nunca uma pessoa.
+        const _competenciasCorrigidas = (!event.hasMedia && !casarPode(txt).pode)
+          ? extrairCompetenciasTexto(txt) : [];
+        if (_competenciasCorrigidas.length >= 2
+            && (event.quotedMessageId || (arrP.length === 1 && /\b(?:s[aã]o|cobre|cobrem|corresponde|correspondem)\b[\s\S]{0,40}\bparcelas?\b/i.test(txt)))) {
+          const _citaLista = (x, id) => x.previewId === id || x.origem === id
+            || (Array.isArray(x.msgIds) && x.msgIds.includes(id));
+          const elegiveisLista = arrP.filter((x) => !categoriaEhSaida(x.categoria)
+            && x.tipoOperacao !== 'manual_review_multi_student'
+            && x.tipoOperacao !== 'lancar_recebimento_lote');
+          let alvoLista = null;
+          if (event.quotedMessageId) alvoLista = elegiveisLista.find((x) => _citaLista(x, event.quotedMessageId)) || null;
+          if (!alvoLista && !event.quotedMessageId && elegiveisLista.length === 1) alvoLista = elegiveisLista[0];
+          if (!alvoLista) {
+            await sendFn(chatId, 'Entendi os dois meses, mas não achei um único card ativo para corrigir. Reenvia o comprovante com o nome do aluno.');
+            return { acao: 'parcelas_competencias_sem_alvo' };
+          }
+          const rLista = await tratarParcelasCompetenciasExplicitas({
+            event, grupo: grp, agora, texto: txt,
+            aluno: alvoLista.aluno, valor: alvoLista.valor, forma: alvoLista.forma,
+            categoria: alvoLista.categoria || 'parcela',
+            origemMessageId: alvoLista.origem,
+            supersedePreviewId: alvoLista.previewId,
+            evidenceEnvelope: alvoLista.evidenceEnvelope || null,
+          });
+          if (rLista) return rLista;
         }
 
         // ── correcao de COMPETENCIA: operacao propria, sem fingir que o aluno
@@ -7171,7 +7342,7 @@ module.exports = {
   _cursoRotulado, _confirmacaoManualFatura,
   derivarVinculo, casarParcelaCanonica, linhasDaFatura, categoriaDaFatura, descricaoDaFatura, jaLancadoHoje,
   periodoQuitacao, extrairPeriodoMeses,
-  extrairCompetenciaTexto, extrairCorrecaoCompetencia, normalizarCorrecaoCompetenciaRoteador, compostoDeFaturas, buscarCompostoFaturasMes, descricaoDoComposto,
+  extrairCompetenciaTexto, extrairCompetenciasTexto, extrairCorrecaoCompetencia, normalizarCorrecaoCompetenciaRoteador, compostoDeFaturas, buscarCompostoFaturasMes, descricaoDoComposto,
   extrairComprovanteVisao, interpretarComprovante, interpretarMultiAluno, extrairItensNomeValor, casarParcela,
   guardaFinanceiraV4,
   ocrLocal,
