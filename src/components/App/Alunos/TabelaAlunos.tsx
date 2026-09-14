@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/contexts/AuthContext';
+import { getStatusPagamentoOperacional, isMatriculaAtivaParaInadimplencia } from '@/lib/alunosStatus';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 import { useToast } from '@/hooks/useToast';
@@ -93,15 +94,8 @@ interface GovernancaSemParcelaState {
 const DIAS_SEMANA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 const HORARIOS_LISTA = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00'];
 
-function isMatriculaAtivaParaInadimplencia(aluno: { status?: string | null }) {
-  return String(aluno.status || '').toLowerCase() === 'ativo';
-}
-
-function getStatusPagamentoOperacional(aluno: { status?: string | null; status_pagamento?: string | null }) {
-  const statusPagamento = aluno.status_pagamento || null;
-  if (statusPagamento === 'inadimplente' && !isMatriculaAtivaParaInadimplencia(aluno)) return null;
-  return statusPagamento;
-}
+// isMatriculaAtivaParaInadimplencia e getStatusPagamentoOperacional moram em
+// @/lib/alunosStatus — a tela do celular usa as MESMAS.
 
 // Configuração de colunas toggleable
 const COLUNAS_CONFIG = [
