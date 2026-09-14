@@ -7,13 +7,21 @@ const read = (path) => readFileSync(path, 'utf8');
 test('rota e menu operacional publicam a tela financeira de Faturas', () => {
   const router = read('src/router.tsx');
   const sidebar = read('src/components/App/Layout/AppSidebar.tsx');
+  // O item de menu saiu do AppSidebar quando a versao mobile precisou da MESMA
+  // lista nos dois shells (spec mobile secao 5, "fonte unica do menu"). O teste
+  // segue a lista ate onde ela mora: checa que o item existe la, e que o desktop
+  // a CONSOME em vez de redeclarar — redeclarar e o que faria a barra inferior
+  // do celular e a sidebar divergirem.
+  const menu = read('src/lib/menuItems.tsx');
   const entrypoint = read('src/components/App/FaturasAlunos/index.ts');
   const compatibility = read('src/components/App/FaturasAlunos/FaturasAlunosPage.tsx');
 
   assert.match(router, /FaturasAlunosPage/);
   assert.match(router, /path:\s*['"]faturas['"]/);
-  assert.match(sidebar, /['"]\/app\/faturas['"]/);
-  assert.match(sidebar, /label:\s*['"]Faturas['"]/);
+  assert.match(menu, /['"]\/app\/faturas['"]/);
+  assert.match(menu, /label:\s*['"]Faturas['"]/);
+  assert.match(sidebar, /from '@\/lib\/menuItems'/);
+  assert.doesNotMatch(sidebar, /label:\s*['"]Faturas['"]/);
   assert.match(sidebar, /components\/App\/FaturasAlunos/);
   assert.match(entrypoint, /FaturasAlunosFinanceirasPage/);
   assert.match(compatibility, /FaturasAlunosFinanceirasPage/);
