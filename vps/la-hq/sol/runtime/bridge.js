@@ -1074,9 +1074,9 @@ async function caixaAbf() {
               if (_tratou) { _govRecord('route_decided', { route: 'deterministic_abf', engine: 'abf', action: 'confirmacao' }); _govRecord('episode_closed', { terminal_state: 'handled', outcome: 'ok' }); _caixaLog({ step: 'abf_tratou' }); continue; }
             }
             // Abertura/fechamento fica determinístico acima. Confirmação de
-            // preview criado por mídia também fica no handler determinístico;
-            // somente texto novo (ou confirmação de preview das tools) segue
-            // para o agent-first.
+            // qualquer preview persistido também fica no handler determinístico;
+            // somente texto novo segue para o agent-first. Aprovação financeira
+            // nunca depende de o LLM escolher uma tool dentro do turno.
             const _confirmacaoDeterministica = !!(_fhPrio
               && _fhPrio.deveTratarConfirmacaoDeterministica
               && _fhPrio.deveTratarConfirmacaoDeterministica(event));
