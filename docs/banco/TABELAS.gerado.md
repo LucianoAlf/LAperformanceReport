@@ -38,6 +38,9 @@
 | `banda_evento_participante` | tabela | aluno | 4 | 0 | sim (0) | 2 |  |
 | `banda_integrante` | tabela | aluno | 11 | 90 | sim (0) | 1 | Enriquecimento de banda por aluno (instrumento/funcao). O roster BASE vem do canonico (alunos da turma); esta tabela apenas adiciona papel. aluno_id referencia public.alunos.id (sem FK rigida de proposito). |
 | `banda_repertorio` | tabela | aluno | 14 | 0 | sim (0) | 1 | Repertorio da banda. letra/cifra/cifraclub_url alimentados pela integracao Cifra Club (edge function). |
+| `comunidade_wa_grupos` | tabela | aluno | 8 | 0 | sim (0) | 2 | Grupos/comunidades de WhatsApp por unidade, lidos pela edge sincronizar-comunidade-whatsapp (POST /group/info UAZAPI). |
+| `comunidade_wa_participantes` | tabela | aluno | 5 | 664 | sim (0) | 1 | Foto mais recente dos participantes de cada grupo. Linhas somem quando o participante some na captura seguinte (é estado atual, não histórico). |
+| `config_cadastro_obrigatorio` | tabela | aluno | 7 | 0 | sim (0) | 1 | Régua de completude de cadastro por unidade × classificação. Editável pelo gerente; a RPC get_situacao_alunos_v1 honra esta tabela. |
 | `cursos_matriculados` | tabela | aluno | 6 | 226 | sim (4) | 0 |  |
 | `evasoes_backup_20260215` | tabela | aluno | 10 | 677 | sim (0) | 0 |  |
 | `evasoes_legacy_backup` | tabela | aluno | 10 | 677 | sim (0) | 0 |  |
@@ -172,6 +175,7 @@
 | `crm_templates_whatsapp` | tabela | comercial | 8 | 8 | sim (1) | 0 |  |
 | `experimentais_mensal_unidade` | tabela | comercial | 7 | 96 | sim (4) | 1 |  |
 | `experimentais_professor_mensal` | tabela | comercial | 7 | 291 | sim (4) | 2 |  |
+| `google_ads_metricas_diarias` | tabela | comercial | 17 | 292 | sim (1) | 0 | Alicerce/estrategica. Custo diario do Google Ads por CAMPANHA (grao de campanha atravessa Search e Performance Max; anuncio nao). Gemeo de meta_ads_metricas_diarias. Reescrita por janela — o Google revisa conversao por dias. gasto ja vem convertido de cost_micros na ingestao. |
 | `instagram_sessoes` | tabela | comercial | 15 | 116 | sim (1) | 1 | Espelho das sessões da bridge de Instagram (la-hq, instagram-comments-bridge.js). Uma linha por (conta, pessoa). Alimentado pela edge ingerir-instagram-sessoes; a bridge segue sendo a fonte de verdade viva — isto é foto para leitura, relatório e Mapa de Sinais. |
 | `lead_conciliacao_decisoes` | tabela | comercial | 10 | 318 | sim (1) | 1 |  |
 | `lead_experimentais` | tabela | comercial | 19 | 1132 | sim (1) | 6 |  |
@@ -200,6 +204,7 @@
 | `templates_meta` | tabela | comercial | 16 | 30 | sim (3) | 1 |  |
 | `transferencias_mila` | tabela | comercial | 7 | 0 | sim (0) | 2 |  |
 | `unidade_contato_comercial` | tabela | comercial | 5 | 3 | não | 1 | Quem recebe o aviso comercial de cada unidade. Em tabela, nao no fluxo: a pessoa muda (Recreio trocou em um mes) e o no do n8n continua com o nome antigo. |
+| `vw_ads_gasto_diario_v1` | view | comercial | 10 | — | não | 0 | Alicerce/estrategica. Gasto diario de midia unificado (meta + google). FONTE UNICA do custo — nao somar as tabelas cruas em consumidor novo. ⚠️ `conversoes_plataforma` NAO e comparavel entre plataformas: no Meta e conversa iniciada no WhatsApp, no Google e a acao de conversao configurada na conta. Serve para acompanhar cada uma contra ela mesma, nunca para ranquear uma contra a outra. |
 | `vw_experimental_aula_canonica` | view | comercial | 2 | — | não | 0 | Liga experimental a aula fisica confirmada pelo roster; fallback so aceita mesma unidade, pessoa, data e horario. |
 | `vw_experimental_faltou_sem_afirmacao` | view | comercial | 5 | — | não | 0 | Regua UNICA do 'faltou' de procedencia comercial que ninguem afirmou. Lida por fn_desfaz_faltou_sem_afirmacao (conserta) e por fn_diag_saude_experimental (conta). Nunca duplicar o predicado: dois leitores, uma regua. |
 | `vw_experimental_pendencia` | view | comercial | 14 | — | não | 0 | Experimentais realizadas sem devolutiva. `data_hora_fim` sustenta o atraso; `data_hora_inicio` (07/09/2026) e a hora que o PROFESSOR reconhece -- antes disso as duas mensagens mandavam a hora do FIM como se fosse a da aula. |
@@ -216,6 +221,7 @@
 | `vw_motivos_nao_matricula` | view | comercial | 4 | — | não | 0 |  |
 | `vw_observador_leads_orfaos` | view | comercial | 16 | — | não | 0 | Webhooks de lead recebidos pelo observador, classificados: ok (existe por emusys_lead_id), vinculo_faltando (existe por telefone, so falta o emusys_lead_id) e perdido (nao existe de jeito nenhum — payload salvo, recuperavel via upsert_lead). Alerta = situacao perdido em lead_criado. |
 | `vw_performance_professor_experimental` | view | comercial | 6 | — | não | 0 |  |
+| `vw_retomada_eficacia_v1` | view | comercial | 8 | — | não | 0 |  |
 | `caixa_categorias` | tabela | financeiro | 9 | 0 | sim (3) | 0 | Categorias operacionais do caixa diario. Substitui lista fixa do frontend e permite novas categorias pela UI. |
 | `caixa_financeiro_grupos_whatsapp` | tabela | financeiro | 8 | 0 | sim (2) | 1 | JIDs dos grupos financeiros por unidade para envio manual do fechamento de caixa. |
 | `caixa_movimentacoes` | tabela | financeiro | 19 | 617 | sim (4) | 4 | Lancamentos manuais do caixa diario/cofre. Ambiente cofre afeta saldo fisico em dinheiro; ambiente venda alimenta resumo. |
@@ -389,14 +395,6 @@
 | `visitas` | tabela | operacao | 13 | 105 | sim (4) | 2 | Visitas presenciais agendadas por lead. Alternativa a aula experimental. |
 | `visitas_config` | tabela | operacao | 14 | 0 | sim (3) | 1 | Configuracao do sistema de visitas por unidade (limite, horarios). |
 | `vw_disciplinas_modalidade` | view | operacao | 4 | — | não | 0 | Somente disciplina -> modalidade (individual\|turma), para consumo por RPC SECURITY INVOKER. security_invoker=false de proposito: evita abrir emusys_disciplinas_catalogo, que tem RLS sem policy. |
-| `comunidade_wa_grupos` | tabela | outros | 8 | 0 | sim (0) | 2 | Grupos/comunidades de WhatsApp por unidade, lidos pela edge sincronizar-comunidade-whatsapp (POST /group/info UAZAPI). |
-| `comunidade_wa_participantes` | tabela | outros | 5 | 664 | sim (0) | 1 | Foto mais recente dos participantes de cada grupo. Linhas somem quando o participante some na captura seguinte (é estado atual, não histórico). |
-| `config_cadastro_obrigatorio` | tabela | outros | 7 | 0 | sim (0) | 1 | Régua de completude de cadastro por unidade × classificação. Editável pelo gerente; a RPC get_situacao_alunos_v1 honra esta tabela. |
-| `google_ads_metricas_diarias` | tabela | outros | 17 | 292 | sim (1) | 0 | Alicerce/estrategica. Custo diario do Google Ads por CAMPANHA (grao de campanha atravessa Search e Performance Max; anuncio nao). Gemeo de meta_ads_metricas_diarias. Reescrita por janela — o Google revisa conversao por dias. gasto ja vem convertido de cost_micros na ingestao. |
-| `sol_governanca_eventos` | tabela | outros | 13 | 0 | sim (0) | 0 | Gate 3D: trilha append-only sanitizada da governanca da Sol. Nao contem mensagens, PII ou payload operacional bruto. |
-| `sol_grants_revogados_fatia0` | tabela | outros | 6 | 360 | não | 0 | O que a Fatia 0.1 revogou de sol_acesso_restrito, para o rollback ser um comando e nao uma arqueologia. Rollback: select 'grant '\|\|privilegio\|\|' on '\|\|objeto\|\|' to '\|\|papel\|\|';' from esta tabela. |
-| `vw_ads_gasto_diario_v1` | view | outros | 10 | — | não | 0 | Alicerce/estrategica. Gasto diario de midia unificado (meta + google). FONTE UNICA do custo — nao somar as tabelas cruas em consumidor novo. ⚠️ `conversoes_plataforma` NAO e comparavel entre plataformas: no Meta e conversa iniciada no WhatsApp, no Google e a acao de conversao configurada na conta. Serve para acompanhar cada uma contra ela mesma, nunca para ranquear uma contra a outra. |
-| `vw_retomada_eficacia_v1` | view | outros | 8 | — | não | 0 |  |
 | `_auditoria_chave_natural_20260809` | tabela | plataforma | 17 | 597 | não | 0 |  |
 | `_auditoria_reconstrucao_20260809` | tabela | plataforma | 13 | 88 | não | 0 |  |
 | `assistente_ia_config` | tabela | plataforma | 4 | 0 | sim (2) | 0 |  |
@@ -408,6 +406,8 @@
 | `perfis` | tabela | plataforma | 10 | 0 | sim (2) | 0 | Perfis de acesso do sistema (Admin, Gerente, Farmer, Hunter, etc.) |
 | `permissoes` | tabela | plataforma | 9 | 0 | sim (2) | 0 | Permissões granulares do sistema (ex: alunos.ver, alunos.editar) |
 | `rbac_piloto_usuarios` | tabela | plataforma | 3 | 0 | sim (0) | 1 |  |
+| `sol_governanca_eventos` | tabela | plataforma | 13 | 0 | sim (0) | 0 | Gate 3D: trilha append-only sanitizada da governanca da Sol. Nao contem mensagens, PII ou payload operacional bruto. |
+| `sol_grants_revogados_fatia0` | tabela | plataforma | 6 | 360 | não | 0 | O que a Fatia 0.1 revogou de sol_acesso_restrito, para o rollback ser um comando e nao uma arqueologia. Rollback: select 'grant '\|\|privilegio\|\|' on '\|\|objeto\|\|' to '\|\|papel\|\|';' from esta tabela. |
 | `sol_permissoes` | tabela | plataforma | 12 | 0 | sim (0) | 2 |  |
 | `unidades` | tabela | plataforma | 20 | 3 | sim (6) | 0 |  |
 | `unidades_cursos` | tabela | plataforma | 6 | 69 | sim (2) | 2 | Relacionamento entre unidades e cursos - define quais cursos cada unidade oferece |
