@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — professor
 
-146 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+148 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## anotacoes
 
@@ -593,6 +593,25 @@
 **Triggers:**
 - `trg_fabio_ocorrencia_incidente → fn_fabio_ocorrencia_incidente_trg()`
 
+## fabio_emusys_escrita
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('fabio_emusys_escrita_id_seq'::regclass) |  |
+| `registro_id` | uuid | não |  | fabio_registros_aula.id |
+| `emusys_aula_id` | integer | sim |  |  |
+| `unidade` | text | sim |  |  |
+| `texto_md5` | text | não |  |  |
+| `texto` | text | não |  |  |
+| `decisao` | text | não |  |  |
+| `motivo` | text | sim |  |  |
+| `anotacao_antes` | text | sim |  |  |
+| `erro` | text | sim |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `fabio_emusys_escrita_pkey`
+
 ## fabio_fila_audios
 
 | Coluna | Tipo | Nulo | Default | Referência |
@@ -673,6 +692,19 @@
 **Únicos:**
 - `fabio_licao_pkey`
 - `ux_licao_nome_versao`
+
+## fabio_limpeza_backup
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('fabio_limpeza_backup_id_seq'::regclass) |  |
+| `lote` | text | não |  |  |
+| `tabela` | text | não |  |  |
+| `linha` | jsonb | não |  |  |
+| `guardado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `fabio_limpeza_backup_pkey`
 
 ## fabio_memoria_janela
 
@@ -1289,7 +1321,7 @@
 | `id` | uuid | não | gen_random_uuid() |  |
 | `snapshot_metrica_id` | uuid | não |  | health_score_professor_v3_snapshot_metricas.id |
 | `config_meta_segmento_id` | uuid | sim |  | health_score_professor_v3_config_metas_curso_modalidade.id |
-| `unidade_id` | uuid | não |  | health_score_professor_v3_config_metas_curso_modalidade.unidade_id |
+| `unidade_id` | uuid | não |  | unidades.id |
 | `curso_id` | integer | não |  | cursos.id |
 | `modalidade` | text | não |  | health_score_professor_v3_config_metas_curso_modalidade.modalidade |
 | `pessoas_unicas` | integer | não | 0 |  |

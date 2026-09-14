@@ -14,7 +14,20 @@
 - **Hash:** usa apenas unidade UUID, ID Emusys, competência, dados financeiros e estado/motivo de ausência; IDs de run/item e timestamps operacionais ficam fora.
 - **Cron:** competências atual e anterior, sequenciais, com segredo lido do Vault.
 >
-> Última atualização: 2026-07-30.
+> **Novo pipeline 14/09/2026 — espelho do fluxo de caixa Emusys (beta):** 4 endpoints
+> (`/financeiro/lancamentos` + catálogos contas/plano de contas/formas de pagamento).
+> Espelho imutável em `financeiro_emusys_lancamentos`/`_contas`/`_plano_contas`/
+> `_formas_pagamento` (tracking por item: primeira/última vez visto, hash, alterado_em,
+> sumiu_em — nunca apaga), controle diário em `financeiro_emusys_varredura_dias/_resumo`
+> (janela = mês corrente + 2 anteriores; dia em erro nunca vale como vazio).
+> Entrada única: edge `sync-financeiro-emusys` (cron `sync-financeiro-emusys-*`).
+> Saída pro Super Folha: edge `export-financeiro-lancamentos` (segredo
+> `x-super-folha-sync-secret`, mesmo padrão do contas-receber-sync).
+>
+> Contrato completo de consumo p/ os agentes do Super Folha:
+> [`../handoffs/2026-09-14-espelho-financeiro-emusys-superfolha.md`](../handoffs/2026-09-14-espelho-financeiro-emusys-superfolha.md).
+>
+> Última atualização: 2026-09-14.
 
 ## Fechamento mensal (histórico canônico)
 

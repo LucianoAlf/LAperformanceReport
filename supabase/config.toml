@@ -102,6 +102,16 @@ verify_jwt = true
 # Integracao servidor-servidor: autentica o segredo dedicado no proprio codigo.
 verify_jwt = false
 
+[functions.export-financeiro-lancamentos]
+# Leitura do espelho financeiro p/ o Super Folha: mesmo padrao do export-contas-receber
+# (segredo dedicado validado no proprio codigo, sem JWT).
+verify_jwt = false
+
+[functions.sync-financeiro-emusys]
+# Cron envia JWT anon valido mais x-sync-token; a funcao valida o segredo antes
+# de abrir execucao. TRUE impede chamadas sem JWT de chegarem ao codigo.
+verify_jwt = true
+
 [functions.refresh-contas-receber]
 # Integracao servidor-servidor: autentica o segredo dedicado no proprio codigo.
 verify_jwt = false

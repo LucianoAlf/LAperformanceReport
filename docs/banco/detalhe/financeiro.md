@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — financeiro
 
-33 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+39 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## caixa_categorias
 
@@ -293,6 +293,149 @@
 | `created_at` | timestamp with time zone | sim |  |  |
 | `updated_at` | timestamp with time zone | sim |  |  |
 | `backup_em` | timestamp with time zone | sim |  |  |
+
+## financeiro_emusys_contas
+
+> Catálogo GET /financeiro/contas_financeiras (Emusys beta), completo a cada rodada. CG retorna HTTP 500 "erro desconhecido" neste endpoint desde 14/09/2026 (bug da origem) — a sync registra erro e segue com os outros.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `emusys_conta_id` | bigint | não |  |  |
+| `descricao` | text | sim |  |  |
+| `tipo` | text | sim |  |  |
+| `banco` | text | sim |  |  |
+| `status` | text | sim |  |  |
+| `payload` | jsonb | não |  |  |
+| `hash_conteudo` | text | não |  |  |
+| `primeira_vez_visto` | timestamp with time zone | não | now() |  |
+| `ultima_vez_visto` | timestamp with time zone | não | now() |  |
+| `alterado_em` | timestamp with time zone | sim |  |  |
+| `sumiu_em` | timestamp with time zone | sim |  |  |
+
+**Únicos:**
+- `financeiro_emusys_contas_pkey`
+- `financeiro_emusys_contas_unidade_id_emusys_conta_id_key`
+
+## financeiro_emusys_formas_pagamento
+
+> Catálogo GET /financeiro/formas_pagamento (Emusys beta), completo a cada rodada.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `emusys_forma_id` | bigint | não |  |  |
+| `descricao` | text | sim |  |  |
+| `id_pai` | bigint | sim |  |  |
+| `generico` | boolean | sim |  |  |
+| `payload` | jsonb | não |  |  |
+| `hash_conteudo` | text | não |  |  |
+| `primeira_vez_visto` | timestamp with time zone | não | now() |  |
+| `ultima_vez_visto` | timestamp with time zone | não | now() |  |
+| `alterado_em` | timestamp with time zone | sim |  |  |
+| `sumiu_em` | timestamp with time zone | sim |  |  |
+
+**Únicos:**
+- `financeiro_emusys_formas_pagamen_unidade_id_emusys_forma_id_key`
+- `financeiro_emusys_formas_pagamento_pkey`
+
+## financeiro_emusys_lancamentos
+
+> Espelho item a item de GET /financeiro/lancamentos (Emusys beta). Nunca apaga: item que some de varredura completa do dia ganha sumiu_em. Chave única (unidade_id, emusys_lancamento_id) porque o id é por token.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `emusys_lancamento_id` | bigint | não |  |  |
+| `data` | date | não |  |  |
+| `valor` | numeric(14,2) | não |  |  |
+| `natureza` | text | não |  |  |
+| `conta_emusys_id` | bigint | sim |  |  |
+| `conta_descricao` | text | sim |  |  |
+| `plano_emusys_id` | bigint | sim |  |  |
+| `plano_nome` | text | sim |  |  |
+| `plano_codigo` | text | sim |  |  |
+| `forma_pagamento_emusys_id` | bigint | sim |  |  |
+| `forma_pagamento_descricao` | text | sim |  |  |
+| `descricao` | text | sim |  |  |
+| `payload` | jsonb | não |  |  |
+| `hash_conteudo` | text | não |  |  |
+| `primeira_vez_visto` | timestamp with time zone | não | now() |  |
+| `ultima_vez_visto` | timestamp with time zone | não | now() |  |
+| `alterado_em` | timestamp with time zone | sim |  |  |
+| `sumiu_em` | timestamp with time zone | sim |  |  |
+
+**Únicos:**
+- `financeiro_emusys_lancamentos_pkey`
+- `financeiro_emusys_lancamentos_unidade_id_emusys_lancamento__key`
+
+## financeiro_emusys_plano_contas
+
+> Catálogo GET /financeiro/plano_contas (Emusys beta), completo a cada rodada. codigo_extraido vem do início do nome; codigo_api é a numeração interna e não classifica nada.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `emusys_plano_id` | bigint | não |  |  |
+| `nome` | text | sim |  |  |
+| `codigo_api` | text | sim |  |  |
+| `codigo_extraido` | text | sim |  |  |
+| `id_pai` | bigint | sim |  |  |
+| `tipo` | text | sim |  |  |
+| `natureza` | text | sim |  |  |
+| `status` | text | sim |  |  |
+| `payload` | jsonb | não |  |  |
+| `hash_conteudo` | text | não |  |  |
+| `primeira_vez_visto` | timestamp with time zone | não | now() |  |
+| `ultima_vez_visto` | timestamp with time zone | não | now() |  |
+| `alterado_em` | timestamp with time zone | sim |  |  |
+| `sumiu_em` | timestamp with time zone | sim |  |  |
+
+**Únicos:**
+- `financeiro_emusys_plano_contas_pkey`
+- `financeiro_emusys_plano_contas_unidade_id_emusys_plano_id_key`
+
+## financeiro_emusys_varredura_dias
+
+> Um dia só entra como completo quando TODAS as páginas dele vieram. Status erro nunca vale como vazio: o dia fica pendente até completar.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `unidade_id` | uuid | não |  | unidades.id |
+| `data` | date | não |  |  |
+| `status` | text | não |  |  |
+| `itens` | integer | não | 0 |  |
+| `tentativas` | integer | não | 0 |  |
+| `ultimo_erro` | text | sim |  |  |
+| `iniciado_em` | timestamp with time zone | sim |  |  |
+| `concluido_em` | timestamp with time zone | sim |  |  |
+| `ultima_tentativa_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `financeiro_emusys_varredura_dias_pkey`
+
+## financeiro_emusys_varredura_resumo
+
+> Estado da rotina diária (mês corrente + 2 anteriores). ultima_varredura_completa_em só anda quando a janela inteira fecha sem dia em erro.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `unidade_id` | uuid | não |  | unidades.id |
+| `janela_inicio` | date | sim |  |  |
+| `janela_fim` | date | sim |  |  |
+| `ultima_varredura_completa_em` | timestamp with time zone | sim |  |  |
+| `ultima_tentativa_em` | timestamp with time zone | não | now() |  |
+| `dias_pendentes` | integer | não | 0 |  |
+| `catalogos_erro` | jsonb | sim |  |  |
+| `ultimo_erro` | text | sim |  |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `financeiro_emusys_varredura_resumo_pkey`
 
 ## financeiro_fatura_reconciliacao_decisoes
 
