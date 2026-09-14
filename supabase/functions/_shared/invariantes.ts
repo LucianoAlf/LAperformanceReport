@@ -195,6 +195,22 @@ export function checarMatricula(payload: any, resultado: ResultadoMatricula): In
       mensagem: 'valor_taxa_matricula = 0 (re-matrícula, bolsista ou erro?)' });
   }
 
+  // Payload íntegro e mesmo assim sem linha em `alunos` = a matrícula não existe no LA
+  // Report. Vem por último de propósito: quando o payload está quebrado, a causa é uma das
+  // críticas acima e esta seria só o efeito (por isso o retorno antecipado de
+  // `matricula_sem_disciplinas` não chega aqui).
+  //
+  // 🔴 Caso real (2026-09-08, Lara Boldrine / Barra, matrícula 870): o INSERT em `alunos`
+  // foi revertido por exceção num AFTER trigger (`sync_aluno_to_leads` com `origem_registro`
+  // fora de ordem, 22007), a edge não desestruturava o `error` do supabase-js e o log saiu
+  // `acao='inserido'`, `status='ok'`, `aluno_id: null`. A aluna ficou 6 dias fora do sistema
+  // e só apareceu porque alguém foi procurá-la à mão. `checarRenovacao` já tratava
+  // `aluno_id === null` como crítico; aqui faltava.
+  if (resultado.aluno_id == null) {
+    v.push({ regra: 'matricula_aluno_nao_gravado', severidade: 'critico',
+      mensagem: `matrícula ${matriculaId ?? '?'} ("${nomeAluno ?? '?'}") processada sem linha em alunos — INSERT/UPDATE não retornou id (erro engolido? trigger que aborta? RLS?)` });
+  }
+
   return v;
 }
 
