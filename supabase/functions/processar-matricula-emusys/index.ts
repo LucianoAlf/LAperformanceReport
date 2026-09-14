@@ -147,7 +147,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 // v34 (2026-08-13): matricula_alterada passa a reconciliar a grade futura do aluno
 // (edge reconciliar-grade-aluno). Fecha o buraco em que mudar a data da 1a aula
 // deixava a aula do dia antigo viva na Agenda para sempre.
-const VERSAO = 'v34';
+const VERSAO = 'v35';
 const EVENTOS_JORNADA_CANONICA = new Set([
   'matricula_nova',
   'matricula_renovacao',
@@ -1241,6 +1241,9 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
     let alunoId: number | null;
     let action: string;
     let fonte = found?.fonte;
+    // O motivo da gravação ter falhado, quando falha. Sem ele o log diz apenas
+    // "aluno_id: null" e quem lê não sabe se foi trigger, RLS, constraint ou timeout.
+    let erroGravacaoAluno: { code?: string; message?: string; details?: string } | null = null;
 
     if (found?.aluno) {
       if (found.fonte === 'nome_unico' || found.fonte === 'nome_priorizado') {
@@ -1323,7 +1326,7 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
         action = 'atualizado';
       }
     } else {
-      const { data: newAluno } = await supabase.from('alunos').insert({
+      const { data: newAluno, error: erroNovoAluno } = await supabase.from('alunos').insert({
         nome: p.nomeAluno,
         unidade_id: p.unidadeId,
         status: 'ativo',
@@ -1354,6 +1357,26 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }).select('id').single();
+
+      // 🔴 O supabase-js NÃO lança: insert que falha volta com `error` preenchido e `data`
+      // nulo. Sem ler o `error` aqui, a falha virava `aluno_id: null` com `status: 'ok'` e
+      // o aluno simplesmente não existia — foi o que aconteceu com a matrícula 870
+      // (Lara Boldrine / Barra, 08/09/2026), revertida por exceção no AFTER trigger
+      // `sync_aluno_to_leads`. A invariante `matricula_aluno_nao_gravado` já derruba o
+      // status para 'erro'; o que guardamos aqui é o MOTIVO, sem o qual o próximo caso
+      // exige arqueologia em `audit_log` e `schema_migrations` para ser entendido.
+      if (erroNovoAluno) {
+        erroGravacaoAluno = {
+          code: erroNovoAluno.code,
+          message: erroNovoAluno.message,
+          details: erroNovoAluno.details,
+        };
+        console.error('[matricula_nova] INSERT em alunos falhou', {
+          emusys_matricula_id: p.matriculaIdEmusys,
+          nome: p.nomeAluno,
+          erro: erroGravacaoAluno,
+        });
+      }
 
       alunoId = newAluno?.id || null;
       action = 'inserido';
@@ -1422,6 +1445,8 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
         telefone: p.telefoneAluno,
         emusys_lead_id: p.emusysLeadId,
         emusys_matricula_id: p.matriculaIdEmusys,
+        // Só aparece quando houve falha — chave ausente = gravou.
+        ...(erroGravacaoAluno ? { erro_gravacao_aluno: erroGravacaoAluno } : {}),
         version: VERSAO,
       },
       workflow_id: 'processar-matricula-emusys',
