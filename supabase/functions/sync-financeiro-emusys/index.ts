@@ -309,6 +309,7 @@ async function processarUnidade(
   comCatalogos: boolean,
   orcamentoMs: number,
   comecouEm: number,
+  revarreduraAnual: boolean = false,
 ) {
   if (!unidade.token) throw new Error(`token Emusys ausente para ${unidade.codigo}`);
   const resultado: Record<string, unknown> = { unidade: unidade.codigo, catalogos: {} as Record<string, unknown> };
@@ -369,15 +370,32 @@ async function processarUnidade(
   }
 
   const diasJanela = resumoJanela(janela.inicio, janela.fim);
-  const { data: completos, error: erroCompletos } = await client
-    .from('financeiro_emusys_varredura_dias')
-    .select('data')
-    .eq('unidade_id', unidade.id)
-    .eq('status', 'completo')
-    .gte('data', janela.inicio)
-    .lte('data', janela.fim);
-  if (erroCompletos) throw erroCompletos;
-  const completosSet = new Set((completos ?? []).map((row) => String(row.data)));
+  // Na revarredura anual, re-scanneia dias cuja última conclusão é antiga (>7 dias)
+  // ou nula — assim não repete o que a janela diária acabou de cobrir.
+  let completosSet: Set<string>;
+  if (revarreduraAnual) {
+    const corte = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: recentes, error: erroRecentes } = await client
+      .from('financeiro_emusys_varredura_dias')
+      .select('data')
+      .eq('unidade_id', unidade.id)
+      .eq('status', 'completo')
+      .gte('data', janela.inicio)
+      .lte('data', janela.fim)
+      .gte('concluido_em', corte);
+    if (erroRecentes) throw erroRecentes;
+    completosSet = new Set((recentes ?? []).map((row) => String(row.data)));
+  } else {
+    const { data: completos, error: erroCompletos } = await client
+      .from('financeiro_emusys_varredura_dias')
+      .select('data')
+      .eq('unidade_id', unidade.id)
+      .eq('status', 'completo')
+      .gte('data', janela.inicio)
+      .lte('data', janela.fim);
+    if (erroCompletos) throw erroCompletos;
+    completosSet = new Set((completos ?? []).map((row) => String(row.data)));
+  }
   let pendentes = diasJanela.filter((dia) => !completosSet.has(dia));
 
   let diasProcessados = 0;
@@ -413,26 +431,47 @@ async function processarUnidade(
   const agora = new Date().toISOString();
   const { data: anterior } = await client
     .from('financeiro_emusys_varredura_resumo')
-    .select('ultima_varredura_completa_em')
+    .select('ultima_varredura_completa_em,janela_inicio,janela_fim')
     .eq('unidade_id', unidade.id)
     .maybeSingle();
-  const { error: erroResumo } = await client
-    .from('financeiro_emusys_varredura_resumo')
-    .upsert({
-      unidade_id: unidade.id,
-      janela_inicio: janela.inicio,
-      janela_fim: janela.fim,
-      ultima_tentativa_em: agora,
-      dias_pendentes: restantes,
-      catalogos_erro: Object.fromEntries(
-        Object.entries(catalogos).filter(([, v]) => typeof v === 'object' && v !== null && 'erro' in (v as object)),
-      ),
-      ultimo_erro: falhas[0] ?? null,
-      // só avança quando a janela inteira fecha sem pendência
-      ultima_varredura_completa_em: restantes === 0 ? agora : (anterior?.ultima_varredura_completa_em ?? null),
-      atualizado_em: agora,
-    }, { onConflict: 'unidade_id' });
-  if (erroResumo) throw erroResumo;
+
+  if (revarreduraAnual) {
+    // Revarredura anual: NÃO sobrescreve a janela diária nem ultima_varredura_completa_em.
+    // Só atualiza ultima_revarredura_anual_em quando o ano inteiro fechar sem pendência.
+    const { error: erroResumo } = await client
+      .from('financeiro_emusys_varredura_resumo')
+      .upsert({
+        unidade_id: unidade.id,
+        // preserva a janela diária se já existir; se não existir, usa a anual como fallback
+        janela_inicio: anterior?.janela_inicio ?? janela.inicio,
+        janela_fim: anterior?.janela_fim ?? janela.fim,
+        ultima_tentativa_em: agora,
+        dias_pendentes: restantes,
+        ultima_varredura_completa_em: anterior?.ultima_varredura_completa_em ?? null,
+        ultima_revarredura_anual_em: restantes === 0 ? agora : (anterior?.ultima_revarredura_anual_em ?? null),
+        atualizado_em: agora,
+      }, { onConflict: 'unidade_id' });
+    if (erroResumo) throw erroResumo;
+  } else {
+    const { error: erroResumo } = await client
+      .from('financeiro_emusys_varredura_resumo')
+      .upsert({
+        unidade_id: unidade.id,
+        janela_inicio: janela.inicio,
+        janela_fim: janela.fim,
+        ultima_tentativa_em: agora,
+        dias_pendentes: restantes,
+        catalogos_erro: Object.fromEntries(
+          Object.entries(catalogos).filter(([, v]) => typeof v === 'object' && v !== null && 'erro' in (v as object)),
+        ),
+        ultimo_erro: falhas[0] ?? null,
+        // só avança quando a janela inteira fecha sem pendência
+        ultima_varredura_completa_em: restantes === 0 ? agora : (anterior?.ultima_varredura_completa_em ?? null),
+        ultima_revarredura_anual_em: anterior?.ultima_revarredura_anual_em ?? null,
+        atualizado_em: agora,
+      }, { onConflict: 'unidade_id' });
+    if (erroResumo) throw erroResumo;
+  }
 
   resultado.dias_processados = diasProcessados;
   resultado.dias_pendentes = restantes;
@@ -454,12 +493,29 @@ serve(async (request) => {
     const corpo = await request.json().catch(() => ({})) as Record<string, unknown>;
     const alvo = String(corpo.unidade ?? url.searchParams.get('u') ?? 'todas').trim().toLowerCase();
     const hoje = String(corpo.hoje ?? hojeBrt());
-    const janelaPadrao = janelaRotinaDiaria(hoje);
-    const inicio = String(corpo.data_inicial ?? janelaPadrao.inicio).trim();
-    const fim = String(corpo.data_final ?? janelaPadrao.fim).trim();
-    // janela explícita = backfill: catálogos ficam para a chamada final da rodada
-    const comCatalogos = corpo.catalogos != null ? corpo.catalogos === true : !(corpo.data_inicial || corpo.data_final);
-    const orcamento = Math.min(200, Math.max(30, Number(corpo.orcamento_segundos ?? ORCAMENTO_PADRAO_SEGUNDOS))) * 1000;
+    const revarreduraAnual = corpo.revarredura_anual === true || url.searchParams.get('revarredura_anual') === 'true';
+
+    let inicio: string;
+    let fim: string;
+    let comCatalogos: boolean;
+
+    if (revarreduraAnual) {
+      // Janela = 01 de janeiro do ano corrente até hoje (revarredura mensal do ano inteiro)
+      const ano = hoje.slice(0, 4);
+      inicio = `${ano}-01-01`;
+      fim = hoje;
+      comCatalogos = true; // refresh de catálogos também na revarredura anual
+    } else {
+      const janelaPadrao = janelaRotinaDiaria(hoje);
+      inicio = String(corpo.data_inicial ?? janelaPadrao.inicio).trim();
+      fim = String(corpo.data_final ?? janelaPadrao.fim).trim();
+      // janela explícita = backfill: catálogos ficam para a chamada final da rodada
+      comCatalogos = corpo.catalogos != null ? corpo.catalogos === true : !(corpo.data_inicial || corpo.data_final);
+    }
+
+    // Revarredura anual precisa de orçamento maior (até 600s = 10 min por chamada)
+    const orcamentoMax = revarreduraAnual ? 600 : 200;
+    const orcamento = Math.min(orcamentoMax, Math.max(30, Number(corpo.orcamento_segundos ?? (revarreduraAnual ? 600 : ORCAMENTO_PADRAO_SEGUNDOS)))) * 1000;
 
     if (fim < inicio) return json({ success: false, erro: 'data_final anterior a data_inicial' }, 400);
 
@@ -474,7 +530,7 @@ serve(async (request) => {
     const resultados = [];
     for (const unidade of unidades) {
       if (Date.now() - comecouEm >= orcamento) break;
-      resultados.push(await processarUnidade(client, unidade, { inicio, fim }, comCatalogos, orcamento, comecouEm));
+      resultados.push(await processarUnidade(client, unidade, { inicio, fim }, comCatalogos, orcamento, comecouEm, revarreduraAnual));
     }
     return json({ success: true, janela: { inicio, fim }, resultados });
   } catch (erro) {

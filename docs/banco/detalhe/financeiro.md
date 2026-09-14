@@ -433,6 +433,7 @@
 | `catalogos_erro` | jsonb | sim |  |  |
 | `ultimo_erro` | text | sim |  |  |
 | `atualizado_em` | timestamp with time zone | não | now() |  |
+| `ultima_revarredura_anual_em` | timestamp with time zone | sim |  |  |
 
 **Únicos:**
 - `financeiro_emusys_varredura_resumo_pkey`

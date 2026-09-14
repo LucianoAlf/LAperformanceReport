@@ -107,6 +107,9 @@ x-super-folha-sync-secret: <segredo compartilhado>
       "janela_fim": "2026-09-14",
       "janela_cobre_competencia": true,
       "ultima_varredura_completa_em": "2026-09-14T...",
+      "ultima_revarredura_anual_em": "2026-09-01T...",
+      "competencia_ultima_varredura_completa_em": "2026-09-14T...",
+      "competencia_total_dias": 31,
       "ultima_tentativa_em": "...",
       "dias_pendentes_janela": 0,
       "dias_competencia_completos": 31,
@@ -147,6 +150,69 @@ x-super-folha-sync-secret: <segredo compartilhado>
 3. `valor_total` é soma algébrica com sinal (saídas negativas na soma da natureza `saida` também — é a convenção da origem).
 4. Erros: `403 acesso negado` (segredo errado), `400` (parâmetro inválido), `503` (segredo não configurado no lado do LA Report).
 5. Erros da fonte ficam visíveis: catálogo da CG dando 500 aparece no resumo da sync, não aqui; um dia em erro aparece em `dias_competencia_com_erro` e o item NUNCA é confundido com "dia vazio".
+
+### 2.5 Confirmações de contrato (pedido Super Folha 15/09/2026)
+
+1. **Segredo:** o header `x-super-folha-sync-secret` aceita `SUPER_FOLHA_FINANCEIRO_SECRET` (dedicado, se configurado) com fallback para `SUPER_FOLHA_CONTAS_RECEBER_SECRET` (o mesmo do `export-contas-receber`). Se o Super Folha já usa o segredo do contas-receber, funciona sem mudança. Se preferir segredo separado, basta configurar `SUPER_FOLHA_FINANCEIRO_SECRET` no projeto Supabase.
+2. **Ordem dos itens:** `data ASC, emusys_lancamento_id ASC` — determinística, igual em toda chamada.
+3. **UUIDs de unidade:** os mesmos do export de faturas: CG `2ec861f6-023f-4d7b-9927-3960ad8c2a92`, Barra `368d47f5-2d88-4475-bc14-ba084a9a348e`, Recreio `95553e96-971b-4590-a6eb-0201d013c14d`.
+4. **Conta da CG nos lançamentos:** `conta.id` e `conta.descricao` vêm preenchidos em todos os lançamentos da CG, **exceto** nos repasses da operadora e transferidos para a tesouraria (onde `conta` é null ou `{id: 1002, descricao: ""}` — id fantasma fora do catálogo). O catálogo de contas da CG continua dando HTTP 500 na origem, mas a conta de cada lançamento vem no próprio item — é dela que se deriva a separação EMLA vs Kids.
+5. **Campos novos no `varredura[]` (15/09/2026):**
+   - `competencia_ultima_varredura_completa_em`: data mais recente em que **todos** os dias da competência pedida vieram completos. `null` se a competência ainda tem dias em erro ou não foi toda varrida. Distingue "mês conferido ontem" de "foto de 3 meses atrás".
+   - `competencia_total_dias`: total de dias da competência (para conferir cobertura).
+   - `ultima_revarredura_anual_em`: timestamp da última revarredura do ano inteiro (ver §2.6).
+6. **Mudanças de formato deste export serão avisadas antes.** A Maria repassa números no WhatsApp; o Super Folha é o único consumidor.
+
+### 2.6 Revarredura anual (NOVO 15/09/2026)
+
+A janela diária cobre só mês corrente + 2 anteriores. Mês fechado que a Rose corrigir depois sai do radar — e junho, julho e agosto são meses que o Super Folha já fechou no DRE.
+
+**Solução:** revarredura mensal do ano corrente inteiro (jan–hoje), dia a dia, no dia 1 de cada mês às 3h BRT. Jobs `sync-financeiro-emusys-revarredura-anual-{cg,barra,recreio}`.
+
+- Mesma regra dura: `sumiu_em` só é marcado a partir de um dia com varredura completa.
+- Ignora dias já revarridos na última semana (não repete o que a janela diária acabou de cobrir).
+- Não sobrescreve a janela diária do `varredura_resumo` — só atualiza `ultima_revarredura_anual_em`.
+- Orçamento de 600s (10 min) por chamada; retomada incremental por dias pendentes.
+
+O Super Folha lê `ultima_revarredura_anual_em` no `varredura[]` do export para saber até quando cada mês antigo foi conferido.
+
+### 2.7 Planos de contas sem código no nome
+
+Planos cujo `nome` não começa com número (logo `plano_codigo` = null no espelho). São **27 planos por unidade**, os mesmos nas três. O de-para fica com o Super Folha.
+
+| emusys_plano_id | nome |
+|---|---|
+| -25 | Taxas de Antecipação de Valores |
+| 19 | Telefone fixo |
+| 45 | Falta de Caixa |
+| 53 | ICMS |
+| 54 | ISS |
+| 55 | PIS |
+| 56 | Cofins |
+| 57 | IRPJ |
+| 59 | Descontos Incondicionais |
+| 60 | Descontos Condicionais |
+| 62 | Vale Transporte |
+| 63 | Cesta Básica |
+| 75 | Receita com Eventos / Casamentos |
+| 89 | Material para Encadernação |
+| 90 | Despesas da Cantina |
+| 91 | Despesas Negativação / Protesto |
+| 96 | Impostos de Veículos |
+| 99 | Eventos |
+| 104 | Sicredi |
+| 105 | Confraternização |
+| 108 | Despesas na comunicação de cobrança |
+| 111 | Cartório |
+| 112 | Certificados |
+| 129 | Assinatura de Material |
+| 135 | Beneficios |
+| 136 | Encargos Sociais |
+| 137 | Pró-Labore |
+
+**Observação:** o Super Folha mencionou "Vendas Loja" como plano sem código, mas esse nome **não existe** no catálogo espelhado nem em descrições de lançamento. Pode ser um plano do Emusys UI que ainda não foi espelhado, ou um nome diferente. Se aparecer na próxima revarredura, será incluído aqui.
+
+Transferência sem plano (302 itens no espelho) é esperado — `plano_contas` vem null nesses casos.
 
 ---
 

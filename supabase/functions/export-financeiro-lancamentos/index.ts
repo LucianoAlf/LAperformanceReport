@@ -107,31 +107,45 @@ serve(async (request) => {
     // status da varredura: resumo da janela diária + cobertura dia a dia da competência pedida
     let statusQuery = client
       .from('financeiro_emusys_varredura_resumo')
-      .select('unidade_id,janela_inicio,janela_fim,ultima_varredura_completa_em,ultima_tentativa_em,dias_pendentes,ultimo_erro');
+      .select('unidade_id,janela_inicio,janela_fim,ultima_varredura_completa_em,ultima_revarredura_anual_em,ultima_tentativa_em,dias_pendentes,ultimo_erro');
     if (unidadeId) statusQuery = statusQuery.eq('unidade_id', unidadeId);
     const { data: resumos, error: erroResumo } = await statusQuery;
     if (erroResumo) throw erroResumo;
 
     let diasQuery = client
       .from('financeiro_emusys_varredura_dias')
-      .select('unidade_id,data,status')
+      .select('unidade_id,data,status,concluido_em')
       .gte('data', inicio)
       .lte('data', fim);
     if (unidadeId) diasQuery = diasQuery.eq('unidade_id', unidadeId);
     const { data: dias, error: erroDias } = await diasQuery;
     if (erroDias) throw erroDias;
 
-    const diasPorUnidade = new Map<string, { completos: number; erro: number }>();
+    // Total de dias da competência (para saber se a competência inteira foi conferida)
+    const [anoComp, mesComp] = inicio.split('-').map(Number);
+    const totalDiasCompetencia = new Date(Date.UTC(anoComp, mesComp, 0)).getUTCDate();
+
+    const diasPorUnidade = new Map<string, { completos: number; erro: number; ultimoCompletoEm: string | null }>();
     for (const dia of dias ?? []) {
-      const atual = diasPorUnidade.get(dia.unidade_id) ?? { completos: 0, erro: 0 };
-      if (dia.status === 'completo') atual.completos += 1;
-      else atual.erro += 1;
+      const atual = diasPorUnidade.get(dia.unidade_id) ?? { completos: 0, erro: 0, ultimoCompletoEm: null };
+      if (dia.status === 'completo') {
+        atual.completos += 1;
+        if (dia.concluido_em && (!atual.ultimoCompletoEm || dia.concluido_em > atual.ultimoCompletoEm)) {
+          atual.ultimoCompletoEm = dia.concluido_em;
+        }
+      } else {
+        atual.erro += 1;
+      }
       diasPorUnidade.set(dia.unidade_id, atual);
     }
 
     const varredura = (resumos ?? []).map((r) => {
       const unidade = unidades.get(r.unidade_id) as { nome?: string; codigo?: string } | undefined;
-      const cobertura = diasPorUnidade.get(r.unidade_id) ?? { completos: 0, erro: 0 };
+      const cobertura = diasPorUnidade.get(r.unidade_id) ?? { completos: 0, erro: 0, ultimoCompletoEm: null };
+      // competencia_ultima_varredura_completa_em: só é preenchido quando TODOS os dias
+      // da competência estão completos — é a data mais recente em que a competência
+      // inteira foi conferida. Distingue "mês conferido ontem" de "foto de 3 meses atrás".
+      const competenciaCompleta = cobertura.completos >= totalDiasCompetencia && cobertura.erro === 0;
       return {
         unidade_id: r.unidade_id,
         unidade_nome: unidade?.nome ?? null,
@@ -139,6 +153,9 @@ serve(async (request) => {
         janela_fim: r.janela_fim,
         janela_cobre_competencia: !!r.janela_inicio && r.janela_inicio <= inicio && !!r.janela_fim && r.janela_fim >= inicio,
         ultima_varredura_completa_em: r.ultima_varredura_completa_em,
+        ultima_revarredura_anual_em: r.ultima_revarredura_anual_em ?? null,
+        competencia_ultima_varredura_completa_em: competenciaCompleta ? cobertura.ultimoCompletoEm : null,
+        competencia_total_dias: totalDiasCompetencia,
         ultima_tentativa_em: r.ultima_tentativa_em,
         dias_pendentes_janela: r.dias_pendentes,
         dias_competencia_completos: cobertura.completos,
