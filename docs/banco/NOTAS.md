@@ -4,20 +4,21 @@ O que um script não descobre. O fato mecânico está nos `*.gerado.md` ao lado.
 
 > Armadilhas de regra de negócio continuam no [`CLAUDE.md`](../../CLAUDE.md) e em
 > `.claude/memory/`. Este arquivo **não as duplica** — registra só o que saiu da
-> leitura do próprio banco, em 2026-09-02.
+> leitura do próprio banco, em 2026-09-02 (quadro geral e contagem `anon`
+> reconferidos em 2026-09-14; as revisões nominais seguem sendo as de 02/09).
 
 ## Quadro geral
 
-| | Total |
-|---|---|
-| Tabelas | 379 |
-| Views | 122 |
-| Funções nossas | 1.151 |
-| — em uso (ATIVA) | 439 |
-| — só chamadas por outra função (SÓ-INTERNA) | 365 |
-| — sem consumidor conhecido (ÓRFÃ) | 336 |
-| — superadas por versão maior (LEGADO) | 11 |
-| Executáveis por `anon` | 150 |
+| | 2026-09-02 | 2026-09-14 |
+|---|---|---|
+| Tabelas | 379 | 423 |
+| Views | 122 | 134 |
+| Funções nossas | 1.151 | 1.459 |
+| — em uso (ATIVA) | 439 | 496 |
+| — só chamadas por outra função (SÓ-INTERNA) | 365 | 524 |
+| — sem consumidor conhecido (ÓRFÃ) | 336 | 422 |
+| — superadas por versão maior (LEGADO) | 11 | 17 |
+| Executáveis por `anon` | 150 | 166 |
 
 **As funções de extensão ficam fora do catálogo.** `pg_trgm` e `unaccent` instalam
 35 funções no schema `public` (`word_similarity`, `gtrgm_*`, `unaccent`…). Elas
@@ -25,7 +26,18 @@ não são nossas, ninguém as mantém, e infladas no meio das nossas escondiam o
 importa — o gerador as exclui por `pg_depend`. Note que **35 das 185 funções
 `anon` que uma contagem ingênua acha são delas**: o número nosso é 150.
 
-## 🔓 150 funções executáveis por `anon`
+## 🔓 166 funções executáveis por `anon`
+
+> ⚠️ **A contagem é de 14/09/2026; a revisão nominal abaixo é de 02/09.** Eram 150
+> (95 ATIVA + 33 ÓRFÃ); hoje são 166 assinaturas — 101 ATIVA, 29 SÓ-INTERNA e 36
+> ÓRFÃ (35 nomes). **A lista das ÓRFÃ não foi refeita**: recontá-la é mecânico, mas
+> decidir o que revogar é auditoria caso a caso, e ninguém a fez desde 02/09.
+> Entraram nesse intervalo, sem revisão: `app_coordenacao_radar`,
+> `app_corrigir_presenca_do_aluno`, `app_falta_professor_cancelar_aulas`,
+> `calcular_pontos_perdidos_com_tolerancia`, `dispensar_passagem_bastao`,
+> `financeiro_enriquecer_fatura_item`, `fn_presenca_fonte_legivel`,
+> `fn_presenca_status_efetivo`, `get_ocorrencias_mes`, `responder_passagem_bastao`,
+> `retirar_do_roster_health_score_v3_ciclo`.
 
 A `anon key` vai no bundle do front — é pública por construção. Toda função com
 `EXECUTE` para `anon` é chamável por qualquer pessoa na internet.

@@ -33,6 +33,49 @@ function safeEqual(left: string, right: string) {
   return diff === 0;
 }
 
+async function fetchFaturasPagasMes(client: SupabaseClient, competencia: string, unidadeId: string | null) {
+  const rows: FaturaSource[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    let query = client
+      .from('faturas_pagas_mes')
+      .select('unidade_id,unidade_codigo,emusys_fatura_id::text,emusys_matricula_id::text,emusys_student_id::text,descricao,status,data_vencimento,data_pagamento,competencia_vencimento,competencia_pagamento,valor_original,valor_pago,juros_e_multa,desconto_aplicado,desconto_fixo,desconto_condicional')
+      .eq('competencia_pagamento', competencia)
+      .order('unidade_id', { ascending: true })
+      .order('emusys_fatura_id', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+    if (unidadeId) query = query.eq('unidade_id', unidadeId);
+    // deno-lint-ignore no-explicit-any
+    const { data, error } = await query as any;
+    if (error) throw error;
+    const pageRows = ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+      id: '',
+      canonical_fatura_id: '',
+      sync_run_id: '',
+      unidade_id: row.unidade_id as string,
+      unidade_codigo: row.unidade_codigo as string,
+      emusys_fatura_id: row.emusys_fatura_id as string,
+      emusys_matricula_id: row.emusys_matricula_id as string | null,
+      emusys_student_id: row.emusys_student_id as string | null,
+      descricao: row.descricao as string,
+      status: row.status as string,
+      data_vencimento: row.data_vencimento as string,
+      data_pagamento: row.data_pagamento as string,
+      // competencia do snapshot = vencimento; o export usa para join com alunos
+      competencia: row.competencia_vencimento as string,
+      valor_original: row.valor_original as number,
+      valor_pago: row.valor_pago as number | null,
+      juros_e_multa: row.juros_e_multa as number,
+      desconto_aplicado: row.desconto_aplicado as number,
+      desconto_fixo: row.desconto_fixo as number,
+      desconto_condicional: row.desconto_condicional as number,
+      source_missing: false,
+    } as FaturaSource));
+    rows.push(...pageRows);
+    if ((data?.length ?? 0) < PAGE_SIZE) break;
+  }
+  return rows;
+}
+
 async function fetchFaturas(client: SupabaseClient, competencia: string, syncRunId: string) {
   const rows: FaturaSource[] = [];
   for (let from = 0; ; from += PAGE_SIZE) {
@@ -140,6 +183,7 @@ async function readSnapshot(
   syncRunId: string | null,
   requireLatest: boolean,
   requireFresh: boolean,
+  incluirPagasNoMes: boolean,
 ) {
   const latestRun = await fetchLatestCompleteRun(client, competencia);
   const run = syncRunId ? await fetchRun(client, competencia, syncRunId) : latestRun;
@@ -153,9 +197,23 @@ async function readSnapshot(
   }
 
   const faturas = await fetchFaturas(client, competencia, run.id);
-  const alunos = await fetchAlunos(client, faturas);
+
+  // Merge OPT-IN: faturas pagas em M por data de pagamento, com vencimento fora de M.
+  // Só liga com incluir_pagas_no_mes: true. Sem o parâmetro, o export é exatamente o de antes.
+  // Dedup por (unidade_id, emusys_fatura_id): se já está no snapshot de vencimento, pula.
+  let pagasMesExtra: FaturaSource[] = [];
+  if (incluirPagasNoMes) {
+    const vencimentoIds = new Set(faturas.map((f) => `${f.unidade_id}|${f.emusys_fatura_id}`));
+    const pagasMes = await fetchFaturasPagasMes(client, competencia, null);
+    pagasMesExtra = pagasMes.filter(
+      (f) => !vencimentoIds.has(`${f.unidade_id}|${f.emusys_fatura_id}`),
+    );
+  }
+  const todasFaturas = [...faturas, ...pagasMesExtra];
+
+  const alunos = await fetchAlunos(client, todasFaturas);
   const cursos = await fetchCursos(client, alunos);
-  const itens = await buildExportRows({ faturas, alunos, cursos });
+  const itens = await buildExportRows({ faturas: todasFaturas, alunos, cursos });
   const latestAfterRead = await fetchLatestCompleteRun(client, competencia);
   if (requireLatest && run.id !== latestAfterRead.id) {
     throw new Error('run solicitado nao e o ultimo snapshot completo');
@@ -163,6 +221,10 @@ async function readSnapshot(
   const manifesto = await buildManifest(competencia, itens, run, latestAfterRead.id);
   if (requireFresh && manifesto.is_fresh !== true) {
     throw new Error('snapshot stale: expirou durante a exportacao');
+  }
+  // Anota no manifesto quantas faturas extras por pagamento foram incluídas
+  if (manifesto && typeof manifesto === 'object') {
+    (manifesto as Record<string, unknown>).faturas_pagas_mes_extras = pagasMesExtra.length;
   }
   return { itens, manifesto };
 }
@@ -239,9 +301,13 @@ serve(async (request) => {
     if (body.require_fresh != null && typeof body.require_fresh !== 'boolean') {
       return json({ success: false, erro: 'require_fresh deve ser boolean' }, 400);
     }
+    if (body.incluir_pagas_no_mes != null && typeof body.incluir_pagas_no_mes !== 'boolean') {
+      return json({ success: false, erro: 'incluir_pagas_no_mes deve ser boolean' }, 400);
+    }
     const requireLatest = body.require_latest === true;
     const requireFresh = body.require_fresh !== false;
-    const snapshot = await readSnapshot(client, competencia, syncRunId, requireLatest, requireFresh);
+    const incluirPagasNoMes = body.incluir_pagas_no_mes === true;
+    const snapshot = await readSnapshot(client, competencia, syncRunId, requireLatest, requireFresh, incluirPagasNoMes);
     return json({ success: true, manifesto: snapshot.manifesto, itens: snapshot.itens });
   } catch (error) {
     console.error('[export-contas-receber]', error);

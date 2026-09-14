@@ -41,6 +41,11 @@ ARTIFACTS = (
         "caixa-runtime",
     ),
     (
+        "vps/la-hq/sol/runtime/caixa-governanca-shadow.cjs",
+        "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-governanca-shadow.cjs",
+        "governance-shadow",
+    ),
+    (
         "vps/la-hq/sol/scripts/sol-portas-mcp.mjs",
         "/home/sol/.openclaw/workspace/scripts/sol-portas-mcp.mjs",
         "mcp-runtime",

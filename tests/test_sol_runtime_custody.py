@@ -16,7 +16,7 @@ class SolRuntimeCustodyTest(unittest.TestCase):
     def test_manifest_matches_fixed_artifact_set(self):
         result = custody.verify_local()
         self.assertTrue(result["ok"])
-        self.assertEqual(result["files"], 5)
+        self.assertEqual(result["files"], len(custody.ARTIFACTS))
 
     def test_remote_drift_is_fail_closed(self):
         manifest = custody.load_manifest()

@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-09 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-14 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — aluno
 
-138 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+141 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## aluno_acoes
 
@@ -913,6 +913,59 @@
 **Únicos:**
 - `banda_repertorio_pkey`
 
+## comunidade_wa_grupos
+
+> Grupos/comunidades de WhatsApp por unidade, lidos pela edge sincronizar-comunidade-whatsapp (POST /group/info UAZAPI).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `jid` | text | não |  |  |
+| `nome` | text | não |  |  |
+| `caixa_id` | integer | sim |  | whatsapp_caixas.id |
+| `ativo` | boolean | não | true |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `comunidade_wa_grupos_jid_key`
+- `comunidade_wa_grupos_pkey`
+
+## comunidade_wa_participantes
+
+> Foto mais recente dos participantes de cada grupo. Linhas somem quando o participante some na captura seguinte (é estado atual, não histórico).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `grupo_id` | bigint | não |  | comunidade_wa_grupos.id |
+| `telefone_key` | text | não |  |  |
+| `telefone_original` | text | sim |  |  |
+| `capturado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `comunidade_wa_participantes_grupo_id_telefone_key_key`
+- `comunidade_wa_participantes_pkey`
+
+## config_cadastro_obrigatorio
+
+> Régua de completude de cadastro por unidade × classificação. Editável pelo gerente; a RPC get_situacao_alunos_v1 honra esta tabela.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `campo` | text | não |  |  |
+| `obrigatorio` | boolean | não | true |  |
+| `aplica_classificacao` | text | não | 'todas'::text |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `config_cadastro_obrigatorio_pkey`
+- `config_cadastro_obrigatorio_unidade_id_campo_aplica_classif_key`
+
 ## cursos_matriculados
 
 | Coluna | Tipo | Nulo | Default | Referência |
@@ -1762,7 +1815,7 @@
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
 | `id` | uuid | não | gen_random_uuid() |  |
-| `pesquisa_id` | uuid | sim |  | pesquisa_evasao.id |
+| `pesquisa_id` | uuid | sim |  | pesquisa_evasao_analises.pesquisa_id |
 | `caixa_id` | integer | não |  | whatsapp_caixas.id |
 | `direcao` | text | não |  |  |
 | `provider_message_id` | text | sim |  |  |

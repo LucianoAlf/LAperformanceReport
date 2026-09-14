@@ -4,8 +4,10 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.89.0';
 import {
   coletarFaturasUnidade,
+  coletarFaturasPagasPorJanela,
   GlobalRateLimiter,
   type UnidadeSyncConfig,
+  type FaturaEmusys,
 } from '../_shared/faturasSync.ts';
 import {
   classifyFinanceiroSyncError,
@@ -214,8 +216,104 @@ function queueStateFromEnqueues(enqueues: QueueRpcResult[]) {
   return { jobs, status, nextAttemptAt };
 }
 
+// Modo pagas_no_mes: captura faturas PAGAS por data de pagamento, para o DRE
+// caixa do Super Folha. A API só filtra por vencimento, então puxamos status=paga
+// com janela de vencimento M-2 a M+12 e filtramos por data_pagamento em M no
+// cliente. Upsert em faturas_pagas_mes (chave única por unidade+emusys_fatura_id).
+async function processarPagasNoMes(
+  supabase: ServiceClient,
+  competencia: string,
+  unidadeCodigo: string | null,
+) {
+  const ano = Number(competencia.slice(0, 4));
+  const mes = Number(competencia.slice(5, 7));
+  // Janela de vencimento: M-12 a M+12 (pagamento atrasado pode ter vencimento
+  // até 1 ano atrás; adiantamento pode ter vencimento até 1 ano à frente)
+  const inicioVenc = new Date(Date.UTC(ano, mes - 13, 1)).toISOString().slice(0, 10);
+  const fimVenc = new Date(Date.UTC(ano, mes + 11, 0)).toISOString().slice(0, 10);
+  // Janela de pagamento: mês M
+  const pagInicio = competencia;
+  const pagFim = new Date(Date.UTC(ano, mes, 0)).toISOString().slice(0, 10);
+
+  const limiter = new GlobalRateLimiter();
+  const unidades = unidadeCodigo
+    ? { [unidadeCodigo]: UNIDADES[unidadeCodigo] }
+    : UNIDADES;
+
+  const resultado: Record<string, unknown> = { competencia, pagamento_janela: { inicio: pagInicio, fim: pagFim } };
+  const resumoUnidades: Record<string, unknown> = {};
+
+  for (const [codigo, unidade] of Object.entries(unidades)) {
+    if (!unidade) throw new Error(`unidade desconhecida: ${codigo}`);
+    try {
+      const { rawItems, paginas } = await coletarFaturasPagasPorJanela({
+        apiBaseUrl: EMUSYS_API,
+        dataVencimentoInicial: inicioVenc,
+        dataVencimentoFinal: fimVenc,
+        unidadeCodigo: codigo,
+        unidade,
+        limiter,
+      });
+
+      // Filtra: só fica quem tem data_pagamento dentro do mês M
+      const pagasNoMes = rawItems.filter((item) => {
+        const dp = String(item.data_pagamento ?? '').trim();
+        return dp >= pagInicio && dp <= pagFim;
+      });
+
+      // Upsert em faturas_pagas_mes
+      const linhas = pagasNoMes.map((item) => {
+        const dv = String(item.data_vencimento ?? '').trim();
+        const dp = String(item.data_pagamento ?? '').trim();
+        return {
+          unidade_id: unidade.id,
+          unidade_codigo: codigo,
+          emusys_fatura_id: Number(item.id),
+          emusys_matricula_id: item.matricula_id != null ? Number(item.matricula_id) : null,
+          emusys_contrato_id: item.contrato_id != null ? Number(item.contrato_id) : null,
+          emusys_student_id: item.aluno_id != null ? Number(item.aluno_id) : null,
+          descricao: String(item.descricao ?? ''),
+          status: 'paga',
+          data_vencimento: dv,
+          data_pagamento: dp,
+          competencia_vencimento: `${dv.slice(0, 7)}-01`,
+          competencia_pagamento: competencia,
+          valor_original: Number(item.valor_original ?? 0),
+          valor_pago: item.valor_pago != null ? Number(item.valor_pago) : null,
+          juros_e_multa: Number(item.juros_e_multa ?? 0),
+          desconto_aplicado: Number(item.desconto_aplicado ?? 0),
+          desconto_fixo: Number(item.desconto_fixo ?? 0),
+          desconto_condicional: Number(item.desconto_condicional ?? 0),
+          payload: item as unknown as Record<string, unknown>,
+        };
+      });
+
+      let upserted = 0;
+      for (let i = 0; i < linhas.length; i += 200) {
+        const { error } = await supabase
+          .from('faturas_pagas_mes')
+          .upsert(linhas.slice(i, i + 200), { onConflict: 'unidade_id,emusys_fatura_id' });
+        if (error) throw error;
+        upserted += Math.min(200, linhas.length - i);
+      }
+
+      resumoUnidades[codigo] = {
+        paginas,
+        recebidas_api: rawItems.length,
+        pagas_no_mes: pagasNoMes.length,
+        upserted,
+      };
+    } catch (erro) {
+      resumoUnidades[codigo] = { erro: erro instanceof Error ? erro.message : String(erro) };
+      console.error(`[sync-faturas] pagas_no_mes ${codigo}:`, erro);
+    }
+  }
+
+  resultado.unidades = resumoUnidades;
+  return resultado;
+}
+
 async function executarProbe(competencia: string, unidadeCodigo: string) {
-  const unidade = UNIDADES[unidadeCodigo];
   const collected = await coletarFaturasUnidade({
     apiBaseUrl: EMUSYS_API,
     competencia,
@@ -392,8 +490,35 @@ serve(async (req) => {
     if (access.denied) return access.denied;
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const mode = String(body.mode ?? 'enqueue_and_work').trim().toLowerCase();
-    if (!['enqueue_and_work', 'worker', 'probe'].includes(mode)) {
+    if (!['enqueue_and_work', 'worker', 'probe', 'pagas_no_mes'].includes(mode)) {
       return json({ ok: false, erro: 'mode invalido' }, 400);
+    }
+
+    // Modo pagas_no_mes: captura faturas pagas por data de pagamento (DRE caixa).
+    // Caminho separado da fila — não cria sync_run, só upsert em faturas_pagas_mes.
+    if (mode === 'pagas_no_mes') {
+      if (!access.isServiceRole && access.requestedBy !== 'sync_admin_token') {
+        return json({ ok: false, erro: 'pagas_no_mes exige service_role ou token tecnico' }, 403);
+      }
+      const competencias = parseCompetencias(body);
+      if (competencias.length === 0) {
+        return json({ ok: false, erro: 'pagas_no_mes exige competencia' }, 400);
+      }
+      if (competencias.length > 3) {
+        return json({ ok: false, erro: 'pagas_no_mes aceita no maximo 3 competencias por chamada' }, 400);
+      }
+      const unidadeCodigo = body.unidade ? String(body.unidade).trim().toLowerCase() : null;
+      if (unidadeCodigo && !Object.hasOwn(UNIDADES, unidadeCodigo)) {
+        return json({ ok: false, erro: 'unidade deve ser cg, recreio, barra ou omitida' }, 400);
+      }
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const resultados = [];
+      for (const comp of competencias) {
+        resultados.push(await processarPagasNoMes(supabase, comp, unidadeCodigo));
+      }
+      return json({ ok: true, mode: 'pagas_no_mes', resultados });
     }
 
     if (mode === 'probe') {

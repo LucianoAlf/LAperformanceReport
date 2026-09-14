@@ -470,7 +470,46 @@ e o envio usa a unidade dessa origem, nunca a seleção corrente. Geração e en
 possuem IDs distintos para que respostas antigas não restaurem sucesso, erro ou
 spinner depois de uma troca ou regeneração.
 
+### Fonte única do comercial (13/09/2026)
+
+Até 13/09/2026 o mesmo rótulo saía com três definições: **"Experimentais
+realizadas"** era o snapshot do Emusys no diário (22 em Recreio/set), o
+**denominador da taxa exp→mat** (presença confirmada, 51 em ago) no mensal, e o
+status operacional do CRM (27 / 61) na v2 canônica e na Mila. O ticket das
+parcelas tinha duas fórmulas (§6.6 no diário e no front; média por linha na Mila
+e no builder mensal — o 2º curso do Henrique ficava fora do numerador: 407,14
+contra 464,29). O comparativo do front contava `experimental_agendada` (66).
+
+Hoje todos leem das mesmas funções:
+
+| Função | O que devolve | Quem lê |
+|---|---|---|
+| `matriculas_comerciais_lista_v1(unidade, de, ate_exclusivo, criado_ate)` | uma linha por pessoa+dia; o 2º curso do mesmo dia entra nas `parcelas`, não conta como matrícula | `get_matriculas_comerciais_resumo_v1` |
+| `get_matriculas_comerciais_resumo_v1(…)` | contagem, LAMK/EMLA, totais, **tickets §6.6**, por canal/curso, lista | edge do diário, builder mensal (com `criado_ate = capturado_em`), competência |
+| `get_kpis_comercial_competencia_v1(unidade, ano, mes)` | fechamento oficial (snapshots `comercial` + `relatorio_comercial_mensal`) quando existe, senão ao vivo (v2 canônica + conciliação v2 + resumo acima); `unidade null` = rede | `mila_numeros_do_mes_v1`, `relatorio_matriculas_texto_v1`, `relatorio_comparativo_texto_v1` |
+| `relatorio_matriculas_texto_v1` / `relatorio_comparativo_texto_v1` | o texto dos relatórios de MATRÍCULAS e COMPARATIVO | botão do LA Report (`ComercialPage`) e as tools da Mila |
+
+Definições fixadas: **Experimentais realizadas** =
+`experimentais_realizadas_status_operacional` (status `experimental_realizada`
+ou `convertido`, v2 canônica); **experimentais confirmadas** = presença
+individual + vínculo (`denominador_taxa_exp_mat` da conciliação v2), que é o
+denominador da taxa experimental→matrícula e aparece como linha própria
+("Presença + vínculo confirmados") no diário e no mensal. Mês fechado lê o
+snapshot; o builder mensal publica `resumo.experimentais` (status operacional)
+e `resumo.experimentais_confirmadas`. Junho, julho e agosto/2026 foram
+retificados (append-only; ago v3, jun/jul v3 via
+`retificar_experimentais_status_operacional_v1`) só nessa definição — lista e
+tickets ficaram como a foto do fechamento, porque uma retificação corrige a
+definição, não re-fotografa o cadastro. O card de tickets do dashboard
+(`GestaoMensal/TabComercialNew`) também lê `get_matriculas_comerciais_resumo_v1`
+para o período selecionado (14/09/2026); a base canônica local
+(`calcularFinanceiroMatriculasCanonicas`) segue servindo só a lista dos gráficos.
+
 ### Tickets do relatório comercial diário
+
+Desde 13/09/2026 o cálculo mora em SQL (`get_matriculas_comerciais_resumo_v1`)
+e a edge apenas publica; o texto abaixo descreve a regra, que não mudou.
+
 
 O relatório diário calcula duas métricas separadas sobre a mesma coorte de
 matrículas comerciais agrupada que alimenta a lista detalhada:

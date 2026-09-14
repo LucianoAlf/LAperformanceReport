@@ -23,6 +23,7 @@ function novoHandler() {
   const enviadas = [];
   const logs = [];
   let lancou = null;
+  let lote = null;
   let seq = 0;
   const h = mod.criarHandlerFinanceiro({
     grupos: { [CHAT]: { grupo_jid: CHAT, unidade_id: UNIDADE, nome: 'Recreio' } },
@@ -39,9 +40,20 @@ function novoHandler() {
       return { ok: true, movimentacao_id: 'MOV-TESTE', valor: Number(p.valor),
                forma: p.forma, categoria: p.categoria, descricao: p.descricao };
     },
+    // Nunca deixar um teste de integração disparar o writer real de lote.
+    // O resolver/faturas são reais; a escrita continua fake e auditável aqui.
+    lancarLoteFn: async (p) => {
+      lote = p;
+      return { ok: true, lote_id: 'LOTE-TESTE', movimentacoes: p.itens.map((i, idx) => ({
+        movimentacao_id: 'MOV-LOTE-' + idx, aluno_nome: i.aluno_nome, valor: Number(i.valor),
+      })) };
+    },
     log: (o) => logs.push(o),
   });
-  return { handle: (ev) => h.handle(ev), enviadas, logs, get lancou() { return lancou; } };
+  return {
+    handle: (ev) => h.handle(ev), enviadas, logs,
+    get lancou() { return lancou; }, get lote() { return lote; },
+  };
 }
 
 async function rodar(legenda, resposta, tag) {
@@ -55,7 +67,7 @@ async function rodar(legenda, resposta, tag) {
     body: resposta, hasMedia: false,
   });
   const v = H.logs.filter((l) => l && l.acao === 'vinculo_lancamento').pop() || null;
-  return { payload: H.lancou, vinculo: v, msgs: H.enviadas };
+  return { payload: H.lancou, lote: H.lote, vinculo: v, msgs: H.enviadas };
 }
 
 (async () => {
@@ -111,33 +123,29 @@ async function rodar(legenda, resposta, tag) {
   }
 
   // ── CASO 3: composto (2 cursos num pagamento só) ──────────────────────────────────
-  // Canto 418,91 + Teclado 395,90 = 814,81. São matrículas DIFERENTES, então o honesto
-  // é não vincular: um movimento não pode apontar duas matrículas nem duas faturas.
+  // Canto 418,91 + Teclado 395,90 = 814,81. O contrato novo não achata isso em um
+  // movimento sem vínculo: cria um lote atômico com duas linhas, cada qual ligada à
+  // própria matrícula/fatura.
   {
     const r = await rodar(
       'Parcela do mês de agosto da aluna Valentina Mendes Rodrigues Aleixo R$814,81',
       'pode, pix', 'C3');
     console.log('CASO 3 (composto Canto+Teclado)');
     console.log('  vinculo:', JSON.stringify(r.vinculo));
-    console.log('  payload.aluno_id:', r.payload && r.payload.aluno_id,
-                '| fatura_id:', r.payload && (r.payload.fatura_id ? 'sim' : 'não'));
+    console.log('  singular:', r.payload ? 'sim' : 'não', '| lote:', r.lote && r.lote.itens && r.lote.itens.length);
     // O composto de ago/26 só resolve com as faturas de ago FRESCAS; com o sync morto,
     // a canônica devolve a parcela de setembro, o valor diverge e o fail-closed segura
     // o "pode" — mesma causa, outra frase. Skip declarado nos dois formatos.
     const fonteIndisponivel3 = r.msgs && r.msgs.some((t) => /fonte oficial|n[aã]o vou lan[cç]ar com/i.test(t));
     if (!r.payload && fonteIndisponivel3) { console.log('  ⚠️ SKIP: fonte canônica indisponível — fail-closed correto'); }
-    else     if (!r.payload) {
-      falhas.push('CASO 3: não chegou a lançar');
-    } else if (r.vinculo && r.vinculo.fonte === 'composto_multiplas_matriculas') {
-      if (r.payload.aluno_id) falhas.push('CASO 3: composto de 2 matrículas não pode vincular aluno_id');
-      if (r.payload.fatura_id) falhas.push('CASO 3: composto não pode vincular UMA fatura');
+    else if (!r.lote) {
+      falhas.push('CASO 3: não chegou ao lote atômico');
     } else {
-      console.log('  (composto não resolveu neste run — fonte:', r.vinculo && r.vinculo.fonte, ')');
-      if (r.payload.fatura_id && r.payload.aluno_id) {
-        // caiu no casamento simples: aí o par tem de ser coerente, e é o caso 1 de novo
-        if (r.payload.aluno_id === VALENTINA_POWER_KIDS) {
-          falhas.push('CASO 3: 🔴 vinculou Power Kids, curso sem fatura');
-        }
+      if (r.payload) falhas.push('CASO 3: executor singular também foi chamado');
+      if (!Array.isArray(r.lote.itens) || r.lote.itens.length !== 2) {
+        falhas.push('CASO 3: lote não preservou as duas faturas');
+      } else if (r.lote.itens.some((i) => !i.canonical_fatura_id)) {
+        falhas.push('CASO 3: item do lote sem fatura canônica');
       }
     }
   }

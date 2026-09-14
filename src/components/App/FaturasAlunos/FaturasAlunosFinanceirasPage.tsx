@@ -32,6 +32,7 @@ import { Textarea } from '@/components/ui/textarea';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
+import { EspelhoFinanceiroSaude } from './EspelhoFinanceiroSaude';
 import type { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 import { useUnidades } from '@/hooks/useSupabase';
 import {
@@ -635,6 +636,8 @@ export function FaturasAlunosFinanceirasPage() {
       ) : (
         <>
           <LeituraNotice state={state} />
+
+          <EspelhoFinanceiroSaude />
 
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <MetricCard label="Todas as faturas" count={totaisDaVisao.todas.quantidade} value={totaisDaVisao.todas.valor} baselineCount={visaoRecortada ? state.totals.todas.quantidade : undefined} baselineValue={visaoRecortada ? state.totals.todas.valor : undefined} tone="cyan" active={situacao === 'todas'} onClick={() => selecionarSituacao('todas')} />

@@ -980,7 +980,18 @@ function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competenci
 function montarPreviewMultiAluno({ unidadeNome, valorTotal, forma, categoria, itens }) {
   const lista = Array.isArray(itens) ? itens : [];
   const formaTxt = forma === 'cartao' ? 'cartão' : (forma || '❓ forma não identificada');
-  const linhas = lista.map((item) => `• ${item.aluno_nome} — ${fmtBRL(item.valor)}${item.sem_vinculo_fatura ? ' _(valor declarado — sem vínculo de fatura)_' : ''}`);
+  const nomes = [...new Set(lista.map((i) => String(i.aluno_nome || '').trim()).filter(Boolean))];
+  const mesmoAlunoVariasFaturas = lista.length >= 2 && nomes.length === 1;
+  const categorias = [...new Set(lista.map((i) => String(i.categoria || '').toLowerCase().trim()).filter(Boolean))];
+  const mesmoAlunoCategoriasMistas = mesmoAlunoVariasFaturas && categorias.length >= 2;
+  const linhas = lista.map((item) => {
+    const rotulo = mesmoAlunoVariasFaturas
+      ? (mesmoAlunoCategoriasMistas
+        ? (item.descricao || `${cap(item.categoria || 'Fatura')}${item.competencia ? ' ' + item.competencia : ''}`)
+        : (item.competencia || item.descricao || 'Fatura'))
+      : item.aluno_nome;
+    return `• ${rotulo} — ${fmtBRL(item.valor)}${item.sem_vinculo_fatura ? ' _(valor declarado — sem vínculo de fatura)_' : ''}`;
+  });
   const responsaveis = [...new Set(lista.map((i) => String(i.responsavel_financeiro || '').trim()).filter(Boolean))];
   const linhaResponsavel = responsaveis.length === 1 ? `\n• Resp. financeiro: ${responsaveis[0]}`
     : (responsaveis.length > 1 ? `\n• Resp. financeiros: ${responsaveis.join(' · ')}` : '');
@@ -997,10 +1008,13 @@ function montarPreviewMultiAluno({ unidadeNome, valorTotal, forma, categoria, it
   const linhaStatus = faturasPagas.length === lista.length && dataBR
     ? `• Já pago no Emusys em ${dataBR}${formasPagas.length === 1 ? ` no ${formasPagas[0]}` : ''} — falta lançar no caixa`
     : '• Faturas validadas individualmente no Emusys';
+  const blocoPessoas = mesmoAlunoVariasFaturas
+    ? `*ALUNO*\n\n• ${nomes[0]}${linhaResponsavel}\n\n*${mesmoAlunoCategoriasMistas ? 'ITENS' : 'PARCELAS'}*\n\n${linhas.join('\n')}`
+    : `*ALUNOS*\n\n${linhas.join('\n')}${linhaResponsavel}`;
   return [
     `📄 *Comprovante recebido — ${unidadeNome}*`,
     `*RECEBIMENTO*\n\n*${fmtBRL(valorTotal)}* · ${formaTxt}`,
-    `*ALUNOS*\n\n${linhas.join('\n')}${linhaResponsavel}`,
+    blocoPessoas,
     `*FATURA*\n\n• ${faturaTexto}\n• Valor: ${fmtBRL(valorTotal)} ✅ confere\n${linhaStatus}${lista.some((i) => i.sem_vinculo_fatura) ? '\n• ⚠️ Item(ns) com desconto negociado — lanço sem vínculo de fatura.' : ''}`,
     '👉 *Posso lançar o lote completo no caixa de hoje?* Responde *pode*',
   ].join('\n\n');
@@ -1732,6 +1746,9 @@ function linhasDaFatura(can, valorComprovante) {
   if (vp !== null) {
     L.push(`Valor: ${fmtBRL(vp)}${f.vencida ? ' (até o vencimento)' : ''}${bate === true ? '  ✅ confere' : ''}`);
   }
+  if (f.sem_vinculo_fatura === true) {
+    L.push('Valor declarado no comprovante — sem vínculo de fatura no Emusys');
+  }
   if (f.vencida) {
     let l = `🔴 Atrasada há ${f.dias_atraso} dia(s)`;
     if (vh !== null && vp !== null && Math.abs(vh - vp) >= 0.01) l += ` — hoje com multa/mora: *${fmtBRL(vh)}*`;
@@ -2137,11 +2154,22 @@ function _semAlunoDeclarado(body) {
 }
 
 function _nomeHumanoTardio(body) {
+  const cru = bodyLimpo(body);
+  // "a aluna faz dois cursos" tambem e metafrasa. Ela contem o rotulo
+  // `aluna`, mas o que vem depois e uma propriedade da matricula, nao um nome.
+  if (/\balun[oa]\s+(?:faz|tem|cursa)\s+(?:dois|duas|tr[eê]s|\d+)\s+cursos?\b/i.test(cru)) return null;
   const rotulado = _alunoRotulado(body);
   if (rotulado) return rotulado;
+  // 🔴 LISTA DE PARCELAS NAO E NOME. Caso Isabella/CG 14/09: a Mayra citou o
+  // card e respondeu "sao duas parcelas 08/2026 e 09/2026". O extrator tirou
+  // os meses e o singular "parcela", deixou "sao duas parcelas e" e substituiu
+  // Isabella por essa metafrasa. Duas competencias explicitas pertencem ao
+  // campo FATURA; nunca podem entrar no caminho de correcao de aluno.
+  if (extrairCompetenciasTexto(body).length >= 2
+      || /\b(?:duas|dois|tr[eê]s|quatro|cinco|seis|\d+)\s+parcelas?\b/i.test(bodyLimpo(body))) return null;
   // Quem fala SOBRE o lancamento nao esta dizendo um nome de aluno.
-  if (META_NAO_E_NOME_RE.test(bodyLimpo(body))) return null;
-  let t = bodyLimpo(body)
+  if (META_NAO_E_NOME_RE.test(cru)) return null;
+  let t = cru
     .replace(/^sol\s*[,!?:-]?\s*/i, ' ')
     .replace(/\b(parcela|mensalidade|compet[eê]ncia|pagamento|comprovante|recibo|pix|dinheiro|cart[ãa]o|transfer[êe]ncia|unidade|campo\s+grande|recreio|barra)\b/gi, ' ')
     .replace(/\b\d{1,2}\s*\/\s*\d{4}\b/g, ' ')
@@ -2646,16 +2674,18 @@ function _v4CanarioLigado(chatId) {
   return lista.length > 0 && lista.includes(String(chatId || ''));
 }
 
-function rotearMensagemV4(texto, contexto, { timeout = 30000 } = {}) {
+function rotearMensagemV4(texto, contexto, { timeout = 30000, documento = null } = {}) {
   return new Promise((resolve) => {
     const t = String(texto || '').trim();
     if (t.length < 1 || t.length > 1200) return resolve(null);
     const prompt = 'Voce e a Sol, agente do caixa de uma escola de musica, lendo UMA mensagem do grupo financeiro. '
       + 'Contexto atual (pendencias aguardando conferencia humana, pode ser vazio): '
       + JSON.stringify(contexto).slice(0, 1200)
+      + '. Evidencia estruturada do documento (pode ser vazia): '
+      + JSON.stringify(documento || {}).slice(0, 1600)
       + '. Classifique a INTENCAO da mensagem. Responda SOMENTE JSON valido, sem markdown: '
       + '{"intencao":"aprovar|descartar|corrigir_aluno|corrigir_valor|corrigir_categoria|corrigir_forma|corrigir_competencia|sem_aluno|contestar_fatura|saida_dinheiro|lancamento_por_texto|lancamento_multi_aluno|corrigir_lancamento_gravado|estornar_lancamento|reabrir_caixa|abrir_caixa|fechar_caixa|consulta_caixa|conversa|nada",'
-      + '"aluno_nome":null,"valor":null,"forma":null,"categoria":null,"competencia":null,"entidade":null,'
+      + '"aluno_nome":null,"valor":null,"forma":null,"cartao_modalidade":null,"cartao_parcelas":null,"categoria":null,"competencia":null,"entidade":null,'
       // 🔴 O CONTRATO PLURAL (10/09). O singular nao comportava familia nem
       //    varios meses: um `aluno_nome`, um `valor`, uma `competencia`.
       //    Mesmo invertendo o bridge, esses dois casos ficariam
@@ -2673,6 +2703,8 @@ function rotearMensagemV4(texto, contexto, { timeout = 30000 } = {}) {
       //    modelo uma categoria que o filtro nao sustenta faria a Sol prometer
       //    um recorte que nao existe, e o item viria sem casar com fatura nenhuma.
       + 'TAXA DE MATRICULA e categoria "passaporte" — o sistema trata as duas juntas. '
+      + 'A evidencia do documento serve para valor, forma, modalidade e parcelas. Nome lido no documento e pagador, nunca aluno confirmado. '
+      + 'Se a mensagem humana declarar forma ou valor, ela vence a leitura do documento; conflito humano deve ficar nulo para pedir esclarecimento. '
       + 'Um aluno com dois cursos e UM item; dois irmaos sao DOIS itens. Varios meses do mesmo aluno vao em competencias[]. '
       + 'REGRAS: "conversa" = papo de equipe/elogio/despedida; "nada" = assunto alheio ao caixa. '
       + '"aprovar" quando autorizam lancar o que ja esta num card do contexto — inclusive so com "pode", "pode sim", "ok", "isso", "manda", respondendo a pergunta da Sol. Exige card no contexto: sem card, "pode" sozinho e "conversa". '
@@ -2698,10 +2730,15 @@ function rotearMensagemV4(texto, contexto, { timeout = 30000 } = {}) {
     };
     const normaliza = (o) => {
       if (!o || typeof o !== 'object') return null;
+      // Em mídia, o valor pode existir só no comprovante. A guarda continua
+      // exata, mas passa a aceitar também o trecho de OCR já estruturado; sem
+      // isso o modelo copiava R$ 400 do documento e a própria guarda anulava o
+      // número por ele não aparecer na legenda humana.
+      const textoDocumento = documento ? JSON.stringify(documento) : '';
       const _v  = o.valor != null ? parseBRMoney(String(o.valor)) : null;
       const _vt = o.valor_total != null ? parseBRMoney(String(o.valor_total)) : null;
-      const gv  = _guardar(_v, texto);
-      const gvt = _guardar(_vt, texto);
+      const gv  = _guardar(_v, texto, textoDocumento);
+      const gvt = _guardar(_vt, texto, textoDocumento);
       // itens[]: uma entrada por ALUNO. Listas sempre listas — `null` aqui
       // obrigaria todo consumidor a repetir a mesma checagem.
       const itens = Array.isArray(o.itens) ? o.itens.map((it) => {
@@ -2710,7 +2747,8 @@ function rotearMensagemV4(texto, contexto, { timeout = 30000 } = {}) {
         if (!aluno) return null;
         const lista = (x) => (Array.isArray(x) ? x : (x == null ? [] : [x]))
           .map((y) => String(y || '').trim()).filter(Boolean);
-        const gi = _guardar(it.valor != null ? parseBRMoney(String(it.valor)) : null, texto);
+        const gi = _guardar(it.valor != null ? parseBRMoney(String(it.valor)) : null,
+          texto, textoDocumento);
         return {
           aluno,
           categorias: lista(it.categorias).map((c) => c.toLowerCase()),
@@ -2724,6 +2762,8 @@ function rotearMensagemV4(texto, contexto, { timeout = 30000 } = {}) {
         aluno_nome: (o.aluno_nome && String(o.aluno_nome).trim()) || null,
         valor: gv.valor, valor_recusado: gv.recusado,
         forma: (o.forma && String(o.forma).toLowerCase().trim()) || null,
+        cartao_modalidade: (o.cartao_modalidade && String(o.cartao_modalidade).toLowerCase().trim()) || null,
+        cartao_parcelas: Number(o.cartao_parcelas) || null,
         categoria: (o.categoria && String(o.categoria).toLowerCase().trim()) || null,
         competencia: (o.competencia && String(o.competencia).trim()) || null,
         entidade: (o.entidade && String(o.entidade).trim()) || null,
@@ -2942,6 +2982,21 @@ function extrairCompetenciaTexto(texto) {
   return null;
 }
 
+// Todas as competencias que o HUMANO escreveu, preservando ordem e removendo
+// repeticoes. O extrator singular acima continua sendo o contrato legado; este
+// e o contrato de lote para "08/2026 e 09/2026" do mesmo aluno.
+function extrairCompetenciasTexto(texto) {
+  const t = _normConf(texto);
+  if (!t) return [];
+  const achadas = [];
+  const adicionar = (c) => { if (c && !achadas.includes(c)) achadas.push(c); };
+  for (const m of t.matchAll(/\b(0?[1-9]|1[0-2])\s*[\/.-]\s*(20\d{2}|\d{2})\b/g)) {
+    const ano = Number(m[2].length === 2 ? '20' + m[2] : m[2]);
+    adicionar(_mm(Number(m[1]), ano));
+  }
+  return achadas;
+}
+
 // Correcao de competencia e um comando de CAMPO, nao uma correcao de aluno.
 // Exige linguagem corretiva; uma legenda nova como "PG parcela 09/2026" nao
 // pode sequestrar um card aberto, e "pode" continua sendo o unico gesto de
@@ -3110,7 +3165,7 @@ function categoriaEhSaida(categoria) {
   return ['seguranca', 'despesa', 'retirada', 'troco'].includes(String(categoria || '').toLowerCase());
 }
 
-function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, finalizarPreviewV3Fn = finalizarPreviewV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, resolverEnvelopeFn = resolverEnvelopeCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, log = () => {}, janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
+function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, finalizarPreviewV3Fn = finalizarPreviewV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, resolverEnvelopeFn = resolverEnvelopeCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, log = () => {}, governanceFn = () => Promise.resolve({ ok: false, disabled: true }), janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
   // SOL_CAIXA_V3_LEDGER_FAKE=1 (suite de testes): fiacao V3 ativa, banco intacto.
   // Sem isto, teste que nao mocka os registradores grava preview/approval REAL
   // no ledger de producao — 62% dos previews de 24-31/08 eram artefato de teste.
@@ -3133,6 +3188,34 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   const v3LedgerMode = String(process.env.SOL_CAIXA_V3_LEDGER_MODE || '').toLowerCase();
   const v3LedgerAtivo = ['production', 'prod', 'on', '1'].includes(v3LedgerMode);
   const v3LedgerStrict = process.env.SOL_CAIXA_V3_LEDGER_STRICT === '1';
+  function governance(event, eventType, details) {
+    try { return Promise.resolve(governanceFn(event, eventType, details || {})).catch(() => ({ ok: false })); }
+    catch (_) { return Promise.resolve({ ok: false }); }
+  }
+
+  function readbackMovimento(event, grupo, movimentoId, valor, forma, categoria) {
+    if (!event || !event.caixaGovernancaEpisode || !movimentoId || !grupo) return;
+    Promise.resolve().then(async () => {
+      let resposta;
+      try {
+        resposta = await buscarMovimentosFn({
+          unidade_id: grupo.unidade_id, valor: Number(valor), forma: forma || null,
+          categoria: categoria || null, data_inicio: new Date().toISOString().slice(0, 10),
+          data_fim: new Date().toISOString().slice(0, 10), chat_id: event.chatId,
+          grupo_jid: event.chatId, ator_numero: event.senderPhone || '', ator_papel: 'grupo',
+        });
+      } catch (_) {
+        await governance(event, 'readback_failed', { movement_ref: movimentoId, readback_status: 'query_error', outcome: 'inconclusive' });
+        return;
+      }
+      const itens = resposta && Array.isArray(resposta.items) ? resposta.items : [];
+      const confirmou = itens.some((item) => String(item.movimentacao_id || '') === String(movimentoId));
+      await governance(event, confirmou ? 'readback_confirmed' : 'readback_failed', {
+        movement_ref: movimentoId, readback_status: confirmou ? 'confirmed' : 'movement_not_found',
+        outcome: confirmou ? 'ok' : 'inconclusive',
+      });
+    });
+  }
 
   async function registrarPreviewPublicoV3({ event, grupo, previewId, texto, pendencia, result,
     previewStatus = 'public_preview_sent', previewHashFixo = null,
@@ -3184,6 +3267,10 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     };
     try {
       const registered = await registrarPreviewV3Fn(payload);
+      await governance(event, publicPreviewSent ? 'preview_sent' : 'preview_prepared', {
+        preview_ref: (registered && registered.preview_id) || previewId || previewHash,
+        action: result && result.acao || 'preview', outcome: registered && registered.ok ? 'ok' : 'inconclusive',
+      });
       log({ acao: 'v3_preview_ledger_registrado', chatId: event.chatId,
             ok: !!(registered && registered.ok), preview_ledger_id: registered && registered.preview_id });
       return { ...(registered || {}), preview_hash: previewHash };
@@ -3218,6 +3305,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
 
   async function registrarApprovalPublicoV3({ event, alvo, decision = 'approved' }) {
     if (!v3LedgerAtivo || !alvo || !alvo.v3PreviewId) return null;
+    await governance(event, 'approval_observed', { preview_ref: alvo.v3PreviewId, action: decision, outcome: 'pending' });
     const approvalEventHash = sha256(event.messageId);
     const actorIdHash = sha256(event.senderId || event.senderPhone || '');
     const payload = {
@@ -3236,6 +3324,10 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     };
     try {
       const registered = await registrarApprovalV3Fn(payload);
+      await governance(event, 'approval_observed', {
+        preview_ref: alvo.v3PreviewId, approval_ref: registered && registered.approval_id,
+        action: 'registered', outcome: registered && registered.ok ? 'ok' : 'inconclusive',
+      });
       log({ acao: 'v3_approval_ledger_registrado', chatId: event.chatId,
             ok: !!(registered && registered.ok), approval_id: registered && registered.approval_id });
       return { ...(registered || {}), approval_event_hash: approvalEventHash, actor_id_hash: actorIdHash };
@@ -3300,6 +3392,129 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   // categoria ou vinculo seguro. Tambem e persistido no ledger para sobreviver
   // a restart sem depender da memoria do processo.
   const rascunhosV4 = new Map();
+
+  function identidadeRascunhoV4(event) {
+    const bruto = String((event && (event.senderPhone || event.senderId)) || '')
+      .replace(/@.*/, '').replace(/\D/g, '');
+    return bruto ? sha256(bruto) : null;
+  }
+
+  function referenciasRascunhoV4(draft) {
+    return [draft && draft.origem]
+      .concat((draft && Array.isArray(draft.msgIds)) ? draft.msgIds : [])
+      .filter(Boolean).map(String);
+  }
+
+  function eventoPodeCompletarRascunhoV4(event, draft) {
+    if (!event || !draft) return false;
+    const autor = identidadeRascunhoV4(event);
+    if (autor && draft.autorHash && autor === draft.autorHash) return true;
+    const citado = event.quotedMessageId && String(event.quotedMessageId);
+    return !!(citado && referenciasRascunhoV4(draft).includes(citado));
+  }
+
+  async function coletarEvidenciaMidiaV4(event) {
+    if (!event || !event.hasMedia) return null;
+    if (event.caixaMediaEvidence) return event.caixaMediaEvidence;
+    const media = (event.mediaUrls || [])[0];
+    if (!media) return null;
+
+    let ocrText = '';
+    let ocrMeta = { status: 'nao_executado', duration_ms: 0, file_bytes: null };
+    try {
+      log({ acao: 'ocr_attempt', chatId: event.chatId, trilho: 'agent_first_preflight' });
+      const rawOcr = await ocrFn(media, { detailed: true });
+      const textoPrimario = String((rawOcr && rawOcr.text) || rawOcr || '');
+      if (textoPrimario.trim()) {
+        ocrText = textoPrimario;
+        ocrMeta = rawOcr && typeof rawOcr === 'object'
+          ? { ...ocrMeta, ...rawOcr }
+          : { ...ocrMeta, status: 'ok' };
+      } else {
+        const alt = ocrSegundaChance(media);
+        if (alt && String(alt.text || '').trim()) {
+          ocrText = String(alt.text);
+          ocrMeta = {
+            ...ocrMeta, status: 'ok_segunda_chance',
+            ocr_confidence: alt.ocr_confidence,
+            needs_human_confirmation: alt.needs_human_confirmation,
+            qr: alt.qr || [], pix_payloads: alt.pix_payloads || [],
+          };
+        } else {
+          ocrMeta = rawOcr && typeof rawOcr === 'object'
+            ? { ...ocrMeta, ...rawOcr }
+            : { ...ocrMeta, status: 'texto_vazio' };
+        }
+      }
+    } catch (e) {
+      ocrMeta = { ...ocrMeta, status: 'ocr_exception', error_code: e && e.code || null };
+    }
+
+    let valor = extrairValorOcr(ocrText);
+    let forma = extrairForma(ocrText, null);
+    let cartaoModalidade = null;
+    let cartaoParcelas = null;
+    const cartao = extrairCartao(ocrText);
+    if (cartao) {
+      forma = 'cartao';
+      cartaoModalidade = cartao.modalidade || null;
+      cartaoParcelas = cartao.parcelas || null;
+    }
+
+    let visao = null;
+    if (!valor || !forma || ocrText.trim().length < 20) {
+      try {
+        visao = await visaoFn(media);
+        if (visao) {
+          if (!valor && visao.valor) valor = Number(visao.valor);
+          if (!forma && visao.forma) forma = String(visao.forma).toLowerCase();
+          if (forma === 'cartao') {
+            cartaoModalidade = cartaoModalidade || visao.cartao_modalidade || visao.modalidade || null;
+            cartaoParcelas = cartaoParcelas || Number(visao.cartao_parcelas || visao.parcelas) || null;
+          }
+        }
+      } catch (e) {
+        log({ acao: 'fallback_vision_error', chatId: event.chatId,
+          trilho: 'agent_first_preflight', error_code: e && e.code || null });
+      }
+    }
+
+    const evidence = {
+      ocrText, ocrMeta, visao, valor: Number(valor) || null, forma: forma || null,
+      cartaoModalidade, cartaoParcelas,
+      pagador: (visao && (visao.pagador_nome || visao.aluno)) || extrairPagador(ocrText) || null,
+    };
+    event.caixaMediaEvidence = evidence;
+    log({ acao: 'agent_first_midia_estruturada', chatId: event.chatId,
+      ocr_status: ocrMeta.status, forma: evidence.forma,
+      cartao_modalidade: evidence.cartaoModalidade,
+      cartao_parcelas: evidence.cartaoParcelas, valor: evidence.valor });
+    return evidence;
+  }
+
+  function aplicarEvidenciaMidiaV4(decisao, evidence, textoHumano) {
+    if (!decisao || !evidence) return decisao;
+    const dec = { ...decisao };
+    const humana = extrairFormaHumana(textoHumano);
+    if (humana.ambigua) {
+      dec.forma = null;
+      dec.cartao_modalidade = null;
+      dec.cartao_parcelas = null;
+    } else if (humana.forma) {
+      dec.forma = humana.forma;
+      dec.cartao_modalidade = humana.cartaoModalidade || null;
+      dec.cartao_parcelas = humana.cartaoParcelas || null;
+    } else if (evidence.forma) {
+      dec.forma = evidence.forma;
+      dec.cartao_modalidade = evidence.cartaoModalidade || null;
+      dec.cartao_parcelas = evidence.cartaoParcelas || null;
+    }
+    const valorHumano = extrairValor(textoHumano);
+    const valorSeguro = valorHumano || evidence.valor;
+    if (valorSeguro && !(Number(dec.valor_total) > 0)) dec.valor_total = Number(valorSeguro);
+    if (valorSeguro && !(Number(dec.valor) > 0)) dec.valor = Number(valorSeguro);
+    return dec;
+  }
 
   function limparEnvelopeDaPendencia(chatId, pendencia, motivo) {
     const guardado = envelopesV4.get(chatId);
@@ -3371,6 +3586,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       tipoOperacao: 'agent_first_draft', unidade_id: grupo.unidade_id, nome: grupo.nome,
       valor: envelope.valor_total, forma: envelope.forma || null, categoria: null,
       origem, ts: agora, agentFirstEnvelope: envelope, missingFields: ['forma'],
+      rascunhoAutorHash: identidadeRascunhoV4(event), msgIds: [],
       v3Operacao: 'agent_first_draft',
     };
     let v3 = null;
@@ -3386,10 +3602,37 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     }
     if (!v3 || !v3.ok || !v3.preview_id) return null;
     const draft = { envelope, origem, ts: agora, v3PreviewId: v3.preview_id,
-      v3PreviewHash: previewHash, grupo, event: { ...event, body: '' } };
+      v3PreviewHash: previewHash, autorHash: identidadeRascunhoV4(event), msgIds: [],
+      grupo, event: { ...event, body: '' } };
     rascunhosV4.set(event.chatId, draft);
     log({ acao: 'agent_first_draft_persistido', chatId: event.chatId, preview_ledger_id: v3.preview_id });
     return draft;
+  }
+
+  async function vincularPerguntaRascunhoV4(draft, perguntaId) {
+    if (!draft || !perguntaId) return;
+    draft.msgIds = [...new Set([...(draft.msgIds || []), String(perguntaId)])];
+    try {
+      await registrarPreviewPublicoV3({
+        event: draft.event, grupo: draft.grupo, previewId: perguntaId,
+        texto: 'rascunho agent-first aguardando forma', pendencia: {
+          tipoOperacao: 'agent_first_draft', unidade_id: draft.grupo.unidade_id,
+          nome: draft.grupo.nome, valor: draft.envelope.valor_total,
+          forma: draft.envelope.forma || null, categoria: null,
+          origem: draft.origem, ts: draft.ts, agentFirstEnvelope: draft.envelope,
+          missingFields: ['forma'], rascunhoAutorHash: draft.autorHash,
+          msgIds: draft.msgIds, v3Operacao: 'agent_first_draft',
+        },
+        result: { acao: 'agent_first_draft_pergunta_vinculada', missing_fields: ['forma'] },
+        previewStatus: 'draft_missing_fields', previewHashFixo: draft.v3PreviewHash,
+        publicPreviewSent: false, eventStatus: 'draft_missing_fields', mode: 'v4_agent_first_draft',
+      });
+    } catch (e) {
+      // O rascunho continua seguro pelo autor. Falhar ao persistir a referencia
+      // apenas impede que outro remetente o complete por citacao apos restart.
+      log({ acao: 'agent_first_draft_pergunta_vinculo_erro', chatId: draft.event.chatId,
+        erro: String(e && e.message) });
+    }
   }
 
   async function finalizarRascunhoV4(chatId, status, motivo) {
@@ -3403,7 +3646,9 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
           tipoOperacao: 'agent_first_draft', unidade_id: draft.grupo.unidade_id,
           valor: draft.envelope.valor_total, forma: draft.envelope.forma || null,
           categoria: null, origem: draft.origem, ts: draft.ts,
-          agentFirstEnvelope: draft.envelope, missingFields: [], v3Operacao: 'agent_first_draft',
+          agentFirstEnvelope: draft.envelope, missingFields: [],
+          rascunhoAutorHash: draft.autorHash || null, msgIds: draft.msgIds || [],
+          v3Operacao: 'agent_first_draft',
         },
         result: { acao: 'agent_first_draft_finalizado', motivo },
         previewStatus: status, previewHashFixo: draft.v3PreviewHash,
@@ -3437,6 +3682,17 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       await finalizarRascunhoV4(event.chatId, 'expired', 'janela_runtime_expirou');
       draft = null;
     }
+    if (draft && !eventoPodeCompletarRascunhoV4(event, draft)) {
+      const pareceComplemento = !!formaExplicitaV4(texto, event && event.caixaToolDecision).forma
+        || casarNao(texto) || casarPode(texto, { respondeuPreview: false }).pode;
+      if (pareceComplemento) {
+        log({ acao: 'agent_first_draft_ignorado_outro_remetente', chatId: event.chatId,
+          citado: event.quotedMessageId || null });
+        return { acao: 'agent_first_draft_ignorado_outro_remetente' };
+      }
+      // Para texto alheio, o rascunho simplesmente nao participa da decisao.
+      draft = null;
+    }
     if (draft && casarNao(texto)) {
       await finalizarRascunhoV4(event.chatId, 'rejected', 'descartado_pelo_humano');
       await sendFn(event.chatId, 'Tudo bem — descartei esse rascunho. Nada foi lançado.');
@@ -3456,10 +3712,23 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     // estruturada, o runtime nao chama o classificador interno outra vez: daqui
     // para baixo ficam apenas validacao do envelope, Core, preview e cofre V3.
     // Sem essa propriedade, o canario antigo continua funcionando sem mudanca.
+    const evidenceMedia = event && event.caixaMediaEvidence ? event.caixaMediaEvidence : null;
     let dec = event && event.caixaToolDecision ? event.caixaToolDecision : null;
     if (!dec) {
-      try { dec = await rotearV4Fn(texto, contexto, { timeout: 12000 }); } catch (e) { dec = null; }
+      try {
+        dec = await rotearV4Fn(texto, contexto, {
+          timeout: 12000,
+          documento: evidenceMedia ? {
+            valor: evidenceMedia.valor, forma: evidenceMedia.forma,
+            cartao_modalidade: evidenceMedia.cartaoModalidade,
+            cartao_parcelas: evidenceMedia.cartaoParcelas,
+            pagador: evidenceMedia.pagador,
+            ocr_excerpt: String(evidenceMedia.ocrText || '').slice(0, 900),
+          } : null,
+        });
+      } catch (e) { dec = null; }
     }
+    dec = aplicarEvidenciaMidiaV4(dec, evidenceMedia, texto);
     if (!dec) { log({ acao: 'agent_first_sem_decisao', chatId: event.chatId, ms: Date.now() - t0 }); return null; }
 
     // ── SEGUNDO TURNO: corrige o ENVELOPE guardado, nunca remonta frase ──────
@@ -3525,7 +3794,13 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     // O mesmo envelope de negocio passa a carregar a trilha de evidencias.
     // Nesta fase ela e SHADOW: compara a decisao atual sem trocar valor, forma,
     // aluno, categoria ou competencia que chegam ao Core.
-    const evidenciaTurno = construirEnvelopeEvidenciasV1({ textoHumano: texto, llm: dec });
+    const evidenciaTurno = construirEnvelopeEvidenciasV1({
+      textoHumano: texto,
+      ocrText: evidenceMedia && evidenceMedia.ocrText || '',
+      ocrMeta: evidenceMedia && evidenceMedia.ocrMeta || null,
+      visao: evidenceMedia && evidenceMedia.visao || null,
+      llm: dec,
+    });
     env.envelope.evidencias = mesclarEnvelopesEvidenciasV1(
       env.envelope.evidencias || null,
       evidenciaTurno
@@ -3554,7 +3829,8 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
         log({ acao: 'agent_first_draft_nao_persistido', chatId: event.chatId });
         return { acao: 'agent_first_draft_nao_persistido' };
       }
-      await sendFn(event.chatId, 'Entendi o aluno, o valor e a fatura. Falta só a forma de pagamento: *pix*, *dinheiro*, *cartão*, *cheque* ou *transferência*. Guardei o restante; não precisa repetir.');
+      const perguntaId = await sendFn(event.chatId, 'Entendi o aluno, o valor e a fatura. Falta só a forma de pagamento: *pix*, *dinheiro*, *cartão*, *cheque* ou *transferência*. Guardei o restante; não precisa repetir.');
+      await vincularPerguntaRascunhoV4(salvo, perguntaId);
       return { acao: 'agent_first_aguardando_forma' };
     }
 
@@ -3682,6 +3958,97 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     return saida;
   }
 
+  // Mesmo aluno, varias competencias explicitas. E um LOTE DE FATURAS, nao
+  // correcao de nome e nao "quitacao" generica. O Core oficial decide quais
+  // faturas fecham o total; zero combinacoes termina em conferencia humana e
+  // nunca devolve a frase ao parser singular.
+  async function tratarParcelasCompetenciasExplicitas({ event, grupo, agora, texto,
+    aluno, valor, forma, categoria = 'parcela', origemMessageId = null,
+    supersedePreviewId = null, evidenceEnvelope = null }) {
+    const competencias = extrairCompetenciasTexto(texto);
+    const nome = String(aluno || '').trim();
+    const total = Number(valor);
+    if (competencias.length < 2 || !nome || !(total > 0) || !forma) return null;
+
+    const envelope = {
+      pagador: null,
+      valor_total: total,
+      forma,
+      itens: [{ aluno: nome, categorias: [categoria || 'parcela'], competencias }],
+    };
+    let res = null;
+    try {
+      res = await resolverEnvelopeFn({ unidade_id: grupo.unidade_id, envelope });
+    } catch (e) {
+      log({ acao: 'parcelas_competencias_resolver_erro', chatId: event.chatId,
+        competencias, erro: String(e && e.message) });
+    }
+
+    if (res && res.ok && Array.isArray(res.itens) && res.itens.length >= 2) {
+      const cat = categoriaDosItensV4(res.itens);
+      if (!cat.ok) return null;
+      log({ acao: 'parcelas_competencias_resolvidas', chatId: event.chatId,
+        competencias, linhas: res.itens.length, aluno: nome });
+      return abrirFluxoMultiAluno({
+        event, grupo, textoFonte: texto, textoHumano: texto, agora,
+        origemMessageId: origemMessageId || event.messageId,
+        resolvidoPronto: res, agentFirstEnvelope: envelope,
+        supersedePreviewId, evidenceEnvelope,
+        intent: {
+          ok: true, valor_total: Number(res.valor_total), forma,
+          categoria: cat.categoria,
+          itens: res.itens.map((i) => ({
+            aluno_nome: i.aluno_nome, valor: Number(i.valor), categoria: i.categoria,
+          })),
+        },
+      });
+    }
+
+    // O card singular anterior nao pode continuar aprovavel depois que o
+    // humano declarou duas competencias. Se o ledger remoto nao fechar, a
+    // barreira local `bloqueiaLancamento` ainda impede o "pode".
+    if (supersedePreviewId) {
+      const arr = limparVelhos(event.chatId, agora);
+      const alvo = arr.find((p) => p.previewId === supersedePreviewId
+        || (Array.isArray(p.msgIds) && p.msgIds.includes(supersedePreviewId))) || null;
+      if (alvo) {
+        alvo.bloqueiaLancamento = true;
+        alvo.multiplas = true;
+        alvo.competencias = competencias;
+        const fim = await finalizarPreviewSeguroV3({
+          alvo, status: 'rejected', motivo: 'multiplas_competencias_sem_fechamento_exato',
+        });
+        if (fim && fim.ok) {
+          pendentes.set(event.chatId, arr.filter((p) => p !== alvo));
+          limparEnvelopeDaPendencia(event.chatId, alvo, 'multiplas_competencias_sem_fechamento_exato');
+        }
+      }
+    }
+
+    const candidatas = Array.isArray(res && res.faturas) ? res.faturas.filter((f) =>
+      competencias.includes(String(f && f.competencia || ''))) : [];
+    const linhas = candidatas.map((f) => `• ${f.competencia} — ${fmtBRL(Number(f.valor))}`);
+    const soma = candidatas.reduce((s, f) => s + Number(f && f.valor || 0), 0);
+    const cobreTodas = competencias.every((c) => candidatas.some((f) => String(f.competencia) === c));
+    const diferenca = cobreTodas ? total - soma : null;
+    const detalhe = cobreTodas
+      ? (`\n\nNo Emusys encontrei:\n${linhas.join('\n')}\n• Total oficial: *${fmtBRL(soma)}*`
+        + (Math.abs(diferenca) >= 0.005 ? `\n• Diferença para o comprovante: *${fmtBRL(Math.abs(diferenca))}*` : ''))
+      : '\n\nNão consegui confirmar as duas faturas na fonte oficial agora.';
+    const fechoSeguro = supersedePreviewId
+      ? '⚠️ Invalidei o card anterior. Não vou lançar enquanto essa divergência não for conferida.'
+      : '⚠️ Não criei um card aprovável. Não vou lançar enquanto essa divergência não for conferida.';
+    await sendFn(event.chatId,
+      `Entendi a correção: *${nome}*, parcelas *${competencias.join(' e ')}*, `
+      + `comprovante de *${fmtBRL(total)}* via ${forma}.${detalhe}\n\n`
+      + fechoSeguro);
+    log({ acao: 'parcelas_competencias_divergentes', chatId: event.chatId,
+      aluno: nome, competencias, valor: total, soma_oficial: cobreTodas ? soma : null,
+      diferenca: diferenca == null ? null : diferenca, motivo: res && res.motivo || 'fonte_indisponivel' });
+    return { acao: 'parcelas_competencias_divergentes', competencias,
+      motivo: res && res.motivo || 'fonte_indisponivel' };
+  }
+
   async function prepararEPublicarPreviewV4({ event, grupo, texto, pendencia, result, previewStatus }) {
     if (!v3LedgerAtivo) return { ok: false, motivo: 'v3_indisponivel' };
     const origem = pendencia.origem || event.messageId;
@@ -3764,6 +4131,9 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       await limparEstadoDaOrigemV4(event.chatId, origemMessageId || event.messageId, 'singular_incompleto');
       return { acao: 'agent_first_singular_incompleto' };
     }
+    const semVinculoFatura = item.sem_vinculo_fatura === true
+      && !item.canonical_fatura_id
+      && !(item.fatura && item.fatura.canonical_fatura_id);
     const fatura = item.fatura ? {
       ...item.fatura,
       canonical_fatura_id: item.canonical_fatura_id || item.fatura.canonical_fatura_id || null,
@@ -3771,8 +4141,13 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       competencia: item.fatura.competencia || (item.competencia ? String(item.competencia).split('/').reverse().join('-') + '-01' : null),
       valor_da_parcela: item.fatura.valor_da_parcela || item.fatura.valor_pago || item.fatura.valor_hoje || Number(item.valor),
     } : {
-      canonical_fatura_id: item.canonical_fatura_id || null, descricao: item.descricao || null,
-      competencia: item.competencia || null, valor_da_parcela: Number(item.valor), status: 'paga',
+      canonical_fatura_id: item.canonical_fatura_id || null,
+      tipo_fatura: semVinculoFatura ? 'passaporte_taxa_matricula' : null,
+      descricao: item.descricao || (semVinculoFatura ? 'Passaporte promocional' : null),
+      competencia: item.competencia || null,
+      valor_da_parcela: Number(item.valor),
+      status: semVinculoFatura ? 'declarada_sem_fatura' : null,
+      sem_vinculo_fatura: semVinculoFatura,
     };
     const canonica = { ok: true, fatura };
     const texto = montarPreview({
@@ -4203,12 +4578,27 @@ _Não lanço nada pela metade._`);
     fotografarContextoV4(event, chatId, agora);
     const senderNum = String(event.senderPhone || event.senderId || '').replace(/@.*/, '').replace(/\D/g, '');
 
+    // Nova mídia é um novo caso financeiro. Ela nunca pode completar um
+    // rascunho anterior por proximidade temporal; só uma resposta textual do
+    // mesmo remetente ou uma citação explícita pode fazê-lo. Foi assim que o
+    // comprovante da Vitória herdou o rascunho da Daiana no mesmo grupo.
+    const draftNaEntrada = rascunhosV4.get(chatId) || null;
+    if (event.hasMedia && draftNaEntrada && event.messageId !== draftNaEntrada.origem) {
+      await finalizarRascunhoV4(chatId, 'rejected', 'nova_midia_invalida_rascunho_anterior');
+      log({ acao: 'agent_first_draft_invalidado_nova_midia', chatId,
+        origem_hash: sha256(draftNaEntrada.origem || ''), nova_origem_hash: sha256(event.messageId || '') });
+    }
+
+    // O agent-first recebe a mesma evidência estruturada que o trilho
+    // determinístico: OCR/visão, modalidade e parcelas. O documento é lido
+    // uma vez e fica cacheado no evento para o fallback não repetir OCR.
+    if (event.hasMedia && !event._sintetico && _v4CanarioLigado(chatId)) {
+      await coletarEvidenciaMidiaV4(event);
+    }
+
     // CANARIO AGENT-FIRST — DESLIGADO por padrao, por LISTA de grupo.
     // ⚠️ Antes de tudo, de proposito: se o legado responder primeiro, o
     //    canario nao mede nada (foi o diagnostico do caso Lis/Mayra).
-    // ⚠️ Nao vale para midia nesta rodada: o caminho de comprovante tem OCR e
-    //    visao, e misturar as duas inversoes no mesmo canario impede saber qual
-    //    delas moveu o numero.
     // 🔴 LEGENDA DE MIDIA TAMBEM PASSA AQUI — foi o buraco do gate anterior. O
     //    comprovante da Lis chegou como MIDIA COM LEGENDA, e eu tinha gatado em
     //    `!event.hasMedia`: o caso que originou a frente ficava justamente fora
@@ -4599,10 +4989,19 @@ _Não lanço nada pela metade._`);
       let forma = extrairForma(event.body, null);
       let cartaoModalidade = null, cartaoParcelas = null;
       const media = (event.mediaUrls || [])[0];
+      const midiaPreprocessada = event.caixaMediaEvidence || null;
       // Camada 1: OCR LOCAL (igual Maria) -- roda sempre que ha midia (texto p/ valor E interpretacao)
-      let ocrText = '';
-      let ocrMeta = { status: 'nao_executado', duration_ms: 0, file_bytes: null };
-      if (media) {
+      let ocrText = midiaPreprocessada ? String(midiaPreprocessada.ocrText || '') : '';
+      let ocrMeta = midiaPreprocessada
+        ? { ...(midiaPreprocessada.ocrMeta || {}) }
+        : { status: 'nao_executado', duration_ms: 0, file_bytes: null };
+      if (midiaPreprocessada) {
+        if (!valor && midiaPreprocessada.valor) valor = Number(midiaPreprocessada.valor);
+        if (!forma && midiaPreprocessada.forma) forma = midiaPreprocessada.forma;
+        cartaoModalidade = midiaPreprocessada.cartaoModalidade || null;
+        cartaoParcelas = midiaPreprocessada.cartaoParcelas || null;
+      }
+      if (media && !midiaPreprocessada) {
         try {
           log({ acao: 'ocr_attempt', chatId });
           const rawOcr = await ocrFn(media, { detailed: true });
@@ -4652,9 +5051,9 @@ _Não lanço nada pela metade._`);
       // Camada 2: visao OAuth e' fallback do OCR — inclusive quando ele falha.
       // O fluxo antigo recusava a midia antes de chegar aqui justamente no caso
       // de texto vazio/timeout, que e' quando a visao e' mais necessaria.
-      let alunoVis = null;
-      let pagadorVis = null;
-      let visao = null;
+      let alunoVis = midiaPreprocessada && midiaPreprocessada.visao && midiaPreprocessada.visao.aluno || null;
+      let pagadorVis = midiaPreprocessada && midiaPreprocessada.pagador || null;
+      let visao = midiaPreprocessada && midiaPreprocessada.visao || null;
       // ⚠️ Tambem por FORMA ausente. A forma e' tao essencial quanto o valor: sem
       // ela o card trava e pede "pode, pix / pode, dinheiro / pode, cartao" — e
       // convidar a equipe a escolher a forma de cabeca num cupom de CARTAO e' como
@@ -4664,7 +5063,7 @@ _Não lanço nada pela metade._`);
       // e a legenda trazia o valor — entao nada disparava a visao. As 11:27 a MESMA
       // foto, com legenda SEM valor, saiu "cartao credito" certinho: dar mais
       // informacao fazia a Sol saber menos.
-      if (media && (!valor || !forma || ocrText.trim().length < 20)) {
+      if (media && !midiaPreprocessada && (!valor || !forma || ocrText.trim().length < 20)) {
         try {
           log({ acao: 'fallback_vision_attempt', chatId,
                 motivo: ocrText.trim().length < 20 ? (ocrMeta.status || 'ocr_curto')
@@ -4844,6 +5243,20 @@ _Não lanço nada pela metade._`);
         visao,
         llm: interpretacaoLLM,
       });
+      // Isabella/CG 14/09: "parcelas 08/2026 e 09/2026" e um contrato
+      // deterministico completo. Roteia antes do singular e antes do detector
+      // de multi-ALUNO: um aluno com duas faturas continua sendo um lote.
+      const _competenciasDaLegenda = extrairCompetenciasTexto(legendaEfetiva);
+      const _alunoDaLegenda = _alunoRotulado(legendaEfetiva);
+      if (_competenciasDaLegenda.length >= 2 && _alunoDaLegenda
+          && Number(valor) > 0 && forma && !categoriaEhSaida(categoria)) {
+        const _parcelas = await tratarParcelasCompetenciasExplicitas({
+          event, grupo: grp, agora, texto: legendaEfetiva,
+          aluno: _alunoDaLegenda, valor, forma, categoria: categoria || 'parcela',
+          origemMessageId: event.messageId, evidenceEnvelope,
+        });
+        if (_parcelas) return _parcelas;
+      }
       // Antes de qualquer casador singular: pluralidade contextual abre um
       // contrato próprio. Regex só roteia; LLM extrai; banco confirma itens.
       // ⚠️ Multi-aluno e' decisao de QUEM ESCREVEU, nunca do OCR: todo comprovante
@@ -5086,21 +5499,82 @@ _Não lanço nada pela metade._`);
       let composto = null;
       const competenciaComposto = competenciaHumana || competencia;
       if (aluno && valor && competenciaComposto && querParcela && !multiplas) {
+        let compMes = null;
         try {
-          const compMes = await faturasMesFn(grp.unidade_id, aluno, competenciaComposto, valor);
-          if (compMes && compMes.ok && Array.isArray(compMes.partes) && compMes.partes.length >= 2
-              && !(_alunoVeioDoRotulo && compMes.aluno_nome && !_mesmaPessoa(compMes.aluno_nome, aluno))) {
+          compMes = await faturasMesFn(grp.unidade_id, aluno, competenciaComposto, valor);
+        } catch (e) {
+          log({ acao: 'composto_mes_resolver_erro', chatId, erro: String(e && e.message) });
+        }
+        if (compMes && compMes.ok && Array.isArray(compMes.partes) && compMes.partes.length >= 2
+            && !(_alunoVeioDoRotulo && compMes.aluno_nome && !_mesmaPessoa(compMes.aluno_nome, aluno))) {
             composto = compMes;
             if (compMes.aluno_nome) aluno = compMes.aluno_nome;
             if (compMes.competencia) competencia = compMes.competencia;
-            categoria = 'parcela';
+            const itensComposto = (Array.isArray(compMes.itens) ? compMes.itens : []).map((item) => ({
+              ...item,
+              aluno_nome: item.aluno_nome || aluno,
+              responsavel_financeiro: item.responsavel_financeiro || compMes.responsavel_financeiro || null,
+              valor: Number(item.valor),
+              categoria: item.categoria || categoriaDaFatura({ fatura: item.fatura }) || null,
+              competencia: item.competencia || competencia || null,
+              canonical_fatura_id: item.canonical_fatura_id
+                || (item.fatura && item.fatura.canonical_fatura_id) || null,
+            }));
+            const categoriasComposto = categoriaDosItensV4(itensComposto);
+            const somaComposto = itensComposto.reduce((s, item) => s + Number(item.valor || 0), 0);
+            const mesmoAluno = itensComposto.length >= 2 && itensComposto.every((item) =>
+              nomePlausivel(item.aluno_nome) && _mesmaPessoa(item.aluno_nome, aluno));
+            const snapshotCompleto = itensComposto.every((item) =>
+              Number(item.valor) > 0 && item.categoria && item.canonical_fatura_id);
+
+            // O resolver ja encontrou duas cobrancas oficiais. A partir daqui
+            // NAO existe fallback singular: um movimento unico perderia a
+            // categoria e o vinculo de uma das faturas. Ou o snapshot inteiro
+            // fecha, ou o episodio falha fechado sem card aprovavel.
+            if (!categoriasComposto.ok || !mesmoAluno || !snapshotCompleto
+                || Math.abs(somaComposto - Number(valor)) > 0.01) {
+              await sendFn(chatId,
+                '⚠️ Encontrei mais de uma cobrança para este aluno, mas não consegui montar '
+                + 'o vínculo completo de todas elas. Não criei card aprovável e não vou lançar tudo em uma categoria só.');
+              log({ acao: 'composto_mes_snapshot_invalido', chatId,
+                partes: itensComposto.length, soma: somaComposto, valor: Number(valor),
+                categorias_ok: categoriasComposto.ok, mesmo_aluno: mesmoAluno,
+                snapshot_completo: snapshotCompleto });
+              return { acao: 'composto_mes_snapshot_invalido' };
+            }
+
+            categoria = categoriasComposto.categoria;
             parcela = null;
             canonica = null;
             confiancaBaixa = false;
             bloqueiaFonteIndisponivel = false;
-            log({ acao: 'composto_mes_result', ok: true, partes: compMes.partes.length, competencia: compMes.competencia });
-          }
-        } catch (e) { /* best-effort */ }
+            log({ acao: 'composto_mes_result', ok: true, partes: itensComposto.length,
+              competencia: compMes.competencia, categorias: itensComposto.map((i) => i.categoria) });
+
+            const envelopeComposto = {
+              pagador: pagadorNome || null,
+              valor_total: Number(valor),
+              forma,
+              itens: [{
+                aluno,
+                categorias: [...new Set(itensComposto.map((i) => i.categoria))],
+                competencias: [...new Set(itensComposto.map((i) => i.competencia).filter(Boolean))],
+              }],
+            };
+            return abrirFluxoMultiAluno({
+              event, grupo: grp, textoFonte: textoClassificacao,
+              textoHumano: legendaEfetiva, agora, origemMessageId: event.messageId,
+              resolvidoPronto: { ...compMes, valor_total: Number(valor), itens: itensComposto },
+              agentFirstEnvelope: envelopeComposto, evidenceEnvelope,
+              intent: {
+                ok: true, valor_total: Number(valor), forma,
+                categoria: categoriasComposto.categoria,
+                itens: itensComposto.map((i) => ({
+                  aluno_nome: i.aluno_nome, valor: Number(i.valor), categoria: i.categoria,
+                })),
+              },
+            });
+        }
       }
 
       // Responsável financeiro do aluno (quem paga) — pedido do Alf/Fernanda.
@@ -5825,6 +6299,36 @@ _Não lanço nada pela metade._`);
           }
         }
 
+        // ── correcao para VARIAS COMPETENCIAS do mesmo aluno. Precisa vir
+        // antes da correcao singular e, sobretudo, antes de _nomeHumanoTardio:
+        // "sao duas parcelas ..." descreve faturas, nunca uma pessoa.
+        const _competenciasCorrigidas = (!event.hasMedia && !casarPode(txt).pode)
+          ? extrairCompetenciasTexto(txt) : [];
+        if (_competenciasCorrigidas.length >= 2
+            && (event.quotedMessageId || (arrP.length === 1 && /\b(?:s[aã]o|cobre|cobrem|corresponde|correspondem)\b[\s\S]{0,40}\bparcelas?\b/i.test(txt)))) {
+          const _citaLista = (x, id) => x.previewId === id || x.origem === id
+            || (Array.isArray(x.msgIds) && x.msgIds.includes(id));
+          const elegiveisLista = arrP.filter((x) => !categoriaEhSaida(x.categoria)
+            && x.tipoOperacao !== 'manual_review_multi_student'
+            && x.tipoOperacao !== 'lancar_recebimento_lote');
+          let alvoLista = null;
+          if (event.quotedMessageId) alvoLista = elegiveisLista.find((x) => _citaLista(x, event.quotedMessageId)) || null;
+          if (!alvoLista && !event.quotedMessageId && elegiveisLista.length === 1) alvoLista = elegiveisLista[0];
+          if (!alvoLista) {
+            await sendFn(chatId, 'Entendi os dois meses, mas não achei um único card ativo para corrigir. Reenvia o comprovante com o nome do aluno.');
+            return { acao: 'parcelas_competencias_sem_alvo' };
+          }
+          const rLista = await tratarParcelasCompetenciasExplicitas({
+            event, grupo: grp, agora, texto: txt,
+            aluno: alvoLista.aluno, valor: alvoLista.valor, forma: alvoLista.forma,
+            categoria: alvoLista.categoria || 'parcela',
+            origemMessageId: alvoLista.origem,
+            supersedePreviewId: alvoLista.previewId,
+            evidenceEnvelope: alvoLista.evidenceEnvelope || null,
+          });
+          if (rLista) return rLista;
+        }
+
         // ── correcao de COMPETENCIA: operacao propria, sem fingir que o aluno
         // mudou. Resolve novamente a fatura pelo mesmo aluno/valor e pela
         // competencia declarada; os demais campos da pendencia sobrevivem.
@@ -5986,6 +6490,41 @@ _Não lanço nada pela metade._`);
         // levou "Nao entendi essa" porque o card ja tinha um aluno (errado).
         const _cita = (x, id) => x.previewId === id || x.origem === id || (Array.isArray(x.msgIds) && x.msgIds.includes(id));
         const _rotuloNaCorrecao = _alunoRotulado(txt);
+
+        // Um lote e um snapshot imutavel. Se a pessoa avisa que FALTA outro
+        // aluno/valor, alterar um item localmente transformaria o mesmo `pode`
+        // em autorizacao para fatos diferentes. Invalida o lote inteiro e pede
+        // a composicao completa; o comprovante nunca continua aprovavel pela
+        // metade depois de uma correcao explicita.
+        const _correcaoAdicionaItem = /\b(?:falta|faltou|inclui|incluir|inclua|adiciona|adicionar|soma|mais)\b/i.test(txt)
+          && !!_rotuloNaCorrecao && Number(extrairValor(txt)) > 0;
+        if (_correcaoAdicionaItem) {
+          let loteAlvo = null;
+          if (event.quotedMessageId) loteAlvo = arrP.find((x) =>
+            x.tipoOperacao === 'lancar_recebimento_lote' && _cita(x, event.quotedMessageId)) || null;
+          if (!loteAlvo) {
+            const lotesAbertos = arrP.filter((x) => x.tipoOperacao === 'lancar_recebimento_lote');
+            if (lotesAbertos.length === 1 && arrP.length === 1) loteAlvo = lotesAbertos[0];
+          }
+          if (loteAlvo) {
+            loteAlvo.bloqueiaLancamento = true;
+            const fim = await finalizarPreviewSeguroV3({
+              alvo: loteAlvo, status: 'rejected',
+              motivo: 'lote_incompleto_informado_pelo_humano',
+            });
+            if (fim && fim.ok) {
+              pendentes.set(chatId, arrP.filter((p) => p !== loteAlvo));
+              limparEnvelopeDaPendencia(chatId, loteAlvo, 'lote_incompleto_informado_pelo_humano');
+            }
+            await sendFn(chatId,
+              `⚠️ Invalidei o lote anterior porque você informou outro item: ${_rotuloNaCorrecao} — ${fmtBRL(extrairValor(txt))}. `
+              + 'Me reenvia a descrição completa com todos os alunos/cobranças e o total. O card anterior não pode mais ser lançado.');
+            log({ acao: 'lote_invalidado_por_item_faltante', chatId,
+              finalizado: !!(fim && fim.ok), aluno: _rotuloNaCorrecao,
+              valor_item: Number(extrairValor(txt)) });
+            return { acao: 'lote_invalidado_por_item_faltante', finalizado: !!(fim && fim.ok) };
+          }
+        }
         const semAluno = arrP.filter((x) => !categoriaEhSaida(x.categoria)
           // Pendencia MULTI tem .itens, nao "um aluno": comentario humano ("ai
           // Jhon ta certo esse", 01/09 18:31) virou nome e mutilou o card do lote.
@@ -6582,7 +7121,11 @@ _Não lanço nada pela metade._`);
           pendentes.set(chatId, arr.filter((p) => p !== alvo));
           limparEnvelopeDaPendencia(chatId, alvo, 'estornado');
           if (rOp && rOp.ok) {
-            await sendFn(chatId, `Estornei no caixa: ${fmtBRL(rOp.valor || alvo.valor)}. Não apaguei o original; criei o movimento inverso auditado.`);
+            const receipt = await sendFn(chatId, `Estornei no caixa: ${fmtBRL(rOp.valor || alvo.valor)}. Não apaguei o original; criei o movimento inverso auditado.`);
+            await governance(event, 'write_applied', { action: 'estorno', movement_ref: rOp.movimentacao_estorno_id || alvo.movimentacao_id, approval_ref: v3Approval && v3Approval.approval_id, outcome: 'ok' });
+            await governance(event, 'approval_consumed', { approval_ref: v3Approval && v3Approval.approval_id, movement_ref: rOp.movimentacao_estorno_id || alvo.movimentacao_id, outcome: 'ok' });
+            await governance(event, 'receipt_sent', { receipt_ref: receipt, movement_ref: rOp.movimentacao_estorno_id || alvo.movimentacao_id, action: 'estorno', outcome: 'ok' });
+            readbackMovimento(event, grupos[chatId], rOp.movimentacao_estorno_id || alvo.movimentacao_id, rOp.valor || alvo.valor, alvo.forma, alvo.categoria);
             log({ acao: 'movimento_estornado', movimentacao_id: alvo.movimentacao_id, estorno_id: rOp.movimentacao_estorno_id });
             return { acao: 'movimento_estornado', movimentacao_id: alvo.movimentacao_id, movimentacao_estorno_id: rOp.movimentacao_estorno_id };
           }
@@ -6595,7 +7138,11 @@ _Não lanço nada pela metade._`);
         limparEnvelopeDaPendencia(chatId, alvo, 'movimento_corrigido');
         if (rOp && rOp.ok) {
           const depois = rOp.depois || {};
-          await sendFn(chatId, `Corrigi no caixa: ${fmtBRL(depois.valor || alvo.valor)} · ${depois.categoria || alvo.categoria || 'lançamento'} · ${depois.forma_pagamento || alvo.forma || ''}.`);
+          const receipt = await sendFn(chatId, `Corrigi no caixa: ${fmtBRL(depois.valor || alvo.valor)} · ${depois.categoria || alvo.categoria || 'lançamento'} · ${depois.forma_pagamento || alvo.forma || ''}.`);
+          await governance(event, 'write_applied', { action: 'correcao', movement_ref: alvo.movimentacao_id, approval_ref: v3Approval && v3Approval.approval_id, outcome: 'ok' });
+          await governance(event, 'approval_consumed', { approval_ref: v3Approval && v3Approval.approval_id, movement_ref: alvo.movimentacao_id, outcome: 'ok' });
+          await governance(event, 'receipt_sent', { receipt_ref: receipt, movement_ref: alvo.movimentacao_id, action: 'correcao', outcome: 'ok' });
+          readbackMovimento(event, grupos[chatId], alvo.movimentacao_id, depois.valor || alvo.valor, depois.forma_pagamento || alvo.forma, depois.categoria || alvo.categoria);
           log({ acao: 'movimento_corrigido', movimentacao_id: alvo.movimentacao_id });
           return { acao: 'movimento_corrigido', movimentacao_id: alvo.movimentacao_id };
         }
@@ -6603,6 +7150,11 @@ _Não lanço nada pela metade._`);
         return { acao: 'movimento_correcao_recusada', motivo: rOp && rOp.motivo };
       }
       if (alvo.tipoOperacao === 'lancar_recebimento_lote') {
+        if (alvo.bloqueiaLancamento) {
+          await sendFn(chatId, '⚠️ Não lancei: esse lote foi invalidado por uma correção. Reenvia a composição completa para gerar um preview novo.');
+          log({ acao: 'lote_bloqueado_por_correcao', chatId });
+          return { acao: 'lote_bloqueado_por_correcao' };
+        }
         if (!v3LedgerAtivo || !alvo.v3PreviewId || !alvo.v3PreviewHash || !Array.isArray(alvo.itens) || alvo.itens.length < 2) {
           await sendFn(chatId, '⚠️ Não lancei: esse lote não tem o vínculo seguro completo. Reenvia o comprovante para gerar um preview novo.');
           log({ acao: 'lote_multi_bloqueado_sem_v3', chatId });
@@ -6642,12 +7194,31 @@ _Não lanço nada pela metade._`);
         if (lote && lote.ok) {
           const movsLote = lote.movimentacoes || [];
           if (movsLote.length !== alvo.itens.length) {
-            await sendFn(chatId, `🚨 ATENÇÃO: o banco confirmou ${movsLote.length} de ${alvo.itens.length} itens do lote. NÃO confia neste lançamento — confere o caixa antes de fechar e chama o suporte.`);
+            const reciboIncompleto = await sendFn(chatId, `🚨 ATENÇÃO: o banco confirmou ${movsLote.length} de ${alvo.itens.length} itens do lote. NÃO confia neste lançamento — confere o caixa antes de fechar e chama o suporte.`);
+            await governance(event, 'write_refused', { action: 'lote_incompleto', movement_ref: lote.lote_id, reason_code: 'item_count_mismatch', outcome: 'error' });
+            await governance(event, 'receipt_sent', { receipt_ref: reciboIncompleto, movement_ref: lote.lote_id, action: 'critical_warning', outcome: 'ok' });
             log({ acao: 'lote_multi_incompleto', chatId, lote_id: lote.lote_id, esperados: alvo.itens.length, gravados: movsLote.length });
             return { acao: 'lote_multi_incompleto', lote_id: lote.lote_id };
           }
-          const linhas = movsLote.map((m) => `• ${m.aluno_nome}: ${fmtBRL(m.valor)}`).join('\n');
-          await sendFn(chatId, `✅ Lancei o lote no caixa da ${alvo.nome}: ${fmtBRL(alvo.valor)} (${alvo.forma}).\n${linhas}\n_Operação única e auditada; nenhum item foi lançado parcialmente._`);
+          const nomesLote = [...new Set(alvo.itens.map((i) => String(i.aluno_nome || '').trim()).filter(Boolean))];
+          const mesmoAlunoVariasFaturas = alvo.itens.length >= 2 && nomesLote.length === 1;
+          const linhas = movsLote.map((m, idx) => {
+            const item = alvo.itens[idx] || {};
+            const rotulo = mesmoAlunoVariasFaturas
+              ? (item.descricao || `${cap(item.categoria || 'Fatura')}${item.competencia ? ' ' + item.competencia : ''}`)
+              : (m.aluno_nome || item.aluno_nome || 'Item');
+            return `• ${rotulo}: ${fmtBRL(m.valor)}`;
+          }).join('\n');
+          const reciboLote = await sendFn(chatId, `✅ Lancei o lote no caixa da ${alvo.nome}: ${fmtBRL(alvo.valor)} (${alvo.forma}).\n${linhas}\n_Operação única e auditada; nenhum item foi lançado parcialmente._`);
+          await governance(event, 'write_applied', { action: 'lote_lancado', movement_ref: lote.lote_id, approval_ref: approval.approval_id, preview_ref: alvo.v3PreviewId, outcome: 'ok' });
+          await governance(event, 'approval_consumed', { approval_ref: approval.approval_id, movement_ref: lote.lote_id, outcome: 'ok' });
+          await governance(event, 'receipt_sent', { receipt_ref: reciboLote, movement_ref: lote.lote_id, preview_ref: alvo.v3PreviewId, outcome: 'ok' });
+          for (let idx = 0; idx < movsLote.length; idx += 1) {
+            const mov = movsLote[idx];
+            const item = alvo.itens[idx] || {};
+            readbackMovimento(event, grupos[chatId], mov.movimentacao_id, mov.valor,
+              alvo.forma, item.categoria || alvo.categoria);
+          }
           log({ acao: 'lote_multi_lancado', chatId, lote_id: lote.lote_id, itens: alvo.itens.length });
           return { acao: 'lote_multi_lancado', lote_id: lote.lote_id };
         }
@@ -6657,6 +7228,7 @@ _Não lanço nada pela metade._`);
           return { acao: 'lote_multi_recusado', motivo: lote.motivo };
         }
         const motivoLote = lote && lote.motivo;
+        await governance(event, 'write_refused', { action: 'lote_lancamento', reason_code: motivoLote || 'unknown', outcome: 'refused' });
         const motivoHumano = {
           snapshot_fatura_nao_encontrada: 'a fatura canônica do preview não está disponível na fonte oficial',
           snapshot_status_fatura_mudou: 'o status de uma fatura mudou desde o preview',
@@ -6796,8 +7368,20 @@ _Não lanço nada pela metade._`);
       // remove a pendência alvo
       pendentes.set(chatId, arr.filter((p) => p !== alvo));
       limparEnvelopeDaPendencia(chatId, alvo, 'aprovado');
-      if (r && r.ok && r.ja_lancado) { await sendFn(chatId, 'Esse comprovante já tinha sido lançado ✅.'); return { acao: 'ja_lancado' }; }
+      if (r && r.ok && r.ja_lancado) {
+        const reciboDuplicado = await sendFn(chatId, 'Esse comprovante já tinha sido lançado ✅.');
+        await governance(event, 'write_refused', { action: 'duplicate', outcome: 'duplicate', movement_ref: r.movimentacao_id });
+        await governance(event, 'receipt_sent', { action: 'duplicate_notice', receipt_ref: reciboDuplicado, movement_ref: r.movimentacao_id, outcome: 'ok' });
+        return { acao: 'ja_lancado' };
+      }
       if (r && r.ok) {
+        await governance(event, 'write_applied', {
+          action: ehSaida ? 'saida_lancada' : 'lancado', movement_ref: r.movimentacao_id,
+          approval_ref: v3Approval && v3Approval.approval_id, preview_ref: alvo.v3PreviewId, outcome: 'ok',
+        });
+        await governance(event, 'approval_consumed', {
+          approval_ref: v3Approval && v3Approval.approval_id, movement_ref: r.movimentacao_id, outcome: 'ok',
+        });
         const quem = (alvo.enviadoPor && alvo.enviadoPor !== autorizadoPor)
           ? `${autorizadoPor} autorizou · ${alvo.enviadoPor} enviou`
           : `${autorizadoPor} autorizou`;
@@ -6808,6 +7392,10 @@ _Não lanço nada pela metade._`);
         const _de = alvo.aluno ? ` · ${alvo.aluno}`
           : (alvo.descricao ? ` · ${alvo.descricao}` : '');
         const confirmMessageId = await sendFn(chatId, `✅ ${verbo} no caixa da ${alvo.nome}: ${cap(payload.categoria)} — ${fmtBRL(r.valor)} (${r.forma})${_de}.\n_${quem} · registrei isso no responsável do lançamento._`);
+        await governance(event, 'receipt_sent', {
+          receipt_ref: confirmMessageId, movement_ref: r.movimentacao_id, preview_ref: alvo.v3PreviewId, outcome: 'ok',
+        });
+        readbackMovimento(event, grp, r.movimentacao_id, r.valor || valor, r.forma || forma, payload.categoria);
         lembrarLancado(chatId, {
           confirmMessageId, previewId: alvo.previewId, movimentacao_id: r.movimentacao_id,
           unidade_id: alvo.unidade_id, nome: alvo.nome, valor: Number(r.valor || valor),
@@ -6831,6 +7419,7 @@ _Não lanço nada pela metade._`);
         ator_sem_numero: 'não consegui identificar seu número',
       };
       const msg = motivos[r && r.motivo] || 'não consegui lançar agora';
+      await governance(event, 'write_refused', { action: 'lancamento', reason_code: (r && r.motivo) || 'unknown', outcome: 'refused' });
       // devolve a pendência (pode reabrir caixa e tentar de novo)
       if (r && r.motivo === 'caixa_nao_aberto') { arr.push(alvo); pendentes.set(chatId, arr); }
       await sendFn(chatId, `⚠️ Não lancei: ${msg}.`);
@@ -6887,6 +7476,8 @@ _Não lanço nada pela metade._`);
           const ts = Number(a.pending.ts) || new Date(a.criado_em).getTime() || Date.now();
           rascunhosV4.set(chatId, {
             envelope: a.pending.agentFirstEnvelope, origem: a.pending.origem, ts,
+            autorHash: a.pending.rascunhoAutorHash || null,
+            msgIds: Array.isArray(a.pending.msgIds) ? a.pending.msgIds : [],
             v3PreviewId: a.id, v3PreviewHash: a.preview_hash, grupo: grupos[chatId],
             event: { messageId: a.pending.origem, chatId, senderId: 'rehydrated', body: '', ts: a.criado_em },
           });
@@ -7046,15 +7637,16 @@ _Não lanço nada pela metade._`);
     }
   }
 
-  // No canario textual, uma confirmacao de preview criado pelo trilho
-  // deterministico (comprovante/midia) precisa continuar neste handler. Um
-  // preview criado pelas tools leva agentFirstEnvelope e permanece no fluxo
-  // agent-first. Esta consulta nao aprova nem descarta nada; apenas decide a
-  // rota antes do LLM.
-  function deveTratarConfirmacaoDeterministica(event) {
+  // Confirmacao de QUALQUER preview persistido precisa continuar neste handler.
+  // O preview pode ter sido criado pela midia deterministica ou pelo agent-first;
+  // isso nao muda o gate: "pode" e uma decisao financeira exata, nao uma tarefa
+  // probabilistica do LLM. Esta consulta nao aprova nem descarta nada; apenas
+  // decide a rota antes do LLM. Com mais de uma pendencia, o proprio handler
+  // falha fechado e exige que o humano cite o card correto.
+  function deveTratarConfirmacaoDeterministica(event, agora = Date.now()) {
     if (!event || event.hasMedia) return false;
     const chatId = event.chatId;
-    const arr = limparVelhos(chatId, Date.now());
+    const arr = limparVelhos(chatId, agora);
     if (!arr.length) return false;
 
     const _citaPend = (p, id) => p.previewId === id || p.origem === id
@@ -7068,8 +7660,26 @@ _Não lanço nada pela metade._`);
     const confirma = casarPode(event.body, { respondeuPreview }).pode || casarNao(event.body);
     if (!confirma) return false;
 
-    if (citado) return !citado.agentFirstEnvelope;
-    return arr.some((p) => !p.agentFirstEnvelope);
+    if (citado) return true;
+    return arr.length > 0;
+  }
+
+  // Resposta que completa rascunho é parte da mesma máquina de estado do
+  // recebimento. O bridge consulta isto ANTES do handoff ao agente, evitando
+  // que "cartão de crédito" vire um turno probabilístico que pode terminar sem
+  // resposta. Só o mesmo remetente ou uma citação explícita alcança o rascunho.
+  function deveTratarComplementoDeterministico(event, agora = Date.now()) {
+    if (!event || event.hasMedia) return false;
+    let draft = rascunhosV4.get(event.chatId) || null;
+    if (!draft) return false;
+    if (agora - draft.ts >= janelaMs) {
+      void finalizarRascunhoV4(event.chatId, 'expired', 'janela_runtime_expirou');
+      return false;
+    }
+    if (!eventoPodeCompletarRascunhoV4(event, draft)) return false;
+    const texto = bodyLimpo(event.body);
+    return !!formaExplicitaV4(texto, event.caixaToolDecision).forma
+      || casarNao(texto) || casarPode(texto, { respondeuPreview: false }).pode;
   }
 
   // ⚠️ ehConversaSemComando no retorno conserta bug LATENTE: o bridge chama
@@ -7077,7 +7687,7 @@ _Não lanço nada pela metade._`);
   // o guard de "elogio nao leva nao-entendi" estava morto por undefined.
   return { handle, temPendencia, citaAlgumaPendencia, ehConversaSemComando,
     reidratarPendencias, tratarNaoEntendida, observarRoteadorV4, tratarAgentFirst,
-    deveTratarConfirmacaoDeterministica,
+    deveTratarConfirmacaoDeterministica, deveTratarComplementoDeterministico,
     _pendentes: pendentes, _envelopesV4: envelopesV4, _rascunhosV4: rascunhosV4 };
 }
 
@@ -7102,7 +7712,7 @@ module.exports = {
   _cursoRotulado, _confirmacaoManualFatura,
   derivarVinculo, casarParcelaCanonica, linhasDaFatura, categoriaDaFatura, descricaoDaFatura, jaLancadoHoje,
   periodoQuitacao, extrairPeriodoMeses,
-  extrairCompetenciaTexto, extrairCorrecaoCompetencia, normalizarCorrecaoCompetenciaRoteador, compostoDeFaturas, buscarCompostoFaturasMes, descricaoDoComposto,
+  extrairCompetenciaTexto, extrairCompetenciasTexto, extrairCorrecaoCompetencia, normalizarCorrecaoCompetenciaRoteador, compostoDeFaturas, buscarCompostoFaturasMes, descricaoDoComposto,
   extrairComprovanteVisao, interpretarComprovante, interpretarMultiAluno, extrairItensNomeValor, casarParcela,
   guardaFinanceiraV4,
   ocrLocal,

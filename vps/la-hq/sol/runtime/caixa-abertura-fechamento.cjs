@@ -117,7 +117,7 @@ function pedidoReabrir(text) {
 // Arthur vazou para o agente LLM (rota de leitura) e morreu em "o banco
 // bloqueou". Comando claro de membro autorizado executa DIRETO: a RPC exige
 // autorizacao, so reabre o dia corrente, tira snapshot e audita.
-async function tratarPedidoDiretoReabertura(event, { grupo, sendFn, log = () => {}, rpcFn = chamarRpc }) {
+async function tratarPedidoDiretoReabertura(event, { grupo, sendFn, log = () => {}, rpcFn = chamarRpc, governanceFn = () => Promise.resolve() }) {
   const chatId = event.chatId;
   if (event.hasMedia) return false;
   if (!grupo || !grupo.unidade_id) return false;
@@ -133,6 +133,7 @@ async function tratarPedidoDiretoReabertura(event, { grupo, sendFn, log = () => 
 
   let r;
   try {
+    await governanceFn(event, 'approval_observed', { action: 'reabertura', outcome: 'pending' });
     r = await rpcFn('sol_caixa_reabrir_caixa_v1', { p_payload: {
       unidade_id: grupo.unidade_id,
       motivo: 'Reabertura pedida no grupo oficial por ' + quem,
@@ -140,17 +141,41 @@ async function tratarPedidoDiretoReabertura(event, { grupo, sendFn, log = () => 
       autorizado_por: quem, grupo_jid: chatId, chat_id: chatId,
     } });
   } catch (e) {
-    await sendFn(chatId, '⚠️ Não consegui reabrir agora. Tenta de novo em instantes.');
+    const receipt = await sendFn(chatId, '⚠️ Não consegui reabrir agora. Tenta de novo em instantes.');
+    await governanceFn(event, 'write_refused', { action: 'reabertura', reason_code: 'rpc_error', outcome: 'error' });
+    await governanceFn(event, 'receipt_sent', { receipt_ref: receipt, action: 'reabertura_erro', outcome: 'ok' });
     log({ acao: 'reabertura_erro', erro: String(e.message || e).slice(0, 200) });
     return true;
   }
   if (r && r.ok && r.reaberto) {
-    await sendFn(chatId, `Caixa da ${_cap(String(grupo.nome || ''))} reaberto ✅ — saldo inicial ${brl(r.saldo_inicial)} mantido, lançamentos preservados. Pode mandar.\n_${quem} autorizou · reabertura registrada com snapshot._`);
+    const receipt = await sendFn(chatId, `Caixa da ${_cap(String(grupo.nome || ''))} reaberto ✅ — saldo inicial ${brl(r.saldo_inicial)} mantido, lançamentos preservados. Pode mandar.\n_${quem} autorizou · reabertura registrada com snapshot._`);
+    await governanceFn(event, 'write_applied', { action: 'reabertura', movement_ref: r.caixa_diario_id, outcome: 'ok' });
+    await governanceFn(event, 'approval_consumed', { movement_ref: r.caixa_diario_id, outcome: 'ok' });
+    await governanceFn(event, 'receipt_sent', { receipt_ref: receipt, movement_ref: r.caixa_diario_id, action: 'reabertura', outcome: 'ok' });
+    if (event.caixaGovernancaEpisode) {
+      let readback = null;
+      try {
+        readback = await rpcFn('sol_caixa_dados_abertura', { p_unidade_id: grupo.unidade_id });
+      } catch (_) {}
+      await governanceFn(event, readback && readback.ja_aberto ? 'readback_confirmed' : 'readback_failed', {
+        movement_ref: r.caixa_diario_id,
+        readback_status: readback && readback.ja_aberto ? 'opening_data' : 'query_error',
+        outcome: readback && readback.ja_aberto ? 'ok' : 'inconclusive',
+      });
+    }
     log({ acao: 'caixa_reaberto', caixa: r.caixa_diario_id, por: quem });
     return true;
   }
   if (r && r.ok && r.ja_aberto) {
-    await sendFn(chatId, 'O caixa já está aberto ✅ — pode lançar.');
+    const receipt = await sendFn(chatId, 'O caixa já está aberto ✅ — pode lançar.');
+    await governanceFn(event, 'write_refused', {
+      action: 'reabertura', movement_ref: r.caixa_diario_id,
+      reason_code: 'already_open', outcome: 'duplicate',
+    });
+    await governanceFn(event, 'receipt_sent', {
+      receipt_ref: receipt, movement_ref: r.caixa_diario_id,
+      action: 'reabertura_ja_aberto', outcome: 'ok',
+    });
     log({ acao: 'reabertura_ja_aberto' });
     return true;
   }
@@ -160,7 +185,13 @@ async function tratarPedidoDiretoReabertura(event, { grupo, sendFn, log = () => 
     reabrir_nao_autorizado: `não encontrei autorização de ${quem} para reabrir o caixa desta unidade.`,
     reabertura_so_do_dia_corrente: 'só consigo reabrir o caixa do dia corrente; dia anterior é operação manual com a diretoria.',
   }[motivo] || `não consegui (${motivo || 'erro desconhecido'}).`;
-  await sendFn(chatId, `⚠️ Não reabri: ${humano}`);
+  const receipt = await sendFn(chatId, `⚠️ Não reabri: ${humano}`);
+  await governanceFn(event, 'write_refused', {
+    action: 'reabertura', reason_code: motivo || 'unknown', outcome: 'refused',
+  });
+  await governanceFn(event, 'receipt_sent', {
+    receipt_ref: receipt, action: 'reabertura_recusada', outcome: 'ok',
+  });
   log({ acao: 'reabertura_recusada', motivo });
   return true;
 }
@@ -231,7 +262,7 @@ function montarTextoAbertura(d) {
 const JANELA_CONFIRMA_MIN = 120;
 const _reconfirmando = new Set();   // chatId:pendenciaId ja avisados
 
-async function tratarConfirmacao(event, { sendFn, log = () => {}, rpcFn = chamarRpc, temComprovantePendente = null }) {
+async function tratarConfirmacao(event, { sendFn, log = () => {}, rpcFn = chamarRpc, temComprovantePendente = null, governanceFn = () => Promise.resolve() }) {
   const chatId = event.chatId;
   if (event.hasMedia) return false;                 // mídia = comprovante
   const querNegarFechamento = negativoFechamento(event.body)
@@ -291,11 +322,12 @@ async function tratarConfirmacao(event, { sendFn, log = () => {}, rpcFn = chamar
     log({ acao: 'identidade_abf', identificado: !!(ident && ident.identificado) });
   } catch (e) { /* best-effort: mantém o pushName */ }
   const base = { unidade_id: pend.unidade_id, data: pend.data, ator_numero: senderNum, ator_papel: 'grupo', conferido_por: conf, chat_id: chatId };
+  await governanceFn(event, 'approval_observed', { action: pend.tipo, preview_ref: pend.preview_message_id, outcome: 'pending' });
 
   if (pend.tipo === 'abrir') {
     let r;
     try { r = await rpcFn('sol_caixa_abrir', { p_payload: base }); }
-    catch (e) { await sendFn(chatId, '⚠️ Deu erro técnico ao abrir. Tenta de novo em instantes.'); return true; }
+    catch (e) { const receipt = await sendFn(chatId, '⚠️ Deu erro técnico ao abrir. Tenta de novo em instantes.'); await governanceFn(event, 'write_refused', { action: 'abrir', reason_code: 'rpc_error', outcome: 'error' }); await governanceFn(event, 'receipt_sent', { receipt_ref: receipt, action: 'abrir_erro', outcome: 'ok' }); return true; }
     await rpcFn('sol_caixa_pendencia_resolver', { p_id: pend.id, p_status: (r && r.ok) ? 'confirmado' : 'aguardando', p_por: conf }).catch(() => {});
     if (r && r.ok && r.ja_aberto) {
       // o caixa já tinha sido aberto no app: NUNCA imprimir brl(undefined) = R$ 0,00.
@@ -304,30 +336,38 @@ async function tratarConfirmacao(event, { sendFn, log = () => {}, rpcFn = chamar
       const txt = (saldo === null || saldo === undefined)
         ? '✅ O caixa de hoje já estava aberto — não precisei abrir de novo.'
         : `✅ O caixa de hoje já estava aberto (saldo inicial ${brl(saldo)}) — não precisei abrir de novo.`;
-      await sendFn(chatId, txt);
+      const receipt = await sendFn(chatId, txt);
+      await governanceFn(event, 'write_refused', { action: 'abrir', movement_ref: r.caixa_diario_id, reason_code: 'already_open', outcome: 'duplicate' });
+      await governanceFn(event, 'receipt_sent', { receipt_ref: receipt, movement_ref: r.caixa_diario_id, action: 'already_open', outcome: 'ok' });
+      await governanceFn(event, saldo === null || saldo === undefined ? 'readback_failed' : 'readback_confirmed', {
+        movement_ref: r.caixa_diario_id,
+        readback_status: saldo === null || saldo === undefined ? 'query_error' : 'opening_data',
+        outcome: saldo === null || saldo === undefined ? 'inconclusive' : 'ok',
+      });
       log({ acao: 'ja_aberto', caixa: r.caixa_diario_id });
     }
-    else if (r && r.ok) { await sendFn(chatId, `✅ Caixa aberto! Saldo inicial: ${brl(r.saldo_inicial)}. Bom dia de trabalho 💪`); log({ acao: 'aberto', caixa: r.caixa_diario_id }); }
-    else { const m = ({ caixa_ja_existe_hoje: 'o caixa de hoje já existe', ator_nao_autorizado: 'você não está autorizado' })[r && r.motivo] || 'não consegui abrir'; await sendFn(chatId, `⚠️ Não abri: ${m}.`); }
+    else if (r && r.ok) { const receipt = await sendFn(chatId, `✅ Caixa aberto! Saldo inicial: ${brl(r.saldo_inicial)}. Bom dia de trabalho 💪`); await governanceFn(event, 'write_applied', { action: 'abrir', movement_ref: r.caixa_diario_id, outcome: 'ok' }); await governanceFn(event, 'approval_consumed', { movement_ref: r.caixa_diario_id, outcome: 'ok' }); await governanceFn(event, 'receipt_sent', { receipt_ref: receipt, movement_ref: r.caixa_diario_id, action: 'abrir', outcome: 'ok' }); if (event.caixaGovernancaEpisode) { let rb = null; try { rb = await rpcFn('sol_caixa_dados_abertura', { p_unidade_id: pend.unidade_id }); } catch (_) {} await governanceFn(event, rb ? 'readback_confirmed' : 'readback_failed', { movement_ref: r.caixa_diario_id, readback_status: rb ? 'opening_data' : 'query_error', outcome: rb ? 'ok' : 'inconclusive' }); } log({ acao: 'aberto', caixa: r.caixa_diario_id }); }
+    else { const m = ({ caixa_ja_existe_hoje: 'o caixa de hoje já existe', ator_nao_autorizado: 'você não está autorizado' })[r && r.motivo] || 'não consegui abrir'; const receipt = await sendFn(chatId, `⚠️ Não abri: ${m}.`); await governanceFn(event, 'write_refused', { action: 'abrir', reason_code: (r && r.motivo) || 'unknown', outcome: 'refused' }); await governanceFn(event, 'receipt_sent', { receipt_ref: receipt, action: 'abrir_recusado', outcome: 'ok' }); }
     return true;
   }
 
   if (pend.tipo === 'fechar') {
     let r;
     try { r = await rpcFn('sol_caixa_fechar', { p_payload: base }); }
-    catch (e) { await sendFn(chatId, '⚠️ Deu erro técnico ao fechar. Tenta de novo.'); return true; }
+    catch (e) { const receipt = await sendFn(chatId, '⚠️ Deu erro técnico ao fechar. Tenta de novo.'); await governanceFn(event, 'write_refused', { action: 'fechar', reason_code: 'rpc_error', outcome: 'error' }); await governanceFn(event, 'receipt_sent', { receipt_ref: receipt, action: 'fechar_erro', outcome: 'ok' }); return true; }
     await rpcFn('sol_caixa_pendencia_resolver', { p_id: pend.id, p_status: (r && r.ok) ? 'confirmado' : 'aguardando', p_por: conf }).catch(() => {});
     if (r && r.ok) {
       let texto = '✅ Caixa fechado.';
-      try { const dados = await rpcFn('sol_caixa_dados_fechamento', { p_caixa_diario_id: r.caixa_diario_id }); if (dados) texto = montarTextoFechamento(dados); } catch (e) {}
-      await sendFn(chatId, texto); log({ acao: 'fechado', caixa: r.caixa_diario_id });
-    } else { const m = ({ caixa_nao_aberto: 'o caixa não está aberto', ator_nao_autorizado: 'você não está autorizado' })[r && r.motivo] || 'não consegui fechar'; await sendFn(chatId, `⚠️ Não fechei: ${m}.`); }
+      let dados = null;
+      try { dados = await rpcFn('sol_caixa_dados_fechamento', { p_caixa_diario_id: r.caixa_diario_id }); if (dados) texto = montarTextoFechamento(dados); } catch (e) {}
+      const receipt = await sendFn(chatId, texto); await governanceFn(event, 'write_applied', { action: 'fechar', movement_ref: r.caixa_diario_id, outcome: 'ok' }); await governanceFn(event, 'approval_consumed', { movement_ref: r.caixa_diario_id, outcome: 'ok' }); await governanceFn(event, 'receipt_sent', { receipt_ref: receipt, movement_ref: r.caixa_diario_id, action: 'fechar', outcome: 'ok' }); await governanceFn(event, dados ? 'readback_confirmed' : 'readback_failed', { movement_ref: r.caixa_diario_id, readback_status: dados ? 'closing_data' : 'query_error', outcome: dados ? 'ok' : 'inconclusive' }); log({ acao: 'fechado', caixa: r.caixa_diario_id });
+    } else { const m = ({ caixa_nao_aberto: 'o caixa não está aberto', ator_nao_autorizado: 'você não está autorizado' })[r && r.motivo] || 'não consegui fechar'; const receipt = await sendFn(chatId, `⚠️ Não fechei: ${m}.`); await governanceFn(event, 'write_refused', { action: 'fechar', reason_code: (r && r.motivo) || 'unknown', outcome: 'refused' }); await governanceFn(event, 'receipt_sent', { receipt_ref: receipt, action: 'fechar_recusado', outcome: 'ok' }); }
     return true;
   }
   return false;
 }
 
-async function tratarPedidoDiretoFechamento(event, { grupo, sendFn, log = () => {}, rpcFn = chamarRpc }) {
+async function tratarPedidoDiretoFechamento(event, { grupo, sendFn, log = () => {}, rpcFn = chamarRpc, governanceFn = () => Promise.resolve() }) {
   const chatId = event.chatId;
   if (event.hasMedia) return false;
   if (!grupo || !grupo.unidade_id) return false;
@@ -366,6 +406,7 @@ async function tratarPedidoDiretoFechamento(event, { grupo, sendFn, log = () => 
   const texto = montarTextoFechamento(dados) + '\n\n*Posso fechar agora?* Se estiver tudo certo, responde *pode* que eu fecho. Se ainda não for pra fechar, responde *não*.';
   const previewId = await sendFn(chatId, texto);
   await rpcFn('sol_caixa_pendencia_criar', { p_payload: { unidade_id: grupo.unidade_id, chat_id: chatId, tipo: 'fechar', preview_message_id: previewId } }).catch(() => {});
+  await governanceFn(event, 'preview_sent', { preview_ref: previewId, action: 'fechar', outcome: 'ok' });
   log({ acao: 'fechamento_preview_direto_enviado', previewId });
   return true;
 }

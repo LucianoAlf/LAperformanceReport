@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-09 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-14 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — professor
 
-145 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+148 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## anotacoes
 
@@ -421,8 +421,16 @@
 | `prova` | text | não |  |  |
 | `referencia` | text | não |  |  |
 | `criada_em` | timestamp with time zone | não | now() |  |
+| `corrigido_em` | timestamp with time zone | sim |  |  |
+| `status` | text | não | 'corrigido'::text |  |
+| `sinal_tipo` | text | sim |  |  |
+| `sinal` | text | sim |  |  |
+| `sinal_classes` | text[] | não | '{}'::text[] |  |
+| `voltas` | integer | não | 0 |  |
+| `ultima_volta` | timestamp with time zone | sim |  |  |
 
 **Únicos:**
+- `fabio_correcao_codigo_unico`
 - `fabio_correcao_pkey`
 
 ## fabio_correcoes_acoes
@@ -573,10 +581,36 @@
 | `veredito_humano_em` | timestamp with time zone | sim |  |  |
 | `veredito_humano_nota` | text | sim |  |  |
 | `assinatura` | text | sim | ('fabio:'::text \|\| tipo) |  |
+| `incidente_em` | timestamp with time zone | sim |  |  |
+| `incidente_confianca` | text | sim |  |  |
+| `correcao_codigo` | text | sim |  | fabio_correcao.codigo |
+| `triagem` | jsonb | sim |  |  |
 
 **Únicos:**
 - `fabio_diario_ocorrencia_idempotente`
 - `fabio_diario_ocorrencia_pkey`
+
+**Triggers:**
+- `trg_fabio_ocorrencia_incidente → fn_fabio_ocorrencia_incidente_trg()`
+
+## fabio_emusys_escrita
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('fabio_emusys_escrita_id_seq'::regclass) |  |
+| `registro_id` | uuid | não |  | fabio_registros_aula.id |
+| `emusys_aula_id` | integer | sim |  |  |
+| `unidade` | text | sim |  |  |
+| `texto_md5` | text | não |  |  |
+| `texto` | text | não |  |  |
+| `decisao` | text | não |  |  |
+| `motivo` | text | sim |  |  |
+| `anotacao_antes` | text | sim |  |  |
+| `erro` | text | sim |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `fabio_emusys_escrita_pkey`
 
 ## fabio_fila_audios
 
@@ -658,6 +692,19 @@
 **Únicos:**
 - `fabio_licao_pkey`
 - `ux_licao_nome_versao`
+
+## fabio_limpeza_backup
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('fabio_limpeza_backup_id_seq'::regclass) |  |
+| `lote` | text | não |  |  |
+| `tabela` | text | não |  |  |
+| `linha` | jsonb | não |  |  |
+| `guardado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `fabio_limpeza_backup_pkey`
 
 ## fabio_memoria_janela
 
@@ -1274,7 +1321,7 @@
 | `id` | uuid | não | gen_random_uuid() |  |
 | `snapshot_metrica_id` | uuid | não |  | health_score_professor_v3_snapshot_metricas.id |
 | `config_meta_segmento_id` | uuid | sim |  | health_score_professor_v3_config_metas_curso_modalidade.id |
-| `unidade_id` | uuid | não |  | health_score_professor_v3_config_metas_curso_modalidade.unidade_id |
+| `unidade_id` | uuid | não |  | unidades.id |
 | `curso_id` | integer | não |  | cursos.id |
 | `modalidade` | text | não |  | professor_unidade_curso_modalidade.modalidade |
 | `pessoas_unicas` | integer | não | 0 |  |
@@ -2893,6 +2940,38 @@
 | `porque` | text | sim |  |  |
 | `criada_por` | text | sim |  |  |
 | `criada_em` | timestamp with time zone | sim |  |  |
+
+## vw_fabio_ocorrencia_do_teste
+
+> Achados do diario do Fabio so de professores do teste (fn_professor_usa_app) e de sistema (sem professor). E o que o laudo le. 10/09/2026.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | sim |  |  |
+| `dia` | date | sim |  |  |
+| `origem` | text | sim |  |  |
+| `tipo` | text | sim |  |  |
+| `professor_id` | integer | sim |  |  |
+| `aula_id` | bigint | sim |  |  |
+| `referencia` | text | sim |  |  |
+| `o_que` | text | sim |  |  |
+| `porque` | text | sim |  |  |
+| `gravidade` | text | sim |  |  |
+| `detectado_por` | text | sim |  |  |
+| `resolvido_em` | timestamp with time zone | sim |  |  |
+| `resolvido_por` | text | sim |  |  |
+| `resolvido_porque` | text | sim |  |  |
+| `bruto` | jsonb | sim |  |  |
+| `criado_em` | timestamp with time zone | sim |  |  |
+| `veredito_humano` | text | sim |  |  |
+| `veredito_humano_por` | text | sim |  |  |
+| `veredito_humano_em` | timestamp with time zone | sim |  |  |
+| `veredito_humano_nota` | text | sim |  |  |
+| `assinatura` | text | sim |  |  |
+| `incidente_em` | timestamp with time zone | sim |  |  |
+| `incidente_confianca` | text | sim |  |  |
+| `correcao_codigo` | text | sim |  |  |
+| `triagem` | jsonb | sim |  |  |
 
 ## vw_fabio_participacao_ocorrencia_estado
 

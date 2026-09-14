@@ -28,6 +28,7 @@ function fixture({ falharPrepare = false, falharPublicar = false,
   const lotes = [];
   const timeline = [];
   const logs = [];
+  const governanca = [];
   const resgates = [];
   const porHash = new Map();
   let mid = 0;
@@ -76,21 +77,24 @@ function fixture({ falharPrepare = false, falharPublicar = false,
     },
     identidadeFn: async () => ({ identificado: true, nome: 'Fefê Teste' }),
     lancarFn: async (payload) => { lancamentos.push(payload); return { ok: true, valor: Number(payload.valor), forma: payload.forma, movimentacao_id: 'mov-1' }; },
+    buscarMovimentosFn: async () => ({ ok: true, items: [{ movimentacao_id: 'mov-1' }] }),
     lancarLoteFn: async (payload) => { lotes.push(payload); return { ok: true, lote_id: 'lote-1', movimentacoes: payload.itens.map((i, n) => ({ ...i, id: `m-${n}` })) }; },
     listarPreviewsAbertosFn: async () => abertos,
     log: (linha) => logs.push(JSON.parse(JSON.stringify(linha))),
+    governanceFn: async (_event, eventType, details) => { governanca.push({ eventType, details: { ...(details || {}) } }); return { ok: true }; },
     janelaMs,
   });
-  return { h, envios, ledger, lancamentos, lotes, timeline, logs, resgates };
+  return { h, envios, ledger, lancamentos, lotes, timeline, logs, resgates, governanca };
 }
 
 function evento(messageId, body, extra = {}) {
   return { chatId: CHAT, messageId, senderId: '5521999999999@c.us', senderPhone: '5521999999999',
-    body, hasMedia: false, timestamp: 1789160000, ...extra };
+    body, hasMedia: false, timestamp: 1789160000,
+    caixaGovernancaEpisode: { episode_id: 'ep1.teste.' + 'a'.repeat(64) }, ...extra };
 }
 
 test('caso real: rascunho duravel -> cartao 2x -> singular -> pode -> uma escrita', async () => {
-  const { h, envios, ledger, lancamentos, lotes, timeline, logs } = fixture();
+  const { h, envios, ledger, lancamentos, lotes, timeline, logs, governanca } = fixture();
   const inicio = 1_789_160_000_000;
   const primeira = evento('origem-1', 'Pagamento Beatriz R$ 590,00 passaporte', {
     caixaToolDecision: { intencao: 'lancamento_por_texto', aluno_nome: 'Beatriz Teste',
@@ -122,6 +126,13 @@ test('caso real: rascunho duravel -> cartao 2x -> singular -> pode -> uma escrit
   assert.equal(pend.cartaoParcelas, 2);
   assert.equal(pend.tipoOperacao, undefined, 'um item usa executor singular');
   assert.equal(h._rascunhosV4.size, 0);
+  assert.equal(h.deveTratarConfirmacaoDeterministica(evento('rota-aprova-1', 'pode', {
+    quotedMessageId: r2.previewId, timestamp: Math.floor((inicio + 2000) / 1000),
+  }), inicio + 2000), true, 'pode de preview agent-first precisa ficar fora do LLM');
+  assert.equal(h.deveTratarConfirmacaoDeterministica(evento('rota-aprova-2', 'pode', {
+    timestamp: Math.floor((inicio + 2000) / 1000),
+  }), inicio + 2000), true,
+    'pode sem citacao e com uma pendencia tambem precisa ficar no gate deterministico');
 
   const aprova = await h.handle(evento('aprova-1', 'pode', { quotedMessageId: r2.previewId }), inicio + 2000);
   assert.equal(aprova.acao, 'lancado');
@@ -131,6 +142,13 @@ test('caso real: rascunho duravel -> cartao 2x -> singular -> pode -> uma escrit
   assert.equal(lancamentos[0].cartao_modalidade, 'credito');
   assert.equal(lancamentos[0].cartao_parcelas, 2);
   assert.equal(lancamentos[0].fatura_id, FATURA);
+  await new Promise((resolve) => setImmediate(resolve));
+  for (const tipo of ['preview_prepared', 'preview_sent', 'approval_observed',
+    'approval_consumed', 'write_applied', 'receipt_sent', 'readback_confirmed']) {
+    assert.equal(governanca.some((x) => x.eventType === tipo), true, `evento de governança ausente: ${tipo}`);
+  }
+  const recibo = governanca.find((x) => x.eventType === 'receipt_sent');
+  assert.equal(recibo.details.movement_ref, 'mov-1');
 
   await h.handle(evento('aprova-2', 'pode', { quotedMessageId: r2.previewId }), inicio + 3000);
   assert.equal(lancamentos.length, 1, 'redelivery/segundo pode nao duplica');
@@ -142,7 +160,7 @@ test('caso real: rascunho duravel -> cartao 2x -> singular -> pode -> uma escrit
 });
 
 test('passaporte singular sem fatura aberta usa resgate canônico estreito e preserva crédito 2x', async () => {
-  const { h, lancamentos, lotes, resgates, logs } = fixture({ resolverSemFatura: true });
+  const { h, envios, lancamentos, lotes, resgates, logs } = fixture({ resolverSemFatura: true });
   const inicio = 1_789_161_000_000;
   const ev = evento('passaporte-sem-fatura', 'Passaporte Beatriz Teste R$ 440,00 cartão de crédito 2x', {
     caixaToolDecision: { intencao: 'lancamento_por_texto', aluno_nome: 'Beatriz Teste',
@@ -160,6 +178,15 @@ test('passaporte singular sem fatura aberta usa resgate canônico estreito e pre
   assert.equal(pend.canonica.fatura.canonical_fatura_id, null);
   assert.equal(pend.cartaoModalidade, 'credito');
   assert.equal(pend.cartaoParcelas, 2);
+  const card = envios.find((e) => e.id === preview.previewId);
+  assert.ok(card, 'preview publico precisa existir');
+  assert.match(card.texto, /Passaporte promocional/i);
+  assert.match(card.texto, /sem v[ií]nculo de fatura no Emusys/i);
+  assert.doesNotMatch(card.texto, /Lançamento\s*[·•]/i);
+  assert.doesNotMatch(card.texto, /Já pago no Emusys/i);
+  assert.equal(h.deveTratarConfirmacaoDeterministica(evento('rota-passaporte', 'pode', {
+    quotedMessageId: preview.previewId, timestamp: Math.floor((inicio + 1000) / 1000),
+  }), inicio + 1000), true);
 
   const aprovado = await h.handle(evento('pode-passaporte', 'pode', {
     quotedMessageId: preview.previewId,
@@ -259,13 +286,15 @@ test('dois itens continuam no lote e categoria mista nao escolhe a primeira', as
 
 test('rascunho incompleto reidrata depois de restart sem virar pendencia aprovavel', async () => {
   const criado = new Date().toISOString();
+  const autorHash = require('node:crypto').createHash('sha256').update('5521999999999').digest('hex');
   const envelope = { pagador: null, valor_total: 590, forma: null,
     itens: [{ aluno: 'Beatriz Teste', categorias: ['passaporte'], competencias: ['09/2026'] }] };
   const abertos = [{
     id: 'draft-ledger-1', preview_hash: 'hash-draft-1', criado_em: criado,
     operacao: 'agent_first_draft', status: 'draft_missing_fields',
     chat_id_hash: require('node:crypto').createHash('md5').update(CHAT).digest('hex'),
-    pending: { tipoOperacao: 'agent_first_draft', origem: 'origem-restart', ts: Date.now(), agentFirstEnvelope: envelope },
+    pending: { tipoOperacao: 'agent_first_draft', origem: 'origem-restart', ts: Date.now(),
+      agentFirstEnvelope: envelope, rascunhoAutorHash: autorHash, msgIds: ['pergunta-restart'] },
   }];
   const { h } = fixture({ abertos });
   const reidratou = await h.reidratarPendencias();

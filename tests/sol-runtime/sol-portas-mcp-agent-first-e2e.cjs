@@ -14,6 +14,8 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sol-portas-agent-'));
 const log = path.join(tmp, 'calls.jsonl');
 const runtime = path.join(tmp, 'runtime.cjs');
 const abf = path.join(tmp, 'abf.cjs');
+const govlog = path.join(tmp, 'governanca.jsonl');
+const EPISODIO = 'ep1.teste.' + 'a'.repeat(64);
 fs.writeFileSync(runtime, `
 const fs=require('fs');
 const LOG=${JSON.stringify(log)};
@@ -52,6 +54,10 @@ const server = http.createServer((req, res) => {
         LA_REPORT_SUPABASE_URL: `http://127.0.0.1:${port}`,
         LA_REPORT_SERVICE_ROLE_KEY: 'teste', SOL_WHATSAPP_BRIDGE_URL: `http://127.0.0.1:${port}`,
         SOL_CAIXA_RUNTIME: runtime, SOL_CAIXA_ABF_RUNTIME: abf,
+        SOL_CAIXA_GOVERNANCA_RUNTIME: path.join(root, 'vps/la-hq/sol/runtime/caixa-governanca-shadow.cjs'),
+        SOL_CAIXA_GOVERNANCA_SHADOW: '1', SOL_CAIXA_GOVERNANCA_HMAC_KEY_ID: 'teste',
+        SOL_CAIXA_GOVERNANCA_HMAC_SECRET: 'segredo-de-ensaio-com-mais-de-trinta-e-dois-bytes',
+        SOL_CAIXA_GOVERNANCA_LOG: govlog,
         SOL_CAIXA_TOOLS_CANARIO: CHAT,
       }, stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -61,12 +67,14 @@ const server = http.createServer((req, res) => {
     method: 'tools/call', params: { name, arguments: args } }) + '\n');
   chamar(1, 'caixa_preparar_correcao', {
     p_cracha: CRACHA, p_chat_id: CHAT,
+    p_episode_id: EPISODIO,
     p_movimentacao_id: '00000000-0000-0000-0000-000000000099',
     p_valor_atual: 500, p_categoria_atual: 'parcela', p_forma_atual: 'pix',
     p_nova_forma: 'dinheiro', p_motivo: 'forma errada',
   });
   chamar(2, 'caixa_preparar_lancamento', {
     p_cracha: CRACHA, p_chat_id: CHAT,
+    p_episode_id: EPISODIO,
     p_texto_original: 'Pagamento de Ana R$ 500,00 no cartão 2x', p_valor_total: 500,
     p_forma: 'cartao', p_cartao_modalidade: 'credito', p_cartao_parcelas: 2,
     p_itens: [{ aluno: 'Ana', categorias: ['parcela'], competencias: [] }],
@@ -85,5 +93,9 @@ const server = http.createServer((req, res) => {
   assert.strictEqual(calls[1].ev.caixaToolDecision.itens[0].aluno, 'Ana');
   assert.strictEqual(calls[1].ev.caixaToolDecision.cartao_modalidade, 'credito');
   assert.strictEqual(calls[1].ev.caixaToolDecision.cartao_parcelas, 2);
+  assert.strictEqual(calls[0].ev.caixaGovernancaEpisode.episode_id, EPISODIO);
+  const governanca = fs.readFileSync(govlog, 'utf8');
+  assert(governanca.includes('tool_selected'));
+  assert(!governanca.includes(CHAT), 'JID cru não pode entrar no ledger de governança');
   console.log('sol-portas MCP agent-first: contexto, alvo e envelope OK');
 })().finally(() => { server.close(); });

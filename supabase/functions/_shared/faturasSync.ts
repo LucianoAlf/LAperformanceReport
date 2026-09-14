@@ -338,3 +338,75 @@ export async function coletarFaturasUnidade(options: {
     },
   };
 }
+
+// Coleta faturas PAGAS por janela de vencimento ampla (para capturar adiantamentos
+// e cheques pré-datados pagos em M com vencimento futuro). O caller filtra por
+// data_pagamento depois. Não valida competencia (a janela cruza meses).
+export async function coletarFaturasPagasPorJanela(options: {
+  apiBaseUrl: string;
+  dataVencimentoInicial: string;
+  dataVencimentoFinal: string;
+  unidadeCodigo: string;
+  unidade: UnidadeSyncConfig;
+  limiter: GlobalRateLimiter;
+  fetchFn?: typeof fetch;
+}) {
+  const {
+    apiBaseUrl,
+    dataVencimentoInicial,
+    dataVencimentoFinal,
+    unidadeCodigo,
+    unidade,
+    limiter,
+    fetchFn = fetch,
+  } = options;
+
+  const rawItems: FaturaEmusys[] = [];
+  const seenCursors = new Set<string>();
+  let cursor = '';
+  let paginas = 0;
+
+  while (true) {
+    const params = new URLSearchParams({
+      status: 'paga',
+      data_vencimento_inicial: dataVencimentoInicial,
+      data_vencimento_final: dataVencimentoFinal,
+      limite: '50',
+    });
+    if (cursor) params.set('cursor', cursor);
+    const payload = await fetchPage({
+      url: `${apiBaseUrl}/faturas?${params.toString()}`,
+      unidade,
+      limiter,
+      fetchFn,
+    });
+    const pageItems = Array.isArray(payload?.items)
+      ? payload.items
+      : (Array.isArray(payload?.dados) ? payload.dados : []);
+    const nextCursor = String(
+      payload?.paginacao?.proximo_cursor ?? payload?.proximo_cursor ?? '',
+    ).trim();
+    const temMaisRaw = payload?.paginacao?.tem_mais ?? payload?.tem_mais;
+    const temMais = temMaisRaw == null ? Boolean(nextCursor) : temMaisRaw === true;
+
+    paginas += 1;
+    if (temMais && !nextCursor) {
+      throw new Error(`Emusys /faturas ${unidade.nome}: tem_mais exige cursor`);
+    }
+    if (temMais && pageItems.length === 0) {
+      throw new Error(`Emusys /faturas ${unidade.nome}: pagina vazia com tem_mais`);
+    }
+    rawItems.push(...pageItems);
+    if (!temMais) break;
+    if (seenCursors.has(nextCursor)) {
+      throw new Error(`Emusys /faturas ${unidade.nome}: cursor repetido`);
+    }
+    seenCursors.add(nextCursor);
+    cursor = nextCursor;
+    if (paginas >= 200) {
+      throw new Error(`Emusys /faturas ${unidade.nome}: paginacao excedeu limite de seguranca`);
+    }
+  }
+
+  return { rawItems, paginas };
+}
