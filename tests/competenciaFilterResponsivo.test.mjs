@@ -159,3 +159,74 @@ test('o <main> do shell so rola para o lado em rota NAO portada', () => {
     'o aviso de tela nao adaptada deixou de usar a mesma leitura da rolagem',
   );
 });
+
+/**
+ * 14/09/2026 — o conserto passou a morar no COMPONENTE, nao na tela.
+ *
+ * A versao de celular deste filtro (pilula + folha) nasceu dentro do Dashboard
+ * mobile. Resultado: a tela de Alunos abriu com o filtro largo de novo, e o
+ * Hugo perguntou "vou ter que ficar falando isso toda pagina que voce criar?".
+ * A resposta tem de ser nao — e e' isto que estes testes protegem.
+ */
+
+test('o CompetenciaFilter decide sozinho a versao de celular', () => {
+  // Sem isto, cada uma das 10 telas que o usam precisa do mesmo conserto de
+  // novo, e a proxima nasce larga outra vez.
+  assert.match(filtro, /useShellMobile/, 'o filtro voltou a ignorar o shell');
+  assert.match(
+    filtro,
+    /if \(ehCelular\) \{[\s\S]{0,400}<SeletorPeriodoMobile/,
+    'o filtro nao troca mais pela folha no celular',
+  );
+  // Pela MESMA decisao que escolhe o shell, nunca por largura solta: ler so a
+  // largura faz o filtro discordar do resto da tela sob VITE_MOBILE_SHELL=off.
+  assert.doesNotMatch(filtro, /matchMedia|innerWidth|1023/);
+});
+
+test('a restricao de escopos sobrevive a troca de apresentacao', () => {
+  // Tela que so faz sentido no recorte mensal nao pode ganhar "Semestre" de
+  // brinde so porque virou folha no celular.
+  assert.match(filtro, /tiposPermitidos=\{tiposPermitidos\}/);
+  assert.match(painel, /tiposPermitidos\?: TipoCompetencia\[\]/);
+  assert.match(painel, /ESCOPOS\.filter\(\(e\) => permitido\(e\.id\)\)/);
+  assert.match(painel, /ATALHOS\.filter\(\(a\) => permitido\(a\.id\)\)/);
+  // Lista vazia cai em "todos": um painel sem escopo nenhum nao deixaria
+  // escolher nada — falha muda, pior que o defeito.
+  assert.match(painel, /!tiposPermitidos \|\| tiposPermitidos\.length === 0/);
+});
+
+test('a barra de filtros compartilhada quebra linha e nao cola na borda', () => {
+  const barra = readFileSync('src/components/ui/page-filter-bar.tsx', 'utf8');
+  // Sem flex-wrap o que nao cabe fica FORA da tela, nao desce — item de flex
+  // nao encolhe abaixo do proprio min-content.
+  assert.match(barra, /flex flex-wrap items-center justify-start[^"]*sm:justify-end/);
+});
+
+test('o selo de competencia mostra so o ESTADO no celular', () => {
+  const selo = readFileSync('src/components/ui/SeloCompetencia.tsx', 'utf8');
+  // `badgeLabel` e' "<unidade> · <competencia> · <estado>", e no telefone os
+  // dois primeiros ja estao na tela a centimetros dali (cabecalho e pilula).
+  // Repetir os tres custava 76px de altura numa faixa de 375px; medido depois
+  // do fix: 40px, com pilula e selo na mesma linha.
+  assert.match(selo, /ehCelular\s*\n?\s*\?\s*status\.label\s*\n?\s*:\s*status\.badgeLabel/);
+  // O texto completo nao se perde — vai para o title.
+  assert.match(selo, /title=\{status\.loading \? undefined : `\$\{status\.badgeLabel\}/);
+});
+
+test('as 3 telas que tinham o selo copiado passaram a usar o componente', () => {
+  // Trecho igual em 3 lugares vira 3 consertos — foi assim que o filtro de
+  // periodo chegou a Alunos ainda largo depois de resolvido no Dashboard.
+  for (const caminho of [
+    'src/components/App/Alunos/AlunosPage.tsx',
+    'src/components/GestaoMensal/TabGestao.tsx',
+    'src/components/GestaoMensal/TabComercialNew.tsx',
+  ]) {
+    const fonte = readFileSync(caminho, 'utf8');
+    assert.match(fonte, /<SeloCompetencia\b/, `${caminho} nao usa o selo compartilhado`);
+    assert.doesNotMatch(
+      fonte,
+      /competenciaMensal\.loading \? 'Validando competência' : competenciaMensal\.badgeLabel/,
+      `${caminho} voltou a montar o selo a mao`,
+    );
+  }
+});

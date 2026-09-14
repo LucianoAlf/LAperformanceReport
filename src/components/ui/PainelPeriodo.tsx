@@ -118,6 +118,12 @@ export interface PainelPeriodoProps {
    */
   onEscolheuValor?: () => void;
   /**
+   * Restringe os escopos oferecidos, como no `CompetenciaFilter`. Telas que
+   * so fazem sentido em recorte mensal nao podem ganhar "Semestre" de brinde
+   * so porque a apresentacao mudou para a folha do celular.
+   */
+  tiposPermitidos?: TipoCompetencia[];
+  /**
    * `colunas`: escopo a esquerda, grade a direita (painel largo, Agenda).
    * `empilhado`: escopo em chips no topo, grade abaixo — em ~350px nao ha
    * largura para duas colunas sem espremer a grade dos meses.
@@ -138,7 +144,13 @@ export function PainelPeriodo({
   setDataFim,
   onEscolheuValor,
   layout = 'colunas',
+  tiposPermitidos,
 }: PainelPeriodoProps) {
+  // `undefined` = todos (o padrao de antes de a prop existir); lista vazia
+  // tambem cai em "todos", porque um painel sem nenhum escopo nao permitiria
+  // escolher nada — falha muda pior que o defeito.
+  const permitido = (id: TipoCompetencia) =>
+    !tiposPermitidos || tiposPermitidos.length === 0 || tiposPermitidos.includes(id);
   const anos = anosDisponiveis.length > 0 ? anosDisponiveis : [filtro.ano];
   const anoMin = Math.min(...anos);
   const anoMax = Math.max(...anos);
@@ -179,12 +191,12 @@ export function PainelPeriodo({
           : 'flex flex-col gap-px border-r border-slate-800 bg-slate-950/40 p-2',
       )}
     >
-      {ESCOPOS.map((e) => botaoEscopo(e, false))}
+      {ESCOPOS.filter((e) => permitido(e.id)).map((e) => botaoEscopo(e, false))}
       <span
         className={cn('bg-slate-800', empilhado ? 'mx-0.5 h-5 w-px' : 'mx-1 my-1.5 h-px')}
         aria-hidden="true"
       />
-      {ATALHOS.map((a) => botaoEscopo(a, true))}
+      {ATALHOS.filter((a) => permitido(a.id)).map((a) => botaoEscopo(a, true))}
     </nav>
   );
 

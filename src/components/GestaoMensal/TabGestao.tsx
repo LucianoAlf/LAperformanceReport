@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/hooks/useToast';
 import { Users, DollarSign, Percent, Clock, AlertTriangle, Wallet, Calendar, TrendingDown, RefreshCw, UserMinus, Info, XCircle, UserX, CheckCircle, Bell, Star, CreditCard, TrendingUp, Target, UserPlus, GraduationCap, Ticket, Music, Baby, Lock, Unlock } from 'lucide-react';
 import { KPICard } from '@/components/ui/KPICard';
+import { SeloCompetencia } from '@/components/ui/SeloCompetencia';
 import { DistributionChart } from '@/components/ui/DistributionChart';
 import { DonutChart } from '@/components/ui/DonutChart';
 import { EvolutionChart } from '@/components/ui/EvolutionChart';
@@ -1637,13 +1638,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             </button>
           ))}
         </div>
-        <div
-          className={`min-h-9 px-3 py-1.5 rounded-xl border text-xs font-medium flex items-center gap-1.5 max-w-full ${competenciaBadgeClasses}`}
-          title={competenciaMensal.tooltip}
-        >
-          {competenciaMensal.bloqueiaEscrita ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-          <span className="min-w-0 truncate">{competenciaMensal.loading ? 'Validando competência' : competenciaMensal.badgeLabel}</span>
-        </div>
+        <SeloCompetencia status={competenciaMensal} className={competenciaBadgeClasses} />
       </div>
 
       {/* Conteúdo da Sub-aba */}

@@ -18,6 +18,7 @@ import { AvisoNaoOtimizado } from '@/mobile/AvisoNaoOtimizado';
 import { ListaAlunosMobile } from '@/mobile/telas/alunos/ListaAlunosMobile';
 import { COMPETENCIA_FECHADA_MESSAGE, useCompetenciaMensalStatus } from '@/hooks/useCompetenciaMensalStatus';
 import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
+import { SeloCompetencia } from '@/components/ui/SeloCompetencia';
 import { PageFilterBar } from '@/components/ui/page-filter-bar';
 import { KPICard } from '@/components/ui/KPICard';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -1911,7 +1912,7 @@ export function AlunosPage() {
     <div className="space-y-6">
       {/* Filtro de período */}
       <PageFilterBar>
-        <div className="flex flex-wrap items-center justify-end gap-3 w-full">
+        <div className="flex w-full flex-wrap items-center justify-start gap-2 sm:justify-end sm:gap-3">
           <CompetenciaFilter
             filtro={competenciaFiltro}
             range={competenciaRange}
@@ -1925,13 +1926,7 @@ export function AlunosPage() {
             onDataFimChange={setCompetenciaDataFim}
           />
 
-          <div
-            className={`min-h-8 px-3 py-1.5 rounded-lg border text-xs font-medium flex items-center gap-1.5 max-w-full ${competenciaBadgeClasses}`}
-            title={competenciaMensal.tooltip}
-          >
-            {competenciaMensal.bloqueiaEscrita ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-            <span className="min-w-0 truncate">{competenciaMensal.loading ? 'Validando competência' : competenciaMensal.badgeLabel}</span>
-          </div>
+          <SeloCompetencia status={competenciaMensal} className={competenciaBadgeClasses} raio="lg" />
 
           {unidadeAtual && unidadeAtual !== 'todos' ? (
             confirmRecalcular && !recalcBloqueado ? (
@@ -1981,7 +1976,7 @@ export function AlunosPage() {
       </PageFilterBar>
 
       {/* Header actions */}
-      <div className="flex flex-wrap items-center justify-end gap-4">
+      <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end sm:gap-4">
         <button
           type="button"
           onClick={() => navigate(criarUrlFaturasAlunos({

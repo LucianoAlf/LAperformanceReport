@@ -1,4 +1,6 @@
 import { cn } from '@/lib/utils';
+import { useShellMobile } from '@/hooks/useShellMobile';
+import { SeletorPeriodoMobile } from '@/mobile/SeletorPeriodoMobile';
 import { TipoCompetencia, CompetenciaFiltro, CompetenciaRange } from '@/hooks/useCompetenciaFiltro';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -72,6 +74,41 @@ export function CompetenciaFilter({
   const tiposVisiveis = tiposPermitidos?.length
     ? TIPOS.filter((tipo) => tiposPermitidos.includes(tipo.id))
     : TIPOS;
+
+  // ⚠️ A troca e AQUI, no componente compartilhado — nao na tela.
+  //
+  // Em 14/09/2026 a versao de celular deste filtro (pilula + folha) nasceu
+  // dentro do Dashboard mobile. Resultado: cada tela nova precisava do mesmo
+  // conserto de novo, e a de Alunos abriu com o filtro largo outra vez. Como
+  // ele serve 10 telas, corrigir na fonte resolve as 10 e as proximas — a
+  // tela nao precisa saber que existe uma versao de celular.
+  //
+  // Aberto o tempo todo, este filtro custa 148px do topo de uma tela de
+  // 812px, com 728px de conteudo numa faixa de 351px. A pilula custa 36px e
+  // diz o periodo por extenso.
+  //
+  // Decidido pelo MESMO `useShellMobile` que escolhe o shell, e nao por
+  // largura: ler so a largura faria o filtro discordar do resto da tela sob
+  // VITE_MOBILE_SHELL=off e sob shell-override.
+  const ehCelular = useShellMobile() === 'mobile';
+
+  if (ehCelular) {
+    return (
+      <SeletorPeriodoMobile
+        filtro={filtro}
+        range={range}
+        anosDisponiveis={anosDisponiveis}
+        setTipo={onTipoChange}
+        setAno={onAnoChange}
+        setMes={onMesChange}
+        setTrimestre={onTrimestreChange}
+        setSemestre={onSemestreChange}
+        setDataInicio={onDataInicioChange}
+        setDataFim={onDataFimChange}
+        tiposPermitidos={tiposPermitidos}
+      />
+    );
+  }
 
   return (
     // flex-wrap: os 7 tipos mais os seletores de ano/periodo somam ~760px, e a
