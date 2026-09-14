@@ -109,26 +109,33 @@ test('o desktop continua recebendo o DashboardPage intacto, e so quando o shell 
   assert.ok(posSuspense > guardaDesktop.index, 'a guarda do desktop precisa vir antes do ramo mobile');
 });
 
-test('a faixa de aviso sumiu do Dashboard e continua nos outros 17 modulos', () => {
-  assert.match(rotas, /ROTAS_PORTADAS[^=]*=\s*\['\/app'\]/);
+test('a faixa sumiu do Dashboard e de Alunos, e continua nos outros 16 modulos', () => {
+  assert.match(rotas, /ROTAS_PORTADAS[^=]*=\s*\['\/app',\s*'\/app\/alunos'\]/);
 });
 
-test('rotaFoiPortada: /app foi portada, mas /app/alunos (e as demais sub-rotas) continuam com a faixa', () => {
-  // Prova viva do comentario acima: com ROTAS_PORTADAS = ['/app'], a raiz casa e
-  // nenhuma sub-rota herda o estado -- e o corpo de rotaFoiPortada (regra do
-  // RAIZ_APP) nao precisou mudar nesta task.
-  const ROTAS_PORTADAS = ['/app'];
-  assert.equal(rotaFoiPortada('/app', ROTAS_PORTADAS), true);
-  assert.equal(rotaFoiPortada('/app/alunos', ROTAS_PORTADAS), false);
-  assert.equal(rotaFoiPortada('/app/agenda', ROTAS_PORTADAS), false);
+test('rotaFoiPortada: a raiz NAO contagia as sub-rotas, e cada porte entra sozinho', () => {
+  // A regra do RAIZ_APP: com ['/app'], a raiz casa e nenhuma sub-rota herda o
+  // estado — senao portar o Dashboard apagaria a faixa de Alunos, Agenda e
+  // mais 15 de uma vez.
+  assert.equal(rotaFoiPortada('/app', ['/app']), true);
+  assert.equal(rotaFoiPortada('/app/alunos', ['/app']), false);
+  assert.equal(rotaFoiPortada('/app/agenda', ['/app']), false);
+
+  // Com Alunos na lista, so ele e suas sub-rotas saem da faixa.
+  const HOJE = ['/app', '/app/alunos'];
+  assert.equal(rotaFoiPortada('/app/alunos', HOJE), true);
+  assert.equal(rotaFoiPortada('/app/alunos/123', HOJE), true);
+  assert.equal(rotaFoiPortada('/app/agenda', HOJE), false);
 });
 
 test('a rota so entra na lista com a tela ligada no router — uma fonte, um commit', () => {
   const lista = rotas.match(/ROTAS_PORTADAS[^=]*=\s*\[([^\]]*)\]/);
   assert.ok(lista, 'nao achei ROTAS_PORTADAS');
   const declaradas = [...lista[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
-  // Hoje so o Dashboard. Ao portar o proximo modulo, este teste obriga a
-  // ligar a tela no router no mesmo commit em que a faixa some.
-  assert.deepEqual(declaradas, ['/app']);
+  // Ao portar o proximo modulo, este teste obriga a ligar a tela no router no
+  // mesmo commit em que a faixa some — rota sem tela mostraria o desktop
+  // dizendo que foi adaptado.
+  assert.deepEqual(declaradas, ['/app', '/app/alunos']);
   assert.match(router, /DashboardResponsivo/);
+  assert.match(router, /AlunosResponsivo/);
 });

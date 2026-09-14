@@ -29,12 +29,16 @@ test('rotaFoiPortada', async (t) => {
   });
 });
 
-test('nesta etapa apenas o Dashboard foi portado — os outros 17 modulos seguem com a faixa', () => {
-  // Ate a Task 6 da etapa 2, este teste exigia ROTAS_PORTADAS = [] (etapa 1, so o
-  // shell). A Task 6 porta o Dashboard de proposito: a asserção precisa acompanhar
-  // esse fato, senao ela vira falso-negativo permanente a cada novo modulo portado.
+test('Dashboard e Alunos portados — os outros 16 modulos seguem com a faixa', () => {
+  // A lista e travada de PROPOSITO: portar um modulo tem de ser um ato
+  // consciente, com a tela ligada no router no mesmo commit em que a faixa
+  // some. Etapa 1 exigia [], a etapa 2 passou a ['/app'], e Alunos entra aqui.
   const fonte = readFileSync('src/mobile/rotasPortadas.ts', 'utf8');
-  assert.match(fonte, /ROTAS_PORTADAS[^=]*=\s*\['\/app'\]/u, 'etapa 2: so o Dashboard tem tela mobile ligada');
+  assert.match(
+    fonte,
+    /ROTAS_PORTADAS[^=]*=\s*\['\/app',\s*'\/app\/alunos'\]/u,
+    'so Dashboard e Alunos tem tela mobile ligada',
+  );
 });
 
 test('a faixa avisa sem bloquear', () => {
