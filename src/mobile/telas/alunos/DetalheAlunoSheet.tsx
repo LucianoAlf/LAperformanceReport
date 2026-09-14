@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { MessageCircle, Phone, X } from 'lucide-react';
 
 import { formatCurrency } from '@/lib/utils';
-import type { AlunoLista } from '@/hooks/useAlunosLista';
+import type { AlunoNaLinha } from './tipos';
 
 import { linkWhatsApp, quandoTemAula, seloDoAluno } from './seloAluno';
 
@@ -16,7 +16,7 @@ import { linkWhatsApp, quandoTemAula, seloDoAluno } from './seloAluno';
  */
 
 interface DetalheAlunoSheetProps {
-  aluno: AlunoLista | null;
+  aluno: AlunoNaLinha | null;
   onFechar: () => void;
 }
 
@@ -88,9 +88,9 @@ export function DetalheAlunoSheet({ aluno, onFechar }: DetalheAlunoSheetProps) {
         )}
 
         <dl className="grid grid-cols-2 gap-x-3 gap-y-3 border-t border-slate-800 pt-3">
-          <Campo rotulo="Aula" valor={quandoTemAula(aluno.dia_aula, aluno.horario_aula) || null} />
-          <Campo rotulo="Unidade" valor={aluno.unidade_codigo} />
-          <Campo rotulo="Matrícula" valor={aluno.tipo_matricula_nome} />
+          <Campo rotulo="Aula" valor={quandoTemAula(aluno.dia_aula ?? null, aluno.horario_aula ?? null) || null} />
+          <Campo rotulo="Unidade" valor={aluno.unidade_codigo ?? null} />
+          <Campo rotulo="Matrícula" valor={aluno.tipo_matricula_nome ?? null} />
           <Campo
             rotulo="Parcela"
             valor={aluno.valor_parcela != null ? formatCurrency(aluno.valor_parcela, 2) : null}
@@ -103,8 +103,8 @@ export function DetalheAlunoSheet({ aluno, onFechar }: DetalheAlunoSheetProps) {
             rotulo="Tempo de casa"
             valor={aluno.tempo_permanencia_meses != null ? `${aluno.tempo_permanencia_meses} meses` : null}
           />
-          <Campo rotulo="Entrou em" valor={aluno.data_matricula} />
-          <Campo rotulo="Saiu em" valor={aluno.data_saida} />
+          <Campo rotulo="Entrou em" valor={aluno.data_matricula ?? null} />
+          <Campo rotulo="Saiu em" valor={aluno.data_saida ?? null} />
           <Campo rotulo="Anamnese" valor={aluno.anamnese_preenchida ? 'Preenchida' : 'Não preenchida'} />
         </dl>
 

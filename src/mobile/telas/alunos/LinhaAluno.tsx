@@ -1,6 +1,6 @@
 import { ChevronRight } from 'lucide-react';
 
-import type { AlunoLista } from '@/hooks/useAlunosLista';
+import type { AlunoNaLinha } from './tipos';
 
 import { quandoTemAula, seloDoAluno } from './seloAluno';
 
@@ -21,15 +21,15 @@ import { quandoTemAula, seloDoAluno } from './seloAluno';
  */
 
 interface LinhaAlunoProps {
-  aluno: AlunoLista;
+  aluno: AlunoNaLinha;
   /** Na visão consolidada a unidade importa; dentro de uma unidade, é ruído. */
   mostrarUnidade: boolean;
-  onAbrir: (aluno: AlunoLista) => void;
+  onAbrir: (aluno: AlunoNaLinha) => void;
 }
 
 export function LinhaAluno({ aluno, mostrarUnidade, onAbrir }: LinhaAlunoProps) {
   const selo = seloDoAluno(aluno);
-  const quando = quandoTemAula(aluno.dia_aula, aluno.horario_aula);
+  const quando = quandoTemAula(aluno.dia_aula ?? null, aluno.horario_aula ?? null);
   const comQuem = [aluno.curso_nome, aluno.professor_nome].filter(Boolean).join(' · ');
 
   return (

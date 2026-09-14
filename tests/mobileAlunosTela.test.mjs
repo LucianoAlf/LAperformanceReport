@@ -101,6 +101,7 @@ test('linkWhatsApp recusa numero curto e nao duplica o 55', () => {
 const ler = (p) => readFileSync(p, 'utf8');
 const seloFonte = ler('src/mobile/telas/alunos/seloAluno.ts');
 const telaFonte = ler('src/mobile/telas/AlunosMobile.tsx');
+const listaFonte = ler('src/mobile/telas/alunos/ListaAlunosMobile.tsx');
 const tabelaDesktop = ler('src/components/App/Alunos/TabelaAlunos.tsx');
 const folha = ler('src/mobile/telas/alunos/DetalheAlunoSheet.tsx');
 const hook = ler('src/hooks/useAlunosLista.ts');
@@ -115,7 +116,7 @@ test('celular e desktop leem a MESMA regra de status de pagamento', () => {
   }
   // Ancorado na REIMPLEMENTACAO, nao na palavra: o que nao pode voltar e o
   // teste de "esta ativo?" escrito a mao ao lado do status_pagamento.
-  for (const [nome, fonte] of [['selo do celular', seloFonte], ['tela do celular', telaFonte]]) {
+  for (const [nome, fonte] of [['selo do celular', seloFonte], ['lista do celular', listaFonte]]) {
     assert.doesNotMatch(
       fonte,
       /function\s+isMatriculaAtivaParaInadimplencia/,
@@ -124,10 +125,14 @@ test('celular e desktop leem a MESMA regra de status de pagamento', () => {
   }
 });
 
-test('a tela do celular nao fala com o banco por conta propria', () => {
-  // Consulta na tela seria a terceira leitura da lista de alunos.
-  assert.doesNotMatch(telaFonte, /supabase\.(from|rpc)\(/);
+test('a apresentacao da lista nao fala com o banco por conta propria', () => {
+  // A ListaAlunosMobile RECEBE os alunos — e o que permite a AlunosPage passar
+  // os dela e a tela autonoma passar os do hook, sem duas leituras da lista.
+  assert.doesNotMatch(listaFonte, /supabase\.(from|rpc)\(/);
+  assert.match(listaFonte, /alunos: AlunoNaLinha\[\]/);
+  // Quem consulta e so a tela autonoma, pelo hook.
   assert.match(telaFonte, /useAlunosLista/);
+  assert.doesNotMatch(telaFonte, /supabase\.(from|rpc)\(/);
 });
 
 test('o hook pagina de 1000 — sem isso a lista TRUNCA sem erro nenhum', () => {
@@ -154,8 +159,8 @@ test('erro de consulta nao vira lista vazia', () => {
   assert.match(telaFonte, /Não consegui carregar a lista de alunos/);
 });
 
-test('os alvos de toque da tela respeitam 44px', () => {
-  assert.match(telaFonte, /min-h-\[44px\]/, 'a busca perdeu o alvo de 44px');
+test('os alvos de toque respeitam 44px', () => {
+  assert.match(listaFonte, /min-h-\[44px\]/, 'a busca perdeu o alvo de 44px');
   assert.match(folha, /min-h-\[44px\]/, 'os botoes de contato perderam o alvo de 44px');
 });
 
@@ -168,29 +173,50 @@ test('a folha de detalhe existe porque a ficha (arquetipo 3) ainda nao existe', 
   assert.match(folha, /e\.key === 'Escape'/, 'a folha nao fecha no Esc');
 });
 
-test('🔴 a tela existe mas NAO esta ligada — e religar exige cobrir a pagina inteira', () => {
-  // Ela cobre 1 das 8 abas de /app/alunos (lista, turmas, grade, distribuicao,
-  // conciliacao, importar, automacao, historico), nenhum dos 6 KPIs do topo, e
-  // trocou a ficha de 9 abas por uma folha de 9 campos.
-  //
-  // Enquanto for assim, a rota tem de continuar mostrando o desktop COM a faixa
-  // ambar: sem ela, quem abre Alunos no celular ve menos do que ve hoje e nao
-  // tem como saber. Degradar e o combinado; esconder nao e.
-  //
-  // Este teste e o par invertido do "a rota so entra na lista com a tela ligada"
-  // — la a lista nao pode andar sem o router, aqui o router nao pode andar sem a
-  // lista. Ligar os dois no mesmo commit e o que ele obriga.
+test('a faixa e por ABA, e a lista e a UNICA declarada como adaptada', () => {
+  // /app/alunos tem 8 abas em estagios diferentes. Uma faixa por ROTA mentiria
+  // nos dois sentidos — dizendo "adaptada" na aba que ainda nao e, ou o
+  // contrario. Marcar a rota inteira so quando as 8 estiverem prontas deixaria
+  // o celular sem nada por semanas, com 7 abas que JA abrem hoje.
+  const abas = ler('src/mobile/abasPortadas.ts');
+  const shell = ler('src/mobile/MobileLayout.tsx');
+  const pagina = ler('src/components/App/Alunos/AlunosPage.tsx');
+
+  assert.match(abas, /'\/app\/alunos': \['lista'\]/, 'a lista deixou de ser a aba adaptada');
+  assert.match(abas, /ROTAS_COM_FAIXA_POR_ABA[^=]*=\s*\['\/app\/alunos'\]/);
+
+  // O shell suprime a faixa DELE nessa rota, senao apareceriam duas.
+  assert.match(shell, /!portada && !faixaPorAba && <AvisoNaoOtimizado \/>/);
+  // ...mas NAO trava a rolagem lateral: 7 das 8 abas ainda dependem dela.
+  assert.match(shell, /portada \? 'overflow-x-hidden' : 'overflow-x-auto'/);
+
+  // E a pagina mostra a faixa da aba aberta.
+  assert.match(pagina, /ehCelular && !abaFoiPortada\('\/app\/alunos', tabAtiva\) && <AvisoNaoOtimizado \/>/);
+});
+
+test('a rota NAO entra em ROTAS_PORTADAS — a faixa dela e por aba', () => {
+  // Entrar la apagaria a faixa das 7 abas que ainda nao foram adaptadas.
   const rotas = ler('src/mobile/rotasPortadas.ts');
-  const router = ler('src/router.tsx');
-  const portada = /ROTAS_PORTADAS[^=]*=\s*\[[^\]]*'\/app\/alunos'/.test(rotas);
-  const montada = /AlunosResponsivo/.test(router);
-  assert.equal(
-    portada,
-    montada,
-    portada
-      ? 'a rota saiu da faixa mas o router nao monta o AlunosResponsivo'
-      : 'o router monta o AlunosResponsivo com a rota ainda na faixa de "nao adaptada"',
-  );
+  assert.doesNotMatch(rotas, /'\/app\/alunos'\]/, 'a rota voltou a ser marcada como portada por inteiro');
+});
+
+test('a mesma ListaAlunosMobile serve a pagina e a tela autonoma', () => {
+  // Duas apresentacoes da mesma lista divergiriam no primeiro ajuste.
+  const pagina = ler('src/components/App/Alunos/AlunosPage.tsx');
+  const autonoma = ler('src/mobile/telas/AlunosMobile.tsx');
+  for (const [nome, fonte] of [['AlunosPage', pagina], ['tela autonoma', autonoma]]) {
+    assert.match(fonte, /<ListaAlunosMobile/, `${nome} nao renderiza a lista compartilhada`);
+  }
+  // A pagina passa os alunos que ELA ja carregou — nada de segunda consulta.
+  assert.match(pagina, /<ListaAlunosMobile alunos=\{alunosComTurma\}/);
+  // E o desktop continua com a tabela.
+  assert.match(pagina, /tabAtiva === 'lista' && !ehCelular && \(\s*<TabelaAlunos/);
+});
+
+test('os 6 KPIs da pagina ficam compactos no celular', () => {
+  const pagina = ler('src/components/App/Alunos/AlunosPage.tsx');
+  const compactos = pagina.split("size={ehCelular ? 'sm' : undefined}").length - 1;
+  assert.equal(compactos, 6, `esperava os 6 KPIs em size sm no celular, achei ${compactos}`);
 });
 
 test('o contato cai para o telefone do responsavel, e a tela DIZ que e dele', () => {

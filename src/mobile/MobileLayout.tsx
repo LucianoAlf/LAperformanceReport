@@ -10,6 +10,7 @@ import { AvisoNaoOtimizado } from './AvisoNaoOtimizado';
 import { MobileBottomNav } from './MobileBottomNav';
 import { MobileHeader } from './MobileHeader';
 import { MobileMaisSheet } from './MobileMaisSheet';
+import { rotaTemFaixaPorAba } from './abasPortadas';
 import { rotaFoiPortada } from './rotasPortadas';
 import { labelDaUnidade } from './unidadeLabel';
 
@@ -71,6 +72,15 @@ export function MobileLayout() {
   // divergir num refactor futuro.
   const portada = rotaFoiPortada(location.pathname);
 
+  // Rota com abas decide a faixa por ABA, la dentro — o shell nao tem como
+  // saber qual aba esta aberta. /app/alunos tem 8 abas em estagios diferentes
+  // de adaptacao, e uma faixa unica mentiria nos dois sentidos: dizendo
+  // "adaptada" na aba que ainda nao e, ou o contrario.
+  // ⚠️ So a FAIXA muda de lugar; a rolagem lateral NAO. Numa rota mista, 7 das
+  // 8 abas ainda precisam rolar para o lado — travar o <main> em
+  // overflow-x-hidden cortaria justamente as que dependem da degradacao.
+  const faixaPorAba = rotaTemFaixaPorAba(location.pathname);
+
   return (
     <PageTitleProvider>
       <div className="flex h-[100dvh] flex-col bg-slate-950">
@@ -94,7 +104,7 @@ export function MobileLayout() {
             portada ? 'overflow-x-hidden' : 'overflow-x-auto'
           }`}
         >
-          {!portada && <AvisoNaoOtimizado />}
+          {!portada && !faixaPorAba && <AvisoNaoOtimizado />}
           <Outlet context={{ filtroAtivo, unidadeSelecionada, setUnidadeSelecionada, competencia, setPeriodoLabel }} />
         </main>
 

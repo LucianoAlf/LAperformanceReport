@@ -151,8 +151,11 @@ test('o <main> do shell so rola para o lado em rota NAO portada', () => {
     mobileLayout.includes('const portada = rotaFoiPortada(location.pathname)'),
     'a decisao "esta tela foi adaptada?" deixou de ter leitura unica',
   );
+  // O aviso ganhou um segundo termo em 14/09 (`!faixaPorAba`, para /app/alunos
+  // mostrar a faixa por ABA la dentro), mas segue lendo o MESMO `portada` da
+  // politica de rolagem — que e o que este assert protege.
   assert.ok(
-    mobileLayout.includes('{!portada && <AvisoNaoOtimizado />}'),
+    mobileLayout.includes('{!portada && !faixaPorAba && <AvisoNaoOtimizado />}'),
     'o aviso de tela nao adaptada deixou de usar a mesma leitura da rolagem',
   );
 });

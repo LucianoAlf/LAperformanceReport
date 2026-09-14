@@ -1,5 +1,5 @@
 import { getStatusPagamentoOperacional } from '@/lib/alunosStatus';
-import type { AlunoLista } from '@/hooks/useAlunosLista';
+import type { AlunoNaLinha } from './tipos';
 
 /**
  * A decisão de o que a linha SINALIZA — separada do JSX para poder ser
@@ -19,7 +19,7 @@ export interface SeloAluno {
  * A ordem é de gravidade: quem está inadimplente E em aviso prévio aparece
  * como inadimplente, que é o que exige ação hoje.
  */
-export function seloDoAluno(aluno: AlunoLista): SeloAluno | null {
+export function seloDoAluno(aluno: AlunoNaLinha): SeloAluno | null {
   // Pela regra compartilhada, nunca pelo campo cru: quem evadiu devendo não é
   // sinalizado aqui — a cobrança dele é do financeiro, não da lista de alunos.
   if (getStatusPagamentoOperacional(aluno) === 'inadimplente') {
