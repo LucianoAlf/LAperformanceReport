@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — financeiro
 
-39 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+40 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## caixa_categorias
 
@@ -167,6 +167,38 @@
 
 **Únicos:**
 - `contrato_assinatura_sync_execucoes_pkey`
+
+## faturas_pagas_mes
+
+> Faturas PAGAS capturadas por data de pagamento (DRE caixa). O sync puxa status=paga com vencimento M-2 a M+12, filtra por data_pagamento em M. O export merge com o snapshot de vencimento, dedup por emusys_fatura_id.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `unidade_codigo` | text | não |  |  |
+| `emusys_fatura_id` | bigint | não |  |  |
+| `emusys_matricula_id` | bigint | sim |  |  |
+| `emusys_contrato_id` | bigint | sim |  |  |
+| `emusys_student_id` | bigint | sim |  |  |
+| `descricao` | text | não | ''::text |  |
+| `status` | text | não | 'paga'::text |  |
+| `data_vencimento` | date | não |  |  |
+| `data_pagamento` | date | não |  |  |
+| `competencia_vencimento` | date | não |  |  |
+| `competencia_pagamento` | date | não |  |  |
+| `valor_original` | numeric(12,2) | não | 0 |  |
+| `valor_pago` | numeric(12,2) | sim |  |  |
+| `juros_e_multa` | numeric(12,2) | não | 0 |  |
+| `desconto_aplicado` | numeric(12,2) | não | 0 |  |
+| `desconto_fixo` | numeric(12,2) | não | 0 |  |
+| `desconto_condicional` | numeric(12,2) | não | 0 |  |
+| `payload` | jsonb | não | '{}'::jsonb |  |
+| `synced_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `faturas_pagas_mes_pkey`
+- `faturas_pagas_mes_unidade_fatura_uniq`
 
 ## fechamento_mensal_auditoria
 

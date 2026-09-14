@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Funções
 
-1467 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
+1469 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
 chamadas diretas ao PostgREST não são visíveis para o gerador.
 
 ## aluno
@@ -741,6 +741,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | Função | Estado | Segurança | Consumidores |
 |---|---|---|---|
 | `fn_dever_de_casa_regua_desde()` | SO-INTERNA | INVOKER · 🔓 anon | funcao:fn_dever_de_casa_sinal_do_aluno, funcao:fn_fabio_laudo |
+| `fn_repertorio_contem(p_maior text, p_menor text)` | SO-INTERNA | INVOKER · 🔓 anon | funcao:fn_repertorio_da_aula |
 
 ## plataforma
 
@@ -820,7 +821,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_registrar_codigo_enviado(p_professor_id integer, p_telefone text, p_email text, p_enviou boolean, p_ip_hint text, p_user_agent text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `fn_remover_campos_comuns_da_fatia(p_tronco jsonb, p_fatia jsonb)` | SO-INTERNA | DEFINER | funcao:fabio_corrigir_registro_confirmado, funcao:fabio_criar_registro, funcao:fn_atualizar_fatia_core |
 | `fn_set_atualizado_em()` | ATIVA | INVOKER · 🔓 anon | trigger:fabio_fila_audios.trg_fabio_audios_upd, trigger:fabio_registros_aula.trg_fabio_reg_upd |
-| `fn_texto_normalizado(p_texto text)` | SO-INTERNA | INVOKER · 🔓 anon | funcao:fn_gavetas_da_aula, funcao:fn_texto_emusys_como_no_app |
+| `fn_texto_normalizado(p_texto text)` | SO-INTERNA | INVOKER · 🔓 anon | funcao:fn_gavetas_da_aula, funcao:fn_repertorio_contem, funcao:fn_repertorio_da_aula |
 | `fn_texto_para_bigint(p_texto text)` | SO-INTERNA | INVOKER | funcao:fabio_gravar_contexto_experimental, funcao:fn_experimentais_a_extrair |
 | `fn_texto_para_data(p_texto text)` | SO-INTERNA | INVOKER | funcao:fn_experimental_contexto_seguro |
 | `fn_touch_updated_at()` | ATIVA | INVOKER · 🔓 anon | trigger:fabio_professor_preferences.trg_fabio_professor_preferences_touch |
@@ -1283,13 +1284,14 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_professor_do_usuario()` | ATIVA | DEFINER | view:vw_disponibilidade_professores, funcao:app_abrir_rascunho_manual, funcao:app_aluno_ficha, funcao:app_atualizar_fatia, funcao:app_atualizar_perfil, funcao:app_atualizar_preferencia_fabio, +58 outros |
 | `fn_professor_ponto_canonicalizar_ocorrencia()` | ATIVA | DEFINER | trigger:professor_ponto_confirmacoes.trg_professor_ponto_canonicalizar_ocorrencia |
 | `fn_professor_por_whatsapp(p_telefone text)` | SO-INTERNA | DEFINER | funcao:fabio_identidade_whatsapp |
-| `fn_professor_usa_app(p_professor_id integer)` | ATIVA | INVOKER · 🔓 anon | view:vw_experimental_pendencia, view:vw_fabio_ocorrencia_do_teste, view:vw_registro_pendencia, funcao:fn_diag_saude_experimental, funcao:fn_fabio_laudo |
+| `fn_professor_usa_app(p_professor_id integer)` | ATIVA | INVOKER · 🔓 anon | view:vw_experimental_pendencia, view:vw_fabio_ocorrencia_do_teste, view:vw_registro_pendencia, funcao:fn_diag_saude_experimental, funcao:fn_emusys_escrita_pendentes, funcao:fn_fabio_laudo |
 | `fn_proteger_anotacoes_fabio()` | ATIVA | DEFINER | trigger:aulas_emusys.trg_proteger_anotacoes_fabio |
 | `fn_proteger_decisao_humana_aula()` | ATIVA | DEFINER | trigger:aulas_emusys.trg_proteger_decisao_humana_aula |
 | `fn_reagendamento_limpa_chamada_alunos()` | ATIVA | DEFINER | trigger:aulas_emusys.trg_reagendamento_limpa_chamada_alunos |
 | `fn_registrar_conflito_presenca(p_aluno_presenca_id uuid, p_aluno_presenca_gemea_id uuid, p_chave text, p_tipo text, p_status_decisao text, p_origem_decisao text, p_status_contraparte text, p_origem_contraparte text, p_evidencia jsonb)` | SO-INTERNA | DEFINER | funcao:app_corrigir_presenca_do_aluno, funcao:app_registrar_chamada_agenda, funcao:fn_sincronizar_gemeos_presenca, funcao:upsert_presenca_emusys_bruta |
 | `fn_registrar_presenca_experimental(p_vinculo_id bigint, p_status text, p_respondido_por text, p_bruta_emusys text)` | SO-INTERNA | DEFINER | funcao:app_confirmar_registro_experimental, funcao:app_declarar_falta_experimental, funcao:fn_registrar_experimental_interno |
 | `fn_registrar_presencas_core(p_aula_ancora_id integer, p_professor_id integer, p_alunos_ausentes integer[], p_respondido_por text, p_estrito boolean)` | SO-INTERNA | DEFINER | funcao:app_aplicar_comando_presenca_v1, funcao:app_registrar_presencas_aula |
+| `fn_repertorio_da_aula(p_registro_id uuid)` | SO-INTERNA | INVOKER · 🔓 anon | funcao:app_historico_turma, funcao:fn_texto_emusys_como_no_app |
 | `fn_resolver_aula_da_experimental(p_unidade_id uuid, p_data date, p_nome_aluno text)` | ORFA | INVOKER | sem consumidor conhecido |
 | `fn_responder_presenca_core(p_professor_id integer, p_registro_alvo_id uuid, p_presenca text)` | SO-INTERNA | DEFINER | funcao:app_responder_presenca, funcao:fabio_responder_presenca, funcao:fn_confirmar_registro_core |
 | `fn_roster_da_sessao(p_aula_id integer)` | SO-INTERNA | DEFINER | funcao:app_abrir_rascunho_manual, funcao:app_salvar_rascunho_manual, funcao:fabio_criar_registro, funcao:fn_enfileirar_audio_core, funcao:fn_fabio_caso_sem_aluno_no_emusys, funcao:fn_fabio_det_audio_recusado |

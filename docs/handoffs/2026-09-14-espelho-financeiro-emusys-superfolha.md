@@ -230,6 +230,20 @@ Continua valendo e é o que alimenta a tela de Faturas e a inadimplência.
   - `numero_parcela`/`total_parcelas_contrato` numeram por **contrato**, não matrícula (renovação reinicia).
   - Forma de pagamento efetiva = `forma_pagamento_transacao` (≠ preferencial do contrato).
 
+### 3.1 NOVO 14/09: faturas pagas por data de pagamento (DRE caixa)
+
+O snapshot por vencimento não captura adiantamentos e cheques pré-datados pagos em M com vencimento futuro. Para o DRE caixa do Super Folha (que usa data de pagamento), adicionamos:
+
+- **Tabela:** `faturas_pagas_mes` — chave única `(unidade_id, emusys_fatura_id)`. Colunas: `data_vencimento`, `data_pagamento`, `competencia_vencimento`, `competencia_pagamento`, valores, payload.
+- **Sync:** `sync-faturas-emusys` com `mode: "pagas_no_mes"`. Puxa `status=paga` com janela de vencimento M−2 a M+12, filtra por `data_pagamento` em M no cliente, upsert em `faturas_pagas_mes`. Cron diário às 4h BRT (7h UTC) cobrindo mês corrente + anterior.
+- **Export:** `export-contas-receber` modo `snapshot` agora faz **merge**: snapshot por vencimento + `faturas_pagas_mes` por pagamento, **dedup por `(unidade_id, emusys_fatura_id)`** (a do snapshot vence primeiro; a de pagamento é extra). O manifesto traz `faturas_pagas_mes_extras` = quantas faturas extras por pagamento foram incluídas.
+- **Não muda a regra de abertas:** faturas em aberto continuam só por vencimento. Só PAGAS com data de pagamento em M e vencimento fora de M são adicionadas.
+- **Casos reais validados em agosto/2026:**
+  - Recreio: 10 PIX de R$ 385,20 em 11/08 (parcelas 08/2026 a 07/2027) — `emusys_fatura_id` 30293–30304.
+  - Recreio: 9 cheques de R$ 435,50 em 14/08 (parcelas 09/2026 a 06/2027) — `emusys_fatura_id` 29413–29422.
+  - Barra: 12 cartões de R$ 475,00 em 17/08 (parcelas 08/2026 a 07/2027) — `emusys_fatura_id` 15034–15045.
+  - CG R$ 4.714 em 13/08 `emusys_fatura_id` 82868: **não encontrado** no espelho do LA Report (nem no snapshot, nem em `faturas_pagas_mes`, nem em `sync_run_items`). Pode ser ID de outra fonte ou incorreto; pedimos confirmação ao Super Folha.
+
 ---
 
 ## 4. Identidades e convenções que atravessam tudo

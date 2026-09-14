@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Tabelas e views
 
-565 objetos. Uma linha cada; colunas e FKs em `detalhe/<dominio>.md`.
+566 objetos. Uma linha cada; colunas e FKs em `detalhe/<dominio>.md`.
 
 | Objeto | Tipo | Domínio | Colunas | Linhas | RLS | FKs | Comentário |
 |---|---|---|---|---|---|---|---|
@@ -155,7 +155,7 @@
 | `agente_orcamento_config` | tabela | comercial | 3 | 0 | sim (1) | 0 | Quantas mensagens por dia um destino aguenta antes de a Sol calar os nudges. Fato operacional (essencial) nunca e cortado — so contado. |
 | `agentes` | tabela | comercial | 22 | 0 | sim (4) | 2 |  |
 | `atendimento_consultor_diario` | tabela | comercial | 15 | 147 | sim (0) | 1 | Instantâneo diário (19:10 BRT) de atendimento_conversa_estado por pessoa. ESTOQUE do que ficou pendurado, não velocidade de resposta — velocidade é do chatwoot-atendimento-insights, ao vivo. |
-| `atendimento_conversa_estado` | tabela | comercial | 22 | 1269 | sim (1) | 0 | T2/1o andar/operacional. Espelho dos FATOS da conversa do Chatwoot (projeto SOL), ingerido pela edge `ingerir-calor-atendimento`. ⚠️ "humano" = agente que nao e Mila. ⚠️ minutos_ate_humano NEGATIVO = nos iniciamos a conversa. ⚠️ departamento comercial so existe desde 03/09/2026. |
+| `atendimento_conversa_estado` | tabela | comercial | 22 | 1278 | sim (1) | 0 | T2/1o andar/operacional. Espelho dos FATOS da conversa do Chatwoot (projeto SOL), ingerido pela edge `ingerir-calor-atendimento`. ⚠️ "humano" = agente que nao e Mila. ⚠️ minutos_ate_humano NEGATIVO = nos iniciamos a conversa. ⚠️ departamento comercial so existe desde 03/09/2026. |
 | `campanha_contatos` | tabela | comercial | 10 | 10040 | sim (1) | 1 |  |
 | `campanhas` | tabela | comercial | 24 | 7 | sim (4) | 4 |  |
 | `campanhas_config` | tabela | comercial | 5 | 0 | sim (2) | 1 |  |
@@ -228,6 +228,7 @@
 | `caixa_reaberturas_log` | tabela | financeiro | 15 | 0 | sim (1) | 2 | Log auditavel de reaberturas do caixa diario. Guarda snapshot do cabecalho e das movimentacoes antes da reabertura. |
 | `caixas_diarios` | tabela | financeiro | 18 | 179 | sim (3) | 1 | Cabecalho do fechamento de caixa diario por unidade. Fase 1 manual. |
 | `contrato_assinatura_sync_execucoes` | tabela | financeiro | 14 | 17 | sim (1) | 1 |  |
+| `faturas_pagas_mes` | tabela | financeiro | 21 | 1183 | sim (0) | 1 | Faturas PAGAS capturadas por data de pagamento (DRE caixa). O sync puxa status=paga com vencimento M-2 a M+12, filtra por data_pagamento em M. O export merge com o snapshot de vencimento, dedup por emusys_fatura_id. |
 | `fechamento_mensal_auditoria` | tabela | financeiro | 10 | 189 | sim (1) | 2 | Auditoria das acoes de preview, aprovacao, fechamento, retificacao e compatibilidade mensal. |
 | `fechamento_mensal_execucoes` | tabela | financeiro | 10 | 0 | sim (1) | 0 | Placar do fechamento mensal automatico. Alimenta o vigia da la-hq, que le daqui o motivo da falha por unidade. |
 | `fechamento_mensal_retificacoes` | tabela | financeiro | 9 | 0 | sim (0) | 1 | Retificacoes append-only aplicadas somente na leitura de relatorios mensais fechados; o snapshot original permanece imutavel. |
@@ -253,7 +254,7 @@
 | `sol_caixa_lotes_v1` | tabela | financeiro | 13 | 0 | sim (0) | 4 |  |
 | `sol_caixa_operacoes_auditoria_v1` | tabela | financeiro | 21 | 0 | sim (0) | 0 |  |
 | `sol_caixa_shadow_approvals_v1` | tabela | financeiro | 7 | 168 | sim (0) | 1 | Sol Caixa V3 shadow privado: decisões de aprovação observadas, sem acionar write financeiro. |
-| `sol_caixa_shadow_eventos_v1` | tabela | financeiro | 15 | 856 | sim (0) | 1 | Sol Caixa V3 shadow privado: eventos reais observados sem resposta pública e sem mutação financeira. |
+| `sol_caixa_shadow_eventos_v1` | tabela | financeiro | 15 | 990 | sim (0) | 1 | Sol Caixa V3 shadow privado: eventos reais observados sem resposta pública e sem mutação financeira. |
 | `sol_caixa_shadow_previews_v1` | tabela | financeiro | 11 | 1629 | sim (0) | 2 | Sol Caixa V3 shadow privado: previews calculados para auditoria, nunca enviados ao WhatsApp por esta tabela. |
 | `sol_caixa_unidade_policy` | tabela | financeiro | 3 | 0 | sim (0) | 0 |  |
 | `sol_caixa_v3_approval_consumos_v1` | tabela | financeiro | 7 | 168 | sim (0) | 2 |  |
@@ -299,7 +300,7 @@
 | `vw_ranking_professores_retencao` | view | gestao | 8 | — | não | 0 |  |
 | `vw_ranking_unidades` | view | gestao | 9 | — | não | 0 |  |
 | `vw_sazonalidade` | view | gestao | 8 | — | não | 0 |  |
-| `admin_conversas` | tabela | integracao | 15 | 339 | sim (1) | 3 | Conversas administrativas com alunos via WhatsApp - uma por aluno por unidade |
+| `admin_conversas` | tabela | integracao | 15 | 367 | sim (1) | 3 | Conversas administrativas com alunos via WhatsApp - uma por aluno por unidade |
 | `admin_mensagens` | tabela | integracao | 17 | 1807 | sim (1) | 2 | Mensagens das conversas administrativas com alunos |
 | `alunos_emusys_atributos_decisoes` | tabela | integracao | 13 | 929 | sim (1) | 2 |  |
 | `alunos_emusys_atributos_divergencias` | tabela | integracao | 18 | 12477 | sim (1) | 2 |  |
@@ -320,7 +321,7 @@
 | `emusys_experimentais_snapshot_execucoes` | tabela | integracao | 10 | 20778 | não | 1 |  |
 | `emusys_experimentais_snapshot_publicacoes_vigentes` | tabela | integracao | 6 | 3 | sim (0) | 2 | Ponteiro transacional da ultima publicacao completa por unidade para validar leituras admitidas. |
 | `emusys_fatura_source_events` | tabela | integracao | 12 | 5729550 | sim (1) | 4 | Trilha append-only das confirmacoes, ausencias e resolucoes observadas por competencia. |
-| `emusys_faturas` | tabela | integracao | 22 | 5387 | sim (1) | 1 |  |
+| `emusys_faturas` | tabela | integracao | 22 | 5389 | sim (1) | 1 |  |
 | `emusys_historico_backfill_execucoes_v1` | tabela | integracao | 20 | 117 | sim (0) | 2 | Checkpoint retomavel do coletor historico Emusys do Health Score Professor V3. |
 | `emusys_matriculas_estado_atual` | tabela | integracao | 23 | 4929 | sim (1) | 2 | Fonte bruta backend-only do estado atual de cada matricula Emusys, escopada por unidade. |
 | `emusys_matriculas_sync_execucoes` | tabela | integracao | 13 | 178 | sim (1) | 1 | Manifesto auditavel das fotografias Emusys. Somente execucao operacional concluida e fresca pode alimentar KPIs vivos. |
@@ -428,10 +429,10 @@
 | `anotacoes` | tabela | professor | 11 | 0 | sim (2) | 1 |  |
 | `anotacoes_alunos` | tabela | professor | 8 | 6 | sim (4) | 1 | Anotações e observações sobre alunos |
 | `app_audio_preso_no_aparelho` | tabela | professor | 5 | 10 | sim (0) | 1 | Farol do app (20260827170000): estado ATUAL da fila local de audios de cada professor. Uma linha por professor, sobrescrita — e o zero tambem e reportado, senao o alarme de ontem nunca apaga. Sem isto, audio recusado fica so no aparelho e nenhuma auditoria pode ve-lo (caso Valdo/Bruno, 26/08/2026). |
-| `aula_alunos_emusys` | tabela | professor | 16 | 36010 | sim (3) | 3 | Roster operacional de aulas do Emusys, sem contato ou dados financeiros. |
+| `aula_alunos_emusys` | tabela | professor | 16 | 37836 | sim (3) | 3 | Roster operacional de aulas do Emusys, sem contato ou dados financeiros. |
 | `aula_registros_fabio_log` | tabela | professor | 8 | 670 | sim (0) | 1 | Auditoria das gravações do Fábio em aulas_emusys.anotacoes_fabio. É trilha de rastreabilidade, não o lar do registro (o registro vive em anotacoes_fabio). |
-| `aula_roster_sync_estado` | tabela | professor | 9 | 19188 | sim (0) | 2 |  |
-| `aulas_emusys` | tabela | professor | 35 | 64542 | sim (4) | 3 | Metadados completos de cada aula importada do Emusys (turma, curso, sala, professor, horários) |
+| `aula_roster_sync_estado` | tabela | professor | 9 | 19197 | sim (0) | 2 |  |
+| `aulas_emusys` | tabela | professor | 35 | 64552 | sim (4) | 3 | Metadados completos de cada aula importada do Emusys (turma, curso, sala, professor, horários) |
 | `config_health_score` | tabela | professor | 13 | 0 | sim (2) | 1 | Configuração dos pesos e limites do Health Score do Professor |
 | `config_health_score_aluno` | tabela | professor | 11 | 0 | sim (2) | 1 | Configuração de pesos do Health Score de Alunos - ajustável por unidade |
 | `config_health_score_professor` | tabela | professor | 12 | 1 | sim (2) | 1 | Configuração de pesos do Health Score de Professores - ajustável por unidade |
@@ -464,7 +465,7 @@
 | `fabio_professor_memoria` | tabela | professor | 17 | 14 | não | 2 | Memoria do Fabio sobre cada professor: apelido, tom, preferencias, jeito e fatos. Escrita SO por RPC (fabio_memoria_gravar / _revogar), leitura por fabio_memoria_do_professor. Toda linha carrega a evidencia que a originou; sem evidencia nao grava. Desenho espelhado do snapshot diario da Maria, 07/09/2026. |
 | `fabio_professor_preferences` | tabela | professor | 12 | 0 | sim (0) | 1 |  |
 | `fabio_protecao_log` | tabela | professor | 5 | 0 | sim (0) | 0 | Auditoria de updates que tentaram esvaziar aulas_emusys.anotacoes_fabio e foram neutralizados. |
-| `fabio_registro_correcoes` | tabela | professor | 9 | 9 | sim (0) | 3 |  |
+| `fabio_registro_correcoes` | tabela | professor | 9 | 37 | sim (0) | 3 |  |
 | `fabio_registros_aula` | tabela | professor | 19 | 1778 | sim (3) | 7 |  |
 | `fabio_relato_proposto` | tabela | professor | 16 | 75 | sim (0) | 1 | Propostas de atrito mineradas da conversa do professor. CONTEM CITACAO LITERAL do que ele disse -- fechada para anon/authenticated e com RLS desde 08/09/2026, quando a auditoria achou que a chave publica lia e apagava. |
 | `fabio_skills` | tabela | professor | 8 | 2 | sim (0) | 0 |  |

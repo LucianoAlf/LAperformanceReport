@@ -1323,7 +1323,7 @@
 | `config_meta_segmento_id` | uuid | sim |  | health_score_professor_v3_config_metas_curso_modalidade.id |
 | `unidade_id` | uuid | não |  | unidades.id |
 | `curso_id` | integer | não |  | cursos.id |
-| `modalidade` | text | não |  | health_score_professor_v3_config_metas_curso_modalidade.modalidade |
+| `modalidade` | text | não |  | professor_unidade_curso_modalidade.modalidade |
 | `pessoas_unicas` | integer | não | 0 |  |
 | `vinculos_ativos` | integer | não | 0 |  |
 | `turmas_elegiveis` | integer | não | 0 |  |
