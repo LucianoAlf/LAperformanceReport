@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — comercial
 
-73 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+74 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## agente_conversas
 
@@ -1557,6 +1557,23 @@
 | `converteu` | integer | sim |  |  |
 | `conv_com_sinteticos` | numeric | sim |  |  |
 | `conv_so_funil` | numeric | sim |  |  |
+
+## vw_matriculas_ativas_sem_aluno_local
+
+> Matrícula ATIVA no Emusys que não tem linha correspondente em `alunos` — aluno que existe na escola e não existe no LA Report. Linha aqui é sempre defeito: ou o webhook `matricula_nova` falhou ao gravar, ou o aluno foi apagado sem a matrícula ser encerrada na origem. Deve ficar em ZERO. Nasceu do caso Lara Boldrine/Barra (matrícula 870, 08/09/2026), em que o INSERT foi revertido por um AFTER trigger e nada acusou por 6 dias. Ver migration 20260914210000.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `unidade_id` | uuid | sim |  |  |
+| `unidade` | character varying(100) | sim |  |  |
+| `emusys_matricula_id` | bigint | sim |  |  |
+| `emusys_aluno_id` | bigint | sim |  |  |
+| `aluno_nome` | text | sim |  |  |
+| `data_matricula` | text | sim |  |  |
+| `curso_emusys` | text | sim |  |  |
+| `professor_emusys` | text | sim |  |  |
+| `sincronizado_em` | timestamp with time zone | sim |  |  |
+| `dias_sem_aluno_local` | integer | sim |  |  |
 
 ## vw_matriculas_por_canal
 
