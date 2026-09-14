@@ -230,3 +230,30 @@ test('as 3 telas que tinham o selo copiado passaram a usar o componente', () => 
     );
   }
 });
+
+test('a faixa de KPIs deixa de empilhar no celular — medido, nao estimado', () => {
+  const grade = readFileSync('src/components/ui/GradeKPIs.tsx', 'utf8');
+  // 7 cartoes em 2 colunas de 375px davam 551px (4 linhas). Com os 248px de
+  // cabecalho e filtros, as abas so apareciam depois de ~860px numa tela de
+  // 812px: para chegar a lista era preciso passar uma tela inteira de
+  // indicadores. Medido depois: 134px, e as abas cabem na primeira tela.
+  assert.match(grade, /useShellMobile/, 'a faixa voltou a ignorar o shell');
+  assert.match(grade, /snap-x snap-mandatory/, 'a faixa perdeu o snap — o gesto fica solto');
+  // O vizinho cortado e' a affordance: faixa que termina na borda parece
+  // completa, e ai a rolagem vira informacao escondida.
+  assert.match(grade, /\[&>\*\]:w-\[63%\]/);
+  // ⚠️ `scrollbar-hide` aparece em 2 telas deste repo e NAO esta definida em
+  // lugar nenhum (plugin que o projeto nao tem — Tailwind roda pelo Play CDN,
+  // sem config). Copia-la aqui seria fingir um no-op.
+  assert.doesNotMatch(grade, /scrollbar-hide/);
+  // No desktop nada muda: a grade recebida pela tela e' usada como esta.
+  assert.match(grade, /<section data-tour=\{dataTour\} className=\{className\}>/);
+});
+
+test('a pagina de Alunos usa a faixa compartilhada, nao uma grade propria', () => {
+  const pagina = readFileSync('src/components/App/Alunos/AlunosPage.tsx', 'utf8');
+  assert.match(pagina, /<GradeKPIs data-tour="alunos-kpis"/);
+  assert.match(pagina, /<\/GradeKPIs>/);
+  // O tour depende do atributo; perde-lo quebraria o onboarding em silencio.
+  assert.match(pagina, /data-tour="alunos-kpis"/);
+});

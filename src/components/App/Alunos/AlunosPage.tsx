@@ -19,6 +19,7 @@ import { ListaAlunosMobile } from '@/mobile/telas/alunos/ListaAlunosMobile';
 import { COMPETENCIA_FECHADA_MESSAGE, useCompetenciaMensalStatus } from '@/hooks/useCompetenciaMensalStatus';
 import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { SeloCompetencia } from '@/components/ui/SeloCompetencia';
+import { GradeKPIs } from '@/components/ui/GradeKPIs';
 import { PageFilterBar } from '@/components/ui/page-filter-bar';
 import { KPICard } from '@/components/ui/KPICard';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -2011,7 +2012,7 @@ export function AlunosPage() {
       </div>
 
       {/* KPI Cards */}
-      <section data-tour="alunos-kpis" className="grid grid-cols-2 gap-2 md:grid-cols-3 md:gap-4 lg:grid-cols-7">
+      <GradeKPIs data-tour="alunos-kpis" className="grid grid-cols-2 gap-2 md:grid-cols-3 md:gap-4 lg:grid-cols-7">
         <KPICard
           size={ehCelular ? 'sm' : undefined}
           title="Matrículas Ativas"
@@ -2085,7 +2086,7 @@ export function AlunosPage() {
             }
           </p>
         </div>
-      </section>
+      </GradeKPIs>
 
       {/* Abas */}
       <PageTabs
