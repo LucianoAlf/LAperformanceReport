@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-09 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-14 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — plataforma
 
-22 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+24 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## _auditoria_chave_natural_20260809
 
@@ -198,6 +198,53 @@
 
 **Únicos:**
 - `rbac_piloto_usuarios_pkey`
+
+## sol_governanca_eventos
+
+> Gate 3D: trilha append-only sanitizada da governanca da Sol. Nao contem mensagens, PII ou payload operacional bruto.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `record_id` | text | não |  |  |
+| `sequence` | bigint | não |  |  |
+| `recorded_at` | timestamp with time zone | não | clock_timestamp() |  |
+| `entity_type` | text | não |  |  |
+| `entity_id` | text | não |  |  |
+| `event_type` | text | não |  |  |
+| `actor_role` | text | não |  |  |
+| `retention_class` | text | não |  |  |
+| `payload` | jsonb | não |  |  |
+| `previous_digest` | text | não |  |  |
+| `digest` | text | não |  |  |
+| `ingestion_key` | text | sim |  |  |
+| `schema_version` | smallint | não | 1 |  |
+
+**Únicos:**
+- `sol_governanca_eventos_digest_key`
+- `sol_governanca_eventos_ingestion_key_key`
+- `sol_governanca_eventos_pkey`
+- `sol_governanca_eventos_sequence_key`
+- `sol_governanca_run_started_unique`
+
+**Triggers:**
+- `sol_governanca_eventos_no_truncate → sol_governanca_bloquear_mutacao_v1()`
+- `sol_governanca_eventos_no_update_delete → sol_governanca_bloquear_mutacao_v1()`
+
+## sol_grants_revogados_fatia0
+
+> O que a Fatia 0.1 revogou de sol_acesso_restrito, para o rollback ser um comando e nao uma arqueologia. Rollback: select 'grant '\|\|privilegio\|\|' on '\|\|objeto\|\|' to '\|\|papel\|\|';' from esta tabela.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('sol_grants_revogados_fatia0_id_seq'::regclass) |  |
+| `papel` | text | não |  |  |
+| `objeto` | text | não |  |  |
+| `privilegio` | text | não |  |  |
+| `revogado_em` | timestamp with time zone | não | now() |  |
+| `motivo` | text | não |  |  |
+
+**Únicos:**
+- `sol_grants_revogados_fatia0_pkey`
 
 ## sol_permissoes
 

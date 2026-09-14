@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-09 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-14 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — comercial
 
-69 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+73 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## agente_conversas
 
@@ -537,6 +537,33 @@
 - `experimentais_professor_mensa_professor_id_unidade_id_ano_m_key`
 - `experimentais_professor_mensal_pkey`
 
+## google_ads_metricas_diarias
+
+> Alicerce/estrategica. Custo diario do Google Ads por CAMPANHA (grao de campanha atravessa Search e Performance Max; anuncio nao). Gemeo de meta_ads_metricas_diarias. Reescrita por janela — o Google revisa conversao por dias. gasto ja vem convertido de cost_micros na ingestao.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `dia` | date | não |  |  |
+| `campanha_id` | text | não |  |  |
+| `campanha_nome` | text | sim |  |  |
+| `canal_tipo` | text | sim |  |  |
+| `status` | text | sim |  |  |
+| `gasto` | numeric(12,2) | não | 0 |  |
+| `impressoes` | bigint | sim |  |  |
+| `cliques` | bigint | sim |  |  |
+| `ctr` | numeric(8,4) | sim |  |  |
+| `cpc_medio` | numeric(12,4) | sim |  |  |
+| `conversoes` | numeric(12,2) | não | 0 |  |
+| `conversoes_todas` | numeric(12,2) | sim |  |  |
+| `valor_conversoes` | numeric(12,2) | sim |  |  |
+| `custo_por_conversao` | numeric(12,4) | sim | CASE     WHEN (conversoes > (0)::numeric) THEN (gasto / conversoes)     ELSE NULL::numeric END |  |
+| `moeda` | text | não | 'BRL'::text |  |
+| `conta_id` | text | sim |  |  |
+| `capturado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `google_ads_metricas_diarias_pkey`
+
 ## instagram_sessoes
 
 > Espelho das sessões da bridge de Instagram (la-hq, instagram-comments-bridge.js). Uma linha por (conta, pessoa). Alimentado pela edge ingerir-instagram-sessoes; a bridge segue sendo a fonte de verdade viva — isto é foto para leitura, relatório e Mapa de Sinais.
@@ -608,10 +635,10 @@
 - `lead_experimentais_pkey`
 - `uq_lead_exp_aula`
 - `uq_lead_exp_legado`
-- `uq_lead_exp_negocio_novo`
 
 **Triggers:**
 - `trg_audit → fn_audit_log()`
+- `trg_experimental_normaliza_referencia_aula → fn_experimental_normaliza_referencia_aula()`
 - `trg_experimental_preenche_curso → trg_experimental_preenche_curso_do_lead()`
 - `trg_propagar_professor_experimental → fn_propagar_professor_experimental()`
 
@@ -1272,6 +1299,32 @@
 **Únicos:**
 - `unidade_contato_comercial_pkey`
 
+## vw_ads_gasto_diario_v1
+
+> Alicerce/estrategica. Gasto diario de midia unificado (meta + google). FONTE UNICA do custo — nao somar as tabelas cruas em consumidor novo. ⚠️ `conversoes_plataforma` NAO e comparavel entre plataformas: no Meta e conversa iniciada no WhatsApp, no Google e a acao de conversao configurada na conta. Serve para acompanhar cada uma contra ela mesma, nunca para ranquear uma contra a outra.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `dia` | date | sim |  |  |
+| `plataforma` | text | sim |  |  |
+| `campanha_id` | text | sim |  |  |
+| `campanha_nome` | text | sim |  |  |
+| `canal_tipo` | text | sim |  |  |
+| `gasto` | numeric(12,2) | sim |  |  |
+| `impressoes` | bigint | sim |  |  |
+| `cliques` | bigint | sim |  |  |
+| `conversoes_plataforma` | numeric | sim |  |  |
+| `moeda` | text | sim |  |  |
+
+## vw_experimental_aula_canonica
+
+> Liga experimental a aula fisica confirmada pelo roster; fallback so aceita mesma unidade, pessoa, data e horario.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `aula_local_id` | integer | sim |  |  |
+| `lead_experimental_id` | integer | sim |  |  |
+
 ## vw_experimental_faltou_sem_afirmacao
 
 > Regua UNICA do 'faltou' de procedencia comercial que ninguem afirmou. Lida por fn_desfaz_faltou_sem_afirmacao (conserta) e por fn_diag_saude_experimental (conta). Nunca duplicar o predicado: dois leitores, uma regua.
@@ -1556,4 +1609,17 @@
 | `experimentais_realizadas` | bigint | sim |  |  |
 | `matriculas` | bigint | sim |  |  |
 | `taxa_conversao` | numeric | sim |  |  |
+
+## vw_retomada_eficacia_v1
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `retomadas_fechadas` | bigint | sim |  |  |
+| `matriculou` | bigint | sim |  |  |
+| `matriculou_no_prazo` | bigint | sim |  |  |
+| `fechadas_no_prazo` | bigint | sim |  |  |
+| `aguardando` | bigint | sim |  |  |
+| `sem_data` | bigint | sim |  |  |
+| `veio_da_conversa` | bigint | sim |  |  |
+| `veio_da_consultora` | bigint | sim |  |  |
 

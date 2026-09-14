@@ -351,7 +351,16 @@
     "jsonb": "plataforma",
     "schema": "plataforma",
     "unaccent_imutavel": "plataforma",
-    "seguranca": "plataforma"
+    "seguranca": "plataforma",
+    "ads_gasto": "comercial",
+    "comunidade_wa": "aluno",
+    "cracha": "plataforma",
+    "escopo": "plataforma",
+    "fmt": "plataforma",
+    "google_ads": "comercial",
+    "grants": "plataforma",
+    "papel": "plataforma",
+    "retomada": "comercial"
   },
   "excecoes": {
     "reconciliar_saida_automatica_cancelada_v1": "aluno",
@@ -370,7 +379,20 @@
     "tipos_matricula": "aluno",
     "tipos_saida": "aluno",
     "movimentacoes": "aluno",
-    "atendimento_consultor_diario": "comercial"
+    "atendimento_consultor_diario": "comercial",
+    "amostra_pareada_atendimento_v1": "comercial",
+    "config_cadastro_obrigatorio": "aluno",
+    "convertidos_do_periodo_v1": "comercial",
+    "governanca_append_evento_interno_v1": "plataforma",
+    "governanca_eventos": "plataforma",
+    "governanca_payload_sanitizado_v1": "plataforma",
+    "governanca_readback_v1": "plataforma",
+    "governanca_registrar_rodada_v1": "plataforma",
+    "governanca_verificar_acervo_v1": "plataforma",
+    "porta_pauta_do_dia_v1": "aluno",
+    "porta_registrar_desfecho_v1": "aluno",
+    "prazo_retomada": "comercial",
+    "texto_normalizado": "plataforma"
   },
   "tokens": {
     "kpis": "gestao"

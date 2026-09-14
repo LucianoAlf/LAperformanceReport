@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-09 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-14 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — financeiro
@@ -83,6 +83,7 @@
 **Triggers:**
 - `tr_caixa_movimentacoes_updated_at → set_updated_at_caixa()`
 - `trg_audit_caixa_movimentacoes → fn_audit_log()`
+- `trg_caixa_movimentacao_recalcula_saldo → trg_caixa_movimentacao_recalcula_saldo()`
 
 ## caixa_reaberturas_log
 
