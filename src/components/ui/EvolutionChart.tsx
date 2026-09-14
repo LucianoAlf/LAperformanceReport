@@ -18,14 +18,22 @@ interface EvolutionChartProps {
   title?: string;
   className?: string;
   yAxisFormatter?: (value: number) => string;
+  /**
+   * Tela estreita (celular). Encolhe as margens e o eixo Y e deixa o Recharts
+   * pular rotulos do eixo X em vez de sobrepo-los. Aditivo e opcional: sem a
+   * prop, o grafico e byte a byte o de antes — nenhum dos consumidores de
+   * desktop muda.
+   */
+  compacto?: boolean;
 }
 
-export function EvolutionChart({ 
-  data, 
-  lines, 
-  title, 
+export function EvolutionChart({
+  data,
+  lines,
+  title,
   className,
-  yAxisFormatter = (value) => value.toString()
+  yAxisFormatter = (value) => value.toString(),
+  compacto = false,
 }: EvolutionChartProps) {
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -59,16 +67,25 @@ export function EvolutionChart({
       {title && <h3 className="text-lg font-bold text-white mb-4">{title}</h3>}
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 5, right: 20, left: 10, bottom: 5 }} style={{ backgroundColor: 'transparent' }}>
+          <LineChart
+            data={data}
+            margin={compacto ? { top: 5, right: 8, left: 0, bottom: 0 } : { top: 5, right: 20, left: 10, bottom: 5 }}
+            style={{ backgroundColor: 'transparent' }}
+          >
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-            <XAxis 
-              dataKey="name" 
-              stroke="#64748b" 
-              tick={{ fill: '#94a3b8', fontSize: 12 }}
+            <XAxis
+              dataKey="name"
+              stroke="#64748b"
+              tick={{ fill: '#94a3b8', fontSize: compacto ? 10 : 12 }}
+              // Em ~330px os 12 meses se sobrepoem ate virar borrao. Com
+              // minTickGap o Recharts esconde os rotulos que nao cabem, em vez
+              // de desenhar todos por cima uns dos outros.
+              minTickGap={compacto ? 18 : 5}
             />
-            <YAxis 
-              stroke="#64748b" 
-              tick={{ fill: '#94a3b8', fontSize: 12 }}
+            <YAxis
+              stroke="#64748b"
+              tick={{ fill: '#94a3b8', fontSize: compacto ? 10 : 12 }}
+              width={compacto ? 34 : undefined}
               tickFormatter={yAxisFormatter}
             />
             <Tooltip 

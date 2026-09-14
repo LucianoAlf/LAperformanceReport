@@ -66,6 +66,11 @@ export function MobileLayout() {
   // fallback legado de nao-admin; nenhum dos dois casos e' consolidado.
   const unidadeLabel = labelDaUnidade(filtroAtivo, unidadeSelecionada, unidadesDisponiveis);
 
+  // Uma leitura so: o aviso e a politica de rolagem sao a MESMA decisao
+  // ("esta tela foi adaptada?"), e ler duas vezes deixa as duas livres para
+  // divergir num refactor futuro.
+  const portada = rotaFoiPortada(location.pathname);
+
   return (
     <PageTitleProvider>
       <div className="flex h-[100dvh] flex-col bg-slate-950">
@@ -77,8 +82,19 @@ export function MobileLayout() {
           iniciais={iniciaisDoUsuario(usuario?.nome ?? usuario?.email ?? null)}
         />
 
-        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-auto p-3">
-          {!rotaFoiPortada(location.pathname) && <AvisoNaoOtimizado />}
+        {/* A rolagem lateral e a DEGRADACAO das telas ainda nao portadas (spec
+            §8: "funciona, mas rola para o lado"). Aplicada ao <main> sem
+            condicao, ela valia tambem para as telas ja adaptadas — e ali ela
+            nao degrada nada, so ESCONDE estouro: qualquer filho alguns pixels
+            largo demais vira rolagem horizontal em vez de aparecer como o
+            defeito de layout que e. Tela portada que rola para o lado nao esta
+            portada. */}
+        <main
+          className={`min-h-0 flex-1 overflow-y-auto p-3 ${
+            portada ? 'overflow-x-hidden' : 'overflow-x-auto'
+          }`}
+        >
+          {!portada && <AvisoNaoOtimizado />}
           <Outlet context={{ filtroAtivo, unidadeSelecionada, setUnidadeSelecionada, competencia, setPeriodoLabel }} />
         </main>
 

@@ -26,11 +26,12 @@ import {
   TextoCurso,
 } from '@/components/App/Dashboard/ModalDetalheKPI';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
-import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { EvolutionChart } from '@/components/ui/EvolutionChart';
 import { FunnelChart } from '@/components/ui/FunnelChart';
 import { KPICard } from '@/components/ui/KPICard';
 import { useDashboardDados } from '@/hooks/useDashboardDados';
+
+import { SeletorPeriodoMobile } from '../SeletorPeriodoMobile';
 
 import { CartaoUnidade } from './dashboard/CartaoUnidade';
 import { ListaAlertas } from './dashboard/ListaAlertas';
@@ -87,36 +88,35 @@ export function DashboardMobile() {
     <div className="space-y-4 pb-2">
       {/* ===== FILTRO DE COMPETÊNCIA ===== */}
       {competencia?.filtro && setTipo && setAno && setMes && setTrimestre && setSemestre && (
-        // O CompetenciaFilter entra como esta, sem adaptacao (decisao da
-        // etapa 2). Se nao couber em 390px, quem resolve e o overflow-x
-        // desta faixa — nao uma segunda versao do filtro.
-        <div className="-mx-3 overflow-x-auto px-3">
-          <CompetenciaFilter
-            filtro={competencia.filtro}
-            range={competencia.range}
-            anosDisponiveis={anosDisponiveis}
-            onTipoChange={setTipo}
-            onAnoChange={setAno}
-            onMesChange={setMes}
-            onTrimestreChange={setTrimestre}
-            onSemestreChange={setSemestre}
-            onDataInicioChange={setDataInicio}
-            onDataFimChange={setDataFim}
-          />
-        </div>
+        <SeletorPeriodoMobile
+          filtro={competencia.filtro}
+          range={competencia.range}
+          anosDisponiveis={anosDisponiveis}
+          setTipo={setTipo}
+          setAno={setAno}
+          setMes={setMes}
+          setTrimestre={setTrimestre}
+          setSemestre={setSemestre}
+          setDataInicio={setDataInicio}
+          setDataFim={setDataFim}
+        />
       )}
 
       {/* Fonte dos KPIs de alunos — mesmo texto e mesma paleta do desktop */}
       {fonteKpisAlunos && (
-        <div className={`inline-flex max-w-full items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium ${
+        // items-start + sem truncate: a frase diz de ONDE vem o numero e qual
+        // ressalva ele carrega. Cortada em "KPIs de alunos: Calculo vivo · ..."
+        // ela some justamente na parte que muda a leitura — melhor ocupar duas
+        // linhas do que informar pela metade.
+        <div className={`flex max-w-full items-start gap-2 rounded-lg border px-3 py-1.5 text-[11px] font-medium leading-snug ${
           fonteKpisAlunos.fonte === 'dados_mensais'
             ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
             : fonteKpisAlunos.fonte === 'vivo'
               ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-200'
               : 'border-amber-500/40 bg-amber-500/10 text-amber-200'
         }`}>
-          <BarChart3 className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">
+          <BarChart3 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0">
             KPIs de alunos: {fonteKpisAlunos.label}
             {fonteKpisAlunos.alertas[0] ? ` · ${fonteKpisAlunos.alertas[0]}` : ''}
           </span>
@@ -315,7 +315,13 @@ export function DashboardMobile() {
           Evolução de Alunos Ativos (12 meses)
         </h3>
         {evolucaoAlunos.length > 0 ? (
+          // O grafico traz o proprio cartao (borda + fundo + p-4). Dentro do
+          // <section>, que ja e um cartao, isso virava moldura dupla e comia
+          // 28px dos ~350px de largura util. Aqui ele entra como conteudo:
+          // quem desenha o cartao e a secao.
           <EvolutionChart
+            className="rounded-none border-0 bg-transparent p-0"
+            compacto
             data={evolucaoAlunos.map(e => ({ name: e.mes, alunos: e.valor }))}
             lines={[{ dataKey: 'alunos', color: '#06b6d4', name: 'Alunos Ativos' }]}
           />
@@ -332,7 +338,9 @@ export function DashboardMobile() {
           Funil Comercial (Mês)
         </h3>
         {funilComercial.length > 0 ? (
+          // Mesma razao do grafico acima: o cartao e da secao, nao do componente.
           <FunnelChart
+            className="rounded-none border-0 bg-transparent p-0"
             steps={funilComercial.map(f => ({ label: f.etapa, value: f.valor, color: f.cor }))}
           />
         ) : (
