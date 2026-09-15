@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-14 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-15 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — aluno
 
-141 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+142 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## aluno_acoes
 
@@ -2401,6 +2401,28 @@
 | `ultima_presenca` | date | sim |  |  |
 | `dias_sem_presenca` | integer | sim |  |  |
 | `confiavel` | boolean | sim |  |  |
+
+## vw_aluno_comunidade_wa_v1
+
+> LAPE-33: estado de comunidade WhatsApp por aluno (matricula). Busca em TODOS os grupos ativos, nao so o da propria unidade -- ver grupo_mesma_unidade para distinguir. Fonte: comunidade_wa_participantes (captura diaria, cron 190, 07h BRT). Nao confundir com aluno_comunidade_estado_v1(), que so olha o grupo da propria unidade e e a usada pelos agentes (Mila/Sol).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `aluno_id` | integer | sim |  |  |
+| `unidade_id` | uuid | sim |  |  |
+| `estado` | text | sim |  |  |
+| `grupo_id` | bigint | sim |  |  |
+| `grupo_nome` | text | sim |  |  |
+| `grupo_unidade_id` | uuid | sim |  |  |
+| `grupo_mesma_unidade` | boolean | sim |  |  |
+| `capturado_em` | timestamp with time zone | sim |  |  |
+| `outros_grupos_nomes` | text[] | sim |  |  |
+| `contato_telefone` | text | sim |  |  |
+| `contato_de_quem` | text | sim |  |  |
+| `contato_nome` | text | sim |  |  |
+| `contato_parentesco` | text | sim |  |  |
+| `contatos_no_grupo_total` | integer | sim |  |  |
+| `contatos_no_grupo` | jsonb | sim |  |  |
 
 ## vw_aluno_estado_operacional_canonico
 
