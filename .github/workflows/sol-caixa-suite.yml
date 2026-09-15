@@ -155,7 +155,14 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-reparo-vinculos-barra.sql
 
       - name: matcher singular nunca cruza IDs Emusys entre unidades
-        run: psql -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-casar-parcela-isola-unidade.sql
+        run: |
+          # O replay histórico tolera migrations fora do domínio Caixa e hoje
+          # encerra o parser antes das migrations de 15/09. Instale de forma
+          # explícita a unidade sob teste; a migration é fail-closed e
+          # reaplicável, então isto continua válido quando o replay alcançar o
+          # arquivo no futuro.
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260915213600_sol_caixa_casar_parcela_isola_unidade.sql
+          psql -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-casar-parcela-isola-unidade.sql
 
       # 🔎 DIAGNOSTICO. `syntax error` no replay quase sempre significa que uma
       #    instrucao ANTERIOR ficou com aspas abertas e engoliu tudo ate achar um
