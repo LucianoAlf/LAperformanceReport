@@ -57,6 +57,7 @@ import { DatePickerNascimento } from '@/components/ui/date-picker-nascimento';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { rotuloDeQuem, nomeDoContato } from '@/lib/comunidadeWaContato';
+import { avaliarPerfilTemperamento, textoPerfilAusenteWhatsapp } from '@/lib/perfilTemperamento';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
@@ -294,7 +295,9 @@ interface AnamneseAluno {
   temperamento_secundario?: string | null;
   temperamento_codinome?: string | null;
   temperamento_contagem?: Record<string, number> | null;
-  perfil_baby?: string | null;
+  // boolean no banco (`anamneses.perfil_baby`, default false). Estava tipado
+  // como string aqui e funcionava por acidente, via truthy.
+  perfil_baby?: boolean | null;
   observacoes_entrevistador?: string | null;
   share_token?: string | null;
   created_at: string;
@@ -1681,6 +1684,17 @@ export function ModalFichaAluno({
   const primaryMeta = TEMPERAMENTO_META[primaryCode];
   const secondaryMeta = TEMPERAMENTO_META[secondaryCode];
   const codinomeMeta = TEMPERAMENTO_META[(anamnese?.temperamento_codinome || '').toUpperCase()];
+  // Bebê não responde o bloco de perfil, e a ficha precisa dizer isso: antes
+  // mostrava `🧠 - / 🧠 -` com as quatro barras zeradas, e duas pessoas já
+  // perguntaram se a anamnese estava incompleta (não está).
+  const estadoPerfil = avaliarPerfilTemperamento({
+    temperamentoPrimario: anamnese?.temperamento_primario,
+    perfilBaby: anamnese?.perfil_baby,
+    tipoFormulario: anamnese?.tipo_formulario,
+    dataNascimento: dadosCompletos?.data_nascimento,
+    dataAnamnese: anamnese?.created_at,
+    respostasPerfil: anamnese?.anamnese_respostas_perfil,
+  });
 
   const professorWhatsapp = normalizarTelefoneWhatsapp(professorContato?.telefone_whatsapp);
   const linkPerfilAnamnese = anamnese?.share_token
@@ -1707,8 +1721,15 @@ export function ModalFichaAluno({
     linhas.push(`_Preenchida em ${formatarDataHora(anamnese.created_at)}${procedencia}${anamnese.entrevistador ? ` por ${anamnese.entrevistador}` : ''}_`);
     linhas.push('');
     linhas.push(`*🧠 Perfil de Temperamento*`);
-    linhas.push(`${labelPrimario} + ${labelSecundario}${codinome}`);
-    linhas.push(`Col ${colerico} · San ${sanguineo} · Fle ${fleumatico} · Mel ${melancolico}`);
+    if (!estadoPerfil.avaliado) {
+      // Sem isto o professor recebia `- + -` e `Col 0 · San 0 · Fle 0 · Mel 0`.
+      // Quatro zeros parecem uma medição que deu zero, e quem lê está fora do
+      // sistema — não tem a quem perguntar.
+      linhas.push(textoPerfilAusenteWhatsapp(estadoPerfil));
+    } else {
+      linhas.push(`${labelPrimario} + ${labelSecundario}${codinome}`);
+      linhas.push(`Col ${colerico} · San ${sanguineo} · Fle ${fleumatico} · Mel ${melancolico}`);
+    }
     linhas.push('');
     // SAUDE VAI PRO PROFESSOR — corrigido pelo Alf em 05/08/2026.
     //
@@ -2494,6 +2515,28 @@ export function ModalFichaAluno({
                       Há {anamneseAnteriores.length} anamnese(s) anterior(es) desta pessoa — a exibida é a mais recente.
                     </p>
                   )}
+                  {!estadoPerfil.avaliado ? (
+                    <div className={`rounded-xl border p-4 ${estadoPerfil.anomalia ? 'border-amber-800/60 bg-amber-950/30' : 'border-slate-700 bg-slate-800/50'}`}>
+                      <p className="text-sm text-slate-300 flex items-center gap-2">
+                        <Brain className="w-4 h-4" />
+                        Perfil de Temperamento
+                      </p>
+                      <p className={`mt-2 text-base font-medium ${estadoPerfil.anomalia ? 'text-amber-200' : 'text-slate-200'}`}>
+                        {estadoPerfil.titulo}
+                      </p>
+                      {estadoPerfil.detalhe && (
+                        <p className="mt-1 text-sm text-slate-400">{estadoPerfil.detalhe}</p>
+                      )}
+                      {!estadoPerfil.anomalia && (
+                        <p className="mt-2 text-xs text-slate-500">
+                          O restante da anamnese está preenchido — isto não é pendência.
+                        </p>
+                      )}
+                      <p className="mt-4 text-xs text-slate-400">
+                        Preenchido em: {formatarDataHora(anamnese.created_at)}{anamnese.entrevistador ? ` por ${anamnese.entrevistador}` : ''}
+                      </p>
+                    </div>
+                  ) : (
                   <div className={`rounded-xl border p-4 ${codinomeMeta?.soft || 'bg-slate-800/50 border-slate-700'}`}>
                     <div className="flex items-start justify-between gap-4">
                       <div>
@@ -2540,6 +2583,7 @@ export function ModalFichaAluno({
                       Preenchido em: {formatarDataHora(anamnese.created_at)}{anamnese.entrevistador ? ` por ${anamnese.entrevistador}` : ''}
                     </p>
                   </div>
+                  )}
 
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4">
