@@ -367,6 +367,57 @@ async function tratarConfirmacao(event, { sendFn, log = () => {}, rpcFn = chamar
   return false;
 }
 
+// Pedido textual de abertura escolhido pelo roteador estruturado. Esta função
+// só publica a prévia oficial; a escrita continua exclusivamente em
+// tratarConfirmacao, depois de um "pode" humano atual.
+async function tratarPedidoDiretoAbertura(event, {
+  grupo, sendFn, log = () => {}, rpcFn = chamarRpc,
+  governanceFn = () => Promise.resolve(), intencaoEstruturada = null,
+}) {
+  const chatId = event.chatId;
+  if (event.hasMedia) return false;
+  if (!grupo || !grupo.unidade_id) return false;
+  if (intencaoEstruturada !== 'abrir_caixa') return false;
+
+  let resultado;
+  try {
+    resultado = await postarAbertura({
+      chat_id: chatId,
+      unidade_id: grupo.unidade_id,
+      nome: grupo.nome,
+    }, { sendFn, rpcFn, event, governanceFn });
+  } catch (e) {
+    await sendFn(chatId, '⚠️ Não consegui preparar a abertura agora. Tenta de novo em instantes.');
+    await governanceFn(event, 'preview_failed', {
+      action: 'abrir', reason_code: 'rpc_error', outcome: 'error',
+    });
+    log({ acao: 'abertura_preview_erro', erro: String(e.message || e).slice(0, 200) });
+    return true;
+  }
+
+  if (resultado && resultado.ok) {
+    log({ acao: 'abertura_preview_direto_enviado', previewId: resultado.previewId });
+    return true;
+  }
+
+  const motivo = resultado && resultado.skip;
+  const humano = motivo === 'ja_aberto'
+    ? '✅ O caixa de hoje já está aberto — não criei outra abertura.'
+    : motivo === 'ja_existe'
+      ? '⚠️ O caixa de hoje já foi fechado. Se precisa reabrir, peça explicitamente *Sol, reabre o caixa de hoje*.'
+      : '⚠️ Não consegui preparar a abertura agora. Tenta de novo em instantes.';
+  const receipt = await sendFn(chatId, humano);
+  await governanceFn(event, 'write_refused', {
+    action: 'abrir', reason_code: motivo || 'sem_dados',
+    outcome: motivo === 'ja_aberto' ? 'duplicate' : 'refused',
+  });
+  await governanceFn(event, 'receipt_sent', {
+    receipt_ref: receipt, action: 'abrir_preview_recusado', outcome: 'ok',
+  });
+  log({ acao: 'abertura_preview_recusado', motivo: motivo || 'sem_dados' });
+  return true;
+}
+
 async function tratarPedidoDiretoFechamento(event, { grupo, sendFn, log = () => {}, rpcFn = chamarRpc, governanceFn = () => Promise.resolve(), intencaoEstruturada = null }) {
   const chatId = event.chatId;
   if (event.hasMedia) return false;
@@ -412,13 +463,21 @@ async function tratarPedidoDiretoFechamento(event, { grupo, sendFn, log = () => 
 }
 
 // CRON: posta preview de abertura + cria pendência (só se o caixa ainda não existe hoje)
-async function postarAbertura(grupo, { sendFn }) {
-  const d = await chamarRpc('sol_caixa_dados_abertura', { p_unidade_id: grupo.unidade_id });
+async function postarAbertura(grupo, {
+  sendFn, rpcFn = chamarRpc, event = null,
+  governanceFn = () => Promise.resolve(),
+}) {
+  const d = await rpcFn('sol_caixa_dados_abertura', { p_unidade_id: grupo.unidade_id });
   if (!d) return { skip: 'sem_dados' };
   if (d.ja_existe) return { skip: d.ja_aberto ? 'ja_aberto' : 'ja_existe' };
   const texto = montarTextoAbertura({ unidadeNome: d.unidadeNome, data: d.data, saldoInicial: d.saldoInicial });
   const previewId = await sendFn(grupo.chat_id, texto);
-  await chamarRpc('sol_caixa_pendencia_criar', { p_payload: { unidade_id: grupo.unidade_id, chat_id: grupo.chat_id, tipo: 'abrir', preview_message_id: previewId } });
+  await rpcFn('sol_caixa_pendencia_criar', { p_payload: { unidade_id: grupo.unidade_id, chat_id: grupo.chat_id, tipo: 'abrir', preview_message_id: previewId } });
+  if (event) {
+    await governanceFn(event, 'preview_sent', {
+      preview_ref: previewId, action: 'abrir', outcome: 'ok',
+    });
+  }
   return { ok: true, previewId };
 }
 
@@ -437,6 +496,7 @@ async function postarFechamento(grupo, { sendFn }) {
 module.exports = {
   JANELA_CONFIRMA_MIN, brl, montarTextoFechamento, montarTextoAbertura,
   afirmativo, negativoFechamento, pedidoDiretoFechar, chamarRpc, tratarConfirmacao,
-  tratarPedidoDiretoFechamento, pedidoReabrir, tratarPedidoDiretoReabertura,
+  tratarPedidoDiretoAbertura, tratarPedidoDiretoFechamento,
+  pedidoReabrir, tratarPedidoDiretoReabertura,
   postarAbertura, postarFechamento,
 };
