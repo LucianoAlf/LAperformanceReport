@@ -51,6 +51,32 @@ const abf = require(path.join(root, 'vps/la-hq/sol/runtime/caixa-abertura-fecham
       assert(governanca.some((x) => x.eventType === tipo), `evento de governança ausente: ${tipo}`);
     }
 
+    // Caso real da Barra em 15/09: a abertura precisa ser recusada quando o
+    // dia anterior segue aberto, mas a operadora deve receber o motivo real —
+    // não o genérico "não consegui abrir".
+    const recusadas = [];
+    const recusou = await abf.tratarConfirmacao({
+      chatId: 'barra@g.us', senderId: '5521888888888@s.whatsapp.net',
+      senderPhone: '5521888888888', senderName: 'Arthur', body: 'Pode',
+      hasMedia: false, quotedMessageId: 'MSG-ABERTURA-BARRA',
+    }, {
+      sendFn: async (_chatId, texto) => { recusadas.push(texto); return 'MSG-RECUSA'; },
+      temComprovantePendente: () => false,
+      rpcFn: async (nome) => {
+        if (nome === 'sol_caixa_pendencia_aguardando') return {
+          id: 'pend-abertura-barra', tipo: 'abrir', unidade_id: 'unidade-barra',
+          data: '2026-09-15', idade_min: 1, preview_message_id: 'MSG-ABERTURA-BARRA',
+        };
+        if (nome === 'sol_caixa_abrir') return { ok: false, motivo: 'fechamento_pendente_dia_anterior' };
+        if (nome === 'sol_caixa_pendencia_resolver') return { ok: true };
+        throw new Error('RPC inesperada: ' + nome);
+      },
+    });
+    assert.strictEqual(recusou, true);
+    assert(recusadas.some((x) => /caixa de ontem ainda está aberto/i.test(x)));
+    assert(recusadas.some((x) => /feche-o antes de abrir o de hoje/i.test(x)));
+    assert(!recusadas.some((x) => /não consegui abrir/i.test(x)));
+
     // Se também há preview de lançamento, o "pode" seco pertence a ele. A
     // abertura só ganha prioridade quando a pessoa cita o card de abertura.
     const concorrentes = [];

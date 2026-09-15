@@ -619,6 +619,23 @@ cobriu 4% de 504 eventos em 7 dias — a evidência da inversão).
 - Kill switch: `SOL_CAIXA_V4_SHADOW=0` (a suíte roda com ele desligado).
 - Design completo: `docs/specs/2026-08-31-sol-caixa-v4-agente-na-frente-design.md`.
 
+## barra-fechamento-contexto-e2e.cjs + roteador-operacional-fechamento-e2e.cjs + bridge-cracha-e-citacao-propria-e2e.cjs (15/09)
+
+🔴 **Barra lançou um recebimento auditado, mas não conseguiu gerar de novo o
+relatório oficial nem fechar o caixa.** Três raízes independentes apareceram no
+mesmo diálogo: o bridge ESM chamava `require()` dentro de `catch` silencioso e
+nunca emitia o crachá; o episódio também ficava preso dentro da condição do
+crachá; e a frase inédita sobre “relatório do caixa para aprovar” caiu fora da
+gramática. O conserto não adiciona regex: o roteador V4 escolhe, com confiança
+alta, apenas o executor determinístico que cria o preview. A operação continua
+atrás do `pode` humano e da V3. O switch é
+`SOL_CAIXA_V4_OPERATIONAL_PREFLIGHT=1` e nasce desligado.
+
+O bridge também mantém em memória, com TTL e limite, o texto das próprias
+mensagens enviadas. Assim uma resposta que chega só com `stanzaId` recupera o
+card citado sem persistir conteúdo bruto. `/health` expõe apenas o booleano
+`caixaBadgeReady`; ausência do segredo gera log estruturado sem revelar valor.
+
 ## reabertura-do-caixa-e2e.cjs  (31/08, caso Arthur/Barra 19:53)
 🔴 **"Pode abrir novamente" morreu em "o banco bloqueou a operação".** A
 ferramenta existia COMPLETA no banco desde a V3 (`sol_caixa_reabrir_caixa_v1`:

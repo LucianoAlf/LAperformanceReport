@@ -86,6 +86,14 @@ Invariantes (não negociáveis):
   a decidir primeiro e as intenções invocam os caminhos existentes (o mecanismo
   já existe — `tratarNaoEntendida` traduz intenção→frase canônica→`handle()`);
   a gramática vira fallback do roteador (inversão exata dos papéis atuais).
+- **F2a — PREFLIGHT OPERACIONAL DE FECHAMENTO (preparado em 15/09, desligado
+  por padrão):** `SOL_CAIXA_V4_OPERATIONAL_PREFLIGHT=1` permite que uma
+  mensagem dirigida à Sol, não entendida pelo legado e sem preview financeiro
+  aberto, seja classificada uma única vez pelo roteador. Só
+  `fechar_caixa` com confiança >= 0,90 alcança o executor determinístico de
+  fechamento, que **apenas publica o demonstrativo e cria a pendência**; fechar
+  ainda exige o `pode` humano e a RPC V3. Não é o flip do agent-first, não
+  habilita tools nas outras unidades e pode ser desligado sem perder o shadow.
 - **F3 — VOZ:** as respostas deixam de ser template; o modelo redige (tom
   Maria), com números interpolados de fonte canônica. Os cards de
   preview/lançamento mantêm formato fixo (são contrato com a equipe e com a V3).
