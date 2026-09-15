@@ -141,6 +141,13 @@ export interface Aluno {
   _inadimplencia_valor_atualizado?: number;
   _inadimplencia_total_faturas?: number;
   anamnese_diagnosticos?: string[];
+  // Comunidade WhatsApp (LAPE-33) — leitura de vw_aluno_comunidade_wa_v1,
+  // captura diaria (cron 190, 07h BRT). Busca em TODOS os grupos ativos, nao
+  // so o da propria unidade — grupo_mesma_unidade=false sinaliza esse caso.
+  comunidade_wa_estado?: 'na_comunidade' | 'fora_da_comunidade' | 'sem_captura' | 'captura_desatualizada' | 'sem_grupo_configurado' | null;
+  comunidade_wa_grupo_nome?: string | null;
+  comunidade_wa_mesma_unidade?: boolean | null;
+  comunidade_wa_capturado_em?: string | null;
 }
 
 export interface Turma {
@@ -245,6 +252,7 @@ export interface Filtros {
   temperamento: string;
   diagnostico: string;
   sem_telefone: boolean;
+  comunidade_wa: string; // '' | 'dentro' | 'fora'
 }
 
 type TabAtiva = 'lista' | 'turmas' | 'grade' | 'distribuicao' | 'importar' | 'automacao' | 'historico' | 'conciliacao';
@@ -381,6 +389,7 @@ export function AlunosPage() {
     temperamento: '',
     diagnostico: '',
     sem_telefone: false,
+    comunidade_wa: '',
   });
   const leituraFinanceiraDisponivel = podeCobrarInadimplenciaCanonica(inadimplenciaCanonica);
 
@@ -719,6 +728,11 @@ export function AlunosPage() {
       .then((data) => ({ data, error: null }))
       .catch((error) => ({ data: null, error }));
 
+    // Comunidade WhatsApp (LAPE-33) — vw_aluno_comunidade_wa_v1, captura diaria.
+    let qComunidadeWa = supabase.from('vw_aluno_comunidade_wa_v1')
+      .select('aluno_id, estado, grupo_nome, grupo_mesma_unidade, capturado_em');
+    if (unidadeAtual && unidadeAtual !== 'todos') qComunidadeWa = qComunidadeWa.eq('unidade_id', unidadeAtual);
+
     // Disparar tudo em paralelo: alunos (paginado), turmas operacionais, KPI canônico,
     // anotações, turmas explícitas, opções e LTV.
     const [
@@ -727,6 +741,7 @@ export function AlunosPage() {
       turmasViewR,
       kpisTurmasR,
       anotacoesR,
+      comunidadeWaR,
       faturasFinanceirasR,
       ...outrosResults
     ] = await Promise.all([
@@ -739,6 +754,7 @@ export function AlunosPage() {
         .select('aluno_id, texto, categoria, created_at')
         .eq('resolvido', false)
         .order('created_at', { ascending: false }),
+      qComunidadeWa,
       carregarFaturasAlunosFinanceiras(financeiroRpcClient, {
         unidadeId: unidadeAtual,
         ano: competenciaFiltro.ano,
@@ -848,6 +864,17 @@ export function AlunosPage() {
         anotacoesMap.set(a.aluno_id, atual);
       });
 
+      // Mapa de comunidade WhatsApp (LAPE-33) — 1 linha por aluno_id na view
+      const comunidadeWaMap = new Map<number, { estado: string; grupo_nome: string | null; grupo_mesma_unidade: boolean | null; capturado_em: string | null }>();
+      (comunidadeWaR as any)?.data?.forEach((c: any) => {
+        comunidadeWaMap.set(c.aluno_id, {
+          estado: c.estado,
+          grupo_nome: c.grupo_nome,
+          grupo_mesma_unidade: c.grupo_mesma_unidade,
+          capturado_em: c.capturado_em,
+        });
+      });
+
       const alunosFormatados = alunosMesclados.map((a: any) => {
         const turmaKey = `${a.unidade_id}-${a.professor_atual_id}-${a.dia_aula}-${a.horario_aula}`;
         const turmaInfo = turmasMap.get(turmaKey) as any;
@@ -866,7 +893,11 @@ export function AlunosPage() {
           turma_id: turmaInfo?.id,
           nomes_alunos_turma: turmaInfo?.nomes_alunos || [],
           total_anotacoes: anotacoesMap.get(a.id)?.total || 0,
-          ultimas_anotacoes: anotacoesMap.get(a.id)?.ultimas || []
+          ultimas_anotacoes: anotacoesMap.get(a.id)?.ultimas || [],
+          comunidade_wa_estado: comunidadeWaMap.get(a.id)?.estado ?? null,
+          comunidade_wa_grupo_nome: comunidadeWaMap.get(a.id)?.grupo_nome ?? null,
+          comunidade_wa_mesma_unidade: comunidadeWaMap.get(a.id)?.grupo_mesma_unidade ?? null,
+          comunidade_wa_capturado_em: comunidadeWaMap.get(a.id)?.capturado_em ?? null,
         };
       });
 
@@ -1421,6 +1452,15 @@ export function AlunosPage() {
       }
     }
 
+    // Comunidade WhatsApp (LAPE-33) — sem_captura/desatualizada/sem_grupo contam
+    // como "fora", nunca como "dentro" (nao sei != esta dentro).
+    if (filtros.comunidade_wa === 'dentro') {
+      resultado = resultado.filter(a => a.comunidade_wa_estado === 'na_comunidade');
+    }
+    if (filtros.comunidade_wa === 'fora') {
+      resultado = resultado.filter(a => a.comunidade_wa_estado !== 'na_comunidade');
+    }
+
     if (filtros.temperamento) {
       const termoTemperamento = filtros.temperamento.toLowerCase();
       resultado = resultado.filter(a =>
@@ -1563,6 +1603,7 @@ export function AlunosPage() {
       temperamento: '',
       diagnostico: '',
       sem_telefone: false,
+      comunidade_wa: '',
     });
   }
 
