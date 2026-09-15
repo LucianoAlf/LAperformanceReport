@@ -11,6 +11,36 @@ import { copyTextToClipboard } from '@/lib/clipboard';
 import { criarUrlFaturasAlunos } from '@/lib/faturasAlunosCanonicas';
 import { X, Loader2, Save, User, GraduationCap, DollarSign, TrendingUp, History, AlertCircle, Plus, Users, Pencil, Brain, ExternalLink, MessageCircle, Search, Star, BookOpen, ClipboardList, Printer, Copy, Check, RotateCcw, Send, CalendarDays } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
+import { useShellMobile } from '@/hooks/useShellMobile';
+import {
+  ESTILO_RODAPE_CELULAR,
+  FICHA_ABA_CELULAR,
+  FICHA_RODAPE_CELULAR,
+  FICHA_SECOES_CELULAR,
+  FICHA_TELA_CHEIA,
+} from '@/mobile/fichaTelaCheia';
+import { SeletorSecaoMobile } from '@/mobile/SeletorSecaoMobile';
+
+/**
+ * As 9 seções da ficha, em ORDEM — fonte única do rótulo e do ícone.
+ *
+ * Elas eram 9 blocos de JSX repetidos. Viraram dados porque no celular o mesmo
+ * rótulo aparece em dois lugares (a pílula que diz onde se está e a linha na
+ * folha), e manter duas cópias é como "Acadêmico" viraria "Academico" em uma
+ * delas.
+ */
+const SECOES_FICHA = [
+  { id: 'pessoal', label: 'Pessoal', Icone: User },
+  { id: 'academico', label: 'Acadêmico', Icone: GraduationCap },
+  { id: 'financeiro', label: 'Financeiro', Icone: DollarSign },
+  { id: 'comercial', label: 'Comercial', Icone: TrendingUp },
+  { id: 'anamnese', label: 'Anamnese', Icone: Brain },
+  { id: 'historico', label: 'Histórico', Icone: History },
+  { id: 'pesquisas', label: 'Pesquisas', Icone: Star },
+  { id: 'aulas', label: 'Aulas', Icone: BookOpen },
+  { id: 'pedagogico', label: 'Pedagógico', Icone: ClipboardList },
+] as const;
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -976,6 +1006,9 @@ export function ModalFichaAluno({
   } = useContratoAssinaturaAluno(aluno.id);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  // Arquetipo 3 do spec: no celular a ficha TOMA a tela, com cabecalho fixo,
+  // abas deslizantes e a acao de maior valor na base (zona do polegar).
+  const ehCelular = useShellMobile() === 'mobile';
   const [activeTab, setActiveTab] = useState('pessoal');
   
   // Dados completos do aluno
@@ -1774,13 +1807,13 @@ export function ModalFichaAluno({
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+      <DialogContent className={cn('flex max-h-[90vh] max-w-4xl flex-col', ehCelular && FICHA_TELA_CHEIA)}>
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-3">
             {fotoPerfil ? (
-              <img src={fotoPerfil} alt={formData.nome} className="w-14 h-14 rounded-full object-cover border-2 border-purple-500/50" />
+              <img src={fotoPerfil} alt={formData.nome} className={cn('rounded-full object-cover border-2 border-purple-500/50', ehCelular ? 'h-11 w-11 flex-none' : 'w-14 h-14')} />
             ) : (
-              <div className="w-14 h-14 rounded-full bg-purple-500/20 flex items-center justify-center">
+              <div className={cn('rounded-full bg-purple-500/20 flex items-center justify-center', ehCelular ? 'h-11 w-11 flex-none' : 'w-14 h-14')}>
                 <User className="w-6 h-6 text-purple-400" />
               </div>
             )}
@@ -1819,50 +1852,34 @@ export function ModalFichaAluno({
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid grid-cols-9 flex-shrink-0">
-            <TabsTrigger value="pessoal" className="flex items-center gap-2">
-              <User className="w-4 h-4" />
-              <span className="hidden sm:inline">Pessoal</span>
-            </TabsTrigger>
-            <TabsTrigger value="academico" className="flex items-center gap-2">
-              <GraduationCap className="w-4 h-4" />
-              <span className="hidden sm:inline">Acadêmico</span>
-            </TabsTrigger>
-            <TabsTrigger value="financeiro" className="flex items-center gap-2">
-              <DollarSign className="w-4 h-4" />
-              <span className="hidden sm:inline">Financeiro</span>
-            </TabsTrigger>
-            <TabsTrigger value="comercial" className="flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" />
-              <span className="hidden sm:inline">Comercial</span>
-            </TabsTrigger>
-            <TabsTrigger value="anamnese" className="flex items-center gap-2">
-              <Brain className="w-4 h-4" />
-              <span className="hidden sm:inline">Anamnese</span>
-            </TabsTrigger>
-            <TabsTrigger value="historico" className="flex items-center gap-2">
-              <History className="w-4 h-4" />
-              <span className="hidden sm:inline">Histórico</span>
-            </TabsTrigger>
-            <TabsTrigger value="pesquisas" className="flex items-center gap-2">
-              <Star className="w-4 h-4" />
-              <span className="hidden sm:inline">Pesquisas</span>
-            </TabsTrigger>
-            <TabsTrigger value="aulas" className="flex items-center gap-2">
-              <BookOpen className="w-4 h-4" />
-              <span className="hidden sm:inline">Aulas</span>
-            </TabsTrigger>
-            <TabsTrigger value="pedagogico" className="flex items-center gap-2">
-              <ClipboardList className="w-4 h-4" />
-              <span className="hidden sm:inline">Pedagógico</span>
-            </TabsTrigger>
-          </TabsList>
+          <SeletorSecaoMobile
+            ehCelular={ehCelular}
+            rotuloAtual={SECOES_FICHA.find((sec) => sec.id === activeTab)?.label ?? 'Seção'}
+          >
+            <TabsList className={cn('flex-shrink-0', ehCelular ? FICHA_SECOES_CELULAR : 'grid grid-cols-9')}>
+              {SECOES_FICHA.map(({ id, label, Icone }) => (
+                <TabsTrigger
+                  key={id}
+                  value={id}
+                  className={cn('flex items-center gap-2', ehCelular && FICHA_ABA_CELULAR)}
+                >
+                  {/* ⚠️ `flex-none` SO no celular. No desktop as 9 abas dividem 846px
+                      em celulas de 93px, e "Academico", "Financeiro", "Anamnese" e
+                      "Pedagogico" pedem 94-98px — sao os 2-5px que o icone cede
+                      encolhendo. Travado, o conteudo transborda a celula e encosta na
+                      aba vizinha (medido: 4 abas transbordando, 0 ao remover). */}
+                  <Icone className={cn('w-4 h-4', ehCelular && 'flex-none')} />
+                  <span className={ehCelular ? 'whitespace-nowrap' : 'hidden sm:inline'}>{label}</span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </SeletorSecaoMobile>
 
           <div className="flex-1 overflow-y-auto mt-4 pr-2">
             {/* ABA PESSOAL */}
             <TabsContent value="pessoal" className="space-y-4 mt-0">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="col-span-1 sm:col-span-2">
                   <Label className="mb-2 block">Nome Completo *</Label>
                   <Input
                     value={formData.nome}
@@ -1898,8 +1915,8 @@ export function ModalFichaAluno({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="col-span-1 sm:col-span-2">
                   <Label className="mb-2 block">Instagram</Label>
                   <Input
                     value={formData.instagram}
@@ -1963,7 +1980,7 @@ export function ModalFichaAluno({
 
             {/* ABA ACADÊMICO */}
             <TabsContent value="academico" className="space-y-4 mt-0">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <Label className="mb-2 block">Curso</Label>
                   <Select
@@ -2099,7 +2116,7 @@ export function ModalFichaAluno({
                     A origem é exclusivamente o Emusys e este estado não pode ser editado aqui.
                   </p>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <Label className="mb-2 block text-sm">Início do Contrato</Label>
                     <DatePicker
@@ -2132,7 +2149,7 @@ export function ModalFichaAluno({
                   <div className="space-y-2">
                     {outrosCursos.map((outro) => (
                       <div key={outro.id} className="flex items-center justify-between p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
-                        <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                        <div className="min-w-0 flex-1 grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-2">
                           <div className="flex items-center gap-2">
                             <span className="text-slate-400">Curso: </span>
                             <span className="text-white font-medium">{outro.curso_nome || '-'}</span>
@@ -2244,7 +2261,7 @@ export function ModalFichaAluno({
                   Ver faturas canônicas <ExternalLink className="h-3.5 w-3.5" />
                 </Link>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <Label className="mb-2 block">Tipo de Aluno</Label>
                   <Select
@@ -2351,7 +2368,7 @@ export function ModalFichaAluno({
                   />
                 </div>
 
-                <div className="col-span-2">
+                <div className="col-span-1 sm:col-span-2">
                   <Label className="mb-2 block">Status de Pagamento (mês atual)</Label>
                   <Select
                     value={formData.status_pagamento}
@@ -2377,7 +2394,7 @@ export function ModalFichaAluno({
 
             {/* ABA COMERCIAL */}
             <TabsContent value="comercial" className="space-y-4 mt-0">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <Label className="mb-2 block">Canal de Origem</Label>
                   <Select
@@ -2412,7 +2429,7 @@ export function ModalFichaAluno({
                   </Select>
                 </div>
 
-                <div className="col-span-2">
+                <div className="col-span-1 sm:col-span-2">
                   <Label className="mb-2 block">Agente Comercial (Hunter)</Label>
                   <Input
                     value={formData.agente_comercial}
@@ -2424,7 +2441,7 @@ export function ModalFichaAluno({
 
               <div className="border-t border-slate-700 pt-4">
                 <Label className="mb-3 block text-slate-400">Dados de Renovação (somente leitura)</Label>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-3">
                     <p className="text-xs text-slate-500 mb-1">Última Renovação</p>
                     <p className="text-sm text-slate-300">
@@ -2764,11 +2781,21 @@ export function ModalFichaAluno({
         </Tabs>
 
         {/* Footer com botões */}
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-700 flex-shrink-0">
-          <Button variant="outline" onClick={onClose} disabled={saving}>
+        <div
+          className={cn(
+            'flex items-center justify-end gap-3 pt-4 border-t border-slate-700 flex-shrink-0',
+            ehCelular && FICHA_RODAPE_CELULAR,
+          )}
+          style={ehCelular ? ESTILO_RODAPE_CELULAR : undefined}
+        >
+          <Button variant="outline" onClick={onClose} disabled={saving} className={cn(ehCelular && 'min-h-[44px] flex-1')}>
             Cancelar
           </Button>
-          <Button onClick={handleSalvar} disabled={saving} className="bg-purple-600 hover:bg-purple-500">
+          <Button
+            onClick={handleSalvar}
+            disabled={saving}
+            className={cn('bg-purple-600 hover:bg-purple-500', ehCelular && 'min-h-[44px] flex-[2]')}
+          >
             {saving ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -2940,7 +2967,7 @@ export function ModalFichaAluno({
                 </Select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <Label className="mb-2 block">Dia da Aula</Label>
                   <Select

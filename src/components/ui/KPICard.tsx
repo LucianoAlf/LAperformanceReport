@@ -1,3 +1,4 @@
+import { useId, useState } from 'react';
 import { LucideIcon, TrendingUp, TrendingDown, Minus, HelpCircle } from 'lucide-react';
 import { cn, formatCurrency } from '@/lib/utils';
 
@@ -128,6 +129,12 @@ export function KPICard({
 }: KPICardProps) {
   const displayLabel = title || label || '';
   const effectiveVariant = color || variant;
+  // No mobile não existe hover: sem estado próprio, o "?" aparecia e nunca
+  // abria o tooltip com a regra de negócio do indicador.
+  const [tooltipAberto, setTooltipAberto] = useState(false);
+  // Um id por instancia: a mesma tela monta ate 13 KPICard, e id repetido
+  // faria o leitor de tela anunciar sempre o balao do primeiro.
+  const tooltipId = useId();
   
   // Calcular tendência automaticamente se previousValue fornecido
   let trend = propTrend;
@@ -213,7 +220,13 @@ export function KPICard({
   };
 
   const valueSizeClasses = {
-    sm: 'text-2xl',
+    // `sm` e o tamanho da grade de 2 colunas do mobile: o cartao mede ~170px
+    // e sobram ~115px de texto depois do padding e do icone. Em 24px fixos,
+    // "R$ 1.234,56" (11 caracteres) nao cabe e transborda a caixa. O clamp
+    // encolhe so onde a tela e estreita — a partir de ~480px de viewport ele
+    // ja bate no teto de 1.5rem, que e exatamente o `text-2xl` de antes,
+    // entao nenhum consumidor de desktop muda de tamanho.
+    sm: 'text-[clamp(1.125rem,5vw,1.5rem)]',
     md: 'text-2xl md:text-3xl',
     lg: 'text-4xl md:text-5xl',
   };
@@ -253,32 +266,82 @@ export function KPICard({
       onClick={onClick}
     >
       {/* Header: Título + Ícone (alinhados) */}
-      <div className="flex items-start justify-between mb-2">
-        <div>
+      <div className="flex items-start justify-between gap-2 mb-2">
+        {/* min-w-0: item de flex tem `min-width: auto` e NAO encolhe abaixo do
+            proprio min-content. Sem isto, rotulo longo ("Experimentais com
+            Presenca") empurra o icone para fora da caixa numa coluna de ~170px
+            — que e a largura real do cartao na grade de 2 colunas do mobile.
+            Mesma armadilha ja documentada no CLAUDE.md para o AppLayout. */}
+        <div className="min-w-0 flex-1">
           <div className={cn(
-            "font-medium text-slate-400 mb-1 flex items-center gap-1",
-            size === 'sm' ? 'text-[10px]' : 'text-xs'
+            "font-medium text-slate-400 mb-1 flex items-center gap-1 leading-tight",
+            // Numa grade densa, rotulo de 1 linha ("Pagantes") ao lado de um de
+            // 2 ("Ticket Medio Parcelas") faz os numeros comecarem em alturas
+            // diferentes e a grade vira dente-de-serra. Reservar 2 linhas
+            // alinha todos os valores do mesmo eixo. So no `sm`, que e o
+            // tamanho usado em grade.
+            size === 'sm' ? 'text-[10px] min-h-[2.1em] items-start' : 'text-xs'
           )}>
             {displayLabel}
             {tooltip && (
-              <span className="relative group">
-                <HelpCircle size={12} className="text-slate-500 hover:text-slate-300 cursor-help flex-shrink-0" />
-                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-200 whitespace-normal w-[220px] text-center opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-xl pointer-events-none">
+              <span className="relative group inline-flex">
+                {/* O icone e o UNICO filho em fluxo: o wrapper mede 12x12, como
+                    antes de existir alvo de toque. O alvo vive fora do fluxo
+                    (absolute), entao nao estica a linha do rotulo nem quebra
+                    linha em grade densa. */}
+                <HelpCircle
+                  size={12}
+                  aria-hidden="true"
+                  className="text-slate-500 group-hover:text-slate-300 cursor-help flex-shrink-0"
+                />
+                {/* 44px SO no ponteiro grosso. No mouse o alvo e 12x12 — a
+                    caixa exata do glifo: o que se ve e o que se clica, e todo
+                    o resto do cartao continua abrindo o drill-down. Era essa
+                    faixa que a margem negativa de 44px tomava em 14 cartoes,
+                    8 deles fora do Dashboard. O botao esta VAZIO, entao sem
+                    min-* ele encolheria a zero e o "?" ficaria inclicavel no
+                    desktop — falha silenciosa, nao erro. */}
+                <button
+                  type="button"
+                  aria-label="Explicação do indicador"
+                  aria-expanded={tooltipAberto}
+                  aria-controls={tooltipId}
+                  className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-h-[12px] min-w-[12px] [@media(pointer:coarse)]:min-h-[44px] [@media(pointer:coarse)]:min-w-[44px] cursor-help"
+                  onClick={(e) => { e.stopPropagation(); setTooltipAberto((v) => !v); }}
+                ></button>
+                <span
+                  id={tooltipId}
+                  role="tooltip"
+                  className={cn(
+                  "absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-200 whitespace-normal w-[220px] max-w-[calc(100vw-1.5rem)] text-center transition-all duration-200 z-50 shadow-xl pointer-events-none",
+                  // No ponteiro grosso o balao deixa de pendurar no cartao e
+                  // vira uma faixa presa a base da tela. Um balao de 220px
+                  // centrado num cartao de ~170px transborda ~25px de cada
+                  // lado; na coluna da borda isso sai da viewport e o que o
+                  // usuario ve e a PAGINA rolando para o lado. Preso a tela,
+                  // o texto cabe inteiro e nao empurra layout nenhum.
+                  "[@media(pointer:coarse)]:fixed [@media(pointer:coarse)]:inset-x-3 [@media(pointer:coarse)]:bottom-20 [@media(pointer:coarse)]:mb-0 [@media(pointer:coarse)]:w-auto [@media(pointer:coarse)]:max-w-none [@media(pointer:coarse)]:translate-x-0 [@media(pointer:coarse)]:text-left",
+                  tooltipAberto ? "opacity-100 visible" : "opacity-0 invisible",
+                  "group-hover:opacity-100 group-hover:visible",
+                )}>
                   {tooltip}
                 </span>
               </span>
             )}
           </div>
           {/* Valor + Meta na mesma linha */}
-          <div className="flex items-baseline gap-2">
+          {/* flex-wrap: valor e meta ("R$ 1.234 / R$ 2.000") somam mais que a
+              largura do cartao estreito; sem quebrar, o "/ meta" empurrava a
+              caixa em vez de descer uma linha. */}
+          <div className="flex flex-wrap items-baseline gap-x-2">
             <span className={cn(
-              "font-bold text-white leading-none",
+              "font-bold text-white leading-none break-words",
               valueSizeClasses[size]
             )}>
               {typeof value === 'number' ? formatValue(value, format) : value}
             </span>
             {target && (
-              <span className="text-lg text-slate-500">
+              <span className={cn("text-slate-500", size === 'sm' ? 'text-sm' : 'text-lg')}>
                 / {formatValue(target, format)}
               </span>
             )}
@@ -286,7 +349,7 @@ export function KPICard({
         </div>
         {Icon && (
           <div className={cn(
-            "p-2 rounded-xl",
+            "p-2 rounded-xl flex-shrink-0",
             iconBgMap[effectiveVariant]
           )}>
             <Icon size={iconSizeClasses[size]} className={iconColorMap[effectiveVariant]} />
@@ -296,16 +359,22 @@ export function KPICard({
 
       {/* Barra de progresso com percentual */}
       {target && metaPercent !== null && showProgress && (
-        <div className="mb-3">
+        <div className={size === 'sm' ? 'mb-1.5' : 'mb-3'}>
           <div className="flex items-center gap-2 mb-1">
-            <div className="flex-1 h-3 bg-slate-700/60 rounded-full overflow-hidden">
+            {/* Barra fina no cartao pequeno: em 12px de altura ela competia com
+                o proprio numero pela atencao, e o indicador e o numero. */}
+            <div className={cn(
+              "flex-1 bg-slate-700/60 rounded-full overflow-hidden",
+              size === 'sm' ? 'h-1.5' : 'h-3'
+            )}>
               <div 
                 className={cn("h-full rounded-full transition-all duration-500", getMetaColor())}
                 style={{ width: `${getBarWidth()}%` }}
               />
             </div>
             <span className={cn(
-              "text-sm font-bold tabular-nums min-w-[3rem] text-right",
+              "font-bold tabular-nums flex-shrink-0 text-right",
+              size === 'sm' ? 'text-[11px] min-w-[2.2rem]' : 'text-sm min-w-[3rem]',
               metaPercent >= 100 ? 'text-emerald-400' : 
               metaPercent >= 80 ? 'text-cyan-400' : 
               metaPercent >= 50 ? 'text-amber-400' : 'text-rose-400'
@@ -325,7 +394,7 @@ export function KPICard({
 
       {/* Comparativos no rodapé */}
       {hasComparativos && typeof value === 'number' && (
-        <div className="flex gap-4 pt-2 border-t border-slate-700/50">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 pt-2 border-t border-slate-700/50">
           {compMes && comparativoMesAnterior && (
             <div className="flex items-center gap-1">
               <span className={cn("font-semibold text-xs flex items-center gap-0.5", compMes.cor)}>

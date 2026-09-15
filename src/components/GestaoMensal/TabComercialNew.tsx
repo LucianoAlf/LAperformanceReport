@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Phone, Calendar, UserPlus, Percent, DollarSign, TrendingUp, Archive, XCircle, Music, Clock, Users, Baby, GraduationCap, AlertTriangle, Info, Lock, Unlock, Headphones, MessageSquare, Timer, CheckCircle2, Building2, Inbox } from 'lucide-react';
 import { KPICard } from '@/components/ui/KPICard';
+import { SeloCompetencia } from '@/components/ui/SeloCompetencia';
 import { FunnelChart } from '@/components/ui/FunnelChart';
 import { DistributionChart } from '@/components/ui/DistributionChart';
 import { EvolutionChart } from '@/components/ui/EvolutionChart';
@@ -729,13 +730,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             </button>
           ))}
         </div>
-        <div
-          className={`min-h-9 px-3 py-1.5 rounded-xl border text-xs font-medium flex items-center gap-1.5 max-w-full ${competenciaBadgeClasses}`}
-          title={competenciaMensal.tooltip}
-        >
-          {competenciaMensal.bloqueiaEscrita ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-          <span className="min-w-0 truncate">{competenciaMensal.loading ? 'Validando competência' : competenciaMensal.badgeLabel}</span>
-        </div>
+        <SeloCompetencia status={competenciaMensal} className={competenciaBadgeClasses} />
       </div>
 
       {/* Sub-aba: Leads */}

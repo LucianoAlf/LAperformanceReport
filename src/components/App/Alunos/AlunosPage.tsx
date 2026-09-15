@@ -12,8 +12,15 @@ import {
   Calendar, Upload, Zap, RefreshCw, Lock, Unlock, Link2, GraduationCap, ReceiptText
 } from 'lucide-react';
 import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
+import { useShellMobile } from '@/hooks/useShellMobile';
+import { abaFoiPortada } from '@/mobile/abasPortadas';
+import { AvisoNaoOtimizado } from '@/mobile/AvisoNaoOtimizado';
+import { ListaAlunosMobile } from '@/mobile/telas/alunos/ListaAlunosMobile';
+import { ModalFichaAluno } from './ModalFichaAluno';
 import { COMPETENCIA_FECHADA_MESSAGE, useCompetenciaMensalStatus } from '@/hooks/useCompetenciaMensalStatus';
 import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
+import { SeloCompetencia } from '@/components/ui/SeloCompetencia';
+import { GradeKPIs } from '@/components/ui/GradeKPIs';
 import { PageFilterBar } from '@/components/ui/page-filter-bar';
 import { KPICard } from '@/components/ui/KPICard';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -294,6 +301,14 @@ export function AlunosPage() {
     iconeCor: 'text-white',
     iconeWrapperCor: 'bg-gradient-to-br from-purple-500 to-pink-500',
   });
+
+  // Mesma decisao que escolhe o shell, nao apenas o mesmo breakpoint: ler so a
+  // largura faria a pagina discordar do shell sob VITE_MOBILE_SHELL=off.
+  const ehCelular = useShellMobile() === 'mobile';
+  // No desktop quem abre a ficha e' a TabelaAlunos; no celular nao ha tabela,
+  // entao a pagina guarda o aluno aberto. Guarda o ID, nao o objeto: a lista
+  // e' remontada a cada recarga e um objeto preso ficaria velho na tela.
+  const [fichaAlunoId, setFichaAlunoId] = useState<number | null>(null);
 
   const context = useOutletContext<{
     filtroAtivo: boolean;
@@ -1944,7 +1959,7 @@ export function AlunosPage() {
     <div className="space-y-6">
       {/* Filtro de período */}
       <PageFilterBar>
-        <div className="flex flex-wrap items-center justify-end gap-3 w-full">
+        <div className="flex w-full flex-wrap items-center justify-start gap-2 sm:justify-end sm:gap-3">
           <CompetenciaFilter
             filtro={competenciaFiltro}
             range={competenciaRange}
@@ -1958,13 +1973,7 @@ export function AlunosPage() {
             onDataFimChange={setCompetenciaDataFim}
           />
 
-          <div
-            className={`min-h-8 px-3 py-1.5 rounded-lg border text-xs font-medium flex items-center gap-1.5 max-w-full ${competenciaBadgeClasses}`}
-            title={competenciaMensal.tooltip}
-          >
-            {competenciaMensal.bloqueiaEscrita ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-            <span className="min-w-0 truncate">{competenciaMensal.loading ? 'Validando competência' : competenciaMensal.badgeLabel}</span>
-          </div>
+          <SeloCompetencia status={competenciaMensal} className={competenciaBadgeClasses} raio="lg" />
 
           {unidadeAtual && unidadeAtual !== 'todos' ? (
             confirmRecalcular && !recalcBloqueado ? (
@@ -2014,7 +2023,7 @@ export function AlunosPage() {
       </PageFilterBar>
 
       {/* Header actions */}
-      <div className="flex flex-wrap items-center justify-end gap-4">
+      <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end sm:gap-4">
         <button
           type="button"
           onClick={() => navigate(criarUrlFaturasAlunos({
@@ -2049,8 +2058,9 @@ export function AlunosPage() {
       </div>
 
       {/* KPI Cards */}
-      <section data-tour="alunos-kpis" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
+      <GradeKPIs data-tour="alunos-kpis" className="grid grid-cols-2 gap-2 md:grid-cols-3 md:gap-4 lg:grid-cols-7">
         <KPICard
+          size={ehCelular ? 'sm' : undefined}
           title="Matrículas Ativas"
           tooltip="Total de matriculas ativas incluindo primeiro curso, segundo curso, banda e coral."
           value={kpis.totalMatriculasAtivas}
@@ -2060,6 +2070,7 @@ export function AlunosPage() {
           onClick={() => { fetchMatriculasAtivasDetalhe(); setModalMatriculasAtivas(true); }}
         />
         <KPICard
+          size={ehCelular ? 'sm' : undefined}
           title="Alunos Ativos"
           tooltip="Alunos unicos ativos (sem contar segundo curso). Representa pessoas fisicas frequentando."
           value={kpis.totalAtivos}
@@ -2068,6 +2079,7 @@ export function AlunosPage() {
           variant="cyan"
         />
         <KPICard
+          size={ehCelular ? 'sm' : undefined}
           title="Pagantes"
           tooltip="Alunos com tipo de matricula que conta como pagante (exclui bolsa total e banda gratuita)."
           value={kpis.totalPagantes}
@@ -2076,6 +2088,7 @@ export function AlunosPage() {
           variant="amber"
         />
         <KPICard
+          size={ehCelular ? 'sm' : undefined}
           title="Média/Turma"
           tooltip="Ocupacoes elegiveis divididas pelas turmas regulares elegiveis na competencia selecionada. Projetos e bandas nao entram no calculo."
           value={kpis.mediaAlunosTurma === null ? 'Indisponível' : kpis.mediaAlunosTurma.toFixed(2)}
@@ -2086,6 +2099,7 @@ export function AlunosPage() {
           variant="cyan"
         />
         <KPICard
+          size={ehCelular ? 'sm' : undefined}
           title="Ticket Médio"
           tooltip="Valor medio da mensalidade. Considera apenas alunos com tipo de matricula que entra no calculo de ticket medio."
           value={`R$ ${kpis.ticketMedio}`}
@@ -2094,6 +2108,7 @@ export function AlunosPage() {
           variant="green"
         />
         <KPICard
+          size={ehCelular ? 'sm' : undefined}
           title="T. Permanência"
           tooltip="Tempo medio de permanencia dos alunos ativos em meses. Clique para ver o detalhamento por faixa."
           value={kpis.ltvMedio}
@@ -2117,7 +2132,7 @@ export function AlunosPage() {
             }
           </p>
         </div>
-      </section>
+      </GradeKPIs>
 
       {/* Abas */}
       <PageTabs
@@ -2127,6 +2142,12 @@ export function AlunosPage() {
         data-tour="alunos-tabs"
       />
 
+      {/* A faixa e' da ABA, nao da rota: as 8 abas estao em estagios diferentes
+          de adaptacao, e uma faixa unica mentiria nos dois sentidos. O shell
+          nao tem como saber qual esta aberta — por isso ela mora aqui, e o
+          MobileLayout suprime a dele nesta rota (ROTAS_COM_FAIXA_POR_ABA). */}
+      {ehCelular && !abaFoiPortada('/app/alunos', tabAtiva) && <AvisoNaoOtimizado />}
+
       {/* Conteúdo das Tabs */}
       {tabAtiva === 'automacao' ? (
         <TabAutomacao unidadeAtual={unidadeAtual} />
@@ -2134,7 +2155,19 @@ export function AlunosPage() {
         <TabHistoricoLTV unidadeAtual={unidadeAtual} />
       ) : (
         <section className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
-          {tabAtiva === 'lista' && (
+          {/* No celular a mesma lista vira cartoes: a tabela tem 16 colunas e
+              nao encolhe para 351px. Os alunos sao os MESMOS (`alunosComTurma`,
+              ja com os filtros do desktop aplicados) — muda so a apresentacao,
+              entao nao ha segunda leitura da lista. */}
+          {tabAtiva === 'lista' && ehCelular && (
+            <ListaAlunosMobile
+              alunos={alunosComTurma}
+              mostrarUnidade={unidadeAtual === 'todos'}
+              onAbrirAluno={setFichaAlunoId}
+            />
+          )}
+
+          {tabAtiva === 'lista' && !ehCelular && (
             <TabelaAlunos
               alunos={alunosComTurma}
               todosAlunos={alunos}
@@ -2219,6 +2252,29 @@ export function AlunosPage() {
         </section>
       )}
  
+      {/* Ficha do aluno no celular — a MESMA do desktop, em tela cheia.
+          Resolvida pelo id a cada render: assim ela acompanha o recarregar da
+          lista em vez de segurar uma copia congelada do aluno. */}
+      {ehCelular && fichaAlunoId !== null && (() => {
+        const alunoAberto = alunosComTurma.find((a) => a.id === fichaAlunoId)
+          ?? alunos.find((a) => a.id === fichaAlunoId);
+        // O aluno pode sair do recorte enquanto a ficha esta aberta (mudou de
+        // status, trocou a competencia). Fechar em silencio e' melhor que
+        // renderizar ficha vazia.
+        if (!alunoAberto) return null;
+        return (
+          <ModalFichaAluno
+            aluno={alunoAberto}
+            onClose={() => setFichaAlunoId(null)}
+            onSalvar={carregarDados}
+            professores={professores}
+            cursos={cursos}
+            tiposMatricula={tiposMatricula}
+            onAbrirOutroCurso={(outro) => setFichaAlunoId(outro.id)}
+          />
+        );
+      })()}
+
       {/* Modal Novo Aluno */}
       {modalNovoAluno && (
         <ModalNovoAluno

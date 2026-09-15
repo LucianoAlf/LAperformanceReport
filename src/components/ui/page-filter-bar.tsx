@@ -13,7 +13,15 @@ interface PageFilterBarProps {
  */
 export function PageFilterBar({ children, className }: PageFilterBarProps) {
   return (
-    <div className={cn("flex items-center justify-end min-h-[40px]", className)}>
+    // flex-wrap: sem ele os filtros que nao cabem na largura do celular ficam
+    // FORA da tela em vez de descer uma linha — nao encolhem, porque item de
+    // flex nao passa abaixo do proprio min-content.
+    //
+    // justify-start ate `sm`: alinhar a direita numa faixa de 351px cola tudo
+    // na borda e deixa o buraco do lado esquerdo, que e o que faz a barra
+    // parecer quebrada no telefone. Em tela larga segue `justify-end`, como
+    // sempre foi.
+    <div className={cn("flex flex-wrap items-center justify-start gap-2 min-h-[40px] sm:justify-end", className)}>
       {children}
     </div>
   );

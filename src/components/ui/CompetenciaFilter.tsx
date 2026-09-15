@@ -1,4 +1,6 @@
 import { cn } from '@/lib/utils';
+import { useShellMobile } from '@/hooks/useShellMobile';
+import { SeletorPeriodoMobile } from '@/mobile/SeletorPeriodoMobile';
 import { TipoCompetencia, CompetenciaFiltro, CompetenciaRange } from '@/hooks/useCompetenciaFiltro';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -73,17 +75,61 @@ export function CompetenciaFilter({
     ? TIPOS.filter((tipo) => tiposPermitidos.includes(tipo.id))
     : TIPOS;
 
+  // ⚠️ A troca e AQUI, no componente compartilhado — nao na tela.
+  //
+  // Em 14/09/2026 a versao de celular deste filtro (pilula + folha) nasceu
+  // dentro do Dashboard mobile. Resultado: cada tela nova precisava do mesmo
+  // conserto de novo, e a de Alunos abriu com o filtro largo outra vez. Como
+  // ele serve 10 telas, corrigir na fonte resolve as 10 e as proximas — a
+  // tela nao precisa saber que existe uma versao de celular.
+  //
+  // Aberto o tempo todo, este filtro custa 148px do topo de uma tela de
+  // 812px, com 728px de conteudo numa faixa de 351px. A pilula custa 36px e
+  // diz o periodo por extenso.
+  //
+  // Decidido pelo MESMO `useShellMobile` que escolhe o shell, e nao por
+  // largura: ler so a largura faria o filtro discordar do resto da tela sob
+  // VITE_MOBILE_SHELL=off e sob shell-override.
+  const ehCelular = useShellMobile() === 'mobile';
+
+  if (ehCelular) {
+    return (
+      <SeletorPeriodoMobile
+        filtro={filtro}
+        range={range}
+        anosDisponiveis={anosDisponiveis}
+        setTipo={onTipoChange}
+        setAno={onAnoChange}
+        setMes={onMesChange}
+        setTrimestre={onTrimestreChange}
+        setSemestre={onSemestreChange}
+        setDataInicio={onDataInicioChange}
+        setDataFim={onDataFimChange}
+        tiposPermitidos={tiposPermitidos}
+      />
+    );
+  }
+
   return (
-    <div className={cn("flex items-center gap-3", className)}>
+    // flex-wrap: os 7 tipos mais os seletores de ano/periodo somam ~760px, e a
+    // faixa do celular tem ~350px. Sem quebrar, o que passa do fim da linha
+    // nao some: fica FORA da tela — e era justamente o seletor de ano/mes que
+    // caia ali, ou seja, o controle mais usado do filtro so era alcancavel
+    // rolando para o lado. Em tela larga nada quebra (cabe numa linha), entao
+    // o desktop continua identico.
+    <div className={cn("flex flex-wrap items-center gap-2 sm:gap-3", className)}>
       {/* Seletor de Tipo */}
-      {tiposVisiveis.length > 1 && <div className="bg-slate-800/50 p-1 rounded-lg inline-flex gap-1">
+      {tiposVisiveis.length > 1 && <div className="bg-slate-800/50 p-1 rounded-lg inline-flex flex-wrap gap-1">
         {tiposVisiveis.map((tipo) => (
           <button
             type="button"
             key={tipo.id}
             onClick={() => onTipoChange(tipo.id)}
             className={cn(
-              'px-4 py-2 rounded-md text-sm font-medium transition-all',
+              // px menor no celular cabe mais chip por linha; o alvo de 44px
+              // vale so no ponteiro grosso, para o botao do desktop nao crescer.
+              'px-3 sm:px-4 py-2 rounded-md text-sm font-medium transition-all',
+              '[@media(pointer:coarse)]:min-h-[44px]',
               filtro.tipo === tipo.id
                 ? 'bg-violet-600 text-white shadow-sm'
                 : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
@@ -96,7 +142,7 @@ export function CompetenciaFilter({
 
       {/* Seletores de Período Personalizado */}
       {filtro.tipo === 'personalizado' && (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <DatePicker
             date={filtro.dataInicio}
             onDateChange={onDataInicioChange || (() => {})}
@@ -116,7 +162,7 @@ export function CompetenciaFilter({
       )}
 
       {/* Seletores de Período — ocultos quando filtro é "Hoje" ou "Personalizado" */}
-      {filtro.tipo !== 'diario' && filtro.tipo !== 'personalizado' && <div className="flex items-center gap-2">
+      {filtro.tipo !== 'diario' && filtro.tipo !== 'personalizado' && <div className="flex flex-wrap items-center gap-2">
         {/* Seletor de Ano */}
         <Select
           value={filtro.ano.toString()}
