@@ -1928,6 +1928,35 @@ export function ModalFichaAluno({
 
               <ContatosAluno alunoId={aluno.id} nomeAluno={aluno.nome} />
 
+              {/* Comunidade WhatsApp (LAPE-33) — leitura automatica, captura diaria 07h BRT.
+                  sem_captura/desatualizada/sem_grupo = "nao sei", nunca "fora". */}
+              <div>
+                <Label className="mb-2 block">Comunidade WhatsApp</Label>
+                <div className="flex items-center justify-between h-10 px-3 bg-slate-800/50 border border-slate-700 rounded-md">
+                  {aluno.comunidade_wa_estado === 'na_comunidade' ? (
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
+                      aluno.comunidade_wa_mesma_unidade === false
+                        ? 'bg-amber-500/20 text-amber-400'
+                        : 'bg-emerald-500/20 text-emerald-400'
+                    }`}>
+                      ✓ {aluno.comunidade_wa_grupo_nome || 'Dentro'}
+                      {aluno.comunidade_wa_mesma_unidade === false && ' (outra unidade)'}
+                    </span>
+                  ) : aluno.comunidade_wa_estado === 'fora_da_comunidade' ? (
+                    <span className="bg-slate-600/20 text-slate-400 px-2 py-0.5 rounded text-xs font-medium">Fora</span>
+                  ) : (
+                    <span className="text-slate-500 text-xs">Sem verificação recente</span>
+                  )}
+                  {aluno.comunidade_wa_capturado_em && (
+                    <span className="text-xs text-slate-500">
+                      verificado {new Date(aluno.comunidade_wa_capturado_em).toLocaleString('pt-BR', {
+                        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+                      })}
+                    </span>
+                  )}
+                </div>
+              </div>
+
               <div className="border-t border-slate-700 pt-4">
                 <Label className="mb-3 block text-slate-400">Flags do Aluno</Label>
                 <div className="flex flex-wrap gap-6">
