@@ -1,5 +1,5 @@
 // Caso Jhon/CG (01/09 17:09-17:12): pagamento de DOIS alunos com desconto
-// negociado ("*Desconto autorizado pelo Jerêh*"). O Jhon mandou a divisão
+// negociado (agora protocolado como "Desconto autorizado por: Jerêh"). O Jhon mandou a divisão
 // EXATAMENTE no formato que a Sol pediu ("Davi Guilherme - R$ 1.290,00 /
 // Thuanny De Souza - R$ 432,00") e ela repetiu "não consegui confirmar as
 // faturas oficiais" em loop — o resolver exigia bater no centavo com fatura
@@ -11,7 +11,8 @@
 // snapshot pula a revalidação de fatura desses itens; soma × total continua
 // obrigatória; divisão derivada continua fail-closed.
 // Runtime (patch): a flag só é setada quando o valor está LITERALMENTE no
-// texto humano; card avisa item a item; "pode" continua obrigatório.
+// texto humano e a autorização usa o protocolo determinístico; card avisa
+// item a item; "pode" continua obrigatório.
 const mod = require('./_alvo.cjs');
 
 const CHAT = '5521981278047-1544204225@g.us';
@@ -79,7 +80,7 @@ const ultimo = (a) => String(a[a.length - 1] || '');
     body: '', hasMedia: true, mediaType: 'image', mediaUrls: ['fake://transf.jpg'] });
   await sleep(250);
   await A.h.handle({ chatId: CHAT, senderPhone: JHON, messageId: 'J2',
-    body: 'Parcelas 08/26 de dois alunos: Davi Guilherme e Thuanny De Souza\nLA CG - R$1.722,00\n\n*Desconto autorizado pelo Jerêh', hasMedia: false });
+    body: 'Parcelas 08/26 de dois alunos: Davi Guilherme e Thuanny De Souza\nLA CG - R$1.722,00\n\nDesconto autorizado por: Jerêh', hasMedia: false });
   const rMedia = await pMedia;
   console.log('mídia acao:', rMedia && rMedia.acao);
   checar(rMedia && rMedia.acao === 'manual_review_multi_student',
@@ -95,13 +96,19 @@ const ultimo = (a) => String(a[a.length - 1] || '');
     `divisão declarada deveria gerar o preview do lote; veio "${rDiv && rDiv.acao}"`);
   checar(/Davi Guilherme De Souza Chaves Ribeiro — R\$ 1\.290,00/.test(card.replace(/ /g, ' ')) || /Davi Guilherme/.test(card),
     'card lista o Davi com o valor declarado');
-  checar(/valor declarado — sem vínculo de fatura/i.test(card), 'card avisa o item sem vínculo');
-  checar(/desconto negociado/i.test(card), 'card explica o porquê na seção FATURA');
+  checar(/desconto autorizado — sem fatura correspondente no Emusys/i.test(card),
+    'card descreve a exceção sem sugerir lançamento financeiro solto');
+  checar(/desconto explicitamente autorizado/i.test(card), 'card nomeia a exceção comprovada na seção FATURA');
+  checar(/1 de 2 item\(ns\) com fatura validada/i.test(card),
+    'card não afirma que todas as faturas foram validadas quando há exceção');
+  checar(!/Faturas validadas individualmente/i.test(card),
+    'card parcial não pode afirmar validação individual de todas as faturas');
 
   // a flag só foi setada porque os valores estão literalmente no texto
   const chamada = A.resolverCalls[A.resolverCalls.length - 1];
-  checar(chamada && chamada.itens.every((i) => i.declarado_pelo_humano === true),
-    'itens com valor literal no texto vão com declarado_pelo_humano=true');
+  checar(chamada && chamada.itens.every((i) => i.declarado_pelo_humano === true
+    && i.desconto_negociado_explicito === true),
+    'valor literal + desconto protocolado abrem a exceção explícita');
 
   // ...e o "pode" lança o lote com o item sem vínculo
   await A.h.handle({ chatId: CHAT, senderPhone: JHON, messageId: 'J4', body: 'pode', hasMedia: false });

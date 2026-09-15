@@ -719,12 +719,25 @@ situação é aviso + lançamento sem vínculo; no multi era bloqueio.
   itens. Soma × total obrigatória; divisão DERIVADA continua fail-closed.
   Provado com o caso real: Davi 1.290 sem vínculo + Thuanny 432 casando a
   Parcela 08/2026 paga no Emusys no mesmo dia via Pix.
-- Runtime: a flag só é setada quando o valor está LITERALMENTE no texto humano
-  (`textoFonte`) — o LLM não "declara" por conta. Card avisa item a item e na
-  seção FATURA ("desconto negociado"). "pode" continua obrigatório.
+- Runtime (corrigido em 15/09): valor literal prova apenas a divisão. A flag só
+  abre a exceção quando o texto humano do episódio contém a linha protocolada
+  `Desconto autorizado por: Nome`. O modelo não interpreta nem autoriza essa
+  exceção; OCR, soma e valor digitado nunca autorizam. O card informa quantos
+  itens têm fatura, nomeia a exceção e o "pode" continua obrigatório.
 - Placar shadow V4: o roteador classificou `lancamento_por_texto` (gap — mapa
   ganhou `lancamento_multi_aluno`) e teve 2 timeouts de 45s nas mensagens
   longas: a latência via CLI é bloqueante do flip, já no design doc.
+
+## desconto-inferido-sync-global-e2e.cjs  (15/09, caso Arthur/Barra)
+🔴 **Corrida de sincronização não pode virar exceção financeira.** A Sol viu uma
+das três faturas e transformou as outras duas em “desconto negociado” porque o
+humano escreveu os três valores. O teste força inclusive uma RPC antiga/mocada
+devolvendo `ok:true` com vínculo parcial e prova, nas três unidades, que:
+- sem desconto explicitamente autorizado não existe card aprovável nem ação no
+  “pode”;
+- quando a sincronização termina, nasce preview novo com as três faturas;
+- desconto real com o protocolo `Desconto autorizado por: Nome` segue funcionando;
+- renderer parcial nunca afirma “faturas validadas individualmente”.
 
 ## multi-formato-ensinado-e2e.cjs  (01/09 17:51, o reenvio do Jhon com a divisão)
 🔴 **O detector de multi não reconhecia o formato que a PRÓPRIA SOL ensina.**

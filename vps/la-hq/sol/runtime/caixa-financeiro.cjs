@@ -979,6 +979,8 @@ function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competenci
 
 function montarPreviewMultiAluno({ unidadeNome, valorTotal, forma, categoria, itens }) {
   const lista = Array.isArray(itens) ? itens : [];
+  const semVinculo = lista.filter((i) => i && i.sem_vinculo_fatura === true);
+  const vinculadas = lista.length - semVinculo.length;
   const formaTxt = forma === 'cartao' ? 'cartão' : (forma || '❓ forma não identificada');
   const nomes = [...new Set(lista.map((i) => String(i.aluno_nome || '').trim()).filter(Boolean))];
   const mesmoAlunoVariasFaturas = lista.length >= 2 && nomes.length === 1;
@@ -990,7 +992,7 @@ function montarPreviewMultiAluno({ unidadeNome, valorTotal, forma, categoria, it
         ? (item.descricao || `${cap(item.categoria || 'Fatura')}${item.competencia ? ' ' + item.competencia : ''}`)
         : (item.competencia || item.descricao || 'Fatura'))
       : item.aluno_nome;
-    return `• ${rotulo} — ${fmtBRL(item.valor)}${item.sem_vinculo_fatura ? ' _(valor declarado — sem vínculo de fatura)_' : ''}`;
+    return `• ${rotulo} — ${fmtBRL(item.valor)}${item.sem_vinculo_fatura ? ' _(desconto autorizado — sem fatura correspondente no Emusys)_' : ''}`;
   });
   const responsaveis = [...new Set(lista.map((i) => String(i.responsavel_financeiro || '').trim()).filter(Boolean))];
   const linhaResponsavel = responsaveis.length === 1 ? `\n• Resp. financeiro: ${responsaveis[0]}`
@@ -1005,9 +1007,11 @@ function montarPreviewMultiAluno({ unidadeNome, valorTotal, forma, categoria, it
   const formasPagas = [...new Set(faturasPagas.map((f) => String((f.forma_pagamento && f.forma_pagamento.nome) || '').trim()).filter(Boolean))];
   const dataBR = datasPagas.length === 1 && /^\d{4}-\d{2}-\d{2}$/.test(datasPagas[0])
     ? datasPagas[0].slice(8, 10) + '/' + datasPagas[0].slice(5, 7) : null;
-  const linhaStatus = faturasPagas.length === lista.length && dataBR
-    ? `• Já pago no Emusys em ${dataBR}${formasPagas.length === 1 ? ` no ${formasPagas[0]}` : ''} — falta lançar no caixa`
-    : '• Faturas validadas individualmente no Emusys';
+  const linhaStatus = semVinculo.length > 0
+    ? `• ${vinculadas} de ${lista.length} item(ns) com fatura validada no Emusys`
+    : (faturasPagas.length === lista.length && dataBR
+      ? `• Já pago no Emusys em ${dataBR}${formasPagas.length === 1 ? ` no ${formasPagas[0]}` : ''} — falta lançar no caixa`
+      : '• Faturas validadas individualmente no Emusys');
   const blocoPessoas = mesmoAlunoVariasFaturas
     ? `*ALUNO*\n\n• ${nomes[0]}${linhaResponsavel}\n\n*${mesmoAlunoCategoriasMistas ? 'ITENS' : 'PARCELAS'}*\n\n${linhas.join('\n')}`
     : `*ALUNOS*\n\n${linhas.join('\n')}${linhaResponsavel}`;
@@ -1015,9 +1019,29 @@ function montarPreviewMultiAluno({ unidadeNome, valorTotal, forma, categoria, it
     `📄 *Comprovante recebido — ${unidadeNome}*`,
     `*RECEBIMENTO*\n\n*${fmtBRL(valorTotal)}* · ${formaTxt}`,
     blocoPessoas,
-    `*FATURA*\n\n• ${faturaTexto}\n• Valor: ${fmtBRL(valorTotal)} ✅ confere\n${linhaStatus}${lista.some((i) => i.sem_vinculo_fatura) ? '\n• ⚠️ Item(ns) com desconto negociado — lanço sem vínculo de fatura.' : ''}`,
+    `*FATURA*\n\n• ${faturaTexto}\n• Valor: ${fmtBRL(valorTotal)} ✅ confere\n${linhaStatus}${semVinculo.length ? `\n• ⚠️ ${semVinculo.length} item(ns) sem fatura correspondente, com desconto explicitamente autorizado — confira essa exceção antes de aprovar.` : ''}`,
     '👉 *Posso lançar o lote completo no caixa de hoje?* Responde *pode*',
   ].join('\n\n');
+}
+
+// Exceção financeira não nasce de aritmética nem de interpretação do modelo.
+// O formato abaixo é um protocolo explícito, como "Nome — R$ valor": a equipe
+// escreve uma linha `Desconto autorizado por: Nome`. OCR nunca entra aqui e o
+// "pode" posterior continua sendo outro gate independente.
+function extrairAutorizacaoDescontoProtocolada(textoHumano) {
+  const rotulo = 'desconto autorizado por';
+  for (const bruta of String(textoHumano || '').split('\n')) {
+    // Remove apenas markup do WhatsApp; não tenta entender conversa livre.
+    const linha = bruta.split('*').join('').split('_').join('').split('~').join('').trim();
+    const separador = linha.indexOf(':');
+    if (separador < 0) continue;
+    const chave = _normConf(linha.slice(0, separador));
+    const autorizador = linha.slice(separador + 1).trim();
+    if (chave !== rotulo || autorizador.length < 2 || autorizador.length > 80) continue;
+    return { ok: true, autorizador, trecho_evidencia: linha,
+      fonte: 'protocolo_desconto_autorizado_por' };
+  }
+  return { ok: false, motivo: 'desconto_sem_protocolo_explicito' };
 }
 
 // Nome de quem PAGOU, lido do comprovante ("De\nFULANO", "Detalhes do remetente ... Nome X").
@@ -4238,10 +4262,10 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       await sendFn(event.chatId, '⚠️ Entendi os dois alunos e a divisão, mas falta a forma de pagamento. Me diz: pix, dinheiro, cartão, cheque ou transferência.');
       return { acao: 'manual_review_multi_student' };
     }
-    // Divisao DECLARADA pelo humano viaja com a flag: valor negociado que nao
-    // bate com fatura lanca SEM vinculo, como no fluxo de um aluno (Jhon/CG
-    // 01/09, "Desconto autorizado pelo Jereh"). So marca quando o valor esta
-    // LITERALMENTE no texto escrito — divisao derivada segue fail-closed.
+    // Divisao DECLARADA prova o valor, nao o desconto. A excecao sem fatura so
+    // viaja com a flag quando o episodio traz o protocolo deterministico de
+    // autorização. Modelo, OCR e soma nunca autorizam.
+    const _autorizacaoDesconto = extrairAutorizacaoDescontoProtocolada(textoHumano || '');
     const _valorNoTextoHumano = (v) => {
       const n = Number(v);
       // textoFonte carrega o OCR — numero que so existe no RECIBO nao e'
@@ -4255,7 +4279,9 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
         || new RegExp('(^|[^0-9,])' + inteiro + '([^0-9,]|$)').test(String(_baseHumana));
     };
     const itensParaResolver = (intent.itens || []).map((it) =>
-      _valorNoTextoHumano(it && it.valor) ? { ...it, declarado_pelo_humano: true } : it);
+      (_autorizacaoDesconto.ok && _valorNoTextoHumano(it && it.valor))
+        ? { ...it, declarado_pelo_humano: true, desconto_negociado_explicito: true }
+        : { ...it, declarado_pelo_humano: false, desconto_negociado_explicito: false });
     // 🔴 TETO EXPLICITO, COM RECUSA IMEDIATA (09/09/2026).
     //
     // O resolver custa ~1 envelope de faturas por chamada mais um custo por
@@ -4337,16 +4363,42 @@ _Não lanço nada pela metade._`);
           const enc = Number(resolvido && resolvido.valor_encontrado);
           const dec = Number(resolvido && resolvido.valor_declarado);
           const visto = enc ? ` A fatura que achei${_quem} é de ${fmtBRL(enc)}.` : '';
-          return `o valor que você escreveu${dec ? ` (${fmtBRL(dec)})` : ''} não bate com fatura nenhuma${_quem}.${visto} Se for desconto negociado, escreve o valor na mensagem que eu lanço sem vincular a fatura.`;
+          return `o valor que você escreveu${dec ? ` (${fmtBRL(dec)})` : ''} ainda não bate com uma fatura oficial${_quem}.${visto} Se o pagamento acabou de entrar, minha cópia do Emusys pode estar atrasada — me reenvia daqui a pouco. Não criei card aprovável.`;
         })(),
         aluno_sem_nome: 'não consegui ler o nome de um dos alunos — ' + _pedeDivisao + '.',
-        sem_fatura_que_bata: `não achei fatura${_quem} que feche com esse valor — confere o valor, ou ${_pedeDivisao}.`,
+        sem_fatura_que_bata: `ainda não achei fatura oficial${_quem} que feche com esse valor. Se o pagamento acabou de entrar, minha cópia do Emusys pode estar atrasada — me reenvia daqui a pouco. Não criei card aprovável.`,
         itens_ausentes: 'não entendi a divisão — ' + _pedeDivisao + '.',
       };
       const _detalhe = _motivosMulti[resolvido && resolvido.motivo]
         || 'ainda não consegui confirmar todas as faturas oficiais — confere aluno, competência e valor de cada um.';
       await sendFn(event.chatId, `⚠️ Entendi a divisão, mas ${_detalhe}\n_Não lanço parcialmente._`);
       log({ acao: 'manual_review_multi_student', chatId: event.chatId, motivo: resolvido && resolvido.motivo || 'itens_nao_validados' });
+      return { acao: 'manual_review_multi_student' };
+    }
+    // Defesa em profundidade: mesmo que a RPC antiga ou um mock devolva
+    // `ok:true` com item sem fatura, o runtime não cria card aprovável sem a
+    // evidência humana explícita. Isso cobre as três unidades no mesmo Core.
+    const _semVinculo = resolvido.itens.filter((item) => item && item.sem_vinculo_fatura === true);
+    // A RPC pode devolver o nome canônico completo, diferente do rótulo curto
+    // digitado. A identidade estável dentro do lote é ordem + valor.
+    const _chaveItem = (item, indice = null) => {
+      const ordem = Number(item && item.ordem || (indice != null ? indice + 1 : 0));
+      return `${ordem}|${Number(item && item.valor || 0).toFixed(2)}`;
+    };
+    const _entradasAutorizadas = new Set(itensParaResolver
+      .map((item, indice) => (item && item.declarado_pelo_humano === true
+        && item.desconto_negociado_explicito === true) ? _chaveItem(item, indice) : null)
+      .filter(Boolean));
+    const _retornoIncoerente = _semVinculo.some((item) =>
+      item.declarado_pelo_humano !== true || !_entradasAutorizadas.has(_chaveItem(item)));
+    if (_semVinculo.length > 0
+        && (!_autorizacaoDesconto.ok || _retornoIncoerente)) {
+      await colocarEmRevisao('sem_vinculo_sem_desconto_autorizado');
+      await sendFn(event.chatId,
+        '⚠️ Ainda não encontrei todas as faturas oficiais deste lote. Pode ser atraso da sincronização com o Emusys. '
+        + 'Não criei card aprovável e não vou tratar valor digitado como desconto. Me reenvia o comprovante daqui a pouco.');
+      log({ acao: 'multi_sem_vinculo_bloqueado', chatId: event.chatId,
+        itens_sem_vinculo: _semVinculo.length, motivo: _autorizacaoDesconto.motivo || 'retorno_incoerente' });
       return { acao: 'manual_review_multi_student' };
     }
     if (!v3LedgerAtivo) {
@@ -4360,6 +4412,8 @@ _Não lanço nada pela metade._`);
       canonical_fatura_id: item.canonical_fatura_id || null, responsavel_financeiro: item.responsavel_financeiro || null,
       fatura: item.fatura || null,
       sem_vinculo_fatura: !!item.sem_vinculo_fatura, declarado_pelo_humano: !!item.declarado_pelo_humano,
+      desconto_negociado_explicito: !!item.sem_vinculo_fatura
+        && _autorizacaoDesconto.ok && _entradasAutorizadas.has(_chaveItem(item)),
     }));
     const texto = montarPreviewMultiAluno({ unidadeNome: grupo.nome, valorTotal: intent.valor_total, forma: intent.forma, categoria: intent.categoria, itens });
     let idEnviou = null;
@@ -7725,7 +7779,7 @@ module.exports = {
   derivarVinculo, casarParcelaCanonica, linhasDaFatura, categoriaDaFatura, descricaoDaFatura, jaLancadoHoje,
   periodoQuitacao, extrairPeriodoMeses,
   extrairCompetenciaTexto, extrairCompetenciasTexto, extrairCorrecaoCompetencia, normalizarCorrecaoCompetenciaRoteador, compostoDeFaturas, buscarCompostoFaturasMes, descricaoDoComposto,
-  extrairComprovanteVisao, interpretarComprovante, interpretarMultiAluno, extrairItensNomeValor, casarParcela,
+  extrairComprovanteVisao, interpretarComprovante, interpretarMultiAluno, extrairItensNomeValor, extrairAutorizacaoDescontoProtocolada, casarParcela,
   guardaFinanceiraV4,
   ocrLocal,
   extrairCorrecaoForma, extrairLancamentoCitado, extrairComandoMovimento,

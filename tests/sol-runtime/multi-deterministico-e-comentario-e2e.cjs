@@ -30,7 +30,9 @@ function novo(overrides = {}) {
       resolverCalls.push(args);
       return { ok: true, valor_total: 1722, soma_itens: 1722, itens: [
         { ordem: 1, aluno_nome: 'Davi Guilherme De Souza Chaves Ribeiro', aluno_id: 1321, valor: 1290,
-          categoria: 'parcela', canonical_fatura_id: null, sem_vinculo_fatura: true, declarado_pelo_humano: true, fatura: null },
+          categoria: 'parcela', competencia: '08/2026', canonical_fatura_id: '11111111-1111-4111-8111-111111111111',
+          sem_vinculo_fatura: false, declarado_pelo_humano: false,
+          fatura: { status: 'paga', data_pagamento: '2026-09-01', forma_pagamento: { nome: 'Pix' } } },
         { ordem: 2, aluno_nome: 'Thuanny de Souza Chaves Ribeiro', aluno_id: 397, valor: 432,
           categoria: 'parcela', competencia: '08/2026', canonical_fatura_id: '3153ad70-2cb8-4f67-b41e-4bd3e688e0de',
           fatura: { status: 'paga', data_pagamento: '2026-09-01', forma_pagamento: { nome: 'Pix' } } },
@@ -80,8 +82,8 @@ const ultimo = (a) => String(a[a.length - 1] || '');
   checar(A.llm() === 0, `LLM multi não pode estar no caminho do formato ensinado (foi chamada ${A.llm()}x)`);
   checar(/1\.722/.test(cardA) && /Thuanny/i.test(cardA), 'card do lote com total 1.722 e a Thuanny');
   const chamadaA = A.resolverCalls[A.resolverCalls.length - 1];
-  checar(chamadaA && chamadaA.itens.every((i) => i.declarado_pelo_humano === true),
-    'valores literais na legenda viajam como declarado_pelo_humano');
+  checar(chamadaA && chamadaA.itens.every((i) => i.declarado_pelo_humano === false),
+    'valores literais sem desconto autorizado não viram exceção financeira');
 
   // ── D2+D3: comentário humano não vira nome nem toca o lote ──────────────────
   const rB = await A.h.handle({ chatId: CHAT, senderPhone: JHON, messageId: 'D2',
