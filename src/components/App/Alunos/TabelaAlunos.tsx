@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle, FileEdit, ChevronDown, ChevronRight, Music2, Layers, CreditCard, FileText, Banknote, QrCode, Link2, Receipt, ChevronsUpDown, Columns3, Phone, Brain } from 'lucide-react';
+import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle, FileEdit, ChevronDown, ChevronRight, Music2, Layers, CreditCard, FileText, Banknote, QrCode, Link2, Receipt, ChevronsUpDown, Columns3, Phone, Brain, Loader2 } from 'lucide-react';
 import { CelulaEditavel } from '@/components/ui/CelulaEditavel';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -2074,6 +2074,21 @@ export function TabelaAlunos({
           })()}
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Leitura financeira em voo: a lista ja esta utilizavel e o bloco financeiro chega
+          depois. Faixa de UMA linha de propósito -- o bloco final tem altura variavel
+          (1 a 3 faixas), entao reservar altura sobraria nos dias sem reconciliacao pendente.
+          O texto nomeia o estado: ausencia de marcacao aqui e "ainda nao sei", nao "em dia". */}
+      {faturasFinanceiras.status === 'loading' && !alertaInadimplenciaDismissed && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-3 rounded-xl border border-slate-700/80 bg-slate-900/70 px-4 py-2 text-sm text-slate-300"
+        >
+          <Loader2 aria-hidden="true" className="h-4 w-4 flex-shrink-0 animate-spin text-cyan-400" />
+          <span>Verificando faturas&hellip;</span>
+        </div>
+      )}
 
       {/* Alerta financeiro canônico */}
       {inadimplenciaInfoCanonica.mostrar && !alertaInadimplenciaDismissed && (
