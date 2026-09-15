@@ -209,6 +209,20 @@ test('as 9 secoes da ficha deixam de ser 9 colunas de 41px', () => {
   assert.match(ficha, /ehCelular \? 'whitespace-nowrap' : 'hidden sm:inline'/);
 });
 
+test('🔴 o icone da aba nao pode travar a largura NO DESKTOP', () => {
+  // Medido no app (dialogo de 846px): as 9 abas ficam com celulas de 93px e
+  // "Academico" (96), "Financeiro" (94), "Anamnese" (94) e "Pedagogico" (98)
+  // pedem mais — sao os 2-5px que o icone cede encolhendo. Com `flex-none`
+  // fixo ele nao cede, o conteudo transborda a celula do grid e encosta na
+  // aba vizinha: 4 abas transbordando; removendo o flex-none, zero.
+  //
+  // ⚠️ Foi a frente mobile que introduziu o `flex-none` (o icone nao pode
+  // achatar na lista do celular) — e ele vazou para o desktop, que nao tinha
+  // esse problema. Guardar por `ehCelular` e' o que mantem os dois certos.
+  assert.doesNotMatch(ficha, /<Icone className="w-4 h-4 flex-none"/);
+  assert.match(ficha, /<Icone className=\{cn\('w-4 h-4', ehCelular && 'flex-none'\)\} \/>/);
+});
+
 test('a acao de maior valor fica na base, acima da faixa do gesto', () => {
   // No iPhone a faixa do gesto de inicio cobre os ultimos ~34px.
   assert.match(fichaClasses.ESTILO_RODAPE_CELULAR.paddingBottom, /env\(safe-area-inset-bottom\)/);

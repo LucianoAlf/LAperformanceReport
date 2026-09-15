@@ -1863,7 +1863,12 @@ export function ModalFichaAluno({
                   value={id}
                   className={cn('flex items-center gap-2', ehCelular && FICHA_ABA_CELULAR)}
                 >
-                  <Icone className="w-4 h-4 flex-none" />
+                  {/* ⚠️ `flex-none` SO no celular. No desktop as 9 abas dividem 846px
+                      em celulas de 93px, e "Academico", "Financeiro", "Anamnese" e
+                      "Pedagogico" pedem 94-98px — sao os 2-5px que o icone cede
+                      encolhendo. Travado, o conteudo transborda a celula e encosta na
+                      aba vizinha (medido: 4 abas transbordando, 0 ao remover). */}
+                  <Icone className={cn('w-4 h-4', ehCelular && 'flex-none')} />
                   <span className={ehCelular ? 'whitespace-nowrap' : 'hidden sm:inline'}>{label}</span>
                 </TabsTrigger>
               ))}
