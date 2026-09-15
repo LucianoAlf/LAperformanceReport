@@ -53,8 +53,8 @@ function novo(over = {}) {
     canonicaFn: async () => ({ ok: true, motivo_escolha: 'ja_consta_paga',
       aluno_nome: 'Elis Tineli Gomes Cotta', responsavel_nome: 'Ariane Tineli Gomes Cotta',
       fatura: FAT_CANTO_SET }),
-    // em producao o preview inicial saiu do CASADOR (o log tem casar_result e
-    // nenhuma chamada a canonica) — e ele trouxe a parcela de OUTUBRO.
+    // O matcher explícito continua como fallback, mas a fonte canônica da
+    // competência vem primeiro e impede o card de nascer em OUTUBRO.
     casarFn: async () => ({ ok: true, aluno_nome: 'Elis Tineli Gomes Cotta',
       parcela: { competencia: '2026-10-01', valor: 385, descricao: 'Parcela 10/2026 do curso de Canto',
                  data_vencimento: '2026-10-05' }, multiplas: true }),
@@ -98,8 +98,8 @@ const LEGENDA = 'parcela de setembro, curso canto aluna Elis Tineli Gomes Cotta'
     hasMedia: true, mediaType: 'document', downloadMedia: async () => Buffer.from('x') });
   const pend = (A.h._pendentes.get(CHAT) || [])[0];
   checar(!!pend, 'F1: nenhuma pendencia criada pelo comprovante');
-  checar(ultimo(A.enviadas).includes('10/2026'),
-    'F1: o card inicial deveria trazer a fatura ERRADA (outubro), como em producao');
+  checar(ultimo(A.enviadas).includes('09/2026') && !ultimo(A.enviadas).includes('10/2026'),
+    'F1: o card inicial deve usar a canônica de setembro, não o fallback de outubro');
 
   // estado apos a humana corrigir a competencia: a fatura certa fixada
   pend.competencia = '09/2026';
