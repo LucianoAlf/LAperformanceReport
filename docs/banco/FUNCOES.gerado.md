@@ -4,13 +4,14 @@
 <!-- fim do cabecalho gerado -->
 # Funções
 
-1480 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
+1482 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
 chamadas diretas ao PostgREST não são visíveis para o gerador.
 
 ## aluno
 
 | Função | Estado | Segurança | Consumidores |
 |---|---|---|---|
+| `_compute_situacao_alunos_v1(p_unidade_id uuid, p_referencia date, p_apenas_pendentes boolean)` | SO-INTERNA | DEFINER · 🔓 anon | funcao:get_situacao_alunos_v1, funcao:refresh_situacao_alunos_snapshot |
 | `aluno_comunidade_estado_v1(p_aluno_id integer)` | SO-INTERNA | DEFINER | funcao:get_estrelas_matriculador_v1, funcao:radar_pendencias_comerciais_v1 |
 | `app_aluno_ficha(p_aluno_id integer)` | ORFA | DEFINER | sem consumidor conhecido |
 | `app_radar_config()` | ORFA | DEFINER | sem consumidor conhecido |
@@ -405,7 +406,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `get_inadimplencia_canonica_v4_base(p_unidade_id uuid, p_as_of_date date)` | SO-INTERNA | DEFINER | funcao:get_inadimplencia_canonica |
 | `get_kpis_alunos_financeiro_vivo_canonico(p_unidade_id uuid, p_ano integer, p_mes integer)` | ATIVA | DEFINER | edge:supabase/functions/bi-agent-lamusic/tools.ts, funcao:aplicar_denominador_ticket_kpis_v1, funcao:aplicar_financeiro_ticket_contratual_v4, funcao:get_kpis_alunos_canonicos_base_p01t |
 | `get_situacao_alunos_sem_contrato_assinado_core_v1(p_unidade_id uuid, p_referencia date, p_apenas_pendentes boolean)` | SO-INTERNA | DEFINER | funcao:get_situacao_alunos_sem_contrato_assinado_v1 |
-| `get_situacao_alunos_sem_contrato_assinado_v1(p_unidade_id uuid, p_referencia date, p_apenas_pendentes boolean)` | SO-INTERNA | DEFINER | funcao:get_situacao_alunos_v1 |
+| `get_situacao_alunos_sem_contrato_assinado_v1(p_unidade_id uuid, p_referencia date, p_apenas_pendentes boolean)` | SO-INTERNA | DEFINER | funcao:_compute_situacao_alunos_v1 |
 | `gravar_snapshot_fechamento_mensal(p_ano integer, p_mes integer, p_unidade_id uuid, p_observacao text, p_confirmar_alertas boolean)` | SO-INTERNA | DEFINER | funcao:fechar_competencia_mensal_automatico |
 | `marcar_inadimplentes_apos_vencimento()` | ORFA | DEFINER | sem consumidor conhecido |
 | `preview_fechamento_mensal(p_ano integer, p_mes integer, p_unidade_id uuid, p_incluir_payloads boolean)` | SO-INTERNA | DEFINER | funcao:gravar_snapshot_fechamento_mensal |
@@ -598,6 +599,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `recalcular_dados_mensais(p_ano integer, p_mes integer, p_unidade_id uuid)` | ATIVA | DEFINER | front:src/components/App/Alunos/AlunosPage.tsx, front:src/components/GestaoMensal/TabGestao.tsx |
 | `recalcular_dados_mensais_unguarded(p_ano integer, p_mes integer, p_unidade_id uuid)` | SO-INTERNA | DEFINER | funcao:recalcular_dados_mensais |
 | `recalcular_projecao(p_aluno_id integer, p_matricula_disciplina_id bigint, p_trigger text, p_detalhes jsonb)` | ORFA | DEFINER · 🔓 anon | sem consumidor conhecido |
+| `refresh_situacao_alunos_snapshot(p_unidade_id uuid, p_referencia date)` | ATIVA | DEFINER · 🔓 anon | cron:refresh-situacao-snapshot-barra, cron:refresh-situacao-snapshot-cg, cron:refresh-situacao-snapshot-recreio |
 | `relatorio_comparativo_texto_v1(p_unidade_id uuid, p_ano integer, p_mes integer, p_ano_base integer, p_mes_base integer, p_gerado_por text, p_solicitante_telefone text)` | ATIVA | DEFINER | front:src/components/App/Comercial/ComercialPage.tsx |
 | `relatorio_coordenacao_carteira_painel_v4(p_unidade_id uuid, p_competencia date, p_periodicidade text)` | SO-INTERNA | DEFINER | funcao:montar_rel_coord_conteudo_before_espelho_integral_20260909 |
 | `relatorio_coordenacao_carteira_v4(p_unidade_id uuid, p_ano integer, p_mes integer, p_periodicidade text, p_data_corte date)` | SO-INTERNA | DEFINER | funcao:montar_relatorio_coordenacao_conteudo_base_v4 |
@@ -827,7 +829,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_texto_para_bigint(p_texto text)` | SO-INTERNA | INVOKER | funcao:fabio_gravar_contexto_experimental, funcao:fn_experimentais_a_extrair |
 | `fn_texto_para_data(p_texto text)` | SO-INTERNA | INVOKER | funcao:fn_experimental_contexto_seguro |
 | `fn_touch_updated_at()` | ATIVA | INVOKER · 🔓 anon | trigger:fabio_professor_preferences.trg_fabio_professor_preferences_touch |
-| `fn_usuario_atual_tem_permissao(p_codigo_permissao character varying, p_unidade_id uuid)` | SO-INTERNA | DEFINER | funcao:buscar_alunos_ativos_atuais_canonicos, funcao:fn_aluno_entra_base_ativa_v131, funcao:fn_contrato_assinatura_pode_ler_v1, funcao:fn_health_score_professor_v3_ator_gerenciador, funcao:fn_pode_ler_aluno_pedagogico, funcao:get_alunos_ativos_atuais_canonicos, +6 outros |
+| `fn_usuario_atual_tem_permissao(p_codigo_permissao character varying, p_unidade_id uuid)` | SO-INTERNA | DEFINER | funcao:buscar_alunos_ativos_atuais_canonicos, funcao:fn_aluno_entra_base_ativa_v131, funcao:fn_contrato_assinatura_pode_ler_v1, funcao:fn_health_score_professor_v3_ator_gerenciador, funcao:fn_pode_ler_aluno_pedagogico, funcao:get_alunos_ativos_atuais_canonicos, +7 outros |
 | `fn_usuarios_sincroniza_rbac()` | ATIVA | DEFINER | trigger:usuarios.trg_usuarios_sincroniza_rbac |
 | `get_cron_health()` | ATIVA | DEFINER · 🔓 anon | front:src/hooks/useSaudeCrons.ts |
 | `get_kpis_unidade(p_unidade_codigo character varying, p_ano integer)` | ATIVA | DEFINER | front:src/hooks/useSupabase.ts |

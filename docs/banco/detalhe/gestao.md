@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-14 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-15 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — gestao
 
-38 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+39 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## bi_agent_config_lamusic
 
@@ -641,6 +641,76 @@
 
 **Únicos:**
 - `simulacoes_turma_pkey`
+
+## situacao_alunos_snapshot
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `unidade_id` | uuid | não |  |  |
+| `referencia` | date | não |  |  |
+| `pessoa_chave` | text | não |  |  |
+| `aluno_id_canonico` | integer | sim |  |  |
+| `aluno_ids_locais` | integer[] | sim |  |  |
+| `nome` | text | sim |  |  |
+| `classificacao` | text | sim |  |  |
+| `status_operacional` | text | sim |  |  |
+| `matriculas_ativas` | integer | sim |  |  |
+| `cursos` | text[] | sim |  |  |
+| `entrou_em` | date | sim |  |  |
+| `matricula_recente_em` | date | sim |  |  |
+| `responsavel_nome` | text | sim |  |  |
+| `professores` | text[] | sim |  |  |
+| `aulas_resumo` | text[] | sim |  |  |
+| `anamnese_preenchida` | boolean | sim |  |  |
+| `anamnese_em` | date | sim |  |  |
+| `anamnese_tipo` | text | sim |  |  |
+| `anamnese_flag_sem_registro` | boolean | sim |  |  |
+| `anamnese_orfa_candidata_id` | integer | sim |  |  |
+| `anamnese_orfa_match` | text | sim |  |  |
+| `tem_instagram` | boolean | sim |  |  |
+| `instagram_nao_possui` | boolean | sim |  |  |
+| `tem_telefone` | boolean | sim |  |  |
+| `tem_responsavel` | boolean | sim |  |  |
+| `tem_foto` | boolean | sim |  |  |
+| `tem_data_contrato` | boolean | sim |  |  |
+| `contrato_vencido` | boolean | sim |  |  |
+| `cadastro_completo` | boolean | sim |  |  |
+| `cadastro_faltando` | text[] | sim |  |  |
+| `presenca_confirmadas` | integer | sim |  |  |
+| `faltas_confirmadas` | integer | sim |  |  |
+| `faltas_provaveis` | integer | sim |  |  |
+| `chamadas_indeterminadas` | integer | sim |  |  |
+| `presenca_taxa_geral` | numeric | sim |  |  |
+| `presenca_confianca` | text | sim |  |  |
+| `presenca_regra_versao` | text | sim |  |  |
+| `ultima_aula_em` | date | sim |  |  |
+| `dias_desde_ultima_aula` | integer | sim |  |  |
+| `inadimplente` | boolean | sim |  |  |
+| `faturas_vencidas_abertas` | integer | sim |  |  |
+| `em_aviso_previo` | boolean | sim |  |  |
+| `aviso_previo_mes_saida` | date | sim |  |  |
+| `proxima_renovacao_em` | date | sim |  |  |
+| `vence_em_30d` | boolean | sim |  |  |
+| `na_comunidade_wa` | boolean | sim |  |  |
+| `comunidade_status` | text | sim |  |  |
+| `comunidade_capturado_em` | timestamp with time zone | sim |  |  |
+| `pendencias` | text[] | sim |  |  |
+| `fonte` | text | sim |  |  |
+| `regra_versao` | text | sim |  |  |
+| `contrato_assinatura_status` | text | sim |  |  |
+| `contratos_assinados_todos` | boolean | sim |  |  |
+| `contratos_relevantes` | integer | sim |  |  |
+| `contratos_assinados` | integer | sim |  |  |
+| `contratos_nao_assinados` | integer | sim |  |  |
+| `contratos_sem_contrato` | integer | sim |  |  |
+| `contratos_nao_verificados` | integer | sim |  |  |
+| `contrato_status_observado_em` | timestamp with time zone | sim |  |  |
+| `contrato_reconciliado_em` | timestamp with time zone | sim |  |  |
+| `contrato_dado_fresco` | boolean | sim |  |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `situacao_alunos_snapshot_pkey`
 
 ## vw_alertas
 
