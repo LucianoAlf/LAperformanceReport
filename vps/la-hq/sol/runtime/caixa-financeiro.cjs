@@ -950,7 +950,11 @@ function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competenci
 
   // ---- o que eu preciso pra lançar
   const semAluno = !aluno && !!(candidatosAluno && candidatosAluno.length || pagadorNome);
-  if (faturaIndisponivel) {
+  if (bloqueiaLancamento) {
+    // O gate deterministico ja recusa o `pode`; o renderer nao pode terminar
+    // convidando a equipe a executar uma aprovacao que ele mesmo vai negar.
+    fecho = '👉 Me explica a divisão/curso correto antes de lançar.';
+  } else if (faturaIndisponivel) {
     fecho = '👉 Confirma aluno, competência e curso/parcela antes de lançar.';
   } else if (semAluno && valor && !formaIncerta) {
     fecho = '👉 Me diz de qual aluno é que eu lanço.';
@@ -1759,7 +1763,13 @@ function linhasDaFatura(can, valorComprovante) {
 
   const vp = (f.valor_da_parcela !== null && f.valor_da_parcela !== undefined) ? Number(f.valor_da_parcela) : null;
   const vh = (f.valor_hoje !== null && f.valor_hoje !== undefined) ? Number(f.valor_hoje) : null;
-  const base = (f.status !== 'paga' && f.vencida && vh !== null) ? vh : vp;
+  const vPago = (f.valor_pago !== null && f.valor_pago !== undefined) ? Number(f.valor_pago) : null;
+  // Fatura paga precisa ser comparada com o que o Emusys efetivamente baixou.
+  // Comparar com o valor original transforma multa/mora legitima em divergencia
+  // (Bernardo/Barra, 15/09: 482,00 + 10,76 = 492,76).
+  const base = (f.status === 'paga' && vPago !== null)
+    ? vPago
+    : ((f.status !== 'paga' && f.vencida && vh !== null) ? vh : vp);
   const bate = (valorComprovante && base !== null) ? Math.abs(Number(valorComprovante) - base) < 0.01 : null;
   // Teto de plausibilidade: quitacao real e' ate ~12 parcelas + margem. Razao
   // de 100x (31/08: OCR sem virgula fez 38.700 "bater com 100 parcelas") e'
@@ -1767,7 +1777,10 @@ function linhasDaFatura(can, valorComprovante) {
   const _razaoParcelas = (valorComprovante && vp) ? Number(valorComprovante) / vp : 0;
   const quitacao = (valorComprovante && vp) ? (Number(valorComprovante) % vp < 0.01 && _razaoParcelas >= 2 && _razaoParcelas <= 13) : false;
 
-  if (vp !== null) {
+  if (f.status === 'paga' && vPago !== null) {
+    L.push(`Valor pago: ${fmtBRL(vPago)}${bate === true ? '  ✅ confere' : ''}`);
+    if (vp !== null && Math.abs(vPago - vp) >= 0.01) L.push(`Valor original: ${fmtBRL(vp)}`);
+  } else if (vp !== null) {
     L.push(`Valor: ${fmtBRL(vp)}${f.vencida ? ' (até o vencimento)' : ''}${bate === true ? '  ✅ confere' : ''}`);
   }
   if (f.sem_vinculo_fatura === true) {
@@ -3044,6 +3057,8 @@ function normalizarCorrecaoCompetenciaRoteador(decisao, texto, temContexto) {
 }
 
 function competenciaIso(competencia) {
+  const iso = String(competencia || '').match(/\b(20\d{2})-(0[1-9]|1[0-2])(?:-\d{2})?\b/);
+  if (iso) return `${iso[1]}-${iso[2]}-01`;
   const c = extrairCompetenciaTexto(competencia) || String(competencia || '');
   const m = c.match(/\b(0[1-9]|1[0-2])\/(20\d{2})\b/);
   if (!m) return null;
@@ -5432,9 +5447,53 @@ _Não lanço nada pela metade._`);
       // em 18/08 um statement timeout fez o fallback chutar a parcela errada no preview).
       const tentarCanonica = async (nome, competenciaPreferida = null) => {
         // Quando a equipe informou a competência, use a RPC date-aware que
-        // recebe o mês explicitamente. Nunca deixe a busca sem competência
-        // escolher outra fatura de mesmo valor.
+        // recebe o mês explicitamente. Antes dela, consulte a fonte canônica:
+        // é ela que sabe valor pago, multa/mora e baixa no Emusys. A canônica
+        // só vale aqui se devolver exatamente a competência humana; caso
+        // contrário, a RPC explícita continua desambiguando o mês.
         if (competenciaPreferida && querParcela && !multiplas) {
+          const compEsperada = competenciaIso(competenciaPreferida);
+          try {
+            let c = await canonicaFn(grp.unidade_id, nome, valor);
+            let respondeu = !!(c && (c.ok === true || c.ok === false));
+            if (c && c.ok === false && _fonteCanonicaIndisponivel(c)) {
+              respondeu = false;
+              bloqueiaFonteIndisponivel = true;
+            }
+            if (!respondeu) {
+              log({ acao: 'canonica_competencia_retry', chatId, competencia: competenciaPreferida });
+              c = await canonicaFn(grp.unidade_id, nome, valor);
+              respondeu = !!(c && (c.ok === true || c.ok === false));
+              if (c && c.ok === false && _fonteCanonicaIndisponivel(c)) {
+                respondeu = false;
+                bloqueiaFonteIndisponivel = true;
+              }
+            }
+            canonicaIndisponivel = !respondeu;
+            const compCanonica = c && c.fatura && competenciaIso(c.fatura.competencia);
+            log({ acao: 'canonica_competencia_result', chatId, ok: !!(c && c.ok),
+              competencia: competenciaPreferida, competencia_canonica: compCanonica,
+              indisponivel: canonicaIndisponivel || undefined });
+            if (c && c.ok && _alunoVeioDoRotulo && c.aluno_nome && !_mesmaPessoa(c.aluno_nome, aluno)) {
+              log({ acao: 'canonica_rejeitada_nome_diverge', chatId, rotulo: aluno, casado: c.aluno_nome });
+              return false;
+            }
+            if (c && c.ok && compEsperada && compCanonica === compEsperada) {
+              canonica = c;
+              if (c.aluno_nome) aluno = c.aluno_nome;
+              competencia = competenciaPreferida;
+              return true;
+            }
+            // Fonte canônica muda/indisponível nunca autoriza cair na tabela
+            // bruta. O fallback explícito só existe para resposta válida em
+            // outra competência ou ausência confirmada de fatura na janela.
+            if (!respondeu) return false;
+          } catch (e) {
+            canonicaIndisponivel = true;
+            bloqueiaFonteIndisponivel = true;
+            log({ acao: 'canonica_competencia_erro', chatId, competencia: competenciaPreferida });
+            return false;
+          }
           try {
             const m = await casarFn(grp.unidade_id, nome, valor, competenciaPreferida);
             log({ acao: 'casar_competencia_result', chatId, ok: !!(m && m.ok), competencia: competenciaPreferida });

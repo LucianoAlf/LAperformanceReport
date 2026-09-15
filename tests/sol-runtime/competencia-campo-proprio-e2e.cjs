@@ -32,6 +32,7 @@ const CANONICA_09 = {
   responsavel_nome: 'Diana Pereira Dias',
   fatura: {
     canonical_fatura_id: FATURA_ID,
+    tipo_fatura: 'parcela',
     descricao: 'Parcela 08/2026 do curso de Musicalização Infantil',
     competencia: '2026-09-01',
     data_vencimento: '2026-09-05',
@@ -51,7 +52,6 @@ function novo() {
   const logs = [];
   const lancados = [];
   let seq = 0;
-  let chamadasCanonica = 0;
   const h = mod.criarHandlerFinanceiro({
     grupos: { [CHAT]: { grupo_jid: CHAT, unidade_id: UNIDADE, nome: 'Campo Grande' } },
     sendFn: async (_chat, texto) => {
@@ -66,11 +66,9 @@ function novo() {
       categoria: 'parcela', aluno: 'Heitor Dias Berriel Abreu',
       competencia: '09/2026', forma: 'pix', pagamentos: [],
     }),
-    // No evento real a cascata canonica nao resolveu no primeiro turno; o
-    // casamento por competencia trouxe a fatura, com descricao incoerente.
-    canonicaFn: async () => (++chamadasCanonica === 1
-      ? { ok: false, motivo: 'nenhuma_fatura_aberta' }
-      : CANONICA_09),
+    // A fonte canônica da competência agora é consultada antes do matcher
+    // bruto; ela preserva valor atualizado, status e vínculo da fatura.
+    canonicaFn: async () => CANONICA_09,
     casarFn: async () => ({
       ok: true, aluno_nome: 'Heitor Dias Berriel Abreu',
       parcela: { ...PARCELA_INCONSISTENTE },
@@ -103,7 +101,7 @@ function novo() {
   });
   const card1 = A.enviadas[A.enviadas.length - 1] || '';
   checar(r1 && r1.acao === 'preview_enviado', 'setup deveria criar preview');
-  checar(/Parcela 09\/2026/.test(card1), 'competencia estruturada 09/2026 deve aparecer no primeiro card');
+  checar(/Parcela (?:6\/12 · )?09\/2026/.test(card1), 'competencia estruturada 09/2026 deve aparecer no primeiro card');
   checar(!/Parcela 08\/2026/.test(card1), 'descricao historica 08/2026 nao pode contradizer o campo estruturado');
 
   const r2 = await A.h.handle({
