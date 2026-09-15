@@ -31,13 +31,35 @@
 //    não seria.
 //
 // ⚠️ Depois de aplicar, REINICIAR a bridge — ela faz `require` no start.
-const fs = require('fs');
+import { copyFileSync, readFileSync, writeFileSync } from 'fs';
 
 const alvo = process.argv[2] ||
   '/home/sol/.hermes/hermes-agent/scripts/whatsapp-bridge/bridge.js';
-let s = fs.readFileSync(alvo, 'utf8');
+let s = readFileSync(alvo, 'utf8');
 
-if (s.includes('crachaDoSolicitante')) { console.log('ja aplicado'); process.exit(0); }
+function garantirImport(nome, modulo) {
+  const re = new RegExp(`import \\{([^}]+)\\} from ['\"]${modulo}['\"];`);
+  const m = s.match(re);
+  if (!m) { console.error(`import ESM de ${modulo}: nao achei`); process.exit(1); }
+  const nomes = m[1].split(',').map((x) => x.trim()).filter(Boolean);
+  if (!nomes.includes(nome)) nomes.push(nome);
+  s = s.replace(m[0], `import { ${nomes.join(', ')} } from '${modulo}';`);
+}
+
+garantirImport('readFileSync', 'fs');
+garantirImport('createHmac', 'crypto');
+
+if (s.includes('crachaDoSolicitante')) {
+  const corrigido = s
+    .replace("require('fs').readFileSync", 'readFileSync')
+    .replace("require('crypto').createHmac", 'createHmac');
+  if (corrigido === s) { console.log('ja aplicado'); process.exit(0); }
+  const carimbo = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15);
+  copyFileSync(alvo, `${alvo}.bak-${carimbo}-before-cracha-esm-fix`);
+  writeFileSync(alvo, corrigido);
+  console.log('crachá existente corrigido para imports ESM');
+  process.exit(0);
+}
 
 const EOL = s.includes('\r\n') ? '\r\n' : '\n';
 
@@ -68,14 +90,22 @@ if ((s.split(ANC2).length - 1) < 1) { console.error('ANCORA MAX_QUEUE_SIZE: nao 
 const FUNCAO = [
   '// ── crachá do solicitante (08/09/2026) ────────────────────────────────────',
   'let _crachaSegredo;',
+  'let _crachaSegredoErro = null;',
+  'let _crachaAusenteLogado = false;',
   'function crachaSegredo() {',
   '  if (_crachaSegredo !== undefined) return _crachaSegredo;',
   '  _crachaSegredo = null;',
   '  try {',
-  "    const t = require('fs').readFileSync('/home/sol/.openclaw/secrets/sol-cracha.env', 'utf8');",
+  "    const t = readFileSync('/home/sol/.openclaw/secrets/sol-cracha.env', 'utf8');",
   '    const m = t.match(/^\\s*SOL_CRACHA_HMAC\\s*=\\s*(.+)\\s*$/m);',
   "    if (m) _crachaSegredo = m[1].trim().replace(/^[\"']|[\"']$/g, '');",
-  '  } catch (_) { /* sem segredo: segue sem crachá, de propósito */ }',
+  '  } catch (e) {',
+  "    _crachaSegredoErro = String(e && e.code || 'secret_unavailable');",
+  '  }',
+  '  if (!_crachaSegredo && !_crachaAusenteLogado) {',
+  '    _crachaAusenteLogado = true;',
+  "    try { console.warn(JSON.stringify({ event: 'caixa_badge_unavailable', reason: _crachaSegredoErro || 'secret_missing' })); } catch (_) {}",
+  '  }',
   '  return _crachaSegredo;',
   '}',
   'function crachaDoSolicitante(telefone, chatId) {',
@@ -85,7 +115,7 @@ const FUNCAO = [
   '  // ⚠️ A janela de 30 min e o corte em 32 hex TÊM de bater com',
   '  //    `sol_cracha_emitir_v1` no banco. Divergir aqui faz TODA porta recusar.',
   '  const janela = Math.floor(Date.now() / 1000 / 1800);',
-  "  const assin = require('crypto').createHmac('sha256', seg)",
+  "  const assin = createHmac('sha256', seg)",
   "    .update(tel + '|' + String(chatId || '') + '|' + janela).digest('hex');",
   "  return 'SOL1.' + tel + '.' + assin.slice(0, 32);",
   '}',
@@ -95,7 +125,7 @@ const FUNCAO = [
 s = s.replace(ANC2, FUNCAO);
 
 const carimbo = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15);
-fs.copyFileSync(alvo, `${alvo}.bak-${carimbo}-before-cracha`);
-fs.writeFileSync(alvo, s);
+copyFileSync(alvo, `${alvo}.bak-${carimbo}-before-cracha`);
+writeFileSync(alvo, s);
 console.log('bridge VIVA passa a emitir [cracha: SOL1....] antes do telefone');
 console.log('⚠️ REINICIE — require no start');

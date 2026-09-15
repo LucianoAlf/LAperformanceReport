@@ -2713,7 +2713,8 @@ function rotearMensagemV4(texto, contexto, { timeout = 30000, documento = null }
       + 'Se a pessoa DIZ QUAL e a competencia certa ("e a parcela de 08/26 e 09/26 juntas", "e de setembro"), e "corrigir_competencia", nao contestacao — quem aponta o valor certo esta corrigindo, quem so aponta o erro esta contestando. '
       + '"saida_dinheiro" quando o dinheiro SAI do caixa — despesa, compra, retirada, vale, reembolso, troco, pagamento a fornecedor ou a prestador. '
       + 'Vale mesmo sem a palavra "saida" e mesmo sem forma de pagamento: "comprei agua 45", "paguei o motoboy 30", "retirei 200 pro cofre", "vale de R$ 100 pra Ana" sao todos saida_dinheiro. '
-      + '"consulta_caixa" para perguntas (resumo, quanto entrou, etc). '
+      + '"fechar_caixa" quando pedem para fechar OU pedem o relatorio/demonstrativo OFICIAL do caixa atual para revisar, aprovar ou fechar; isso cria apenas o preview e ainda exige "pode" humano depois. '
+      + '"consulta_caixa" para perguntas de numeros/resumo e para relatorios historicos que nao iniciam fechamento. '
       + '"reabrir_caixa" quando pedem para abrir NOVAMENTE um caixa fechado ("pode abrir novamente", "reabre o caixa"). '
       + '"lancamento_multi_aluno" quando um pagamento cobre DOIS OU MAIS alunos (divisao por aluno). '
       + 'NUNCA invente nome ou valor que nao esteja na mensagem. confianca entre 0 e 1.\n\nMENSAGEM:\n' + t.slice(0, 900);
@@ -7515,16 +7516,18 @@ _Não lanço nada pela metade._`);
     }
   }
 
-  // V4 SHADOW: o bridge chama SEM await depois do handle() — a decisao do
-  // roteador vai para o log ao lado da acao do legado. Nunca escreve.
-  async function observarRoteadorV4(event, acaoLegada) {
+  // Decide e registra UMA vez. Em shadow, o bridge chama sem await e ignora o
+  // retorno. No preflight operacional, ele aguarda a mesma decisão apenas para
+  // escolher um executor determinístico que cria preview — nunca aprovação ou
+  // escrita financeira. Isso evita duplicar chamada/custo e mantém o placar.
+  async function decidirRoteadorV4(event, acaoLegada, { modo = 'shadow' } = {}) {
     try {
-      if (process.env.SOL_CAIXA_V4_SHADOW === '0') return;
-      if (!event || event.hasMedia || event._sintetico) return;
+      if (process.env.SOL_CAIXA_V4_SHADOW === '0') return null;
+      if (!event || event.hasMedia || event._sintetico) return null;
       const texto = bodyLimpo(event.body);
-      if (!texto) return;
+      if (!texto) return null;
       const chatId = event.chatId;
-      if (!grupos[chatId]) return;
+      if (!grupos[chatId]) return null;
       // Usa a FOTO tirada na entrada do handle; so cai no estado atual quando
       // nao ha foto (mensagem que nem chegou ao handle). O campo contexto_de diz qual
       // dos dois foi usado — sem isso a proxima leitura do placar nao sabe se
@@ -7550,12 +7553,21 @@ _Não lanço nada pela metade._`);
         // nem o caixa.log nem o bridge.log nem a auditoria guardavam o corpo.
         pendencias: usouFoto ? foto.cards.length : arrP.length,
         contexto_de: usouFoto ? 'foto_pre_handle' : 'pos_handle',
+        modo,
         modelo: _v4Modelo(), texto: texto.slice(0, 300),
         ms: Date.now() - t0,
       });
+      return dec || null;
     } catch (e) {
       log({ acao: 'roteador_v4_shadow_erro', erro: String(e && e.message) });
+      return null;
     }
+  }
+
+  // V4 SHADOW: o bridge chama SEM await depois do handle() — a decisao do
+  // roteador vai para o log ao lado da acao do legado. Nunca escreve.
+  async function observarRoteadorV4(event, acaoLegada) {
+    await decidirRoteadorV4(event, acaoLegada, { modo: 'shadow' });
   }
 
   // Fallback de DIALOGO: chamado pelo bridge ANTES do "Nao entendi". A intencao
@@ -7686,7 +7698,7 @@ _Não lanço nada pela metade._`);
   // _fh.ehConversaSemComando(body) desde 25/08, mas o handler nunca a expos —
   // o guard de "elogio nao leva nao-entendi" estava morto por undefined.
   return { handle, temPendencia, citaAlgumaPendencia, ehConversaSemComando,
-    reidratarPendencias, tratarNaoEntendida, observarRoteadorV4, tratarAgentFirst,
+    reidratarPendencias, tratarNaoEntendida, observarRoteadorV4, decidirRoteadorV4, tratarAgentFirst,
     deveTratarConfirmacaoDeterministica, deveTratarComplementoDeterministico,
     _pendentes: pendentes, _envelopesV4: envelopesV4, _rascunhosV4: rascunhosV4 };
 }

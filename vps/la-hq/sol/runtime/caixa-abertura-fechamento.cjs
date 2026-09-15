@@ -347,7 +347,7 @@ async function tratarConfirmacao(event, { sendFn, log = () => {}, rpcFn = chamar
       log({ acao: 'ja_aberto', caixa: r.caixa_diario_id });
     }
     else if (r && r.ok) { const receipt = await sendFn(chatId, `✅ Caixa aberto! Saldo inicial: ${brl(r.saldo_inicial)}. Bom dia de trabalho 💪`); await governanceFn(event, 'write_applied', { action: 'abrir', movement_ref: r.caixa_diario_id, outcome: 'ok' }); await governanceFn(event, 'approval_consumed', { movement_ref: r.caixa_diario_id, outcome: 'ok' }); await governanceFn(event, 'receipt_sent', { receipt_ref: receipt, movement_ref: r.caixa_diario_id, action: 'abrir', outcome: 'ok' }); if (event.caixaGovernancaEpisode) { let rb = null; try { rb = await rpcFn('sol_caixa_dados_abertura', { p_unidade_id: pend.unidade_id }); } catch (_) {} await governanceFn(event, rb ? 'readback_confirmed' : 'readback_failed', { movement_ref: r.caixa_diario_id, readback_status: rb ? 'opening_data' : 'query_error', outcome: rb ? 'ok' : 'inconclusive' }); } log({ acao: 'aberto', caixa: r.caixa_diario_id }); }
-    else { const m = ({ caixa_ja_existe_hoje: 'o caixa de hoje já existe', ator_nao_autorizado: 'você não está autorizado' })[r && r.motivo] || 'não consegui abrir'; const receipt = await sendFn(chatId, `⚠️ Não abri: ${m}.`); await governanceFn(event, 'write_refused', { action: 'abrir', reason_code: (r && r.motivo) || 'unknown', outcome: 'refused' }); await governanceFn(event, 'receipt_sent', { receipt_ref: receipt, action: 'abrir_recusado', outcome: 'ok' }); }
+    else { const m = ({ caixa_ja_existe_hoje: 'o caixa de hoje já existe', fechamento_pendente_dia_anterior: 'o caixa de ontem ainda está aberto; feche-o antes de abrir o de hoje', ator_nao_autorizado: 'você não está autorizado' })[r && r.motivo] || 'não consegui abrir'; const receipt = await sendFn(chatId, `⚠️ Não abri: ${m}.`); await governanceFn(event, 'write_refused', { action: 'abrir', reason_code: (r && r.motivo) || 'unknown', outcome: 'refused' }); await governanceFn(event, 'receipt_sent', { receipt_ref: receipt, action: 'abrir_recusado', outcome: 'ok' }); }
     return true;
   }
 
@@ -367,11 +367,11 @@ async function tratarConfirmacao(event, { sendFn, log = () => {}, rpcFn = chamar
   return false;
 }
 
-async function tratarPedidoDiretoFechamento(event, { grupo, sendFn, log = () => {}, rpcFn = chamarRpc, governanceFn = () => Promise.resolve() }) {
+async function tratarPedidoDiretoFechamento(event, { grupo, sendFn, log = () => {}, rpcFn = chamarRpc, governanceFn = () => Promise.resolve(), intencaoEstruturada = null }) {
   const chatId = event.chatId;
   if (event.hasMedia) return false;
   if (!grupo || !grupo.unidade_id) return false;
-  if (!pedidoDiretoFechar(event.body)) return false;
+  if (intencaoEstruturada !== 'fechar_caixa' && !pedidoDiretoFechar(event.body)) return false;
 
   const senderNum = String(event.senderPhone || event.senderId || '').replace(/@.*/, '').replace(/\D/g, '');
   let conf = event.senderName || senderNum;

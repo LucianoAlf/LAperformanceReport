@@ -25,7 +25,7 @@ import pino from 'pino';
 import path from 'path';
 import { mkdirSync, readFileSync, writeFileSync, appendFileSync, existsSync, readdirSync, unlinkSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { randomBytes, createHash } from 'crypto';
+import { randomBytes, createHash, createHmac } from 'crypto';
 import { execSync } from 'child_process';
 import { tmpdir } from 'os';
 import qrcode from 'qrcode-terminal';
@@ -364,6 +364,11 @@ function sendWithTimeout(chatId, payload, timeoutMs = SEND_TIMEOUT_MS) {
     );
   });
   return Promise.race([sock.sendMessage(chatId, payload), timeoutPromise])
+    .then((sent) => {
+      trackSentMessageId(sent);
+      rememberSentMessage(sent, chatId, payload);
+      return sent;
+    })
     .finally(() => clearTimeout(timer));
 }
 
@@ -453,6 +458,41 @@ function trackSentMessageId(sent) {
   }
 }
 
+function pruneRecentlySentMessages(now = Date.now()) {
+  for (const [id, item] of recentlySentMessages) {
+    if (!item || now - item.sentAt > RECENT_SENT_MESSAGE_TTL_MS) {
+      recentlySentMessages.delete(id);
+    }
+  }
+  while (recentlySentMessages.size > MAX_RECENT_SENT_MESSAGES) {
+    recentlySentMessages.delete(recentlySentMessages.keys().next().value);
+  }
+}
+
+function rememberSentMessage(sent, chatId, payload, now = Date.now()) {
+  const id = sent?.key?.id;
+  const text = String(payload?.text || payload?.caption || '').trim();
+  if (!id || !text) return;
+  recentlySentMessages.set(id, {
+    chatId: String(chatId || sent?.key?.remoteJid || ''),
+    text: text.slice(0, MAX_RECENT_SENT_MESSAGE_TEXT),
+    sentAt: now,
+  });
+  pruneRecentlySentMessages(now);
+}
+
+function findRecentlySentMessage(messageId, chatId, now = Date.now()) {
+  if (!messageId) return null;
+  const item = recentlySentMessages.get(String(messageId));
+  if (!item) return null;
+  if (now - item.sentAt > RECENT_SENT_MESSAGE_TTL_MS) {
+    recentlySentMessages.delete(String(messageId));
+    return null;
+  }
+  if (chatId && item.chatId && String(chatId) !== item.chatId) return null;
+  return item;
+}
+
 function normalizeWhatsAppId(value) {
   if (!value) return '';
   return String(value).replace(':', '@');
@@ -515,14 +555,22 @@ const logger = pino({ level: 'warn' });
 const messageQueue = [];
 // ── crachá do solicitante (08/09/2026) ────────────────────────────────────
 let _crachaSegredo;
+let _crachaSegredoErro = null;
+let _crachaAusenteLogado = false;
 function crachaSegredo() {
   if (_crachaSegredo !== undefined) return _crachaSegredo;
   _crachaSegredo = null;
   try {
-    const t = require('fs').readFileSync('/home/sol/.openclaw/secrets/sol-cracha.env', 'utf8');
+    const t = readFileSync('/home/sol/.openclaw/secrets/sol-cracha.env', 'utf8');
     const m = t.match(/^\s*SOL_CRACHA_HMAC\s*=\s*(.+)\s*$/m);
     if (m) _crachaSegredo = m[1].trim().replace(/^["']|["']$/g, '');
-  } catch (_) { /* sem segredo: segue sem crachá, de propósito */ }
+  } catch (e) {
+    _crachaSegredoErro = String(e && e.code || 'secret_unavailable');
+  }
+  if (!_crachaSegredo && !_crachaAusenteLogado) {
+    _crachaAusenteLogado = true;
+    try { console.warn(JSON.stringify({ event: 'caixa_badge_unavailable', reason: _crachaSegredoErro || 'secret_missing' })); } catch (_) {}
+  }
   return _crachaSegredo;
 }
 function crachaDoSolicitante(telefone, chatId) {
@@ -532,7 +580,7 @@ function crachaDoSolicitante(telefone, chatId) {
   // ⚠️ A janela de 30 min e o corte em 32 hex TÊM de bater com
   //    `sol_cracha_emitir_v1` no banco. Divergir aqui faz TODA porta recusar.
   const janela = Math.floor(Date.now() / 1000 / 1800);
-  const assin = require('crypto').createHmac('sha256', seg)
+  const assin = createHmac('sha256', seg)
     .update(tel + '|' + String(chatId || '') + '|' + janela).digest('hex');
   return 'SOL1.' + tel + '.' + assin.slice(0, 32);
 }
@@ -542,6 +590,10 @@ const MAX_QUEUE_SIZE = 100;
 // Track recently sent message IDs to prevent echo-back loops with media
 const recentlySentIds = new Set();
 const MAX_RECENT_IDS = 50;
+const recentlySentMessages = new Map();
+const MAX_RECENT_SENT_MESSAGES = 500;
+const MAX_RECENT_SENT_MESSAGE_TEXT = 2000;
+const RECENT_SENT_MESSAGE_TTL_MS = 24 * 60 * 60 * 1000;
 
 let sock = null;
 
@@ -826,9 +878,17 @@ async function caixaAbf() {
       const quotedParticipant = normalizeWhatsAppId(contextInfo?.participant || '') || null;
       const quotedRemoteJid = normalizeWhatsAppId(contextInfo?.remoteJid || '') || null;
       const hasQuotedMessage = !!contextInfo?.quotedMessage;
-      const quotedBody = hasQuotedMessage ? getPlainTextFromMessageContent(getMessageContent({ message: contextInfo.quotedMessage })) : '';
+      let quotedBody = hasQuotedMessage ? getPlainTextFromMessageContent(getMessageContent({ message: contextInfo.quotedMessage })) : '';
       let quotedResolved = false;
       let quotedPreview = quotedBody ? quotedBody.slice(0, 500) : '';
+      if (!quotedBody && quotedMessageId) {
+        const ownQuoted = findRecentlySentMessage(quotedMessageId, quotedRemoteJid || chatId);
+        if (ownQuoted) {
+          quotedBody = ownQuoted.text;
+          quotedPreview = ownQuoted.text.slice(0, 500);
+          quotedResolved = true;
+        }
+      }
 
       // Extract message body
       let body = '';
@@ -1051,8 +1111,9 @@ async function caixaAbf() {
             if (event.hasMedia) typingStart(chatId);
             const _abf = await caixaAbf();
             let _fhPrio = null;
+            let _sendCaixa = null;
             if (_abf) {
-              const _sf = async (cid, txt) => {
+              _sendCaixa = async (cid, txt) => {
                 const s2 = await sendWithTimeout(cid, { text: txt });
                 const id = s2 && s2.key && s2.key.id; if (id) recentlySentIds.add(id);
                 // A janela pertence a quem abriu a operação. O resto do grupo
@@ -1060,16 +1121,16 @@ async function caixaAbf() {
                 abrirJanelaGrupo(cid, event.senderId, 'financeiro_abertura_fechamento');
                 return id;
               };
-              const _direto = await _abf.tratarPedidoDiretoFechamento(event, { grupo: _grupoCaixa, sendFn: _sf, log: _caixaLog, governanceFn: _govFn });
+              const _direto = await _abf.tratarPedidoDiretoFechamento(event, { grupo: _grupoCaixa, sendFn: _sendCaixa, log: _caixaLog, governanceFn: _govFn });
               if (_direto) { _govRecord('route_decided', { route: 'deterministic_abf', engine: 'abf', action: 'fechamento_direto' }); _govRecord('episode_closed', { terminal_state: 'handled', outcome: 'ok' }); typingStop(chatId); _caixaLog({ step: 'abf_fechamento_direto' }); continue; }
               // Reabertura do caixa fechado do dia (31/08: "Pode abrir novamente"
               // vazava para o LLM de leitura e morria em "banco bloqueou").
               const _reab = _abf.tratarPedidoDiretoReabertura
-                ? await _abf.tratarPedidoDiretoReabertura(event, { grupo: _grupoCaixa, sendFn: _sf, log: _caixaLog, governanceFn: _govFn })
+                ? await _abf.tratarPedidoDiretoReabertura(event, { grupo: _grupoCaixa, sendFn: _sendCaixa, log: _caixaLog, governanceFn: _govFn })
                 : false;
               if (_reab) { _govRecord('route_decided', { route: 'deterministic_abf', engine: 'abf', action: 'reabertura_direta' }); _govRecord('episode_closed', { terminal_state: 'handled', outcome: 'ok' }); typingStop(chatId); _caixaLog({ step: 'abf_reabertura_direta' }); continue; }
               _fhPrio = await financeHandler();
-              const _tratou = await _abf.tratarConfirmacao(event, { sendFn: _sf, log: _caixaLog, governanceFn: _govFn,
+              const _tratou = await _abf.tratarConfirmacao(event, { sendFn: _sendCaixa, log: _caixaLog, governanceFn: _govFn,
                 temComprovantePendente: (cid) => !!(_fhPrio && _fhPrio.temPendencia && _fhPrio.temPendencia(cid)) });
               if (_tratou) { _govRecord('route_decided', { route: 'deterministic_abf', engine: 'abf', action: 'confirmacao' }); _govRecord('episode_closed', { terminal_state: 'handled', outcome: 'ok' }); _caixaLog({ step: 'abf_tratou' }); continue; }
             }
@@ -1113,13 +1174,6 @@ async function caixaAbf() {
               const _r = await _fh.handle(event);
               _resultadoCaixa = _r;
               _caixaLog({ step: 'result', r: _r });
-              // V4 SHADOW (31/08, go do Luciano): o roteador LLM observa a mesma
-              // mensagem em paralelo e loga a decisao ao lado da acao do legado.
-              // Fire-and-forget: nao atrasa nada, nao escreve nada.
-              if (_fh.observarRoteadorV4) {
-                _fh.observarRoteadorV4(event, _r && _r.acao)
-                  .catch(function (e) { _caixaLog({ step: 'roteador_v4_shadow_erro', msg: e && e.message }); });
-              }
               if (_shadow && _shadowClassificacao) {
                 try { _shadow.registrar({ log: _caixaLog, event, grupo: _grupoCaixa, classificacao: _shadowClassificacao, legado: _r }); }
                 catch (e) { _caixaLog({ step: 'classificador_v3_shadow_erro', msg: e.message }); }
@@ -1145,6 +1199,44 @@ async function caixaAbf() {
               const _pareceProSol = !!(groupEngagement.pareceChamarSol && groupEngagement.pareceChamarSol(body));
               const _citouCard = !!(event.quotedMessageId && _fh.citaAlgumaPendencia
                 && _fh.citaAlgumaPendencia(chatId, event.quotedMessageId));
+              let _v4JaRegistrou = false;
+              // Pré-flight operacional V4: frase inédita dirigida à Sol pode
+              // escolher apenas o executor determinístico de FECHAMENTO, que
+              // cria um preview e ainda exige o "pode" humano. Não aprova, não
+              // escreve no caixa e não depende de o grupo estar no canário.
+              // Switch separado: permite rollback sem desligar o shadow/D2.
+              if (!_tratouCaixa && _pareceProSol && _r && _r.acao === 'nada'
+                  && process.env.SOL_CAIXA_V4_OPERATIONAL_PREFLIGHT === '1'
+                  && _abf && _sendCaixa && _fh.decidirRoteadorV4
+                  && !(_fh.temPendencia && _fh.temPendencia(chatId))) {
+                let _decOperacional = null;
+                try {
+                  _v4JaRegistrou = true;
+                  _decOperacional = await _fh.decidirRoteadorV4(event, _r.acao, { modo: 'preflight_operacional' });
+                } catch (e) {
+                  _caixaLog({ step: 'roteador_v4_operacional_erro', msg: e && e.message });
+                }
+                if (_decOperacional && _decOperacional.intencao === 'fechar_caixa'
+                    && Number(_decOperacional.confianca || 0) >= 0.9) {
+                  const _fechamentoV4 = await _abf.tratarPedidoDiretoFechamento(event, {
+                    grupo: _grupoCaixa, sendFn: _sendCaixa, log: _caixaLog,
+                    governanceFn: _govFn, intencaoEstruturada: 'fechar_caixa',
+                  });
+                  if (_fechamentoV4) {
+                    _govRecord('route_decided', { route: 'deterministic_abf', engine: 'router_v4', action: 'fechamento_preview' });
+                    _govRecord('episode_closed', { terminal_state: 'handled', outcome: 'ok' });
+                    typingStop(chatId);
+                    _caixaLog({ step: 'abf_fechamento_v4_estruturado' });
+                    continue;
+                  }
+                }
+              }
+              // Nos demais casos, o mesmo roteador continua em shadow. O
+              // preflight acima já registrou sua decisão e não chama de novo.
+              if (!_v4JaRegistrou && _fh.observarRoteadorV4) {
+                _fh.observarRoteadorV4(event, _r && _r.acao)
+                  .catch(function (e) { _caixaLog({ step: 'roteador_v4_shadow_erro', msg: e && e.message }); });
+              }
               if (!_tratouCaixa && (_pareceProSol || _citouCard) && _r && _r.acao === 'nada'
                   && _fh.temPendencia && _fh.temPendencia(chatId)) {
                 // Fallback de dialogo (31/08, OK do Luciano): antes do "nao
@@ -1236,10 +1328,11 @@ async function caixaAbf() {
       // Só cálculo: nada é gravado, a bridge segue read-only.
       if (event.senderPhone) {
         try {
+          const _ep = event.caixaGovernancaEpisode && event.caixaGovernancaEpisode.episode_id;
+          if (_ep) event.body = `[episode_caixa: ${_ep}]\n${event.body || ''}`;
           const _cr = crachaDoSolicitante(event.senderPhone, chatId);
           if (_cr) {
-            const _ep = event.caixaGovernancaEpisode && event.caixaGovernancaEpisode.episode_id;
-            event.body = `${_ep ? `[episode_caixa: ${_ep}]\n` : ''}[chat_caixa: ${chatId}]\n[cracha: ${_cr}]\n${event.body || ''}`;
+            event.body = `[chat_caixa: ${chatId}]\n[cracha: ${_cr}]\n${event.body || ''}`;
           }
         } catch (_) { /* crachá é reforço; falhar nele não pode derrubar a mensagem */ }
       }
@@ -1522,6 +1615,7 @@ app.get('/health', (req, res) => {
     queueLength: messageQueue.length,
     uptime: process.uptime(),
     scriptHash: SCRIPT_HASH,
+    caixaBadgeReady: !!crachaSegredo(),
   });
 });
 
