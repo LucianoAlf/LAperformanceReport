@@ -368,6 +368,12 @@ export function AlunosPage() {
     FATURAS_FINANCEIRAS_LOADING,
   );
   const carregarDadosRef = useRef<() => Promise<void>>(async () => undefined);
+
+  // Sequencia de carregamento: a leitura financeira deixou de bloquear a tela (ela chega
+  // ~4s depois da lista), entao a resposta da unidade anterior pode voltar quando o usuario
+  // ja trocou de unidade/competencia. Sem isso, inadimplencia de uma unidade marcaria alunos
+  // de outra. Resposta com selo antigo e descartada.
+  const carregamentoSeqRef = useRef(0);
   const [turmas, setTurmas] = useState<Turma[]>([]);
 
   useEffect(() => {
@@ -436,6 +442,48 @@ export function AlunosPage() {
     setFiltros(prev => prev.inadimplente_emusys_live
       ? { ...prev, inadimplente_emusys_live: false }
       : prev);
+  }, []);
+
+  // Gemeo de limparInadimplenciaDerivada: a leitura financeira chega ~4s DEPOIS da lista ja
+  // estar renderizada, entao os alunos em tela precisam receber a inadimplencia sem refazer
+  // o fetch. Chamada so quando podeCobrarInadimplenciaCanonica(state) e verdadeiro.
+  const aplicarInadimplenciaDerivada = useCallback((state: InadimplenciaCanonicaState) => {
+    const inadimplenciaMap = indexarInadimplenciaPorMatricula(state);
+    setAlunos(prev => prev.map(aluno => {
+      // Sem emusys_matricula_id o aluno nao esta no mapa porque NAO TEM VINCULO com o Emusys,
+      // e nao porque esta em dia: fica `undefined` ("nao sei"). Marcar false aqui afirmaria
+      // algo que a leitura financeira nunca disse -- mesma regua de `sem_captura` nao virar
+      // "fora". Com vinculo e ausente do mapa, ai sim e `false` (confirmado em dia).
+      const chavePrincipal = aluno.emusys_matricula_id
+        ? chaveInadimplenciaMatricula(aluno.unidade_id, aluno.emusys_matricula_id)
+        : null;
+      const principal = chavePrincipal ? inadimplenciaMap.get(chavePrincipal) : undefined;
+
+      // Cada curso tem matricula propria no Emusys, entao a inadimplencia do 2o curso e
+      // independente da do principal e precisa da mesma resolucao.
+      const outrosCursos = aluno.outros_cursos?.map(outroCurso => {
+        const chaveOutro = outroCurso.emusys_matricula_id
+          ? chaveInadimplenciaMatricula(outroCurso.unidade_id, outroCurso.emusys_matricula_id)
+          : null;
+        const inadimplenciaOutro = chaveOutro ? inadimplenciaMap.get(chaveOutro) : undefined;
+        return {
+          ...outroCurso,
+          inadimplente_emusys: inadimplenciaOutro ? true : (chaveOutro ? false : undefined),
+          _inadimplencia_atualizado_em: inadimplenciaOutro?.ultimoSync ?? null,
+          _inadimplencia_valor_atualizado: inadimplenciaOutro?.valorAtualizado ?? 0,
+          _inadimplencia_total_faturas: inadimplenciaOutro?.faturas ?? 0,
+        };
+      });
+
+      return {
+        ...aluno,
+        inadimplente_emusys: principal ? true : (chavePrincipal ? false : undefined),
+        _inadimplencia_atualizado_em: principal?.ultimoSync ?? null,
+        _inadimplencia_valor_atualizado: principal?.valorAtualizado ?? 0,
+        _inadimplencia_total_faturas: principal?.faturas ?? 0,
+        outros_cursos: outrosCursos,
+      };
+    }));
   }, []);
 
   const invalidarInadimplenciaExpirada = useCallback(() => {
@@ -685,6 +733,9 @@ export function AlunosPage() {
   async function carregarDados() {
     setLoading(true);
 
+    // Selo desta carga; a resposta financeira so e aplicada se ainda for a carga corrente.
+    const seqCarregamento = ++carregamentoSeqRef.current;
+
     // ── FASE 1: disparar TUDO em paralelo ──
 
     // Helper: busca paginada para contornar limite 1000 rows do PostgREST
@@ -758,6 +809,24 @@ export function AlunosPage() {
       .select('aluno_id, estado, grupo_nome, grupo_mesma_unidade, capturado_em, contato_telefone, contato_de_quem, contato_nome, contato_parentesco, contatos_no_grupo_total, contatos_no_grupo');
     if (unidadeAtual && unidadeAtual !== 'todos') qComunidadeWa = qComunidadeWa.eq('unidade_id', unidadeAtual);
 
+    // A leitura financeira custa ~5s (get_inadimplencia_canonica) e NAO entra no Promise.all
+    // abaixo: `Promise.all` resolve na mais lenta, entao ela sozinha segurava a tela inteira
+    // (tail latency amplification). Ela dispara aqui, corre em paralelo e e aplicada quando
+    // chegar. Nada na lista depende dela: so o banner, o filtro "inadimplente ao vivo" e a
+    // trava de cobranca -- que ficam em "nao sei" ate a resposta, nunca em "esta em dia".
+    const promessaFinanceira = carregarFaturasAlunosFinanceiras(financeiroRpcClient, {
+      unidadeId: unidadeAtual,
+      ano: competenciaFiltro.ano,
+      mes: competenciaFiltro.mes,
+      modoPeriodo: 'competencia',
+      situacao: 'em_atraso_d0',
+      asOfDate: hojeBrasilia(),
+    }).catch((error) => ({
+      ...FATURAS_FINANCEIRAS_LOADING,
+      status: 'error' as const,
+      error: error instanceof Error ? error.message : 'Falha ao consultar faturas financeiras.',
+    }));
+
     // Disparar tudo em paralelo: alunos (paginado), turmas operacionais, KPI canônico,
     // anotações, turmas explícitas, opções e LTV.
     const [
@@ -767,7 +836,6 @@ export function AlunosPage() {
       kpisTurmasR,
       anotacoesR,
       comunidadeWaR,
-      faturasFinanceirasR,
       ...outrosResults
     ] = await Promise.all([
       fetchAllAlunos(buildMainQuery),
@@ -780,18 +848,6 @@ export function AlunosPage() {
         .eq('resolvido', false)
         .order('created_at', { ascending: false }),
       qComunidadeWa,
-      carregarFaturasAlunosFinanceiras(financeiroRpcClient, {
-        unidadeId: unidadeAtual,
-        ano: competenciaFiltro.ano,
-        mes: competenciaFiltro.mes,
-        modoPeriodo: 'competencia',
-        situacao: 'em_atraso_d0',
-        asOfDate: hojeBrasilia(),
-      }).catch((error) => ({
-        ...FATURAS_FINANCEIRAS_LOADING,
-        status: 'error' as const,
-        error: error instanceof Error ? error.message : 'Falha ao consultar faturas financeiras.',
-      })),
       // Turmas explícitas
       carregarTurmasExplicitas(),
       // Opções (selects)
@@ -807,14 +863,24 @@ export function AlunosPage() {
 
     // ── FASE 2: processar alunos ──
     const { data: alunosRaw, error } = alunosR;
-    const inadimplenciaAtual = faturasFinanceirasR.inadimplenciaCanonica;
-    setFaturasFinanceiras(faturasFinanceirasR);
-    const leituraFinanceiraDisponivel = podeCobrarInadimplenciaCanonica(inadimplenciaAtual);
-    const leituraExpirada = inadimplenciaAtual.collectionAllowed && !leituraFinanceiraDisponivel;
-    setInadimplenciaCanonica(
-      leituraExpirada ? bloquearInadimplenciaPorExpiracao(inadimplenciaAtual) : inadimplenciaAtual,
-    );
-    if (!leituraFinanceiraDisponivel) limparInadimplenciaDerivada();
+    // A financeira nao e esperada aqui: a lista e publicada sem ela e o resultado e aplicado
+    // quando chegar (ver aplicarInadimplenciaDerivada). Ate la todo aluno fica com
+    // `inadimplente_emusys: undefined` -- "nao sei", nunca "esta em dia".
+    void promessaFinanceira.then((faturasFinanceirasR) => {
+      // Selo de sequencia: descarta resposta de uma unidade/competencia que ja nao esta na tela.
+      if (seqCarregamento !== carregamentoSeqRef.current) return;
+
+      const inadimplenciaAtual = faturasFinanceirasR.inadimplenciaCanonica;
+      setFaturasFinanceiras(faturasFinanceirasR);
+      const disponivel = podeCobrarInadimplenciaCanonica(inadimplenciaAtual);
+      const leituraExpirada = inadimplenciaAtual.collectionAllowed && !disponivel;
+      const estadoFinal = leituraExpirada
+        ? bloquearInadimplenciaPorExpiracao(inadimplenciaAtual)
+        : inadimplenciaAtual;
+      setInadimplenciaCanonica(estadoFinal);
+      if (!podeCobrarInadimplenciaCanonica(estadoFinal)) limparInadimplenciaDerivada();
+      else aplicarInadimplenciaDerivada(estadoFinal);
+    });
 
     // Mesclar alunos por data_saida (sem duplicatas)
     let alunosMesclados = alunosRaw ?? [];
@@ -1003,36 +1069,29 @@ export function AlunosPage() {
 
       alunosComSegundoCurso.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
 
-      // A RPC canonica ja aplicou frescor, reconciliacao, dedupe e juros. Aqui so
-      // indexamos por (unidade, matricula Emusys) para ligar as faturas aos alunos.
-      const inadimplenciaMap = indexarInadimplenciaPorMatricula(inadimplenciaAtual);
-
+      // A leitura financeira ainda esta EM VOO neste ponto (saiu do Promise.all), entao a
+      // lista nasce com inadimplencia indeterminada e `aplicarInadimplenciaDerivada` a
+      // preenche quando a resposta chegar.
+      // ⚠️ NAO usar `leituraFinanceiraDisponivel` aqui: ela e derivada do render e esta
+      // funcao captura o valor do render ANTERIOR pelo closure -- ao trocar de unidade ela
+      // ainda vale `true` da unidade passada, e a lista nova nasceria com `false`
+      // ("confirmado em dia") para todo aluno com vinculo, sem nenhuma leitura que sustente
+      // isso. Indeterminado e `undefined`, sempre.
       const alunosComInadimplenciaEmusys = alunosComSegundoCurso.map(aluno => {
-        const chavePrincipal = aluno.emusys_matricula_id
-          ? chaveInadimplenciaMatricula(aluno.unidade_id, aluno.emusys_matricula_id)
-          : null;
-        const principal = chavePrincipal ? inadimplenciaMap.get(chavePrincipal) : undefined;
-
-        const outrosCursosComInadimplencia = aluno.outros_cursos?.map(oc => {
-          const chaveOc = oc.emusys_matricula_id
-            ? chaveInadimplenciaMatricula(oc.unidade_id, oc.emusys_matricula_id)
-            : null;
-          const inadimplenciaOutroCurso = chaveOc ? inadimplenciaMap.get(chaveOc) : undefined;
-          return {
-            ...oc,
-            inadimplente_emusys: inadimplenciaOutroCurso ? true : (leituraFinanceiraDisponivel ? false : undefined),
-            _inadimplencia_atualizado_em: inadimplenciaOutroCurso?.ultimoSync ?? null,
-            _inadimplencia_valor_atualizado: inadimplenciaOutroCurso?.valorAtualizado ?? 0,
-            _inadimplencia_total_faturas: inadimplenciaOutroCurso?.faturas ?? 0,
-          };
-        });
+        const outrosCursosComInadimplencia = aluno.outros_cursos?.map(oc => ({
+          ...oc,
+          inadimplente_emusys: undefined,
+          _inadimplencia_atualizado_em: null,
+          _inadimplencia_valor_atualizado: 0,
+          _inadimplencia_total_faturas: 0,
+        }));
 
         return {
           ...aluno,
-          inadimplente_emusys: principal ? true : (leituraFinanceiraDisponivel ? false : undefined),
-          _inadimplencia_atualizado_em: principal?.ultimoSync ?? null,
-          _inadimplencia_valor_atualizado: principal?.valorAtualizado ?? 0,
-          _inadimplencia_total_faturas: principal?.faturas ?? 0,
+          inadimplente_emusys: undefined,
+          _inadimplencia_atualizado_em: null,
+          _inadimplencia_valor_atualizado: 0,
+          _inadimplencia_total_faturas: 0,
           outros_cursos: outrosCursosComInadimplencia,
         };
       });

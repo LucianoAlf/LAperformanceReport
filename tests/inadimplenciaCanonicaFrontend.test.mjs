@@ -145,11 +145,60 @@ test('expiracao limpa flags e filtro, recarrega uma vez e sempre limpa o timer',
   assert.match(alunosPage, /carregarDadosRef\.current\(\)/);
 });
 
+// A associacao financeira saiu do bloco inline de carregarDados e passou a viver em
+// `aplicarInadimplenciaDerivada`, porque a leitura financeira deixou de bloquear a tela e
+// agora e aplicada depois que a lista ja esta renderizada. A REGRA e a mesma: casar por
+// (unidade_id, emusys_matricula_id) e jamais por nome ou emusys_student_id.
 test('associacao financeira preserva unidade mais matricula e nunca usa nome ou student id', () => {
-  const canonicalJoin = alunosPage.match(/const inadimplenciaMap[\s\S]*?setAlunos\(alunosComInadimplenciaEmusys\)/)?.[0] ?? '';
+  const canonicalJoin = alunosPage.match(/const aplicarInadimplenciaDerivada[\s\S]*?\}, \[\]\);/)?.[0] ?? '';
+  assert.notStrictEqual(canonicalJoin, '', 'aplicarInadimplenciaDerivada sumiu do AlunosPage');
   assert.match(canonicalJoin, /chaveInadimplenciaMatricula\(aluno\.unidade_id, aluno\.emusys_matricula_id\)/);
-  assert.match(canonicalJoin, /chaveInadimplenciaMatricula\(oc\.unidade_id, oc\.emusys_matricula_id\)/);
+  assert.match(canonicalJoin, /chaveInadimplenciaMatricula\(outroCurso\.unidade_id, outroCurso\.emusys_matricula_id\)/);
   assert.doesNotMatch(canonicalJoin, /\.nome|emusys_student_id/);
+});
+
+// Regressao: a lista e publicada ANTES da resposta financeira chegar. O bloco inline nao pode
+// afirmar "confirmado em dia" (false) nesse momento -- ele nao tem leitura que sustente isso.
+// `leituraFinanceiraDisponivel` ali seria pior ainda: e derivada do render e `carregarDados`
+// captura o valor do render ANTERIOR pelo closure, entao ao trocar de unidade ela ainda vale
+// `true` da unidade passada. Indeterminado e `undefined`, sempre.
+test('lista nasce com inadimplencia indeterminada, nunca com confirmado em dia', () => {
+  const blocoInline = alunosPage.match(/const alunosComInadimplenciaEmusys[\s\S]*?setAlunos\(alunosComInadimplenciaEmusys\)/)?.[0] ?? '';
+  assert.notStrictEqual(blocoInline, '', 'bloco inline de alunos sumiu do AlunosPage');
+  assert.doesNotMatch(
+    blocoInline,
+    /leituraFinanceiraDisponivel/,
+    'bloco inline nao pode decidir inadimplencia por leituraFinanceiraDisponivel (closure do render anterior)',
+  );
+  // Extrai os valores em vez de usar lookahead: \s* casa ZERO espacos, entao o lookahead
+  // olha o espaco logo depois dos dois-pontos e reprova codigo que esta correto.
+  const valores = [...blocoInline.matchAll(/inadimplente_emusys:\s*([A-Za-z0-9_]+)/g)].map(m => m[1]);
+  assert.ok(valores.length > 0, 'bloco inline nao atribui inadimplente_emusys');
+  assert.deepStrictEqual(
+    [...new Set(valores)],
+    ['undefined'],
+    'na publicacao inicial inadimplente_emusys so pode ser undefined, veio: ' + [...new Set(valores)].join(', '),
+  );
+});
+
+// A resposta financeira chega ~4s depois e pode ser de uma unidade que ja nao esta na tela.
+test('resposta financeira obsoleta e descartada por selo de sequencia', () => {
+  assert.match(alunosPage, /carregamentoSeqRef/);
+  assert.match(alunosPage, /const seqCarregamento = \+\+carregamentoSeqRef\.current/);
+  assert.match(alunosPage, /if \(seqCarregamento !== carregamentoSeqRef\.current\) return;/);
+});
+
+// A financeira nao pode voltar para dentro do Promise.all: `Promise.all` resolve na mais
+// lenta, e era ela sozinha segurando a tela inteira (tail latency amplification).
+test('leitura financeira nao bloqueia a montagem da lista', () => {
+  // Sem regex: recorta o bloco do Promise.all por indice e confere que a financeira nao esta la.
+  const abre = alunosPage.indexOf('] = await Promise.all([');
+  assert.notStrictEqual(abre, -1, 'Promise.all de carregarDados sumiu');
+  const fecha = alunosPage.indexOf(']);', abre);
+  const promiseAll = alunosPage.slice(abre, fecha);
+  assert.ok(!promiseAll.includes('carregarFaturasAlunosFinanceiras'),
+    'a leitura financeira nao pode voltar para dentro do Promise.all: ele resolve na mais lenta');
+  assert.match(alunosPage, /const promessaFinanceira = carregarFaturasAlunosFinanceiras/);
 });
 
 test('atualizar agora recarrega a leitura real e nunca trata 429 como sucesso', () => {
