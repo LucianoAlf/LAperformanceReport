@@ -154,16 +154,6 @@ jobs:
       - name: reparo historico da Barra e rollback sao estreitos e idempotentes
         run: psql -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-reparo-vinculos-barra.sql
 
-      - name: matcher singular nunca cruza IDs Emusys entre unidades
-        run: |
-          # O replay histórico tolera migrations fora do domínio Caixa e hoje
-          # encerra o parser antes das migrations de 15/09. Instale de forma
-          # explícita a unidade sob teste; a migration é fail-closed e
-          # reaplicável, então isto continua válido quando o replay alcançar o
-          # arquivo no futuro.
-          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260915213600_sol_caixa_casar_parcela_isola_unidade.sql
-          psql -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-casar-parcela-isola-unidade.sql
-
       # 🔎 DIAGNOSTICO. `syntax error` no replay quase sempre significa que uma
       #    instrucao ANTERIOR ficou com aspas abertas e engoliu tudo ate achar um
       #    terminador — o numero que o psql reporta e o FIM da instrucao, nao o
@@ -232,3 +222,16 @@ jobs:
 
       - name: cadeia real, caminho feliz V3 e atomicidade
         run: psql -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-cadeia-e-atomicidade.sql
+
+      # Roda por último para preservar, nos ensaios anteriores, o manifesto do
+      # baseline produtivo. A migration nova só muda o estado do banco no teste
+      # que prova o estado-alvo desta branch.
+      - name: matcher singular nunca cruza IDs Emusys entre unidades
+        run: |
+          # O replay histórico tolera migrations fora do domínio Caixa e hoje
+          # encerra o parser antes das migrations de 15/09. Instale de forma
+          # explícita a unidade sob teste; a migration é fail-closed e
+          # reaplicável, então isto continua válido quando o replay alcançar o
+          # arquivo no futuro.
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260915213600_sol_caixa_casar_parcela_isola_unidade.sql
+          psql -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-casar-parcela-isola-unidade.sql
