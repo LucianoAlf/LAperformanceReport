@@ -164,8 +164,12 @@ async function divisaoDitada(A) {
   const rC = await divisaoDitada(C);
   checar(String(rC && rC.acao) === 'manual_review_multi_student', 'valor divergente não vira preview');
   checar(/432/.test(ultimo(C.enviadas)), 'a recusa mostra o valor da fatura que existe');
-  checar(/desconto negociado/i.test(ultimo(C.enviadas)),
-    'a recusa aponta a saída legítima (declarar o valor) em vez de só dizer não');
+  checar(/cópia do Emusys pode estar atrasada/i.test(ultimo(C.enviadas)),
+    'a recusa trata ausência recente como possível corrida de sincronização');
+  checar(/Não criei card aprovável/i.test(ultimo(C.enviadas)),
+    'a recusa deixa explícito que não existe card financeiro para aprovar');
+  checar(!/desconto negociado/i.test(ultimo(C.enviadas)),
+    'valor divergente não vira sugestão automática de desconto');
 
   // ── 4. atomicidade: soma que não fecha não lança NADA ──────────────────────
   const D = novo({ resolverMultiFn: async () => ({
