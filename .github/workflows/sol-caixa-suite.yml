@@ -151,6 +151,9 @@ jobs:
           psql -f /tmp/todas.sql > /tmp/replay.log 2>&1 || true
           echo "erros no replay: $(grep -c ': ERROR:' /tmp/replay.log || true)"
 
+      - name: reparo historico da Barra e rollback sao estreitos e idempotentes
+        run: psql -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-reparo-vinculos-barra.sql
+
       # 🔎 DIAGNOSTICO. `syntax error` no replay quase sempre significa que uma
       #    instrucao ANTERIOR ficou com aspas abertas e engoliu tudo ate achar um
       #    terminador — o numero que o psql reporta e o FIM da instrucao, nao o
