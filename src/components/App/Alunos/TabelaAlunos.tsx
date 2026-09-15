@@ -107,6 +107,7 @@ function getStatusPagamentoOperacional(aluno: { status?: string | null; status_p
 const COLUNAS_CONFIG = [
   { id: 'telefone', label: 'Telefone', defaultVisible: false },
   { id: 'anamnese', label: 'Anamnese', defaultVisible: false },
+  { id: 'comunidade_wa', label: 'Comunidade WA', defaultVisible: false },
   { id: 'escola', label: 'Escola', defaultVisible: true },
   { id: 'professor', label: 'Professor', defaultVisible: true },
   { id: 'curso', label: 'Curso', defaultVisible: true },
@@ -1441,6 +1442,35 @@ export function TabelaAlunos({
     }
   }
 
+  // Comunidade WhatsApp (LAPE-33) — leitura de vw_aluno_comunidade_wa_v1 (captura
+  // diaria). "sem_captura"/"desatualizada"/"sem_grupo" contam como "nao sei",
+  // nunca como "fora" nem "dentro" -- mostrar traco, nao inventar estado.
+  function renderComunidadeWaBadge(aluno: Aluno) {
+    const estado = aluno.comunidade_wa_estado;
+    if (estado === 'na_comunidade') {
+      const grupo = aluno.comunidade_wa_grupo_nome || '';
+      const outraUnidade = aluno.comunidade_wa_mesma_unidade === false;
+      return (
+        <Tooltip content={grupo ? `${grupo}${outraUnidade ? ' (outra unidade)' : ''}` : 'Na comunidade'}>
+          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${
+            outraUnidade ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'
+          }`}>
+            ✓ {grupo || 'Dentro'}
+          </span>
+        </Tooltip>
+      );
+    }
+    if (estado === 'fora_da_comunidade') {
+      return <span className="bg-slate-600/20 text-slate-400 px-2 py-1 rounded text-xs font-medium">Fora</span>;
+    }
+    // sem_captura / captura_desatualizada / sem_grupo_configurado / null
+    return (
+      <Tooltip content="Sem verificação recente da comunidade">
+        <span className="text-slate-500 text-xs">—</span>
+      </Tooltip>
+    );
+  }
+
   function getBadgeEscola(classificacao: string) {
     if (classificacao === 'EMLA') {
       return <span className="bg-blue-500/20 text-blue-400 px-2 py-1 rounded text-xs font-medium">EMLA</span>;
@@ -1781,6 +1811,21 @@ export function TabelaAlunos({
                 <SelectItem value="todos">Anamnese</SelectItem>
                 <SelectItem value="preenchida">Preenchida</SelectItem>
                 <SelectItem value="nao_preenchida">Não preenchida</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Filtro Comunidade WhatsApp (LAPE-33) */}
+            <Select
+              value={filtros.comunidade_wa || "todos"}
+              onValueChange={(value) => setFiltros({ ...filtros, comunidade_wa: value === "todos" ? "" : value })}
+            >
+              <SelectTrigger className={`w-[150px] ${filtros.comunidade_wa ? 'border-2 border-purple-500 bg-purple-500/10' : ''}`}>
+                <SelectValue placeholder="Comunidade" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Comunidade</SelectItem>
+                <SelectItem value="dentro">Na comunidade</SelectItem>
+                <SelectItem value="fora">Fora</SelectItem>
               </SelectContent>
             </Select>
 
@@ -2179,6 +2224,7 @@ export function TabelaAlunos({
               <SortableHeader label="Nome" sortKey="nome" sortConfig={sortConfig} onSort={handleSort} className="text-left" />
               {col('telefone') && <th className="px-4 py-3 font-medium">Telefone</th>}
               {col('anamnese') && <th className="px-4 py-3 font-medium">Anamnese</th>}
+              {col('comunidade_wa') && <th className="px-4 py-3 font-medium">Comunidade WA</th>}
               {col('escola') && <th className="px-4 py-3 font-medium">Escola</th>}
               {col('professor') && <SortableHeader label="Professor" sortKey="professor" sortConfig={sortConfig} onSort={handleSort} />}
               {col('curso') && <SortableHeader label="Curso" sortKey="curso" sortConfig={sortConfig} onSort={handleSort} />}
@@ -2318,6 +2364,12 @@ export function TabelaAlunos({
                     ) : (
                       <span className="text-slate-500">—</span>
                     )}
+                  </td>
+                  )}
+
+                  {col('comunidade_wa') && (
+                  <td className="px-4 py-2">
+                    {renderComunidadeWaBadge(aluno)}
                   </td>
                   )}
 
@@ -2721,6 +2773,11 @@ export function TabelaAlunos({
                       ) : (
                         <span className="text-slate-500">—</span>
                       )}
+                    </td>
+                    )}
+                    {col('comunidade_wa') && (
+                    <td className="px-4 py-2">
+                      {renderComunidadeWaBadge(outroCurso)}
                     </td>
                     )}
                     {col('escola') && (
