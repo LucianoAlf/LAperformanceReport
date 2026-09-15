@@ -1201,9 +1201,9 @@ async function caixaAbf() {
                 && _fh.citaAlgumaPendencia(chatId, event.quotedMessageId));
               let _v4JaRegistrou = false;
               // Pré-flight operacional V4: frase inédita dirigida à Sol pode
-              // escolher apenas o executor determinístico de FECHAMENTO, que
-              // cria um preview e ainda exige o "pode" humano. Não aprova, não
-              // escreve no caixa e não depende de o grupo estar no canário.
+              // escolher apenas os executores determinísticos de ABERTURA ou
+              // FECHAMENTO. Ambos criam preview e ainda exigem um "pode" humano
+              // atual. Não aprovam, não escrevem e não ampliam o agent-first.
               // Switch separado: permite rollback sem desligar o shadow/D2.
               if (!_tratouCaixa && _pareceProSol && _r && _r.acao === 'nada'
                   && process.env.SOL_CAIXA_V4_OPERATIONAL_PREFLIGHT === '1'
@@ -1216,17 +1216,22 @@ async function caixaAbf() {
                 } catch (e) {
                   _caixaLog({ step: 'roteador_v4_operacional_erro', msg: e && e.message });
                 }
-                if (_decOperacional && _decOperacional.intencao === 'fechar_caixa'
+                const _intencaoOperacional = _decOperacional && _decOperacional.intencao;
+                if ((_intencaoOperacional === 'abrir_caixa' || _intencaoOperacional === 'fechar_caixa')
                     && Number(_decOperacional.confianca || 0) >= 0.9) {
-                  const _fechamentoV4 = await _abf.tratarPedidoDiretoFechamento(event, {
+                  const _acaoOperacional = _intencaoOperacional === 'abrir_caixa' ? 'abertura' : 'fechamento';
+                  const _tratadorOperacional = _intencaoOperacional === 'abrir_caixa'
+                    ? _abf.tratarPedidoDiretoAbertura
+                    : _abf.tratarPedidoDiretoFechamento;
+                  const _operacaoV4 = _tratadorOperacional && await _tratadorOperacional(event, {
                     grupo: _grupoCaixa, sendFn: _sendCaixa, log: _caixaLog,
-                    governanceFn: _govFn, intencaoEstruturada: 'fechar_caixa',
+                    governanceFn: _govFn, intencaoEstruturada: _intencaoOperacional,
                   });
-                  if (_fechamentoV4) {
-                    _govRecord('route_decided', { route: 'deterministic_abf', engine: 'router_v4', action: 'fechamento_preview' });
+                  if (_operacaoV4) {
+                    _govRecord('route_decided', { route: 'deterministic_abf', engine: 'router_v4', action: `${_acaoOperacional}_preview` });
                     _govRecord('episode_closed', { terminal_state: 'handled', outcome: 'ok' });
                     typingStop(chatId);
-                    _caixaLog({ step: 'abf_fechamento_v4_estruturado' });
+                    _caixaLog({ step: `abf_${_acaoOperacional}_v4_estruturado` });
                     continue;
                   }
                 }

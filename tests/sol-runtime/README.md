@@ -636,6 +636,21 @@ mensagens enviadas. Assim uma resposta que chega só com `stanzaId` recupera o
 card citado sem persistir conteúdo bruto. `/health` expõe apenas o booleano
 `caixaBadgeReady`; ausência do segredo gera log estruturado sem revelar valor.
 
+## sol-portas-capability-gates-e2e.cjs + abertura-direta-roteador-e2e.cjs (15/09)
+
+🔴 **O canário agent-first cercava capacidades que não eram experimentais.**
+`SOL_CAIXA_TOOLS_CANARIO` foi colocado na frente de consulta, localização,
+abertura, fechamento, lançamento, correção e estorno. Como as tools são globais,
+Barra e Campo Grande conseguiam escolher a porta certa, mas recebiam
+`fora_do_canario` até para ler o caixa de ontem ou preparar a abertura.
+
+A escada agora é explícita: `consulta` e `operacional` (somente previews de
+abertura/fechamento) funcionam nos chats presentes em
+`SOL_CAIXA_FINANCE_GROUPS`; `agent_first` continua exigindo
+`SOL_CAIXA_TOOLS_CANARIO`. Crachá assinado, chat oficial, resolução de unidade no
+servidor, preview e novo “pode” continuam obrigatórios. Abertura direta também
+usa a decisão estruturada do roteador V4 e nunca escreve antes da confirmação.
+
 ## reabertura-do-caixa-e2e.cjs  (31/08, caso Arthur/Barra 19:53)
 🔴 **"Pode abrir novamente" morreu em "o banco bloqueou a operação".** A
 ferramenta existia COMPLETA no banco desde a V3 (`sol_caixa_reabrir_caixa_v1`:

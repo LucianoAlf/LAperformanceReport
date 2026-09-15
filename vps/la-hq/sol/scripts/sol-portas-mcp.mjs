@@ -85,11 +85,11 @@ const C = {
 };
 
 const PORTAS = [
-  { name: 'caixa_do_dia', fn: 'sol_porta_caixa_do_dia_assinado_v1', auth: 'caixa_assinado',
-    description: 'O caixa de HOJE da unidade: aberto ou fechado, quanto entrou, quanto saiu, por forma de pagamento. Use quando perguntarem "como tá o caixa?", "já fechou?", "quanto entrou hoje?". 🔴 É a FONTE do caixa — nunca monte esse número somando comprovantes do grupo por conta própria: comprovante repetido e estorno não aparecem na soma e o total sai maior que o real. Para o que ainda não foi lançado, é o grupo que manda, não eu.',
+  { name: 'caixa_do_dia', fn: 'sol_porta_caixa_do_dia_assinado_v1', auth: 'caixa_assinado', capability: 'consulta',
+    description: 'O caixa da DATA PEDIDA na unidade: aberto ou fechado, quanto entrou, quanto saiu, por forma de pagamento. Use quando perguntarem "como tá o caixa?", "já fechou?", "quanto entrou hoje?" ou "me manda o de ontem". 🔴 É a FONTE do caixa — nunca monte esse número somando comprovantes do grupo por conta própria: comprovante repetido e estorno não aparecem na soma e o total sai maior que o real. Para o que ainda não foi lançado, é o grupo que manda, não eu.',
     schema: { ...C, p_data: { type: 'string', description: 'YYYY-MM-DD. Vazio = hoje.' } } },
 
-  { name: 'caixa_localizar_lancamento', fn: 'sol_porta_caixa_localizar_lancamento_v1', auth: 'caixa_assinado',
+  { name: 'caixa_localizar_lancamento', fn: 'sol_porta_caixa_localizar_lancamento_v1', auth: 'caixa_assinado', capability: 'consulta',
     description: 'Procura um lançamento REAL do Caixa e informa se o recibo foi persistido. Use antes de responder “já entrou?”, “isso foi lançado?”, “cadê o recibo?”, “lanço de novo?” ou ao suspeitar de duplicidade. Caso real: um recebimento já tinha sido lançado e confirmado no grupo, mas a consulta genérica não o encontrou e a Sol mandou repetir o processo. Esta porta existe para impedir exatamente isso. 🔴 Se encontrar item compatível, diga que já entrou e NÃO prepare novo lançamento. Para Caixa coberto por esta porta, nunca use SQL genérico.',
     schema: { ...C,
       p_data_inicio: { type: 'string', description: 'YYYY-MM-DD. Vazio = ontem.' },
@@ -141,11 +141,11 @@ const PORTAS = [
       p_motivo: { type: 'string', description: 'Motivo humano do estorno. Obrigatório.' },
     } },
 
-  { name: 'caixa_preparar_abertura', auth: 'caixa_runtime', action: 'preparar_abertura',
+  { name: 'caixa_preparar_abertura', auth: 'caixa_runtime', action: 'preparar_abertura', capability: 'operacional',
     description: 'Publica a prévia oficial para ABRIR o Caixa da unidade do grupo. Não abre ainda; espera “pode”. Use quando pedirem para abrir o caixa. A ferramenta já publica no grupo: não repita o card.',
     schema: { ...C } },
 
-  { name: 'caixa_preparar_fechamento', auth: 'caixa_runtime', action: 'preparar_fechamento',
+  { name: 'caixa_preparar_fechamento', auth: 'caixa_runtime', action: 'preparar_fechamento', capability: 'operacional',
     description: 'Publica o demonstrativo oficial e a prévia para FECHAR o Caixa. Não fecha ainda; espera “pode”. Use quando pedirem fechamento, nunca calcule o saldo por conta própria. A ferramenta já publica no grupo: não repita o demonstrativo.',
     schema: { ...C } },
 
@@ -234,12 +234,37 @@ function chatNoCanario(chat) {
   return lista.includes(chat);
 }
 
-async function contextoCaixa(args) {
+function chatFinanceiroOficial(chat) {
+  return String(process.env.SOL_CAIXA_FINANCE_GROUPS || '')
+    .split(';')
+    .map((item) => String(item || '').split('|')[0].trim())
+    .filter(Boolean)
+    .includes(chat);
+}
+
+function chatComCapacidade(chat, capability = 'agent_first') {
+  if (chatNoCanario(chat)) return true;
+  return (capability === 'consulta' || capability === 'operacional')
+    && chatFinanceiroOficial(chat);
+}
+
+function validarEnvelopeCaixa(args, capability = 'agent_first') {
   const cracha = String((args && args.p_cracha) || '').trim().replace(/[^A-Za-z0-9.]/g, '');
   const chat = String((args && args.p_chat_id) || '').trim().replace(/[^A-Za-z0-9@._:-]/g, '');
   if (!/^SOL1\.[0-9]+\.[0-9a-f]{32}$/.test(cracha)) return { ok: false, motivo: 'cracha_assinado_obrigatorio' };
   if (!chat.endsWith('@g.us')) return { ok: false, motivo: 'chat_oficial_obrigatorio' };
-  if (!chatNoCanario(chat)) return { ok: false, motivo: 'caixa_agent_tools_fora_do_canario' };
+  if (!chatComCapacidade(chat, capability)) {
+    return { ok: false, motivo: capability === 'agent_first'
+      ? 'caixa_agent_tools_fora_do_canario'
+      : 'caixa_capacidade_fora_do_grupo_oficial' };
+  }
+  return { ok: true, _chat: chat, _cracha: cracha };
+}
+
+async function contextoCaixa(args, capability = 'agent_first') {
+  const envelope = validarEnvelopeCaixa(args, capability);
+  if (!envelope.ok) return envelope;
+  const { _chat: chat, _cracha: cracha } = envelope;
   const ctx = await rpc('sol_porta_caixa_contexto_v1', { p_cracha: cracha, p_chat_id: chat });
   return { ...(ctx || {}), _chat: chat, _cracha: cracha, _episode_id: String((args && args.p_episode_id) || '').trim() };
 }
@@ -297,7 +322,7 @@ function idMensagem(ctx, action, args) {
 }
 
 async function executarRuntimeCaixa(p, args) {
-  const ctx = await contextoCaixa(args);
+  const ctx = await contextoCaixa(args, p.capability || 'agent_first');
   if (!ctx.ok) return j(ctx);
   carregarRuntimeCaixa();
   gruposCaixa[ctx._chat] = { unidade_id: ctx.unidade_id, nome: ctx.unidade_nome || 'unidade' };
@@ -354,7 +379,9 @@ async function executarRuntimeCaixa(p, args) {
     const body = `saída ${categoria} R$ ${valor.toFixed(2).replace('.', ',')} ${forma} ${descricao}`;
     resultado = await handlerCaixa.handle({ ...base, body });
   } else if (p.action === 'preparar_abertura') {
-    resultado = await abfCaixa.postarAbertura({ chat_id: ctx._chat, unidade_id: ctx.unidade_id, nome: ctx.unidade_nome }, { sendFn: enviarPeloBridge });
+    resultado = await abfCaixa.postarAbertura(
+      { chat_id: ctx._chat, unidade_id: ctx.unidade_id, nome: ctx.unidade_nome },
+      { sendFn: enviarPeloBridge, event: base, governanceFn });
   } else if (p.action === 'preparar_fechamento') {
     resultado = await abfCaixa.tratarPedidoDiretoFechamento(
       { ...base, body: 'Sol, vamos fechar o caixa agora' },
@@ -412,15 +439,9 @@ async function despachar(name, args) {
   if (!p) return j({ ok: false, motivo: 'porta_desconhecida', porta: name });
   if (p.auth === 'caixa_runtime') return executarRuntimeCaixa(p, args || {});
   if (p.auth === 'caixa_assinado') {
-    const cracha = String((args && args.p_cracha) || '').trim().replace(/[^A-Za-z0-9.]/g, '');
-    const chat = String((args && args.p_chat_id) || '').trim().replace(/[^A-Za-z0-9@._:-]/g, '');
-    if (!/^SOL1\.[0-9]+\.[0-9a-f]{32}$/.test(cracha)) {
-      return j({ ok: false, motivo: 'cracha_assinado_obrigatorio' });
-    }
-    if (!chat.endsWith('@g.us')) {
-      return j({ ok: false, motivo: 'chat_oficial_obrigatorio' });
-    }
-    if (!chatNoCanario(chat)) return j({ ok: false, motivo: 'caixa_agent_tools_fora_do_canario' });
+    const envelope = validarEnvelopeCaixa(args, p.capability || 'agent_first');
+    if (!envelope.ok) return j(envelope);
+    const { _cracha: cracha, _chat: chat } = envelope;
     const limpos = { p_cracha: cracha, p_chat_id: chat };
     for (const [k, v] of Object.entries(args || {})) {
       if (k !== 'p_cracha' && k !== 'p_chat_id' && k !== 'p_episode_id' && v !== null && v !== undefined && v !== '') limpos[k] = v;
