@@ -9,6 +9,7 @@ import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/contexts/AuthContext';
 import { getStatusPagamentoOperacional, isMatriculaAtivaParaInadimplencia } from '@/lib/alunosStatus';
+import { rotuloDeQuem, rotuloDeQuemCurto, nomeDoContato } from '@/lib/comunidadeWaContato';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 import { useToast } from '@/hooks/useToast';
@@ -1444,12 +1445,29 @@ export function TabelaAlunos({
     if (estado === 'na_comunidade') {
       const grupo = aluno.comunidade_wa_grupo_nome || '';
       const outraUnidade = aluno.comunidade_wa_mesma_unidade === false;
+      // LAPE-34 — qual contato daquele aluno esta no grupo. Os rotulos saem de
+      // comunidadeWaContato.ts, a MESMA fonte que a Ficha usa: se a coluna dissesse
+      // "responsavel" e a ficha "aluno" para a mesma pessoa, nenhuma das duas serviria.
+      const telefone = aluno.comunidade_wa_contato_telefone;
+      const deQuem = aluno.comunidade_wa_contato_de_quem ?? null;
+      const outros = Math.max(0, (aluno.comunidade_wa_contatos_total ?? 1) - 1);
+      const linhas = [
+        grupo ? `${grupo}${outraUnidade ? ' (outra unidade)' : ''}` : 'Na comunidade',
+        telefone ? `${telefone} — ${rotuloDeQuem(deQuem)}` : null,
+        nomeDoContato({ nome: aluno.comunidade_wa_contato_nome ?? null, parentesco: aluno.comunidade_wa_contato_parentesco ?? null }),
+        outros > 0 ? `+${outros} contato${outros > 1 ? 's' : ''} desta pessoa no grupo` : null,
+      ].filter(Boolean).join('\n');
       return (
-        <Tooltip content={grupo ? `${grupo}${outraUnidade ? ' (outra unidade)' : ''}` : 'Na comunidade'}>
-          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${
+        <Tooltip content={linhas}>
+          <span className={`inline-flex flex-col items-start gap-0.5 px-2 py-1 rounded text-xs font-medium ${
             outraUnidade ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'
           }`}>
-            ✓ {grupo || 'Dentro'}
+            <span>✓ {grupo || 'Dentro'}</span>
+            {telefone && (
+              <span className="font-normal opacity-80">
+                {telefone} · {rotuloDeQuemCurto(deQuem)}{outros > 0 ? ` +${outros}` : ''}
+              </span>
+            )}
           </span>
         </Tooltip>
       );

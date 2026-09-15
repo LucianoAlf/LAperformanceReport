@@ -3,6 +3,7 @@ import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+import { normalizarContatos, type ComunidadeWaContato, type ComunidadeWaDeQuem } from '@/lib/comunidadeWaContato';
 import { format } from 'date-fns';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import { ptBR } from 'date-fns/locale';
@@ -155,6 +156,15 @@ export interface Aluno {
   comunidade_wa_grupo_nome?: string | null;
   comunidade_wa_mesma_unidade?: boolean | null;
   comunidade_wa_capturado_em?: string | null;
+  // LAPE-34 — QUAL contato do aluno esta no grupo. `de_quem` distingue o numero do
+  // aluno do numero do responsavel; `aluno_e_responsavel` e o caso (31%) em que o
+  // cadastro guarda o MESMO numero nos dois campos, e nao uma indecisao nossa.
+  comunidade_wa_contato_telefone?: string | null;
+  comunidade_wa_contato_de_quem?: ComunidadeWaDeQuem | null;
+  comunidade_wa_contato_nome?: string | null;
+  comunidade_wa_contato_parentesco?: string | null;
+  comunidade_wa_contatos_total?: number | null;
+  comunidade_wa_contatos?: ComunidadeWaContato[];
 }
 
 export interface Turma {
@@ -745,7 +755,7 @@ export function AlunosPage() {
 
     // Comunidade WhatsApp (LAPE-33) — vw_aluno_comunidade_wa_v1, captura diaria.
     let qComunidadeWa = supabase.from('vw_aluno_comunidade_wa_v1')
-      .select('aluno_id, estado, grupo_nome, grupo_mesma_unidade, capturado_em');
+      .select('aluno_id, estado, grupo_nome, grupo_mesma_unidade, capturado_em, contato_telefone, contato_de_quem, contato_nome, contato_parentesco, contatos_no_grupo_total, contatos_no_grupo');
     if (unidadeAtual && unidadeAtual !== 'todos') qComunidadeWa = qComunidadeWa.eq('unidade_id', unidadeAtual);
 
     // Disparar tudo em paralelo: alunos (paginado), turmas operacionais, KPI canônico,
@@ -880,13 +890,19 @@ export function AlunosPage() {
       });
 
       // Mapa de comunidade WhatsApp (LAPE-33) — 1 linha por aluno_id na view
-      const comunidadeWaMap = new Map<number, { estado: string; grupo_nome: string | null; grupo_mesma_unidade: boolean | null; capturado_em: string | null }>();
+      const comunidadeWaMap = new Map<number, { estado: string; grupo_nome: string | null; grupo_mesma_unidade: boolean | null; capturado_em: string | null; contato_telefone: string | null; contato_de_quem: string | null; contato_nome: string | null; contato_parentesco: string | null; contatos_no_grupo_total: number | null; contatos_no_grupo: unknown }>();
       (comunidadeWaR as any)?.data?.forEach((c: any) => {
         comunidadeWaMap.set(c.aluno_id, {
           estado: c.estado,
           grupo_nome: c.grupo_nome,
           grupo_mesma_unidade: c.grupo_mesma_unidade,
           capturado_em: c.capturado_em,
+          contato_telefone: c.contato_telefone,
+          contato_de_quem: c.contato_de_quem,
+          contato_nome: c.contato_nome,
+          contato_parentesco: c.contato_parentesco,
+          contatos_no_grupo_total: c.contatos_no_grupo_total,
+          contatos_no_grupo: c.contatos_no_grupo,
         });
       });
 
@@ -913,6 +929,12 @@ export function AlunosPage() {
           comunidade_wa_grupo_nome: comunidadeWaMap.get(a.id)?.grupo_nome ?? null,
           comunidade_wa_mesma_unidade: comunidadeWaMap.get(a.id)?.grupo_mesma_unidade ?? null,
           comunidade_wa_capturado_em: comunidadeWaMap.get(a.id)?.capturado_em ?? null,
+          comunidade_wa_contato_telefone: comunidadeWaMap.get(a.id)?.contato_telefone ?? null,
+          comunidade_wa_contato_de_quem: (comunidadeWaMap.get(a.id)?.contato_de_quem as ComunidadeWaDeQuem | null) ?? null,
+          comunidade_wa_contato_nome: comunidadeWaMap.get(a.id)?.contato_nome ?? null,
+          comunidade_wa_contato_parentesco: comunidadeWaMap.get(a.id)?.contato_parentesco ?? null,
+          comunidade_wa_contatos_total: comunidadeWaMap.get(a.id)?.contatos_no_grupo_total ?? null,
+          comunidade_wa_contatos: normalizarContatos(comunidadeWaMap.get(a.id)?.contatos_no_grupo),
         };
       });
 

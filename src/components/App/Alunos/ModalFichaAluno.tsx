@@ -56,6 +56,7 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { DatePickerNascimento } from '@/components/ui/date-picker-nascimento';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { rotuloDeQuem, nomeDoContato } from '@/lib/comunidadeWaContato';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
@@ -1955,6 +1956,23 @@ export function ModalFichaAluno({
                     </span>
                   )}
                 </div>
+                {/* LAPE-34 — QUAIS contatos desta pessoa estao no grupo. Lista todos (25
+                    alunos tem 2+, tipicamente mae e pai); a Lista de Alunos mostra so o
+                    primeiro. Os rotulos saem de comunidadeWaContato.ts, fonte unica
+                    compartilhada com a coluna da Lista. */}
+                {aluno.comunidade_wa_estado === 'na_comunidade' && (aluno.comunidade_wa_contatos?.length ?? 0) > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {aluno.comunidade_wa_contatos!.map((contato, i) => (
+                      <li key={`${contato.telefone ?? 'sem-telefone'}-${i}`} className="flex flex-wrap items-baseline gap-x-2 text-xs">
+                        <span className="text-slate-200 font-medium">{contato.telefone ?? 'número não identificado'}</span>
+                        <span className="text-slate-400">{rotuloDeQuem(contato.de_quem)}</span>
+                        {nomeDoContato(contato) && (
+                          <span className="text-slate-500">· {nomeDoContato(contato)}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
 
               <div className="border-t border-slate-700 pt-4">
