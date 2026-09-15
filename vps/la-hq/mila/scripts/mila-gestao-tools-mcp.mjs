@@ -189,6 +189,22 @@ async function entregarNaConversa(texto, rotulo) {
            nota: `${rotulo} já foi enviado inteiro na conversa — NÃO repita o texto; comente em 1-2 linhas o que mais importa e pergunte se quer detalhar algo.` };
 }
 
+// 🔴 RELATÓRIO É ENVIO, NÃO CONSULTA (15/09/2026). O Alf perguntou "quais novos alunos da
+// Barra matriculados em setembro não estão na comunidade?" e a Mila disparou o RELATÓRIO DE
+// MATRÍCULAS inteiro no WhatsApp dele ANTES de responder — a resposta em si saiu certa.
+// A descrição já dizia "ENTREGA na conversa", mas declarar o EFEITO não é declarar a
+// PRECONDIÇÃO: o modelo leu a tool como "onde moram as matrículas do mês". Pior, a descrição
+// do relatorio_mensal_comercial mandava usar relatorio_matriculas para o mês corrente.
+// Agora o pedido tem de ser DECLARADO, e a recusa ensina o caminho de leitura.
+const PEDIDO_EXPLICITO = { type: 'boolean', description: 'true SÓ quando a pessoa PEDIU o relatório com todas as letras. Sem isso a tool recusa — e recusar é o certo, porque ela dispara mensagem no WhatsApp de quem está falando.' };
+function exigePedidoExplicito(a, tool, alternativa) {
+  if (a && a.pedido_explicito === true) return null;
+  return { recusado: true, motivo: 'pedido_nao_declarado',
+    explicacao: `${tool} DISPARA uma mensagem no WhatsApp da pessoa. Só chame quando ela pedir o relatório com todas as letras, e aí passe pedido_explicito: true.`,
+    use_no_lugar: alternativa,
+    o_que_fazer_agora: 'Responda a pergunta com a tool de consulta indicada em use_no_lugar. NÃO chame esta tool de novo.' };
+}
+
 // Unidade do relatório: quem tem unidade só vê a própria (trava, igual às RPCs);
 // quem lidera a rede diz qual — ou recebe o consolidado quando o relatório aceita.
 async function unidadeAlvo(a, { obrigatoria } = {}) {
@@ -206,19 +222,19 @@ function competenciaPadrao(a, { mesAnterior } = {}) {
 
 const RELATORIOS = [
   { name: 'relatorio_diario_comercial',
-    description: 'ENTREGA na conversa o RELATÓRIO DIÁRIO COMERCIAL — o MESMO texto, da MESMA fonte, que o grupo da unidade recebe às 20h (até o momento em que for pedido). Use quando pedirem "me manda o relatório de hoje", "relatório diário", "como está o dia" com o texto completo. `data` YYYY-MM-DD (padrão hoje). Quem lidera a rede diz `unidade`. O texto já vai inteiro na conversa: você só comenta.',
-    inputSchema: { type: 'object', properties: { data: { type: 'string', description: 'YYYY-MM-DD (padrão: hoje).' },
+    description: '🔴 ENVIA uma mensagem no WhatsApp da pessoa com o RELATÓRIO DIÁRIO COMERCIAL inteiro — o MESMO texto que o grupo da unidade recebe às 20h. SÓ chame quando ela PEDIR o relatório com todas as letras ("me manda o relatório de hoje", "manda o diário") e então passe `pedido_explicito: true`. NUNCA use para consultar, contar ou listar: para saber como está o dia SEM enviar nada use `fechamento_do_dia` ou `numeros_do_mes`. `data` YYYY-MM-DD (padrão hoje). Quem lidera a rede diz `unidade`. O texto já vai inteiro na conversa: você só comenta.',
+    inputSchema: { type: 'object', properties: { pedido_explicito: PEDIDO_EXPLICITO, data: { type: 'string', description: 'YYYY-MM-DD (padrão: hoje).' },
       unidade: { type: 'string', description: 'Barra | Campo Grande | Recreio (só para quem enxerga a rede).' } } } },
   { name: 'relatorio_mensal_comercial',
-    description: 'ENTREGA na conversa o RELATÓRIO MENSAL COMERCIAL oficial (o fechamento que a equipe recebeu). Só existe para mês FECHADO; para o mês corrente use numeros_do_mes ou relatorio_matriculas. `ano`/`mes` (padrão: mês anterior). Quem lidera a rede diz `unidade`.',
-    inputSchema: { type: 'object', properties: { ano: { type: 'integer' }, mes: { type: 'integer' },
+    description: '🔴 ENVIA uma mensagem no WhatsApp da pessoa com o RELATÓRIO MENSAL COMERCIAL oficial (o fechamento que a equipe recebeu). SÓ chame quando ela PEDIR o relatório com todas as letras, e então passe `pedido_explicito: true`. Só existe para mês FECHADO. ⚠️ Para CONSULTAR o mês corrente sem enviar nada use `numeros_do_mes` — NUNCA `relatorio_matriculas`, que também dispara mensagem. `ano`/`mes` (padrão: mês anterior). Quem lidera a rede diz `unidade`.',
+    inputSchema: { type: 'object', properties: { pedido_explicito: PEDIDO_EXPLICITO, ano: { type: 'integer' }, mes: { type: 'integer' },
       unidade: { type: 'string', description: 'Barra | Campo Grande | Recreio (só para quem enxerga a rede).' } } } },
   { name: 'relatorio_matriculas',
-    description: 'ENTREGA na conversa o RELATÓRIO DE MATRÍCULAS do mês (resumo, LAMK/EMLA, passaportes, parcelas, tickets, por canal, por curso e a lista detalhada) — a MESMA RPC que o botão do LA Report usa. `ano`/`mes` (padrão: mês corrente). Mês fechado sai do fechamento oficial; corrente sai ao vivo. Quem lidera a rede pode pedir `unidade` ou receber o consolidado.',
-    inputSchema: { type: 'object', properties: { ano: { type: 'integer' }, mes: { type: 'integer' }, unidade: { type: 'string' } } } },
+    description: '🔴 ENVIA uma mensagem no WhatsApp da pessoa com o RELATÓRIO DE MATRÍCULAS do mês inteiro (resumo, LAMK/EMLA, passaportes, parcelas, tickets, por canal, por curso e a lista detalhada) — a MESMA RPC do botão do LA Report. SÓ chame quando ela PEDIR o relatório com todas as letras ("me manda o relatório de matrículas"), e então passe `pedido_explicito: true`. NUNCA use como consulta: para saber QUEM matriculou no mês, quantos, ou quem falta anamnese/comunidade, use `pendencias_comerciais`, `numeros_do_mes` ou `consultar_base_comercial` — respondem sem enviar nada. `ano`/`mes` (padrão: mês corrente). Mês fechado sai do fechamento oficial; corrente sai ao vivo.',
+    inputSchema: { type: 'object', properties: { pedido_explicito: PEDIDO_EXPLICITO, ano: { type: 'integer' }, mes: { type: 'integer' }, unidade: { type: 'string' } } } },
   { name: 'relatorio_comparativo',
-    description: 'ENTREGA na conversa o RELATÓRIO COMPARATIVO (leads, experimentais REALIZADAS, visitas, matrículas e ticket) de um mês contra a base: `base` = "mes_anterior" (padrão) ou "ano_anterior". Mesma RPC do botão do LA Report. `ano`/`mes` (padrão: mês corrente). Quem lidera a rede pode pedir `unidade` ou receber o consolidado.',
-    inputSchema: { type: 'object', properties: { ano: { type: 'integer' }, mes: { type: 'integer' },
+    description: '🔴 ENVIA uma mensagem no WhatsApp da pessoa com o RELATÓRIO COMPARATIVO (leads, experimentais REALIZADAS, visitas, matrículas e ticket) de um mês contra a base. SÓ chame quando ela PEDIR o comparativo com todas as letras, e então passe `pedido_explicito: true`. Para comparar SEM enviar nada use `numeros_do_mes` ou `o_que_aprendemos`. `base` = "mes_anterior" (padrão) ou "ano_anterior". `ano`/`mes` (padrão: mês corrente).',
+    inputSchema: { type: 'object', properties: { pedido_explicito: PEDIDO_EXPLICITO, ano: { type: 'integer' }, mes: { type: 'integer' },
       base: { type: 'string', enum: ['mes_anterior', 'ano_anterior'] }, unidade: { type: 'string' } } } },
   { name: 'link_la_report',
     description: 'O LINK OFICIAL do LA Report e como entrar, para quem está falando comigo (colaborador autorizado). Diz se a pessoa já tem usuário (pelo telefone dela) e o que fazer se não tiver. Use quando pedirem "me manda o link do LA Report", "como acesso o sistema", "esqueci a senha". Nunca invente outro endereço.',
@@ -596,12 +612,14 @@ _${ap.de} me pediu para te avisar. Pode me responder por aqui que eu levo a resp
         recado: 'Conversa marcada como resolvida. Agora me diz em uma palavra o que houve, que eu registro o motivo.' });
     }
     case 'relatorio_diario_comercial': {
+      { const veto = exigePedidoExplicito(a, 'relatorio_diario_comercial', 'fechamento_do_dia ou numeros_do_mes'); if (veto) return j(veto); }
       const u = await unidadeAlvo(a, { obrigatoria: true });
       const hojeBrt = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
       const r = await edgeRelatorio('dry_run_comercial', { unidade: u.id, data_referencia: a.data || hojeBrt });
       return j(await entregarNaConversa(r.texto, `O relatório diário comercial de ${u.nome}`));
     }
     case 'relatorio_mensal_comercial': {
+      { const veto = exigePedidoExplicito(a, 'relatorio_mensal_comercial', 'numeros_do_mes'); if (veto) return j(veto); }
       const u = await unidadeAlvo(a, { obrigatoria: true });
       const { ano, mes } = competenciaPadrao(a, { mesAnterior: true });
       const comp = `${String(mes).padStart(2, '0')}/${ano}`;
@@ -617,6 +635,7 @@ _${ap.de} me pediu para te avisar. Pode me responder por aqui que eu levo a resp
       }
     }
     case 'relatorio_matriculas': {
+      { const veto = exigePedidoExplicito(a, 'relatorio_matriculas', 'pendencias_comerciais, numeros_do_mes ou consultar_base_comercial'); if (veto) return j(veto); }
       const u = await unidadeAlvo(a);
       const { ano, mes } = competenciaPadrao(a);
       const texto = await rpc('relatorio_matriculas_texto_v1', { p_unidade_id: u.id, p_ano: ano, p_mes: mes,
@@ -624,6 +643,7 @@ _${ap.de} me pediu para te avisar. Pode me responder por aqui que eu levo a resp
       return j(await entregarNaConversa(String(texto || ''), `O relatório de matrículas de ${u.nome} (${String(mes).padStart(2, '0')}/${ano})`));
     }
     case 'relatorio_comparativo': {
+      { const veto = exigePedidoExplicito(a, 'relatorio_comparativo', 'numeros_do_mes ou o_que_aprendemos'); if (veto) return j(veto); }
       const u = await unidadeAlvo(a);
       const { ano, mes } = competenciaPadrao(a);
       const anual = a.base === 'ano_anterior';
