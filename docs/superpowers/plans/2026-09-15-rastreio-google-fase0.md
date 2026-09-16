@@ -15,8 +15,9 @@
 - **Não trocar a frase — prefixar.** A frase nova é `Vim pelo Google. ` + a frase atual, verbatim. Trocar a frase inteira exigiria decidir marca (Kids × School), que não está declarada nas campanhas P.Max e seria chute.
 - **Marcador exato:** `Vim pelo Google.` — é por essa string que a medição e, depois, a Fase 1 vão procurar. Não variar capitalização entre campanhas.
 - **Inboxes da medição:** `147` (Barra), `148` (CG), `155` (Recreio). São as únicas com texto pré-preenchido; as de secretaria (168, 179, 180) têm zero e não entram.
-- **Baseline:** ~6 leads de Google/dia (551 em 90 dias) = **~42 em 7 dias**.
-- **Cortes de decisão:** ≥25 conversas com o marcador → seguir para a Fase 1. <13 → abandonar o texto e ir para número dedicado por unidade. Entre 13 e 24 → estender por mais 7 dias.
+- **Baseline, com ressalva:** ~6 leads declarados como Google/dia (551 em 90 dias) = ~42 em 7 dias. ⚠️ **Esse número NÃO é o teto do marcador.** "Google" é rótulo **declarado no cadastro do Emusys** (`upsert_lead` traduz o que a consultora digitou) e inclui **busca orgânica e Google Maps**, que nunca passam pelo link do anúncio. Nenhuma fonte separa orgânico de pago hoje — é justamente o que este projeto existe para criar. Logo, `com_marcador` **abaixo** dos declarados é o esperado, não fracasso.
+- **Cortes de decisão:** ≥15 conversas com o marcador em 7 dias (~2/dia) → o mecanismo funciona, seguir para a Fase 1. Entre 5 e 14 → funciona com cobertura parcial, estender por mais 7 dias antes de decidir. <5 → o texto não sobrevive, ir para número dedicado por unidade.
+- ⚠️ **O corte mede o mecanismo, não a cobertura.** Saber que fração dos cliques sobrevive exigiria conhecer quantos clicaram no link — e isso só o pedágio da Fase 2 informa. A Fase 0 responde "funciona?", não "funciona quanto?".
 - **Não mexer em verba, lance, público ou criativo.** Só a URL de destino. Qualquer outra alteração contamina a medição e atrapalha o gestor.
 
 ---
@@ -225,9 +226,9 @@ where canal_origem_id = 3
 
 | Resultado | Leitura |
 |---|---|
-| `com_marcador` ≈ `leads_google_declarados` | o texto sobrevive **e** a declaração manual é razoável |
-| `com_marcador` muito abaixo | ou o texto morre, ou os declarados não eram Google — indistinguível sem a Fase 1 |
-| `com_marcador` **acima** dos declarados | o texto sobrevive e a declaração manual **subconta** o Google |
+| `com_marcador` ≈ `leads_google_declarados` | o texto sobrevive **e** quase todo o "Google" declarado é anúncio |
+| `com_marcador` abaixo | **esperado.** Parte do "Google" declarado é busca orgânica e Maps, que não passam pelo link do anúncio. Só o corte de ≥15 decide |
+| `com_marcador` **acima** dos declarados | o texto sobrevive e a declaração manual **subconta** o Google — achado próprio, vale registrar |
 
 ⚠️ **Antes de concluir qualquer coisa, conferir o denominador da veiculação:** se as campanhas gastaram muito menos que o normal na semana, o número baixo é de tráfego, não de sobrevivência do texto.
 
@@ -266,9 +267,9 @@ O que procurar: gente que apagou **só o prefixo** e manteve o resto. Se isso ap
 
 | `com_marcador` em 7 dias | Decisão |
 |---|---|
-| ≥ 25 | Seguir para a Fase 1 (LAPE-36). Escrever o plano da Fase 1 |
-| 13 a 24 | Estender a medição por mais 7 dias e reavaliar |
-| < 13 | Abandonar o texto. Reabrir a decisão de número de WhatsApp dedicado por unidade |
+| ≥ 15 | Seguir para a Fase 1 (LAPE-36). Escrever o plano da Fase 1 |
+| 5 a 14 | Estender a medição por mais 7 dias e reavaliar |
+| < 5 | Abandonar o texto. Reabrir a decisão de número de WhatsApp dedicado por unidade |
 
 - [ ] **Step 2: Registrar no daily-note**
 

@@ -141,15 +141,23 @@ informativos:
 
 | Resultado | Leitura |
 |---|---|
-| Frase ≈ declarados | o texto sobrevive **e** a declaração manual é razoável |
-| Frase muito abaixo | ou o texto morre, ou os declarados não eram Google — indistinguível sem a Fase 1 |
+| Frase ≈ declarados | o texto sobrevive **e** quase todo o "Google" declarado é anúncio |
+| Frase abaixo | **esperado** — ver ressalva do teto abaixo |
 | Frase **acima** dos declarados | o texto sobrevive e a declaração manual **subconta** o Google |
 
-Como baseline, o volume esperado é ~6 conversas/dia (551 em 90 dias), ou seja **~42 em 7 dias**.
+⚠️ **O volume declarado NÃO é o teto.** "Google" é rótulo escolhido no cadastro do Emusys
+(`upsert_lead` traduz 28 valores recebidos) e engloba **busca orgânica e Google Maps**, que
+nunca passam pelo link do anúncio. Nenhuma fonte separa orgânico de pago hoje — é o que este
+projeto existe para criar. Medido em 90 dias: `GOOGLE` + `Google` = 1.434 eventos vindos do
+Emusys, e `SITE DA ESCOLA` (que o mapeamento também traduz para Google) **zero** — o rótulo
+existe no `case` mas está morto, então ao menos o site não contamina a conta.
 
-**Critério de pronto:** 25 ou mais conversas com a frase em 7 dias (≈60% do baseline) → seguem
-as Fases 1–3. Abaixo de 13 (≈30%) → o caminho vira número dedicado por unidade. Entre os dois,
-estender a medição por mais 7 dias antes de decidir.
+**Critério de pronto:** 15 ou mais conversas com a frase em 7 dias (~2/dia) → seguem as Fases
+1–3. Abaixo de 5 → o caminho vira número dedicado por unidade. Entre 5 e 14, estender por mais
+7 dias.
+
+⚠️ **A Fase 0 responde "funciona?", não "funciona quanto?"** — medir a fração de cliques que
+sobrevive exigiria saber quantos clicaram no link, e isso só o pedágio da Fase 2 informa.
 
 O site já faz isso sem saber: 30 leads chegaram com *"Estava no site da LA Music School e
 gostaria…"*. As frases atuais já separam marca (Kids/School) e unidade — só falta a origem.
