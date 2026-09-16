@@ -38,6 +38,9 @@ mídia, OCR, prompt, credencial e payload financeiro.
 - Log local append-only, modo `0600`, rotação padrão em 10 MiB e sete arquivos.
 - Banco dedicado da Sol, tabelas RLS e RPC `security definer`; escrita direta
   não é concedida.
+- O readback remoto usa RPC `security definer` autenticada pelo mesmo token
+  opaco do control plane. A anon key não recebe `SELECT` nas tabelas; a RPC
+  aceita no máximo três dias e 10.000 eventos e falha em vez de truncar.
 - Retenção padrão proposta: 35 dias. A RPC de poda aceita apenas 7–90 dias e
   **não recebe agendamento nesta entrega**.
 - Dedupe por `event_key`; redelivery só incrementa uma vez por evento novo.
@@ -67,6 +70,9 @@ transforma falha de telemetria em falha financeira.
 4. Provar uma mensagem sintética sem escrita e conferir ausência de dados crus.
 5. Ligar remoto, observar 24 horas e confrontar log local × banco.
 6. Só então iniciar os dois dias reais exigidos pelo Checkpoint 2.
+
+O readback estreito é um gate aditivo separado: migration, rollback e ensaio
+ficam versionados antes de qualquer aplicação no banco dedicado.
 
 ## Rollback
 
