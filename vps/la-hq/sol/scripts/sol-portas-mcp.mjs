@@ -48,6 +48,33 @@ for (const f of ENVS) {
   }
 }
 
+// O Hermes inicia o MCP com ambiente deliberadamente enxuto. O cadastro dos
+// grupos e o canário pertencem ao runtime da Sol, não aos dois arquivos acima.
+// Carregamos SOMENTE essas duas chaves das fontes canônicas; importar o .env
+// inteiro colocaria segredos desnecessários dentro do processo de tools.
+const SCOPE_ENV_KEYS = new Set(['SOL_CAIXA_FINANCE_GROUPS', 'SOL_CAIXA_TOOLS_CANARIO']);
+const SCOPE_ENV_FILES = process.env.SOL_CAIXA_SCOPE_ENV_FILE
+  ? [process.env.SOL_CAIXA_SCOPE_ENV_FILE]
+  : [
+      '/home/sol/.hermes/profiles/sol/.env',
+      '/home/sol/.config/systemd/user/hermes-gateway-sol.service.d/31-sol-caixa-tools-canario.conf',
+    ];
+for (const f of SCOPE_ENV_FILES) {
+  let t; try { t = fs.readFileSync(f, 'utf8'); } catch { continue; }
+  for (const linha of t.split('\n')) {
+    let s = linha.trim();
+    if (!s || s.startsWith('#')) continue;
+    if (s.startsWith('Environment=')) s = s.slice('Environment='.length).trim();
+    s = s.replace(/^["']|["']$/g, '');
+    if (s.startsWith('export ')) s = s.slice('export '.length).trim();
+    if (!s.includes('=')) continue;
+    const i = s.indexOf('=');
+    const k = s.slice(0, i).trim();
+    if (!SCOPE_ENV_KEYS.has(k) || k in process.env) continue;
+    process.env[k] = s.slice(i + 1).trim().replace(/^["']|["']$/g, '');
+  }
+}
+
 const URL = (process.env.LA_REPORT_SUPABASE_URL || process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const KEY = process.env.LA_REPORT_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
          || process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -76,7 +103,10 @@ async function rpc(fn, args) {
 
 // ── as 12 portas ────────────────────────────────────────────────────────────
 // ⚠️ `Q` (quem) entra em TODA porta; `U` (unidade) so onde faz sentido.
-const Q = { p_solicitante_telefone: { type: 'string', description: 'Quem está perguntando. 🔴 Se a mensagem trouxer `[cracha: SOL1....]`, cole o CRACHÁ INTEIRO aqui — ele é assinado e é a prova de quem falou. Só se não houver crachá, use o número de `[telefone_remetente: ...]`, só os dígitos. Não é opcional e não é para inventar: decide qual unidade você enxerga, e toda chamada fica registrada. Sem saber quem falou, pergunte em vez de chutar.' } };
+const Q = {
+  p_solicitante_telefone: { type: 'string', description: 'Quem está perguntando. 🔴 Se a mensagem trouxer `[cracha: SOL1....]`, cole o CRACHÁ INTEIRO aqui — ele é assinado e é a prova de quem falou. Só se não houver crachá, use o número de `[telefone_remetente: ...]`, só os dígitos. Não é opcional e não é para inventar: decide qual unidade você enxerga, e toda chamada fica registrada. Sem saber quem falou, pergunte em vez de chutar.' },
+  p_chat_id: { type: 'string', description: 'Quando houver `[chat_caixa: ...]`, copie o chat exatamente. Ele é obrigatório para validar um crachá emitido dentro de grupo.' },
+};
 const U = { ...Q, p_unidade: { type: 'string', description: 'Só a diretoria escolhe unidade. Para os demais, deixe vazio — eu já sei qual é a sua.' } };
 const C = {
   p_cracha: { type: 'string', description: 'Crachá SOL1 completo da linha `[cracha: ...]`. Obrigatório: não use o telefone como substituto.' },
@@ -485,14 +515,25 @@ async function despachar(name, args) {
   //    nao resolve ninguem. Foi a propria auditoria (`telefone_alegado`) que
   //    mostrou, porque ela grava o que FOI MANDADO, nao o que eu quis mandar.
   const _bruto = String((args && args.p_solicitante_telefone) || TEL_ENSAIO || "").trim();
-  const tel = /^SOL1./.test(_bruto)
-    ? _bruto.replace(/[^A-Za-z0-9.]/g, "")   // cracha: so tira lixo de colagem
-    : _bruto.replace(/\D/g, "");    // telefone: digitos
+  let tel;
+  if (/^SOL1\./.test(_bruto)) {
+    const cracha = _bruto.replace(/[^A-Za-z0-9.]/g, "");
+    const chat = String((args && args.p_chat_id) || '').trim().replace(/[^A-Za-z0-9@._:-]/g, '');
+    if (!chat.endsWith('@g.us')) return j({ ok: false, motivo: 'chat_oficial_obrigatorio',
+      recado: 'Esse crachá foi emitido em grupo. Passe também o `[chat_caixa: ...]` da mensagem.' });
+    const verificado = await rpc('sol_cracha_verificar_v1', { p_cracha: cracha, p_chat: chat });
+    if (!verificado || !verificado.ok) return j({ ok: false, motivo: 'cracha_invalido',
+      detalhe: String((verificado && verificado.motivo) || 'verificacao_falhou').slice(0, 80) });
+    tel = String(verificado.telefone || '').replace(/\D/g, '');
+  } else {
+    tel = _bruto.replace(/\D/g, '');
+  }
   if (!tel) return j({ ok: false, motivo: 'sem_solicitante',
     recado: 'Não sei quem está perguntando. Passe o `[cracha: ...]` da mensagem, ou o número de `[telefone_remetente: ...]` — sem isso eu não sei qual unidade mostrar.' });
   const limpos = { p_solicitante_telefone: tel };
   for (const [k, v] of Object.entries(args || {})) {
-    if (v !== null && v !== undefined && v !== '') limpos[k] = v;
+    if (k !== 'p_solicitante_telefone' && k !== 'p_chat_id'
+        && v !== null && v !== undefined && v !== '') limpos[k] = v;
   }
   return j(await rpc(p.fn, limpos));
 }

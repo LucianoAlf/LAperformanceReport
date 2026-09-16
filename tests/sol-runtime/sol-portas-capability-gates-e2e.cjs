@@ -16,10 +16,17 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sol-portas-capability-'));
 const runtime = path.join(tmp, 'runtime.cjs');
 const abf = path.join(tmp, 'abf.cjs');
 const calls = path.join(tmp, 'calls.jsonl');
+const scopeEnv = path.join(tmp, 'scope.env');
 const CHAT_CANARIO = 'recreio@g.us';
 const CHAT_BARRA = 'barra@g.us';
 const CHAT_FORA = 'outro@g.us';
 const CRACHA = 'SOL1.5521999999999.' + 'a'.repeat(32);
+
+fs.writeFileSync(scopeEnv, [
+  `SOL_CAIXA_FINANCE_GROUPS=${CHAT_CANARIO}|unidade-recreio|Recreio;${CHAT_BARRA}|unidade-barra|Barra`,
+  `SOL_CAIXA_TOOLS_CANARIO=${CHAT_CANARIO}`,
+  'SEGREDO_FORA_DO_ESCOPO=nao_importar',
+].join('\n'));
 
 fs.writeFileSync(runtime, `
 const fs=require('fs'); const LOG=${JSON.stringify(calls)};
@@ -56,6 +63,17 @@ const server = http.createServer((req, res) => {
     if (req.url === '/rest/v1/rpc/sol_porta_caixa_do_dia_assinado_v1') {
       return res.end(JSON.stringify({ ok: true, estado: 'aberto' }));
     }
+    if (req.url === '/rest/v1/rpc/sol_cracha_verificar_v1') {
+      const args = JSON.parse(body || '{}');
+      assert.strictEqual(args.p_chat, CHAT_CANARIO);
+      assert.strictEqual(args.p_cracha, CRACHA);
+      return res.end(JSON.stringify({ ok: true, telefone: '5521999999999' }));
+    }
+    if (req.url === '/rest/v1/rpc/sol_porta_inadimplencia_v1') {
+      const args = JSON.parse(body || '{}');
+      assert.deepStrictEqual(args, { p_solicitante_telefone: '5521999999999' });
+      return res.end(JSON.stringify({ ok: true, total: 2 }));
+    }
     res.statusCode = 404;
     res.end('{}');
   });
@@ -72,8 +90,9 @@ const server = http.createServer((req, res) => {
         SOL_CAIXA_RUNTIME: runtime, SOL_CAIXA_ABF_RUNTIME: abf,
         SOL_CAIXA_GOVERNANCA_RUNTIME: path.join(root, 'vps/la-hq/sol/runtime/caixa-governanca-shadow.cjs'),
         SOL_CAIXA_GOVERNANCA_SHADOW: '0',
-        SOL_CAIXA_TOOLS_CANARIO: CHAT_CANARIO,
-        SOL_CAIXA_FINANCE_GROUPS: `${CHAT_CANARIO}|unidade-recreio|Recreio;${CHAT_BARRA}|unidade-barra|Barra`,
+        SOL_CAIXA_SCOPE_ENV_FILE: scopeEnv,
+        SOL_CAIXA_TOOLS_CANARIO: undefined,
+        SOL_CAIXA_FINANCE_GROUPS: undefined,
       }, stdio: ['pipe', 'pipe', 'pipe'],
     });
   let out = '';
@@ -89,19 +108,26 @@ const server = http.createServer((req, res) => {
     p_texto_original: 'Pagamento R$ 100,00', p_valor_total: 100,
   });
   chamar(4, 'caixa_do_dia', CHAT_FORA, { p_data: '2026-09-14' });
+  child.stdin.write(JSON.stringify({
+    jsonrpc: '2.0', id: 5, method: 'tools/call',
+    params: { name: 'inadimplencia', arguments: {
+      p_solicitante_telefone: CRACHA, p_chat_id: CHAT_CANARIO,
+    } },
+  }) + '\n');
 
   const limite = Date.now() + 5000;
-  while ((out.match(/"jsonrpc"/g) || []).length < 4 && Date.now() < limite) {
+  while ((out.match(/"jsonrpc"/g) || []).length < 5 && Date.now() < limite) {
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   child.kill('SIGTERM');
   const respostas = out.trim().split('\n').filter(Boolean).map(JSON.parse)
     .sort((a, b) => a.id - b.id).map((rpc) => respostaMcp(JSON.stringify(rpc)));
-  assert.strictEqual(respostas.length, 4, out);
+  assert.strictEqual(respostas.length, 5, out);
   assert.strictEqual(respostas[0].ok, true, 'consulta oficial da Barra deve funcionar');
   assert.strictEqual(respostas[1].ok, true, 'preview de abertura da Barra deve funcionar');
   assert.strictEqual(respostas[2].motivo, 'caixa_agent_tools_fora_do_canario');
   assert.strictEqual(respostas[3].motivo, 'caixa_capacidade_fora_do_grupo_oficial');
+  assert.strictEqual(respostas[4].ok, true, 'crachá genérico deve ser validado no chat antes da RPC');
   const executadas = fs.readFileSync(calls, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
   assert.deepStrictEqual(executadas, [{ tipo: 'abertura', chat: CHAT_BARRA }]);
   console.log('portas Caixa: consulta/operação oficial separadas do canário agent-first — OK');

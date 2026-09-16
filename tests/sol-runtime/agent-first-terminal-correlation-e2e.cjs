@@ -69,5 +69,15 @@ const factory = new Function(`${src.slice(start, end)}\nreturn createAgentFirstC
   assert(src.includes("terminal_state: 'agent_reply_sent'"));
   assert(src.includes("terminal_state: 'agent_reply_failed'"));
   assert(src.includes('_agentFirstCorrelation.register({'));
+  const socketStart = src.indexOf('async function startSocket()');
+  const correlationDeclaration = src.indexOf('let _agentFirstCorrelation = null;');
+  assert(correlationDeclaration >= 0 && correlationDeclaration < socketStart,
+    'correlação precisa existir no escopo do módulo antes de startSocket');
+  assert(!src.includes('const _agentFirstCorrelation = createAgentFirstCorrelation'),
+    'startSocket não pode sombrear a correlação consumida pelas rotas HTTP');
+  assert(src.includes("if (replyTo && !_agentFirstCorrelation)"),
+    '/send deve recusar antes do envio se a correlação ainda não estiver pronta');
+  assert(src.includes('await closeAgentFirstByReplySafely({'),
+    'falha de telemetria não pode derrubar a bridge depois do envio');
   console.log('agent-first terminal: resposta, falha, TTL e duplicidade — OK');
 })().catch((error) => { console.error(error && error.stack || error); process.exit(1); });
