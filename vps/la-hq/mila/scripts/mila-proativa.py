@@ -276,10 +276,11 @@ def conversa_da_consultora(telefone, unidade_nome):
     return max(achadas, key=lambda cv: cv.get("last_activity_at") or 0)["id"]
 
 
-def enviar(telefone, unidade_nome, texto):
+def enviar(telefone, unidade_nome, texto, origem="consultora"):
     cid = conversa_da_consultora(telefone, unidade_nome)
     r = _cw("POST", f"/conversations/{cid}/messages",
             {"content": texto, "message_type": "outgoing", "private": False})
+    _registrar_contexto_proativo(telefone, texto, origem)
     return {"conversation_id": cid, "message_id": r.get("id")}
 
 
@@ -470,10 +471,27 @@ def conversa_da_lideranca(telefone):
     return max(achadas, key=lambda cv: cv.get("last_activity_at") or 0)["id"]
 
 
-def enviar_lideranca(telefone, texto):
+# 🔴 CONTEXTO PROATIVO (16/09/2026). A sessao interativa da Mila com o Hermes
+# e PERSISTENTE por telefone (chatwoot-mila-bridge.js, --continue), mas so
+# "ouve" o que passa por ela. Um envio deste script vai direto ao Chatwoot, sem
+# Hermes no meio -- entao, sem isto, a Mila responde "sim"/"quero" reabrindo o
+# ultimo turno que REALMENTE processou, que pode ser de dias atras (caso real:
+# Alf respondeu ao briefing da manha e ela retomou uma conversa de 14/09 sobre
+# comunidade). Falha aqui NUNCA derruba o envio -- registrar depois de mandar,
+# nunca antes, e engolir exception.
+def _registrar_contexto_proativo(telefone, texto, origem):
+    try:
+        rpc("mila_registrar_envio_proativo_v1",
+            {"p_telefone": telefone, "p_texto": texto, "p_origem": origem})
+    except Exception as e:  # noqa: BLE001
+        log(f"contexto proativo NAO registrado ({e}) — envio ja saiu, sigo")
+
+
+def enviar_lideranca(telefone, texto, origem="lideranca"):
     cid = conversa_da_lideranca(telefone)
     r = _cw("POST", f"/conversations/{cid}/messages",
             {"content": texto, "message_type": "outgoing", "private": False})
+    _registrar_contexto_proativo(telefone, texto, origem)
     return {"conversation_id": cid, "message_id": r.get("id")}
 
 
@@ -817,7 +835,7 @@ def main():
             if a.dry_run:
                 log(f"--- {c['apelido']} ({c['unidade_nome']}) [DRY-RUN — nada enviado] ---\n{texto}\n")
                 continue
-            r = enviar(c["telefone"], c["unidade_nome"], texto)
+            r = enviar(c["telefone"], c["unidade_nome"], texto, origem=f"consultora_{a.tipo}")
             # O convite oferecido vai para o log para dar pra medir depois se
             # ele fez a pessoa responder. Recalculado, nao guardado: a funcao e
             # pura e deterministica, entao devolve a mesma escolha.
@@ -882,7 +900,7 @@ def main():
                 if a.dry_run:
                     log(f"--- {p.get('apelido') or p['nome']} [DRY-RUN] ---\n{texto}\n")
                     continue
-                r = enviar_lideranca(p["telefone"], texto)
+                r = enviar_lideranca(p["telefone"], texto, origem=f"lideranca_{a.tipo}")
                 concluir(log_id, "ok", {"fase": "enviado", "texto": texto, "chatwoot": r})
                 log(f"{p.get('apelido') or p['nome']}: enviado ({len(texto)} chars)")
             except Exception as e:  # noqa: BLE001

@@ -75,6 +75,59 @@ const CONSULTOR_OPCOES = {
   contextoMaxChars: Number(process.env.CONSULTOR_CONTEXTO_CHARS || gatilho.PADROES.contextoMaxChars),
 };
 
+// 🔴 CONTEXTO PROATIVO (16/09/2026). A sessão do Hermes é persistente por
+// telefone (--continue chatwoot-consultor-v2-<telefone>), mas só "ouve" o que
+// passa por ELA MESMA. Um envio do cron (mila-proativa.py) vai direto ao
+// Chatwoot, sem Hermes no meio — então, sem isto, "sim"/"quero" reabre o
+// último turno que REALMENTE passou pelo Hermes, que pode ser de dias atrás
+// (caso real, 16/09/2026: Alf respondeu ao briefing da manhã e a Mila retomou
+// uma conversa de dois dias antes, porque foi o último turno que ela viu de
+// verdade). Mesmo padrão de kill switch do gatilho acima.
+const CONTEXTO_PROATIVO_ENABLED = process.env.MILA_CONTEXTO_PROATIVO_ENABLED !== 'false';
+// ⚠️ NAO e SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY (esses apontam para o projeto
+// ANTIGO da Mila SDR, wxairgavoteauysgruyv — medido em 16/09/2026, HTTP 404 na
+// primeira tentativa). O projeto certo, o MESMO que mila-gestao-tools-mcp.mjs
+// usa, e o do LA Report: SUPABASE_LAREPORT_URL/_SERVICE_KEY, em
+// secrets/mila-sdr-tools.env (mesmo arquivo que o SDR ja carregava).
+const SUPABASE_URL = process.env.SUPABASE_LAREPORT_URL || '';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_LAREPORT_SERVICE_KEY || '';
+
+/** Chamada direta ao PostgREST — a bridge nunca falou com o Supabase antes de
+ *  hoje (quem chama RPC é o Hermes, por dentro do MCP). Sem as duas envs,
+ *  devolve null e o chamador segue sem contexto extra — nunca derruba a
+ *  resposta por causa disto. */
+async function rpcSupabase(fn, args) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return null;
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+    body: JSON.stringify(args || {}),
+  });
+  if (!res.ok) throw new Error(`rpc_${fn}_${res.status}`);
+  return res.json();
+}
+
+/** Mesma forma do blocoContexto do gatilho (consultor-gatilho.js), rótulo
+ *  diferente de propósito: aquele é "o que a PESSOA disse e você não
+ *  respondeu"; este é "o que VOCÊ mandou sozinha e ainda não foi respondido"
+ *  — confundir os dois faria ela tratar o próprio relatório como pedido da
+ *  pessoa. */
+function blocoContextoProativo(pendente) {
+  if (!pendente || !pendente.texto) return '';
+  return `A ÚLTIMA COISA QUE VOCÊ MANDOU nesta conversa (${pendente.enviado_em}, `
+    + `${pendente.origem}), ainda sem resposta — é a isso que a pessoa provavelmente `
+    + `está respondendo agora; não invente outro assunto:
+"""
+${pendente.texto}
+"""
+
+`;
+}
+
 function log(event, data = {}) {
   const line = JSON.stringify({ ts: new Date().toISOString(), event, ...data });
   console.log(line);
@@ -483,11 +536,12 @@ function extractContactId(payload) {
   return payload.sender?.id || payload.meta?.sender?.id || null;
 }
 
-function buildConsultantPrompt(name, phone, escopoLinhas, content, contexto) {
+function buildConsultantPrompt(name, phone, escopoLinhas, content, contexto, envioProativo) {
   // O bloco de contexto entra ANTES da mensagem: é o que ela já ouviu mas não
   // respondeu, e vem rotulado como contexto justamente para não ser lido como
   // uma fila de pedidos atrasados.
-  const antes = gatilho.blocoContexto(contexto);
+  const proativo = blocoContextoProativo(envioProativo);
+  const antes = proativo + gatilho.blocoContexto(contexto);
   // 🔴 `escopoLinhas` vem da GOVERNANCA (quem e a pessoa), nao do inbox. Ate
   //    08/09 esta linha dizia `Unidade: <inbox>`, e foi o que fez a Mila
   //    esconder da lider do comercial as 3 unidades que a tool tinha acabado
@@ -886,8 +940,19 @@ async function processIncoming(payload, state) {
         + 'ferramentas devolverem das três é dela por direito, e esconder qualquer parte disso é mentir.' + `\n`
         + `Caixa de entrada: ${INBOX_UNIT[inboxId] || 'desconhecida'} (é apenas a porta por onde ela escreveu, NÃO o limite do que ela enxerga)`
       : `Unidade: ${consultorUnidade || INBOX_UNIT[inboxId] || 'desconhecida'}`;
+    let envioProativoPendente = null;
+    if (consultantMode && CONTEXTO_PROATIVO_ENABLED && senderPhone) {
+      try {
+        envioProativoPendente = await rpcSupabase('mila_envio_proativo_pendente_v1',
+          { p_telefone: senderPhone, p_horas: 36 });
+      } catch (err) {
+        log('contexto_proativo_erro', { conversation_id: conversationId,
+          error: String(err?.message || err).slice(0, 200) });
+      }
+    }
     const prompt = consultantMode
-      ? buildConsultantPrompt(cwSender.name || 'Consultor', senderPhone, escopoLinhas, content, contextoGuardado)
+      ? buildConsultantPrompt(cwSender.name || 'Consultor', senderPhone, escopoLinhas, content,
+                               contextoGuardado, envioProativoPendente)
       : buildMilaPrompt(payload, currentConversation);
     const hermesHome = consultantMode ? pickHermesProfile(podeEditar) : undefined;
     // MILA_UNIDADE vai SEMPRE: e o carimbo que o MCP usa para recusar tool
@@ -926,6 +991,12 @@ async function processIncoming(payload, state) {
     const sent = await sendChatwootMessage(conversationId, reply.trim());
     markProcessed(messageId, { conversation_id: conversationId, action: 'sent', sent_id: sent?.id });
     log('reply_sent', { conversation_id: conversationId, message_id: messageId, inbox_id: inboxId, telefone: senderPhone, nome: consultorNome, preview: reply.slice(0, 160) });
+    if (consultantMode && CONTEXTO_PROATIVO_ENABLED && senderPhone) {
+      rpcSupabase('mila_marcar_contexto_proativo_usado_v1', { p_telefone: senderPhone }).catch((err) => {
+        log('contexto_proativo_marcar_erro', { conversation_id: conversationId,
+          error: String(err?.message || err).slice(0, 200) });
+      });
+    }
     return { action: 'sent', sent_id: sent?.id };
 
   } catch (err) {
