@@ -805,9 +805,19 @@ export function AlunosPage() {
       .catch((error) => ({ data: null, error }));
 
     // Comunidade WhatsApp (LAPE-33) — vw_aluno_comunidade_wa_v1, captura diaria.
-    let qComunidadeWa = supabase.from('vw_aluno_comunidade_wa_v1')
-      .select('aluno_id, estado, grupo_nome, grupo_mesma_unidade, capturado_em, contato_telefone, contato_de_quem, contato_nome, contato_parentesco, contatos_no_grupo_total, contatos_no_grupo');
-    if (unidadeAtual && unidadeAtual !== 'todos') qComunidadeWa = qComunidadeWa.eq('unidade_id', unidadeAtual);
+    // PAGINADA: a view tem 1 linha por aluno e ja passa de 1.700; sem .range() o PostgREST
+    // corta em 1.000 (max-rows) EM SILENCIO, e quem esta no Consolidado perdia o dado de
+    // centenas de alunos -- a ficha entao escrevia "Sem verificacao recente" sobre uma
+    // captura feita hoje de manha. Filtrar por unidade escondia o defeito (750 linhas em CG),
+    // entao ele so aparecia para quem enxerga a rede inteira. O .order e' obrigatorio: sem
+    // ordenacao estavel, paginar por range pode repetir e pular linha.
+    const buildComunidadeWaQuery = () => {
+      let q = supabase.from('vw_aluno_comunidade_wa_v1')
+        .select('aluno_id, estado, grupo_nome, grupo_mesma_unidade, capturado_em, contato_telefone, contato_de_quem, contato_nome, contato_parentesco, contatos_no_grupo_total, contatos_no_grupo')
+        .order('aluno_id');
+      if (unidadeAtual && unidadeAtual !== 'todos') q = q.eq('unidade_id', unidadeAtual);
+      return q;
+    };
 
     // A leitura financeira custa ~5s (get_inadimplencia_canonica) e NAO entra no Promise.all
     // abaixo: `Promise.all` resolve na mais lenta, entao ela sozinha segurava a tela inteira
@@ -847,7 +857,7 @@ export function AlunosPage() {
         .select('aluno_id, texto, categoria, created_at')
         .eq('resolvido', false)
         .order('created_at', { ascending: false }),
-      qComunidadeWa,
+      fetchAllAlunos(buildComunidadeWaQuery),
       // Turmas explícitas
       carregarTurmasExplicitas(),
       // Opções (selects)
