@@ -355,6 +355,23 @@ function toArray(value: unknown): string[] {
   return [];
 }
 
+// Cor do selo de match da anamnese orfa. Verde so' para sinal que identifica (telefone, ou
+// nome exato na mesma unidade); ambar para semelhanca; cinza para a lista completa da unidade,
+// que agora aparece quando nada casa -- ver buscar_anamneses_pendentes.
+function corDoMatchAnamnese(label?: string | null) {
+  switch (label) {
+    case 'Telefone e nome conferem':
+    case 'Telefone confere':
+    case 'Nome e unidade conferem':
+      return 'bg-emerald-500/20 text-emerald-400';
+    case 'Mesmo nome (outra unidade)':
+    case 'Nome parecido':
+      return 'bg-amber-500/20 text-amber-400';
+    default:
+      return 'bg-slate-500/20 text-slate-400';
+  }
+}
+
 function formatarDataHora(data: string | null | undefined) {
   if (!data) return '-';
   return new Date(data).toLocaleString('pt-BR', {
@@ -1113,6 +1130,16 @@ export function ModalFichaAluno({
   const [modalBuscaAnamnese, setModalBuscaAnamnese] = useState(false);
   const [buscandoAnamnese, setBuscandoAnamnese] = useState(false);
   const [candidatosAnamnese, setCandidatosAnamnese] = useState<any[]>([]);
+  const [verOrfasSemSemelhanca, setVerOrfasSemSemelhanca] = useState(false);
+
+  // A separacao usa o selo que a RPC ja calculou -- inventar um limiar aqui criaria uma
+  // segunda regua de "e' a mesma pessoa?", que e' a origem dos bugs de duplicata neste repo.
+  const orfasProvaveis = candidatosAnamnese.filter(
+    (c) => !String(c?.match_label || '').startsWith('Sem semelhanca'),
+  );
+  const orfasSemSemelhanca = candidatosAnamnese.filter(
+    (c) => String(c?.match_label || '').startsWith('Sem semelhanca'),
+  );
   const [vinculandoAnamnese, setVinculandoAnamnese] = useState(false);
 
   const perfisAtivos = perfis.map((perfil) => perfil.perfil_nome.toLowerCase());
@@ -1619,10 +1646,11 @@ export function ModalFichaAluno({
       if (error) throw error;
 
       if (!data || data.length === 0) {
-        toast.info('Nenhuma anamnese pendente encontrada para este aluno.');
+        toast.info('Nao ha nenhuma anamnese sem vinculo nesta unidade.');
         setModalBuscaAnamnese(false);
       } else {
         setCandidatosAnamnese(data);
+        setVerOrfasSemSemelhanca(false);
         setModalBuscaAnamnese(true);
       }
     } catch (error: any) {
@@ -3162,10 +3190,21 @@ export function ModalFichaAluno({
                 <Brain className="w-5 h-5 text-purple-400" />
                 Anamneses Pendentes
               </DialogTitle>
+              <p className="text-sm text-slate-400">
+                Confira antes de vincular. Se o nome tiver sido digitado diferente, o match pode
+                nao aparecer aqui &mdash; use &ldquo;ver todas&rdquo; no fim da lista.
+              </p>
             </DialogHeader>
 
             <div className="flex-1 overflow-y-auto py-4 space-y-3">
-              {candidatosAnamnese.map((candidato) => (
+              {orfasProvaveis.length === 0 && (
+                <p className="rounded-xl border border-slate-700 bg-slate-800/40 px-4 py-3 text-sm text-slate-400">
+                  Nenhuma anamnese casou com o nome ou o telefone deste aluno. Abaixo estao todas
+                  as que seguem sem vinculo nesta unidade.
+                </p>
+              )}
+
+              {orfasProvaveis.map((candidato) => (
                 <div key={candidato.anamnese_id} className="rounded-xl border border-slate-700 bg-slate-800/50 p-4 space-y-3">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
@@ -3209,18 +3248,84 @@ export function ModalFichaAluno({
 
                   <div className="flex items-center gap-4 text-sm text-slate-400">
                     <span>📅 {formatarDataHora(candidato.created_at)}</span>
-                    <span className={`px-2 py-0.5 rounded text-xs ${
-                      candidato.match_label === 'Nome e unidade conferem'
-                        ? 'bg-emerald-500/20 text-emerald-400'
-                        : candidato.match_label === 'Mesmo nome (outra unidade)'
-                        ? 'bg-amber-500/20 text-amber-400'
-                        : 'bg-slate-500/20 text-slate-400'
-                    }`}>
+                    {candidato.telefone_aluno && <span>📱 {candidato.telefone_aluno}</span>}
+                    <span className={`px-2 py-0.5 rounded text-xs ${corDoMatchAnamnese(candidato.match_label)}`}>
                       {candidato.match_label}
                     </span>
                   </div>
                 </div>
               ))}
+
+              {orfasSemSemelhanca.length > 0 && (orfasProvaveis.length === 0 || verOrfasSemSemelhanca) && (
+                <>
+                  {orfasProvaveis.length > 0 && (
+                    <p className="pt-2 text-xs uppercase tracking-wide text-slate-500">
+                      Sem semelhanca com este aluno
+                    </p>
+                  )}
+                  {orfasSemSemelhanca.map((candidato) => (
+                <div key={candidato.anamnese_id} className="rounded-xl border border-slate-700 bg-slate-800/50 p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                          candidato.tipo_formulario === 'EMLA'
+                            ? 'bg-emerald-500/20 text-emerald-400'
+                            : 'bg-blue-500/20 text-blue-400'
+                        }`}>
+                          {candidato.tipo_formulario}
+                        </span>
+                        {candidato.temperamento_codinome && (
+                          <span className="px-2 py-0.5 rounded text-xs font-semibold bg-purple-500/20 text-purple-400">
+                            {candidato.temperamento_codinome}
+                          </span>
+                        )}
+                      </div>
+                      <h5 className="text-base font-medium text-white">{candidato.nome_aluno}</h5>
+                      <p className="text-sm text-slate-400">{candidato.unidade_nome}</p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => handleVincularAnamnese(candidato.anamnese_id)}
+                      disabled={vinculandoAnamnese}
+                      className="bg-purple-600 hover:bg-purple-500"
+                    >
+                      {vinculandoAnamnese ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Vinculando...
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-4 h-4 mr-2" />
+                          Vincular
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center gap-4 text-sm text-slate-400">
+                    <span>📅 {formatarDataHora(candidato.created_at)}</span>
+                    {candidato.telefone_aluno && <span>📱 {candidato.telefone_aluno}</span>}
+                    <span className={`px-2 py-0.5 rounded text-xs ${corDoMatchAnamnese(candidato.match_label)}`}>
+                      {candidato.match_label}
+                    </span>
+                  </div>
+                </div>
+                  ))}
+                </>
+              )}
+
+              {orfasSemSemelhanca.length > 0 && orfasProvaveis.length > 0 && !verOrfasSemSemelhanca && (
+                <button
+                  type="button"
+                  onClick={() => setVerOrfasSemSemelhanca(true)}
+                  className="w-full rounded-xl border border-dashed border-slate-700 px-4 py-3 text-sm text-slate-400 hover:text-slate-200 hover:border-slate-500"
+                >
+                  Ver todas &mdash; mais {orfasSemSemelhanca.length} anamnese(s) sem vinculo nesta unidade
+                </button>
+              )}
             </div>
 
             <div className="p-6 border-t border-slate-700 flex justify-end">
