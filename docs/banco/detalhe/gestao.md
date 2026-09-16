@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-15 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-16 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — gestao
 
-39 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+40 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## bi_agent_config_lamusic
 
@@ -457,6 +457,32 @@
 **Únicos:**
 - `metas_professor_turma_pkey`
 - `metas_professor_turma_professor_id_ano_mes_key`
+
+## pix_migracao_snapshot
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `unidade_id` | uuid | não |  |  |
+| `referencia` | date | não |  |  |
+| `pagador_chave` | text | não |  |  |
+| `pagador_nome` | text | sim |  |  |
+| `alunos` | text[] | sim |  |  |
+| `matriculas` | bigint[] | sim |  |  |
+| `categoria` | text | não |  |  |
+| `fatia` | text | sim |  |  |
+| `forma_ultima_mensalidade` | text | sim |  |  |
+| `formas_90d` | text[] | sim |  |  |
+| `mensalidades_pagas_90d` | integer | sim |  |  |
+| `ultima_mensalidade_em` | date | sim |  |  |
+| `forma_cadastrada` | text | sim |  |  |
+| `cobranca_automatica_cadastrada` | text | sim |  |  |
+| `migrou_em` | date | sim |  |  |
+| `dado_atualizado_em` | timestamp with time zone | sim |  |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+| `migracao_parcial` | boolean | não | false |  |
+
+**Únicos:**
+- `pix_migracao_snapshot_pkey`
 
 ## projecao_aulas
 

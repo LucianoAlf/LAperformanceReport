@@ -394,7 +394,10 @@
     "prazo_retomada": "comercial",
     "texto_normalizado": "plataforma",
     "dever_de_casa_regua_desde": "professor",
-    "repertorio_contem": "professor"
+    "repertorio_contem": "professor",
+    "complementar_gaveta": "professor",
+    "_compute_pix_migracao_v1": "financeiro",
+    "get_pix_migracao_v1": "financeiro"
   },
   "tokens": {
     "kpis": "gestao"

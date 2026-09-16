@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-15 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-16 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — comercial
 
-74 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+76 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## agente_conversas
 
@@ -537,6 +537,27 @@
 - `experimentais_professor_mensa_professor_id_unidade_id_ano_m_key`
 - `experimentais_professor_mensal_pkey`
 
+## google_ads_cliques
+
+> Par codigo<->gclid gravado no clique do botao de WhatsApp nas landings do Google Ads. usado_em null = clique que ainda nao virou lead (ou nunca vai virar) -- e o sinal de quanto se perde entre clique e mensagem, hoje invisivel.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `codigo` | text | não |  |  |
+| `gclid` | text | sim |  |  |
+| `gbraid` | text | sim |  |  |
+| `wbraid` | text | sim |  |  |
+| `unidade_id` | uuid | sim |  | unidades.id |
+| `pagina` | text | sim |  |  |
+| `clicado_em` | timestamp with time zone | não | now() |  |
+| `usado_em` | timestamp with time zone | sim |  |  |
+| `lead_id` | integer | sim |  | leads.id |
+
+**Únicos:**
+- `google_ads_cliques_codigo_key`
+- `google_ads_cliques_pkey`
+
 ## google_ads_metricas_diarias
 
 > Alicerce/estrategica. Custo diario do Google Ads por CAMPANHA (grao de campanha atravessa Search e Performance Max; anuncio nao). Gemeo de meta_ads_metricas_diarias. Reescrita por janela — o Google revisa conversao por dias. gasto ja vem convertido de cost_micros na ingestao.
@@ -886,6 +907,7 @@
 | `chatwoot_ultima_msg_em` | timestamp with time zone | sim |  |  |
 | `chatwoot_ultima_msg_de` | text | sim |  |  |
 | `chatwoot_espelhado_em` | timestamp with time zone | sim |  |  |
+| `gclid` | text | sim |  |  |
 
 **Únicos:**
 - `idx_leads_emusys_lead_id`
@@ -1102,6 +1124,22 @@
 
 **Triggers:**
 - `trigger_mila_config_updated_at → update_mila_config_updated_at()`
+
+## mila_envio_proativo
+
+> O que a Mila mandou SOZINHA (cron, sem passar pela sessao interativa do Hermes) — briefing de manha/fim de dia, hoje. Existe porque o bridge interativo (chatwoot-mila-bridge.js) roda uma sessao Hermes PERSISTENTE por telefone (--continue chatwoot-consultor-v2-<telefone>), e essa sessao so "ouve" o que passa por ela mesma -- um envio direto do cron ao Chatwoot fica invisivel para a propria Mila. Sem isto, "sim"/"quero" respondido a um relatorio da manha reabre o TOPICO MAIS RECENTE que a sessao Hermes de fato processou, que pode ser de dois dias atras (caso real, 16/09/2026: Alf respondeu "Quero Mila" ao briefing da manha e a Mila retomou a conversa de comunidade de 14/09, porque foi o ultimo turno que passou pelo Hermes).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `telefone` | text | não |  |  |
+| `texto` | text | não |  |  |
+| `origem` | text | não |  |  |
+| `enviado_em` | timestamp with time zone | não | now() |  |
+| `reconhecido_em` | timestamp with time zone | sim |  |  |
+
+**Únicos:**
+- `mila_envio_proativo_pkey`
 
 ## mila_message_buffer
 
