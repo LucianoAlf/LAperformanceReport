@@ -89,6 +89,52 @@ begin
      or (select count(*) from public.sol_caixa_governanca_eventos_v1) <> 2 then
     raise exception 'contagens inesperadas';
   end if;
+
+  select public.sol_caixa_governanca_readback_v1(
+    'writer-ensaio', 'token-escritor-ensaio', now() - interval '1 hour', now() + interval '1 minute', 10
+  ) into v_r;
+  if v_r->>'ok' <> 'true'
+     or (v_r#>>'{counts,events}')::integer <> 2
+     or (v_r#>>'{counts,episodes}')::integer <> 1
+     or (v_r#>>'{counts,open_episodes}')::integer <> 1
+     or jsonb_array_length(v_r->'events') <> 2
+     or jsonb_array_length(v_r->'episodes') <> 1 then
+    raise exception 'readback válido não reconciliou: %', v_r;
+  end if;
+
+  begin
+    perform public.sol_caixa_governanca_readback_v1(
+      'writer-ensaio', 'token-incorreto', now() - interval '1 hour', now(), 10
+    );
+    raise exception 'reader aceitou token incorreto';
+  exception when insufficient_privilege then null;
+  end;
+
+  begin
+    perform public.sol_caixa_governanca_readback_v1(
+      'writer-ensaio', 'token-escritor-ensaio', now() - interval '4 days', now(), 10
+    );
+    raise exception 'reader aceitou janela larga';
+  exception when invalid_parameter_value then null;
+  end;
+
+  begin
+    perform public.sol_caixa_governanca_readback_v1(
+      'writer-ensaio', 'token-escritor-ensaio', now() - interval '1 hour', now() + interval '1 minute', 1
+    );
+    raise exception 'reader truncou silenciosamente';
+  exception when program_limit_exceeded then null;
+  end;
+
+  if not has_function_privilege(
+       'anon',
+       'public.sol_caixa_governanca_readback_v1(text,text,timestamp with time zone,timestamp with time zone,integer)',
+       'execute'
+     )
+     or has_table_privilege('anon', 'public.sol_caixa_governanca_episodios_v1', 'select')
+     or has_table_privilege('anon', 'public.sol_caixa_governanca_eventos_v1', 'select') then
+    raise exception 'fronteira de leitura estreita está incorreta';
+  end if;
 end $$;
 
-select 'governanca shadow SQL: contrato, dedupe e bloqueio de bruto OK' as resultado;
+select 'governanca shadow SQL: contrato, dedupe, sanitização e readback estreito OK' as resultado;

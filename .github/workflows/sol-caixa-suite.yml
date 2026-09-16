@@ -200,6 +200,12 @@ jobs:
         run: |
           psql -q -v ON_ERROR_STOP=1 -f supabase-sol/migrations/20260913193000_sol_caixa_governanca_shadow_ledger_v1.sql
           psql -q -v ON_ERROR_STOP=1 -f supabase-sol/migrations/20260913224000_sol_caixa_governanca_writer_v2.sql
+          psql -q -v ON_ERROR_STOP=1 -f supabase-sol/migrations/20260916015500_sol_caixa_governanca_readback_v1.sql
+          psql -q -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-governanca-shadow.sql
+          psql -q -v ON_ERROR_STOP=1 -f supabase-sol/migration-rollbacks/20260916015500_sol_caixa_governanca_readback_v1_rollback.sql
+          absent="$(psql -Atqc "select to_regprocedure('public.sol_caixa_governanca_readback_v1(text,text,timestamp with time zone,timestamp with time zone,integer)') is null")"
+          test "$absent" = "t"
+          psql -q -v ON_ERROR_STOP=1 -f supabase-sol/migrations/20260916015500_sol_caixa_governanca_readback_v1.sql
           psql -q -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-governanca-shadow.sql
 
       - name: porta localizar executa contra o schema real da auditoria
