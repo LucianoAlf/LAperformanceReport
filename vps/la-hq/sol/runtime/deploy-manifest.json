@@ -4,8 +4,8 @@
     {
       "class": "bridge",
       "mode": "0644",
-      "sha256": "11f4888f3ca0b510f414f2c704a902a7ff7e794375739774cded73e1c95b6694",
-      "size": 72169,
+      "sha256": "c9af631fb7a0e3e12e36902b4912a75dd2d6dd5038520fe7c0c85d37030baf30",
+      "size": 77254,
       "source": "vps/la-hq/sol/runtime/bridge.js",
       "target": "/home/sol/.hermes/hermes-agent/scripts/whatsapp-bridge/bridge.js"
     },
@@ -20,8 +20,8 @@
     {
       "class": "caixa-runtime",
       "mode": "0644",
-      "sha256": "6496f9755cca4e04ed9ff8ced3fa70dec30e43a5f70bf119f818744dd7935932",
-      "size": 452746,
+      "sha256": "61c4f7cff8965ecfaed61c18db9139da79e1fc10835d9258e4842f98150e206a",
+      "size": 456185,
       "source": "vps/la-hq/sol/runtime/caixa-financeiro.cjs",
       "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs"
     },
@@ -44,8 +44,8 @@
     {
       "class": "mcp-runtime",
       "mode": "0644",
-      "sha256": "9c1f37a7f37f49f07c4d1e71bdd83dc8478f2bd11f8e4628cb3faa406f23aeaf",
-      "size": 37799,
+      "sha256": "105bc46a66f6c4bbf2791e277b0fc551e06865e76a3374e2b85aea06a02a048c",
+      "size": 38807,
       "source": "vps/la-hq/sol/scripts/sol-portas-mcp.mjs",
       "target": "/home/sol/.openclaw/workspace/scripts/sol-portas-mcp.mjs"
     }

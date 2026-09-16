@@ -15,6 +15,7 @@ const log = path.join(tmp, 'calls.jsonl');
 const runtime = path.join(tmp, 'runtime.cjs');
 const abf = path.join(tmp, 'abf.cjs');
 const govlog = path.join(tmp, 'governanca.jsonl');
+const closures = [];
 const EPISODIO = 'ep1.teste.' + 'a'.repeat(64);
 fs.writeFileSync(runtime, `
 const fs=require('fs');
@@ -37,6 +38,20 @@ const server = http.createServer((req, res) => {
     return res.end(JSON.stringify({ ok: true, quem: 'Teste', nivel: 'lider',
       unidade_id: '00000000-0000-0000-0000-000000000001', unidade_nome: 'Teste',
       _ator_numero: '5521999999999' }));
+  }
+  if (req.url === '/rest/v1/rpc/sol_porta_caixa_do_dia_assinado_v1') {
+    res.setHeader('content-type', 'application/json');
+    return res.end(JSON.stringify({ ok: true, status: 'aberto' }));
+  }
+  if (req.url === '/governance/agent-first/close') {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      closures.push(JSON.parse(body));
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ ok: true }));
+    });
+    return;
   }
   if (req.url === '/send') {
     res.setHeader('content-type', 'application/json');
@@ -79,12 +94,15 @@ const server = http.createServer((req, res) => {
     p_forma: 'cartao', p_cartao_modalidade: 'credito', p_cartao_parcelas: 2,
     p_itens: [{ aluno: 'Ana', categorias: ['parcela'], competencias: [] }],
   });
+  chamar(3, 'caixa_do_dia', {
+    p_cracha: CRACHA, p_chat_id: CHAT, p_episode_id: EPISODIO, p_data: '2026-09-16',
+  });
   const limite = Date.now() + 5000;
-  while ((out.match(/"jsonrpc"/g) || []).length < 2 && Date.now() < limite) {
+  while ((out.match(/"jsonrpc"/g) || []).length < 3 && Date.now() < limite) {
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   child.kill('SIGTERM');
-  assert.strictEqual((out.match(/"jsonrpc"/g) || []).length, 2, out);
+  assert.strictEqual((out.match(/"jsonrpc"/g) || []).length, 3, out);
   const calls = fs.readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse);
   assert.strictEqual(calls[0].ev.caixaToolTarget.movimentacao_id,
     '00000000-0000-0000-0000-000000000099');
@@ -94,6 +112,9 @@ const server = http.createServer((req, res) => {
   assert.strictEqual(calls[1].ev.caixaToolDecision.cartao_modalidade, 'credito');
   assert.strictEqual(calls[1].ev.caixaToolDecision.cartao_parcelas, 2);
   assert.strictEqual(calls[0].ev.caixaGovernancaEpisode.episode_id, EPISODIO);
+  assert(closures.some((x) => x.action === 'caixa_do_dia'
+    && x.terminalState === 'readback_confirmed' && x.outcome === 'ok'),
+  'consulta read-only precisa fechar o episódio pela correlação central');
   const governanca = fs.readFileSync(govlog, 'utf8');
   assert(governanca.includes('tool_selected'));
   assert(!governanca.includes(CHAT), 'JID cru não pode entrar no ledger de governança');
