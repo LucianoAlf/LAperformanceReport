@@ -226,3 +226,9 @@ verify_jwt = false
 # token `orcamento_atencao` em `integracao_tokens`, conferido em tempo
 # constante DENTRO da funcao — a anon key e publica e nao serve de porta.
 verify_jwt = false
+
+# Chamada pelo front autenticado, mas roda com verify_jwt = false em producao (conferido em
+# 16/09/2026 com get_edge_function, v45). Sem esta entrada a CLI usaria o default `true` e o
+# envio da Caixa de Entrada morreria em 401 no gateway, antes do codigo rodar.
+[functions.enviar-mensagem-admin]
+verify_jwt = false
