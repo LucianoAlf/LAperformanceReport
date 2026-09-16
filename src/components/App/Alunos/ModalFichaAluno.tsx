@@ -1994,8 +1994,12 @@ export function ModalFichaAluno({
                     </span>
                   ) : aluno.comunidade_wa_estado === 'fora_da_comunidade' ? (
                     <span className="bg-slate-600/20 text-slate-400 px-2 py-0.5 rounded text-xs font-medium">Fora</span>
-                  ) : (
+                  ) : aluno.comunidade_wa_estado ? (
                     <span className="text-slate-500 text-xs">Sem verificação recente</span>
+                  ) : (
+                    // campo ausente != captura velha. Dizer "sem verificacao recente" aqui
+                    // acusa o cron de 07h por uma leitura que nao chegou a tela.
+                    <span className="text-slate-500 text-xs">Não carregado</span>
                   )}
                   {aluno.comunidade_wa_capturado_em && (
                     <span className="text-xs text-slate-500">
