@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/lib/supabase';
 import { Database, Users, Clock, Filter, DollarSign } from 'lucide-react';
@@ -19,6 +19,12 @@ interface ExAlunoRow {
   ltv_individual?: number;
 }
 
+// Default ESTAVEL: `= []` na desestruturacao cria um array novo a cada render, e o
+// useEffect compara dependencia por identidade (`[] !== []`) -- isso disparava
+// `carregarDados` em loop infinito, com ~18 conexoes simultaneas rodando
+// `get_historico_ltv` em producao (6.528 chamadas / 2h37 de CPU acumulada).
+const SEM_MOVIMENTACOES: MovimentacaoRetencaoRow[] = [];
+
 interface ModalPermanenciaDetalheProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -34,7 +40,7 @@ export function ModalPermanenciaDetalhe({
   unidadeId,
   mediaAtual,
   modo = 'permanencia',
-  movimentacoesEvasao = [],
+  movimentacoesEvasao = SEM_MOVIMENTACOES,
 }: ModalPermanenciaDetalheProps) {
   const [loading, setLoading] = useState(false);
   const [dados, setDados] = useState<ExAlunoRow[]>([]);
@@ -42,11 +48,20 @@ export function ModalPermanenciaDetalhe({
   const [ordenacao, setOrdenacao] = useState<'meses_desc' | 'meses_asc' | 'nome'>('meses_desc');
   const isLtvEvasoes = modo === 'ltv_evasoes';
 
+  // Assinatura de CONTEUDO em vez da identidade do array: mesmo que o chamador monte a
+  // lista inline a cada render (`movimentacoesEvasao={[...a, ...b]}`, como faz o
+  // AdministrativoPage), o efeito so dispara quando as movimentacoes mudam de verdade.
+  const assinaturaMovimentacoes = useMemo(
+    () => movimentacoesEvasao.map(m => m.id ?? `${m.aluno_id}|${m.data}`).join(','),
+    [movimentacoesEvasao],
+  );
+
   useEffect(() => {
     if (open && unidadeId) {
       carregarDados();
     }
-  }, [open, unidadeId, modo, movimentacoesEvasao]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, unidadeId, modo, assinaturaMovimentacoes]);
 
   async function carregarDados() {
     setLoading(true);
@@ -74,10 +89,26 @@ export function ModalPermanenciaDetalhe({
       }
 
       // RPC historica de permanencia: tempo>=4, exclui bolsistas/banda e exige saida real.
-      const { data, error } = await supabase.rpc('get_historico_ltv', {
-        p_unidade_id: unidadeId && unidadeId !== 'todos' ? unidadeId : null,
-      });
-      if (error) throw error;
+      // O PostgREST corta a resposta em 1.000 linhas (`max-rows`), e a RPC devolve 1.670:
+      // sem paginar, a tela publicava "1000 ex-alunos" e media de 15,7m onde o real e
+      // 1.670 e 16,1m -- numero truncado apresentado como se fosse a base inteira.
+      // A RPC tem ORDER BY proprio, entao a paginacao por range e estavel.
+      const TAMANHO_PAGINA = 1000;
+      const MAX_PAGINAS = 20; // teto de seguranca: 20 mil linhas, nunca laco infinito
+      const todas: any[] = [];
+      for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
+        const inicio = pagina * TAMANHO_PAGINA;
+        const { data, error } = await supabase
+          .rpc('get_historico_ltv', {
+            p_unidade_id: unidadeId && unidadeId !== 'todos' ? unidadeId : null,
+          })
+          .range(inicio, inicio + TAMANHO_PAGINA - 1);
+        if (error) throw error;
+        const lote = data || [];
+        todas.push(...lote);
+        if (lote.length < TAMANHO_PAGINA) break;
+      }
+      const data = todas;
 
       const linhas: ExAlunoRow[] = (data || []).map((r: any) => ({
         nome: r.nome,
