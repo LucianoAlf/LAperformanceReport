@@ -679,6 +679,20 @@ const MAX_RECENT_SENT_MESSAGE_TEXT = 2000;
 const RECENT_SENT_MESSAGE_TTL_MS = 24 * 60 * 60 * 1000;
 
 let sock = null;
+// A correlação é consumida também pelas rotas HTTP, que vivem fora de
+// startSocket(). Mantê-la no escopo do módulo evita que uma resposta seja
+// enviada e a bridge caia em seguida por ReferenceError.
+let _agentFirstCorrelation = null;
+async function closeAgentFirstByReplySafely(input) {
+  if (!_agentFirstCorrelation || !input || !input.messageId) return;
+  try {
+    await _agentFirstCorrelation.closeByReply(input);
+  } catch (error) {
+    // Telemetria nunca pode transformar uma resposta já enviada em queda da
+    // bridge. A falha fica observável, mas o fluxo operacional segue vivo.
+    console.error('agent-first terminal close failed:', error && error.message);
+  }
+}
 
 // TYPING (18/08, paridade com a Maria): "escrevendo..." enquanto a Sol processa.
 // composing expira ~10s no WhatsApp -> refresher a cada 8s; TTL de seguranca 180s.
@@ -795,13 +809,15 @@ async function caixaGovernanca() {
   }
   return _caixaGovernanca;
 }
-const _agentFirstCorrelation = createAgentFirstCorrelation({
-  recordFn: async function (episode, eventType, details) {
-    const gov = await caixaGovernanca();
-    if (!gov || !episode) return { ok: false, sem_episodio: true };
-    return gov.record(episode, eventType, details || {});
-  },
-});
+if (!_agentFirstCorrelation) {
+  _agentFirstCorrelation = createAgentFirstCorrelation({
+    recordFn: async function (episode, eventType, details) {
+      const gov = await caixaGovernanca();
+      if (!gov || !episode) return { ok: false, sem_episodio: true };
+      return gov.record(episode, eventType, details || {});
+    },
+  });
+}
 const SOL_CAIXA_CLASSIFICADOR_V3_SHADOW = process.env.SOL_CAIXA_CLASSIFICADOR_V3_SHADOW === '1';
 let _classificadorV3Shadow = null;
 async function classificadorV3Shadow() {
@@ -1498,6 +1514,9 @@ app.post('/send', async (req, res) => {
   if (!chatId || !message) {
     return res.status(400).json({ error: 'chatId and message are required' });
   }
+  if (replyTo && !_agentFirstCorrelation) {
+    return res.status(503).json({ error: 'Agent-first correlation is not ready' });
+  }
   if (blockGroupSendIfNeeded(chatId, res)) return;
 
   try {
@@ -1512,8 +1531,8 @@ app.post('/send', async (req, res) => {
       }
     }
 
-    if (replyTo) {
-      await _agentFirstCorrelation.closeByReply({
+    if (replyTo && _agentFirstCorrelation) {
+      await closeAgentFirstByReplySafely({
         messageId: replyTo,
         chatId,
         details: { terminal_state: 'agent_reply_sent', action: 'agent_reply', outcome: 'ok' },
@@ -1527,7 +1546,7 @@ app.post('/send', async (req, res) => {
     });
   } catch (err) {
     if (replyTo) {
-      await _agentFirstCorrelation.closeByReply({
+      await closeAgentFirstByReplySafely({
         messageId: replyTo,
         chatId,
         details: { terminal_state: 'agent_reply_failed', action: 'agent_reply', outcome: 'error' },
@@ -1541,6 +1560,9 @@ app.post('/send', async (req, res) => {
 // Centralizar o terminal aqui consome a correlação e impede um segundo
 // episode_closed quando essa resposta chegar depois via /send.
 app.post('/governance/agent-first/close', async (req, res) => {
+  if (!_agentFirstCorrelation) {
+    return res.status(503).json({ ok: false, reason: 'correlation_not_ready' });
+  }
   const { episodeId, chatId, terminalState, action, outcome } = req.body || {};
   const result = await _agentFirstCorrelation.closeByEpisode({
     episodeId,
