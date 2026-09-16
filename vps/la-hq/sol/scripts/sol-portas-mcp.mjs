@@ -279,6 +279,25 @@ async function enviarPeloBridge(chatId, texto) {
   return data.messageId || (data.messageIds || []).at(-1) || null;
 }
 
+async function fecharEpisodioAgentFirst(episodio, chatId, detalhes) {
+  if (!episodio || !episodio.episode_id || !governancaCaixa) return { ok: false, sem_episodio: true };
+  try {
+    const r = await fetch(`${BRIDGE_URL}/governance/agent-first/close`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Host: 'localhost' },
+      body: JSON.stringify({
+        episodeId: episodio.episode_id,
+        chatId,
+        terminalState: detalhes.terminal_state,
+        action: detalhes.action,
+        outcome: detalhes.outcome,
+      }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (r.ok && data.ok) return data;
+  } catch (_) { /* fallback local abaixo */ }
+  return governancaCaixa.record(episodio, 'episode_closed', detalhes);
+}
+
 function carregarGovernancaCaixa() {
   if (governancaCaixa) return governancaCaixa;
   try { governancaCaixa = require(CAIXA_GOVERNANCA_RUNTIME).criarInstrumento(); }
@@ -426,7 +445,7 @@ async function executarRuntimeCaixa(p, args) {
       caixaToolCommand: cmd, caixaToolTarget: alvo,
     });
   }
-  if (episodio && governancaCaixa) void governancaCaixa.record(episodio, 'episode_closed', {
+  if (episodio && governancaCaixa) await fecharEpisodioAgentFirst(episodio, ctx._chat, {
     terminal_state: (resultado && resultado.acao) || 'tool_completed',
     action: (resultado && resultado.acao) || p.action,
     outcome: (resultado && /^erro|recus|bloquead/.test(String(resultado.acao || ''))) ? 'refused' : 'ok',
@@ -452,6 +471,11 @@ async function despachar(name, args) {
     const resultado = await rpc(p.fn, limpos);
     if (ep) void governancaCaixa.record(ep, resultado && resultado.ok ? 'readback_confirmed' : 'readback_failed', {
       action: p.name, outcome: resultado && resultado.ok ? 'ok' : 'refused', readback_status: resultado && resultado.ok ? 'confirmed' : 'refused',
+    });
+    if (ep) await fecharEpisodioAgentFirst(ep, chat, {
+      terminal_state: resultado && resultado.ok ? 'readback_confirmed' : 'readback_refused',
+      action: p.name,
+      outcome: resultado && resultado.ok ? 'ok' : 'refused',
     });
     return j(resultado);
   }

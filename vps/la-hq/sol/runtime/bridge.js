@@ -85,6 +85,89 @@ const CHUNK_DELAY_MS = parseInt(process.env.WHATSAPP_CHUNK_DELAY_MS || '300', 10
 // fires. Fail fast instead so the gateway can surface a real error and retry.
 const SEND_TIMEOUT_MS = parseInt(process.env.WHATSAPP_SEND_TIMEOUT_MS || '60000', 10);
 
+// Correlaciona o handoff agent-first com o resultado real da entrega do
+// Hermes. O mapa guarda apenas IDs opacos e o envelope sanitizado do episódio;
+// nunca texto, telefone ou identidade. A entrada é terminalizada uma única vez
+// pela primeira evidência comprovada: resposta enviada, falha de entrega ou
+// conclusão de uma tool comunicada pelo MCP local.
+function createAgentFirstCorrelation({ recordFn, nowFn = () => Date.now(), ttlMs = 6 * 60 * 60 * 1000, maxEntries = 500 } = {}) {
+  const byMessage = new Map();
+  const byEpisode = new Map();
+  const closed = new Map();
+
+  function prune() {
+    const cutoff = nowFn() - ttlMs;
+    for (const [messageId, entry] of byMessage) {
+      if (entry.createdAt >= cutoff) continue;
+      byMessage.delete(messageId);
+      byEpisode.delete(entry.episode.episode_id);
+    }
+    for (const [episodeId, closedAt] of closed) {
+      if (closedAt < cutoff) closed.delete(episodeId);
+    }
+    while (byMessage.size > maxEntries) {
+      const messageId = byMessage.keys().next().value;
+      const entry = byMessage.get(messageId);
+      byMessage.delete(messageId);
+      if (entry) byEpisode.delete(entry.episode.episode_id);
+    }
+    while (closed.size > maxEntries) closed.delete(closed.keys().next().value);
+  }
+
+  function register({ messageId, chatId, episode }) {
+    prune();
+    const id = String(messageId || '');
+    const chat = String(chatId || '');
+    const episodeId = String(episode && episode.episode_id || '');
+    if (!id || !chat || !episodeId || closed.has(episodeId)) return false;
+    const existing = byMessage.get(id);
+    if (existing) byEpisode.delete(existing.episode.episode_id);
+    const entry = { messageId: id, chatId: chat, episode, createdAt: nowFn() };
+    byMessage.set(id, entry);
+    byEpisode.set(episodeId, entry);
+    prune();
+    return true;
+  }
+
+  async function closeEntry(entry, details) {
+    if (!entry) return { ok: false, reason: 'correlation_not_found' };
+    const episodeId = entry.episode.episode_id;
+    if (closed.has(episodeId)) return { ok: true, duplicate: true };
+    // Marca antes do await para duas respostas concorrentes não criarem dois
+    // terminais. Telemetria é fail-safe e não pode reabrir o episódio.
+    closed.set(episodeId, nowFn());
+    byMessage.delete(entry.messageId);
+    byEpisode.delete(episodeId);
+    prune();
+    try {
+      const recorded = typeof recordFn === 'function'
+        ? await recordFn(entry.episode, 'episode_closed', details || {})
+        : { ok: false, reason: 'recorder_unavailable' };
+      return { ok: !!(recorded && recorded.ok), recorded };
+    } catch (_) {
+      return { ok: false, reason: 'record_failed' };
+    }
+  }
+
+  async function closeByReply({ messageId, chatId, details }) {
+    prune();
+    const entry = byMessage.get(String(messageId || ''));
+    if (!entry || entry.chatId !== String(chatId || '')) return { ok: false, reason: 'correlation_not_found' };
+    return closeEntry(entry, details);
+  }
+
+  async function closeByEpisode({ episodeId, chatId, details }) {
+    prune();
+    const id = String(episodeId || '');
+    if (closed.has(id)) return { ok: true, duplicate: true };
+    const entry = byEpisode.get(id);
+    if (!entry || entry.chatId !== String(chatId || '')) return { ok: false, reason: 'correlation_not_found' };
+    return closeEntry(entry, details);
+  }
+
+  return { register, closeByReply, closeByEpisode };
+}
+
 
 // LAHQ/Sol safety patch: group listen-only mode.
 // Groups can be observed locally for warm-up/context, but are never queued to
@@ -712,6 +795,13 @@ async function caixaGovernanca() {
   }
   return _caixaGovernanca;
 }
+const _agentFirstCorrelation = createAgentFirstCorrelation({
+  recordFn: async function (episode, eventType, details) {
+    const gov = await caixaGovernanca();
+    if (!gov || !episode) return { ok: false, sem_episodio: true };
+    return gov.record(episode, eventType, details || {});
+  },
+});
 const SOL_CAIXA_CLASSIFICADOR_V3_SHADOW = process.env.SOL_CAIXA_CLASSIFICADOR_V3_SHADOW === '1';
 let _classificadorV3Shadow = null;
 async function classificadorV3Shadow() {
@@ -1148,6 +1238,9 @@ async function caixaAbf() {
               && !event.hasMedia && !_confirmacaoDeterministica && !_complementoDeterministico;
             if (_textoVaiParaAgentTools) {
               _govRecord('route_decided', { route: 'agent_first', engine: 'agent_tools', outcome: 'pending' });
+              _agentFirstCorrelation.register({
+                messageId: event.messageId, chatId: event.chatId, episode: event.caixaGovernancaEpisode,
+              });
               _caixaLog({ step: 'agent_first_text_handoff_pos_abf', chatId: chatId });
             } else {
             if (_confirmacaoDeterministica) {
@@ -1419,14 +1512,49 @@ app.post('/send', async (req, res) => {
       }
     }
 
+    if (replyTo) {
+      await _agentFirstCorrelation.closeByReply({
+        messageId: replyTo,
+        chatId,
+        details: { terminal_state: 'agent_reply_sent', action: 'agent_reply', outcome: 'ok' },
+      });
+    }
+
     res.json({
       success: true,
       messageId: messageIds[messageIds.length - 1],
       messageIds,
     });
   } catch (err) {
+    if (replyTo) {
+      await _agentFirstCorrelation.closeByReply({
+        messageId: replyTo,
+        chatId,
+        details: { terminal_state: 'agent_reply_failed', action: 'agent_reply', outcome: 'error' },
+      });
+    }
     res.status(500).json({ error: err.message });
   }
+});
+
+// O MCP local conclui tools antes de o Hermes produzir a resposta textual.
+// Centralizar o terminal aqui consome a correlação e impede um segundo
+// episode_closed quando essa resposta chegar depois via /send.
+app.post('/governance/agent-first/close', async (req, res) => {
+  const { episodeId, chatId, terminalState, action, outcome } = req.body || {};
+  const result = await _agentFirstCorrelation.closeByEpisode({
+    episodeId,
+    chatId,
+    details: {
+      terminal_state: terminalState || 'tool_completed',
+      action: action || 'tool_completed',
+      outcome: outcome || 'ok',
+    },
+  });
+  if (!result.ok && result.reason === 'correlation_not_found') {
+    return res.status(404).json(result);
+  }
+  return res.json(result);
 });
 registerReportSingleMessageRoute({
   app,

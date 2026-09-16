@@ -33,6 +33,19 @@ mídia, OCR, prompt, credencial e payload financeiro.
 - `readback_confirmed` / `readback_failed`
 - `episode_closed` / `correlation_gap` / `instrument_failure`
 
+### Terminal do handoff agent-first
+
+- A bridge mantém correlação efêmera e limitada entre o `messageId` recebido e
+  o `episode_id`; texto, telefone e identidade não entram nesse cache.
+- Resposta do Hermes com `replyTo` fecha o episódio somente depois do resultado
+  comprovado do envio: `agent_reply_sent` ou `agent_reply_failed`.
+- Tools do Caixa comunicam seu terminal à bridge antes de devolver o resultado
+  ao Hermes. A bridge consome a correlação, impedindo que a resposta textual
+  posterior gere um segundo `episode_closed`.
+- Se a bridge não reconhecer a correlação (por exemplo, após restart), o MCP
+  registra o terminal pelo instrumento local como fallback. Ausência de
+  evidência continua inconclusiva; nunca se fabrica sucesso retroativo.
+
 ## Persistência
 
 - Log local append-only, modo `0600`, rotação padrão em 10 MiB e sete arquivos.
