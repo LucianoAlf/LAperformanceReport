@@ -26,6 +26,15 @@ serve(async (req) => {
     const telefone = aluno ? (aluno.whatsapp || aluno.telefone) : conversa.telefone_externo;
     if (!telefone) return new Response(JSON.stringify({ error: 'Sem telefone para envio' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     const numero = conversa.whatsapp_jid || formatPhoneNumber(telefone);
+    // O jid da conversa tem precedencia sobre o cadastro (ele e' o endereco real do WhatsApp),
+    // mas e' uma COPIA feita quando a conversa nasceu e ninguem a reconcilia depois. Em 16/09/2026
+    // dois alunos novos ficaram dias sem receber nada por isso: numero digitado errado no Emusys,
+    // corrigido no cadastro, conversa congelada no antigo. Guardar a divergencia aqui faz o motivo
+    // da falha dizer ONDE olhar, em vez de um 'Erro WhatsApp' sem pista.
+    const fimDoNumero = (v) => (v || '').replace(/\D/g, '').slice(-8);
+    const numeroDoCadastro = telefone ? formatPhoneNumber(telefone) : null;
+    const divergeDoCadastro = Boolean(aluno && numeroDoCadastro && fimDoNumero(numero) && fimDoNumero(numeroDoCadastro) && fimDoNumero(numero) !== fimDoNumero(numeroDoCadastro));
+    const avisoDivergencia = divergeDoCadastro ? ` - esta conversa envia para ${numero}, mas o cadastro do aluno hoje e ${numeroDoCadastro}. A conversa pode estar presa num numero antigo.` : '';
     const [msgResult, creds] = await Promise.all([
       supabase.from('admin_mensagens').insert({ conversa_id, aluno_id: aluno_id || null, direcao: 'saida', tipo, conteudo: conteudo || null, midia_url: midia_url || null, midia_mimetype: midia_mimetype || null, midia_nome: midia_nome || null, remetente: 'admin', remetente_nome, status_entrega: 'enviando' }).select('id').single(),
       getWhatsAppCredentials(supabase, { funcao: 'administrativo', caixaId: conversa.caixa_id ?? undefined, unidadeId: conversa.unidade_id ?? undefined, departamento: conversa.departamento ?? undefined }),
@@ -81,11 +90,12 @@ serve(async (req) => {
         } else {
           const errorMsg = uazapiData.error || uazapiData.message || 'Erro WhatsApp';
           console.error('[enviar-mensagem-admin] [bg] Erro WhatsApp:', errorMsg);
-          await supabase.from('admin_mensagens').update({ status_entrega: 'erro' }).eq('id', mensagem.id);
+          await supabase.from('admin_mensagens').update({ status_entrega: 'erro', erro_motivo: `${errorMsg}${avisoDivergencia}` }).eq('id', mensagem.id);
         }
       } catch (bgError) {
         console.error('[enviar-mensagem-admin] [bg] Erro no background:', bgError);
-        await supabase.from('admin_mensagens').update({ status_entrega: 'erro' }).eq('id', mensagem.id);
+        const motivoBg = bgError instanceof Error ? bgError.message : String(bgError);
+        await supabase.from('admin_mensagens').update({ status_entrega: 'erro', erro_motivo: `${motivoBg}${avisoDivergencia}` }).eq('id', mensagem.id);
       }
     })());
     return response;
