@@ -157,6 +157,18 @@ async function divisaoDitada(A) {
   checar(/nome completo/i.test(ultimo(B.enviadas)), 'a recusa diz o que fazer');
   checar(B.lancadosLote.length === 0, 'ambíguo não grava nada');
 
+  // ── 2b. nome parcial com baixa confiança pede o dado que falta ────────────
+  const B2 = novo({ resolverMultiFn: async () => ({
+    ok: false, motivo: 'aluno_baixa_confianca', ordem: 1, aluno_nome: 'Nome parcial' }) });
+  const rB2 = await divisaoDitada(B2);
+  checar(String(rB2 && rB2.acao) === 'manual_review_multi_student',
+    'nome com baixa confiança não vira preview');
+  checar(/nome completo de cada aluno/i.test(ultimo(B2.enviadas)),
+    'baixa confiança pede os nomes completos, não os valores outra vez');
+  checar(/Não criei card aprovável/i.test(ultimo(B2.enviadas)),
+    'baixa confiança deixa explícito que não há card para aprovar');
+  checar(B2.lancadosLote.length === 0, 'baixa confiança não grava nada');
+
   // ── 3. valor declarado que não bate: recusa explicando, não sorteio ────────
   const C = novo({ resolverMultiFn: async () => ({
     ok: false, motivo: 'valor_declarado_nao_bate', ordem: 1, aluno_nome: THU,
