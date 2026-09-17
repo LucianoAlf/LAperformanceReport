@@ -88,6 +88,26 @@ export function CaixaEntradaTab({ unidadeId, departamento = 'administrativo', mu
     }
   }, [alunoIdInicial, telefoneInicial, conversas, marcarComoLida]);
 
+  // Depois de apontar a conversa para o numero do cadastro, abrir a conversa que passou a
+  // valer — que pode ser OUTRA (a regra abre conversa nova quando a antiga ja recebeu
+  // mensagem). Guardar o alvo num ref e esperar a lista chegar e deterministico; ler
+  // `conversas` dentro de um setTimeout leria o array ANTERIOR ao refetch, preso no closure.
+  const conversaAlvoRef = useRef<string | null>(null);
+
+  const handleNumeroCorrigido = useCallback((conversaId: string) => {
+    conversaAlvoRef.current = conversaId;
+    refetch();
+  }, [refetch]);
+
+  useEffect(() => {
+    const alvo = conversaAlvoRef.current;
+    if (!alvo) return;
+    const conv = conversas.find(c => c.id === alvo);
+    if (!conv) return; // pode nao estar na lista ainda (ou fora do filtro) — o toast ja avisou
+    conversaAlvoRef.current = null;
+    setConversaSelecionada(conv);
+  }, [conversas]);
+
   const handleNovaConversaCriada = useCallback((contato: ContatoInbox) => {
     refetch().then(() => {
       setTimeout(() => {
@@ -169,6 +189,7 @@ export function CaixaEntradaTab({ unidadeId, departamento = 'administrativo', mu
             onEditarMensagem={editarMensagem}
             contexto={departamento}
             remetenteNome={usuario?.nome || usuario?.apelido || 'Admin'}
+            onNumeroCorrigido={handleNumeroCorrigido}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center" style={{ background: 'linear-gradient(180deg, #0f172a 0%, #0d1424 100%)' }}>
