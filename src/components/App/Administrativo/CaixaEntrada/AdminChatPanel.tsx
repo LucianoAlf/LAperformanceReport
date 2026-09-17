@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Users, Phone, Mic, X, Play, Pause, Settings, Trash2, Pencil, Zap, MapPin, Bot, Smile, GraduationCap } from 'lucide-react';
+import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Users, Phone, Mic, X, Play, Pause, Settings, Trash2, Pencil, Zap, MapPin, Bot, Smile, GraduationCap, AlertTriangle, PhoneForwarded } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { formatarWhatsApp } from '@/lib/whatsappFormat';
+import { conversaDivergeDoCadastro, numeroDeEnvioDoCadastro } from '@/lib/numeroDaConversa';
+import { formatarTelefoneBR } from '@/lib/normalizarTelefone';
 import { TemplateSelector, isTemplateAutomacao } from '@/components/App/PreAtendimento/components/chat/TemplateSelector';
 import type { VcardChip } from '@/components/App/PreAtendimento/components/chat/TemplateSelector';
 import { EmojiPicker } from '@/components/App/PreAtendimento/components/chat/EmojiPicker';
@@ -26,6 +28,23 @@ function getStatusAlunoTag(status: string | null | undefined) {
   return map[status] || null;
 }
 
+// Traducao das respostas de `admin_conversa_usar_numero_do_cadastro_v1`. A RPC devolve
+// codigo, nao frase: quem le a tela precisa saber o que FOI feito -- migrar e abrir conversa
+// nova sao coisas diferentes, e so uma delas deixa o historico para tras.
+const SUCESSO_NUMERO: Record<string, string> = {
+  migrou: 'Pronto: esta conversa passou a enviar para o numero do cadastro.',
+  criou: 'Abri uma conversa nova no numero do cadastro. O historico antigo continua guardado na conversa anterior.',
+  reaproveitou: 'Ja existia uma conversa nesse numero — abri ela.',
+};
+
+const RECUSA_NUMERO: Record<string, string> = {
+  conversa_inexistente: 'Esta conversa nao existe mais. Recarregue a caixa.',
+  conversa_externa_sem_cadastro: 'Esta conversa nao tem aluno vinculado, entao nao ha cadastro de onde tirar o numero.',
+  aluno_inexistente: 'O aluno desta conversa nao foi encontrado.',
+  cadastro_sem_telefone_utilizavel: 'O cadastro do aluno nao tem um telefone utilizavel — corrija o cadastro antes.',
+  ja_e_o_numero_do_cadastro: 'A conversa ja usa o numero do cadastro; o problema do envio e outro.',
+};
+
 interface AdminChatPanelProps {
   conversa: AdminConversa;
   aluno: AlunoInbox | null;
@@ -42,6 +61,12 @@ interface AdminChatPanelProps {
   contexto?: string;
   /** Nome do usuário logado, para registrar autoria ao disparar cartões de contato. */
   remetenteNome?: string;
+  /**
+   * Chamada depois que a conversa passa a usar o número do cadastro. Recebe o id da
+   * conversa que deve ficar aberta — que pode ser OUTRA, quando a regra decide abrir
+   * uma nova em vez de migrar o número desta.
+   */
+  onNumeroCorrigido?: (conversaId: string) => void;
 }
 
 function StatusIcon({ status }: { status: string }) {
@@ -581,6 +606,7 @@ export function AdminChatPanel({
   onEditarMensagem,
   contexto = 'administrativo',
   remetenteNome = 'Admin',
+  onNumeroCorrigido,
 }: AdminChatPanelProps) {
   const [texto, setTexto] = useState('');
   const [editandoMsg, setEditandoMsg] = useState<AdminMensagem | null>(null);
@@ -591,6 +617,8 @@ export function AdminChatPanel({
   const [templateFiltroInicial, setTemplateFiltroInicial] = useState('');
   const [modalTemplatesAberto, setModalTemplatesAberto] = useState(false);
   const [fotoPerfil, setFotoPerfil] = useState<string | null>(conversa.foto_perfil_url || null);
+  const [confirmandoNumero, setConfirmandoNumero] = useState(false);
+  const [corrigindoNumero, setCorrigindoNumero] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -613,6 +641,52 @@ export function AdminChatPanel({
 
   const mensagensComSeparadores = useMemo(() => agruparPorData(mensagens), [mensagens]);
   const irmaosCompartilhando = useIrmaosCompartilhandoNumero(conversa.whatsapp_jid, aluno?.id ?? null);
+
+  // ---------------------------------------------------------------------------------------
+  // Conversa presa num numero antigo
+  //
+  // O envio usa `conversa.whatsapp_jid`, nao o cadastro (enviar-mensagem-admin), e o jid e
+  // uma copia feita no nascimento da conversa que ninguem reconcilia. Corrigir o cadastro
+  // nao move o envio -- e o cabecalho logo acima mostra o numero CERTO o tempo todo, o que
+  // torna a falha indistinguivel de "o WhatsApp dele esta fora do ar".
+  //
+  // O aviso exige as DUAS coisas: divergencia e a ultima saida em erro. So divergir e comum
+  // e legitimo (o jid costuma ser o numero do responsavel).
+  const numeroDoCadastro = numeroDeEnvioDoCadastro(aluno);
+  const ultimaSaidaFalhou = useMemo(() => {
+    for (let i = mensagens.length - 1; i >= 0; i--) {
+      if (mensagens[i].direcao !== 'saida') continue;
+      return mensagens[i].status_entrega === 'erro';
+    }
+    return false;
+  }, [mensagens]);
+  const conversaPresaEmNumeroAntigo = Boolean(
+    aluno && ultimaSaidaFalhou && conversaDivergeDoCadastro(conversa.whatsapp_jid, aluno),
+  );
+
+  const usarNumeroDoCadastro = useCallback(async () => {
+    setCorrigindoNumero(true);
+    try {
+      const { data, error } = await supabase.rpc('admin_conversa_usar_numero_do_cadastro_v1', {
+        p_conversa_id: conversa.id,
+      });
+      if (error) {
+        toast.error('Nao consegui corrigir o numero: ' + error.message);
+        return;
+      }
+      if (!data?.ok) {
+        toast.error(RECUSA_NUMERO[data?.erro] || `Nao consegui corrigir o numero (${data?.erro || 'motivo desconhecido'})`);
+        return;
+      }
+      toast.success(SUCESSO_NUMERO[data.acao] || 'Numero corrigido.');
+      setConfirmandoNumero(false);
+      if (data.conversa_id) onNumeroCorrigido?.(data.conversa_id);
+    } catch (err: any) {
+      toast.error('Erro ao corrigir o numero: ' + (err?.message || 'desconhecido'));
+    } finally {
+      setCorrigindoNumero(false);
+    }
+  }, [conversa.id, onNumeroCorrigido]);
   // Opções de "enviar para" na automação: o aluno da conversa + irmãos que compartilham o número.
   const opcoesAutomacao: AlunoAutomacaoAlvo[] = useMemo(() => {
     const donoConversa: AlunoAutomacaoAlvo[] = aluno
@@ -1049,6 +1123,57 @@ export function AdminChatPanel({
           )}
         </div>
       </div>
+
+      {/* Conversa presa num numero antigo — so aparece com falha de envio E divergencia */}
+      {conversaPresaEmNumeroAntigo && (
+        <div className="px-4 py-2.5 border-b border-amber-500/20 bg-amber-500/10">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[12px] font-medium text-amber-200">
+                A ultima mensagem nao foi entregue — esta conversa pode estar presa num numero antigo.
+              </p>
+              <p className="text-[11px] text-amber-200/70 mt-0.5">
+                Ela envia para <span className="font-semibold">{formatarTelefoneBR(conversa.whatsapp_jid)}</span>, mas o cadastro
+                {aluno?.nome ? ` de ${aluno.nome.split(' ')[0]}` : ''} hoje e <span className="font-semibold">{formatarTelefoneBR(numeroDoCadastro)}</span>.
+              </p>
+              {!confirmandoNumero ? (
+                <button
+                  onClick={() => setConfirmandoNumero(true)}
+                  className="mt-2 flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-md bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 transition"
+                >
+                  <PhoneForwarded className="w-3 h-3" />
+                  Usar o numero do cadastro
+                </button>
+              ) : (
+                <div className="mt-2">
+                  <p className="text-[11px] text-amber-200/70">
+                    Se esta conversa nunca recebeu mensagem, o numero dela e corrigido. Se ja recebeu, abro uma
+                    conversa nova no numero do cadastro — o historico daqui continua onde esta.
+                  </p>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <button
+                      onClick={usarNumeroDoCadastro}
+                      disabled={corrigindoNumero}
+                      className="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-md bg-amber-500 text-slate-900 hover:bg-amber-400 disabled:opacity-60 transition"
+                    >
+                      {corrigindoNumero ? <Loader2 className="w-3 h-3 animate-spin" /> : <PhoneForwarded className="w-3 h-3" />}
+                      Confirmar
+                    </button>
+                    <button
+                      onClick={() => setConfirmandoNumero(false)}
+                      disabled={corrigindoNumero}
+                      className="text-[11px] text-amber-200/70 hover:text-amber-200 disabled:opacity-60 transition"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Mensagens */}
       <div className="flex-1 overflow-y-auto px-4 py-4">

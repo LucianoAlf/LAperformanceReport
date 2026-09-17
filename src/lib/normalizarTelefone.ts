@@ -32,3 +32,19 @@ export function mesmoTelefone(a: string | null | undefined, b: string | null | u
   const finalB = finalDe(b);
   return finalA !== null && finalA === finalB;
 }
+
+/**
+ * Escreve o numero como um brasileiro le: (21) 98765-4321.
+ *
+ * Exibicao apenas — nunca use a saida para montar jid ou comparar numeros. Vivia como copia
+ * privada no AdminInboxList; virou fonte unica quando o painel de conversa passou a mostrar
+ * numero tambem, para as duas telas nao escreverem o mesmo contato de formas diferentes.
+ */
+export function formatarTelefoneBR(raw: string | null | undefined): string {
+  if (!raw) return '';
+  let d = raw.replace(/\D/g, '');
+  if (d.startsWith('55') && d.length > 11) d = d.slice(2);
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return raw;
+}
