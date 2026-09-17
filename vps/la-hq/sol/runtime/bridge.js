@@ -1228,17 +1228,17 @@ async function caixaAbf() {
                 return id;
               };
               const _direto = await _abf.tratarPedidoDiretoFechamento(event, { grupo: _grupoCaixa, sendFn: _sendCaixa, log: _caixaLog, governanceFn: _govFn });
-              if (_direto) { _govRecord('route_decided', { route: 'deterministic_abf', engine: 'abf', action: 'fechamento_direto' }); _govRecord('episode_closed', { terminal_state: 'handled', outcome: 'ok' }); typingStop(chatId); _caixaLog({ step: 'abf_fechamento_direto' }); continue; }
+              if (_direto) { _govRecord('relevance_decided', { relevance: 'relevant', reason_code: 'deterministic_abf' }); _govRecord('route_decided', { route: 'deterministic_abf', engine: 'abf', action: 'fechamento_direto' }); _govRecord('episode_closed', { terminal_state: 'handled', outcome: 'ok' }); typingStop(chatId); _caixaLog({ step: 'abf_fechamento_direto' }); continue; }
               // Reabertura do caixa fechado do dia (31/08: "Pode abrir novamente"
               // vazava para o LLM de leitura e morria em "banco bloqueou").
               const _reab = _abf.tratarPedidoDiretoReabertura
                 ? await _abf.tratarPedidoDiretoReabertura(event, { grupo: _grupoCaixa, sendFn: _sendCaixa, log: _caixaLog, governanceFn: _govFn })
                 : false;
-              if (_reab) { _govRecord('route_decided', { route: 'deterministic_abf', engine: 'abf', action: 'reabertura_direta' }); _govRecord('episode_closed', { terminal_state: 'handled', outcome: 'ok' }); typingStop(chatId); _caixaLog({ step: 'abf_reabertura_direta' }); continue; }
+              if (_reab) { _govRecord('relevance_decided', { relevance: 'relevant', reason_code: 'deterministic_abf' }); _govRecord('route_decided', { route: 'deterministic_abf', engine: 'abf', action: 'reabertura_direta' }); _govRecord('episode_closed', { terminal_state: 'handled', outcome: 'ok' }); typingStop(chatId); _caixaLog({ step: 'abf_reabertura_direta' }); continue; }
               _fhPrio = await financeHandler();
               const _tratou = await _abf.tratarConfirmacao(event, { sendFn: _sendCaixa, log: _caixaLog, governanceFn: _govFn,
                 temComprovantePendente: (cid) => !!(_fhPrio && _fhPrio.temPendencia && _fhPrio.temPendencia(cid)) });
-              if (_tratou) { _govRecord('route_decided', { route: 'deterministic_abf', engine: 'abf', action: 'confirmacao' }); _govRecord('episode_closed', { terminal_state: 'handled', outcome: 'ok' }); _caixaLog({ step: 'abf_tratou' }); continue; }
+              if (_tratou) { _govRecord('relevance_decided', { relevance: 'relevant', reason_code: 'deterministic_abf' }); _govRecord('route_decided', { route: 'deterministic_abf', engine: 'abf', action: 'confirmacao' }); _govRecord('episode_closed', { terminal_state: 'handled', outcome: 'ok' }); _caixaLog({ step: 'abf_tratou' }); continue; }
             }
             // Abertura/fechamento fica determinístico acima. Confirmação de
             // qualquer preview persistido também fica no handler determinístico;
@@ -1253,11 +1253,11 @@ async function caixaAbf() {
             const _textoVaiParaAgentTools = SOL_CAIXA_TOOLS_GROUPS.has(chatId)
               && !event.hasMedia && !_confirmacaoDeterministica && !_complementoDeterministico;
             if (_textoVaiParaAgentTools) {
-              _govRecord('route_decided', { route: 'agent_first', engine: 'agent_tools', outcome: 'pending' });
-              _agentFirstCorrelation.register({
-                messageId: event.messageId, chatId: event.chatId, episode: event.caixaGovernancaEpisode,
-              });
-              _caixaLog({ step: 'agent_first_text_handoff_pos_abf', chatId: chatId });
+              // O canário só vira rota agent_first DEPOIS da política de grupo.
+              // Antes, mensagens em standby eram marcadas como handoff e ficavam
+              // falsamente abertas mesmo sem jamais entrar na sessão/modelo.
+              event.caixaGovernancaAgentFirstCandidate = true;
+              _caixaLog({ step: 'agent_first_text_candidate_pos_abf', chatId: chatId });
             } else {
             if (_confirmacaoDeterministica) {
               _govRecord('route_decided', { route: 'legacy', engine: 'legacy_parser', action: 'confirmacao_preview' });
@@ -1337,6 +1337,7 @@ async function caixaAbf() {
                     governanceFn: _govFn, intencaoEstruturada: _intencaoOperacional,
                   });
                   if (_operacaoV4) {
+                    _govRecord('relevance_decided', { relevance: 'relevant', reason_code: 'deterministic_abf' });
                     _govRecord('route_decided', { route: 'deterministic_abf', engine: 'router_v4', action: `${_acaoOperacional}_preview` });
                     _govRecord('episode_closed', { terminal_state: 'handled', outcome: 'ok' });
                     typingStop(chatId);
@@ -1377,6 +1378,7 @@ async function caixaAbf() {
               }
             }
             if (_tratouCaixa) {
+              _govRecord('relevance_decided', { relevance: 'relevant', reason_code: 'caixa_handler' });
               _govRecord('episode_closed', {
                 terminal_state: (_resultadoCaixa && _resultadoCaixa.acao) || 'handled',
                 outcome: 'ok',
@@ -1385,11 +1387,10 @@ async function caixaAbf() {
               typingStop(chatId);
               continue;
             }
-            _govRecord('episode_closed', {
-              terminal_state: 'routed_to_group_engagement',
-              outcome: 'contained',
-              action: (_resultadoCaixa && _resultadoCaixa.acao) || 'not_caixa',
-            });
+            // Não terminaliza antes do agente responder. A política de grupo
+            // abaixo decide entre ignorada_por_politica e group_engagement;
+            // quando houver resposta, /send fecha somente após o envio real.
+            event.caixaGovernancaNotCaixa = true;
             }
           } catch (e) {
             if (event.caixaGovernancaEpisode && _caixaGovernanca) {
@@ -1400,7 +1401,23 @@ async function caixaAbf() {
             continue;
           }
         }
-        if (WHATSAPP_GROUP_LISTEN_ONLY || remetenteNaoAutorizado) continue;
+        if (WHATSAPP_GROUP_LISTEN_ONLY || remetenteNaoAutorizado) {
+          const _gov = event.caixaGovernancaEpisode && (_caixaGovernanca || await caixaGovernanca());
+          if (_gov) {
+            const _reason = remetenteNaoAutorizado ? 'sender_not_allowed' : 'group_listen_only';
+            const _p1 = _gov.record(event.caixaGovernancaEpisode, 'relevance_decided', {
+              relevance: 'irrelevant', reason_code: _reason, outcome: 'contained',
+            });
+            const _p2 = _gov.record(event.caixaGovernancaEpisode, 'contained_with_reason', {
+              route: 'contained', engine: 'bridge', reason_code: _reason, outcome: 'contained',
+            });
+            const _p3 = _gov.record(event.caixaGovernancaEpisode, 'episode_closed', {
+              terminal_state: 'ignored_by_policy', action: _reason, outcome: 'contained',
+            });
+            await Promise.all([_p1, _p2, _p3]);
+          }
+          continue;
+        }
 
         const identidadesProprias = new Set(
           [(sock.user?.id || ''), (sock.user?.lid || '')]
@@ -1417,14 +1434,54 @@ async function caixaAbf() {
           }));
         } catch {}
         if (!decisao.responder) {
+          const _gov = event.caixaGovernancaEpisode && (_caixaGovernanca || await caixaGovernanca());
+          let _terminal = 'ignored_by_policy';
+          let _outcome = 'contained';
           // Agradecimento dirigido a Sol: uma linha e fim. Sem LLM, sem reabrir janela.
           if (decisao.cortesia) {
             try {
               const _c = await sendWithTimeout(chatId, { text: 'De nada! 🌻' });
               const _cid = _c && _c.key && _c.key.id; if (_cid) recentlySentIds.add(_cid);
-            } catch (e) { /* cortesia nunca derruba o fluxo */ }
+              _terminal = 'courtesy_sent';
+              _outcome = 'ok';
+            } catch (e) {
+              _terminal = 'courtesy_failed';
+              _outcome = 'error';
+            }
+          }
+          if (_gov) {
+            const _reason = String(decisao.motivo || 'policy_contained');
+            const _p1 = _gov.record(event.caixaGovernancaEpisode, 'relevance_decided', {
+              relevance: 'irrelevant', reason_code: _reason, outcome: 'contained',
+            });
+            const _p2 = _gov.record(event.caixaGovernancaEpisode, 'contained_with_reason', {
+              route: 'contained', engine: 'bridge', reason_code: _reason, outcome: 'contained',
+            });
+            const _p3 = _gov.record(event.caixaGovernancaEpisode, 'episode_closed', {
+              terminal_state: _terminal, action: _reason, outcome: _outcome,
+            });
+            await Promise.all([_p1, _p2, _p3]);
           }
           continue;
+        }
+        if (event.caixaGovernancaEpisode) {
+          const _gov = _caixaGovernanca || await caixaGovernanca();
+          if (_gov) {
+            const _agentFirst = !!event.caixaGovernancaAgentFirstCandidate;
+            await _gov.record(event.caixaGovernancaEpisode, 'relevance_decided', {
+              relevance: _agentFirst ? 'relevant' : 'irrelevant',
+              reason_code: _agentFirst ? 'agent_first_candidate' : 'group_engagement',
+              outcome: 'ok',
+            });
+            await _gov.record(event.caixaGovernancaEpisode, 'route_decided', {
+              route: _agentFirst ? 'agent_first' : 'group_engagement',
+              engine: _agentFirst ? 'agent_tools' : 'agent_llm', outcome: 'pending',
+            });
+            _agentFirstCorrelation.register({
+              messageId: event.messageId, chatId: event.chatId, episode: event.caixaGovernancaEpisode,
+            });
+            if (_agentFirst) _caixaLog({ step: 'agent_first_text_handoff_pos_policy', chatId: chatId });
+          }
         }
       } else {
         observeDirectMessage(event);

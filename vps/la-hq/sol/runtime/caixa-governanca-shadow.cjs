@@ -12,17 +12,19 @@ const fs = require('fs');
 const path = require('path');
 
 const EVENTOS = new Set([
-  'message_observed', 'redelivery_observed', 'route_decided', 'tool_selected',
+  'message_observed', 'redelivery_observed', 'relevance_decided',
+  'contained_with_reason', 'route_decided', 'tool_selected',
   'preview_prepared', 'preview_sent', 'approval_observed', 'approval_consumed',
   'write_applied', 'write_refused', 'receipt_sent', 'readback_confirmed',
   'readback_failed', 'episode_closed', 'correlation_gap', 'instrument_failure',
 ]);
-const ROTAS = new Set(['deterministic_abf', 'agent_first', 'legacy', 'ocr', 'fallback', 'contained', 'unknown']);
-const MOTORES = new Set(['abf', 'agent_tools', 'legacy_parser', 'ocr', 'vision', 'fallback_llm', 'bank_rpc', 'bridge', 'unknown']);
+const ROTAS = new Set(['deterministic_abf', 'agent_first', 'group_engagement', 'legacy', 'ocr', 'fallback', 'contained', 'unknown']);
+const MOTORES = new Set(['abf', 'agent_tools', 'agent_llm', 'legacy_parser', 'ocr', 'vision', 'fallback_llm', 'bank_rpc', 'bridge', 'unknown']);
 const RESULTADOS = new Set(['ok', 'refused', 'error', 'inconclusive', 'duplicate', 'contained', 'pending']);
 const REFERENCIAS = new Set(['preview_ref', 'approval_ref', 'movement_ref', 'receipt_ref', 'readback_ref', 'tool_call_ref']);
 const CAMPOS = new Set([
   'route', 'engine', 'tool_name', 'action', 'outcome', 'reason_code', 'media_kind',
+  'relevance',
   'terminal_state', 'readback_status', 'correlation_status', 'duplicate',
   ...REFERENCIAS,
 ]);

@@ -74,6 +74,7 @@ jobs:
           node -c vps/la-hq/sol/runtime/caixa-financeiro.cjs
           node -c vps/la-hq/sol/runtime/caixa-abertura-fechamento.cjs
           node -c vps/la-hq/sol/runtime/caixa-governanca-shadow.cjs
+          node -c vps/la-hq/sol/runtime/caixa-auditor-conformidade.cjs
           node --check vps/la-hq/sol/scripts/sol-portas-mcp.mjs
 
       - name: suíte do caixa
@@ -207,6 +208,12 @@ jobs:
           test "$absent" = "t"
           psql -q -v ON_ERROR_STOP=1 -f supabase-sol/migrations/20260916015500_sol_caixa_governanca_readback_v1.sql
           psql -q -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-governanca-shadow.sql
+          psql -q -v ON_ERROR_STOP=1 -f supabase-sol/migrations/20260917013000_sol_caixa_governanca_cp3_classificacao.sql
+          psql -q -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-governanca-cp3.sql
+          psql -q -v ON_ERROR_STOP=1 -f supabase-sol/migration-rollbacks/20260917013000_sol_caixa_governanca_cp3_classificacao_rollback.sql
+          absent_cp3="$(psql -Atqc "select position('relevance_decided' in pg_get_functiondef('public.sol_caixa_governanca_registrar_v1(jsonb)'::regprocedure)) = 0")"
+          test "$absent_cp3" = "t"
+          psql -q -v ON_ERROR_STOP=1 -f supabase-sol/migrations/20260917013000_sol_caixa_governanca_cp3_classificacao.sql
 
       - name: porta localizar executa contra o schema real da auditoria
         run: psql -q -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-porta-localizar-lancamento.sql

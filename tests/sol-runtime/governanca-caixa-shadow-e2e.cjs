@@ -30,6 +30,13 @@ const { criarInstrumento } = require('../../vps/la-hq/sol/runtime/caixa-governan
   assert(/^ep1\.teste\.[0-9a-f]{64}$/.test(a.episode_id));
   assert.strictEqual(instrumento.adoptEpisode(a.episode_id, { unitName: 'Recreio' }).episode_id, a.episode_id);
 
+  await instrumento.record(a, 'relevance_decided', {
+    relevance: 'irrelevant', reason_code: 'standby', outcome: 'contained',
+  });
+  await instrumento.record(a, 'contained_with_reason', {
+    route: 'contained', engine: 'bridge', reason_code: 'standby', outcome: 'contained',
+  });
+
   await instrumento.record(a, 'tool_selected', {
     tool_name: 'caixa_preparar_lancamento', engine: 'agent_tools',
     preview_ref: 'PREVIEW-REAL', raw_text: entrada.body, phone: entrada.senderPhone,
@@ -48,6 +55,10 @@ const { criarInstrumento } = require('../../vps/la-hq/sol/runtime/caixa-governan
   const linhas = bruto.trim().split('\n').map(JSON.parse);
   assert(linhas.some((x) => x.event_type === 'message_observed'));
   assert(linhas.some((x) => x.event_type === 'redelivery_observed'));
+  assert(linhas.some((x) => x.event_type === 'relevance_decided'
+    && x.details.relevance === 'irrelevant'));
+  assert(linhas.some((x) => x.event_type === 'contained_with_reason'
+    && x.details.reason_code === 'standby'));
   assert(linhas.some((x) => x.event_type === 'tool_selected'));
   assert(linhas.every((x) => !x.details || !('raw_text' in x.details)));
   assert(linhas.some((x) => x.event_type === 'tool_selected' && x.details.reason_code === 'unknown'));
