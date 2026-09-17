@@ -26,6 +26,7 @@ on:
       - '.github/workflows/sol-caixa-suite.yml'
       # 🔴 O CI ficava verde sem observar NADA disto. Adicionado em 09/09.
       - 'supabase/migrations/**'
+      - 'supabase/rollbacks/**'
       - 'supabase/functions/caixa-financeiro-whatsapp/**'
       - 'src/lib/caixaFinanceiro.ts'
       - 'tests/caixaPixCofreCompat.test.mjs'
@@ -39,6 +40,7 @@ on:
       - 'vps/la-hq/sol/scripts/**'
       - 'tests/sol-runtime/**'
       - 'supabase/migrations/**'
+      - 'supabase/rollbacks/**'
       - 'supabase/functions/caixa-financeiro-whatsapp/**'
       - 'src/lib/caixaFinanceiro.ts'
       - 'tests/caixaPixCofreCompat.test.mjs'
@@ -235,6 +237,15 @@ jobs:
 
       - name: cadeia real, caminho feliz V3 e atomicidade
         run: psql -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-cadeia-e-atomicidade.sql
+
+      - name: fatura paga hoje vence parcela antiga de mesmo valor
+        run: |
+          psql -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-prioridade-pago-hoje.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/rollbacks/20260917233000_sol_caixa_prioriza_fatura_paga_hoje_no_empate_ROLLBACK.sql
+          ausente="$(psql -Atqc "select position('paga_hoje_valor_exato' in pg_get_functiondef('public.sol_caixa_parcela_canonica_env_v1(jsonb,uuid,text,numeric,date)'::regprocedure)) = 0")"
+          test "$ausente" = "t"
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260917233000_sol_caixa_prioriza_fatura_paga_hoje_no_empate.sql
+          psql -v ON_ERROR_STOP=1 -f tests/sol-caixa/ensaio-prioridade-pago-hoje.sql
 
       # Roda por último para preservar, nos ensaios anteriores, o manifesto do
       # baseline produtivo. A migration nova só muda o estado do banco no teste

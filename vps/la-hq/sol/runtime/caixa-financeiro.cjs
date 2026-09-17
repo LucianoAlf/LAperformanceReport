@@ -2040,11 +2040,27 @@ function _pareceTesteLancarApagar(texto) {
     && /\b(test(?:e|ar|ando)?|lanc(?:o|a|ar)|lan[çc](?:o|a|ar))\b/i.test(t);
 }
 
+// Corta o comentario operacional que vem DEPOIS do nome do aluno. A equipe
+// escreve naturalmente "parcela Nome Sobrenome pago no pix (...)"; sem esta
+// fronteira, o parser transformava "pago no pix / ativamos..." em sobrenomes e
+// obrigava o fluxo a depender do fallback pelo pagador.
+//
+// A regra exige um separador antes do verbo e um complemento tipico de
+// pagamento depois dele. Assim, nao vira uma lista de frases conhecidas e nao
+// corta nomes por mero substring.
+function _cortarComentarioPagamentoDoNome(texto) {
+  return String(texto || '').replace(
+    /\s+(?:foi\s+)?(?:pag[oa]|pagou|quitad[oa])\b(?=\s+(?:no|na|via|por|em|hoje|ontem)\b|\s*\(|\s*$)[\s\S]*$/i,
+    ' '
+  );
+}
+
 function _alunoFromCaption(body) {
   let t = bodyLimpo(body);
   if (!t) return null;
   const rotulado = _alunoRotulado(t);
   if (rotulado) return rotulado;
+  t = _cortarComentarioPagamentoDoNome(t);
   t = t.replace(/\b(parcela|passaporte|lojinha|mensalidade|matr[íi]cula|pagamento|comprovante|recibo|pix|dinheiro|cart[ãa]o|transfer[êe]ncia|boleto)\b/gi, ' ');
   t = t.replace(/\b(janeiro|fevereiro|mar[çc]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b/gi, ' ');
   t = t.replace(/r\$\s*[\d.,]+/gi, ' ').replace(/\d+/g, ' ').replace(/[^\p{L}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
@@ -2059,6 +2075,7 @@ const _INSTRUMENTO = /^(viol[a\u00e3]o|guitarra|baixo|teclado|piano|bateria|cant
 function _limparAlunoRotulado(nome, opts) {
   const minTokens = (opts && opts.minTokens) || 2;
   let n = String(nome || '').split(/[\n,;|]/)[0];
+  n = _cortarComentarioPagamentoDoNome(n);
   // O nome termina onde comeca OUTRO campo: "Aluno é Luiza Rodrigues é
   // responsável financeiro Salomé..." engolia a frase inteira (31/08).
   n = n.replace(/\s+(?:e|eh|é)?\s*(?:o|a)?\s*respons[aá]vel(?:\s+financeir[oa])?\b[\s\S]*$/i, ' ');
@@ -3203,7 +3220,11 @@ function _descricaoLancamento(categoria, competencia, aluno, parcela) {
 
 function _fonteCanonicaIndisponivel(c) {
   const motivo = String(c && (c.motivo || c.motivo_escolha || c.erro || '') || '').toLowerCase();
-  return !c || motivo === 'fonte_indisponivel' || /fonte.*indispon|timeout|temporar|indisponivel/.test(motivo);
+  // Ambiguidade de duas faturas pagas hoje nao e queda da fonte, mas precisa
+  // seguir pela mesma barreira fail-closed: retry unico, zero fallback legado e
+  // nenhum card aprovavel ate a fonte permitir uma escolha unica.
+  return !c || motivo === 'fonte_indisponivel' || motivo === 'fatura_paga_hoje_ambigua'
+    || /fonte.*indispon|timeout|temporar|indisponivel/.test(motivo);
 }
 
 function categoriaEhSaida(categoria) {
@@ -7843,7 +7864,8 @@ module.exports = {
   confirmacaoLimpa, classificarMidia, bodyLimpo, nomeDoAtor, buscarResponsavel, mesmaPessoa, pagamentoMultiplo,
   extrairDivisaoPagamento, extrairSomaAditivaPagamento, extrairAdicionalPagamento, detectarLojinhaProduto, detectarContextoMultiAluno, validarIntencaoMultiAluno,
   identificarPessoa, nomeParaCarimbo, ehPerguntaDeCaixa, resumoDoDia, montarResumoCaixa,
-  extrairCartao, extrairValorOcr, extrairPagador, identificarPorPagador, nomePlausivel, _alunoRotulado, _alunoFromCaption, _alunoSuspeito,
+  extrairCartao, extrairValorOcr, extrairPagador, identificarPorPagador, nomePlausivel,
+  _alunoRotulado, _alunoFromCaption, _cortarComentarioPagamentoDoNome, _alunoSuspeito,
   _cursoRotulado, _confirmacaoManualFatura,
   derivarVinculo, casarParcelaCanonica, linhasDaFatura, categoriaDaFatura, descricaoDaFatura, jaLancadoHoje,
   periodoQuitacao, extrairPeriodoMeses,
