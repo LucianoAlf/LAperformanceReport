@@ -82,7 +82,7 @@ function getLoginErrorMessage(error: Error) {
     message.includes('Failed to fetch') ||
     name.includes('AuthRetryableFetchError')
   ) {
-    return 'Erro de comunicacao com o servidor de autenticacao. Verifique a configuracao de CORS/Allowed Origins no Supabase.';
+    return 'Falha de conexão com o servidor de autenticação. Verifique sua internet e tente novamente.';
   }
 
   return 'Email ou senha incorretos';
