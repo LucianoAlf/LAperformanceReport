@@ -46,7 +46,10 @@ const CANONICA_09 = {
   },
 };
 
-function novo() {
+function novo({ canonicaFn = async () => CANONICA_09, casarFn = async () => ({
+  ok: true, aluno_nome: 'Heitor Dias Berriel Abreu',
+  parcela: { ...PARCELA_INCONSISTENTE },
+}) } = {}) {
   const enviadas = [];
   const ids = [];
   const logs = [];
@@ -68,11 +71,8 @@ function novo() {
     }),
     // A fonte canônica da competência agora é consultada antes do matcher
     // bruto; ela preserva valor atualizado, status e vínculo da fatura.
-    canonicaFn: async () => CANONICA_09,
-    casarFn: async () => ({
-      ok: true, aluno_nome: 'Heitor Dias Berriel Abreu',
-      parcela: { ...PARCELA_INCONSISTENTE },
-    }),
+    canonicaFn,
+    casarFn,
     responsavelFn: async () => ({
       ok: true, aluno_nome: 'Heitor Dias Berriel Abreu', responsavel_nome: 'Diana Pereira Dias',
     }),
@@ -140,10 +140,52 @@ function novo() {
     'legenda de pagamento novo nao e correcao');
   checar(mod.extrairCorrecaoCompetencia('Sol, a parcela é 09/2026') === '09/2026',
     'frase real detecta correcao 09/2026');
+  checar(mod.extrairCorrecaoCompetencia('Sol, é a parcela 09/2026') === '09/2026',
+    'ordem invertida da frase real detecta correcao 09/2026');
   const normalizada = mod.normalizarCorrecaoCompetenciaRoteador(
     { intencao: 'aprovar', competencia: '09/2026' }, 'Sol, a parcela é 09/2026', true);
   checar(normalizada.intencao === 'corrigir_competencia',
     'roteador nao pode transformar correcao de campo em aprovacao');
+
+  // Regressão Lis/CG 17/09: a frase entrou no corretor genérico e o casador,
+  // mesmo consultado com 09/2026, devolveu a fatura 10/2026. O mês humano não
+  // pode ser sobrescrito; retorno divergente fica sem vínculo e sem aprovação.
+  const PARCELA_10 = {
+    ...PARCELA_INCONSISTENTE,
+    fatura_id: 'fatura-outubro',
+    descricao: 'Parcela 10/2026 do curso de Musicalização Infantil',
+    competencia: '10/2026',
+  };
+  const B = novo({
+    canonicaFn: async () => ({
+      ...CANONICA_09,
+      fatura: { ...CANONICA_09.fatura, canonical_fatura_id: 'fatura-outubro', competencia: '2026-10-01' },
+    }),
+    casarFn: async () => ({
+      ok: true, aluno_nome: 'Heitor Dias Berriel Abreu', parcela: PARCELA_10,
+    }),
+  });
+  await B.h.handle({
+    chatId: CHAT, senderPhone: ADM, messageId: 'DOC2', hasMedia: true,
+    mediaType: 'document', mediaUrls: ['fake://comprovante-2.pdf'],
+    body: 'PG pix parcela 09/2026 aluno Heitor Dias Berriel Abreu R$510,75',
+  });
+  const rDivergente = await B.h.handle({
+    chatId: CHAT, senderPhone: ADM, messageId: 'CORR2', hasMedia: false,
+    quotedMessageId: B.ids[B.ids.length - 1], body: 'Parcela 09/2026',
+  });
+  const cardDivergente = B.enviadas[B.enviadas.length - 1] || '';
+  const pendDivergente = (B.h._pendentes.get(CHAT) || [])[0] || {};
+  checar(rDivergente && rDivergente.acao === 'preview_competencia_corrigida',
+    `correcao generica precisa remontar o preview; veio ${JSON.stringify(rDivergente)}`);
+  checar(rDivergente && rDivergente.competencia === '09/2026',
+    `competencia humana 09/2026 precisa sobreviver ao retorno divergente; veio ${JSON.stringify(rDivergente)}`);
+  checar(!/10\/2026/.test(cardDivergente),
+    'card corrigido nao pode exibir a competencia divergente da fonte');
+  checar(pendDivergente.competencia === '09/2026' && pendDivergente.canonica == null && pendDivergente.parcela == null,
+    'retorno divergente deve soltar o vinculo da fatura errada');
+  checar(pendDivergente.bloqueiaFonteIndisponivel === true,
+    `retorno divergente deve bloquear aprovacao ate a fonte confirmar 09/2026; pendencia ${JSON.stringify({ competencia: pendDivergente.competencia, bloqueiaFonteIndisponivel: pendDivergente.bloqueiaFonteIndisponivel, faturaIndisponivel: pendDivergente.faturaIndisponivel })}`);
 
   if (falhas.length) {
     console.error('FALHOU:');

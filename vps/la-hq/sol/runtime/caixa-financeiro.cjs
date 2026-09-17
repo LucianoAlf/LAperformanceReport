@@ -3044,9 +3044,14 @@ function extrairCorrecaoCompetencia(texto) {
   if (!competencia) return null;
   const t = _normConf(texto);
   const explicita = /\b(?:parcela|mensalidade|competencia)\s*(?:correta?\s*)?(?:e|eh|foi|seria)\s*(?:a\s+)?(?:de\s+)?(?:0?[1-9]|1[0-2]|janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\b/.test(t);
+  // A equipe tambem fala na ordem inversa: "e a parcela 09/2026". Sem essa
+  // forma, a mensagem caia no corretor generico de categoria, que podia aceitar
+  // outra competencia devolvida pelo casador e remontar exatamente o card que a
+  // pessoa acabara de corrigir.
+  const explicitaInvertida = /\b(?:e|eh|foi|seria)\s+(?:a\s+)?(?:parcela|mensalidade|competencia)\s*(?:correta?\s*)?(?:de\s+)?(?:0?[1-9]|1[0-2]|janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\b/.test(t);
   const imperativa = /\b(?:corrig|troca|muda|ajusta|altera)\w*\b[\s\S]{0,80}\b(?:parcela|mensalidade|competencia|0?[1-9]\s*[\/. -]\s*(?:20)?\d{2})\b/.test(t);
   const deMes = /\b(?:essa|esta|isso)\s+(?:e|eh)\s+(?:a\s+)?de\s+(?:janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\b/.test(t);
-  return (explicita || imperativa || deMes) ? competencia : null;
+  return (explicita || explicitaInvertida || imperativa || deMes) ? competencia : null;
 }
 
 function normalizarCorrecaoCompetenciaRoteador(decisao, texto, temContexto) {
@@ -4380,6 +4385,7 @@ _Não lanço nada pela metade._`);
           const visto = enc ? ` A fatura que achei${_quem} é de ${fmtBRL(enc)}.` : '';
           return `o valor que você escreveu${dec ? ` (${fmtBRL(dec)})` : ''} ainda não bate com uma fatura oficial${_quem}.${visto} Se o pagamento acabou de entrar, minha cópia do Emusys pode estar atrasada — me reenvia daqui a pouco. Não criei card aprovável.`;
         })(),
+        aluno_baixa_confianca: `o nome informado não bateu com segurança no cadastro${_quem}. Me manda o nome completo de cada aluno, exatamente como está no sistema. Não criei card aprovável.`,
         aluno_sem_nome: 'não consegui ler o nome de um dos alunos — ' + _pedeDivisao + '.',
         sem_fatura_que_bata: `ainda não achei fatura oficial${_quem} que feche com esse valor. Se o pagamento acabou de entrar, minha cópia do Emusys pode estar atrasada — me reenvia daqui a pouco. Não criei card aprovável.`,
         itens_ausentes: 'não entendi a divisão — ' + _pedeDivisao + '.',
@@ -6956,11 +6962,15 @@ _Não lanço nada pela metade._`);
               let encontrouFatura = false;
               try {
                 const m = await casarFn(alvoP.unidade_id, alvoP.aluno, alvoP.valor, competencia);
-                if (m && m.ok && m.parcela) {
+                const competenciaRetornada = _competenciaParaExibicao(m && m.parcela && m.parcela.competencia);
+                // A fala humana e autoridade do campo. Se a fonte ignorar o
+                // filtro e devolver outra competencia, ela nao pode sobrescrever
+                // a escolha explicita nem deixar uma fatura errada aprovavel.
+                if (m && m.ok && m.parcela && competenciaRetornada === competenciaInformada) {
                   if (m.aluno_nome) alvoP.aluno = m.aluno_nome;
                   if (m.ambiguo) confiancaBaixa = true;
                   parcela = m.parcela;
-                  if (m.parcela.competencia) competencia = m.parcela.competencia;
+                  competencia = competenciaInformada;
                   encontrouFatura = true;
                 }
               } catch (e) { /* fail-closed abaixo */ }
