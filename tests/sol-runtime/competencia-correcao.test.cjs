@@ -44,6 +44,8 @@ ok(extrairCompetenciaTexto('nao entendi nada') === null, 'texto sem competencia 
 // nova que apenas informa a competencia do pagamento.
 ok(extrairCorrecaoCompetencia('Sol, a parcela e 09/2026') === '09/2026',
    'frase corretiva -> campo competencia 09/2026');
+ok(extrairCorrecaoCompetencia('Sol, é a parcela 09/2026') === '09/2026',
+   'frase corretiva em ordem invertida -> campo competencia 09/2026');
 ok(extrairCorrecaoCompetencia('PG pix parcela 09/2026 aluno Lucas Nunes R$500') === null,
    'pagamento novo com competencia nao vira correcao');
 const normalizada = normalizarCorrecaoCompetenciaRoteador(
