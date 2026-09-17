@@ -22,8 +22,9 @@ import {
 } from 'recharts';
 import {
   DollarSign, Loader2, AlertTriangle, TrendingUp, Target,
-  Smartphone, Radio, UsersRound, Building2, Layers,
+  Smartphone, Radio, UsersRound, Building2, Layers, Users, MousePointerClick,
 } from 'lucide-react';
+import { usePaginacaoTabela, PaginacaoTabela } from './PaginacaoTabela';
 
 // ============================================================================
 // Tipos (espelham o retorno da edge)
@@ -102,6 +103,20 @@ const brl = (v: number) => formatCurrency(v, v >= 1000 ? 0 : 2);
 const num = (v: number) => v.toLocaleString('pt-BR');
 const dec = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
 
+// Lead que chegou por clique de anúncio do Google. `gclid` é a prova do clique e
+// `google_ads_campanha_id` vem do gad_campaignid da URL de destino — os dois são gravados
+// pela edge `registrar-atribuicao-google-ads`, a partir do webhook da onpromedia.
+interface LeadGoogle {
+  id: number;
+  nome: string | null;
+  data_contato: string;
+  status: string;
+  converteu: boolean | null;
+  gclid: string;
+  google_ads_campanha_id: string | null;
+  unidades: { codigo: string } | null;
+}
+
 // ============================================================================
 // Ranking horizontal — mesma linguagem da metade do Meta, em azul
 // ============================================================================
@@ -158,6 +173,12 @@ export function SecaoGoogleAds({ preset }: { preset: PresetGoogle }) {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
+  const [leadsGoogle, setLeadsGoogle] = useState<LeadGoogle[]>([]);
+  const [nomeCampanha, setNomeCampanha] = useState<Map<string, string>>(new Map());
+  const [carregandoLeads, setCarregandoLeads] = useState(true);
+  const paginacaoLeads = usePaginacaoTabela(leadsGoogle, 15);
+  const matricularam = useMemo(() => leadsGoogle.filter(l => l.converteu).length, [leadsGoogle]);
+
   useEffect(() => {
     let ativo = true;
     (async () => {
@@ -179,6 +200,39 @@ export function SecaoGoogleAds({ preset }: { preset: PresetGoogle }) {
     })();
     return () => { ativo = false; };
   }, [preset]);
+
+  // ----- Leads atribuídos ao Google (gêmea da tabela do Meta) -----
+  //
+  // ⚠️ Não filtra por `preset` de propósito, igual à do Meta: a lista responde "quem já
+  // veio do Google", não "quanto gastei na janela". O período de cima é das métricas.
+  useEffect(() => {
+    let ativo = true;
+    (async () => {
+      setCarregandoLeads(true);
+      try {
+        const [{ data: leads }, { data: campanhas }] = await Promise.all([
+          supabase
+            .from('leads')
+            .select('id, nome, data_contato, status, converteu, gclid, google_ads_campanha_id, unidades:unidade_id(codigo)')
+            .not('gclid', 'is', null)
+            .order('data_contato', { ascending: false })
+            .limit(200),
+          // Equivalente ao meta_ads_cache: é daqui que sai o NOME da campanha. Sem tabela
+          // de anúncios porque o Performance Max não expõe anúncio individual.
+          supabase.from('google_ads_metricas_diarias').select('campanha_id, campanha_nome'),
+        ]);
+        if (!ativo) return;
+        setLeadsGoogle((leads as unknown as LeadGoogle[]) || []);
+        setNomeCampanha(new Map((campanhas || []).map((c: { campanha_id: string; campanha_nome: string }) => [c.campanha_id, c.campanha_nome])));
+        paginacaoLeads.setPagina(1);
+      } catch (e) {
+        console.error('Erro ao buscar leads atribuídos ao Google:', e);
+      } finally {
+        if (ativo) setCarregandoLeads(false);
+      }
+    })();
+    return () => { ativo = false; };
+  }, []);
 
   const conta = dados?.conta ?? null;
   const custoPorConversao = conta && conta.conversoes > 0 ? conta.gasto / conta.conversoes : 0;
@@ -500,6 +554,91 @@ export function SecaoGoogleAds({ preset }: { preset: PresetGoogle }) {
           </div>
         </Painel>
       )}
+
+      {/* Atribuição de leads — gêmea da tabela do Meta.
+          ⚠️ SEM coluna "Anúncio": o Performance Max não expõe anúncio individual, então o
+          grão mais fino que existe aqui é a campanha. Inventar a coluna faria a tabela
+          parecer comparável com a do Meta, e ela não é. */}
+      <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-700 flex items-center justify-between flex-wrap gap-2">
+          <h3 className="text-sm font-medium text-slate-400 flex items-center gap-2">
+            <Users className="w-4 h-4" /> Leads atribuídos a anúncios
+          </h3>
+          <div className="flex items-center gap-4 text-xs">
+            <span className="text-slate-400">
+              Atribuídos: <span className="text-white font-bold">{leadsGoogle.length}</span>
+            </span>
+            <span className="text-slate-400">
+              Matricularam: <span className="text-emerald-400 font-bold">{matricularam}</span>
+            </span>
+          </div>
+        </div>
+
+        {carregandoLeads ? (
+          <div className="flex items-center justify-center h-24">
+            <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+          </div>
+        ) : leadsGoogle.length === 0 ? (
+          <div className="p-8 text-center text-slate-400">
+            <MousePointerClick className="w-8 h-8 mx-auto mb-3 opacity-40" />
+            <p className="text-sm">Nenhum lead atribuído ainda.</p>
+            <p className="text-xs text-slate-500 mt-1">
+              A captura de gclid foi ligada em 17/09/2026 — leads que clicarem em anúncio do
+              Google a partir de agora aparecem aqui automaticamente.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-700 text-xs text-slate-400">
+                  <th className="text-left px-5 py-3 font-medium">Lead</th>
+                  <th className="text-left px-4 py-3 font-medium">Campanha</th>
+                  <th className="text-center px-4 py-3 font-medium">Unidade</th>
+                  <th className="text-center px-4 py-3 font-medium">Data</th>
+                  <th className="text-center px-5 py-3 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700/50">
+                {paginacaoLeads.paginados.map(lead => {
+                  const campId = lead.google_ads_campanha_id;
+                  // Sem nome conhecido, mostra o id cru em vez de "—": some assim que a
+                  // captura diária trouxer a campanha, e enquanto isso denuncia a lacuna.
+                  const campanha = campId ? (nomeCampanha.get(campId) || campId) : '—';
+                  return (
+                    <tr key={lead.id} className="hover:bg-slate-700/30 transition-colors">
+                      <td className="px-5 py-3 text-sm text-white">{lead.nome || '(sem nome)'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-300" title={lead.gclid}>{campanha}</td>
+                      <td className="px-4 py-3 text-sm text-center text-slate-300">{lead.unidades?.codigo || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-center text-slate-300">
+                        {format(new Date(`${lead.data_contato}T12:00:00`), 'dd/MM/yy', { locale: ptBR })}
+                      </td>
+                      <td className="px-5 py-3 text-center">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium border ${
+                          lead.converteu
+                            ? 'bg-emerald-900/30 border-emerald-700 text-emerald-400'
+                            : 'bg-slate-700/40 border-slate-600 text-slate-300'
+                        }`}>
+                          {lead.converteu ? 'Matriculou' : lead.status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <PaginacaoTabela
+          pagina={paginacaoLeads.pagina}
+          totalPaginas={paginacaoLeads.totalPaginas}
+          setPagina={paginacaoLeads.setPagina}
+          totalItens={leadsGoogle.length}
+          porPagina={15}
+          labelItem="leads"
+          corAtiva="bg-blue-600"
+        />
+      </div>
     </div>
   );
 }

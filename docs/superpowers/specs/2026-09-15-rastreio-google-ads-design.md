@@ -335,50 +335,135 @@ duas fontes escrevendo na mesma coluna. O filtro `origem === 'google' && gclid` 
 ⚠️ **`gad_campaignid` não é campo próprio** — vem dentro da query string de
 `page_url_origem`. Ausente não é erro; nem todo clique carrega.
 
-### Política de escrita
+### A lacuna que só apareceu ao medir: o webhook chega ANTES do lead existir
+
+A primeira versão desta função era one-shot — recebia, casava, acabou. Medindo os 7
+telefones do dia 17/09 contra o `created_at` do lead:
+
+| Lead | Nasceu em relação ao webhook | Veredito |
+|---|---|---|
+| Cristiane | +1,8s | perderia |
+| (emoji) | +2,1s | perderia |
+| Renata | +2,4s | perderia |
+| Marcelly | +3,0s | perderia |
+| Danilo | +3,9s | perderia |
+| Paula | nunca virou lead | perderia |
+| Izadora | lead de março | ok |
+
+**5 de 7 leads não existiam no banco quando o webhook chegou.** O único caso que funcionou
+no teste inicial (José Arimateia) só funcionou por ser lead antigo — caso atípico, não o
+padrão. A raiz: o braço do Meta tem *duas* camadas (tempo real + varredura horária) e eu
+tinha copiado só a primeira.
+
+Por isso existem a tabela `google_ads_cliques` e a varredura.
+
+### As três coisas que a tabela `google_ads_cliques` resolve
+
+1. **A corrida de segundos** — o clique fica gravado como `pendente` e a varredura casa no
+   ciclo seguinte (cron `*/10`, janela de 7 dias).
+2. **O clique órfão** — conversa que nunca virou lead (2 de 10 no dia) passa a deixar
+   rastro: é verba gasta que não gerou nem cadastro, e antes era invisível.
+3. **O histórico por lead** — `leads.gclid` guarda **um** clique só. Quem clica em três
+   anúncios ao longo de dois meses tem dois cliques sem onde existir. Isso também é o que
+   destrava a Fase 3: o Google usa **last click** na importação de conversão, não o
+   first-touch que a coluna guarda.
+
+⚠️ **`leads` continua fonte única do lead.** A tabela guarda EVENTO de clique e aponta para
+o lead quando casa — não duplica cadastro.
+
+### A regra de canal: fato vence declaração, mas só quando o clique trouxe a pessoa
 
 ```
-teste: true ....................... ignora (não grava nem loga)
-origem != google OU sem gclid ..... ignora
-sem telefone / telefone inválido .. loga sem_telefone
-nenhum lead com o telefone ........ loga nao_encontrado
-todos os leads já com gclid ....... ja_completo (é o 2º evento ecoando o mesmo dado)
-2+ leads sem gclid no telefone .... loga ambiguo_pendente, NÃO escolhe
-exatamente 1 lead sem gclid ....... grava
+canal vazio ........................... preenche Google (tapa-buraco — 18% dos leads hoje)
+lead criado DEPOIS da conversa ........ sobrescreve (foi o clique que trouxe)
+lead já existia antes da conversa ..... canal intacto (reengajamento)
+gclid e campanha ...................... sempre gravados, nos três casos
 ```
 
-- **First-touch:** a trava `IS NULL` fica no `WHERE` do próprio `UPDATE`, então sobrevive a
-  evento duplicado e a corrida entre os dois eventos da mesma conversa.
-- **`canal_origem_id = 3` (Google) vai em UPDATE separado**, com trava própria — mesmo
-  motivo documentado em `varrer-atribuicao-meta-ads`: num update só, uma coluna já
-  preenchida bloquearia a gravação da outra.
+⚠️ **O critério é BINÁRIO — "o lead já existia?" — não uma janela de tempo.** Chegou-se a
+propor uma janela de 24h, medindo a distribuição real (88% dos cliques chegam em até 10 min
+do lead nascer; 10,5% acima de 7 dias; quase nada entre 1h e 7 dias). Mas a janela era
+constante arbitrária para uma pergunta que os dados já respondem de forma exata.
 
-### Medido no dia do deploy
+⚠️ **Compara com `conversa.created_at` do payload, NUNCA com a hora de chegada do webhook.**
+O webhook chega ~1-2s depois da conversa nascer e o lead ~2-4s depois disso: comparar pela
+chegada classificaria errado justamente o caso mais comum.
 
-Lead 14201 (José Arimateia Carneiro, CG) recebeu `gclid`,
-`google_ads_campanha_id = 23155373713` e `canal_origem_id = 3`, com 1 linha `vinculado` em
-`leads_automacao_log`. Segunda chamada com o mesmo payload devolveu `ja_completo` sem
-escrever de novo. Pelo webhook real: `teste: true` → `ignorado_teste`, payload Meta →
-`ignorado_nao_google`.
+⚠️ **Por que não reatribuir lead antigo:** o `gclid` prova que houve um clique, não que ele
+foi o primeiro toque. O lead 9323 (Meta) foi criado em 23/05 declarado Google e recebeu o
+`ctwa_clid` em **17/09** — 117 dias depois. Reatribuir faria o canal de retargeting roubar o
+crédito de quem trouxe a pessoa, e mudaria a série histórica para trás.
 
-⚠️ **O `onError` do node HTTP foi deixado no padrão (derruba a execução).** Como o webhook
-responde `200` no recebimento (`responseMode: onReceived`), falhar depois **não** afeta a
-onpromedia — e faz a falha aparecer vermelha na lista de execuções do n8n em vez de sumir.
-Conferir sempre pelo efeito:
+### `upsert_lead` parou de desfazer a atribuição
+
+`canal_origem_id = coalesce(v_canal_id, canal_origem_id)` fazia o **último a falar ganhar**:
+como o Emusys manda o canal a cada atualização, ele desfazia o que a atribuição apurou.
+Flagrado no log — o lead 9674 tinha canal Instagram (correto) e virou "Indicação" em 11/06.
+
+A regra nova protege **só quando o canal gravado concorda com a prova**:
+
+| Situação | Emusys pode sobrescrever? |
+|---|---|
+| `gclid` + canal Google | ❌ protegido |
+| `ctwa_clid` + canal Instagram/Facebook | ❌ protegido |
+| `gclid` + canal Indicação (divergente) | ✅ livre — pode ser reengajamento, e aí a declaração é que está certa |
+
+⚠️ **Não é trigger, de propósito.** Um trigger em `leads` protegeria a coluna em todo caminho
+de escrita — inclusive a edição humana pela tela, que ficaria revertida em silêncio. O escopo
+aqui é só o sync automático (emusys/nocodb/campanha).
+
+Testado com rollback garantido: o protegido continuou Google (3) depois de o Emusys mandar
+INSTAGRAM; o divergente virou Instagram (1), como deve.
+
+### A tela
+
+`SecaoGoogleAds.tsx` ganhou a tabela **"Leads atribuídos a anúncios"**, gêmea da do Meta.
+
+⚠️ **Sem coluna "Anúncio"** — o Performance Max não expõe anúncio individual; o grão mais
+fino é campanha. Inventar a coluna faria a tabela parecer comparável com a do Meta, e ela
+não é.
+
+O nome da campanha sai de `google_ads_metricas_diarias` (equivalente ao `meta_ads_cache`);
+sem nome conhecido, mostra o id cru em vez de "—", para a lacuna se denunciar.
+
+Os helpers de paginação saíram de `TrafegoPagoPage.tsx` para `PaginacaoTabela.tsx` — as duas
+abas usam, e `TrafegoPagoPage` já importa `SecaoGoogleAds` (deixar lá faria ciclo de import).
+
+### Inventário das peças
+
+| Peça | Onde |
+|---|---|
+| Webhook da onpromedia | `https://webhookla.latecnology.com.br/webhook/onpromedia-google-ads-clique` |
+| Workflow n8n | `DVqC4ihArH1Pz1vg` — Webhook → `registrarAtribuicaoGoogle` |
+| Edge (webhook + varredura, 2 modos) | `supabase/functions/registrar-atribuicao-google-ads/index.ts` |
+| Tabela de cliques | `google_ads_cliques` (migration `20260917230000`) |
+| Colunas em `leads` | `gclid`, `google_ads_campanha_id` (`20260917220000`) |
+| Cron da varredura | `varrer-atribuicao-google-ads`, `*/10 * * * *` (`20260917234500`) |
+| Proteção do canal | `upsert_lead` (`20260917235500`) |
+| Tela | `src/components/App/TrafegoPago/SecaoGoogleAds.tsx` |
+| Log | `leads_automacao_log`, `evento='google_ads'` |
+
+### Como conferir que está vivo (nunca pelo status do cron)
 
 ```sql
-select acao, count(*), max(created_at) as ultimo
-from leads_automacao_log where evento = 'google_ads'
-group by acao order by 2 desc;
+select situacao, count(*), max(created_at) from public.google_ads_cliques group by 1;
+select acao, count(*), max(created_at) from public.leads_automacao_log
+ where evento='google_ads' group by 1;
 ```
 
 ### O que ainda não está resolvido
 
-1. **`gbraid`/`wbraid` (iOS e app) não foram vistos preenchidos em nenhum evento.** O
-   payload tem o campo `gclid` e nada equivalente para os outros dois. Performance Max gera
-   muito tráfego iOS — **perder essa fatia seria silencioso**. Confirmar com a onpromedia.
-2. **Cobertura desconhecida.** 1 evento com `gclid` em 17 não diz qual fração dos cliques
-   pagos chega atribuída. Comparar `leads` com `gclid` contra os cliques que o Google
-   reporta em `google_ads_metricas_diarias`.
-3. **Fase 3** (importar a matrícula como conversão no Google) continua de pé, e agora tem
-   o insumo que faltava.
+1. ⚠️ **`gbraid`/`wbraid` não aparecem no payload.** Só `gclid`. Performance Max gera muito
+   tráfego iOS/app, e essa perda seria **silenciosa**. Confirmar com o Rayan. A coluna já
+   existe na tabela, esperando.
+2. ⚠️ **O `gad_campaignid` do clique NÃO bate com nenhuma campanha da conta que lemos.** O
+   clique real trouxe `23155373713`; a `google_ads_metricas_diarias` (capturada no mesmo dia,
+   fresca) tem só 4 campanhas: `23150914508`, `22240061012`, `22636203296`, `22635897064`.
+   Ou o `gad_campaignid` da URL é um identificador diferente do `campaign.id` da API, **ou as
+   campanhas rodam numa conta do Google Ads diferente da que o LAReport lê** (717-909-7170).
+   Se for a segunda, o gasto que o painel mostra e os cliques que chegam são de contas
+   distintas — e cruzar custo com lead ficaria errado. **Pendência antes de qualquer conta de
+   CPL.**
+3. **Cobertura desconhecida** — 1 `gclid` em 17 eventos não diz que fração dos cliques pagos
+   chega atribuída. Comparar contra os cliques que o Google reporta.
+4. **Fase 3** (importar a matrícula como conversão) segue pendente, agora com insumo.
