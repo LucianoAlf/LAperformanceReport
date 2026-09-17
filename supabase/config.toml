@@ -140,6 +140,12 @@ verify_jwt = false
 # marca "succeeded" -- falha silenciosa. Ver comentario no topo do index.ts.
 verify_jwt = false
 
+[functions.registrar-atribuicao-google-ads]
+# Chamada pelo n8n (DVqC4ihArH1Pz1vg) com a anon key no Authorization, igual ao
+# registrar-atribuicao-meta-ads. O gateway valida o JWT; o filtro de escopo (so
+# origem=google com gclid) fica dentro da funcao.
+verify_jwt = true
+
 [functions.atualizar-inadimplencia-emusys]
 # Endpoint de compatibilidade do botao: navegador manda JWT e servidor pode mandar
 # x-sync-token, ambos validados dentro da funcao. Ele apenas encaminha para a fila unica

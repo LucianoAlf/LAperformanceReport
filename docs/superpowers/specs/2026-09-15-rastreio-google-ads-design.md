@@ -5,6 +5,15 @@
 **Origem:** conversa sobre um "motor de análise de tráfego pago" para avaliar o gestor humano.
 A investigação mostrou que o motor não é o primeiro problema — a atribuição do Google é.
 
+> ⚠️ **ATUALIZAÇÃO 2026-09-17 — o caminho mudou, e as Fases 0 e 2 foram DESCARTADAS.**
+> Apareceu a quarta porta que a seção 3 dizia não existir: a **onpromedia já opera o
+> redirect** entre o anúncio e o `wa.me` (domínio deles, não nosso), e passou a empurrar a
+> atribuição resolvida por webhook. Não precisamos do prefixo "Vim pelo Google." (Fase 0)
+> nem da nossa página-pedágio (Fase 2) — nem trocar o link do botão. O que foi construído
+> está na **seção 9**, no fim deste documento. O resto do texto fica como registro do
+> raciocínio original, que continua válido para explicar *por que* a solução tinha de vir
+> de quem está antes do `wa.me`.
+
 ---
 
 ## 1. O problema, medido
@@ -269,3 +278,107 @@ Por isso a ordem inverteu: **rastreio primeiro, motor depois.** O motor de avali
 continua de pé como projeto seguinte, e o desenho dele — auditor de decisões em modo sombra,
 lendo Activity Log do Meta e `change_event` do Google, julgando só as divergências — fica
 registrado para quando a base existir.
+
+---
+
+## 9. O que foi construído (2026-09-17) — a rota pela onpromedia
+
+### O que mudou em relação ao desenho original
+
+A seção 3 concluiu que, como o `wa.me` é domínio da Meta, a ponte só poderia ser feita por
+algo que viajasse junto com o lead (texto, telefone ou número dedicado) — "não há uma quarta
+porta". **Havia**: quem está *antes* do `wa.me`. A onpromedia (plataforma "CQC"), que opera
+as campanhas, já redireciona o clique pelo domínio dela antes de abrir o WhatsApp, e é ali
+que o `gclid` é capturado. O que faltava não era mecanismo, era o **repasse** — e ele agora
+existe, por webhook.
+
+| Fase do desenho original | Situação |
+|---|---|
+| Fase 0 (prefixo "Vim pelo Google.") | ❌ **descartada** — existia só porque não víamos como obter o gclid |
+| Fase 1 (origem chega ao banco) | ✅ **feita**, por outro caminho (webhook, não varredura do Chatwoot) |
+| Fase 2 (página-pedágio própria) | ❌ **descartada** — o pedágio é da onpromedia; não construímos nem mantemos |
+| Fase 3 (devolver a matrícula ao Google) | ⏳ pendente, e agora destravada: o `gclid` existe |
+
+⚠️ **O link do botão NÃO mudou** do nosso lado, e não precisa mudar.
+
+### As peças
+
+| Peça | Onde |
+|---|---|
+| Webhook que a onpromedia chama | `https://webhookla.latecnology.com.br/webhook/onpromedia-google-ads-clique` |
+| Workflow n8n | `DVqC4ihArH1Pz1vg` — Webhook → `registrarAtribuicaoGoogle` (HTTP) |
+| Edge function | `supabase/functions/registrar-atribuicao-google-ads/index.ts` |
+| Colunas em `leads` | `gclid` (já existia) e `google_ads_campanha_id` (migration `20260917220000`) |
+| Log | `leads_automacao_log`, `evento='google_ads'` |
+
+### O formato que chega
+
+Dois eventos por conversa (`conversa.criada` e depois `conversa.evento_disparado`, este
+quando uma palavra-chave dispara etapa de funil), ambos ecoando o **mesmo** bloco
+`atribuicao`. Medido em 17 execuções no dia 17/09:
+
+| `atribuicao.origem` | Conversas | O que traz |
+|---|---|---|
+| `organico` | 7 | nada |
+| `meta` | 3 | `ctwa_clid`, `ad_id`, `ad_source_url` (post do Instagram) |
+| `google` | 1 | `gclid`, `page_url_origem` (com `gad_campaignid`), `tracking_link_id` |
+
+⚠️ **O mesmo endpoint mistura os três canais** — a onpromedia não separa por canal do lado
+dela. Por isso o nome do webhook (`...-google-ads-clique`) é enganoso: ele recebe tudo.
+
+⚠️ **O braço do Meta NÃO é processado aqui, de propósito.** Ele já tem dono
+(`registrar-atribuicao-meta-ads` em tempo real + `varrer-atribuicao-meta-ads` de hora em
+hora, com first-touch e trava contra corrida). Processar Meta também nesta função criaria
+duas fontes escrevendo na mesma coluna. O filtro `origem === 'google' && gclid` é o
+**primeiro passo**, antes de qualquer leitura no banco.
+
+⚠️ **`gad_campaignid` não é campo próprio** — vem dentro da query string de
+`page_url_origem`. Ausente não é erro; nem todo clique carrega.
+
+### Política de escrita
+
+```
+teste: true ....................... ignora (não grava nem loga)
+origem != google OU sem gclid ..... ignora
+sem telefone / telefone inválido .. loga sem_telefone
+nenhum lead com o telefone ........ loga nao_encontrado
+todos os leads já com gclid ....... ja_completo (é o 2º evento ecoando o mesmo dado)
+2+ leads sem gclid no telefone .... loga ambiguo_pendente, NÃO escolhe
+exatamente 1 lead sem gclid ....... grava
+```
+
+- **First-touch:** a trava `IS NULL` fica no `WHERE` do próprio `UPDATE`, então sobrevive a
+  evento duplicado e a corrida entre os dois eventos da mesma conversa.
+- **`canal_origem_id = 3` (Google) vai em UPDATE separado**, com trava própria — mesmo
+  motivo documentado em `varrer-atribuicao-meta-ads`: num update só, uma coluna já
+  preenchida bloquearia a gravação da outra.
+
+### Medido no dia do deploy
+
+Lead 14201 (José Arimateia Carneiro, CG) recebeu `gclid`,
+`google_ads_campanha_id = 23155373713` e `canal_origem_id = 3`, com 1 linha `vinculado` em
+`leads_automacao_log`. Segunda chamada com o mesmo payload devolveu `ja_completo` sem
+escrever de novo. Pelo webhook real: `teste: true` → `ignorado_teste`, payload Meta →
+`ignorado_nao_google`.
+
+⚠️ **O `onError` do node HTTP foi deixado no padrão (derruba a execução).** Como o webhook
+responde `200` no recebimento (`responseMode: onReceived`), falhar depois **não** afeta a
+onpromedia — e faz a falha aparecer vermelha na lista de execuções do n8n em vez de sumir.
+Conferir sempre pelo efeito:
+
+```sql
+select acao, count(*), max(created_at) as ultimo
+from leads_automacao_log where evento = 'google_ads'
+group by acao order by 2 desc;
+```
+
+### O que ainda não está resolvido
+
+1. **`gbraid`/`wbraid` (iOS e app) não foram vistos preenchidos em nenhum evento.** O
+   payload tem o campo `gclid` e nada equivalente para os outros dois. Performance Max gera
+   muito tráfego iOS — **perder essa fatia seria silencioso**. Confirmar com a onpromedia.
+2. **Cobertura desconhecida.** 1 evento com `gclid` em 17 não diz qual fração dos cliques
+   pagos chega atribuída. Comparar `leads` com `gclid` contra os cliques que o Google
+   reporta em `google_ads_metricas_diarias`.
+3. **Fase 3** (importar a matrícula como conversão no Google) continua de pé, e agora tem
+   o insumo que faltava.
