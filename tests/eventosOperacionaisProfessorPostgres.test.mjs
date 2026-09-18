@@ -6,10 +6,16 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const migrationPath = path.join(
-  root,
-  'supabase/migrations/20260918082627_central_notificacoes_operacionais.sql',
-);
+const migrationPaths = [
+  path.join(
+    root,
+    'supabase/migrations/20260918115015_central_notificacoes_operacionais.sql',
+  ),
+  path.join(
+    root,
+    'supabase/migrations/20260918120815_central_notificacoes_operacionais_acl.sql',
+  ),
+];
 
 function docker(args, input) {
   return spawnSync('docker', args, {
@@ -262,7 +268,9 @@ const fixtureSchema = String.raw`
 `;
 
 test('the operational-notification migration is present before its PostgreSQL fixture runs', () => {
-  assert.ok(fs.existsSync(migrationPath), `missing migration: ${migrationPath}`);
+  for (const migrationPath of migrationPaths) {
+    assert.ok(fs.existsSync(migrationPath), `missing migration: ${migrationPath}`);
+  }
 });
 
 test('operational notification triggers, service RPCs, ACLs and initial load honour the closed contract', async (t) => {
@@ -285,9 +293,11 @@ test('operational notification triggers, service RPCs, ACLs and initial load hon
     const fixture = psql(container, fixtureSchema);
     assert.equal(fixture.status, 0, fixture.stderr || fixture.stdout);
 
-    const migration = fs.readFileSync(migrationPath, 'utf8');
-    const setup = psql(container, migration);
-    assert.equal(setup.status, 0, setup.stderr || setup.stdout);
+    for (const migrationPath of migrationPaths) {
+      const migration = fs.readFileSync(migrationPath, 'utf8');
+      const setup = psql(container, migration);
+      assert.equal(setup.status, 0, setup.stderr || setup.stdout);
+    }
 
     const initial = jsonOutput(psql(container, `
       set role service_role;
@@ -509,6 +519,44 @@ test('operational notification triggers, service RPCs, ACLs and initial load hon
     `);
     assert.equal(rlsAndBirthdayAcl.status, 0, rlsAndBirthdayAcl.stderr || rlsAndBirthdayAcl.stdout);
     assert.deepEqual(rlsAndBirthdayAcl.stdout.trim().split(/\r?\n/u), ['true|true', 'f|f|f', 'f|t']);
+
+    const triggerWithRevokedExecute = psql(container, `
+      grant select, update on public.aulas_emusys to service_role;
+      set role service_role;
+      update public.aulas_emusys
+         set data_hora_inicio = data_hora_inicio + interval '30 minutes'
+       where id = 101;
+      reset role;
+      select count(*) > 2
+        from public.eventos_operacionais
+       where tipo = 'aula_reagendada';
+    `);
+    assert.equal(triggerWithRevokedExecute.status, 0, triggerWithRevokedExecute.stderr || triggerWithRevokedExecute.stdout);
+    assert.equal(triggerWithRevokedExecute.stdout.trim().split(/\r?\n/u).at(-1), 't');
+
+    const internalAclAndIndexes = psql(container, `
+      select string_agg(
+        has_function_privilege('anon', format('public.%I()', proname), 'execute')::text,
+        '|' order by proname
+      )
+      from pg_proc
+      join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+      where nspname = 'public'
+        and proname in (
+          'trg_eventos_operacionais_aula_cancelada',
+          'trg_eventos_operacionais_aula_reagendada',
+          'trg_eventos_operacionais_aviso_previo',
+          'trg_eventos_operacionais_experimental',
+          'trg_eventos_operacionais_jornada_matricula',
+          'trg_eventos_operacionais_professor_aula',
+          'trg_eventos_operacionais_professor_jornada'
+        );
+      select to_regclass('public.idx_eventos_operacionais_aluno_id') is not null,
+             to_regclass('public.idx_eventos_operacionais_aula_id') is not null,
+             to_regclass('public.idx_eventos_operacionais_unidade_id') is not null;
+    `);
+    assert.equal(internalAclAndIndexes.status, 0, internalAclAndIndexes.stderr || internalAclAndIndexes.stdout);
+    assert.deepEqual(internalAclAndIndexes.stdout.trim().split(/\r?\n/u), ['false|false|false|false|false|false|false', 't|t|t']);
 
     const isolation = psql(container, `
       alter table public.eventos_operacionais

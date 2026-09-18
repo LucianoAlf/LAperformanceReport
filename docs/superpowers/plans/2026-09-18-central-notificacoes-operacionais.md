@@ -8,6 +8,8 @@
 
 **Tech Stack:** PostgreSQL/Supabase, migrations SQL versionadas, RLS, funções SECURITY DEFINER com search_path fixado, Node test runner e fixture PostgreSQL 17 em Docker.
 
+> **Execução em 18/09:** Tasks 1–5 concluídas e publicadas. A Task 6 está em observação: carga inicial, consulta e primeira rodada de sincronização já foram medidas; a janela de 24 horas continua registrada no handoff.
+
 ---
 
 ## Estrutura de arquivos
@@ -323,18 +325,21 @@ Expected: PASS, com Docker indisponível marcado como SKIP pela fixture.
 - [ ] **Step 1: Medir baseline do sync de grade**
 
 ~~~sql
-select unidade_id, started_at, finished_at,
-       extract(epoch from finished_at - started_at) * 1000 as duracao_ms
-from public.presenca_sync_runs
+select unidade_id, criada_em, finalizada_em,
+       extract(epoch from finalizada_em - criada_em) * 1000 as duracao_ms
+from public.presenca_sync_execucoes
 where modo = 'metadados'
-order by started_at desc
+  and status = 'concluida'
+  and finalizada_em is not null
+order by criada_em desc
 limit 30;
 ~~~
 
 - [ ] **Step 2: Aplicar migration só após testes locais e revisão de SQL**
 
 ~~~text
-Aplicar apenas a migration versionada; nenhuma Edge Function é publicada.
+Aplicar a migration versionada. Depois, publicar somente a Edge que passa a
+persistir a descrição curta permitida de `matricula_alterada`.
 ~~~
 
 - [ ] **Step 3: Rodar carga inicial e medir consulta**
@@ -357,10 +362,12 @@ select unidade_id,
        percentile_cont(0.9) within group (order by duracao_ms) as p90_ms
 from (
   select unidade_id,
-         extract(epoch from finished_at - started_at) * 1000 as duracao_ms
-  from public.presenca_sync_runs
-  where modo = 'metadados'
-    and started_at >= now() - interval '24 hours'
+          extract(epoch from finalizada_em - criada_em) * 1000 as duracao_ms
+   from public.presenca_sync_execucoes
+   where modo = 'metadados'
+     and status = 'concluida'
+     and finalizada_em is not null
+     and criada_em >= now() - interval '24 hours'
 ) runs
 group by unidade_id;
 ~~~

@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-16 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-18 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — comercial
 
-76 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+78 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## agente_conversas
 
@@ -539,24 +539,81 @@
 
 ## google_ads_cliques
 
-> Par codigo<->gclid gravado no clique do botao de WhatsApp nas landings do Google Ads. usado_em null = clique que ainda nao virou lead (ou nunca vai virar) -- e o sinal de quanto se perde entre clique e mensagem, hoje invisivel.
+> Cliques do Google Ads recebidos do webhook da onpromedia (CQC). Guarda EVENTO de clique, nao lead -- `leads` continua fonte unica. Serve de fila de re-tentativa (o webhook chega segundos antes do lead existir), de registro do clique orfao e do historico de cliques por lead. Schema reaproveitado da Fase 2 abandonada (pagina-pedagio propria), que nunca chegou a rodar.
 
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
 | `id` | bigint | não |  |  |
-| `codigo` | text | não |  |  |
 | `gclid` | text | sim |  |  |
 | `gbraid` | text | sim |  |  |
 | `wbraid` | text | sim |  |  |
-| `unidade_id` | uuid | sim |  | unidades.id |
-| `pagina` | text | sim |  |  |
-| `clicado_em` | timestamp with time zone | não | now() |  |
-| `usado_em` | timestamp with time zone | sim |  |  |
 | `lead_id` | integer | sim |  | leads.id |
+| `campanha_id` | text | sim |  |  |
+| `cqc_conversa_id` | text | sim |  |  |
+| `cqc_event` | text | sim |  |  |
+| `telefone` | text | sim |  |  |
+| `nome_lead` | text | sim |  |  |
+| `origem` | text | sim |  |  |
+| `page_url_origem` | text | sim |  |  |
+| `tracking_link_id` | text | sim |  |  |
+| `conversa_criada_em` | timestamp with time zone | sim |  |  |
+| `situacao` | text | não | 'pendente'::text |  |
+| `canal_aplicado` | boolean | não | false |  |
+| `motivo_canal` | text | sim |  |  |
+| `tentativas` | integer | não | 0 |  |
+| `ultima_tentativa_em` | timestamp with time zone | sim |  |  |
+| `casado_em` | timestamp with time zone | sim |  |  |
+| `payload` | jsonb | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+| `gad_campaignid` | text | sim |  |  |
+| `campanha_nome` | text | sim |  |  |
+| `campanha_resolvida_em` | timestamp with time zone | sim |  |  |
 
 **Únicos:**
-- `google_ads_cliques_codigo_key`
 - `google_ads_cliques_pkey`
+- `idx_google_ads_cliques_gclid`
+
+## google_ads_conversoes
+
+> Registro das conversoes offline enviadas ao Google Ads (UploadClickConversions). Uma linha por aluno+tipo. `enviado_em` nulo = ainda na fila; `ultimo_erro` preenchido com `enviado_em` nulo = tentou e falhou.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('google_ads_conversoes_id_seq'::regclass) |  |
+| `aluno_id` | integer | não |  | alunos.id |
+| `gclid` | text | não |  |  |
+| `tipo` | text | não | 'matricula'::text |  |
+| `valor` | numeric(12,2) | não |  |  |
+| `moeda` | text | não | 'BRL'::text |  |
+| `ocorrido_em` | timestamp with time zone | não |  |  |
+| `via` | text | sim |  |  |
+| `clique_em` | timestamp with time zone | sim |  |  |
+| `enviado_em` | timestamp with time zone | sim |  |  |
+| `tentativas` | integer | não | 0 |  |
+| `ultimo_erro` | text | sim |  |  |
+| `resposta` | jsonb | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `google_ads_conversoes_pkey`
+- `google_ads_conversoes_unica`
+
+## google_ads_conversoes_fila
+
+> Matriculas que tem gclid e ainda nao foram devolvidas ao Google. Fila da edge `enviar-conversoes-google-ads`. A view NAO filtra por janela de lookback de proposito: quem esta velho demais para ser aceito precisa aparecer e ser contado como descartado, nao sumir em silencio.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `aluno_id` | integer | sim |  |  |
+| `nome` | character varying(200) | sim |  |  |
+| `data_matricula` | date | sim |  |  |
+| `ocorrido_em` | timestamp with time zone | sim |  |  |
+| `valor` | numeric | sim |  |  |
+| `gclid` | text | sim |  |  |
+| `via` | text | sim |  |  |
+| `clique_em` | timestamp with time zone | sim |  |  |
 
 ## google_ads_metricas_diarias
 
@@ -659,6 +716,7 @@
 
 **Triggers:**
 - `trg_audit → fn_audit_log()`
+- `trg_eventos_operacionais_experimental → trg_eventos_operacionais_experimental()`
 - `trg_experimental_normaliza_referencia_aula → fn_experimental_normaliza_referencia_aula()`
 - `trg_experimental_preenche_curso → trg_experimental_preenche_curso_do_lead()`
 - `trg_propagar_professor_experimental → fn_propagar_professor_experimental()`
@@ -908,6 +966,7 @@
 | `chatwoot_ultima_msg_de` | text | sim |  |  |
 | `chatwoot_espelhado_em` | timestamp with time zone | sim |  |  |
 | `gclid` | text | sim |  |  |
+| `google_ads_campanha_id` | text | sim |  |  |
 
 **Únicos:**
 - `idx_leads_emusys_lead_id`

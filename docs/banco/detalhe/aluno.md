@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-15 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-18 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — aluno
@@ -172,6 +172,7 @@
 | `trancamento_data_final` | date | sim |  |  |
 | `sucedida_por` | bigint | sim |  |  |
 | `sucedida_em` | timestamp with time zone | sim |  |  |
+| `alteracao_descricao_emusys` | text | sim |  |  |
 
 **Únicos:**
 - `aluno_jornada_matricula_disciplina_pkey`
@@ -179,6 +180,7 @@
 
 **Triggers:**
 - `trg_aluno_jornada_matricula_disciplina_updated_at → update_updated_at_column()`
+- `trg_eventos_operacionais_jornada_matricula → trg_eventos_operacionais_jornada_matricula()`
 - `trg_jornada_ciclo_sucedido → fn_jornada_marca_ciclo_sucedido()`
 - `trg_materializar_projecao_jornada → trg_materializar_projecao_jornada()`
 - `trg_resolver_jornada_curso_grade_atual_v1 → fn_aplicar_jornada_curso_grade_atual_v1()`
@@ -377,6 +379,9 @@
 **Únicos:**
 - `aluno_professor_transicoes_pkey`
 - `uq_aluno_professor_transicoes_evento`
+
+**Triggers:**
+- `trg_eventos_operacionais_professor_jornada → trg_eventos_operacionais_professor_jornada()`
 
 ## aluno_reposicoes
 
@@ -1481,6 +1486,7 @@
 - `trg_audit → fn_audit_log()`
 - `trg_bloqueia_delete_movimentacao_admin → fn_bloqueia_delete_movimentacao_admin()`
 - `trg_capturar_telefone_snapshot_movimentacao_retencao → capturar_telefone_snapshot_movimentacao_retencao()`
+- `trg_eventos_operacionais_aviso_previo → trg_eventos_operacionais_aviso_previo()`
 - `trg_preencher_campos_retencao_movimentacoes_admin → preencher_campos_retencao_movimentacoes_admin()`
 - `trg_resolver_motivo_saida_movimentacao_admin → fn_resolver_motivo_saida_movimentacao_admin()`
 - `trg_sync_evasao_dados_mensais → sync_evasao_to_dados_mensais()`
