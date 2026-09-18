@@ -845,6 +845,19 @@ async function sincronizarJornadaCanonicaWebhook(supabase: any, p: Payload, auto
       )
       : buildJornadaInputFromWebhook(webhookCanonico, p.unidadeId, `webhook:${p.evento}`);
     if (!input) return { updated: 0, skipped: 0, errors: ['payload_sem_matricula'] };
+
+    // Quando a Edge precisou consultar o estado atual, a grade vem do GET e a
+    // descricao curta continua no envelope original. Persistimos somente esse
+    // texto limpo para a projecao de notificacoes; nunca o payload inteiro.
+    if (p.evento === 'matricula_alterada' && typeof p.rawPayload?.alteracao?.descricao === 'string') {
+      const descricao = p.rawPayload.alteracao.descricao
+        .replace(/<[^>]*>/gu, ' ')
+        .replace(/\s+/gu, ' ')
+        .trim()
+        .slice(0, 500);
+      input.alteracaoDescricaoEmusys = descricao || null;
+    }
+
     const transicoesProfessor = await registrarTransicaoProfessorSeNecessario(supabase, input, p, automacaoLogId);
     const result = await upsertJornadaMatriculaDisciplina(supabase, input);
     if (result.errors.length > 0) {
@@ -2038,6 +2051,7 @@ async function handleAvisoPrevio(supabase: any, p: Payload) {
       motivo,
       motivo_saida_id: motivoSaidaId,
       observacoes,
+      origem_registro: 'webhook_emusys',
       competencia_referencia: inicioMesISO(dataAviso),
       updated_at: new Date().toISOString(),
     };
