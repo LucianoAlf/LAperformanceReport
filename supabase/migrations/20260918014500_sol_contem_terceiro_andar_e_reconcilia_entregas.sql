@@ -10,7 +10,7 @@
 
 create table if not exists public.sol_terceiro_andar_contencao_auditoria_v1 (
   run_id uuid primary key default gen_random_uuid(),
-  migration_key text not null,
+  controle_ref text not null,
   captured_at timestamptz not null default now(),
   switches jsonb not null,
   recipients jsonb not null,
@@ -19,7 +19,7 @@ create table if not exists public.sol_terceiro_andar_contencao_auditoria_v1 (
 );
 
 create unique index if not exists sol_terceiro_andar_contencao_ativa_uidx
-  on public.sol_terceiro_andar_contencao_auditoria_v1 (migration_key)
+  on public.sol_terceiro_andar_contencao_auditoria_v1 (controle_ref)
   where rolled_back_at is null;
 
 alter table public.sol_terceiro_andar_contencao_auditoria_v1 enable row level security;
@@ -34,7 +34,7 @@ declare
 begin
   select count(*) into v_ativa
     from public.sol_terceiro_andar_contencao_auditoria_v1
-   where migration_key = 'third_floor_containment_v1'
+   where controle_ref = 'third_floor_containment_v1'
      and rolled_back_at is null;
 
   if v_ativa = 0 then
@@ -46,7 +46,7 @@ begin
     end if;
 
     insert into public.sol_terceiro_andar_contencao_auditoria_v1
-      (migration_key, switches, recipients, deliveries)
+      (controle_ref, switches, recipients, deliveries)
     select
       'third_floor_containment_v1',
       coalesce((
@@ -167,7 +167,7 @@ begin
        or (f.status = 'erro' and e.status <> 'falhou'));
   select count(*) into v_ativa
     from public.sol_terceiro_andar_contencao_auditoria_v1
-   where migration_key = 'third_floor_containment_v1'
+   where controle_ref = 'third_floor_containment_v1'
      and rolled_back_at is null;
 
   if v_switches_on <> 0 or v_recipients_on <> 0 or v_mismatch <> 0 or v_ativa <> 1 then

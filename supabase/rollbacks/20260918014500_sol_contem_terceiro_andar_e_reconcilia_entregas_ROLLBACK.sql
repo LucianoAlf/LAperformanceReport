@@ -9,7 +9,7 @@ declare
 begin
   select * into v_run
     from public.sol_terceiro_andar_contencao_auditoria_v1
-   where migration_key = 'third_floor_containment_v1'
+   where controle_ref = 'third_floor_containment_v1'
      and rolled_back_at is null
    order by captured_at desc
    limit 1
