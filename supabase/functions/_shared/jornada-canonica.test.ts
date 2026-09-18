@@ -187,6 +187,25 @@ Deno.test('upsertJornadaMatriculaDisciplina: webhook sem contrato nao envia as 4
   assertEquals('inadimplente_emusys' in row, false);
 });
 
+Deno.test('matricula_alterada projeta apenas a descricao curta permitida', () => {
+  const payload: any = webhookPayloadFake();
+  payload.alteracao = { descricao: `${'x'.repeat(510)} detalhe permitido` };
+
+  const input = buildJornadaInputFromWebhook(
+    payload,
+    UNIDADE,
+    'webhook:matricula_alterada',
+  )!;
+  const { rows } = buildJornadaRowsForUpsert(input);
+
+  assertEquals(rows[0].alteracao_descricao_emusys.length, 500);
+  assertEquals(rows[0].alteracao_descricao_emusys, 'x'.repeat(500));
+
+  const outro = buildJornadaInputFromWebhook(payload, UNIDADE, 'webhook:matricula_nova')!;
+  const { rows: outrasRows } = buildJornadaRowsForUpsert(outro);
+  assertEquals('alteracao_descricao_emusys' in outrasRows[0], false);
+});
+
 Deno.test('upsertJornadaMatriculaDisciplina: input com contrato preenchido mantem as 4 chaves com os valores', async () => {
   const input = buildJornadaInputFromMatriculaApi(matriculaFake(), UNIDADE)!;
   const { client, captured } = fakeSupabaseCapturandoUpsert();
