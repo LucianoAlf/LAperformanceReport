@@ -21,8 +21,14 @@ function psql(container, sql) {
 }
 
 async function waitForPostgres(container) {
+  let consecutiveReady = 0;
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    if (psql(container, 'select 1;').status === 0) return;
+    if (psql(container, 'select 1;').status === 0) {
+      consecutiveReady += 1;
+      if (consecutiveReady >= 3) return;
+    } else {
+      consecutiveReady = 0;
+    }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   throw new Error('PostgreSQL de teste nao iniciou');

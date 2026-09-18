@@ -6,7 +6,10 @@ on:
       - 'vps/la-hq/sol/scripts/sol-portas-mcp.mjs'
       - 'supabase/migrations/20260912043000_sol_gate4_*'
       - 'supabase/rollbacks/20260912043000_sol_gate4_*'
+      - 'supabase/migrations/20260918014500_sol_contem_terceiro_andar_*'
+      - 'supabase/rollbacks/20260918014500_sol_contem_terceiro_andar_*'
       - 'tests/solGate4*'
+      - 'tests/solThirdFloor*'
       - '.github/workflows/sol-gate4.yml'
   push:
     branches: [main]
@@ -14,7 +17,10 @@ on:
       - 'vps/la-hq/sol/scripts/sol-portas-mcp.mjs'
       - 'supabase/migrations/20260912043000_sol_gate4_*'
       - 'supabase/rollbacks/20260912043000_sol_gate4_*'
+      - 'supabase/migrations/20260918014500_sol_contem_terceiro_andar_*'
+      - 'supabase/rollbacks/20260918014500_sol_contem_terceiro_andar_*'
       - 'tests/solGate4*'
+      - 'tests/solThirdFloor*'
       - '.github/workflows/sol-gate4.yml'
 
 permissions:
@@ -34,3 +40,4 @@ jobs:
           node --test tests/solGate4PortasMcpContract.test.mjs
           node --test tests/solGate4RegistrarDesfechoPostgres.test.mjs
           node --test tests/solGate4TerceiroAndarPostgres.test.mjs
+          node --test tests/solThirdFloorContainmentPostgres.test.mjs
