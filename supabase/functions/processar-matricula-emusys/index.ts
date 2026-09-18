@@ -2051,6 +2051,7 @@ async function handleAvisoPrevio(supabase: any, p: Payload) {
       motivo,
       motivo_saida_id: motivoSaidaId,
       observacoes,
+      origem_registro: 'webhook_emusys',
       competencia_referencia: inicioMesISO(dataAviso),
       updated_at: new Date().toISOString(),
     };

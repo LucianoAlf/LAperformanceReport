@@ -6,7 +6,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const migrationPaths = [
+const baseMigrationPaths = [
   path.join(
     root,
     'supabase/migrations/20260918115015_central_notificacoes_operacionais.sql',
@@ -16,6 +16,11 @@ const migrationPaths = [
     'supabase/migrations/20260918120815_central_notificacoes_operacionais_acl.sql',
   ),
 ];
+const rolloutMigrationPath = path.join(
+  root,
+  'supabase/migrations/20260918152711_central_notificacoes_operacionais_primeiro_dia.sql',
+);
+const migrationPaths = [...baseMigrationPaths, rolloutMigrationPath];
 
 function docker(args, input) {
   return spawnSync('docker', args, {
@@ -77,6 +82,13 @@ const fixtureSchema = String.raw`
     id integer primary key,
     unidade_id uuid not null references public.unidades(id),
     nome text not null,
+    professor_atual_id integer references public.professores(id),
+    curso_id integer references public.cursos(id),
+    data_matricula date,
+    emusys_matricula_id text,
+    lead_origem_id integer,
+    emusys_lead_id text,
+    status text,
     emusys_student_id text,
     data_nascimento date,
     arquivado_em timestamptz,
@@ -92,6 +104,7 @@ const fixtureSchema = String.raw`
     tipo text,
     categoria text,
     turma_nome text,
+    curso_emusys_id integer,
     curso_nome text,
     professor_id integer references public.professores(id),
     matricula_disciplina_id bigint,
@@ -162,9 +175,17 @@ const fixtureSchema = String.raw`
     curso_interesse_id integer references public.cursos(id),
     status text,
     aluno_id integer references public.alunos(id),
+    emusys_lead_id integer,
     emusys_aula_id integer,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
+  );
+  create table public.leads (
+    id integer primary key,
+    unidade_id uuid not null references public.unidades(id),
+    aluno_id integer references public.alunos(id),
+    emusys_lead_id integer,
+    status text not null default 'novo'
   );
   create table public.aluno_professor_transicoes (
     id uuid primary key,
@@ -190,6 +211,14 @@ const fixtureSchema = String.raw`
     payload jsonb not null,
     primeira_coleta_em timestamptz not null default now(),
     ultima_coleta_em timestamptz not null default now()
+  );
+  create table public.automacao_log (
+    id bigint generated always as identity primary key,
+    aluno_id integer references public.alunos(id),
+    evento text,
+    acao text,
+    workflow_id text,
+    created_at timestamptz not null default now()
   );
 
   create view public.vw_alunos_estado_operacional_v131 as
@@ -235,7 +264,41 @@ const fixtureSchema = String.raw`
      now() + interval '3 days', now() + interval '3 days 50 minutes', 'individual', null, 'Piano', 10, 9101),
     (106, 5006, '11111111-1111-1111-1111-111111111111', current_date + 3,
      now() + interval '3 days', now() + interval '3 days 50 minutes', 'individual', null, 'Guitarra', 10, 9101);
+  insert into public.aulas_emusys
+    (id, emusys_id, unidade_id, data_aula, data_hora_inicio, data_hora_fim,
+     tipo, turma_nome, curso_emusys_id, curso_nome, professor_id,
+     matricula_disciplina_id, data_hora_inicio_original)
+  values
+    (107, 5107, '11111111-1111-1111-1111-111111111111', current_date + 4,
+     now() + interval '4 days', now() + interval '4 days 50 minutes', 'grupo', 'Turma unica', 1,
+     'Guitarra', 10, 9207, now() + interval '4 days'),
+    (108, 5108, '11111111-1111-1111-1111-111111111111', current_date + 4,
+     now() + interval '4 days', now() + interval '4 days 50 minutes', 'grupo', 'Turma unica', 1,
+     'Guitarra', 10, 9208, now() + interval '4 days');
   insert into public.aula_alunos_emusys values (101, 1, 'Aluno um', true), (103, 1, 'Aluno um', true);
+
+  insert into public.alunos
+    (id, unidade_id, nome, professor_atual_id, curso_id, data_matricula,
+     emusys_matricula_id, lead_origem_id, emusys_lead_id, status,
+     emusys_student_id, operacional_ativo)
+  values
+    (5, '11111111-1111-1111-1111-111111111111', 'Aluno convertido inicial', 20, 1,
+     current_date - 1, '9500', 700, '7001', 'ativo', '1005', true);
+  insert into public.leads (id, unidade_id, aluno_id, emusys_lead_id, status)
+  values (700, '11111111-1111-1111-1111-111111111111', 5, 7001, 'convertido');
+  insert into public.lead_experimentais
+    (id, lead_id, nome_aluno, unidade_id, data_experimental, horario_experimental,
+     professor_experimental_id, curso_interesse_id, status, aluno_id, emusys_lead_id)
+  values
+    (504, 700, 'Lead convertido inicial', '11111111-1111-1111-1111-111111111111',
+     current_date - 3, time '18:00', 10, 1, 'experimental_realizada', 5, 7001);
+  insert into public.aluno_jornada_matricula_disciplina
+    (id, unidade_id, aluno_id, emusys_aluno_id, emusys_matricula_id,
+     emusys_matricula_disciplina_id, emusys_disciplina_id, curso_id,
+     curso_nome_emusys, professor_id, status_matricula, fonte_ultima_atualizacao)
+  values
+    ('00000000-0000-0000-0000-000000000005', '11111111-1111-1111-1111-111111111111',
+     5, 1005, 9500, 9150, 1, 1, 'Guitarra', 20, 'ativa', 'sync-matriculas-emusys');
 
   insert into public.movimentacoes_admin
     (id, unidade_id, data, tipo, aluno_nome, aluno_id, professor_id, curso_id,
@@ -293,11 +356,94 @@ test('operational notification triggers, service RPCs, ACLs and initial load hon
     const fixture = psql(container, fixtureSchema);
     assert.equal(fixture.status, 0, fixture.stderr || fixture.stdout);
 
-    for (const migrationPath of migrationPaths) {
+    for (const migrationPath of baseMigrationPaths) {
       const migration = fs.readFileSync(migrationPath, 'utf8');
       const setup = psql(container, migration);
       assert.equal(setup.status, 0, setup.stderr || setup.stdout);
     }
+
+    const legacyDuplicates = psql(container, `
+      select public.fn_eventos_operacionais_registrar(
+        'legacy-turma:5107', 'aula_reagendada', now(), 'carga_inicial',
+        '11111111-1111-1111-1111-111111111111'::uuid, null, null, 107, 'Guitarra',
+        jsonb_build_object('emusys_id', 5107, 'inicio', timestamptz '2030-01-05 18:00:00+00', 'turma', 'Turma unica'),
+        jsonb_build_object('antes', jsonb_build_object('inicio', timestamptz '2030-01-04 18:00:00+00'), 'depois', jsonb_build_object('inicio', timestamptz '2030-01-05 18:00:00+00')),
+        null, null, jsonb_build_array(jsonb_build_object('professor_id', 10, 'participacao', 'responsavel'))
+      );
+      select public.fn_eventos_operacionais_registrar(
+        'legacy-turma:5108', 'aula_reagendada', now(), 'carga_inicial',
+        '11111111-1111-1111-1111-111111111111'::uuid, null, null, 108, 'Guitarra',
+        jsonb_build_object('emusys_id', 5108, 'inicio', timestamptz '2030-01-05 18:00:00+00', 'turma', 'Turma unica'),
+        jsonb_build_object('antes', jsonb_build_object('inicio', timestamptz '2030-01-04 18:00:00+00'), 'depois', jsonb_build_object('inicio', timestamptz '2030-01-05 18:00:00+00')),
+        null, null, jsonb_build_array(jsonb_build_object('professor_id', 10, 'participacao', 'responsavel'))
+      );
+      select count(*) from public.eventos_operacionais where evento_id like 'legacy-turma:%';
+    `);
+    assert.equal(legacyDuplicates.status, 0, legacyDuplicates.stderr || legacyDuplicates.stdout);
+    assert.equal(legacyDuplicates.stdout.trim().split(/\r?\n/u).at(-1), '2');
+
+    const avisoComOrigemCorrigida = psql(container, `
+      insert into public.movimentacoes_admin
+        (id, unidade_id, data, tipo, aluno_nome, aluno_id, professor_id, curso_id,
+         motivo, data_prevista_saida, emusys_aviso_previo_id, origem_registro)
+      values
+        (403, '11111111-1111-1111-1111-111111111111', current_date, 'aviso_previo',
+         'Aluno um', 1, 10, 1, 'mudanca de cidade', current_date + 12, 703, 'manual');
+      insert into public.automacao_log
+        (aluno_id, evento, acao, workflow_id, created_at)
+      values
+        (1, 'matricula_aviso_previo_adicionado', 'aviso_previo_registrado',
+         'processar-matricula-emusys', clock_timestamp());
+      select origem from public.eventos_operacionais
+       where tipo = 'aviso_previo' and evento_id like '%:703:%';
+    `);
+    assert.equal(avisoComOrigemCorrigida.status, 0, avisoComOrigemCorrigida.stderr || avisoComOrigemCorrigida.stdout);
+    assert.equal(avisoComOrigemCorrigida.stdout.trim().split(/\r?\n/u).at(-1), 'sincronizacao');
+
+    const rolloutSource = fs.readFileSync(rolloutMigrationPath, 'utf8');
+    const rollbackProof = psql(container, `
+      begin;
+      ${rolloutSource}
+      select
+        to_regprocedure('public.fn_eventos_operacionais_carga_inicial_experimental_convertida_v1(timestamp with time zone)') is not null,
+        exists (
+          select 1
+          from pg_constraint
+          where conrelid = 'public.eventos_operacionais'::regclass
+            and conname = 'eventos_operacionais_tipo_check'
+            and pg_get_constraintdef(oid) like '%experimental_convertida%'
+        );
+      rollback;
+      select to_regprocedure('public.fn_eventos_operacionais_carga_inicial_experimental_convertida_v1(timestamp with time zone)') is null;
+    `);
+    assert.equal(rollbackProof.status, 0, rollbackProof.stderr || rollbackProof.stdout);
+    assert.deepEqual(
+      rollbackProof.stdout.trim().split(/\r?\n/u).filter((line) => /^(t\|t|t)$/u.test(line)),
+      ['t|t', 't'],
+    );
+
+    const rolloutMigration = psql(container, rolloutSource);
+    assert.equal(rolloutMigration.status, 0, rolloutMigration.stderr || rolloutMigration.stdout);
+    const legacyDeduplicated = psql(container, `
+      select count(*) from public.eventos_operacionais where evento_id like 'legacy-turma:%';
+      select origem from public.eventos_operacionais
+       where tipo = 'aviso_previo' and evento_id like '%:703:%';
+    `);
+    assert.equal(legacyDeduplicated.status, 0, legacyDeduplicated.stderr || legacyDeduplicated.stdout);
+    assert.deepEqual(legacyDeduplicated.stdout.trim().split(/\r?\n/u), ['1', 'webhook']);
+
+    const conversoesIniciais = jsonOutput(psql(container, `
+      set role service_role;
+      select public.fn_eventos_operacionais_carga_inicial_experimental_convertida_v1(now() - interval '7 days')::text;
+      reset role;
+    `));
+    assert.equal(conversoesIniciais.por_tipo.experimental_convertida, 1, JSON.stringify(conversoesIniciais));
+    const conversoesIniciaisRepetidas = jsonOutput(psql(container, `
+      set role service_role;
+      select public.fn_eventos_operacionais_carga_inicial_experimental_convertida_v1(now() - interval '7 days')::text;
+      reset role;
+    `));
+    assert.equal(conversoesIniciaisRepetidas.inseridos, 0, JSON.stringify(conversoesIniciaisRepetidas));
 
     const initial = jsonOutput(psql(container, `
       set role service_role;
@@ -323,7 +469,40 @@ test('operational notification triggers, service RPCs, ACLs and initial load hon
          set data_hora_inicio = data_hora_inicio + interval '1 hour'
        where id = 102;
       update public.aulas_emusys set cancelada = true, cancelada_motivo = 'feriado' where id = 103;
+      insert into public.aulas_emusys
+        (id, emusys_id, unidade_id, data_aula, data_hora_inicio, data_hora_fim,
+         tipo, curso_nome, professor_id, matricula_disciplina_id, cancelada, cancelada_motivo)
+      values
+        (105, 5005, '11111111-1111-1111-1111-111111111111', current_date + 2,
+         now() + interval '2 days', now() + interval '2 days 50 minutes',
+         'individual', 'Guitarra', 10, 9101, true, 'fonte ja cancelada');
+      update public.aulas_emusys
+         set data_hora_inicio = data_hora_inicio + interval '1 hour'
+       where id in (107, 108);
       update public.aulas_emusys set professor_id = 20 where id = 101;
+
+      insert into public.alunos
+        (id, unidade_id, nome, professor_atual_id, curso_id, data_matricula,
+         emusys_matricula_id, lead_origem_id, emusys_lead_id, status,
+         emusys_student_id, operacional_ativo)
+      values
+        (6, '11111111-1111-1111-1111-111111111111', 'Aluno convertido ao vivo', 20, 1,
+         current_date, '9600', 701, '7002', 'ativo', '1006', true);
+      insert into public.leads (id, unidade_id, aluno_id, emusys_lead_id, status)
+      values (701, '11111111-1111-1111-1111-111111111111', 6, 7002, 'convertido');
+      insert into public.lead_experimentais
+        (id, lead_id, nome_aluno, unidade_id, data_experimental, horario_experimental,
+         professor_experimental_id, curso_interesse_id, status, aluno_id, emusys_lead_id)
+      values
+        (505, 701, 'Lead convertido ao vivo', '11111111-1111-1111-1111-111111111111',
+         current_date - 2, time '18:00', 10, 1, 'experimental_realizada', 6, 7002);
+      insert into public.aluno_jornada_matricula_disciplina
+        (id, unidade_id, aluno_id, emusys_aluno_id, emusys_matricula_id,
+         emusys_matricula_disciplina_id, emusys_disciplina_id, curso_id,
+         curso_nome_emusys, professor_id, status_matricula, fonte_ultima_atualizacao)
+      values
+        ('00000000-0000-0000-0000-000000000006', '11111111-1111-1111-1111-111111111111',
+         6, 1006, 9600, 9160, 1, 1, 'Guitarra', 20, 'ativa', 'webhook:matricula_nova');
 
       insert into public.lead_experimentais
         (id, nome_aluno, unidade_id, data_experimental, horario_experimental,
@@ -403,6 +582,29 @@ test('operational notification triggers, service RPCs, ACLs and initial load hon
     assert.equal(noOpExperimental.status, 0, noOpExperimental.stderr || noOpExperimental.stdout);
     assert.equal(noOpExperimental.stdout.trim().split(/\r?\n/u).at(-1), '2');
 
+    const firstDayCases = psql(container, `
+      select count(*) from public.eventos_operacionais
+       where tipo = 'aula_cancelada' and aula_id = 105;
+      select count(*) from public.eventos_operacionais
+       where tipo = 'aula_reagendada' and aula ->> 'turma' = 'Turma unica'
+         and evento_id not like 'legacy-turma:%';
+      select count(*) from public.eventos_operacionais
+       where tipo = 'experimental_convertida'
+         and mudanca ? 'antes' and mudanca ? 'depois'
+         and mudanca -> 'antes' ? 'data_experimental'
+         and mudanca -> 'depois' ? 'data_matricula'
+         and mudanca::text !~ '(valor|plano)';
+      select origem from public.eventos_operacionais
+       where tipo = 'experimental_convertida' and aluno_id = 6;
+      select count(*) from public.eventos_operacionais_audiencia a
+       join public.eventos_operacionais e on e.evento_id = a.evento_id
+       where e.tipo = 'experimental_convertida'
+         and a.professor_id in (10, 20)
+         and a.participacao = 'responsavel';
+    `);
+    assert.equal(firstDayCases.status, 0, firstDayCases.stderr || firstDayCases.stdout);
+    assert.deepEqual(firstDayCases.stdout.trim().split(/\r?\n/u), ['1', '1', '2', 'webhook', '4']);
+
     const counts = psql(container, `
       select tipo || '|' || count(*)
         from public.eventos_operacionais
@@ -411,15 +613,16 @@ test('operational notification triggers, service RPCs, ACLs and initial load hon
     `);
     assert.equal(counts.status, 0, counts.stderr || counts.stdout);
     const lines = counts.stdout.trim().split(/\r?\n/u);
-    assert.ok(lines.includes('aula_reagendada|2'), lines.join('\n'));
-    assert.ok(lines.includes('aula_cancelada|1'), lines.join('\n'));
+    assert.ok(lines.includes('aula_reagendada|4'), lines.join('\n'));
+    assert.ok(lines.includes('aula_cancelada|2'), lines.join('\n'));
     assert.ok(lines.includes('professor_trocado|3'), lines.join('\n'));
     assert.ok(lines.includes('experimental_marcada|2'), lines.join('\n'));
-    assert.ok(lines.includes('aluno_novo|1'), lines.join('\n'));
-    assert.ok(lines.includes('aviso_previo|4'), lines.join('\n'));
+    assert.ok(lines.includes('aluno_novo|2'), lines.join('\n'));
+    assert.ok(lines.includes('aviso_previo|5'), lines.join('\n'));
     assert.ok(lines.includes('matricula_trancada|1'), lines.join('\n'));
     assert.ok(lines.includes('matricula_encerrada|1'), lines.join('\n'));
     assert.ok(lines.includes('matricula_alterada|1'), lines.join('\n'));
+    assert.ok(lines.includes('experimental_convertida|2'), lines.join('\n'));
 
     const audience = psql(container, `
       select count(*)
@@ -547,6 +750,7 @@ test('operational notification triggers, service RPCs, ACLs and initial load hon
           'trg_eventos_operacionais_aula_reagendada',
           'trg_eventos_operacionais_aviso_previo',
           'trg_eventos_operacionais_experimental',
+          'trg_eventos_operacionais_experimental_convertida',
           'trg_eventos_operacionais_jornada_matricula',
           'trg_eventos_operacionais_professor_aula',
           'trg_eventos_operacionais_professor_jornada'
@@ -554,20 +758,46 @@ test('operational notification triggers, service RPCs, ACLs and initial load hon
       select to_regclass('public.idx_eventos_operacionais_aluno_id') is not null,
              to_regclass('public.idx_eventos_operacionais_aula_id') is not null,
              to_regclass('public.idx_eventos_operacionais_unidade_id') is not null;
+      select has_function_privilege('anon',
+          'public.fn_eventos_operacionais_registrar_experimental_convertida(uuid,text)', 'execute'),
+             has_function_privilege('authenticated',
+          'public.fn_eventos_operacionais_registrar_experimental_convertida(uuid,text)', 'execute'),
+             has_function_privilege('service_role',
+          'public.fn_eventos_operacionais_registrar_experimental_convertida(uuid,text)', 'execute');
+      select has_function_privilege('anon',
+          'public.fn_eventos_operacionais_carga_inicial_experimental_convertida_v1(timestamp with time zone)', 'execute'),
+             has_function_privilege('service_role',
+          'public.fn_eventos_operacionais_carga_inicial_experimental_convertida_v1(timestamp with time zone)', 'execute');
     `);
     assert.equal(internalAclAndIndexes.status, 0, internalAclAndIndexes.stderr || internalAclAndIndexes.stdout);
-    assert.deepEqual(internalAclAndIndexes.stdout.trim().split(/\r?\n/u), ['false|false|false|false|false|false|false', 't|t|t']);
+    assert.deepEqual(internalAclAndIndexes.stdout.trim().split(/\r?\n/u), [
+      'false|false|false|false|false|false|false|false',
+      't|t|t',
+      'f|f|f',
+      'f|t',
+    ]);
 
     const isolation = psql(container, `
       alter table public.eventos_operacionais
         add constraint eventos_operacionais_teste_falha check (false) not valid;
       update public.aulas_emusys
-         set data_hora_inicio = data_hora_inicio + interval '1 hour'
+       set data_hora_inicio = data_hora_inicio + interval '1 hour'
        where id = 101;
       select data_hora_inicio is not null from public.aulas_emusys where id = 101;
+      insert into public.aulas_emusys
+        (id, emusys_id, unidade_id, data_aula, data_hora_inicio, data_hora_fim,
+         tipo, curso_nome, professor_id, matricula_disciplina_id, cancelada)
+      values
+        (109, 5109, '11111111-1111-1111-1111-111111111111', current_date + 2,
+         now() + interval '2 days', now() + interval '2 days 50 minutes',
+         'individual', 'Guitarra', 10, 9101, true);
+      select exists (select 1 from public.aulas_emusys where id = 109 and cancelada);
     `);
     assert.equal(isolation.status, 0, isolation.stderr || isolation.stdout);
-    assert.equal(isolation.stdout.trim().split(/\r?\n/u).at(-1), 't');
+    assert.deepEqual(
+      isolation.stdout.trim().split(/\r?\n/u).filter((line) => line === 't'),
+      ['t', 't'],
+    );
   } finally {
     docker(['stop', container]);
   }
