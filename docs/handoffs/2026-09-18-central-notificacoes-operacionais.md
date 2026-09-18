@@ -15,7 +15,7 @@ Atualizado em **18/09/2026**. Banco principal: `ouqwbbermlzqqvtqwlul`.
   - revoga a execução direta dos helpers e sete funções de gatilho para `public`, `anon`, `authenticated` e `service_role`;
   - preserva somente as três RPCs de serviço necessárias para `service_role`;
   - acrescenta índices de cobertura para as FKs de aluno, aula e unidade.
-- Edge `processar-matricula-emusys`, versão **99**, com `verify_jwt=true`: guarda apenas a descrição curta e limpa de `matricula_alterada` na jornada. Não replica payload bruto, observações livres, saúde ou financeiro.
+- Edge `processar-matricula-emusys`, versão **100**, com `verify_jwt=true`: guarda apenas a descrição curta e limpa de `matricula_alterada` na jornada. Não replica payload bruto, observações livres, saúde ou financeiro.
 - Mapa do banco regenerado na produção: 577 tabelas/views e 1.518 funções. Os objetos novos foram classificados no domínio de professor; notificações do app, no de integração. O inventário de funções executáveis por `anon` caiu de 183 para 176.
 
 ## Contrato publicado
@@ -39,7 +39,7 @@ fn_aniversariantes_do_professor_v1(
 
 A primeira retorna `{ itens, proximo_cursor }`, ordenado por `detectado_em desc, evento_id desc`; aceita no máximo 200 itens. `p_professor_id = null` é o recorte consolidado de serviço. A segunda deduplica por `unidade_id + emusys_student_id` (com ID local como fallback), exclui arquivados e exige vínculo operacional ativo na jornada.
 
-Os nove tipos da v1 são `aula_reagendada`, `aula_cancelada`, `professor_trocado`, `experimental_marcada`, `aluno_novo`, `aviso_previo`, `matricula_trancada`, `matricula_encerrada` e `matricula_alterada`. Aniversários são consulta, não evento. Troca de sala continua fora do contrato.
+Os dez tipos da v1 são `aula_reagendada`, `aula_cancelada`, `professor_trocado`, `experimental_marcada`, `experimental_convertida`, `aluno_novo`, `aviso_previo`, `matricula_trancada`, `matricula_encerrada` e `matricula_alterada`. Aniversários são consulta, não evento. Troca de sala continua fora do contrato.
 
 A janela da aula é BRT de ontem até D+14, avaliando tanto o início anterior quanto o novo. Eventos de turma mantêm `aluno=null` e descrevem a turma, em vez de atribuir o fato a uma pessoa errada.
 
@@ -110,6 +110,7 @@ Os dois professores de uma troca explicam as 22 audiências para 11 fatos. Os qu
 | `aula_cancelada` | `mudanca.antes.status=ativa`, `mudanca.depois.status=cancelada`; motivo somente quando a fonte informou |
 | `professor_trocado` | `mudanca.antes.professor` e `mudanca.depois.professor`; duas audiências, `saiu` e `entrou` |
 | `experimental_marcada` | `aula.inicio`, curso e professor responsável |
+| `experimental_convertida` | `mudanca.antes.data_experimental`, `mudanca.depois.data_matricula`, curso e uma ou duas audiências `responsavel` |
 | `aviso_previo` | `mudanca.depois.acao=adicionado`, `data_prevista` e categoria do motivo; sem observações livres |
 | `aluno_novo` / `matricula_trancada` / `matricula_encerrada` / `matricula_alterada` | ainda sem ocorrência publicada desde a ativação; os formatos foram cobertos pela fixture PostgreSQL |
 
@@ -137,3 +138,38 @@ Na leitura final desta entrega, os 68 fatos existentes têm `origem='carga_inici
 - `deno check` passou para `jornada-canonica.ts` e `processar-matricula-emusys/index.ts`.
 - `npm run build` passou. Permanecem os avisos preexistentes de chunk/ciclo do Recharts.
 - `npm run mapa:banco` passou pelo pooler e atualizou o mapa gerado.
+
+## Ajustes do primeiro dia — 18/09
+
+### 1. Cancelamento que escapava
+
+A migration `20260918154358_central_notificacoes_operacionais_primeiro_dia` mantém o gatilho de atualização em `aulas_emusys` como `AFTER UPDATE OF cancelada`, com `WHEN (OLD.cancelada IS DISTINCT FROM NEW.cancelada) AND NEW.cancelada`, e acrescenta `trg_eventos_operacionais_aula_cancelada_insert` para `INSERT` já cancelado. Ambos passam pela mesma função protegida por exceção, portanto uma falha de notificação não interrompe a sincronização.
+
+O teste PostgreSQL insere uma aula dentro da janela já com `cancelada=true`; antes da migration não havia `aula_cancelada`, depois há exatamente uma. O código de `sync-grade-futura-emusys` usa `upsert` por `(emusys_id, unidade_id)`: registros conhecidos seguem pelo `UPDATE`; registros ainda não vistos, inclusive já cancelados, seguem pelo `INSERT`.
+
+O cruzamento temporal pedido ainda depende da revisão que ocorre após **19/09 03:08 UTC**. O corte será: aulas que se tornaram canceladas entre **18/09 11:51 UTC** e **19/09 03:08 UTC**, comparadas com fatos `aula_cancelada` de origem `sincronizacao` no mesmo intervalo. Não foram fabricados dados de sincronização para antecipar esses dois números.
+
+### 2. Turma duplicada
+
+O Emusys materializa a sessão de turma por matrícula-disciplina: no caso investigado, as aulas `240296` e `240446` têm mesma unidade, turma, curso, professor, horário original e horário reagendado, mas `matricula_disciplina_id` e `nr_da_aula` diferentes. O evento era calculado por `emusys_id`, por isso o mesmo fato chegava duas vezes. A migration introduz uma chave de sessão para aula de turma, composta por unidade, turma normalizada, curso Emusys e horário original/de referência. Aulas individuais conservam a chave por aula.
+
+Na carga já existente havia **22 fatos excedentes** em **10 grupos duplicados**: 8 fatos em 16 `aula_reagendada` de carga inicial, 11 em 18 `aula_cancelada` de carga inicial, 2 em 4 `aula_reagendada` de sincronização e 1 em 2 `professor_trocado` de sincronização. A migration preservou o primeiro fato, moveu suas audiências e removeu os excedentes; a verificação posterior encontrou **0 grupos duplicados**. A fixture muda duas linhas da mesma turma e exige um único fato — sem a nova chave, o teste produz dois.
+
+### 3. Origem do aviso prévio
+
+`processar-matricula-emusys` versão 100 agora grava `origem_registro='webhook_emusys'` ao criar ou atualizar `aluno_aviso_previo`. Isso percorre a função canônica de origem e resulta em `origem='webhook'` no evento. O teste estático falha sem esse campo; a fixture também comprova que o registro recém-identificado deixa de sair como sincronização. O único aviso novo observado foi corrigido para `webhook`; não houve alteração de prazo na RPC.
+
+### 4. Experimental convertida
+
+O tipo novo `experimental_convertida` foi adicionado à restrição da tabela e aos gatilhos de `aluno_jornada_matricula_disciplina`, com helper idempotente e seguro para falha. O elo procura a experimental pelo `emusys_lead_id` e depois registra audiência para o professor experimental e para o professor da jornada, quando diferentes. O `evento_id` é estável por unidade, lead e matrícula; o payload contém somente aluno, curso, data experimental e data da matrícula.
+
+A carga inicial dos últimos sete dias inseriu **18 conversões** em **189,119 ms**; a repetição inseriu **0** em **58,949 ms**. Exemplo anonimizado: `u:95553e96-971b-4590-a6eb-0201d013c14d:lead:8483:matricula:1572:experimental_convertida`, com `data_experimental=2026-09-11` e `data_matricula=2026-09-11`.
+
+Há vínculo de `lead_experimentais.emusys_aula_id` com `aulas_emusys`, portanto experimentais vinculadas já passam pelos gatilhos genéricos de `aula_reagendada` e `aula_cancelada`; não foi criado um segundo caminho para não duplicá-las. No corte desta verificação, 530 de 1.173 experimentais tinham essa ligação, incluindo 39 canceladas e 68 reagendadas; as 643 sem aula vinculada não têm como gerar esses dois eventos pela tabela de aulas.
+
+### Verificação posterior aos ajustes
+
+- A fixture PostgreSQL foi aplicada dentro de transação, verificou a nova função e a nova restrição, executou `ROLLBACK`, comprovou a ausência delas e então executou o cenário completo. Ela cobre inserção cancelada, deduplicação de turma, origem webhook do aviso, conversão, idempotência, ACL e isolamento da exceção.
+- No banco real, a RPC de 50 itens para o professor 16 executou em **8,83 ms**; o recorte consolidado em **10,833 ms**, ambos com buffers em memória.
+- O advisor não trouxe alerta novo para os objetos deste ajuste. Permanece apenas o informativo intencional de RLS sem política nas duas tabelas, cuja leitura direta continua revogada.
+- A tentativa de regenerar o mapa nesta sessão não conseguiu resolver o host direto do banco e não havia URL de pooler local; ela abortou sem escrever arquivos. As verificações acima foram feitas no projeto Supabase real.

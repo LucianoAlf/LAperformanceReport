@@ -18,7 +18,7 @@ const baseMigrationPaths = [
 ];
 const rolloutMigrationPath = path.join(
   root,
-  'supabase/migrations/20260918152711_central_notificacoes_operacionais_primeiro_dia.sql',
+  'supabase/migrations/20260918154358_central_notificacoes_operacionais_primeiro_dia.sql',
 );
 const migrationPaths = [...baseMigrationPaths, rolloutMigrationPath];
 

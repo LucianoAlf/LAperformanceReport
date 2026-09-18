@@ -29,6 +29,7 @@ precisa abrir o Emusys para saber que a aula mudou, que um aluno pediu aviso pr�
 | `aula_cancelada` | `cancelada` passou de false para true | professor(es) da aula | com o motivo quando houver (36% têm); **sem** "quem cancelou" (só 21 de 1.987 têm autor) |
 | `professor_trocado` | professor da aula ou do aluno mudou | quem **saiu** e quem **entrou** (uma linha de audiência cada) | `participacao` = `saiu` / `entrou` |
 | `experimental_marcada` | experimental criada (ou reagendada) para o professor | `professor_experimental_id` | reagendamento/cancelamento de experimental também sai como `aula_reagendada`/`aula_cancelada` se a aula estiver em `aulas_emusys` — sem duplicar |
+| `experimental_convertida` | lead com experimental vinculada virou matrícula | professor da experimental e, se diferente, professor da jornada nova | ambos com `participacao = responsavel`; antes = data experimental, depois = data da matrícula |
 | `aluno_novo` | matrícula nova com jornada ligando o aluno ao professor | professor da jornada | a ligação nasce da jornada, não só da matrícula |
 | `aviso_previo` | aviso adicionado, editado ou removido | professor(es) da jornada do aluno | `mudanca.depois.acao` = `adicionado`/`editado`/`removido`; motivo (categoria) + data prevista |
 | `matricula_trancada` | status virou trancada | professor(es) da jornada | período do trancamento |
@@ -120,7 +121,7 @@ Devolve:
 - `aluno`: `null` em aula de turma (a `aula.turma` vem preenchida).
 - `aula`: `null` nos eventos de matrícula.
 - `mudanca.antes`/`depois`: só as chaves que mudaram (`inicio`, `professor`, `curso`,
-  `status`, `acao`, `data_prevista`, `periodo`).
+  `status`, `acao`, `data_prevista`, `periodo`, `data_experimental`, `data_matricula`).
 - `detalhe`: texto curto vindo da fonte quando não há diff estruturado (ex.: a descrição de
   `matricula_alterada`).
 - **Não vai no retorno:** `urgencia` (hoje/amanhã muda com o relógio; quem lê calcula pelo
@@ -184,6 +185,7 @@ Frases por tipo (o aluno em turma vira o nome da turma):
 | `professor_trocado` (entrou) | Você assumiu a aula do Lucas | sáb 19/09 · 18:00 |
 | `professor_trocado` (saiu) | A aula do Lucas passou para outro professor | sáb 19/09 · 18:00 |
 | `experimental_marcada` | Experimental marcada | Nome · curso · data e hora |
+| `experimental_convertida` | Sua experimental virou matrícula | curso · experimental em DD/MM · matrícula em DD/MM |
 | `aluno_novo` | Aluno novo: Pedro | curso · começa em |
 | `aviso_previo` | Maria pediu aviso prévio (ou: retirou o aviso prévio) | sai em · motivo |
 | `matricula_trancada` | Matrícula da Maria trancada | até DD/MM |
