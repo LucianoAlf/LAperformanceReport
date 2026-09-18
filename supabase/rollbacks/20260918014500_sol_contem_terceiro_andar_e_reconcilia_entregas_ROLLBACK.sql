@@ -9,7 +9,7 @@ declare
 begin
   select * into v_run
     from public.sol_terceiro_andar_contencao_auditoria_v1
-   where migration_key = '20260918014500_sol_contem_terceiro_andar'
+   where migration_key = 'third_floor_containment_v1'
      and rolled_back_at is null
    order by captured_at desc
    limit 1
@@ -58,4 +58,3 @@ $rollback$;
 drop trigger if exists tr_sol_sincronizar_radar_entrega_da_fila_v1
   on public.fila_relatorios_sol_hermes;
 drop function if exists public.sol_sincronizar_radar_entrega_da_fila_v1();
-

@@ -34,7 +34,7 @@ declare
 begin
   select count(*) into v_ativa
     from public.sol_terceiro_andar_contencao_auditoria_v1
-   where migration_key = '20260918014500_sol_contem_terceiro_andar'
+   where migration_key = 'third_floor_containment_v1'
      and rolled_back_at is null;
 
   if v_ativa = 0 then
@@ -48,7 +48,7 @@ begin
     insert into public.sol_terceiro_andar_contencao_auditoria_v1
       (migration_key, switches, recipients, deliveries)
     select
-      '20260918014500_sol_contem_terceiro_andar',
+      'third_floor_containment_v1',
       coalesce((
         select jsonb_agg(jsonb_build_object(
           'slug', c.slug, 'ativo', c.ativo, 'updated_at', c.updated_at
@@ -167,7 +167,7 @@ begin
        or (f.status = 'erro' and e.status <> 'falhou'));
   select count(*) into v_ativa
     from public.sol_terceiro_andar_contencao_auditoria_v1
-   where migration_key = '20260918014500_sol_contem_terceiro_andar'
+   where migration_key = 'third_floor_containment_v1'
      and rolled_back_at is null;
 
   if v_switches_on <> 0 or v_recipients_on <> 0 or v_mismatch <> 0 or v_ativa <> 1 then
@@ -179,4 +179,3 @@ $proof$;
 
 comment on function public.sol_sincronizar_radar_entrega_da_fila_v1() is
   'Sincroniza somente o recibo radar_pauta vinculado por mensagem=fila:<id>. Não envia e não altera sinais.';
-
