@@ -4,8 +4,8 @@
     {
       "class": "bridge",
       "mode": "0644",
-      "sha256": "c9af631fb7a0e3e12e36902b4912a75dd2d6dd5038520fe7c0c85d37030baf30",
-      "size": 77254,
+      "sha256": "19e12a84205e1727b814c702537bb238d82cf80f7cffdd70427ae00f14b150f8",
+      "size": 81791,
       "source": "vps/la-hq/sol/runtime/bridge.js",
       "target": "/home/sol/.hermes/hermes-agent/scripts/whatsapp-bridge/bridge.js"
     },
@@ -20,8 +20,8 @@
     {
       "class": "caixa-runtime",
       "mode": "0644",
-      "sha256": "58218fcbf479234c474922fcda50d383a7c16243f9d27bbfa7dc078ca569aa13",
-      "size": 457343,
+      "sha256": "fbb1a28f91f9a6754a1f4c39efbbc24fd368d4504fb6ef2a28f45ca9b5eda218",
+      "size": 458432,
       "source": "vps/la-hq/sol/runtime/caixa-financeiro.cjs",
       "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs"
     },
@@ -36,16 +36,24 @@
     {
       "class": "governance-shadow",
       "mode": "0644",
-      "sha256": "27bc12004c1e84a9990baa383ed8ac136a6c7a1a2eff509a1572e19ed3731042",
-      "size": 10323,
+      "sha256": "888af5c1ba6fe92d4a45d47747e2147e6638d8de3036228a82d25d0c0294ebcb",
+      "size": 10419,
       "source": "vps/la-hq/sol/runtime/caixa-governanca-shadow.cjs",
       "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-governanca-shadow.cjs"
     },
     {
+      "class": "governance-auditor",
+      "mode": "0644",
+      "sha256": "3ad2bc6a2b6da4ef8f4658e1bbec0faa6be726f0896dfd7b44619ecc2d907110",
+      "size": 12189,
+      "source": "vps/la-hq/sol/runtime/caixa-auditor-conformidade.cjs",
+      "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-auditor-conformidade.cjs"
+    },
+    {
       "class": "mcp-runtime",
       "mode": "0644",
-      "sha256": "105bc46a66f6c4bbf2791e277b0fc551e06865e76a3374e2b85aea06a02a048c",
-      "size": 38807,
+      "sha256": "8b1995e86c8419147607c6003bb2fda5e84f93bea1a2739206beb1f646860e64",
+      "size": 40981,
       "source": "vps/la-hq/sol/scripts/sol-portas-mcp.mjs",
       "target": "/home/sol/.openclaw/workspace/scripts/sol-portas-mcp.mjs"
     }

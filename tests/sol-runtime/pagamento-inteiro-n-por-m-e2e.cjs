@@ -69,12 +69,19 @@ const CINCO_LINHAS = {
 
 function novo(overrides = {}) {
   const enviadas = []; const logs = []; const lancadosLote = []; const resolverCalls = [];
+  let liberarOcr;
+  const ocrGate = new Promise((resolve) => { liberarOcr = resolve; });
   let seq = 0;
   const criar = vm.runInContext('criarHandlerFinanceiro', ctx);
   const h = criar({
     grupos: { [CHAT]: { grupo_jid: CHAT, unidade_id: UNIDADE, nome: 'Campo Grande' } },
     sendFn: async (_c, t) => { enviadas.push(t); return 'MSG' + (++seq); },
-    ocrFn: async () => ({ text: 'Comprovante\nValor R$ 1.722,00\nPix', status: 'ok', file_bytes: 4198 }),
+    // A legenda precisa chegar enquanto a mídia ainda está em processamento.
+    // Um gate explícito prova essa ordem sem depender da velocidade da máquina.
+    ocrFn: async () => {
+      await ocrGate;
+      return { text: 'Comprovante\nValor R$ 1.722,00\nPix', status: 'ok', file_bytes: 4198 };
+    },
     visaoFn: async () => ({ valor: 1722, forma: 'pix' }),
     // 🔴 É o MODELO que enxerga "são dois alunos", lendo a legenda — não um
     //    regex de portaria. `pagamentos[]` é o contrato que a interpretação
@@ -94,7 +101,7 @@ function novo(overrides = {}) {
     log: (o) => logs.push(o),
     ...overrides,
   });
-  return { h, enviadas, logs, lancadosLote, resolverCalls };
+  return { h, enviadas, logs, lancadosLote, resolverCalls, liberarOcr };
 }
 
 // ⚠️ A ORDEM IMPORTA e foi onde eu errei primeiro: a legenda tem de chegar
@@ -105,9 +112,11 @@ function novo(overrides = {}) {
 async function divisaoDitada(A) {
   const p = A.h.handle({ chatId: CHAT, senderPhone: MAYRA, messageId: 'Y1',
     body: '', hasMedia: true, mediaType: 'image', mediaUrls: ['fake://pix.jpg'] });
-  await sleep(250);
-  await A.h.handle({ chatId: CHAT, senderPhone: MAYRA, messageId: 'Y2',
+  await sleep(20);
+  const texto = A.h.handle({ chatId: CHAT, senderPhone: MAYRA, messageId: 'Y2',
     body: `${DAVI} - R$ 1.290,00\n\nThuanny De Souza - R$ 432,00`, hasMedia: false });
+  A.liberarOcr();
+  await texto;
   return p;
 }
 
