@@ -146,6 +146,13 @@ verify_jwt = false
 # origem=google com gclid) fica dentro da funcao.
 verify_jwt = true
 
+[functions.enviar-conversoes-google-ads]
+# Fase 3: devolve a matricula ao Google Ads. Nao tem chamador externo -- so cron e operacao
+# manual. O padrao da funcao e DRY RUN: envia de verdade so com {"enviar": true} e com o
+# secret GOOGLE_ADS_CONVERSION_ACTION_ID configurado. Conversao enviada ao Google nao se
+# apaga, so se retrata item a item por outra chamada de API.
+verify_jwt = true
+
 [functions.atualizar-inadimplencia-emusys]
 # Endpoint de compatibilidade do botao: navegador manda JWT e servidor pode mandar
 # x-sync-token, ambos validados dentro da funcao. Ele apenas encaminha para a fila unica
