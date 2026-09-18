@@ -451,19 +451,82 @@ select acao, count(*), max(created_at) from public.leads_automacao_log
  where evento='google_ads' group by 1;
 ```
 
+### `gad_campaignid` NÃO é `campaign.id` — e isso quase virou uma conclusão errada
+
+O clique real carimbou `gad_campaignid=23155373713` na URL. Esse id **não existe**: nem na
+conta que lemos (`717-909-7170`), nem em nenhuma das **38 contas** do MCC que gerencia a
+escola, nem como `asset_group`, `ad_group` ou `campaign_budget`.
+
+A conclusão apressada foi *"as campanhas rodam numa conta que não enxergamos"* — e estava
+**errada**. Perguntando ao Google pelo próprio `gclid` (recurso `click_view`):
+
+```
+campaign.id   : 23150914508
+campaign.name : [CG] [P.MAX] [LEADS] 18.10.2025
+```
+
+Que **está** na nossa conta, e cuja URL final é exatamente a landing do clique
+(`laescolademusica.com.br/music-kids/`), batendo também com a unidade do lead (CG).
+
+⚠️ **São dois identificadores diferentes.** O da URL não cruza com
+`google_ads_metricas_diarias` e não serve para nomear campanha nem dividir custo.
+
+⚠️ **Não há conta oculta nem verba invisível.** O gestor administra a conta da escola pelo
+MCC dele (`716-163-9915`, 38 escolas) — é a mesma conta que o LAReport já lê.
+
+### O resolvedor de campanha (3º modo da edge)
+
+`POST {"resolver_campanhas": true}` — cron `25 */6 * * *`. Pega os cliques sem campanha
+real, pergunta ao Google pelo `gclid` e grava `campanha_id` + `campanha_nome`, propagando o
+id real para `leads.google_ads_campanha_id`.
+
+| Coluna | O que guarda |
+|---|---|
+| `gad_campaignid` | o que o Google carimbou na URL — só registro, não cruza com nada |
+| `campanha_id` | o **real**, do `click_view` — cruza com `google_ads_metricas_diarias` |
+| `campanha_nome` | o nome, direto da API |
+
+⚠️ **`click_view` exige `segments.date` de UM dia exato** e cobre só **90 dias**. Por isso a
+consulta é por dia, e clique mais antigo que isso nunca terá campanha — é fato sobre a API.
+
+⚠️ **4x por dia, não a cada 10 min: o `click_view` tem latência.** Medido no mesmo dia — o
+clique das 18h34 resolveu na hora, o das 23h58 só apareceu depois. Consultar de minuto em
+minuto só gastaria chamada para ouvir "ainda não".
+
+⚠️ **Sem data da conversa, a janela é de 7 dias.** É o caso das linhas de backfill, cujo
+`created_at` é a data do **lead**, não a do clique — procurar ali erraria o dia por semanas.
+Foi exatamente o que aconteceu com o lead 13871 até a janela ser ampliada.
+
+⚠️ **Usa as credenciais do próprio LAReport** (`GOOGLE_ADS_*`), as mesmas da captura diária.
+Nada de terceiros.
+
+### Medido no fim (3 cliques, 3 leads)
+
+| Lead | Motivo do canal | Campanha resolvida |
+|---|---|---|
+| José Arimateia | `preservado_reengajamento` | [CG] [P.MAX] [LEADS] |
+| José Carlos | `vazio_preenchido` | [CG] [P.MAX] [LEADS] |
+| Paulo | `backfill_v1` | [CG] [P.MAX] [LEADS] |
+
+Os três caminhos da regra de canal exercitados com tráfego real, e os três leads com
+`canal_origem_id = 3` e o id de campanha que cruza com as métricas.
+
+### Como conferir que está vivo (nunca pelo status do cron)
+
+```sql
+select situacao, count(*), count(campanha_id) as com_campanha, max(created_at)
+from public.google_ads_cliques group by 1;
+
+select acao, count(*), max(created_at) from public.leads_automacao_log
+ where evento='google_ads' group by 1;
+```
+
 ### O que ainda não está resolvido
 
-1. ⚠️ **`gbraid`/`wbraid` não aparecem no payload.** Só `gclid`. Performance Max gera muito
-   tráfego iOS/app, e essa perda seria **silenciosa**. Confirmar com o Rayan. A coluna já
-   existe na tabela, esperando.
-2. ⚠️ **O `gad_campaignid` do clique NÃO bate com nenhuma campanha da conta que lemos.** O
-   clique real trouxe `23155373713`; a `google_ads_metricas_diarias` (capturada no mesmo dia,
-   fresca) tem só 4 campanhas: `23150914508`, `22240061012`, `22636203296`, `22635897064`.
-   Ou o `gad_campaignid` da URL é um identificador diferente do `campaign.id` da API, **ou as
-   campanhas rodam numa conta do Google Ads diferente da que o LAReport lê** (717-909-7170).
-   Se for a segunda, o gasto que o painel mostra e os cliques que chegam são de contas
-   distintas — e cruzar custo com lead ficaria errado. **Pendência antes de qualquer conta de
-   CPL.**
-3. **Cobertura desconhecida** — 1 `gclid` em 17 eventos não diz que fração dos cliques pagos
-   chega atribuída. Comparar contra os cliques que o Google reporta.
-4. **Fase 3** (importar a matrícula como conversão) segue pendente, agora com insumo.
+1. ⚠️ **`gbraid`/`wbraid` não aparecem no payload da onpromedia.** Só `gclid`. Performance
+   Max gera muito tráfego iOS/app, e essa perda seria **silenciosa**. Confirmar com o Rayan —
+   a coluna já existe, esperando.
+2. **Cobertura desconhecida.** 3 cliques atribuídos contra ~480 cliques/dia que o Google
+   reporta. Falta medir que fração das conversas chega com `gclid`.
+3. **Fase 3** (importar a matrícula como conversão) — agora com os dois insumos que faltavam:
+   o `gclid` validado e o caminho do `click_view` já provado.

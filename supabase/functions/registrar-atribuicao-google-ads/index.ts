@@ -7,6 +7,7 @@
 //
 //   POST {...payload da onpromedia...}  -> registra o clique e tenta casar na hora
 //   POST {"varrer": true}               -> re-tenta os cliques pendentes (cron)
+//   POST {"resolver_campanhas": true}   -> descobre a campanha REAL de cada clique (cron)
 //
 // DE ONDE VEM: a onpromedia (plataforma "CQC") opera o redirect entre o anuncio e o
 // WhatsApp, captura o gclid ali, e manda um evento por conversa. O n8n (DVqC4ihArH1Pz1vg)
@@ -25,6 +26,12 @@ import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supa
 
 const CANAL_GOOGLE = 3; // public.canais_origem
 const JANELA_VARREDURA_DIAS = 7; // depois disso o clique vira orfao (situacao='expirado')
+
+// click_view so cobre os ultimos 90 dias. Passou disso, a campanha daquele clique nao tem
+// mais como ser descoberta -- fica nula para sempre, e isso e um fato sobre a API, nao um bug.
+const JANELA_CLICK_VIEW_DIAS = 88;
+const VERSOES_ADS = (Deno.env.get('GOOGLE_ADS_API_VERSIONS') ?? 'v25,v24,v23,v22')
+  .split(',').map((v) => v.trim()).filter(Boolean);
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -62,7 +69,8 @@ type Clique = {
   gclid: string;
   gbraid?: string | null;
   wbraid?: string | null;
-  campanha_id: string | null;
+  // O que o Google carimbou na URL. NAO e o campaign.id da API -- ver resolverCampanhas().
+  gad_campaignid: string | null;
   cqc_conversa_id: string | null;
   cqc_event: string | null;
   telefone: string;
@@ -141,7 +149,7 @@ async function casar(supabase: SupabaseClient, clique: Clique) {
   if (!lead.gclid) {
     const { error: upErr } = await supabase
       .from('leads')
-      .update({ gclid: clique.gclid, google_ads_campanha_id: clique.campanha_id })
+      .update({ gclid: clique.gclid })
       .eq('id', lead.id)
       .is('gclid', null);
     if (upErr) throw upErr;
@@ -183,7 +191,7 @@ async function casar(supabase: SupabaseClient, clique: Clique) {
     acao: 'vinculado',
     detalhes: {
       gclid: clique.gclid,
-      gad_campaignid: clique.campanha_id,
+      gad_campaignid: clique.gad_campaignid,
       cqc_conversa_id: clique.cqc_conversa_id,
       cqc_event: clique.cqc_event,
       conversa_criada_em: clique.conversa_criada_em,
@@ -241,7 +249,7 @@ async function registrar(supabase: SupabaseClient, body: Record<string, any>) {
     gclid: String(gclid),
     gbraid: atribuicao?.gbraid ?? null,
     wbraid: atribuicao?.wbraid ?? null,
-    campanha_id: extrairCampanhaId(atribuicao?.page_url_origem),
+    gad_campaignid: extrairCampanhaId(atribuicao?.page_url_origem),
     cqc_conversa_id: body?.conversa?.id ?? null,
     cqc_event: body?.event ?? null,
     telefone: String(telefone),
@@ -318,13 +326,172 @@ async function varrer(supabase: SupabaseClient, body: Record<string, any>) {
   return json({ ok: true, ...resumo });
 }
 
+/**
+ * Modo cron: descobre a campanha REAL de cada clique, perguntando ao Google pelo gclid.
+ *
+ * ⚠️ POR QUE ISSO PRECISA EXISTIR: o `gad_campaignid` que vem carimbado na URL NAO e o
+ * `campaign.id` da API. Medido em 17/09/2026 -- o clique do lead 14201 trouxe
+ * gad_campaignid=23155373713, que nao existe em conta nenhuma (nem na nossa, nem nas 38 do
+ * MCC que gerencia a escola, nem como asset_group/ad_group/budget). Perguntando pelo gclid,
+ * o Google respondeu campaign.id 23150914508 -- "[CG] [P.MAX] [LEADS] 18.10.2025", que esta
+ * na nossa conta. Sao dois identificadores diferentes, e so o segundo cruza com
+ * google_ads_metricas_diarias.
+ *
+ * ⚠️ `click_view` e o UNICO recurso que casa gclid com campanha, e exige `segments.date`
+ * de UM dia exato -- nao aceita intervalo. Por isso a consulta e por dia.
+ *
+ * ⚠️ O clique pode ser de um dia ANTERIOR a conversa (a pessoa clica, sai, volta depois).
+ * Por isso cada clique e procurado no dia da conversa e nos 2 anteriores.
+ *
+ * ⚠️ NAO manda `login-customer-id`: o usuario OAuth alcanca a conta direto e nao e membro
+ * do MCC -- mandar o header da 403 com mensagem que sugere exatamente o contrario. Mesma
+ * regra ja documentada em capturar-google-ads-diario.
+ */
+async function resolverCampanhas(supabase: SupabaseClient, body: Record<string, any>) {
+  const dev = Deno.env.get('GOOGLE_ADS_DEVELOPER_TOKEN') ?? '';
+  const customer = (Deno.env.get('GOOGLE_ADS_CUSTOMER_ID') ?? '').replace(/\D/g, '');
+  if (!dev || !customer) {
+    return json({ ok: false, error: 'GOOGLE_ADS_DEVELOPER_TOKEN/CUSTOMER_ID nao configurados' }, 500);
+  }
+
+  const limiteDias = Number.isFinite(Number(body?.dias)) ? Number(body.dias) : JANELA_CLICK_VIEW_DIAS;
+  const corte = new Date(Date.now() - limiteDias * 86400_000).toISOString();
+
+  const { data: pendentes, error } = await supabase
+    .from('google_ads_cliques')
+    .select('id, gclid, conversa_criada_em, created_at, lead_id')
+    .is('campanha_id', null)
+    .gte('created_at', corte)
+    .order('created_at', { ascending: false })
+    .limit(300);
+  if (error) throw error;
+
+  const resumo = { pendentes: pendentes?.length ?? 0, resolvidos: 0, nao_achados: 0, dias_consultados: 0, erros: [] as string[] };
+  if (!pendentes || pendentes.length === 0) {
+    console.log('[google-ads/resolver]', JSON.stringify(resumo));
+    return json({ ok: true, ...resumo });
+  }
+
+  // OAuth (mesmas credenciais da captura diaria -- nada novo)
+  const rTok = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: Deno.env.get('GOOGLE_ADS_CLIENT_ID') ?? '',
+      client_secret: Deno.env.get('GOOGLE_ADS_CLIENT_SECRET') ?? '',
+      refresh_token: Deno.env.get('GOOGLE_ADS_REFRESH_TOKEN') ?? '',
+      grant_type: 'refresh_token',
+    }),
+  });
+  const jTok = await rTok.json().catch(() => ({}));
+  if (!rTok.ok || !jTok.access_token) {
+    const extra = jTok.error === 'invalid_grant' ? ' (refresh token expirado/revogado)' : '';
+    return json({ ok: false, error: `oauth ${rTok.status}: ${jTok.error ?? 'sem access_token'}${extra}` }, 502);
+  }
+  const token = jTok.access_token as string;
+
+  // Agrupa os gclids pelos dias em que o clique pode ter acontecido.
+  //
+  // Com data da conversa: o dia dela e os 2 anteriores (a pessoa pode clicar, sair e voltar).
+  // SEM data da conversa: os ultimos 7 dias a contar de hoje. E o caso das linhas de
+  // backfill, cujo `created_at` e a data do LEAD, nao a do clique -- procurar ali erraria o
+  // dia por semanas.
+  const porDia = new Map<string, string[]>();
+  const dia = (iso: string) => iso.slice(0, 10);
+  for (const p of pendentes) {
+    const temData = !!p.conversa_criada_em;
+    const base = temData ? new Date(p.conversa_criada_em) : new Date();
+    const janela = temData ? 2 : 6;
+    for (let d = 0; d <= janela; d++) {
+      const chave = dia(new Date(base.getTime() - d * 86400_000).toISOString());
+      if (!porDia.has(chave)) porDia.set(chave, []);
+      porDia.get(chave)!.push(p.gclid);
+    }
+  }
+
+  let versaoOk: string | null = null;
+  // gclid -> {id, nome}
+  const achados = new Map<string, { id: string; nome: string }>();
+
+  for (const [d, gclids] of porDia) {
+    const unicos = [...new Set(gclids)].filter((g) => !achados.has(g));
+    if (unicos.length === 0) continue;
+    resumo.dias_consultados++;
+
+    const lista = unicos.map((g) => `'${g.replace(/'/g, "")}'`).join(',');
+    const query = `SELECT click_view.gclid, campaign.id, campaign.name, segments.date
+                   FROM click_view
+                   WHERE segments.date = '${d}' AND click_view.gclid IN (${lista})`;
+
+    for (const v of versaoOk ? [versaoOk] : VERSOES_ADS) {
+      const r = await fetch(
+        `https://googleads.googleapis.com/${v}/customers/${customer}/googleAds:search`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'developer-token': dev, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query }),
+        },
+      );
+      if (r.ok) {
+        versaoOk = v;
+        const jr = await r.json();
+        for (const l of (jr.results ?? [])) {
+          const g = l?.clickView?.gclid;
+          const c = l?.campaign;
+          if (g && c?.id) achados.set(g, { id: String(c.id), nome: String(c.name ?? '') });
+        }
+        break;
+      }
+      const txt = await r.text();
+      if (r.status !== 404) {
+        // Erro do pedido (token/permissao/GAQL) -- repetir noutra versao so esconderia a causa.
+        resumo.erros.push(`${d}: HTTP ${r.status} ${txt.slice(0, 200)}`);
+        break;
+      }
+    }
+  }
+
+  // Grava o que foi descoberto
+  for (const p of pendentes) {
+    const achado = achados.get(p.gclid);
+    if (!achado) { resumo.nao_achados++; continue; }
+
+    const { error: upErr } = await supabase
+      .from('google_ads_cliques')
+      .update({
+        campanha_id: achado.id,
+        campanha_nome: achado.nome,
+        campanha_resolvida_em: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', p.id);
+    if (upErr) { resumo.erros.push(`clique ${p.id}: ${upErr.message}`); continue; }
+
+    // O lead guarda o id REAL, que e o que cruza com as metricas. Sobrescreve o
+    // gad_campaignid que a primeira versao gravou -- ele nao servia para nada.
+    if (p.lead_id) {
+      const { error: leadErr } = await supabase
+        .from('leads')
+        .update({ google_ads_campanha_id: achado.id })
+        .eq('id', p.lead_id);
+      if (leadErr) resumo.erros.push(`lead ${p.lead_id}: ${leadErr.message}`);
+    }
+    resumo.resolvidos++;
+  }
+
+  console.log('[google-ads/resolver]', JSON.stringify(resumo));
+  return json({ ok: true, ...resumo });
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
     const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
     const body = await req.json().catch(() => ({}));
-    return body?.varrer === true ? await varrer(supabase, body) : await registrar(supabase, body);
+    if (body?.resolver_campanhas === true) return await resolverCampanhas(supabase, body);
+    if (body?.varrer === true) return await varrer(supabase, body);
+    return await registrar(supabase, body);
   } catch (e) {
     console.error('[registrar-atribuicao-google-ads]', e);
     return json({ ok: false, error: e instanceof Error ? e.message : 'erro interno' }, 500);
