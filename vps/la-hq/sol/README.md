@@ -12,6 +12,7 @@ O arquivo `runtime/deploy-manifest.json` fixa SHA-256, tamanho, modo e destino d
 - módulo de engajamento;
 - runtime financeiro;
 - abertura/fechamento determinístico;
+- ledger shadow e Auditor/Conformidade do Caixa;
 - MCP `sol-portas`.
 
 A bridge final agora é versionada diretamente em `runtime/bridge.js`. Os patches
@@ -29,9 +30,9 @@ O readback é somente leitura e falha se SHA, tamanho ou modo divergirem. Este
 utilitário não faz deploy, restart, DDL/DML nem envia mensagem. Uma promoção
 produtiva continua exigindo backup, gate explícito, aplicação atômica e readback.
 
-No baseline de 2026-09-11, os cinco conteúdos coincidiram com a VPS. O readback
-apontou três drifts apenas de modo de arquivo contra a política canônica `0644`.
-Nenhuma permissão viva foi alterada neste gate.
+O manifesto representa o estado desejado versionado. O readback separa artefatos
+já promovidos de itens ainda pendentes e não altera permissões, arquivos ou
+serviços. Em 2026-09-18, o conjunto passou a incluir também o Auditor do CP3.
 
 ## Origem da bridge baseline
 
