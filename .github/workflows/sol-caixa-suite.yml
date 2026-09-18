@@ -30,6 +30,7 @@ on:
       - 'supabase/functions/caixa-financeiro-whatsapp/**'
       - 'src/lib/caixaFinanceiro.ts'
       - 'tests/caixaPixCofreCompat.test.mjs'
+      - 'tests/solReparoCompetenciaCampoGrandePostgres.test.mjs'
       - 'tests/sol-caixa/**'
       - 'supabase-sol/migrations/**'
       - 'supabase-sol/migration-rollbacks/**'
@@ -44,6 +45,7 @@ on:
       - 'supabase/functions/caixa-financeiro-whatsapp/**'
       - 'src/lib/caixaFinanceiro.ts'
       - 'tests/caixaPixCofreCompat.test.mjs'
+      - 'tests/solReparoCompetenciaCampoGrandePostgres.test.mjs'
       - 'tests/sol-caixa/**'
       - 'supabase-sol/migrations/**'
       - 'supabase-sol/migration-rollbacks/**'
@@ -97,6 +99,9 @@ jobs:
 
       - name: paridade do fechamento — app e Edge
         run: node --test tests/caixaPixCofreCompat.test.mjs
+
+      - name: reparo histórico de competência — Campo Grande
+        run: node --test tests/solReparoCompetenciaCampoGrandePostgres.test.mjs
 
   # 🔴 O JOB QUE FALTAVA. Até 09/09/2026 o CI só olhava o runtime JS: ficou VERDE
   #    enquanto a regra financeira do resolver nem estava instalada no banco,
