@@ -39,7 +39,7 @@ fn_aniversariantes_do_professor_v1(
 
 A primeira retorna `{ itens, proximo_cursor }`, ordenado por `detectado_em desc, evento_id desc`; aceita no máximo 200 itens. `p_professor_id = null` é o recorte consolidado de serviço. A segunda deduplica por `unidade_id + emusys_student_id` (com ID local como fallback), exclui arquivados e exige vínculo operacional ativo na jornada.
 
-Os dez tipos da v1 são `aula_reagendada`, `aula_cancelada`, `professor_trocado`, `experimental_marcada`, `experimental_convertida`, `aluno_novo`, `aviso_previo`, `matricula_trancada`, `matricula_encerrada` e `matricula_alterada`. Aniversários são consulta, não evento. Troca de sala continua fora do contrato.
+Os doze tipos são `aula_reagendada`, `aula_cancelada`, `professor_trocado`, `experimental_marcada`, `experimental_convertida`, `experimental_cancelada`, `experimental_remarcada`, `aluno_novo`, `aviso_previo`, `matricula_trancada`, `matricula_encerrada` e `matricula_alterada`. Aniversários são consulta, não evento. Troca de sala continua fora do contrato.
 
 A janela da aula é BRT de ontem até D+14, avaliando tanto o início anterior quanto o novo. Eventos de turma mantêm `aluno=null` e descrevem a turma, em vez de atribuir o fato a uma pessoa errada.
 
@@ -111,6 +111,8 @@ Os dois professores de uma troca explicam as 22 audiências para 11 fatos. Os qu
 | `professor_trocado` | `mudanca.antes.professor` e `mudanca.depois.professor`; duas audiências, `saiu` e `entrou` |
 | `experimental_marcada` | `aula.inicio`, curso e professor responsável |
 | `experimental_convertida` | `mudanca.antes.data_experimental`, `mudanca.depois.data_matricula`, curso e uma ou duas audiências `responsavel` |
+| `experimental_cancelada` | `mudanca.antes.data_experimental` e `horario_experimental`; depois = status cancelada; audiência `responsavel` |
+| `experimental_remarcada` | `mudanca.antes/depois.data_experimental` e `horario_experimental`; audiência `responsavel` |
 | `aviso_previo` | `mudanca.depois.acao=adicionado`, `data_prevista` e categoria do motivo; sem observações livres |
 | `aluno_novo` / `matricula_trancada` / `matricula_encerrada` / `matricula_alterada` | ainda sem ocorrência publicada desde a ativação; os formatos foram cobertos pela fixture PostgreSQL |
 
@@ -173,3 +175,114 @@ Há vínculo de `lead_experimentais.emusys_aula_id` com `aulas_emusys`, portanto
 - No banco real, a RPC de 50 itens para o professor 16 executou em **8,83 ms**; o recorte consolidado em **10,833 ms**, ambos com buffers em memória.
 - O advisor não trouxe alerta novo para os objetos deste ajuste. Permanece apenas o informativo intencional de RLS sem política nas duas tabelas, cuja leitura direta continua revogada.
 - A tentativa de regenerar o mapa nesta sessão não conseguiu resolver o host direto do banco e não havia URL de pooler local; ela abortou sem escrever arquivos. As verificações acima foram feitas no projeto Supabase real.
+
+## Acompanhamento noturno — 18/09
+
+### Experimental cancelada ou remarcada sem aula ligada
+
+A migration `20260918205401_central_notificacoes_experimentais_sem_aula` entrou no banco principal. Ela acrescenta `experimental_cancelada` e `experimental_remarcada` à restrição de tipos e preserva o contrato da RPC: os novos tipos aparecem no mesmo campo `tipo`, com o mesmo `evento_id` estável, paginação e ordem por `detectado_em`.
+
+Há dois caminhos canônicos, ambos protegidos por exceção:
+
+- `lead_experimentais.status`: `AFTER UPDATE OF status`, com `WHEN OLD.status IS DISTINCT FROM NEW.status`, registra o cancelamento quando o status entra em cancelado;
+- `lead_experimentais.data_experimental, horario_experimental`: `AFTER UPDATE OF ...`, com `WHEN ... IS DISTINCT FROM ...`, registra a remarcação quando a mesma linha muda;
+- `leads_automacao_log`: o observer do webhook registra a remarcação como uma linha nova em `lead_experimentais`. O gatilho de `INSERT` do log recupera a agenda anterior do mesmo lead e cria `experimental_remarcada` para a nova linha.
+
+O último caminho ordena a sequência por `(created_at, id)`, não só pelo timestamp: dois logs na mesma transação podem ter o mesmo `created_at`. Depois de confirmar a remarcação, ele remove apenas a `experimental_marcada` genérica que o gatilho legado de `INSERT` tenha criado para aquela nova linha. A marcação original e os eventos de aula vinculada não são removidos.
+
+O elo com `aulas_emusys` é reavaliado em todos os caminhos. Se existe uma aula vinculada de verdade, o evento de experimental não nasce; a agenda continua a emitir `aula_cancelada` ou `aula_reagendada`. O payload novo contém somente `aluno`, `curso`, `aula.inicio` e `mudanca.antes/depois` com data, horário e, no cancelamento, status. Não leva motivo livre, observações, saúde, valor ou parcela. A audiência é uma única linha `responsavel` para `professor_experimental_id`.
+
+Os índices parciais novos em `leads_automacao_log` são:
+
+```sql
+idx_leads_automacao_log_experimental_lead_criado
+  (lead_id, created_at desc, id desc)
+  -- criação/remarcação de experimental
+
+idx_leads_automacao_log_experimental_carga
+  (created_at, id)
+  -- cancelamento/remarcação de experimental
+```
+
+A migration limita a espera pelo lock a 2 s durante a criação deles. A tabela tinha cerca de 110 mil linhas na medição. Antes, a busca do estado anterior de uma remarcação fazia `Seq Scan` de 110.698 linhas em **147,539 ms**; depois usa `Index Only Scan` em **0,115 ms**. A seleção dos 16 logs da carga de sete dias caiu de **96,715 ms** para **0,159 ms**. A repetição idempotente da carga completa mediu **30,135 ms** no banco real.
+
+### Provas e carga real
+
+A fixture PostgreSQL 17 agora falha sem esta migration porque os tipos não passam pela restrição e os gatilhos não existem. Ela também cobre três regressões específicas:
+
+- dois logs com o mesmo timestamp devem gerar uma remarcação; sem a chave `(created_at, id)`, o estado anterior é perdido;
+- a remarcação por webhook deve deixar **zero** `experimental_marcada` para a mesma linha nova;
+- uma restrição que faz a escrita na tabela derivada falhar não pode impedir o `UPDATE` canônico de cancelamento nem a inserção dos dois logs de remarcação.
+
+O teste passa com `node --test tests/eventosOperacionaisProfessorPostgres.test.mjs`, incluindo a aplicação da migration dentro de `BEGIN`/`ROLLBACK` e a prova de que os objetos desaparecem depois do rollback.
+
+A carga de sete dias, iniciada em `2026-09-11 20:54:25 UTC`, inseriu **7** fatos: **1** `experimental_cancelada` e **6** `experimental_remarcada`. A segunda chamada inseriu **0**. A diferença frente aos 16 logs de transporte é a política do contrato: dos 5 cancelamentos, 2 já tinham aula vinculada e 2 estavam fora da janela de ontem até D+14; das 11 remarcações, 4 estavam vinculadas a aula (inclui uma entrega duplicada) e 1 ficou fora da janela. Não houve alvo ausente entre os logs analisados.
+
+Exemplos sem nome de aluno:
+
+| Tipo | Exemplo observado |
+|---|---|
+| `experimental_cancelada` | experimental `2930`; Teclado; agenda de 19/09 às 08:00 BRT; `status: experimental_agendada → cancelada` |
+| `experimental_remarcada` | experimental `2894`; Aula Experimental; `14/09 15:00 → 24/09 15:00` BRT |
+
+No pós-carga, os 7 fatos têm audiência `responsavel`, não contêm os campos excluídos e há **0** marcações genéricas duplicadas para as seis remarcações. A RPC `fn_eventos_operacionais_professor_v1` já devolve os novos tipos ao filtrar `p_tipos`; a validação real retornou `experimental_remarcada` para uma audiência alcançada, sem leitura direta das tabelas.
+
+### Cruzamento de cancelamentos — pendente do dado de 19/09
+
+O horário local desta execução ainda é 18/09. A coleta de revisões que fecha o universo solicitado ocorre após **19/09 03:08 UTC**; portanto os números A e B não existem ainda e não foram estimados.
+
+Assim que a coleta estiver presente, o cruzamento usará `primeira_coleta_em` da revisão append-only, particionado por `aula_staging_id` e ordenado por `primeira_coleta_em, id`. A é a união distinta de: (1) revisão que passou de `cancelada=false` para `true` na janela e (2) aula inserida já cancelada no mesmo intervalo. As duas partes aplicam a mesma janela BRT de ontem a D+14 dos gatilhos. B são os `aula_cancelada` de origem `sincronizacao` ou `webhook`, agrupados por unidade e `emusys_id`, detectados no mesmo intervalo.
+
+```sql
+with parametros as (
+  select timestamptz '2026-09-18 11:51:00+00' as inicio,
+         /* substituir pela primeira coleta concluída após 19/09 03:08 UTC */
+         timestamptz '2026-09-19 03:08:00+00' as fim
+), candidatas as (
+  select distinct r.aula_staging_id
+    from public.emusys_aulas_historico_revisoes_v1 r, parametros p
+   where r.primeira_coleta_em >= p.inicio
+     and r.primeira_coleta_em < p.fim
+), historico as (
+  select r.*,
+         lag(coalesce(r.payload ->> 'cancelada', 'false')) over (
+           partition by r.aula_staging_id order by r.primeira_coleta_em, r.id
+         ) as cancelada_anterior,
+         lag(r.payload ->> 'data_hora_inicio') over (
+           partition by r.aula_staging_id order by r.primeira_coleta_em, r.id
+         ) as inicio_anterior
+    from public.emusys_aulas_historico_revisoes_v1 r
+    join candidatas c on c.aula_staging_id = r.aula_staging_id
+), a as (
+  select distinct h.unidade_id, h.emusys_aula_id, 'revisao'::text as fonte
+    from historico h, parametros p
+   where h.primeira_coleta_em >= p.inicio
+     and h.primeira_coleta_em < p.fim
+     and coalesce(h.cancelada_anterior, 'false') <> 'true'
+     and coalesce(h.payload ->> 'cancelada', 'false') = 'true'
+     and public.fn_eventos_operacionais_na_janela_aula(
+       public.fn_eventos_operacionais_timestamptz(h.inicio_anterior),
+       public.fn_eventos_operacionais_timestamptz(h.payload ->> 'data_hora_inicio')
+     )
+  union
+  select distinct ae.unidade_id, ae.emusys_id, 'insert_cancelado'::text
+    from public.aulas_emusys ae, parametros p
+   where ae.created_at >= p.inicio
+     and ae.created_at < p.fim
+     and ae.cancelada
+     and public.fn_eventos_operacionais_na_janela_aula(null, ae.data_hora_inicio)
+), b as (
+  select distinct e.unidade_id, (e.aula ->> 'emusys_id')::bigint as emusys_aula_id
+    from public.eventos_operacionais e, parametros p
+   where e.tipo = 'aula_cancelada'
+     and e.origem in ('sincronizacao', 'webhook')
+     and e.detectado_em >= p.inicio
+     and e.detectado_em < p.fim
+)
+select (select count(*) from a) as a_cancelamentos,
+       (select count(*) from b) as b_eventos,
+       (select count(*) from a left join b using (unidade_id, emusys_aula_id)
+         where b.emusys_aula_id is null) as a_sem_evento;
+```
+
+Se `a_sem_evento > 0`, a consulta de detalhamento deve retornar somente `unidade_id`, `emusys_aula_id`, `turma_nome` ou `aluno_id`, e a razão técnica encontrada. Não incluirá nome de aluno.

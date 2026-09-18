@@ -16,11 +16,19 @@ const baseMigrationPaths = [
     'supabase/migrations/20260918120815_central_notificacoes_operacionais_acl.sql',
   ),
 ];
-const rolloutMigrationPath = path.join(
+const primeiroDiaMigrationPath = path.join(
   root,
   'supabase/migrations/20260918154358_central_notificacoes_operacionais_primeiro_dia.sql',
 );
-const migrationPaths = [...baseMigrationPaths, rolloutMigrationPath];
+const experimentaisSemAulaMigrationPath = path.join(
+  root,
+  'supabase/migrations/20260918205401_central_notificacoes_experimentais_sem_aula.sql',
+);
+const migrationPaths = [
+  ...baseMigrationPaths,
+  primeiroDiaMigrationPath,
+  experimentaisSemAulaMigrationPath,
+];
 
 function docker(args, input) {
   return spawnSync('docker', args, {
@@ -220,6 +228,14 @@ const fixtureSchema = String.raw`
     workflow_id text,
     created_at timestamptz not null default now()
   );
+  create table public.leads_automacao_log (
+    id bigint generated always as identity primary key,
+    lead_id integer,
+    evento text,
+    acao text,
+    detalhes jsonb not null default '{}'::jsonb,
+    created_at timestamptz not null default now()
+  );
 
   create view public.vw_alunos_estado_operacional_v131 as
   select a.id as aluno_id,
@@ -328,6 +344,29 @@ const fixtureSchema = String.raw`
     (7001, '11111111-1111-1111-1111-111111111111', 5006,
       jsonb_build_object('data_hora_inicio', to_char(now() + interval '3 days', 'YYYY-MM-DD"T"HH24:MI:SSOF'), 'cancelada', false),
       now() - interval '1 day', now() - interval '1 day');
+
+  insert into public.leads (id, unidade_id, status)
+  values
+    (800, '11111111-1111-1111-1111-111111111111', 'novo'),
+    (801, '11111111-1111-1111-1111-111111111111', 'novo');
+  insert into public.lead_experimentais
+    (id, lead_id, nome_aluno, unidade_id, data_experimental, horario_experimental,
+     professor_experimental_id, curso_interesse_id, status, created_at, updated_at)
+  values
+    (506, 800, 'Lead cancelado carga', '11111111-1111-1111-1111-111111111111',
+     current_date + 2, time '10:00', 10, 1, 'cancelada', now() - interval '2 days', now() - interval '2 days'),
+    (507, 801, 'Lead antes da remarcacao', '11111111-1111-1111-1111-111111111111',
+     current_date + 2, time '11:00', 10, 1, 'experimental_agendada', now() - interval '3 days', now() - interval '3 days'),
+    (508, 801, 'Lead depois da remarcacao', '11111111-1111-1111-1111-111111111111',
+     current_date + 4, time '14:00', 10, 1, 'experimental_agendada', now() - interval '2 days', now() - interval '2 days');
+  insert into public.leads_automacao_log
+    (lead_id, evento, acao, detalhes, created_at)
+  values
+    (800, 'aula_experimental_cancelada', 'experimental_cancelada', '{}'::jsonb, now() - interval '2 days'),
+    (801, 'aula_experimental_criada', 'experimental_agendada',
+     jsonb_build_object('data', (current_date + 2)::text, 'horario', '11:00'), now() - interval '3 days'),
+    (801, 'aula_experimental_reagendada', 'experimental_reagendada',
+     jsonb_build_object('data', (current_date + 4)::text, 'horario', '14:00'), now() - interval '2 days');
 `;
 
 test('the operational-notification migration is present before its PostgreSQL fixture runs', () => {
@@ -400,10 +439,10 @@ test('operational notification triggers, service RPCs, ACLs and initial load hon
     assert.equal(avisoComOrigemCorrigida.status, 0, avisoComOrigemCorrigida.stderr || avisoComOrigemCorrigida.stdout);
     assert.equal(avisoComOrigemCorrigida.stdout.trim().split(/\r?\n/u).at(-1), 'sincronizacao');
 
-    const rolloutSource = fs.readFileSync(rolloutMigrationPath, 'utf8');
+    const primeiroDiaSource = fs.readFileSync(primeiroDiaMigrationPath, 'utf8');
     const rollbackProof = psql(container, `
       begin;
-      ${rolloutSource}
+      ${primeiroDiaSource}
       select
         to_regprocedure('public.fn_eventos_operacionais_carga_inicial_experimental_convertida_v1(timestamp with time zone)') is not null,
         exists (
@@ -422,8 +461,8 @@ test('operational notification triggers, service RPCs, ACLs and initial load hon
       ['t|t', 't'],
     );
 
-    const rolloutMigration = psql(container, rolloutSource);
-    assert.equal(rolloutMigration.status, 0, rolloutMigration.stderr || rolloutMigration.stdout);
+    const primeiroDiaMigration = psql(container, primeiroDiaSource);
+    assert.equal(primeiroDiaMigration.status, 0, primeiroDiaMigration.stderr || primeiroDiaMigration.stdout);
     const legacyDeduplicated = psql(container, `
       select count(*) from public.eventos_operacionais where evento_id like 'legacy-turma:%';
       select origem from public.eventos_operacionais
@@ -431,6 +470,76 @@ test('operational notification triggers, service RPCs, ACLs and initial load hon
     `);
     assert.equal(legacyDeduplicated.status, 0, legacyDeduplicated.stderr || legacyDeduplicated.stdout);
     assert.deepEqual(legacyDeduplicated.stdout.trim().split(/\r?\n/u), ['1', 'webhook']);
+
+    // A carga original ja existia antes desta migration. Rodamo-la antes do
+    // complemento para provar que a carga de remarcacao remove o marcador
+    // generico preexistente da mesma linha-alvo.
+    const initial = jsonOutput(psql(container, `
+      set role service_role;
+      select public.fn_eventos_operacionais_carga_inicial_v1(now() - interval '7 days')::text;
+      reset role;
+    `));
+    assert.ok(initial.total >= 4, JSON.stringify(initial));
+    const initialRepeat = jsonOutput(psql(container, `
+      set role service_role;
+      select public.fn_eventos_operacionais_carga_inicial_v1(now() - interval '7 days')::text;
+      reset role;
+    `));
+    assert.equal(initialRepeat.inseridos, 0, JSON.stringify(initialRepeat));
+
+    const experimentaisSemAulaSource = fs.readFileSync(experimentaisSemAulaMigrationPath, 'utf8');
+    const experimentaisSemAulaRollbackProof = psql(container, `
+      begin;
+      ${experimentaisSemAulaSource}
+      select
+        to_regprocedure('public.fn_eventos_operacionais_carga_inicial_experimentais_sem_aula_v1(timestamp with time zone)') is not null,
+        to_regprocedure('public.trg_eventos_operacionais_experimental_remarcada()') is not null,
+        exists (
+          select 1
+          from pg_constraint
+          where conrelid = 'public.eventos_operacionais'::regclass
+            and conname = 'eventos_operacionais_tipo_check'
+            and pg_get_constraintdef(oid) like '%experimental_remarcada%'
+        );
+      rollback;
+      select to_regprocedure('public.fn_eventos_operacionais_carga_inicial_experimentais_sem_aula_v1(timestamp with time zone)') is null;
+    `);
+    assert.equal(experimentaisSemAulaRollbackProof.status, 0, experimentaisSemAulaRollbackProof.stderr || experimentaisSemAulaRollbackProof.stdout);
+    assert.deepEqual(
+      experimentaisSemAulaRollbackProof.stdout.trim().split(/\r?\n/u).filter((line) => /^(t\|t\|t|t)$/u.test(line)),
+      ['t|t|t', 't'],
+    );
+
+    const experimentaisSemAulaMigration = psql(container, experimentaisSemAulaSource);
+    assert.equal(experimentaisSemAulaMigration.status, 0, experimentaisSemAulaMigration.stderr || experimentaisSemAulaMigration.stdout);
+    const experimentaisSemAulaIniciais = jsonOutput(psql(container, `
+      set role service_role;
+      select public.fn_eventos_operacionais_carga_inicial_experimentais_sem_aula_v1(now() - interval '7 days')::text;
+      reset role;
+    `));
+    assert.deepEqual(
+      experimentaisSemAulaIniciais.por_tipo,
+      { experimental_cancelada: 1, experimental_remarcada: 1 },
+      JSON.stringify(experimentaisSemAulaIniciais),
+    );
+    const marcacaoGenericaDaRemarcacaoInicial = psql(container, `
+      select count(*)
+        from public.eventos_operacionais
+       where tipo = 'experimental_marcada'
+         and evento_id like '%:experimental:508:%';
+    `);
+    assert.equal(
+      marcacaoGenericaDaRemarcacaoInicial.status,
+      0,
+      marcacaoGenericaDaRemarcacaoInicial.stderr || marcacaoGenericaDaRemarcacaoInicial.stdout,
+    );
+    assert.equal(marcacaoGenericaDaRemarcacaoInicial.stdout.trim(), '0');
+    const experimentaisSemAulaIniciaisRepetidos = jsonOutput(psql(container, `
+      set role service_role;
+      select public.fn_eventos_operacionais_carga_inicial_experimentais_sem_aula_v1(now() - interval '7 days')::text;
+      reset role;
+    `));
+    assert.equal(experimentaisSemAulaIniciaisRepetidos.inseridos, 0, JSON.stringify(experimentaisSemAulaIniciaisRepetidos));
 
     const conversoesIniciais = jsonOutput(psql(container, `
       set role service_role;
@@ -444,19 +553,6 @@ test('operational notification triggers, service RPCs, ACLs and initial load hon
       reset role;
     `));
     assert.equal(conversoesIniciaisRepetidas.inseridos, 0, JSON.stringify(conversoesIniciaisRepetidas));
-
-    const initial = jsonOutput(psql(container, `
-      set role service_role;
-      select public.fn_eventos_operacionais_carga_inicial_v1(now() - interval '7 days')::text;
-      reset role;
-    `));
-    assert.ok(initial.total >= 4, JSON.stringify(initial));
-    const initialRepeat = jsonOutput(psql(container, `
-      set role service_role;
-      select public.fn_eventos_operacionais_carga_inicial_v1(now() - interval '7 days')::text;
-      reset role;
-    `));
-    assert.equal(initialRepeat.inseridos, 0, JSON.stringify(initialRepeat));
 
     const changes = psql(container, `
       update public.aulas_emusys
@@ -571,6 +667,7 @@ test('operational notification triggers, service RPCs, ACLs and initial load hon
     assert.equal(changes.status, 0, changes.stderr || changes.stdout);
 
     const noOpExperimental = psql(container, `
+      select count(*) from public.eventos_operacionais where tipo = 'experimental_marcada';
       update public.lead_experimentais
          set data_experimental = data_experimental,
              horario_experimental = horario_experimental,
@@ -580,7 +677,82 @@ test('operational notification triggers, service RPCs, ACLs and initial load hon
       select count(*) from public.eventos_operacionais where tipo = 'experimental_marcada';
     `);
     assert.equal(noOpExperimental.status, 0, noOpExperimental.stderr || noOpExperimental.stdout);
-    assert.equal(noOpExperimental.stdout.trim().split(/\r?\n/u).at(-1), '2');
+    const marcadasAntesEDepois = noOpExperimental.stdout
+      .trim()
+      .split(/\r?\n/u)
+      .filter((line) => /^\d+$/u.test(line));
+    assert.equal(marcadasAntesEDepois.length, 2);
+    assert.equal(marcadasAntesEDepois[0], marcadasAntesEDepois[1]);
+
+    const experimentaisSemAulaAoVivo = psql(container, `
+      insert into public.leads (id, unidade_id, status)
+      values
+        (802, '11111111-1111-1111-1111-111111111111', 'novo'),
+        (803, '11111111-1111-1111-1111-111111111111', 'novo');
+      insert into public.lead_experimentais
+        (id, lead_id, nome_aluno, unidade_id, data_experimental, horario_experimental,
+         professor_experimental_id, curso_interesse_id, status)
+      values
+        (509, 802, 'Lead atualizado na mesma linha', '11111111-1111-1111-1111-111111111111',
+         current_date + 3, time '15:00', 10, 1, 'experimental_agendada'),
+        (511, 803, 'Lead anterior do webhook', '11111111-1111-1111-1111-111111111111',
+         current_date + 2, time '09:00', 10, 1, 'experimental_agendada'),
+        (512, 803, 'Lead novo do webhook', '11111111-1111-1111-1111-111111111111',
+         current_date + 4, time '16:00', 10, 1, 'experimental_agendada');
+      update public.lead_experimentais
+         set data_experimental = current_date + 4,
+             horario_experimental = time '16:00'
+       where id = 509;
+      update public.lead_experimentais
+         set status = 'cancelada'
+       where id = 509;
+      update public.lead_experimentais
+         set data_experimental = current_date + 4,
+             horario_experimental = time '19:00'
+       where id = 502;
+      insert into public.leads_automacao_log
+        (lead_id, evento, acao, detalhes)
+      values
+        (803, 'aula_experimental_criada', 'experimental_agendada',
+         jsonb_build_object('data', (current_date + 2)::text, 'horario', '09:00')),
+        (803, 'aula_experimental_reagendada', 'experimental_reagendada',
+         jsonb_build_object('data', (current_date + 4)::text, 'horario', '16:00'));
+      select count(*) from public.eventos_operacionais
+       where tipo = 'experimental_remarcada' and evento_id like '%:experimental:509:%';
+      select count(*) from public.eventos_operacionais
+       where tipo = 'experimental_cancelada' and evento_id like '%:experimental:509:%';
+      select count(*) from public.eventos_operacionais
+       where tipo = 'experimental_remarcada' and evento_id like '%:experimental:512:%';
+      select count(*) from public.eventos_operacionais
+       where tipo = 'experimental_remarcada' and evento_id like '%:experimental:502:%';
+      select count(*) from public.eventos_operacionais
+       where tipo = 'experimental_marcada' and evento_id like '%:experimental:512:%';
+      select mudanca ? 'antes'
+             and mudanca ? 'depois'
+             and mudanca -> 'antes' ? 'data_experimental'
+             and mudanca -> 'antes' ? 'horario_experimental'
+             and mudanca -> 'depois' ? 'data_experimental'
+             and mudanca -> 'depois' ? 'horario_experimental'
+             and mudanca::text !~ '(valor|parcela|observacoes)'
+        from public.eventos_operacionais
+       where tipo = 'experimental_remarcada' and evento_id like '%:experimental:509:%';
+      select origem from public.eventos_operacionais
+       where tipo = 'experimental_remarcada' and evento_id like '%:experimental:512:%';
+      select count(*) from public.eventos_operacionais_audiencia a
+       join public.eventos_operacionais e on e.evento_id = a.evento_id
+       where e.tipo = 'experimental_remarcada'
+         and e.evento_id like '%:experimental:512:%'
+         and a.professor_id = 10
+         and a.participacao = 'responsavel';
+    `);
+    assert.equal(experimentaisSemAulaAoVivo.status, 0, experimentaisSemAulaAoVivo.stderr || experimentaisSemAulaAoVivo.stdout);
+    assert.deepEqual(
+      experimentaisSemAulaAoVivo.stdout
+        .trim()
+        .split(/\r?\n/u)
+        .filter((line) => !/^(?:INSERT|UPDATE) /u.test(line)),
+      ['1', '1', '1', '0', '0', 't', 'webhook', '1'],
+    );
 
     const firstDayCases = psql(container, `
       select count(*) from public.eventos_operacionais
@@ -616,7 +788,9 @@ test('operational notification triggers, service RPCs, ACLs and initial load hon
     assert.ok(lines.includes('aula_reagendada|4'), lines.join('\n'));
     assert.ok(lines.includes('aula_cancelada|2'), lines.join('\n'));
     assert.ok(lines.includes('professor_trocado|3'), lines.join('\n'));
-    assert.ok(lines.includes('experimental_marcada|2'), lines.join('\n'));
+    assert.ok(lines.includes('experimental_marcada|5'), lines.join('\n'));
+    assert.ok(lines.includes('experimental_cancelada|2'), lines.join('\n'));
+    assert.ok(lines.includes('experimental_remarcada|3'), lines.join('\n'));
     assert.ok(lines.includes('aluno_novo|2'), lines.join('\n'));
     assert.ok(lines.includes('aviso_previo|5'), lines.join('\n'));
     assert.ok(lines.includes('matricula_trancada|1'), lines.join('\n'));
@@ -633,6 +807,55 @@ test('operational notification triggers, service RPCs, ACLs and initial load hon
     `);
     assert.equal(audience.status, 0, audience.stderr || audience.stdout);
     assert.equal(audience.stdout.trim(), '6');
+
+    const isolamentoDeFalhaDasExperimentais = psql(container, `
+      alter table public.eventos_operacionais
+        add constraint eventos_operacionais_teste_experimentais_falham
+        check (tipo not in ('experimental_cancelada', 'experimental_remarcada')) not valid;
+      insert into public.leads (id, unidade_id, status)
+      values
+        (804, '11111111-1111-1111-1111-111111111111', 'novo'),
+        (805, '11111111-1111-1111-1111-111111111111', 'novo');
+      insert into public.lead_experimentais
+        (id, lead_id, nome_aluno, unidade_id, data_experimental, horario_experimental,
+         professor_experimental_id, curso_interesse_id, status)
+      values
+        (513, 804, 'Lead cujo cancelamento nao pode quebrar o sync',
+         '11111111-1111-1111-1111-111111111111', current_date + 2, time '10:00', 10, 1,
+         'experimental_agendada'),
+        (514, 805, 'Lead anterior cujo webhook nao pode quebrar',
+         '11111111-1111-1111-1111-111111111111', current_date + 2, time '11:00', 10, 1,
+         'experimental_agendada'),
+        (515, 805, 'Lead novo cujo webhook nao pode quebrar',
+         '11111111-1111-1111-1111-111111111111', current_date + 4, time '12:00', 10, 1,
+         'experimental_agendada');
+      update public.lead_experimentais set status = 'cancelada' where id = 513;
+      insert into public.leads_automacao_log (lead_id, evento, acao, detalhes)
+      values
+        (805, 'aula_experimental_criada', 'experimental_agendada',
+         jsonb_build_object('data', (current_date + 2)::text, 'horario', '11:00')),
+        (805, 'aula_experimental_reagendada', 'experimental_reagendada',
+         jsonb_build_object('data', (current_date + 4)::text, 'horario', '12:00'));
+      select status from public.lead_experimentais where id = 513;
+      select count(*) from public.leads_automacao_log where lead_id = 805;
+      select count(*) from public.eventos_operacionais
+       where tipo in ('experimental_cancelada', 'experimental_remarcada')
+         and evento_id like any (array['%:experimental:513:%', '%:experimental:515:%']);
+      alter table public.eventos_operacionais
+        drop constraint eventos_operacionais_teste_experimentais_falham;
+    `);
+    assert.equal(
+      isolamentoDeFalhaDasExperimentais.status,
+      0,
+      isolamentoDeFalhaDasExperimentais.stderr || isolamentoDeFalhaDasExperimentais.stdout,
+    );
+    assert.deepEqual(
+      isolamentoDeFalhaDasExperimentais.stdout
+        .trim()
+        .split(/\r?\n/u)
+        .filter((line) => !/^(?:ALTER TABLE|INSERT|UPDATE)(?: |$)/u.test(line)),
+      ['cancelada', '2', '0'],
+    );
 
     const service = jsonOutput(psql(container, `
       set role service_role;
