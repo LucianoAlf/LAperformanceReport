@@ -23,6 +23,22 @@ interface Opcao {
   jaNaGrade: boolean;
 }
 
+/**
+ * As opções de UMA pessoa, juntas.
+ *
+ * A lista continua sendo de pares `(pessoa, curso)` — é o grão da UNIQUE e da grade —, mas
+ * exibir cada par como uma linha solta repete o nome e esconde o que importa na hora de
+ * montar: **esta pessoa faz Violão E Canto**. Medido em 18/09: 59 pessoas nas 3 unidades têm
+ * 2+ cursos, e uma de Campo Grande tem quatro.
+ */
+interface Pessoa {
+  chave: string;
+  aluno: AlunoElegivel;
+  opcoes: Opcao[];
+  /** Quantos cursos dela ainda não entraram em bloco nenhum. */
+  fora: number;
+}
+
 export function SeletorApresentacao({
   eventoId,
   unidadeId,
@@ -70,15 +86,38 @@ export function SeletorApresentacao({
       }
     }
 
-    // Quem ainda não está na grade primeiro — é neles que se trabalha. Depois, quem
-    // confirmou participação antes de quem está indefinido.
-    return lista.sort(
+    return lista;
+  }, [alunos, busca]);
+
+  /**
+   * Agrupa por pessoa preservando a ordem de trabalho: quem tem curso fora da grade vem
+   * primeiro (é neles que se trabalha), depois quem confirmou antes de quem está indefinido.
+   *
+   * ⚠️ A ordenação é por PESSOA, não por par: ordenar os pares e depois agrupar faria a
+   * mesma pessoa aparecer em dois lugares da lista quando um curso dela já está na grade e
+   * o outro não — que é exatamente o caso que o agrupamento existe para tornar visível.
+   */
+  const pessoas = useMemo<Pessoa[]>(() => {
+    const porPessoa = new Map<string, Pessoa>();
+    for (const o of opcoes) {
+      const atual = porPessoa.get(o.aluno.pessoa_chave) ?? {
+        chave: o.aluno.pessoa_chave,
+        aluno: o.aluno,
+        opcoes: [],
+        fora: 0,
+      };
+      atual.opcoes.push(o);
+      if (!o.jaNaGrade) atual.fora += 1;
+      porPessoa.set(o.aluno.pessoa_chave, atual);
+    }
+
+    return [...porPessoa.values()].sort(
       (a, b) =>
-        Number(a.jaNaGrade) - Number(b.jaNaGrade) ||
+        Number(a.fora === 0) - Number(b.fora === 0) ||
         Number(b.aluno.status === 'participa') - Number(a.aluno.status === 'participa') ||
         a.aluno.nome.localeCompare(b.aluno.nome, 'pt-BR'),
     );
-  }, [alunos, busca]);
+  }, [opcoes]);
 
   const adicionar = async (o: Opcao) => {
     setGravando(o.chave);
@@ -134,54 +173,70 @@ export function SeletorApresentacao({
         )}
       </p>
 
-      <div className="mt-1.5 max-h-72 overflow-y-auto">
-        {opcoes.length === 0 ? (
+      <div className="mt-1.5 max-h-72 space-y-0.5 overflow-y-auto">
+        {pessoas.length === 0 ? (
           <p className="py-6 text-center text-[12.5px] text-slate-500">
             {loading ? '' : 'Nenhum candidato com esse filtro.'}
           </p>
         ) : (
-          opcoes.map((o) => (
-            <button
-              key={o.chave}
-              type="button"
-              disabled={o.jaNaGrade || gravando === o.chave}
-              onClick={() => adicionar(o)}
-              className={cn(
-                'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition-colors',
-                o.jaNaGrade
-                  ? 'cursor-not-allowed opacity-40'
-                  : 'hover:bg-slate-800 focus-visible:bg-slate-800',
-              )}
-            >
-              {o.jaNaGrade ? (
-                <Music className="h-3.5 w-3.5 shrink-0 text-violet-400" />
-              ) : (
-                <Plus className="h-3.5 w-3.5 shrink-0 text-slate-500" />
-              )}
-              <span className="min-w-0 flex-1 truncate text-[12.5px] text-white">
-                {o.aluno.nome}
-              </span>
-              <span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-px text-[10.5px] text-amber-300">
-                {o.curso_nome}
-              </span>
-              {/* Os dois estados marcados, nunca só o negativo: sem o selo verde, quem
-                  confirmou fica igual a quem ninguém perguntou ainda. */}
-              <span
-                className={cn(
-                  'flex shrink-0 items-center gap-1 text-[10.5px]',
-                  PARTICIPACAO_SELO[o.aluno.status].texto,
-                )}
-              >
+          pessoas.map((p) => (
+            <div key={p.chave} className="rounded px-2 py-1.5 hover:bg-slate-800/50">
+              <div className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate text-[12.5px] text-white">
+                  {p.aluno.nome}
+                </span>
+                {/* Os dois estados marcados, nunca só o negativo: sem o selo verde, quem
+                    confirmou fica igual a quem ninguém perguntou ainda. */}
                 <span
                   className={cn(
-                    'h-1.5 w-1.5 rounded-full',
-                    PARTICIPACAO_SELO[o.aluno.status].ponto,
+                    'flex shrink-0 items-center gap-1 text-[10.5px]',
+                    PARTICIPACAO_SELO[p.aluno.status].texto,
                   )}
-                />
-                {PARTICIPACAO_SELO[o.aluno.status].rotulo}
-              </span>
-              {o.jaNaGrade && <span className="shrink-0 text-[10.5px] text-slate-500">na grade</span>}
-            </button>
+                >
+                  <span
+                    className={cn(
+                      'h-1.5 w-1.5 rounded-full',
+                      PARTICIPACAO_SELO[p.aluno.status].ponto,
+                    )}
+                  />
+                  {PARTICIPACAO_SELO[p.aluno.status].rotulo}
+                </span>
+              </div>
+
+              {/* Um botão por CURSO MATRICULADO. É aqui que a pessoa com dois cursos deixa
+                  de ser duas linhas parecidas e passa a ser uma escolha explícita entre
+                  Violão e Canto — o caso da Maria Fernanda, que o formato anterior
+                  espalhava pela lista. */}
+              <div className="mt-1 flex flex-wrap gap-1">
+                {p.opcoes.map((o) => (
+                  <button
+                    key={o.chave}
+                    type="button"
+                    disabled={o.jaNaGrade || gravando === o.chave}
+                    onClick={() => adicionar(o)}
+                    title={
+                      o.jaNaGrade
+                        ? `${o.curso_nome} já está na grade`
+                        : `Adicionar ${o.curso_nome}${o.professor_nome ? ` · Prof. ${o.professor_nome}` : ''}`
+                    }
+                    className={cn(
+                      'flex items-center gap-1 rounded px-1.5 py-0.5 text-[11.5px] transition-colors',
+                      o.jaNaGrade
+                        ? 'cursor-not-allowed bg-slate-800/60 text-slate-500'
+                        : 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/30',
+                    )}
+                  >
+                    {o.jaNaGrade ? (
+                      <Music className="h-3 w-3 shrink-0" />
+                    ) : (
+                      <Plus className="h-3 w-3 shrink-0" />
+                    )}
+                    {o.curso_nome}
+                    {o.jaNaGrade && <span className="text-[10px]">na grade</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
           ))
         )}
       </div>

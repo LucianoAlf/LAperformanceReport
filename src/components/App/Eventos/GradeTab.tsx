@@ -28,6 +28,7 @@ import {
   LayoutList,
   Music,
   Settings2,
+  MapPin,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -123,7 +124,9 @@ function CartaoApresentacao({
             </span>
           </div>
           {apresentacao.professor_nome && (
-            <p className="text-[11.5px] text-slate-500">{apresentacao.professor_nome}</p>
+            // "Prof." explícito: sem ele o nome fica solto embaixo do nome do aluno e a
+            // programação impressa vira dois nomes sem papel declarado.
+            <p className="text-[11.5px] text-slate-500">Prof. {apresentacao.professor_nome}</p>
           )}
 
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
@@ -178,6 +181,30 @@ function CartaoApresentacao({
               {resumoPalco ?? 'palco'}
             </button>
           </div>
+
+          {/* A observação fica FORA do painel, sempre à vista, como no protótipo do Arthur.
+              Ela é a única parte do palco que se lê em voz alta na montagem — esconder o
+              texto atrás de um clique faz quem confere a grade não saber que ele existe.
+              O resumo ao lado diz "mapa", mas dizer que há um mapa não é mostrar o mapa. */}
+          {palcoAberto ? null : apresentacao.observacao_mapa ? (
+            <button
+              type="button"
+              onClick={() => setPalcoAberto(true)}
+              className="mt-1.5 flex w-full gap-1.5 rounded px-1.5 py-1 text-left text-[11.5px] text-slate-400 transition-colors hover:bg-slate-800/60"
+            >
+              <MapPin className="mt-px h-3.5 w-3.5 shrink-0 text-slate-500" />
+              <span className="min-w-0 flex-1">{apresentacao.observacao_mapa}</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setPalcoAberto(true)}
+              className="mt-1 flex items-center gap-1.5 px-1.5 text-[11.5px] text-slate-600 transition-colors hover:text-slate-400"
+            >
+              <MapPin className="h-3.5 w-3.5" />
+              adicionar observação / mapa de palco
+            </button>
+          )}
 
           {palcoAberto && (
             <PalcoApresentacao
@@ -418,7 +445,9 @@ function CartaoBloco({
                   : 'bg-sky-500/10 text-sky-300/90',
                 // Derivado do curso fica tracejado: some sozinho se a apresentação sair do
                 // bloco, enquanto o digitado é decisão de alguém e só sai se alguém apagar.
-                item.doCurso && 'border border-dashed border-current/30',
+                // Cor nomeada, não `border-current/30` — opacidade sobre `currentColor` não
+                // gera classe no Tailwind e a borda sairia sem estilo nenhum.
+                item.doCurso && 'border border-dashed border-slate-600',
               )}
             >
               {item.quantidade}× {item.nome}
