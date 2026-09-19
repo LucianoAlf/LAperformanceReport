@@ -17,6 +17,7 @@ import {
   type EventoStatus,
 } from '@/hooks/useEventos';
 import { ModalNovoEvento } from './ModalNovoEvento';
+import { AvisoEmDesenvolvimento } from './AvisoEmDesenvolvimento';
 
 const STATUS_VARIANT: Record<EventoStatus, 'default' | 'success' | 'warning' | 'error'> = {
   rascunho: 'warning',
@@ -100,6 +101,8 @@ export function EventosPage() {
   return (
     <div className="space-y-4">
       <PageFilterBar />
+
+      <AvisoEmDesenvolvimento />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[12.5px] text-slate-400">

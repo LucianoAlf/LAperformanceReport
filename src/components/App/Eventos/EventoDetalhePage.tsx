@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { useEvento, EVENTO_STATUS_LABEL, type EventoStatus } from '@/hooks/useEventos';
 import { AlunosTab } from './AlunosTab';
 import { GradeTab } from './GradeTab';
+import { AvisoEmDesenvolvimento } from './AvisoEmDesenvolvimento';
 
 type TabAtiva = 'alunos' | 'grade' | 'palco' | 'revisao';
 
@@ -117,6 +118,8 @@ export function EventoDetalhePage() {
           <Badge variant={STATUS_VARIANT[evento.status]}>{EVENTO_STATUS_LABEL[evento.status]}</Badge>
         </div>
       </div>
+
+      <AvisoEmDesenvolvimento />
 
       <PageTabs tabs={tabs} activeTab={tabAtiva} onTabChange={alterarTab} />
 

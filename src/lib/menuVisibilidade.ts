@@ -20,19 +20,25 @@ export interface ContextoVisibilidade {
 /**
  * Quem enxerga o modulo Eventos (recital) — LAPE-39.
  *
- * ESTE CORPO E DESCARTAVEL. Enquanto o modulo esta em teste, o gate e por e-mail;
- * na virada para producao troca-se o corpo por `hasPermission('eventos.ver')` e a
- * liberacao passa a ser feita na tela de Permissoes, sem deploy. As permissoes
- * `eventos.ver` e `eventos.editar` ja existem (migration 20260918120000).
+ * ABERTO A TODO USUARIO AUTENTICADO desde 19/09/2026 (decisao do Hugo), com aviso de
+ * "em desenvolvimento" na propria tela. Antes o gate era por e-mail (`hugo@gmail.com`).
  *
- * A funcao existe para haver UM ponto de corte: o guard da rota, a sidebar do desktop
- * e o menu do celular chamam esta funcao em vez de repetir a regra. O Trafego Pago nao
- * tem isso — a lista de e-mails dele esta escrita em 3 arquivos (divida da LAPE-32).
+ * ⚠️ Abrir o MENU nao abre o DADO: as cinco tabelas do modulo tem RLS por unidade, entao
+ * cada pessoa continua vendo apenas os eventos da unidade dela e o admin ve tudo — provado
+ * contra o banco nos tres perfis. O que esta funcao controla e visibilidade de tela.
+ *
+ * O destino continua sendo `hasPermission('eventos.ver')`, para a liberacao virar um
+ * clique na tela de Permissoes em vez de um deploy; as permissoes `eventos.ver` e
+ * `eventos.editar` ja existem desde a migration 20260918120000. A funcao permanece como
+ * UM ponto de corte — o guard da rota, a sidebar do desktop e o menu do celular chamam
+ * ela em vez de repetir a regra. O Trafego Pago e o contra-exemplo: a lista de e-mails
+ * dele esta escrita em 3 arquivos (divida da LAPE-32).
+ *
+ * O parametro fica na assinatura de proposito: os tres consumidores ja passam o e-mail, e
+ * remove-lo agora obrigaria a mexer nos tres de novo quando o RBAC entrar.
  */
-const EVENTOS_EMAIL_TESTE = 'hugo@gmail.com';
-
-export function podeVerEventos(email: string | null | undefined): boolean {
-  return (email ?? '').toLowerCase() === EVENTOS_EMAIL_TESTE;
+export function podeVerEventos(_email?: string | null): boolean {
+  return true;
 }
 
 export function itemVisivel(
