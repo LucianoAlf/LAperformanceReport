@@ -164,6 +164,7 @@ function priorityForFinanceiroTrigger(triggerSource: string) {
   switch (triggerSource) {
     case 'manual':
     case 'internal_refresh':
+    case 'backfill_super_folha_dre_2026':
       return 50;
     case 'cron_financeiro_current_15m':
       return 100;
@@ -202,6 +203,18 @@ async function rpcOrThrow<T>(
   const { data, error } = await supabase.rpc(functionName, args);
   if (error) throw error;
   return data as T;
+}
+
+async function varreduraFinanceiroEmusysAtiva(supabase: ServiceClient): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('sync_financeiro_emusys_queue')
+    .select('id')
+    .in('status', ['pending', 'running', 'retry_wait'])
+    .limit(1);
+  // Compatibilidade durante o rollout: a Edge nova pode entrar antes da migration.
+  if (error?.code === '42P01' || error?.code === 'PGRST205') return false;
+  if (error) throw error;
+  return (data?.length ?? 0) > 0;
 }
 
 function queueStateFromEnqueues(enqueues: QueueRpcResult[]) {
@@ -314,6 +327,8 @@ async function processarPagasNoMes(
 }
 
 async function executarProbe(competencia: string, unidadeCodigo: string) {
+  const unidade = UNIDADES[unidadeCodigo];
+  if (!unidade) throw new Error(`unidade desconhecida: ${unidadeCodigo}`);
   const collected = await coletarFaturasUnidade({
     apiBaseUrl: EMUSYS_API,
     competencia,
@@ -514,6 +529,14 @@ serve(async (req) => {
       const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
         auth: { persistSession: false, autoRefreshToken: false },
       });
+      if (await varreduraFinanceiroEmusysAtiva(supabase)) {
+        return json({
+          ok: true,
+          queued: true,
+          queue_status: 'blocked_by_financeiro_emusys',
+          erro: null,
+        }, 202);
+      }
       const resultados = [];
       for (const comp of competencias) {
         resultados.push(await processarPagasNoMes(supabase, comp, unidadeCodigo));
@@ -583,6 +606,18 @@ serve(async (req) => {
           p_requested_by: access.requestedBy,
         }));
       }
+    }
+
+    if (await varreduraFinanceiroEmusysAtiva(supabase)) {
+      const queueState = queueStateFromEnqueues(enqueues);
+      return json({
+        ok: true,
+        queued: true,
+        queue_status: 'blocked_by_financeiro_emusys',
+        next_attempt_at: queueState.nextAttemptAt,
+        sync_run_id: null,
+        jobs: queueState.jobs,
+      }, 202);
     }
 
     const workerId = crypto.randomUUID();
