@@ -11,8 +11,12 @@
  * Juntar as duas num documento so obrigaria a producao a caçar a informacao dela no meio da
  * programacao, e entregaria ao publico um papel cheio de "2x estante".
  *
+ * Os dois aceitam `apenasBlocoId` e imprimem um bloco isolado, mantendo o horario real dele
+ * dentro do recital — e o "PDF por bloco" que o plano previa e o Arthur descreveu como
+ * "impressao de fichas de palco para os roadies, sonoplastia e equipe de montagem".
+ *
  * ⚠️ Geracao PURA: devolve string, nao abre janela. E o que permite testar o conteudo sem
- * navegador — `abrirParaImpressao` (em `lib/html.ts`) faz o resto.
+ * navegador — `abrirDocumento`, logo abaixo, faz o resto.
  */
 
 import {
@@ -73,6 +77,23 @@ export function abrirDocumento(html: string): boolean {
   }
   setTimeout(() => URL.revokeObjectURL(url), 60000);
   return true;
+}
+
+/**
+ * Baixa um arquivo gerado no proprio navegador.
+ *
+ * Mesma tecnica do documento (Blob), com `download` no link em vez de abrir aba.
+ */
+export function baixarArquivo(nomeDoArquivo: string, conteudo: string, tipo: string): void {
+  const blob = new Blob([conteudo], { type: tipo });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nomeDoArquivo;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
 export interface ApresentacaoParaImprimir {
@@ -286,15 +307,31 @@ function moldura(titulo: string, dados: DadosDaImpressao, corpo: string, rodapeE
 }
 
 /**
+ * Recorta UM bloco mantendo o horario dos demais.
+ *
+ * ⚠️ Filtrar os blocos ANTES do calculo faria o bloco 3 comecar as 09:00, porque o
+ * encadeamento e `inicio(N+1) = fim(N) + intervalo`. O recorte e de EXIBICAO, e por isso
+ * acontece depois: a folha do bloco 3 tem de dizer 11:30, o horario real dele no recital.
+ */
+function soEsteBloco(dados: DadosDaImpressao, blocoId: number): DadosDaImpressao {
+  return { ...dados, blocos: dados.blocos.filter((b) => b.id === blocoId) };
+}
+
+/**
  * A programacao que vai para o publico.
  *
  * ⚠️ Bloco VAZIO nao sai: um titulo sem nada embaixo no papel do publico parece que alguem
  * foi cortado da apresentacao. Na tela ele aparece como pendencia, que e onde a informacao
  * serve — o papel nao e lugar de expor trabalho pela metade.
+ *
+ * `apenasBlocoId` imprime um bloco so, com o horario REAL dele dentro do recital.
  */
-export function gerarProgramaHtml(dados: DadosDaImpressao): string {
+export function gerarProgramaHtml(dados: DadosDaImpressao, apenasBlocoId?: number): string {
+  // O calculo usa SEMPRE a grade inteira; o recorte vem depois.
   const horarios = calcularHorariosDaGrade(dados.evento, dados.blocos);
-  const comApresentacao = dados.blocos.filter((b) => b.apresentacoes.length > 0);
+  const visiveis =
+    apenasBlocoId === undefined ? dados.blocos : soEsteBloco(dados, apenasBlocoId).blocos;
+  const comApresentacao = visiveis.filter((b) => b.apresentacoes.length > 0);
 
   if (comApresentacao.length === 0) {
     return moldura(
@@ -338,8 +375,14 @@ export function gerarProgramaHtml(dados: DadosDaImpressao): string {
     .join('');
 
   const total = comApresentacao.reduce((s, b) => s + b.apresentacoes.length, 0);
+  // O titulo diz que e recorte: uma folha com 6 de 40 apresentacoes, sem avisar, parece a
+  // programacao inteira — e quem recebe conclui que o recital tem 6 numeros.
+  const titulo =
+    apenasBlocoId === undefined
+      ? 'Programação'
+      : `Programação — ${comApresentacao[0]?.nome ?? 'bloco'}`;
   return moldura(
-    'Programação',
+    titulo,
     dados,
     corpo,
     `${total} ${total === 1 ? 'apresentação' : 'apresentações'}`,
@@ -352,8 +395,11 @@ export function gerarProgramaHtml(dados: DadosDaImpressao): string {
  * ⚠️ Aqui o bloco vazio SAI, ao contrario da programacao: quem monta precisa saber que o
  * bloco existe e nao pede nada, senao vai procurar a folha que falta.
  */
-export function gerarFolhaDePalcoHtml(dados: DadosDaImpressao): string {
+export function gerarFolhaDePalcoHtml(dados: DadosDaImpressao, apenasBlocoId?: number): string {
+  // Horario calculado sobre a grade INTEIRA; o recorte e so de exibicao (ver `soEsteBloco`).
   const horarios = calcularHorariosDaGrade(dados.evento, dados.blocos);
+  const visiveis =
+    apenasBlocoId === undefined ? dados.blocos : soEsteBloco(dados, apenasBlocoId).blocos;
 
   const paraPalco = (bs: BlocoParaImprimir[]): ApresentacaoParaPalco[] =>
     bs.flatMap((b) => b.apresentacoes.map((a) => ({ cursoNome: a.curso_nome, itens: a.itens })));
@@ -370,9 +416,9 @@ export function gerarFolhaDePalcoHtml(dados: DadosDaImpressao): string {
           )
           .join('')}</div>`;
 
-  const geral = consolidarItensDoPalco(paraPalco(dados.blocos));
+  const geral = consolidarItensDoPalco(paraPalco(visiveis));
 
-  const corpoBlocos = dados.blocos
+  const corpoBlocos = visiveis
     .map((bloco) => {
       const h = horarios.find((x) => x.blocoId === bloco.id);
       const itens = consolidarItensDoPalco(paraPalco([bloco]));
@@ -403,9 +449,14 @@ export function gerarFolhaDePalcoHtml(dados: DadosDaImpressao): string {
     })
     .join('');
 
+  // Com um bloco so, "o recital inteiro" seria mentira: o consolidado ali cobre apenas
+  // aquele bloco, e quem levasse a folha montaria o palco achando que tem tudo.
+  const tituloGeral =
+    apenasBlocoId === undefined ? 'O recital inteiro precisa de' : 'Este bloco precisa de';
+
   const corpo = `
     <div class="bloco">
-      <h2>O recital inteiro precisa de</h2>
+      <h2>${tituloGeral}</h2>
       ${chips(geral)}
       <p class="prof">O número é quanto precisa existir ao mesmo tempo — as apresentações são
       uma depois da outra, então o mesmo instrumento serve a várias. Item tracejado vem do
@@ -413,6 +464,89 @@ export function gerarFolhaDePalcoHtml(dados: DadosDaImpressao): string {
     </div>
     ${corpoBlocos}`;
 
-  return moldura('Folha de palco', dados, corpo, 'uso interno da produção');
+  const titulo =
+    apenasBlocoId === undefined
+      ? 'Folha de palco'
+      : `Folha de palco — ${visiveis[0]?.nome ?? 'bloco'}`;
+  return moldura(titulo, dados, corpo, 'uso interno da produção');
 }
 
+
+/* ─────────────────────────── planilha ─────────────────────────── */
+
+/**
+ * Uma celula de CSV, pronta para o Excel brasileiro.
+ *
+ * ⚠️ Escapa aspas DUPLICANDO (`"` -> `""`), que e a regra do formato, e envolve em aspas
+ * qualquer texto com separador, aspas ou quebra de linha. Um nome de musica com ponto e
+ * virgula — "Aquarela; ao vivo" — partiria a linha em duas colunas sem isso.
+ */
+function celulaCsv(valor: string | number | null | undefined): string {
+  const t = valor === null || valor === undefined ? '' : String(valor);
+  return /[";\n\r]/u.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+}
+
+/**
+ * A grade como planilha, uma linha por apresentacao.
+ *
+ * ⚠️ **CSV, nao .xlsx**, e e decisao consciente. O prototipo do Arthur embute o SheetJS
+ * inteiro (por isso o arquivo dele tem 498 KB) e pede ".xlsx" nos comentarios de extensao;
+ * trazer a mesma biblioteca para ca somaria ~800 KB ao bundle do app INTEIRO, carregado por
+ * todo mundo que abre o LA Report, para um botao que roda algumas vezes por semestre. O CSV
+ * abre no Excel com dois cliques e custa zero.
+ *
+ * ⚠️ Separador `;` e **BOM UTF-8**: sem o BOM o Excel em portugues le o arquivo como ANSI e
+ * "Violão" vira "ViolÃ£o"; com virgula em vez de ponto e virgula, ele joga tudo numa coluna
+ * so. As duas coisas fazem a planilha parecer quebrada sem nenhum erro aparecer.
+ */
+export function gerarPlanilhaCsv(dados: DadosDaImpressao, apenasBlocoId?: number): string {
+  const horarios = calcularHorariosDaGrade(dados.evento, dados.blocos);
+  const visiveis =
+    apenasBlocoId === undefined ? dados.blocos : dados.blocos.filter((b) => b.id === apenasBlocoId);
+
+  const cabecalho = [
+    'Bloco', 'Ordem', 'Horário', 'Aluno', 'Curso', 'Professor', 'Música',
+    'Duração (min)', 'Playback', 'Itens de palco', 'Observação de palco',
+  ];
+
+  const linhas = visiveis.flatMap((bloco) => {
+    const h = horarios.find((x) => x.blocoId === bloco.id);
+    return [...bloco.apresentacoes]
+      .sort((a, b) => a.ordem - b.ordem || a.id - b.id)
+      .map((ap, idx) => {
+        const itens = ap.itens
+          .map((i) => (i.quantidade > 1 ? `${i.quantidade}x ${i.nome}` : i.nome))
+          .join(', ');
+        return [
+          bloco.nome,
+          idx + 1,
+          h?.apresentacoes.find((x) => x.id === ap.id)?.inicio ?? '',
+          ap.aluno_nome,
+          ap.curso_nome ?? '',
+          ap.professor_nome ?? '',
+          ap.musica ?? '',
+          // Vazio, nao zero: zero seria lido como "dura nada" numa soma da planilha, quando
+          // o que existe e "ainda usa a duracao padrao do evento".
+          ap.duracao_segundos ? Math.round(ap.duracao_segundos / 60) : '',
+          ap.tem_playback ? 'sim' : '',
+          itens,
+          ap.observacao_mapa ?? '',
+        ].map(celulaCsv).join(';');
+      });
+  });
+
+  // \r\n é o fim de linha que o Excel espera.
+  return `\uFEFF${[cabecalho.join(';'), ...linhas].join('\r\n')}\r\n`;
+}
+
+/** Nome de arquivo seguro, derivado do evento. */
+export function nomeDoArquivo(dados: DadosDaImpressao, sufixo: string): string {
+  const base = `${dados.evento.data_evento}-${dados.evento.titulo}`
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .toLowerCase();
+  return `${base}-${sufixo}`;
+}

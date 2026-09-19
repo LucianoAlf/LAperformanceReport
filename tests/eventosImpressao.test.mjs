@@ -29,7 +29,7 @@ const lib = await (async () => {
   return import(pathToFileURL(arquivo).href);
 })();
 
-const { gerarProgramaHtml, gerarFolhaDePalcoHtml } = lib;
+const { gerarProgramaHtml, gerarFolhaDePalcoHtml, gerarPlanilhaCsv, nomeDoArquivo } = lib;
 
 const EVENTO = {
   titulo: 'Recital de Primavera',
@@ -188,6 +188,52 @@ test('bloco VAZIO aparece na folha — o inverso da programacao', () => {
   assert.match(html, /Bloco 2/u);
 });
 
+/* ───────────────────────── recorte por bloco ───────────────────────── */
+
+test('imprimir UM bloco traz so ele', () => {
+  const b1 = bloco('Abertura', [ap({ aluno_nome: 'Do primeiro' })]);
+  const b2 = bloco('Encerramento', [ap({ aluno_nome: 'Do segundo' })]);
+  b2.id = 2;
+  b2.ordem = 2;
+  const html = gerarProgramaHtml(dados([b1, b2]), 2);
+  assert.match(html, /Do segundo/u);
+  assert.doesNotMatch(html, /Do primeiro/u);
+});
+
+test('🔴 o bloco isolado mantem o horario REAL dele no recital', () => {
+  // O encadeamento e inicio(N+1) = fim(N) + intervalo. Filtrar os blocos ANTES do calculo
+  // faria o segundo bloco comecar as 09:00 — a folha diria a hora errada para quem vai
+  // montar o palco, que e justamente quem usa a folha de um bloco so.
+  const b1 = bloco('Abertura', [ap()]);
+  const b2 = bloco('Encerramento', [ap()]);
+  b2.id = 2;
+  b2.ordem = 2;
+
+  const soOSegundo = gerarProgramaHtml(dados([b1, b2]), 2);
+  assert.match(soOSegundo, /09:50/u, 'tem de manter 09:50 (fim 09:05 + 45 min)');
+  assert.doesNotMatch(soOSegundo, /09:00\s*–/u, 'nao pode reiniciar as 09:00');
+});
+
+test('o titulo avisa que e recorte, nunca se passa pela programacao inteira', () => {
+  // Uma folha com 1 de 40 apresentacoes, sem aviso, faz quem recebe concluir que o recital
+  // tem 1 numero.
+  const b = bloco('Abertura', [ap()]);
+  assert.match(gerarProgramaHtml(dados([b]), 1), /Programação — Abertura/u);
+  assert.match(gerarFolhaDePalcoHtml(dados([b]), 1), /Folha de palco — Abertura/u);
+});
+
+test('a folha de UM bloco nao diz "o recital inteiro precisa de"', () => {
+  // Seria mentira: o consolidado ali cobre so aquele bloco, e quem levasse a folha montaria
+  // o palco achando que tem tudo.
+  const b = bloco('Abertura', [ap({ curso_nome: 'Bateria' })]);
+  const um = gerarFolhaDePalcoHtml(dados([b]), 1);
+  assert.match(um, /Este bloco precisa de/u);
+  assert.doesNotMatch(um, /recital inteiro/u);
+
+  const tudo = gerarFolhaDePalcoHtml(dados([b]));
+  assert.match(tudo, /O recital inteiro precisa de/u);
+});
+
 /* ───────────────────────── moldura comum ───────────────────────── */
 
 test('NENHUM documento dispara a impressao sozinho', () => {
@@ -236,4 +282,76 @@ test('o cabecalho declara unidade, data e local nos dois documentos', () => {
 test('a folha se identifica como uso interno; a programacao nao', () => {
   assert.match(gerarFolhaDePalcoHtml(dados([])), /uso interno/u);
   assert.doesNotMatch(gerarProgramaHtml(dados([bloco('B', [ap()])])), /uso interno/u);
+});
+
+/* ───────────────────────── planilha (CSV) ───────────────────────── */
+
+test('🔴 o CSV comeca com BOM UTF-8 e usa ponto e virgula', () => {
+  // Sem BOM, o Excel em portugues le como ANSI e "Violao" vira "ViolÃ£o". Com virgula em vez
+  // de ponto e virgula, ele joga a linha inteira numa coluna so. As duas coisas fazem a
+  // planilha parecer quebrada sem nenhum erro aparecer.
+  const csv = gerarPlanilhaCsv(dados([bloco('Bloco 1', [ap()])]));
+  assert.ok(csv.startsWith('\uFEFF'), 'falta o BOM — o Excel quebraria os acentos');
+  assert.match(csv.split('\r\n')[0], /^\uFEFFBloco;Ordem;Horário;Aluno;/u);
+});
+
+test('celula com ponto e virgula nao parte a linha', () => {
+  // "Aquarela; ao vivo" viraria duas colunas sem as aspas.
+  const csv = gerarPlanilhaCsv(dados([bloco('Bloco 1', [ap({ musica: 'Aquarela; ao vivo' })])]));
+  assert.match(csv, /"Aquarela; ao vivo"/u);
+});
+
+test('aspas dentro do texto sao duplicadas, como manda o formato', () => {
+  const csv = gerarPlanilhaCsv(dados([bloco('Bloco 1', [ap({ musica: 'A "melhor" de todas' })])]));
+  assert.match(csv, /"A ""melhor"" de todas"/u);
+});
+
+test('uma linha por apresentacao, na ordem da grade', () => {
+  const csv = gerarPlanilhaCsv(
+    dados([
+      bloco('Bloco 1', [ap({ aluno_nome: 'Primeiro' }), ap({ aluno_nome: 'Segundo' })]),
+    ]),
+  );
+  const linhas = csv.trim().split('\r\n');
+  assert.equal(linhas.length, 3, 'cabecalho + 2 apresentacoes');
+  assert.ok(linhas[1].includes('Primeiro'));
+  assert.ok(linhas[2].includes('Segundo'));
+});
+
+test('duracao padrao sai VAZIA, nunca zero', () => {
+  // Zero seria somado como "dura nada" numa planilha; o que existe e "ainda usa o padrao".
+  const csv = gerarPlanilhaCsv(dados([bloco('B', [ap({ duracao_segundos: null })])]));
+  const linha = csv.trim().split('\r\n')[1].split(';');
+  assert.equal(linha[7], '', 'a coluna de duracao tem de ficar vazia');
+});
+
+test('o CSV respeita o recorte por bloco', () => {
+  const b1 = bloco('Abertura', [ap({ aluno_nome: 'Do primeiro' })]);
+  const b2 = bloco('Encerramento', [ap({ aluno_nome: 'Do segundo' })]);
+  b2.id = 2;
+  const csv = gerarPlanilhaCsv(dados([b1, b2]), 2);
+  assert.match(csv, /Do segundo/u);
+  assert.doesNotMatch(csv, /Do primeiro/u);
+});
+
+test('itens de palco entram numa coluna legivel', () => {
+  const csv = gerarPlanilhaCsv(
+    dados([
+      bloco('B', [
+        ap({
+          itens: [
+            { tipo: 'equipamento', nome: 'Estante', quantidade: 2 },
+            { tipo: 'equipamento', nome: 'Cabo P10', quantidade: 1 },
+          ],
+        }),
+      ]),
+    ]),
+  );
+  assert.match(csv, /2x Estante, Cabo P10/u);
+});
+
+test('o nome do arquivo sai seguro e reconhecivel', () => {
+  const nome = nomeDoArquivo(dados([]), 'grade.csv');
+  assert.equal(nome, '2026-09-21-recital-de-primavera-grade.csv');
+  assert.doesNotMatch(nome, /[^a-z0-9.-]/u, 'sem acento, espaco ou caractere de caminho');
 });

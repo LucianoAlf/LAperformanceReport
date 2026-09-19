@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import {
   AlertTriangle,
@@ -9,6 +9,7 @@ import {
   Music,
   FileText,
   Speaker,
+  Table2,
   Users,
 } from 'lucide-react';
 
@@ -23,8 +24,11 @@ import {
 } from '@/lib/eventos';
 import {
   abrirDocumento,
+  baixarArquivo,
   gerarFolhaDePalcoHtml,
+  gerarPlanilhaCsv,
   gerarProgramaHtml,
+  nomeDoArquivo,
   type DadosDaImpressao,
 } from '@/lib/eventosImpressao';
 import { useGradeDoEvento, useAlunosDoEvento, type EventoComResumo } from '@/hooks/useEventos';
@@ -133,14 +137,30 @@ export function RevisaoTab({
     [evento, blocos],
   );
 
+  // `null` = recital inteiro. O recorte e de EXIBICAO: o horario de cada bloco continua
+  // sendo o real dentro do recital, porque o calculo roda sobre a grade completa.
+  const [blocoEscolhido, setBlocoEscolhido] = useState<number | null>(null);
+
   const abrir = (qual: 'programa' | 'palco') => {
+    const apenas = blocoEscolhido ?? undefined;
     const html =
       qual === 'programa'
-        ? gerarProgramaHtml(dadosDaImpressao)
-        : gerarFolhaDePalcoHtml(dadosDaImpressao);
+        ? gerarProgramaHtml(dadosDaImpressao, apenas)
+        : gerarFolhaDePalcoHtml(dadosDaImpressao, apenas);
     if (!abrirDocumento(html)) {
       toast.error('O navegador bloqueou a janela. Permita pop-ups para este site e tente de novo.');
     }
+  };
+
+  const baixarPlanilha = () => {
+    const apenas = blocoEscolhido ?? undefined;
+    const sufixo = apenas === undefined ? 'grade.csv' : 'bloco.csv';
+    baixarArquivo(
+      nomeDoArquivo(dadosDaImpressao, sufixo),
+      gerarPlanilhaCsv(dadosDaImpressao, apenas),
+      'text/csv;charset=utf-8',
+    );
+    toast.success('Planilha baixada. Abre no Excel com dois cliques.');
   };
 
   const erro = erroGrade ?? erroAlunos;
@@ -203,6 +223,27 @@ export function RevisaoTab({
               Dois documentos, dois públicos: a programação vai para a plateia, a folha de
               palco fica com a produção. Abrem numa aba nova, com botão para salvar em PDF.
             </p>
+
+            {/* Recorte por bloco. Chips e não select: com 2 a 6 blocos, ver as opções todas
+                custa menos que abrir uma lista — e o estado escolhido fica à vista. */}
+            {blocos.length > 1 && (
+              <div className="mt-2 flex flex-wrap items-center gap-1">
+                <span className="mr-1 text-[11px] text-slate-500">Imprimir:</span>
+                <ChipBloco
+                  rotulo="recital inteiro"
+                  ativo={blocoEscolhido === null}
+                  onClick={() => setBlocoEscolhido(null)}
+                />
+                {blocos.map((b) => (
+                  <ChipBloco
+                    key={b.id}
+                    rotulo={b.nome}
+                    ativo={blocoEscolhido === b.id}
+                    onClick={() => setBlocoEscolhido(b.id)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -224,6 +265,17 @@ export function RevisaoTab({
             >
               <Speaker className="h-3.5 w-3.5" />
               Folha de palco
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={baixarPlanilha}
+              disabled={resumo.apresentacoes === 0}
+              title="Planilha com uma linha por apresentação — abre no Excel"
+            >
+              <Table2 className="h-3.5 w-3.5" />
+              Planilha
             </Button>
           </div>
         </div>
@@ -279,6 +331,30 @@ export function RevisaoTab({
         </>
       )}
     </div>
+  );
+}
+
+function ChipBloco({
+  rotulo,
+  ativo,
+  onClick,
+}: {
+  rotulo: string;
+  ativo: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={ativo}
+      className={cn(
+        'rounded px-2 py-0.5 text-[11.5px] transition-colors',
+        ativo ? 'bg-amber-500/20 text-amber-200' : 'text-slate-400 hover:bg-slate-700/60',
+      )}
+    >
+      {rotulo}
+    </button>
   );
 }
 

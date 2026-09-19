@@ -630,6 +630,19 @@ export interface EntradaDaRevisao {
 const ordenarNomes = (a: string, b: string) => a.localeCompare(b, 'pt-BR');
 
 /**
+ * Horario limite RECOMENDADO de termino do recital.
+ *
+ * Nao e regra minha: e uma das cinco "REGRAS FUNDAMENTAIS" escritas no prototipo do Arthur
+ * (`const MAX_FINISH_MINUTES = 22 * 60; // 22:00 = 1320 min`), com banner proprio na tela
+ * dele — "A programacao ultrapassa o horario limite recomendado (22:00). Considere remanejar
+ * blocos ou dividir as apresentacoes."
+ *
+ * ⚠️ RECOMENDADO, nao proibido: entra como `atencao`, nunca como impedimento. Quem decide
+ * esticar o recital e a coordenacao, nao o sistema.
+ */
+export const LIMITE_TERMINO_SEGUNDOS = 22 * 3600;
+
+/**
  * O que ainda falta antes do recital, em ordem de gravidade.
  *
  * Os sinais ja existiam espalhados — o contador "N de quem participa ainda fora" no topo da
@@ -767,7 +780,24 @@ export function levantarPendencias(entrada: EntradaDaRevisao): Pendencia[] {
     });
   }
 
-  // 6. Bloco vazio. Ocupa lugar na ordem e no calculo do intervalo sem nada dentro.
+  // 6. Termino depois das 22:00 — regra fundamental do prototipo do Arthur.
+  const fim = horarios.length > 0 ? horarios[horarios.length - 1].fim : null;
+  const fimSegundos = horaParaSegundos(fim);
+  if (fimSegundos !== null && fimSegundos > LIMITE_TERMINO_SEGUNDOS) {
+    pendencias.push({
+      tipo: 'termino_apos_limite',
+      gravidade: 'atencao',
+      titulo: `A programação termina ${fim}, depois das 22:00`,
+      detalhe:
+        'Passa do horário limite recomendado. Considere remanejar blocos, dividir as apresentações ou adiantar o início.',
+      // O item repete o horario de proposito: quem le so a lista de itens, sem o titulo,
+      // continua sabendo do que se trata.
+      itens: [`Término estimado: ${fim}`],
+      onde: 'grade',
+    });
+  }
+
+  // 7. Bloco vazio. Ocupa lugar na ordem e no calculo do intervalo sem nada dentro.
   const vazios = entrada.blocos.filter((b) => b.apresentacoes.length === 0).map((b) => b.nome);
   if (vazios.length > 0) {
     pendencias.push({

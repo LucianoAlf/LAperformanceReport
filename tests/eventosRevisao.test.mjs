@@ -194,6 +194,43 @@ test('toda pendencia diz ONDE se resolve', () => {
   }
 });
 
+/* ───────────────── limite de 22:00 (regra do prototipo) ───────────────── */
+
+test('termino depois das 22:00 vira pendencia', () => {
+  // Uma das cinco "REGRAS FUNDAMENTAIS" escritas no prototipo do Arthur:
+  // `const MAX_FINISH_MINUTES = 22 * 60; // 22:00 = 1320 min`
+  const tarde = { ...EVENTO, horario_inicio: '21:50' };
+  const r = levantarPendencias({
+    evento: tarde,
+    blocos: [bloco('Bloco 1', [ap(), ap(), ap()])],
+    alunos: [],
+  });
+  const p = r.find((x) => x.tipo === 'termino_apos_limite');
+  assert.ok(p, 'tem de acusar termino apos as 22:00');
+  assert.match(p.titulo, /22:05/u);
+});
+
+test('o limite e RECOMENDADO — avisa, nao impede', () => {
+  // O prototipo diz "horario limite recomendado". Quem decide esticar o recital e a
+  // coordenacao, nao o sistema.
+  const tarde = { ...EVENTO, horario_inicio: '21:50' };
+  const r = levantarPendencias({ evento: tarde, blocos: [bloco('B', [ap(), ap(), ap()])], alunos: [] });
+  assert.equal(r.find((x) => x.tipo === 'termino_apos_limite').gravidade, 'atencao');
+});
+
+test('terminar EXATAMENTE as 22:00 nao acusa', () => {
+  // A regra e "ultrapassar", nao "atingir" — acusar no limite exato treinaria a equipe a
+  // ignorar o aviso.
+  const noLimite = { ...EVENTO, horario_inicio: '21:55' };
+  const r = levantarPendencias({ evento: noLimite, blocos: [bloco('B', [ap()])], alunos: [] });
+  assert.equal(r.find((x) => x.tipo === 'termino_apos_limite'), undefined);
+});
+
+test('recital em horario normal nao acusa nada sobre o limite', () => {
+  const r = levantarPendencias(entrada([bloco('B', [ap()])], []));
+  assert.equal(r.find((x) => x.tipo === 'termino_apos_limite'), undefined);
+});
+
 /* ───────────────────────── resumo ───────────────────────── */
 
 test('resumo conta so quem CONFIRMOU como participante', () => {
