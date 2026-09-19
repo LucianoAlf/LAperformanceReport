@@ -92,6 +92,31 @@ As 33, para revisão nominal:
 As três da anamnese pública continuam com `anon` de propósito (token 128 bits,
 conferido 19/09). O consumidor está no repo `anamnese-la-music`, não neste.
 
+## Professor no mesmo projeto (19/09/2026, espelho do LA Teacher)
+
+Professores do LA Teacher logam como `authenticated` neste banco. O que fecha
+isso **já está aplicado** (migrations `20260919194000`–`199700`, origem
+`la-teacher`, copiadas byte a byte). Não desfazer.
+
+- Porteiro: `authenticator.pgrst.db_pre_request = public.fn_porteiro_requisicao`.
+  **Não criar outro pre-request** e não apagar este. Professor só passa nas rotas
+  de `porteiro_rota_professor` (`rpc/<nome>` que devolve jsonb). Emergência:
+  `update porteiro_config set modo = 'observar'`.
+- `usuarios`: gatilho `trg_usuarios_trava_privilegio` — não-admin não mexe em
+  perfil/ativo/auth_user_id/unidade_id/email/senha_hash/id.
+- Realtime: policies das 9 tabelas da publicação ganharam
+  `and not (select fn_usuario_e_professor())`. Policy nova com `using (true)`
+  para `authenticated` em tabela da publicação é furo.
+- `execute_bi_query_lamusic`: SQL livre só `service_role` ou `is_admin()`.
+- `projecao_aulas`: `authenticated` só SELECT; sem `anon`.
+- ~101 RPCs internas sem `EXECUTE` para `authenticated`/`anon`.
+
+Ainda aberto, de propósito, para outro commit: `fn_exigir_equipe()` nas RPCs que
+o site chama (segunda camada se o porteiro cair); default privilege do
+`postgres` ainda dá `EXECUTE` a `authenticated` em função nova; default do
+`supabase_admin` ainda dá `anon`; `anon` ainda tem privilégio de tabela em
+`usuarios` (policies seguram; 6 SELECTs anônimos sem dono no código).
+
 ## 336 funções sem consumidor conhecido
 
 **Sinal, não veredito.** O gerador enxerga seis fontes: `src/`, edge functions,
