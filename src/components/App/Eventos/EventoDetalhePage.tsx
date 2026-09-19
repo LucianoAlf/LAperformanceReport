@@ -12,6 +12,7 @@ import { useEvento, EVENTO_STATUS_LABEL, type EventoStatus } from '@/hooks/useEv
 import { AlunosTab } from './AlunosTab';
 import { GradeTab } from './GradeTab';
 import { PalcoTab } from './PalcoTab';
+import { RevisaoTab } from './RevisaoTab';
 import { AvisoEmDesenvolvimento } from './AvisoEmDesenvolvimento';
 
 type TabAtiva = 'alunos' | 'grade' | 'palco' | 'revisao';
@@ -25,16 +26,10 @@ const STATUS_VARIANT: Record<EventoStatus, 'default' | 'success' | 'warning' | '
 
 const TABS_VALIDAS: TabAtiva[] = ['alunos', 'grade', 'palco', 'revisao'];
 
-/** Placeholder honesto: diz o que a aba VAI fazer e em qual fase, sem fingir tela vazia. */
-function AbaFutura({ titulo, descricao, fase }: { titulo: string; descricao: string; fase: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-slate-700 p-10 text-center">
-      <p className="text-sm font-medium text-slate-300">{titulo}</p>
-      <p className="mx-auto mt-1.5 max-w-md text-[12.5px] text-slate-500">{descricao}</p>
-      <p className="mt-3 text-[11px] uppercase tracking-wide text-slate-600">{fase}</p>
-    </div>
-  );
-}
+// O `AbaFutura` (placeholder "Fase N — em breve") foi removido: as quatro abas passaram a
+// ter tela de verdade. Ele nao fica "por via das duvidas" porque placeholder esquecido e o
+// defeito que ele mesmo causou — a aba Palco anunciou a fase 4 como futura por dois commits
+// depois de ela estar no ar.
 
 export function EventoDetalhePage() {
   const { eventoId } = useParams<{ eventoId: string }>();
@@ -127,13 +122,7 @@ export function EventoDetalhePage() {
       {tabAtiva === 'alunos' && <AlunosTab eventoId={evento.id} unidadeId={evento.unidade_id} />}
       {tabAtiva === 'grade' && <GradeTab evento={evento} />}
       {tabAtiva === 'palco' && <PalcoTab evento={evento} />}
-      {tabAtiva === 'revisao' && (
-        <AbaFutura
-          titulo="Pendências antes do recital"
-          descricao="O que ainda falta: quem está indefinido, apresentação sem música, bloco sem horário."
-          fase="Fase 5"
-        />
-      )}
+      {tabAtiva === 'revisao' && <RevisaoTab evento={evento} onIrPara={alterarTab} />}
     </div>
   );
 }

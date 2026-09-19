@@ -578,3 +578,253 @@ export function resumirPalcoDaApresentacao(
 
   return partes.length === 0 ? null : partes.join(' · ');
 }
+
+/* ─────────────────────────── revisao do evento ─────────────────────────── */
+
+/**
+ * `impede` = a programacao nao deveria ser impressa assim; `atencao` = trabalho que falta,
+ * mas o recital acontece.
+ *
+ * ⚠️ E UM valor, nunca um conjunto de flags — mesma razao de `SituacaoPalco`: gravidade
+ * derivada de condicoes soltas ja pintou cartao contradizendo o proprio rotulo na Agenda.
+ */
+export type GravidadePendencia = 'impede' | 'atencao';
+
+export interface Pendencia {
+  tipo: string;
+  gravidade: GravidadePendencia;
+  /** Uma frase com o NUMERO, porque e por ele que se decide o que atacar primeiro. */
+  titulo: string;
+  /** Por que isso importa. Sem o porque, a lista vira burocracia que se aprende a ignorar. */
+  detalhe: string;
+  /** Quem esta afetado, na ordem em que a pessoa vai procurar. */
+  itens: string[];
+  /** Onde se resolve. Pendencia que nao diz onde agir custa uma caca ao tesouro. */
+  onde: 'alunos' | 'grade';
+}
+
+export interface EntradaDaRevisao {
+  evento: EventoParaCalculo;
+  blocos: (BlocoParaCalculo & {
+    nome: string;
+    apresentacoes: {
+      id: number;
+      ordem: number;
+      duracao_segundos: number | null;
+      pessoa_chave: string;
+      aluno_nome: string;
+      curso_nome: string | null;
+      musica: string | null;
+    }[];
+  })[];
+  alunos: {
+    pessoa_chave: string;
+    nome: string;
+    status: string;
+    cursos_no_recital: number;
+    cursos: { curso_id: number; curso_nome: string | null }[];
+    alocacoes: { curso_id: number }[];
+  }[];
+}
+
+const ordenarNomes = (a: string, b: string) => a.localeCompare(b, 'pt-BR');
+
+/**
+ * O que ainda falta antes do recital, em ordem de gravidade.
+ *
+ * Os sinais ja existiam espalhados — o contador "N de quem participa ainda fora" no topo da
+ * grade, o selo vermelho de conflito no bloco. Aqui eles viram UMA lista, que e o que
+ * permite responder "posso imprimir?" sem varrer a tela inteira.
+ *
+ * ⚠️ Lista vazia significa "nada a apontar", nunca "esta tudo certo": esta funcao so enxerga
+ * o que o sistema sabe. Ninguem aqui verifica se o aluno ensaiou.
+ */
+export function levantarPendencias(entrada: EntradaDaRevisao): Pendencia[] {
+  const pendencias: Pendencia[] = [];
+  const statusPorPessoa = new Map(entrada.alunos.map((a) => [a.pessoa_chave, a.status]));
+  const horarios = calcularHorariosDaGrade(entrada.evento, entrada.blocos);
+
+  const todasApresentacoes = entrada.blocos.flatMap((b) =>
+    b.apresentacoes.map((a) => ({ ...a, blocoNome: b.nome })),
+  );
+
+  /* ── impede ── */
+
+  // 1. Gente na grade que declarou que NAO vem. O pior caso possivel: a programacao
+  //    impressa anuncia um numero que nao vai acontecer, e o nome esta la para todo mundo
+  //    ver. Vem primeiro porque e o unico erro que o publico percebe.
+  const desistentes = todasApresentacoes
+    .filter((a) => statusPorPessoa.get(a.pessoa_chave) === 'nao')
+    .map((a) => `${a.aluno_nome} — ${a.curso_nome ?? 'curso'} (${a.blocoNome})`)
+    .sort(ordenarNomes);
+  if (desistentes.length > 0) {
+    pendencias.push({
+      tipo: 'na_grade_mas_nao_participa',
+      gravidade: 'impede',
+      titulo:
+        desistentes.length === 1
+          ? '1 apresentação de quem marcou "não participa"'
+          : `${desistentes.length} apresentações de quem marcou "não participa"`,
+      detalhe:
+        'A pessoa avisou que não vem e continua na grade. Imprimir assim anuncia um número que não vai acontecer.',
+      itens: desistentes,
+      onde: 'grade',
+    });
+  }
+
+  // 2. Bloco que comeca antes de o anterior terminar. So acontece com horario digitado a
+  //    mao — o encadeamento automatico nunca produz isso.
+  const conflitos = horarios
+    .filter((h) => h.conflitaComAnterior)
+    .map((h) => {
+      const bloco = entrada.blocos.find((b) => b.id === h.blocoId);
+      return `${bloco?.nome ?? 'Bloco'} começa ${h.inicio}, antes de o anterior terminar`;
+    });
+  if (conflitos.length > 0) {
+    pendencias.push({
+      tipo: 'conflito_de_horario',
+      gravidade: 'impede',
+      titulo:
+        conflitos.length === 1
+          ? '1 bloco com horário sobreposto'
+          : `${conflitos.length} blocos com horário sobreposto`,
+      detalhe:
+        'Um horário digitado à mão cai antes do fim do bloco anterior. Apagar o campo devolve o bloco ao encadeamento automático.',
+      itens: conflitos,
+      onde: 'grade',
+    });
+  }
+
+  /* ── atencao ── */
+
+  // 3. Confirmou e nao esta na grade. E o buraco mais comum, e o unico que some sozinho
+  //    conforme a montagem avanca — por isso atencao, nao impedimento.
+  const foraDaGrade: string[] = [];
+  for (const aluno of entrada.alunos) {
+    if (aluno.status !== 'participa') continue;
+    const alocados = new Set(aluno.alocacoes.map((x) => x.curso_id));
+    for (const curso of aluno.cursos) {
+      if (!alocados.has(curso.curso_id)) {
+        foraDaGrade.push(`${aluno.nome} — ${curso.curso_nome ?? 'curso'}`);
+      }
+    }
+  }
+  foraDaGrade.sort(ordenarNomes);
+  if (foraDaGrade.length > 0) {
+    pendencias.push({
+      tipo: 'confirmado_fora_da_grade',
+      gravidade: 'atencao',
+      titulo:
+        foraDaGrade.length === 1
+          ? '1 apresentação confirmada ainda fora da grade'
+          : `${foraDaGrade.length} apresentações confirmadas ainda fora da grade`,
+      detalhe:
+        'Quem confirmou participação e não entrou em bloco nenhum. Cada curso conta separado: quem faz dois se apresenta duas vezes.',
+      itens: foraDaGrade,
+      onde: 'grade',
+    });
+  }
+
+  // 4. Indefinidos. ⚠️ A gravidade NAO depende da proximidade da data, de proposito: a
+  //    funcao nao recebe "hoje", entao a mesma grade revisada em dois dias diferentes
+  //    devolve a mesma lista. Regra que muda sozinha com o relogio apodrece — e o motivo de
+  //    a idade do perfil de temperamento ser medida na data da anamnese, nunca em now().
+  const indefinidos = entrada.alunos
+    .filter((a) => a.status === 'indefinido' && a.cursos_no_recital > 0)
+    .map((a) => a.nome)
+    .sort(ordenarNomes);
+  if (indefinidos.length > 0) {
+    pendencias.push({
+      tipo: 'participacao_indefinida',
+      gravidade: 'atencao',
+      titulo:
+        indefinidos.length === 1
+          ? '1 pessoa sem resposta sobre participar'
+          : `${indefinidos.length} pessoas sem resposta sobre participar`,
+      detalhe:
+        'Ninguém marcou se participa ou não. Enquanto estiver assim, ela não conta como pendência da grade nem sai da lista.',
+      itens: indefinidos,
+      onde: 'alunos',
+    });
+  }
+
+  // 5. Apresentacao sem musica. A programacao impressa sai com o nome e uma lacuna.
+  const semMusica = todasApresentacoes
+    .filter((a) => (a.musica ?? '').trim() === '')
+    .map((a) => `${a.aluno_nome} — ${a.curso_nome ?? 'curso'} (${a.blocoNome})`)
+    .sort(ordenarNomes);
+  if (semMusica.length > 0) {
+    pendencias.push({
+      tipo: 'apresentacao_sem_musica',
+      gravidade: 'atencao',
+      titulo:
+        semMusica.length === 1
+          ? '1 apresentação sem música definida'
+          : `${semMusica.length} apresentações sem música definida`,
+      detalhe: 'A programação impressa sai com o nome do aluno e uma lacuna no lugar da música.',
+      itens: semMusica,
+      onde: 'grade',
+    });
+  }
+
+  // 6. Bloco vazio. Ocupa lugar na ordem e no calculo do intervalo sem nada dentro.
+  const vazios = entrada.blocos.filter((b) => b.apresentacoes.length === 0).map((b) => b.nome);
+  if (vazios.length > 0) {
+    pendencias.push({
+      tipo: 'bloco_vazio',
+      gravidade: 'atencao',
+      titulo:
+        vazios.length === 1 ? '1 bloco sem apresentação' : `${vazios.length} blocos sem apresentação`,
+      detalhe: 'Bloco vazio ocupa lugar na ordem e some da programação impressa.',
+      itens: vazios,
+      onde: 'grade',
+    });
+  }
+
+  // `impede` sempre no topo; dentro do mesmo nivel, a ordem de insercao acima e a ordem de
+  // ataque pretendida, entao o sort tem de ser ESTAVEL (o do V8 e, desde o ES2019).
+  return pendencias.sort(
+    (a, b) => Number(a.gravidade === 'atencao') - Number(b.gravidade === 'atencao'),
+  );
+}
+
+export interface ResumoDoEvento {
+  participantes: number;
+  /** Apresentacoes que o recital VAI ter se ninguem mexer mais: as que estao na grade. */
+  apresentacoes: number;
+  blocos: number;
+  /** Do inicio do primeiro bloco ao fim do ultimo, intervalos inclusos. */
+  duracaoTotalSegundos: number;
+  inicio: string | null;
+  terminoPrevisto: string | null;
+  /** Quantas apresentacoes ainda usam a duracao padrao em vez de uma medida pelo professor. */
+  semDuracaoPropria: number;
+}
+
+/**
+ * A visao executiva do recital.
+ *
+ * ⚠️ `terminoPrevisto` e ESTIMATIVA e depende de quantas apresentacoes ainda estao na
+ * duracao padrao — por isso `semDuracaoPropria` sai junto, sempre. Hora de termino
+ * anunciada sem dizer de que ela depende vira promessa para os pais na porta do teatro.
+ */
+export function resumirEvento(entrada: EntradaDaRevisao): ResumoDoEvento {
+  const horarios = calcularHorariosDaGrade(entrada.evento, entrada.blocos);
+  const apresentacoes = entrada.blocos.flatMap((b) => b.apresentacoes);
+
+  const inicio = horarios.length > 0 ? horarios[0].inicio : null;
+  const fim = horarios.length > 0 ? horarios[horarios.length - 1].fim : null;
+
+  return {
+    participantes: entrada.alunos.filter((a) => a.status === 'participa').length,
+    apresentacoes: apresentacoes.length,
+    blocos: entrada.blocos.length,
+    duracaoTotalSegundos:
+      inicio !== null && fim !== null
+        ? Math.max(0, (horaParaSegundos(fim) ?? 0) - (horaParaSegundos(inicio) ?? 0))
+        : 0,
+    inicio,
+    terminoPrevisto: fim,
+    semDuracaoPropria: apresentacoes.filter((a) => (a.duracao_segundos ?? 0) <= 0).length,
+  };
+}
