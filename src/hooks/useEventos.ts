@@ -369,6 +369,16 @@ export async function definirParticipacao(
 
 /* ─────────────────────────────── grade ─────────────────────────────── */
 
+/** Instrumento ou equipamento que a apresentacao precisa no palco. */
+export interface ItemDaApresentacao {
+  id: number;
+  apresentacao_id: number;
+  tipo: 'instrumento' | 'equipamento';
+  nome: string;
+  quantidade: number;
+  observacao: string | null;
+}
+
 export interface ApresentacaoDaGrade {
   id: number;
   bloco_id: number;
@@ -382,6 +392,8 @@ export interface ApresentacaoDaGrade {
   musica: string | null;
   duracao_segundos: number | null;
   tem_playback: boolean;
+  observacao_mapa: string | null;
+  itens: ItemDaApresentacao[];
 }
 
 export interface BlocoDaGrade {
@@ -422,7 +434,11 @@ export function useGradeDoEvento(eventoId: number | null) {
         .from('evento_apresentacao')
         .select(
           'id, bloco_id, aluno_id, pessoa_chave, curso_id, ordem, musica, duracao_segundos,' +
-            ' tem_playback, alunos(nome), cursos(nome), professores(nome)',
+            ' tem_playback, observacao_mapa, alunos(nome), cursos(nome), professores(nome),' +
+            // Itens embutidos em vez de uma segunda leitura: aqui a FK existe
+            // (`apresentacao_id -> evento_apresentacao`), entao o PostgREST resolve o embed —
+            // ao contrario da participacao, que cruza com uma VIEW e por isso vai separada.
+            ' evento_apresentacao_item(id, apresentacao_id, tipo, nome, quantidade, observacao)',
         )
         .eq('evento_id', eventoId)
         .order('ordem'),
@@ -436,10 +452,14 @@ export function useGradeDoEvento(eventoId: number | null) {
       return;
     }
 
-    type LinhaAp = Omit<ApresentacaoDaGrade, 'curso_nome' | 'aluno_nome' | 'professor_nome'> & {
+    type LinhaAp = Omit<
+      ApresentacaoDaGrade,
+      'curso_nome' | 'aluno_nome' | 'professor_nome' | 'itens'
+    > & {
       alunos: { nome: string } | null;
       cursos: { nome: string } | null;
       professores: { nome: string } | null;
+      evento_apresentacao_item: ItemDaApresentacao[] | null;
     };
 
     const porBloco = new Map<number, ApresentacaoDaGrade[]>();
@@ -450,6 +470,9 @@ export function useGradeDoEvento(eventoId: number | null) {
         aluno_nome: linha.alunos?.nome ?? '(aluno removido)',
         curso_nome: linha.cursos?.nome ?? null,
         professor_nome: linha.professores?.nome ?? null,
+        // Ordem explicita por id: o embed do PostgREST nao promete ordem nenhuma, e sem
+        // isso a lista de itens trocaria de posicao a cada carregamento.
+        itens: [...(linha.evento_apresentacao_item ?? [])].sort((a, b) => a.id - b.id),
       });
       porBloco.set(linha.bloco_id, lista);
     }
@@ -501,12 +524,55 @@ export async function removerApresentacao(id: number) {
 
 export async function atualizarApresentacao(
   id: number,
-  campos: Partial<Pick<ApresentacaoDaGrade, 'musica' | 'duracao_segundos' | 'tem_playback'>>,
+  campos: Partial<
+    Pick<
+      ApresentacaoDaGrade,
+      'musica' | 'duracao_segundos' | 'tem_playback' | 'observacao_mapa'
+    >
+  >,
 ) {
   return supabase
     .from('evento_apresentacao')
     .update({ ...campos, updated_at: new Date().toISOString() })
     .eq('id', id);
+}
+
+/* ─────────────────────────────── palco ─────────────────────────────── */
+
+/**
+ * Escrita direta, sem RPC: aqui nao ha regra nenhuma alem do que o banco ja garante
+ * (`tipo` no CHECK, `quantidade > 0`, cascade do pai). RPC so onde existe decisao —
+ * foi o criterio da fase 3, em que `adicionarApresentacao` precisou de uma para resolver a
+ * matricula do curso e traduzir a UNIQUE numa frase legivel.
+ *
+ * ⚠️ A tabela NAO tem `unidade_id` proprio: a policy passa por `exists` na apresentacao pai,
+ * e a subquery de dentro da policy tambem aplica a RLS de `evento_apresentacao`. Provado
+ * contra o banco em 19/09/2026 nos tres perfis — admin le, Barra le, Campo Grande le 0, e o
+ * INSERT de Campo Grande numa apresentacao da Barra e recusado com
+ * "new row violates row-level security policy".
+ */
+export async function adicionarItemDePalco(
+  apresentacaoId: number,
+  item: { tipo: 'instrumento' | 'equipamento'; nome: string; quantidade: number; observacao?: string | null },
+) {
+  return supabase.from('evento_apresentacao_item').insert({
+    apresentacao_id: apresentacaoId,
+    tipo: item.tipo,
+    nome: item.nome.trim(),
+    quantidade: item.quantidade,
+    observacao: item.observacao?.trim() || null,
+  });
+}
+
+export async function removerItemDePalco(id: number) {
+  return supabase.from('evento_apresentacao_item').delete().eq('id', id);
+}
+
+export async function atualizarItemDePalco(
+  id: number,
+  campos: Partial<Pick<ItemDaApresentacao, 'nome' | 'quantidade' | 'observacao'>>,
+) {
+  return supabase.from('evento_apresentacao_item').update(campos).eq('id', id);
 }
 
 /**

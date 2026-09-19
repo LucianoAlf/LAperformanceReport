@@ -18,14 +18,27 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Plus, Trash2, Clock, X, AlertTriangle, LayoutList, Music } from 'lucide-react';
+import {
+  GripVertical,
+  Plus,
+  Trash2,
+  Clock,
+  X,
+  AlertTriangle,
+  LayoutList,
+  Music,
+  Settings2,
+} from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import {
   calcularHorariosDaGrade,
+  chaveDoItem,
+  consolidarItensDoPalco,
   formatarDuracao,
+  resumirPalcoDaApresentacao,
   type BlocoComHorario,
 } from '@/lib/eventos';
 import {
@@ -43,24 +56,36 @@ import {
   type EventoComResumo,
 } from '@/hooks/useEventos';
 import { SeletorApresentacao } from './SeletorApresentacao';
+import { PalcoApresentacao } from './PalcoApresentacao';
 
 /* ─────────────────────────── apresentação ─────────────────────────── */
 
 function CartaoApresentacao({
   apresentacao,
   horario,
+  sugestoes,
   onRemover,
   onSalvarCampo,
+  onMudou,
 }: {
   apresentacao: ApresentacaoDaGrade;
   horario: string | undefined;
+  sugestoes: { instrumento: string[]; equipamento: string[] };
   onRemover: () => void;
   onSalvarCampo: (campos: { musica?: string | null; duracao_segundos?: number | null }) => void;
+  onMudou: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: apresentacao.id,
   });
   const [musica, setMusica] = useState(apresentacao.musica ?? '');
+  const [palcoAberto, setPalcoAberto] = useState(false);
+
+  const resumoPalco = resumirPalcoDaApresentacao(
+    apresentacao.itens,
+    apresentacao.tem_playback,
+    Boolean(apresentacao.observacao_mapa),
+  );
 
   return (
     <div
@@ -134,7 +159,33 @@ function CartaoApresentacao({
               />
               <span className="text-[11px] text-slate-600">min</span>
             </div>
+
+            {/* O palco fica fechado por padrão: quase toda apresentação não tem item
+                nenhum, e abrir 270 painéis transformaria a grade num formulário. O resumo
+                ao lado é o que diz se vale abrir. */}
+            <button
+              type="button"
+              onClick={() => setPalcoAberto((v) => !v)}
+              aria-expanded={palcoAberto}
+              className={cn(
+                'flex items-center gap-1 rounded px-1.5 py-0.5 text-[11.5px] transition-colors',
+                resumoPalco
+                  ? 'bg-violet-500/15 text-violet-300 hover:bg-violet-500/25'
+                  : 'text-slate-500 hover:text-slate-300',
+              )}
+            >
+              <Settings2 className="h-3.5 w-3.5" />
+              {resumoPalco ?? 'palco'}
+            </button>
           </div>
+
+          {palcoAberto && (
+            <PalcoApresentacao
+              apresentacao={apresentacao}
+              sugestoes={sugestoes}
+              onMudou={onMudou}
+            />
+          )}
         </div>
 
         <button
@@ -157,15 +208,28 @@ function CartaoBloco({
   horario,
   eventoId,
   unidadeId,
+  sugestoes,
   onMudou,
 }: {
   bloco: BlocoDaGrade;
   horario: BlocoComHorario | undefined;
   eventoId: number;
   unidadeId: string;
+  sugestoes: { instrumento: string[]; equipamento: string[] };
   onMudou: () => void;
 }) {
   const [adicionando, setAdicionando] = useState(false);
+  // O palco do bloco é o que alguém leva para a montagem — por isso consolidado aqui, e
+  // não só item a item dentro de cada apresentação.
+  const palcoDoBloco = useMemo(
+    () =>
+      consolidarItensDoPalco(
+        // O curso vai junto: numa escola de música o instrumento É o curso, então ele entra
+        // sozinho na lista de montagem e ninguém redigita o que a grade já sabe.
+        bloco.apresentacoes.map((a) => ({ cursoNome: a.curso_nome, itens: a.itens })),
+      ),
+    [bloco.apresentacoes],
+  );
   // `useSortable` faz as DUAS coisas: o bloco é item arrastável (trocar de ordem com os
   // outros) e alvo de soltura (receber apresentação, inclusive vazio). Antes eu usava
   // `useDroppable` e o bloco só recebia — não dava para reordenar os blocos entre si.
@@ -314,6 +378,8 @@ function CartaoBloco({
                 key={ap.id}
                 apresentacao={ap}
                 horario={horario?.apresentacoes.find((h) => h.id === ap.id)?.inicio}
+                sugestoes={sugestoes}
+                onMudou={onMudou}
                 onRemover={async () => {
                   const { error } = await removerApresentacao(ap.id);
                   if (error) toast.error(`Não consegui remover: ${error.message}`);
@@ -329,6 +395,37 @@ function CartaoBloco({
           )}
         </SortableContext>
       </div>
+
+      {palcoDoBloco.length > 0 && (
+        <footer className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-slate-700/60 px-3 py-2">
+          <span className="text-[10.5px] uppercase tracking-wide text-slate-500">
+            palco do bloco
+          </span>
+          {palcoDoBloco.map((item) => (
+            <span
+              key={`${item.tipo}-${item.nome}`}
+              // O nº de apresentações vai no title, não na etiqueta: é o que distingue
+              // "reveza entre 6" de "6 no palco ao mesmo tempo", e só interessa a quem
+              // está conferindo a conta.
+              title={
+                `aparece em ${item.apresentacoes} apresentaç${item.apresentacoes > 1 ? 'ões' : 'ão'}` +
+                (item.doCurso ? ' · veio do curso, ninguém digitou' : '')
+              }
+              className={cn(
+                'rounded px-1.5 py-0.5 text-[11.5px]',
+                item.tipo === 'instrumento'
+                  ? 'bg-amber-500/10 text-amber-300/90'
+                  : 'bg-sky-500/10 text-sky-300/90',
+                // Derivado do curso fica tracejado: some sozinho se a apresentação sair do
+                // bloco, enquanto o digitado é decisão de alguém e só sai se alguém apagar.
+                item.doCurso && 'border border-dashed border-current/30',
+              )}
+            >
+              {item.quantidade}× {item.nome}
+            </span>
+          ))}
+        </footer>
+      )}
     </section>
   );
 }
@@ -375,6 +472,29 @@ export function GradeTab({ evento }: { evento: EventoComResumo }) {
       ),
     [evento, blocos],
   );
+
+  /**
+   * Nomes já usados no evento inteiro, para o `datalist` do palco.
+   *
+   * Varre todos os blocos, não só o atual: quem digita "Violão nylon" no bloco 1 tem de
+   * ver a mesma opção no bloco 3, senão a convergência de grafia só valeria dentro do
+   * bloco e a consolidação voltaria a repetir o mesmo instrumento.
+   */
+  const sugestoesDeItem = useMemo(() => {
+    const vistos = { instrumento: new Map<string, string>(), equipamento: new Map<string, string>() };
+    for (const b of blocos) {
+      for (const ap of b.apresentacoes) {
+        for (const item of ap.itens) {
+          const nome = item.nome.trim();
+          if (nome !== '') vistos[item.tipo].set(chaveDoItem(nome), nome);
+        }
+      }
+    }
+    return {
+      instrumento: [...vistos.instrumento.values()].sort((a, b) => a.localeCompare(b, 'pt-BR')),
+      equipamento: [...vistos.equipamento.values()].sort((a, b) => a.localeCompare(b, 'pt-BR')),
+    };
+  }, [blocos]);
 
   const totalApresentacoes = blocos.reduce((s, b) => s + b.apresentacoes.length, 0);
   const participantes = alunos.filter((a) => a.status === 'participa');
@@ -555,6 +675,7 @@ export function GradeTab({ evento }: { evento: EventoComResumo }) {
                     horario={h}
                     eventoId={evento.id}
                     unidadeId={evento.unidade_id}
+                    sugestoes={sugestoesDeItem}
                     onMudou={() => {
                       recarregar();
                       recarregarAlunos();
