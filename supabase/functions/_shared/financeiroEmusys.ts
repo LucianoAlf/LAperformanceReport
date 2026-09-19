@@ -126,6 +126,51 @@ export interface LinhaCatalogo {
   payload: unknown;
 }
 
+export type EstadoAnteriorVarreduraDia = {
+  status: 'completo' | 'erro';
+  concluido_em: string | null;
+} | null;
+
+export type DecisaoPersistenciaFalhaDia =
+  | {
+    modo: 'preservar_completo';
+    atualizacao: { ultimo_erro: string };
+  }
+  | {
+    modo: 'registrar_erro';
+    registro: {
+      status: 'erro';
+      itens: 0;
+      ultimo_erro: string;
+      tentativas: number;
+      iniciado_em: string;
+    };
+  };
+
+export function decidirPersistenciaFalhaDia(
+  anterior: EstadoAnteriorVarreduraDia,
+  mensagem: string,
+  tentativa: { tentativas: number; iniciado_em: string },
+): DecisaoPersistenciaFalhaDia {
+  const ultimoErro = mensagem.slice(0, 400);
+  if (anterior?.status === 'completo') {
+    return {
+      modo: 'preservar_completo',
+      atualizacao: { ultimo_erro: ultimoErro },
+    };
+  }
+  return {
+    modo: 'registrar_erro',
+    registro: {
+      status: 'erro',
+      itens: 0,
+      ultimo_erro: ultimoErro,
+      tentativas: tentativa.tentativas,
+      iniciado_em: tentativa.iniciado_em,
+    },
+  };
+}
+
 export async function mapearCatalogo(valores: Record<string, unknown>, cru: unknown): Promise<LinhaCatalogo> {
   return {
     ...JSON.parse(JSON.stringify(valores)),

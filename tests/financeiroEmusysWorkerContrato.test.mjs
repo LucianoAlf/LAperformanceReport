@@ -57,6 +57,13 @@ test('erro interrompe a unidade, persiste resumo e 429 agenda mais 30 minutos', 
   assert.match(source, /throw\s+erro/i);
 });
 
+test('falha transitória preserva dia já completo e seu concluido_em', () => {
+  assert.match(source, /decidirPersistenciaFalhaDia/i);
+  assert.match(source, /modo\s*===\s*['"]preservar_completo['"]/i);
+  assert.match(source, /\.update\(decisao\.atualizacao\)/i);
+  assert.doesNotMatch(source, /preservar_completo[\s\S]{0,300}concluido_em\s*:\s*null/i);
+});
+
 test('execução sem catálogo preserva catalogos_erro', () => {
   assert.match(source, /if\s*\(comCatalogos\)[\s\S]{0,300}catalogos_erro/i);
 });
