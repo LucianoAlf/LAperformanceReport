@@ -90,10 +90,13 @@ estima 1 linha. `ALTER FUNCTION … SET enable_nestloop = off` (migration
 `20260919210000`) caiu consolidado de 34,37 s para 1,47 s com jsonb idêntico
 nas 5 combinações. O corpo não mudou (`md5` `6cb0df4de0fcdc523b8fac4c0552a113`).
 
-⚠️ Recriar a função a partir de `20260718235000` sem
-`SET enable_nestloop TO 'off'` no cabeçalho **apaga o ajuste**. Mesma família
-do `statement_timeout` por função (`publish_financeiro_sync_run`, leitura
-financeira): o GUC mora no `proconfig`, não no SQL do corpo.
+⚠️ `CREATE OR REPLACE` **não** reabre `EXECUTE` para `anon` — dono e grants
+sobrevivem. O que apaga o ajuste é recriar a partir de `20260718235000` sem
+`SET enable_nestloop TO 'off'` (e sem o `search_path`) no cabeçalho. Mesma
+família do `statement_timeout` por função (`publish_financeiro_sync_run`,
+leitura financeira): o GUC mora no `proconfig`, não no SQL do corpo.
+
+Volta: `alter function public.get_professor_presenca_v3_sombra(date, uuid) reset enable_nestloop;`
 
 ## 11 funções com versão maior viva
 

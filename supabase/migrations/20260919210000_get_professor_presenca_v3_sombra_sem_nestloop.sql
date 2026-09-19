@@ -5,9 +5,15 @@
 -- consolidado 34,37s -> 1,47s; Recreio/ago 3,67s -> 0,65s. jsonb identico
 -- nas 5, md5 do corpo intacto. Controle: Recreio set x ago diferem.
 --
--- POR QUE ALTER, NAO CREATE OR REPLACE: o corpo nao muda; recriar reabre
--- EXECUTE para anon (ALTER DEFAULT PRIVILEGES) e apagaria este SET se o
--- cabecalho viesse sem ele. Vale so enquanto a funcao roda.
+-- POR QUE ALTER, NAO CREATE OR REPLACE: o corpo nao muda. Dono e grants
+-- sobrevivem ao replace (nao reabre EXECUTE para anon). O risco e outro:
+-- um CREATE OR REPLACE cujo cabecalho nao repete
+-- SET search_path e SET enable_nestloop TO 'off' apaga o proconfig e
+-- volta o nested loop.
+--
+-- Volta:
+--   alter function public.get_professor_presenca_v3_sombra(date, uuid)
+--     reset enable_nestloop;
 --
 -- ⚠️ Proximo CREATE OR REPLACE desta funcao PRECISA de
 --    SET enable_nestloop TO 'off'

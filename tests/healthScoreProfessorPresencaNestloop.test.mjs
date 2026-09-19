@@ -18,12 +18,17 @@ test('presenca v3 sombra desliga nestloop por ALTER, sem recriar o corpo', () =>
   assert.doesNotMatch(
     sql,
     /create\s+or\s+replace\s+function\s+public\.get_professor_presenca_v3_sombra/i,
-    'CREATE OR REPLACE reabre EXECUTE para anon e apaga o SET se o cabecalho vier incompleto',
+    'recriar sem repetir o SET no cabecalho apaga o enable_nestloop (e o search_path)',
   );
   assert.match(
     sql,
     /SET enable_nestloop TO 'off'/,
     'o aviso ao proximo CREATE OR REPLACE precisa citar a linha do cabecalho',
+  );
+  assert.match(
+    sql,
+    /reset enable_nestloop/i,
+    'a volta tem de estar no arquivo da migration, nao so no PR',
   );
 });
 
