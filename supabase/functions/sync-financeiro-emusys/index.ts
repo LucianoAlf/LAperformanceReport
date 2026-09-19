@@ -71,6 +71,7 @@ const UNIDADES: UnidadeConfig[] = [
 ];
 
 const PAUSA_MS = 1100;
+const FETCH_TIMEOUT_MS = 30000;
 const ORCAMENTO_PADRAO_SEGUNDOS = 100;
 const PAGE_SIZE = 50;
 
@@ -104,7 +105,10 @@ async function buscarJsonPaginado(
     const agora = Date.now();
     if (agora - ultimaChamadaEm < PAUSA_MS) await espera(PAUSA_MS - (agora - ultimaChamadaEm));
     ultimaChamadaEm = Date.now();
-    const http = await fetch(url, { headers: { token: unidade.token } });
+    const http = await fetch(url, {
+      headers: { token: unidade.token },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
     if (!http.ok) {
       const texto = (await http.text()).slice(0, 200).trim();
       throw criarErroHttpFinanceiroEmusys({
@@ -167,6 +171,7 @@ async function gravarDia(
   unidade: UnidadeConfig,
   data: string,
   itens: Record<string, unknown>[],
+  garantirLease?: () => Promise<void>,
 ) {
   const agora = new Date().toISOString();
 
@@ -190,6 +195,7 @@ async function gravarDia(
   }
 
   for (let ini = 0; ini < linhas.length; ini += 200) {
+    await garantirLease?.();
     const { error } = await client
       .from('financeiro_emusys_lancamentos')
       .upsert(linhas.slice(ini, ini + 200), { onConflict: 'unidade_id,emusys_lancamento_id' });
@@ -197,6 +203,7 @@ async function gravarDia(
   }
 
   // dia SEM nenhum item também é resposta completa da origem — aplicar sumiu_em
+  await garantirLease?.();
   const vistos = itens.length ? `(${itens.map((i) => String(Number(i.id))).join(',')})` : null;
   let morteQuery = client
     .from('financeiro_emusys_lancamentos')
@@ -242,12 +249,14 @@ async function sincronizarCatalogo(
   chaveRaiz: string,
   mapear: (cru: Record<string, unknown>) => Promise<Record<string, unknown>>,
   colunaIdApi: string,
+  garantirLease?: () => Promise<void>,
 ) {
   const resposta = await buscarJsonPaginado(unidade, caminho, {});
   const lista = Array.isArray((resposta as Record<string, unknown>)[chaveRaiz])
     ? (resposta as Record<string, unknown>)[chaveRaiz] as Record<string, unknown>[]
     : null;
   if (!lista) throw new Error(`resposta inesperada em ${caminho}: sem ${chaveRaiz}`);
+  await garantirLease?.();
 
   const agora = new Date().toISOString();
   // deno-lint-ignore no-explicit-any
@@ -280,11 +289,13 @@ async function sincronizarCatalogo(
   }
 
   for (let ini = 0; ini < linhas.length; ini += 200) {
+    await garantirLease?.();
     const { error: erroUpsert } = await client
       .from(tabela)
       .upsert(linhas.slice(ini, ini + 200), { onConflict: `unidade_id,${colunaIdApi}` });
     if (erroUpsert) throw erroUpsert;
   }
+  await garantirLease?.();
   const vistos = linhas.length ? `(${linhas.map((l) => String(l[colunaIdApi])).join(',')})` : null;
   let morte = client.from(tabela).update({ sumiu_em: agora }).eq('unidade_id', unidade.id).is('sumiu_em', null);
   if (vistos) morte = morte.not(colunaIdApi, 'in', vistos);
@@ -304,16 +315,17 @@ async function registrarErroResumo(
   mensagem: string,
   diasPendentes: number,
   modoResumo: ModoResumo,
+  erroOriginal?: unknown,
 ) {
   const agora = new Date().toISOString();
   const { data: anterior, error: erroAnterior } = await client
     .from('financeiro_emusys_varredura_resumo')
-    .select('janela_inicio,janela_fim,ultima_varredura_completa_em,ultima_revarredura_anual_em,dias_pendentes')
+    .select('janela_inicio,janela_fim,ultima_varredura_completa_em,ultima_revarredura_anual_em,dias_pendentes,catalogos_erro')
     .eq('unidade_id', unidade.id)
     .maybeSingle();
   if (erroAnterior) throw erroAnterior;
 
-  const registro = {
+  const registro: Record<string, unknown> = {
     unidade_id: unidade.id,
     janela_inicio: modoResumo === 'diario' ? janela.inicio : (anterior?.janela_inicio ?? janela.inicio),
     janela_fim: modoResumo === 'diario' ? janela.fim : (anterior?.janela_fim ?? janela.fim),
@@ -324,6 +336,19 @@ async function registrarErroResumo(
     ultima_revarredura_anual_em: anterior?.ultima_revarredura_anual_em ?? null,
     atualizado_em: agora,
   };
+  const chaveCatalogo = erroOriginal instanceof EmusysFinanceiroHttpError
+    ? ({
+      '/financeiro/contas_financeiras': 'contas',
+      '/financeiro/plano_contas': 'plano_contas',
+      '/financeiro/formas_pagamento': 'formas_pagamento',
+    } as Record<string, string>)[erroOriginal.caminho]
+    : null;
+  registro.catalogos_erro = chaveCatalogo
+    ? {
+      ...((anterior?.catalogos_erro as Record<string, unknown> | null) ?? {}),
+      [chaveCatalogo]: { erro: mensagem.slice(0, 400) },
+    }
+    : (anterior?.catalogos_erro ?? null);
   const { error } = await client
     .from('financeiro_emusys_varredura_resumo')
     .upsert(registro, { onConflict: 'unidade_id' });
@@ -339,16 +364,19 @@ async function processarUnidade(
   comecouEm: number,
   modoResumo: ModoResumo,
   tentativaNumero = 1,
+  garantirLease?: () => Promise<void>,
 ) {
   if (!unidade.token) throw new Error(`token Emusys ausente para ${unidade.codigo}`);
   const resultado: Record<string, unknown> = { unidade: unidade.codigo, catalogos: {} as Record<string, unknown> };
   const catalogos = resultado.catalogos as Record<string, unknown>;
 
   const capturarErroCatalogo = (chave: string, erro: unknown) => {
+    const mensagem = erro instanceof Error ? erro.message : String(erro);
+    if (/SYNC_FINANCEIRO_EMUSYS_LEASE_PERDIDO/i.test(mensagem)) throw erro;
     if (erro instanceof EmusysFinanceiroHttpError && erro.codigo === 'EMUSYS_HTTP_429') {
       throw erro;
     }
-    catalogos[chave] = { erro: erro instanceof Error ? erro.message : String(erro) };
+    catalogos[chave] = { erro: mensagem };
     console.error(`[sync-financeiro] catalogo ${chave} ${unidade.codigo}:`, erro);
   };
 
@@ -361,6 +389,7 @@ async function processarUnidade(
           tipo: cru.tipo ?? null, banco: cru.banco ?? null, status: cru.status ?? null,
         }),
         'emusys_conta_id',
+        garantirLease,
       );
     } catch (erro) {
       capturarErroCatalogo('contas', erro);
@@ -374,6 +403,7 @@ async function processarUnidade(
           tipo: cru.tipo ?? null, natureza: cru.natureza ?? null, status: cru.status ?? null,
         }),
         'emusys_plano_id',
+        garantirLease,
       );
     } catch (erro) {
       capturarErroCatalogo('plano_contas', erro);
@@ -386,6 +416,7 @@ async function processarUnidade(
           id_pai: cru.id_pai == null ? null : Number(cru.id_pai), generico: cru.generico ?? null,
         }),
         'emusys_forma_id',
+        garantirLease,
       );
     } catch (erro) {
       capturarErroCatalogo('formas_pagamento', erro);
@@ -405,14 +436,17 @@ async function processarUnidade(
         data_inicial: dia,
         data_final: dia,
       });
+      await garantirLease?.();
       const itens = ((coletado as Record<string, unknown>).items ?? []) as Record<string, unknown>[];
-      await gravarDia(client, unidade, dia, itens);
+      await gravarDia(client, unidade, dia, itens, garantirLease);
+      await garantirLease?.();
       await gravarStatusDia(client, unidade.id, dia, {
         status: 'completo', itens: itens.length, tentativas: tentativaNumero, iniciado_em: iniciou,
       });
       diasProcessados += 1;
     } catch (erro) {
       const mensagem = erro instanceof Error ? erro.message : String(erro);
+      await garantirLease?.();
       await gravarStatusDia(client, unidade.id, dia, {
         status: 'erro', itens: 0, ultimo_erro: mensagem.slice(0, 400),
         tentativas: tentativaNumero, iniciado_em: iniciou,
@@ -423,6 +457,7 @@ async function processarUnidade(
   }
 
   const agora = new Date().toISOString();
+  await garantirLease?.();
   if (modoResumo === 'diario') {
     const { data: anterior, error: erroAnterior } = await client
       .from('financeiro_emusys_varredura_resumo')
@@ -448,6 +483,7 @@ async function processarUnidade(
         ),
       );
     }
+    await garantirLease?.();
     const { error } = await client
       .from('financeiro_emusys_varredura_resumo')
       .upsert(registro, { onConflict: 'unidade_id' });
@@ -526,7 +562,7 @@ async function executarWorker(client: SupabaseClient) {
   const workerId = crypto.randomUUID();
   const job = await rpcOrThrow<QueueJob | null>(client, 'claim_sync_financeiro_emusys_job', {
     p_worker_id: workerId,
-    p_lease_seconds: 300,
+    p_lease_seconds: 600,
   });
   if (!job) return { status: 200, body: { success: true, queue_status: 'idle' } };
 
@@ -534,8 +570,16 @@ async function executarWorker(client: SupabaseClient) {
   if (!unidade) throw new Error(`unidade da fila desconhecida: ${job.unidade_codigo}`);
   const janela = { inicio: job.data_inicial, fim: job.data_final };
   const modoResumo: ModoResumo = ehResumoDiario(job.trigger_source) ? 'diario' : 'manutencao';
+  const garantirLease = async () => {
+    await rpcOrThrow<QueueResult>(client, 'renew_sync_financeiro_emusys_job_lease', {
+      p_job_id: job.id,
+      p_worker_id: workerId,
+      p_lease_seconds: 600,
+    });
+  };
 
   try {
+    await garantirLease();
     const resultado = await processarUnidade(
       client,
       unidade,
@@ -545,7 +589,9 @@ async function executarWorker(client: SupabaseClient) {
       Date.now(),
       modoResumo,
       job.attempt_count,
+      garantirLease,
     );
+    await garantirLease();
     const fila = await rpcOrThrow(client, 'complete_sync_financeiro_emusys_job', {
       p_job_id: job.id,
       p_worker_id: workerId,
@@ -553,6 +599,7 @@ async function executarWorker(client: SupabaseClient) {
     return { status: 200, body: { success: true, queue_status: 'succeeded', fila, resultado } };
   } catch (erro) {
     const mensagem = erro instanceof Error ? erro.message : String(erro);
+    await garantirLease();
     await registrarErroResumo(
       client,
       unidade,
@@ -560,6 +607,7 @@ async function executarWorker(client: SupabaseClient) {
       mensagem,
       resumoJanela(janela.inicio, janela.fim).length,
       modoResumo,
+      erro,
     );
 
     if (erro instanceof EmusysFinanceiroHttpError && erro.codigo === 'EMUSYS_HTTP_429') {
@@ -615,6 +663,22 @@ serve(async (request) => {
     if (mode === 'worker') {
       const resposta = await executarWorker(client);
       return json(resposta.body, resposta.status);
+    }
+
+    if (mode === 'queue_status') {
+      const jobIds = Array.isArray(corpo.job_ids)
+        ? [...new Set(corpo.job_ids.map((valor) => String(valor).trim()))]
+        : [];
+      if (jobIds.length < 1 || jobIds.length > 100 || jobIds.some((id) => !/^[0-9a-f-]{36}$/i.test(id))) {
+        return json({ success: false, erro: 'job_ids deve conter de 1 a 100 UUIDs' }, 400);
+      }
+      const { data, error } = await client
+        .from('sync_financeiro_emusys_queue')
+        .select('id,unidade_codigo,data_inicial,data_final,status,attempt_count,max_retries,next_attempt_at,last_error_code,last_error_detail,completed_at')
+        .in('id', jobIds)
+        .order('created_at');
+      if (error) throw error;
+      return json({ success: true, jobs: data ?? [] });
     }
 
     if (!['enqueue_daily', 'enqueue_weekly', 'enqueue_range'].includes(mode)) {

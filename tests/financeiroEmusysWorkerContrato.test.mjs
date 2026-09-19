@@ -8,6 +8,10 @@ const httpSource = readFileSync(
   new URL('../supabase/functions/_shared/financeiroEmusysHttp.ts', import.meta.url),
   'utf8',
 );
+const backfillSource = readFileSync(
+  new URL('../scripts/backfill-financeiro-emusys.mjs', import.meta.url),
+  'utf8',
+);
 
 test('worker expõe modos duráveis e usa todas as RPCs da fila', () => {
   for (const mode of ['enqueue_daily', 'enqueue_weekly', 'enqueue_range', 'worker']) {
@@ -19,6 +23,7 @@ test('worker expõe modos duráveis e usa todas as RPCs da fila', () => {
     'retry_sync_financeiro_emusys_job',
     'complete_sync_financeiro_emusys_job',
     'fail_sync_financeiro_emusys_job',
+    'renew_sync_financeiro_emusys_job_lease',
   ]) {
     assert.match(source, new RegExp(`['"]${rpc}['"]`));
   }
@@ -32,6 +37,7 @@ test('429 e 5xx são tipados sem sleep exponencial dentro da função', () => {
   assert.doesNotMatch(source, /10000\s*\*\s*2\s*\*\*/i);
   assert.doesNotMatch(source, /recuo\s+exponencial/i);
   assert.doesNotMatch(source, /await\s+espera\s*\(\s*recuo/i);
+  assert.match(source, /AbortSignal\.timeout\s*\(\s*FETCH_TIMEOUT_MS\s*\)/i);
 });
 
 test('dias completos voltam para a fila de processamento e hoje é recusado', () => {
@@ -53,4 +59,12 @@ test('erro interrompe a unidade, persiste resumo e 429 agenda mais 30 minutos', 
 
 test('execução sem catálogo preserva catalogos_erro', () => {
   assert.match(source, /if\s*\(comCatalogos\)[\s\S]{0,300}catalogos_erro/i);
+});
+
+test('script legado acompanha jobs ate succeeded e nunca inclui o dia corrente', () => {
+  assert.match(source, /mode\s*===\s*['"]queue_status['"]/i);
+  assert.match(backfillSource, /mode:\s*['"]queue_status['"]/i);
+  assert.match(backfillSource, /job\.status\s*===\s*['"]succeeded['"]/i);
+  assert.match(backfillSource, /const\s+ONTEM/i);
+  assert.doesNotMatch(backfillSource, /janela_completa/i);
 });

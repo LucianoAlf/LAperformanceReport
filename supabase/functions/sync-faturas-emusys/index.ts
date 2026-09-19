@@ -20,6 +20,17 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const SUPABASE_PROJECT_REF = new URL(SUPABASE_URL).hostname.split('.')[0] ?? '';
 const EMUSYS_API = 'https://api.emusys.com.br/v1';
+const EMUSYS_FETCH_TIMEOUT_MS = 30000;
+const WORKER_BUDGET_MS = 8 * 60 * 1000;
+
+const fetchComPrazo = (deadlineMs: number): typeof fetch => (async (input, init) => {
+  const restante = deadlineMs - Date.now();
+  if (restante <= 0) throw new Error('SYNC_FATURAS_WORKER_TIMEOUT');
+  return await fetch(input, {
+    ...init,
+    signal: AbortSignal.timeout(Math.min(EMUSYS_FETCH_TIMEOUT_MS, restante)),
+  });
+}) as typeof fetch;
 
 const requiredEnv = (name: string) => {
   const value = Deno.env.get(name)?.trim();
@@ -86,6 +97,15 @@ type QueueRpcResult = Record<string, unknown> & {
 type ProcessResult = {
   status: number;
   body: Record<string, unknown>;
+};
+
+type PagasMesQueueJob = {
+  id: string;
+  competencia: string;
+  unidade_codigo: string | null;
+  trigger_source: string;
+  attempt_count: number;
+  max_attempts: number;
 };
 
 async function validarAcessoSync(req: Request): Promise<AccessResult> {
@@ -249,12 +269,14 @@ async function processarPagasNoMes(
   const pagFim = new Date(Date.UTC(ano, mes, 0)).toISOString().slice(0, 10);
 
   const limiter = new GlobalRateLimiter();
+  const fetchFn = fetchComPrazo(Date.now() + WORKER_BUDGET_MS);
   const unidades = unidadeCodigo
     ? { [unidadeCodigo]: UNIDADES[unidadeCodigo] }
     : UNIDADES;
 
   const resultado: Record<string, unknown> = { competencia, pagamento_janela: { inicio: pagInicio, fim: pagFim } };
   const resumoUnidades: Record<string, unknown> = {};
+  const falhas: unknown[] = [];
 
   for (const [codigo, unidade] of Object.entries(unidades)) {
     if (!unidade) throw new Error(`unidade desconhecida: ${codigo}`);
@@ -266,6 +288,7 @@ async function processarPagasNoMes(
         unidadeCodigo: codigo,
         unidade,
         limiter,
+        fetchFn,
       });
 
       // Filtra: só fica quem tem data_pagamento dentro do mês M
@@ -317,13 +340,98 @@ async function processarPagasNoMes(
         upserted,
       };
     } catch (erro) {
+      falhas.push(erro);
       resumoUnidades[codigo] = { erro: erro instanceof Error ? erro.message : String(erro) };
       console.error(`[sync-faturas] pagas_no_mes ${codigo}:`, erro);
     }
   }
 
   resultado.unidades = resumoUnidades;
+  if (falhas.length) throw falhas[0];
   return resultado;
+}
+
+async function processarProximoPagasMes(supabase: ServiceClient): Promise<ProcessResult | null> {
+  const workerId = crypto.randomUUID();
+  const job = await rpcOrThrow<PagasMesQueueJob | null>(
+    supabase,
+    'claim_sync_faturas_pagas_mes_job',
+    { p_worker_id: workerId, p_lease_seconds: 900 },
+  );
+  if (!job) return null;
+
+  try {
+    const resultado = await processarPagasNoMes(supabase, job.competencia, job.unidade_codigo);
+    const fila = await rpcOrThrow<QueueRpcResult>(
+      supabase,
+      'complete_sync_faturas_pagas_mes_job',
+      { p_job_id: job.id, p_worker_id: workerId },
+    );
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        mode: 'pagas_no_mes',
+        queued: false,
+        queue_status: fila.status ?? 'succeeded',
+        competencia: job.competencia,
+        resultado,
+      },
+    };
+  } catch (erro) {
+    const classificado = classifyFinanceiroSyncError(erro);
+    if (classificado.retryable) {
+      const fila = await rpcOrThrow<QueueRpcResult>(
+        supabase,
+        'retry_sync_faturas_pagas_mes_job',
+        {
+          p_job_id: job.id,
+          p_worker_id: workerId,
+          p_error_code: classificado.code,
+          p_error_detail: classificado.detail,
+          p_http_status: classificado.httpStatus,
+        },
+      );
+      const aguardando = fila.status === 'retry_wait';
+      return {
+        status: aguardando ? 202 : 502,
+        body: {
+          ok: false,
+          mode: 'pagas_no_mes',
+          queued: aguardando,
+          queue_status: fila.status ?? 'failed',
+          next_attempt_at: fila.next_attempt_at ?? null,
+          competencia: job.competencia,
+          erro_codigo: classificado.code,
+          erro: classificado.detail,
+        },
+      };
+    }
+
+    const fila = await rpcOrThrow<QueueRpcResult>(
+      supabase,
+      'fail_sync_faturas_pagas_mes_job',
+      {
+        p_job_id: job.id,
+        p_worker_id: workerId,
+        p_error_code: classificado.code,
+        p_error_detail: classificado.detail,
+        p_http_status: classificado.httpStatus,
+      },
+    );
+    return {
+      status: classificado.code === 'SYNC_VALIDATION_ERROR' ? 400 : 502,
+      body: {
+        ok: false,
+        mode: 'pagas_no_mes',
+        queued: false,
+        queue_status: fila.status ?? 'failed',
+        competencia: job.competencia,
+        erro_codigo: classificado.code,
+        erro: classificado.detail,
+      },
+    };
+  }
 }
 
 async function executarProbe(competencia: string, unidadeCodigo: string) {
@@ -378,6 +486,7 @@ async function processarQueueJob(
     }));
 
     const limiter = new GlobalRateLimiter();
+    const fetchFn = fetchComPrazo(Date.now() + WORKER_BUDGET_MS);
     const allRows: unknown[] = [];
     const unitsSummary: unknown[] = [];
     for (const [unidadeCodigo, unidade] of Object.entries(UNIDADES)) {
@@ -387,6 +496,7 @@ async function processarQueueJob(
         unidadeCodigo,
         unidade,
         limiter,
+        fetchFn,
       });
       allRows.push(...collected.rows);
       unitsSummary.push(collected.resumo);
@@ -529,19 +639,27 @@ serve(async (req) => {
       const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
         auth: { persistSession: false, autoRefreshToken: false },
       });
-      if (await varreduraFinanceiroEmusysAtiva(supabase)) {
-        return json({
-          ok: true,
-          queued: true,
-          queue_status: 'blocked_by_financeiro_emusys',
-          erro: null,
-        }, 202);
+      const enfileirado = await rpcOrThrow<QueueRpcResult>(
+        supabase,
+        'enqueue_sync_faturas_pagas_mes_jobs',
+        {
+          p_competencias: competencias,
+          p_unidade_codigo: unidadeCodigo,
+          p_trigger_source: String(body.trigger_source ?? 'cron_faturas_pagas_no_mes').trim()
+            || 'cron_faturas_pagas_no_mes',
+        },
+      );
+      const processado = await processarProximoPagasMes(supabase);
+      if (processado) {
+        return json({ ...processado.body, jobs: enfileirado.jobs ?? [] }, processado.status);
       }
-      const resultados = [];
-      for (const comp of competencias) {
-        resultados.push(await processarPagasNoMes(supabase, comp, unidadeCodigo));
-      }
-      return json({ ok: true, mode: 'pagas_no_mes', resultados });
+      return json({
+        ok: true,
+        mode: 'pagas_no_mes',
+        queued: true,
+        queue_status: 'pending',
+        jobs: enfileirado.jobs ?? [],
+      }, 202);
     }
 
     if (mode === 'probe') {
@@ -606,6 +724,11 @@ serve(async (req) => {
           p_requested_by: access.requestedBy,
         }));
       }
+    }
+
+    if (mode === 'worker') {
+      const pagas = await processarProximoPagasMes(supabase);
+      if (pagas) return json(pagas.body, pagas.status);
     }
 
     if (await varreduraFinanceiroEmusysAtiva(supabase)) {

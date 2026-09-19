@@ -45,6 +45,25 @@ test('claim de faturas compartilha mutex e cede prioridade à varredura de lanç
   assert.match(sql, /create or replace function public\.claim_financeiro_sync_job/i);
   assert.match(sql, /pg_advisory_xact_lock[\s\S]*sync_financeiro_emusys_queue/is);
   assert.match(sql, /status\s+in\s*\(\s*'pending'\s*,\s*'running'\s*,\s*'retry_wait'\s*\)/i);
+  assert.match(sql, /time\s+'08:45'[\s\S]*time\s+'11:00'/i);
+});
+
+test('pagas no mes persiste em fila propria e e retomada pelo worker', () => {
+  const sql = source();
+  const edge = readFileSync(faturasUrl, 'utf8');
+  assert.match(sql, /create table public\.sync_faturas_pagas_mes_queue/i);
+  for (const rpc of [
+    'enqueue_sync_faturas_pagas_mes_jobs',
+    'claim_sync_faturas_pagas_mes_job',
+    'retry_sync_faturas_pagas_mes_job',
+    'complete_sync_faturas_pagas_mes_job',
+    'fail_sync_faturas_pagas_mes_job',
+  ]) {
+    assert.match(sql, new RegExp(`create or replace function public\\.${rpc}`, 'i'));
+    assert.match(edge, new RegExp(rpc, 'i'));
+  }
+  assert.match(sql, /sync_faturas_pagas_mes_queue_one_running_uniq/i);
+  assert.match(edge, /mode\s*===\s*['"]worker['"][\s\S]*processarProximoPagasMes/is);
 });
 
 test('agenda reserva financeiro, isola pagas no mês e instala semanal', () => {
@@ -56,7 +75,7 @@ test('agenda reserva financeiro, isola pagas no mês e instala semanal', () => {
   assert.match(sql, /sync-financeiro-emusys-fila-worker[\s\S]*'\* \* \* \* \*'/i);
   assert.match(sql, /sync-financeiro-emusys-semanal[\s\S]*'0 4 \* \* 0'/i);
 
-  assert.match(sql, /sync-faturas-fila-worker[\s\S]*'\* 0-4,6-8,11-23 \* \* \*'/i);
+  assert.match(sql, /sync-faturas-fila-worker[\s\S]*'\* 0-8,11-23 \* \* \*'/i);
   assert.match(sql, /financeiro-sync-atual-15m[\s\S]*'3,18,33,48 0-4,6-8,11-23 \* \* \*'/i);
   assert.match(sql, /financeiro-sync-anteriores-60m[\s\S]*'7 0-4,6-8,11-23 \* \* \*'/i);
   assert.match(sql, /financeiro-sync-backlog-2h[\s\S]*'11 0,2,4,6,8,12,14,16,18,20,22 \* \* \*'/i);
@@ -89,7 +108,7 @@ test('edge de faturas respeita a fila de lançamentos em pagas_no_mes e antes do
   const edge = readFileSync(faturasUrl, 'utf8');
   assert.match(edge, /function\s+varreduraFinanceiroEmusysAtiva/i);
   assert.match(edge, /from\(['"]sync_financeiro_emusys_queue['"]\)/i);
-  assert.match(edge, /mode\s*===\s*['"]pagas_no_mes['"][\s\S]*varreduraFinanceiroEmusysAtiva/is);
+  assert.match(edge, /mode\s*===\s*['"]pagas_no_mes['"][\s\S]*enqueue_sync_faturas_pagas_mes_jobs/is);
   assert.match(edge, /varreduraFinanceiroEmusysAtiva[\s\S]*claim_financeiro_sync_job/is);
   assert.match(edge, /backfill_super_folha_dre_2026[\s\S]{0,160}return\s+50/i);
 });

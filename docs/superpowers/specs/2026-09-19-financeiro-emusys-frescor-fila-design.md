@@ -18,10 +18,12 @@ O formato das tabelas `financeiro_emusys_*`, o formato do export e a granularida
 ## Fila e erros HTTP
 
 - Todo trabalho de lançamentos passa por uma fila serial com claim atômico, lease e no máximo três novas tentativas além da tentativa inicial.
+- O worker renova o lease antes de cada escrita; um lease vencido não pode mais gravar itens, `sumiu_em`, status ou resumo. Cada chamada HTTP tem timeout de 30 segundos e o lease inicial é de 600 segundos.
 - HTTP 429 vira `EMUSYS_HTTP_429`, é persistido imediatamente em `financeiro_emusys_varredura_resumo.ultimo_erro` e reagendado para 30 minutos depois.
 - HTTP 5xx usa `EMUSYS_HTTP_5XX`. Não há sleep longo dentro da Edge Function.
 - Um job em execução ou aguardando retry do espelho bloqueia o claim da fila de faturas. O claim das duas filas usa o mesmo mutex transacional para impedir corrida.
-- A janela diária do financeiro fica reservada entre 09:00 e 10:59 UTC. Os produtores e o worker de faturas não executam nessa janela nem às 05:00 UTC, horário reservado a `faturas_pagas_no_mes`.
+- A janela diária do financeiro fica reservada entre 09:00 e 10:59 UTC. Novos claims de faturas param às 08:45 UTC, antes de um lease de 15 minutos poder atravessar a janela.
+- `faturas_pagas_no_mes` usa uma fila durável própria. O cron das 05:00 UTC sempre persiste o pedido; o worker pode drenar essa fila às 05:00 e a retoma depois se a fila de lançamentos ainda estiver ativa. Os outros produtores de faturas ficam pausados nessa hora.
 
 ## Recuperações de 20/09
 
@@ -29,6 +31,7 @@ O formato das tabelas `financeiro_emusys_*`, o formato do export e a granularida
 - Às 03:05 UTC, já depois da virada do dia em São Paulo, enfileirar a janela diária 10–19/09. Assim 19/09 só poderá receber `completo` depois de encerrado.
 - Às 03:30 UTC, enfileirar as competências de faturas de janeiro a maio de 2026. O processamento espera a fila de lançamentos terminar e continua serialmente.
 - Os jobs extraordinários se removem do `pg_cron` depois do disparo.
+- O script legado de backfill agora enfileira somente dias encerrados e acompanha os IDs até todos chegarem a `succeeded`; resposta `202` não é tratada como conclusão.
 
 ## Aceite e evidência
 

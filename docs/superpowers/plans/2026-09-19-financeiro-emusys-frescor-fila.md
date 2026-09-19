@@ -35,6 +35,7 @@
 - [ ] Cobrir no teste os crons: diários 09:05/09:15/09:25 UTC, worker, semanal domingo 04:00 UTC, pausa das faturas em 05/09/10 UTC, recovery 01:00 e 03:05 UTC de 20/09 e backfill de faturas 03:30 UTC.
 - [ ] Rodar `node --test tests/financeiroEmusysFilaContrato.test.mjs` e confirmar falha inicial.
 - [ ] Criar tabela/RPCs com RLS e grants somente para `service_role`; o enqueue rejeita `data_final >= hoje BRT`, o claim inicial mais três retries e os dois claims usam o mesmo advisory xact lock.
+- [ ] Renovar e fencear o lease antes das escritas e impor timeout HTTP menor que o lease.
 - [ ] Invalidar status prematuros do dia corrente com `status='erro'`, `concluido_em=null` e `DIA_CORRENTE_NAO_ENCERRADO`, sem alterar colunas das tabelas existentes.
 - [ ] Reagendar os produtores de faturas e instalar jobs auto-removíveis; o backfill usa `enqueue_and_work` para `2026-01-01` até `2026-05-01`.
 - [ ] Repetir o teste de contrato e obter verde.
@@ -50,7 +51,7 @@
 - [ ] Trocar o fetch por uma tentativa por página; 429 e 5xx viram erros tipados.
 - [ ] Fazer todo job revarrer os dias recebidos, atualizar `concluido_em` em sucesso, interromper no primeiro erro e preservar `catalogos_erro` quando catálogos não rodarem.
 - [ ] No worker, completar, reagendar +30 minutos ou falhar a fila; antes de responder, persistir o erro no resumo.
-- [ ] Manter o modo direto compatível, sempre limitado a ontem, e usar a fila para todos os novos crons.
+- [ ] Migrar o script legado para enfileirar somente até ontem e aguardar `succeeded`; todo trabalho passa pela fila.
 - [ ] Repetir testes Deno e Node até ficarem verdes.
 
 ### Task 4: Coordenação com faturas
@@ -61,6 +62,7 @@
 
 - [ ] Escrever teste para impedir `pagas_no_mes` e claim de faturas enquanto houver job ativo em `sync_financeiro_emusys_queue`.
 - [ ] Implementar consulta fail-safe da fila nova; ausência da tabela durante o rollout significa “sem bloqueio”, outros erros falham fechados.
+- [ ] Persistir `pagas_no_mes` em fila própria para que bloqueio às 05:00 UTC não descarte a execução.
 - [ ] Adicionar prioridade explícita ao trigger `backfill_super_folha_dre_2026`.
 - [ ] Rodar os testes focados das duas filas.
 
