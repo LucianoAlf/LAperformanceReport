@@ -65,6 +65,20 @@ Deno.test('sem ID de aula o fallback exige lead e data no mesmo escopo', () => {
   );
 });
 
+Deno.test('sem ID de aula o fallback exige tambem o horario exato', () => {
+  assertEquals(
+    selecionarCandidatoExperimental({
+      unidadeId: 'u-recreio',
+      emusysAulaId: null,
+      emusysLeadId: 700,
+      data: '2026-07-10',
+      horario: '10:30:00',
+      cursoId: 8,
+    }, CANDIDATOS),
+    null,
+  );
+});
+
 Deno.test('candidato de outra unidade nunca e selecionado', () => {
   assertEquals(
     selecionarCandidatoExperimental({
