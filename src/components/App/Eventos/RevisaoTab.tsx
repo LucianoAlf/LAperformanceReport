@@ -7,7 +7,7 @@ import {
   Clock,
   LayoutList,
   Music,
-  Printer,
+  FileText,
   Speaker,
   Users,
 } from 'lucide-react';
@@ -22,7 +22,7 @@ import {
   type Pendencia,
 } from '@/lib/eventos';
 import {
-  abrirParaImpressao,
+  abrirDocumento,
   gerarFolhaDePalcoHtml,
   gerarProgramaHtml,
   type DadosDaImpressao,
@@ -126,16 +126,19 @@ export function RevisaoTab({
           })),
         })),
       })),
+      // `window.location.origin` e lido AQUI, nao dentro do gerador: a funcao que monta o
+      // documento fica pura e testavel em Node, onde `window` nao existe.
+      origem: typeof window === 'undefined' ? undefined : window.location.origin,
     }),
     [evento, blocos],
   );
 
-  const imprimir = (qual: 'programa' | 'palco') => {
+  const abrir = (qual: 'programa' | 'palco') => {
     const html =
       qual === 'programa'
         ? gerarProgramaHtml(dadosDaImpressao)
         : gerarFolhaDePalcoHtml(dadosDaImpressao);
-    if (!abrirParaImpressao(html)) {
+    if (!abrirDocumento(html)) {
       toast.error('O navegador bloqueou a janela. Permita pop-ups para este site e tente de novo.');
     }
   };
@@ -193,12 +196,12 @@ export function RevisaoTab({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
             <h3 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              <Printer className="h-3.5 w-3.5" />
-              Imprimir
+              <FileText className="h-3.5 w-3.5" />
+              Documentos
             </h3>
             <p className="mt-0.5 text-[12px] text-slate-500">
               Dois documentos, dois públicos: a programação vai para a plateia, a folha de
-              palco fica com a produção.
+              palco fica com a produção. Abrem numa aba nova, com botão para salvar em PDF.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -206,17 +209,17 @@ export function RevisaoTab({
               size="sm"
               variant="outline"
               className="gap-1.5"
-              onClick={() => imprimir('programa')}
+              onClick={() => abrir('programa')}
               disabled={resumo.apresentacoes === 0}
             >
-              <Printer className="h-3.5 w-3.5" />
+              <FileText className="h-3.5 w-3.5" />
               Programação
             </Button>
             <Button
               size="sm"
               variant="outline"
               className="gap-1.5"
-              onClick={() => imprimir('palco')}
+              onClick={() => abrir('palco')}
               disabled={resumo.apresentacoes === 0}
             >
               <Speaker className="h-3.5 w-3.5" />
@@ -233,9 +236,9 @@ export function RevisaoTab({
             <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0 text-rose-400" />
             <span>
               {impedimentos.length === 1
-                ? 'Há 1 pendência que sai errada no papel'
-                : `Há ${impedimentos.length} pendências que saem erradas no papel`}{' '}
-              — dá para imprimir assim mesmo, é prévia.
+                ? 'Há 1 pendência que sai errada no documento'
+                : `Há ${impedimentos.length} pendências que saem erradas no documento`}{' '}
+              — dá para abrir assim mesmo, é prévia.
             </span>
           </p>
         )}

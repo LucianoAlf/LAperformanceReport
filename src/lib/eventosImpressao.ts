@@ -47,20 +47,23 @@ function escapeHtml(texto: string | null | undefined): string {
 }
 
 /**
- * Abre o HTML numa aba nova e dispara a impressao.
+ * Abre o documento numa aba nova, para a pessoa VER.
+ *
+ * ⚠️ Nao imprime nada: quem decide isso e o botao dentro do proprio documento. Abrir e
+ * conferir e o caso comum — imprimir e o eventual.
  *
  * ⚠️ Via **Blob URL**, nunca `window.open('', ...)` + `document.write`: numa janela
- * `about:blank` o evento `load` JA DISPAROU antes de o `<script>` registrar o `onload`,
- * entao a impressao nunca acontece e a pagina pode ficar em branco. Com o Blob o navegador
- * carrega um documento normal. E o padrao das outras impressoes do sistema.
+ * `about:blank` o `load` ja disparou antes de o documento existir, e os scripts e estilos se
+ * comportam de forma imprevisivel. Com o Blob o navegador carrega um documento normal. E o
+ * padrao das outras impressoes do sistema.
  *
  * ⚠️ O `revokeObjectURL` vai num timeout longo: revogar antes de a janela carregar mata o
- * proprio documento que se quer imprimir.
+ * proprio documento que se quer mostrar.
  *
  * Devolve `false` quando o navegador bloqueou o pop-up — cabe ao chamador avisar, porque a
- * mensagem certa depende do que estava sendo impresso.
+ * mensagem certa depende do que estava sendo aberto.
  */
-export function abrirParaImpressao(html: string): boolean {
+export function abrirDocumento(html: string): boolean {
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const janela = window.open(url, '_blank');
@@ -102,6 +105,14 @@ export interface DadosDaImpressao {
     unidade_nome: string | null;
   };
   blocos: BlocoParaImprimir[];
+  /**
+   * Origem do app (`window.location.origin`), para montar a URL da logo.
+   *
+   * ⚠️ Vem de FORA de proposito: ler `window` aqui dentro tornaria a geracao impossivel de
+   * testar em Node, e e justamente o conteudo do papel que precisa de teste. Ausente, o
+   * documento sai sem logo — e degrada, nao quebra.
+   */
+  origem?: string;
 }
 
 /** 'AAAA-MM-DD' -> '21 de setembro de 2026'. */
@@ -119,39 +130,99 @@ function dataPorExtenso(iso: string): string {
 }
 
 const ESTILO = `
+  :root { --marca: #b45309; --marca-escura: #7c2d12; --tinta: #1f2937; --suave: #6b7280; }
   * { box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-         color: #1f2937; margin: 0; padding: 28px 32px; font-size: 12px; line-height: 1.5; }
-  .topo { border-bottom: 3px solid #b45309; padding-bottom: 12px; margin-bottom: 20px; }
-  .topo h1 { font-size: 22px; color: #7c2d12; margin: 0 0 4px; }
-  .topo .meta { color: #6b7280; font-size: 11.5px; }
-  .topo .meta strong { color: #374151; }
-  h2 { font-size: 14px; color: #7c2d12; margin: 22px 0 8px; padding-bottom: 5px;
-       border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; }
-  h2 .hora { font-weight: 400; font-size: 12px; color: #b45309; }
-  .bloco { page-break-inside: avoid; margin-bottom: 4px; }
+         color: var(--tinta); margin: 0; background: #f1f5f9; font-size: 12px; line-height: 1.55; }
+
+  /* A folha: um retangulo branco centrado na tela, do tamanho de uma pagina. Na impressao
+     ela perde sombra e margem e vira a propria pagina. */
+  .folha { background: #fff; max-width: 820px; margin: 22px auto 40px; padding: 34px 40px;
+           box-shadow: 0 1px 3px rgba(15,23,42,.1), 0 12px 32px rgba(15,23,42,.08);
+           border-radius: 4px; }
+
+  /* ── barra de acoes: existe so na tela ── */
+  .acoes { position: sticky; top: 0; z-index: 10; background: #0f172a; color: #e2e8f0;
+           padding: 10px 0; }
+  /* Container interno com a MESMA largura da folha: sem ele os botoes encostam na borda da
+     janela e a barra parece de outro documento. */
+  .acoes .dentro { max-width: 820px; margin: 0 auto; padding: 0 16px;
+                   display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .acoes .qual { font-size: 12.5px; font-weight: 600; margin-right: auto; }
+  .acoes .qual span { display: block; font-weight: 400; font-size: 11px; color: #94a3b8; }
+  .acoes button { font: inherit; font-size: 12.5px; border-radius: 6px; padding: 7px 14px;
+                  cursor: pointer; border: 1px solid transparent; }
+  .acoes .pdf { background: #b45309; color: #fff; font-weight: 600; }
+  .acoes .pdf:hover { background: #92400e; }
+  .acoes .imprimir { background: transparent; color: #e2e8f0; border-color: #334155; }
+  .acoes .imprimir:hover { background: #1e293b; }
+  .dica { width: 100%; font-size: 11px; color: #94a3b8; margin: -2px 0 0; }
+
+  /* ── cabecalho ── */
+  .topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px;
+          padding-bottom: 14px; border-bottom: 3px solid var(--marca); }
+  .topo img { height: 44px; width: auto; object-fit: contain; }
+  .topo .doc { text-align: right; font-size: 10.5px; color: var(--suave);
+               text-transform: uppercase; letter-spacing: .07em; }
+  h1 { font-size: 24px; color: var(--marca-escura); text-align: center; margin: 24px 0 5px;
+       letter-spacing: -.01em; }
+  .meta { text-align: center; color: var(--suave); font-size: 12px; margin-bottom: 26px; }
+  .meta strong { color: #374151; }
+
+  /* ── conteudo ── */
+  h2 { font-size: 13.5px; color: var(--marca-escura); margin: 24px 0 8px; padding-bottom: 6px;
+       border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between;
+       align-items: baseline; gap: 12px; }
+  h2 .hora { font-weight: 500; font-size: 12px; color: var(--marca);
+             font-variant-numeric: tabular-nums; }
+  .bloco { page-break-inside: avoid; }
   table { width: 100%; border-collapse: collapse; }
-  td { padding: 5px 6px; vertical-align: top; border-bottom: 1px solid #f3f4f6; }
-  td.n { width: 28px; color: #9ca3af; text-align: right; font-variant-numeric: tabular-nums; }
-  td.hora { width: 48px; color: #b45309; font-variant-numeric: tabular-nums; font-size: 11px; }
-  .aluno { font-weight: 600; }
-  .curso { color: #b45309; font-size: 11px; }
-  .musica { color: #374151; }
-  .prof { color: #6b7280; font-size: 10.5px; }
-  .vazio { color: #9ca3af; font-style: italic; padding: 8px 6px; }
-  .intervalo { text-align: center; color: #9ca3af; font-size: 10px; letter-spacing: 0.08em;
-               text-transform: uppercase; margin: 10px 0; }
-  .chips span { display: inline-block; border: 1px solid #e5e7eb; border-radius: 4px;
-                padding: 2px 7px; margin: 0 4px 4px 0; font-size: 11px; }
-  .chips span.derivado { border-style: dashed; color: #6b7280; }
-  .obs { border-left: 3px solid #e5e7eb; padding: 2px 0 2px 9px; margin: 4px 0 8px; }
-  .obs .quem { font-size: 11px; }
+  tr { page-break-inside: avoid; }
+  td { padding: 7px 6px; vertical-align: top; border-bottom: 1px solid #f3f4f6; }
+  td.n { width: 30px; color: #cbd5e1; text-align: right; font-variant-numeric: tabular-nums;
+         font-size: 11px; padding-top: 8px; }
+  td.hora { width: 52px; color: var(--marca); font-variant-numeric: tabular-nums;
+            font-size: 11px; padding-top: 8px; }
+  .aluno { font-weight: 600; font-size: 12.5px; }
+  .curso { color: var(--marca); font-size: 11px; }
+  .musica { color: #374151; font-style: italic; }
+  .prof { color: var(--suave); font-size: 10.5px; }
+  .vazio { color: #9ca3af; font-style: italic; padding: 10px 6px; }
+  .intervalo { text-align: center; color: #9ca3af; font-size: 9.5px; letter-spacing: .12em;
+               text-transform: uppercase; margin: 14px 0; position: relative; }
+  .intervalo::before, .intervalo::after { content: ''; position: absolute; top: 50%;
+    width: calc(50% - 46px); height: 1px; background: #e5e7eb; }
+  .intervalo::before { left: 0; } .intervalo::after { right: 0; }
+  .chips span { display: inline-block; background: #fffbeb; border: 1px solid #fde68a;
+                border-radius: 4px; padding: 3px 8px; margin: 0 5px 5px 0; font-size: 11px;
+                color: #78350f; }
+  .chips span.derivado { background: #fff; border-style: dashed; border-color: #e5e7eb;
+                         color: var(--suave); }
+  .obs { border-left: 3px solid #fde68a; padding: 3px 0 3px 10px; margin: 6px 0 10px; }
+  .obs .quem { font-size: 11.5px; }
   .obs p { margin: 2px 0 0; color: #4b5563; font-size: 11px; }
-  .rodape { margin-top: 28px; padding-top: 10px; border-top: 1px solid #e5e7eb;
-            color: #9ca3af; font-size: 10px; text-align: center; }
-  @media print { body { padding: 14px 18px; } }
+  .rodape { margin-top: 32px; padding-top: 12px; border-top: 1px solid #e5e7eb;
+            color: #9ca3af; font-size: 10px; display: flex; justify-content: space-between;
+            gap: 10px; }
+
+  @media print {
+    body { background: #fff; }
+    .acoes { display: none !important; }
+    .folha { max-width: none; margin: 0; padding: 0; box-shadow: none; border-radius: 0; }
+    @page { margin: 14mm 12mm; }
+  }
 `;
 
+/**
+ * Esqueleto comum dos dois documentos.
+ *
+ * ⚠️ **Nao dispara a impressao sozinho.** A versao anterior chamava `window.print()` no
+ * `onload` e a pessoa que so queria CONFERIR a programacao caia num dialogo de impressao que
+ * nao pediu. Abrir e ver e o caso comum; imprimir e o eventual.
+ *
+ * A barra de acoes vive dentro do proprio documento e some no `@media print` — assim ela nao
+ * aparece no papel e nao exige uma tela intermediaria no app.
+ */
 function moldura(titulo: string, dados: DadosDaImpressao, corpo: string, rodapeExtra = ''): string {
   const { evento } = dados;
   const linhaMeta = [
@@ -163,27 +234,53 @@ function moldura(titulo: string, dados: DadosDaImpressao, corpo: string, rodapeE
     .filter(Boolean)
     .join(' &middot; ');
 
+  // Versao "light" da marca: as logos usadas nas telas do app tem texto branco e sumiriam
+  // num documento de fundo branco.
+  const logo = dados.origem
+    ? `<img src="${escapeHtml(dados.origem)}/logo-la-music-light-completa.svg" alt="LA Music"
+            onerror="this.style.display='none'" />`
+    : '<div></div>';
+
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(evento.titulo)} — ${escapeHtml(titulo)}</title>
   <style>${ESTILO}</style>
 </head>
 <body>
-  <div class="topo">
+  <div class="acoes">
+    <div class="dentro">
+      <div class="qual">
+        ${escapeHtml(titulo)}
+        <span>${escapeHtml(evento.titulo)}</span>
+      </div>
+      <button type="button" class="pdf" onclick="window.print()">Salvar em PDF</button>
+      <button type="button" class="imprimir" onclick="window.print()">Imprimir</button>
+      <p class="dica">
+        Os dois abrem a mesma janela: para gerar o arquivo, escolha
+        <strong>Salvar como PDF</strong> no campo &ldquo;Destino&rdquo;.
+      </p>
+    </div>
+  </div>
+
+  <div class="folha">
+    <div class="topo">
+      ${logo}
+      <div class="doc">${escapeHtml(titulo)}</div>
+    </div>
+
     <h1>${escapeHtml(evento.titulo)}</h1>
     <div class="meta">${linhaMeta}</div>
-    <div class="meta">${escapeHtml(titulo)}</div>
+
+    ${corpo}
+
+    <div class="rodape">
+      <span>LA Music Report</span>
+      <span>${rodapeExtra ? escapeHtml(rodapeExtra) : ''}</span>
+    </div>
   </div>
-  ${corpo}
-  <div class="rodape">
-    LA Music Report${rodapeExtra ? ` &middot; ${rodapeExtra}` : ''}
-  </div>
-  <script>
-    // Espera o documento carregar antes do dialogo de impressao.
-    window.onload = function () { setTimeout(function () { window.print(); }, 250); };
-  </script>
 </body>
 </html>`;
 }

@@ -190,13 +190,39 @@ test('bloco VAZIO aparece na folha — o inverso da programacao', () => {
 
 /* ───────────────────────── moldura comum ───────────────────────── */
 
-test('os dois documentos abrem o dialogo de impressao pelo onload', () => {
-  // ⚠️ Com Blob URL o `load` ainda nao disparou quando o script roda — por isso `onload`, e
-  // por isso o projeto nao usa document.write (la o load ja passou e nada imprime).
+test('NENHUM documento dispara a impressao sozinho', () => {
+  // A versao anterior chamava window.print() no onload, e quem so queria CONFERIR a
+  // programacao caia num dialogo de impressao que nao pediu. Abrir e ver e o caso comum.
   for (const html of [gerarProgramaHtml(dados([bloco('B', [ap()])])), gerarFolhaDePalcoHtml(dados([]))]) {
-    assert.match(html, /window\.onload/u);
-    assert.match(html, /window\.print\(\)/u);
+    assert.doesNotMatch(html, /onload/u, 'nada pode rodar sozinho ao abrir');
+    assert.doesNotMatch(html, /setTimeout\([^)]*print/u);
   }
+});
+
+test('imprimir e salvar em PDF sao BOTOES dentro do documento', () => {
+  for (const html of [gerarProgramaHtml(dados([bloco('B', [ap()])])), gerarFolhaDePalcoHtml(dados([]))]) {
+    assert.match(html, /onclick="window\.print\(\)"/u);
+    assert.match(html, /Salvar em PDF/u);
+    assert.match(html, /Imprimir/u);
+  }
+});
+
+test('a barra de acoes NAO sai no papel', () => {
+  // Botao impresso e tinta gasta num controle que ninguem pode clicar.
+  const html = gerarProgramaHtml(dados([bloco('B', [ap()])]));
+  assert.match(html, /@media print[\s\S]*\.acoes\s*\{\s*display:\s*none/u);
+});
+
+test('a logo entra quando ha origem, e o documento sobrevive sem ela', () => {
+  const comLogo = gerarProgramaHtml({ ...dados([bloco('B', [ap()])]), origem: 'https://app.la' });
+  assert.match(comLogo, /https:\/\/app\.la\/logo-la-music-light-completa\.svg/u);
+  // A versao "light" e obrigatoria: a logo das telas do app tem texto branco e sumiria
+  // num documento de fundo branco.
+  assert.match(comLogo, /light/u);
+
+  const semLogo = gerarProgramaHtml(dados([bloco('B', [ap()])]));
+  assert.doesNotMatch(semLogo, /<img/u, 'sem origem, degrada — nao quebra');
+  assert.match(semLogo, /<\/html>/u);
 });
 
 test('o cabecalho declara unidade, data e local nos dois documentos', () => {
