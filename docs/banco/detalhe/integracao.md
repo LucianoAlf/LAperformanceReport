@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-18 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-19 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — integracao
 
-58 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+60 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## admin_conversas
 
@@ -160,6 +160,7 @@
 
 **Triggers:**
 - `trg_automacao_check_professor → check_automacao_professor_vinculado()`
+- `trg_remover_cpf_automacao_log → remover_cpf_claro_jsonb_trigger()`
 
 ## automacoes_config
 
@@ -277,6 +278,9 @@
 
 **Únicos:**
 - `emusys_api_payload_pkey`
+
+**Triggers:**
+- `trg_remover_cpf_emusys_api_payload → remover_cpf_claro_jsonb_trigger()`
 
 ## emusys_aula_alunos_historico_staging_v1
 
@@ -610,6 +614,9 @@
 **Únicos:**
 - `emusys_matriculas_estado_atual_pkey`
 
+**Triggers:**
+- `trg_remover_cpf_emusys_matriculas_estado_atual → remover_cpf_claro_jsonb_trigger()`
+
 ## emusys_matriculas_sync_execucoes
 
 > Manifesto auditavel das fotografias Emusys. Somente execucao operacional concluida e fresca pode alimentar KPIs vivos.
@@ -639,7 +646,7 @@
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
 | `id` | uuid | não | gen_random_uuid() |  |
-| `unidade_id` | uuid | não |  | unidades.id |
+| `unidade_id` | uuid | não |  | emusys_disciplinas_catalogo.unidade_id |
 | `emusys_professor_id` | integer | não |  |  |
 | `emusys_disciplina_id` | integer | não |  | emusys_disciplinas_catalogo.emusys_disciplina_id |
 | `ativo_origem` | boolean | não | true |  |
@@ -1025,6 +1032,9 @@
 - `matriculas_emusys_decisoes_canonicas_pkey`
 - `matriculas_emusys_decisoes_canonicas_unique`
 
+**Triggers:**
+- `trg_remover_cpf_matriculas_decisoes → remover_cpf_claro_jsonb_trigger()`
+
 ## notificacao_config
 
 | Coluna | Tipo | Nulo | Default | Referência |
@@ -1106,6 +1116,73 @@
 
 **Únicos:**
 - `orquestracao_locks_v1_pkey`
+
+## sync_faturas_pagas_mes_queue
+
+> Fila duravel de faturas pagas por competencia de pagamento. Evita perder a rotina das 05:00 UTC quando lancamentos ainda estao ativos.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `competencia` | date | não |  |  |
+| `unidade_codigo` | text | não |  |  |
+| `trigger_source` | text | não |  |  |
+| `status` | text | não | 'pending'::text |  |
+| `attempt_count` | integer | não | 0 |  |
+| `max_attempts` | integer | não | 4 |  |
+| `next_attempt_at` | timestamp with time zone | não | now() |  |
+| `lease_expires_at` | timestamp with time zone | sim |  |  |
+| `worker_id` | uuid | sim |  |  |
+| `last_http_status` | integer | sim |  |  |
+| `last_error_code` | text | sim |  |  |
+| `last_error_detail` | text | sim |  |  |
+| `resume_cursor` | text | sim |  |  |
+| `paginas_processadas` | integer | não | 0 |  |
+| `recebidas_api` | integer | não | 0 |  |
+| `pagas_no_mes` | integer | não | 0 |  |
+| `itens_upserted` | integer | não | 0 |  |
+| `started_at` | timestamp with time zone | sim |  |  |
+| `completed_at` | timestamp with time zone | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `sync_faturas_pagas_mes_queue_active_uniq`
+- `sync_faturas_pagas_mes_queue_one_running_uniq`
+- `sync_faturas_pagas_mes_queue_pkey`
+
+## sync_financeiro_emusys_queue
+
+> Fila serial da varredura de lancamentos Emusys. Uma tentativa inicial e no maximo tres retries de 30 minutos.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `unidade_codigo` | text | não |  |  |
+| `data_inicial` | date | não |  |  |
+| `data_final` | date | não |  |  |
+| `catalogos` | boolean | não | false |  |
+| `trigger_source` | text | não |  |  |
+| `priority` | integer | não | 100 |  |
+| `status` | text | não | 'pending'::text |  |
+| `attempt_count` | integer | não | 0 |  |
+| `max_retries` | integer | não | 3 |  |
+| `next_attempt_at` | timestamp with time zone | não | now() |  |
+| `lease_expires_at` | timestamp with time zone | sim |  |  |
+| `worker_id` | uuid | sim |  |  |
+| `last_http_status` | integer | sim |  |  |
+| `last_error_code` | text | sim |  |  |
+| `last_error_detail` | text | sim |  |  |
+| `last_retry_after_seconds` | integer | sim |  |  |
+| `started_at` | timestamp with time zone | sim |  |  |
+| `completed_at` | timestamp with time zone | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `sync_financeiro_emusys_queue_active_range_uniq`
+- `sync_financeiro_emusys_queue_one_running_uniq`
+- `sync_financeiro_emusys_queue_pkey`
 
 ## sync_run_items
 
@@ -1270,6 +1347,9 @@
 
 **Únicos:**
 - `webhook_debug_log_pkey`
+
+**Triggers:**
+- `trg_remover_cpf_webhook_debug_log → remover_cpf_claro_jsonb_trigger()`
 
 ## whatsapp_caixas
 

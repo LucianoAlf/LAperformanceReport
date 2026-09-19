@@ -1,5 +1,9 @@
 -- Gate 8: publica o observado somente quando a politica temporal da unidade
 -- nao exige auditoria operacional. O valor bruto continua preservado no JSON.
+--
+-- ⚠️ 2026-09-19: enable_nestloop=off vive em 20260919210000. Recriar esta
+-- funcao SEM `SET enable_nestloop TO 'off'` no cabecalho apaga o ajuste
+-- (consolidado volta a ~34s). Nao copiar este arquivo como fonte do SET.
 
 create or replace function public.get_professor_presenca_v3_sombra(
   p_competencia date,

@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-18 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-19 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — outros
 
-2 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+4 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## eventos_operacionais
 
@@ -44,4 +44,29 @@
 
 **Únicos:**
 - `eventos_operacionais_audiencia_pkey`
+
+## porteiro_config
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | boolean | não | true |  |
+| `modo` | text | não |  |  |
+
+**Únicos:**
+- `porteiro_config_pkey`
+
+## porteiro_recusa
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `quando` | timestamp with time zone | não | now() |  |
+| `usuario_id` | integer | sim |  |  |
+| `auth_user_id` | uuid | sim |  |  |
+| `caminho` | text | sim |  |  |
+| `metodo` | text | sim |  |  |
+| `modo` | text | sim |  |  |
+
+**Únicos:**
+- `porteiro_recusa_pkey`
 
