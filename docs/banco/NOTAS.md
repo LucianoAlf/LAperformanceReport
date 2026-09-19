@@ -5,47 +5,69 @@ O que um script não descobre. O fato mecânico está nos `*.gerado.md` ao lado.
 > Armadilhas de regra de negócio continuam no [`CLAUDE.md`](../../CLAUDE.md) e em
 > `.claude/memory/`. Este arquivo **não as duplica** — registra só o que saiu da
 > leitura do próprio banco, em 2026-09-02 (quadro geral e contagem `anon`
-> reconferidos em 2026-09-14; as revisões nominais seguem sendo as de 02/09).
+> reconferidos em 2026-09-14 e 2026-09-19; as revisões nominais de 02/09
+> continuam; em 19/09 fechou-se a *entrada* de `anon` e duas funções que
+> gravavam).
 
 ## Quadro geral
 
-| | 2026-09-02 | 2026-09-14 |
-|---|---|---|
-| Tabelas | 379 | 423 |
-| Views | 122 | 134 |
-| Funções nossas | 1.151 | 1.459 |
-| — em uso (ATIVA) | 439 | 496 |
-| — só chamadas por outra função (SÓ-INTERNA) | 365 | 524 |
-| — sem consumidor conhecido (ÓRFÃ) | 336 | 422 |
-| — superadas por versão maior (LEGADO) | 11 | 17 |
-| Executáveis por `anon` | 150 | 166 |
+| | 2026-09-02 | 2026-09-14 | 2026-09-19 |
+|---|---|---|---|
+| Tabelas | 379 | 423 | — |
+| Views | 122 | 134 | — |
+| Funções nossas | 1.151 | 1.459 | 1.582 |
+| — em uso (ATIVA) | 439 | 496 | — |
+| — só chamadas por outra função (SÓ-INTERNA) | 365 | 524 | — |
+| — sem consumidor conhecido (ÓRFÃ) | 336 | 422 | — |
+| — superadas por versão maior (LEGADO) | 11 | 17 | — |
+| Executáveis por `anon` | 150 | 166 | 179 → 167 |
 
 **As funções de extensão ficam fora do catálogo.** `pg_trgm` e `unaccent` instalam
 35 funções no schema `public` (`word_similarity`, `gtrgm_*`, `unaccent`…). Elas
 não são nossas, ninguém as mantém, e infladas no meio das nossas escondiam o que
-importa — o gerador as exclui por `pg_depend`. Note que **35 das 185 funções
-`anon` que uma contagem ingênua acha são delas**: o número nosso é 150.
+importa — o gerador as exclui por `pg_depend`. Note que dezenas das funções `anon` que uma contagem ingênua acha são delas:
+o número nosso é o da tabela acima (`has_function_privilege`, sem extensão).
 
-## 🔓 166 funções executáveis por `anon`
+## 🔓 179 funções executáveis por `anon`
 
-> ⚠️ **A contagem é de 14/09/2026; a revisão nominal abaixo é de 02/09.** Eram 150
-> (95 ATIVA + 33 ÓRFÃ); hoje são 166 assinaturas — 101 ATIVA, 29 SÓ-INTERNA e 36
-> ÓRFÃ (35 nomes). **A lista das ÓRFÃ não foi refeita**: recontá-la é mecânico, mas
-> decidir o que revogar é auditoria caso a caso, e ninguém a fez desde 02/09.
-> Entraram nesse intervalo, sem revisão: `app_coordenacao_radar`,
-> `app_corrigir_presenca_do_aluno`, `app_falta_professor_cancelar_aulas`,
-> `calcular_pontos_perdidos_com_tolerancia`, `dispensar_passagem_bastao`,
-> `financeiro_enriquecer_fatura_item`, `fn_presenca_fonte_legivel`,
-> `fn_presenca_status_efetivo`, `get_ocorrencias_mes`, `responder_passagem_bastao`,
-> `retirar_do_roster_health_score_v3_ciclo`.
+> ⚠️ **A contagem viva é de 19/09/2026** (`has_function_privilege('anon', …,
+> 'execute')`, sem extensão): 150 (02/09) → 166 (14/09) → **179** (manhã) →
+> **167** depois de sair `recalcular_projecao` e `hermes_patch_status_reportar`.
+> A revisão
+> nominal das ÓRFÃ continua sendo a de 02/09. Entraram depois, sem revisão:
+> `app_coordenacao_radar`, `app_corrigir_presenca_do_aluno`,
+> `app_falta_professor_cancelar_aulas`, `calcular_pontos_perdidos_com_tolerancia`,
+> `dispensar_passagem_bastao`, `financeiro_enriquecer_fatura_item`,
+> `fn_presenca_fonte_legivel`, `fn_presenca_status_efetivo`, `get_ocorrencias_mes`,
+> `responder_passagem_bastao`, `retirar_do_roster_health_score_v3_ciclo` — e o
+> restante até fechar 179.
 
 A `anon key` vai no bundle do front — é pública por construção. Toda função com
 `EXECUTE` para `anon` é chamável por qualquer pessoa na internet.
 
-A causa está descrita no `CLAUDE.md`: o `ALTER DEFAULT PRIVILEGES` do schema
-`public` concede `EXECUTE` a `anon` em função nova, então **recriar uma função
-reabre o acesso**, e `revoke ... from public` não basta — precisa de
-`revoke execute ... from anon` nominal.
+**Porta de entrada fechada em 19/09/2026** (`20260919223000`):
+`ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE EXECUTE
+ON FUNCTIONS FROM anon`. Função nova criada pelo `postgres` (nossas migrations)
+deixa de nascer aberta. Função pública de propósito precisa de
+`GRANT EXECUTE … TO anon` explícito. As 179 já existentes **não** caem com
+isso — revisão uma a uma. O default do `supabase_admin` (dashboard) continua
+concedendo `anon` até uma sessão superuser revogar.
+
+⚠️ Distinção que a seção antiga misturava: **`DROP` + `CREATE` reabria** o
+`EXECUTE` para `anon` (o default privilege do papel que cria). **`CREATE OR
+REPLACE` nunca reabriu**: dono e grants sobrevivem. Depois de 19/09, um
+`CREATE` novo do `postgres`/`supabase_admin` em `public` também **não** nasce
+com `anon`. `revoke … from public` não basta contra grant nominal a `anon`.
+
+Em 19/09 também saíram de `anon` (e de `PUBLIC`) duas que **gravam** como
+`SECURITY DEFINER` sem conferir quem chama (`20260919224000`):
+`recalcular_projecao` (`authenticated` + `service_role`, grant do authenticated
+reposto na `20260919224500`) e `hermes_patch_status_reportar` (só
+`service_role`, que é quem o guard usa).
+
+As três da anamnese pública (`get_anamnese_publica`, `get_convite_anamnese`,
+`salvar_anamnese_online`) **ficam** com `anon`: exigem `p_token` de 32 hex
+(128 bits, `gen_random_bytes(16)` / uuid sem hífen). Não é adivinhável.
 
 Duas populações, com riscos diferentes:
 
@@ -61,18 +83,14 @@ As 33, para revisão nominal:
 `consolidar_origem_leads_mes` · `consolidar_dados_comerciais_mes` ·
 `creditar_lalita_matricula` · `get_dados_comercial_ia` · `normalize_phone` ·
 `texto_indica_sem_instagram` · `get_historico_mensal_matriculador` ·
-`get_metas_vs_realizado` · `recalcular_projecao` · `upsert_metas` ·
-`hermes_patch_status_reportar` · `simular_emenda` · `transferir_estoque` ·
+`get_metas_vs_realizado` · `upsert_metas` ·
+`simular_emenda` · `transferir_estoque` ·
 `calc_classificacao` · `calc_idade` · `get_unidade_usuario` ·
 `is_admin_usuario` · `app_coordenacao_feedback_mes` (e mais 9 — filtrar por
 `ORFA` + `🔓 anon` em `FUNCOES.gerado.md`).
 
-⚠️ **`get_anamnese_publica`, `get_convite_anamnese` e `salvar_anamnese_online`
-merecem olhar primeiro.** O `CLAUDE.md` as descreve como o caminho da página
-pública de anamnese, aberta por token — mas **nenhuma delas é citada em `src/`
-ou em `supabase/functions/`**. Ou a página passou a usar `get_anamnese_aluno`
-(a leitura canônica adotada no LAPE-19) e elas ficaram para trás expostas, ou o
-consumidor está fora do repo. Confirmar antes de mexer.
+As três da anamnese pública continuam com `anon` de propósito (token 128 bits,
+conferido 19/09). O consumidor está no repo `anamnese-la-music`, não neste.
 
 ## 336 funções sem consumidor conhecido
 

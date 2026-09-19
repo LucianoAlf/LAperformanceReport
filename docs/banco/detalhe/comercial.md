@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-18 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-19 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — comercial
@@ -1010,6 +1010,7 @@
 
 **Triggers:**
 - `trg_eventos_operacionais_log_experimental → trg_eventos_operacionais_log_experimental()`
+- `trg_remover_cpf_leads_automacao_log → remover_cpf_claro_jsonb_trigger()`
 
 ## leads_backup_flags_20260601
 
@@ -1421,7 +1422,7 @@
 
 ## vw_experimental_aula_canonica
 
-> Liga experimental a aula fisica confirmada pelo roster; fallback so aceita mesma unidade, pessoa, data e horario.
+> Experimentais visiveis na Agenda. O caminho principal usa lead_experimental_aulas ativo, reconciliado contra a aula fisica do Emusys; o roster so permanece como fallback legado sem vinculo.
 
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|

@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-18 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-19 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — professor
 
-148 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+151 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## anotacoes
 
@@ -808,6 +808,49 @@
 - `uq_fabio_notif_recorrente_diario`
 - `uq_fabio_notificacoes_registro_recibo_unico`
 
+## fabio_novidade_envio
+
+> Trava de duplicata das novidades mandadas pro WhatsApp do professor (por professor_id + evento_id). RLS ligado, sem policy: so service_role e funcoes SECURITY DEFINER acessam.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `professor_id` | integer | não |  |  |
+| `evento_id` | text | não |  |  |
+| `situacao` | text | não |  |  |
+| `lote` | text | sim |  |  |
+| `registrado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `fabio_novidade_envio_pkey`
+
+## fabio_onde_parou
+
+> Fila do cartao "onde o aluno parou" (professor substituto/reposicao). RLS ligado, sem policy: so service_role e funcoes SECURITY DEFINER acessam.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('fabio_onde_parou_id_seq'::regclass) |  |
+| `aula_id` | integer | não |  | aulas_emusys.id |
+| `aluno_id` | integer | não |  | alunos.id |
+| `professor_id` | integer | não |  | professores.id |
+| `professor_anterior` | text | sim |  |  |
+| `data_aula` | date | não |  |  |
+| `fonte` | jsonb | não |  |  |
+| `fonte_hash` | text | não |  |  |
+| `cartao` | jsonb | sim |  |  |
+| `status` | text | não | 'pendente'::text |  |
+| `tentativas` | integer | não | 0 |  |
+| `lease_token` | uuid | sim |  |  |
+| `lease_expira_em` | timestamp with time zone | sim |  |  |
+| `proxima_tentativa_em` | timestamp with time zone | sim |  |  |
+| `last_error` | text | sim |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `gerado_em` | timestamp with time zone | sim |  |  |
+
+**Únicos:**
+- `fabio_onde_parou_aula_id_aluno_id_professor_id_key`
+- `fabio_onde_parou_pkey`
+
 ## fabio_participacao_ocorrencia_eventos
 
 > Ciclo de vida da ocorrencia (append-only). Estado atual = ultimo evento. registrada->candidata na view.
@@ -1326,7 +1369,7 @@
 | `id` | uuid | não | gen_random_uuid() |  |
 | `snapshot_metrica_id` | uuid | não |  | health_score_professor_v3_snapshot_metricas.id |
 | `config_meta_segmento_id` | uuid | sim |  | health_score_professor_v3_config_metas_curso_modalidade.id |
-| `unidade_id` | uuid | não |  | health_score_professor_v3_config_metas_curso_modalidade.unidade_id |
+| `unidade_id` | uuid | não |  | unidades.id |
 | `curso_id` | integer | não |  | health_score_professor_v3_config_metas_curso_modalidade.curso_id |
 | `modalidade` | text | não |  | professor_unidade_curso_modalidade.modalidade |
 | `pessoas_unicas` | integer | não | 0 |  |
@@ -1478,6 +1521,18 @@
 
 **Únicos:**
 - `la_teacher_coordenacao_pkey`
+
+## porteiro_rota_professor
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `rota` | text | não |  |  |
+| `metodos` | text[] | não |  |  |
+| `origem` | text | não |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `porteiro_rota_professor_pkey`
 
 ## presenca_acao_eventos
 
