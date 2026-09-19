@@ -21,7 +21,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const SUPABASE_PROJECT_REF = new URL(SUPABASE_URL).hostname.split('.')[0] ?? '';
 const EMUSYS_API = 'https://api.emusys.com.br/v1';
 const EMUSYS_FETCH_TIMEOUT_MS = 30000;
-const WORKER_BUDGET_MS = 8 * 60 * 1000;
+const WORKER_BUDGET_MS = 100 * 1000;
 
 const fetchComPrazo = (deadlineMs: number): typeof fetch => (async (input, init) => {
   const restante = deadlineMs - Date.now();
@@ -225,6 +225,14 @@ async function rpcOrThrow<T>(
   return data as T;
 }
 
+const rpcFilaPagasAusente = (erro: unknown): boolean => {
+  const codigo = erro && typeof erro === 'object' && 'code' in erro ? String(erro.code) : '';
+  const mensagem = syncErrorMessage(erro);
+  return codigo === 'PGRST202'
+    || codigo === '42883'
+    || /sync_faturas_pagas_mes[\s\S]*(does not exist|schema cache|nao existe)/i.test(mensagem);
+};
+
 async function varreduraFinanceiroEmusysAtiva(supabase: ServiceClient): Promise<boolean> {
   const { data, error } = await supabase
     .from('sync_financeiro_emusys_queue')
@@ -353,11 +361,19 @@ async function processarPagasNoMes(
 
 async function processarProximoPagasMes(supabase: ServiceClient): Promise<ProcessResult | null> {
   const workerId = crypto.randomUUID();
-  const job = await rpcOrThrow<PagasMesQueueJob | null>(
-    supabase,
-    'claim_sync_faturas_pagas_mes_job',
-    { p_worker_id: workerId, p_lease_seconds: 900 },
-  );
+  let job: PagasMesQueueJob | null;
+  try {
+    job = await rpcOrThrow<PagasMesQueueJob | null>(
+      supabase,
+      'claim_sync_faturas_pagas_mes_job',
+      { p_worker_id: workerId, p_lease_seconds: 900 },
+    );
+  } catch (erro) {
+    // Compatibilidade de rollout: a Edge nova entra antes da migration para que
+    // o worker existente continue drenando a fila sem um minuto de interrupcao.
+    if (rpcFilaPagasAusente(erro)) return null;
+    throw erro;
+  }
   if (!job) return null;
 
   try {
@@ -639,16 +655,26 @@ serve(async (req) => {
       const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
         auth: { persistSession: false, autoRefreshToken: false },
       });
-      const enfileirado = await rpcOrThrow<QueueRpcResult>(
-        supabase,
-        'enqueue_sync_faturas_pagas_mes_jobs',
-        {
-          p_competencias: competencias,
-          p_unidade_codigo: unidadeCodigo,
-          p_trigger_source: String(body.trigger_source ?? 'cron_faturas_pagas_no_mes').trim()
-            || 'cron_faturas_pagas_no_mes',
-        },
-      );
+      let enfileirado: QueueRpcResult;
+      try {
+        enfileirado = await rpcOrThrow<QueueRpcResult>(
+          supabase,
+          'enqueue_sync_faturas_pagas_mes_jobs',
+          {
+            p_competencias: competencias,
+            p_unidade_codigo: unidadeCodigo,
+            p_trigger_source: String(body.trigger_source ?? 'cron_faturas_pagas_no_mes').trim()
+              || 'cron_faturas_pagas_no_mes',
+          },
+        );
+      } catch (erro) {
+        if (!rpcFilaPagasAusente(erro)) throw erro;
+        const resultados = [];
+        for (const competencia of competencias) {
+          resultados.push(await processarPagasNoMes(supabase, competencia, unidadeCodigo));
+        }
+        return json({ ok: true, mode: 'pagas_no_mes', rollout_fallback: true, resultados });
+      }
       const processado = await processarProximoPagasMes(supabase);
       if (processado) {
         return json({ ...processado.body, jobs: enfileirado.jobs ?? [] }, processado.status);

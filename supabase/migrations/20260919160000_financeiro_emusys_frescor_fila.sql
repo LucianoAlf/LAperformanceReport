@@ -523,6 +523,7 @@ set search_path = public, pg_temp
 as $function$
 declare
   v_competencia date;
+  v_unidade text;
   v_job jsonb;
   v_jobs jsonb := '[]'::jsonb;
 begin
@@ -542,25 +543,31 @@ begin
       raise exception 'SYNC_FATURAS_PAGAS_COMPETENCIA_INVALIDA: %', v_competencia;
     end if;
 
-    v_job := null;
-    insert into public.sync_faturas_pagas_mes_queue as queue (
-      competencia, unidade_codigo, trigger_source
-    ) values (
-      v_competencia, p_unidade_codigo, btrim(p_trigger_source)
-    )
-    on conflict do nothing
-    returning to_jsonb(queue.*) into v_job;
+    for v_unidade in
+      select codigo
+      from (values ('cg'), ('barra'), ('recreio')) as unidades(codigo)
+      where p_unidade_codigo is null or codigo = p_unidade_codigo
+    loop
+      v_job := null;
+      insert into public.sync_faturas_pagas_mes_queue as queue (
+        competencia, unidade_codigo, trigger_source
+      ) values (
+        v_competencia, v_unidade, btrim(p_trigger_source)
+      )
+      on conflict do nothing
+      returning to_jsonb(queue.*) into v_job;
 
-    if v_job is null then
-      select to_jsonb(queue.*) into v_job
-      from public.sync_faturas_pagas_mes_queue queue
-      where queue.competencia = v_competencia
-        and coalesce(queue.unidade_codigo, '') = coalesce(p_unidade_codigo, '')
-        and queue.status in ('pending', 'running', 'retry_wait')
-      order by queue.created_at desc
-      limit 1;
-    end if;
-    v_jobs := v_jobs || jsonb_build_array(v_job);
+      if v_job is null then
+        select to_jsonb(queue.*) into v_job
+        from public.sync_faturas_pagas_mes_queue queue
+        where queue.competencia = v_competencia
+          and queue.unidade_codigo = v_unidade
+          and queue.status in ('pending', 'running', 'retry_wait')
+        order by queue.created_at desc
+        limit 1;
+      end if;
+      v_jobs := v_jobs || jsonb_build_array(v_job);
+    end loop;
   end loop;
 
   return jsonb_build_object('jobs', v_jobs);

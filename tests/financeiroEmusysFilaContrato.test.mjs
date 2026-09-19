@@ -63,7 +63,10 @@ test('pagas no mes persiste em fila propria e e retomada pelo worker', () => {
     assert.match(edge, new RegExp(rpc, 'i'));
   }
   assert.match(sql, /sync_faturas_pagas_mes_queue_one_running_uniq/i);
+  assert.match(sql, /values\s*\(\s*'cg'\s*\)\s*,\s*\(\s*'barra'\s*\)\s*,\s*\(\s*'recreio'\s*\)/i);
   assert.match(edge, /mode\s*===\s*['"]worker['"][\s\S]*processarProximoPagasMes/is);
+  assert.match(edge, /WORKER_BUDGET_MS\s*=\s*100\s*\*\s*1000/i);
+  assert.match(edge, /rpcFilaPagasAusente[\s\S]*return\s+null/is);
 });
 
 test('agenda reserva financeiro, isola pagas no mês e instala semanal', () => {

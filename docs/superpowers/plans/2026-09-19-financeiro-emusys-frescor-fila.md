@@ -73,6 +73,6 @@
 
 - [ ] Rodar testes Deno, contratos Node, `deno check` das duas Edges, `git diff --check` e build do projeto.
 - [ ] Fazer commit e push da branch; criar PR com problema, comportamento final e validações.
-- [ ] Publicar primeiro as duas Edges com `verify_jwt=true`, aplicar a migration e confirmar versões/migration/crons no projeto `ouqwbbermlzqqvtqwlul`.
+- [ ] Publicar primeiro `sync-faturas-emusys` com fallback para RPC ausente e `sync-financeiro-emusys`, ambas com `verify_jwt=true`; aplicar a migration em seguida e confirmar versões/migration/crons no projeto `ouqwbbermlzqqvtqwlul`.
 - [ ] Confirmar que 19/09 ficou inválido até a passada pós-virada, que as filas estão sem corrida e que os jobs de 20/09 estão instalados.
 - [ ] Depois da execução noturna, consultar 14–19/09 antes × depois e a cobertura Jan–Mai de `emusys_faturas`; registrar qualquer 429 e seus retries sem atribuir conclusão antes da evidência.
