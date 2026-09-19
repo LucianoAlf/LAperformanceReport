@@ -82,6 +82,19 @@ n8n, scripts na VPS (`la-hq`, `alfredo`), nem chamada direta ao PostgREST. Um
 terço do catálogo aparecer assim é indício de acúmulo, não prova de código morto:
 antes de apagar qualquer uma, procure fora do repo.
 
+## `CREATE OR REPLACE` apaga `SET` da função (19/09/2026)
+
+`get_professor_presenca_v3_sombra` ganhava nested loop entre CTEs materializados
+porque o CTE `params` tem `where p_competencia is not null` e o planejador
+estima 1 linha. `ALTER FUNCTION … SET enable_nestloop = off` (migration
+`20260919210000`) caiu consolidado de 34,37 s para 1,47 s com jsonb idêntico
+nas 5 combinações. O corpo não mudou (`md5` `6cb0df4de0fcdc523b8fac4c0552a113`).
+
+⚠️ Recriar a função a partir de `20260718235000` sem
+`SET enable_nestloop TO 'off'` no cabeçalho **apaga o ajuste**. Mesma família
+do `statement_timeout` por função (`publish_financeiro_sync_run`, leitura
+financeira): o GUC mora no `proconfig`, não no SQL do corpo.
+
 ## 11 funções com versão maior viva
 
 Onde o `_v1` continua existindo ao lado do `_v3`. Vale conferir se o antigo ainda
