@@ -108,6 +108,7 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { removerCpfClaro } from '../_shared/emusys-cpf-privacy.ts';
 import {
   checarMatricula,
   checarRenovacao,
@@ -633,7 +634,7 @@ async function materializarEstadoAtualWebhook(
     trancamento_motivo: lifecycle.lock?.motivo ?? null,
     trancamento_data_inicial: lifecycle.lock?.dataInicial ?? null,
     trancamento_data_final: lifecycle.lock?.dataFinal ?? null,
-    payload_snapshot: api ?? p.rawPayload,
+    payload_snapshot: removerCpfClaro(api ?? p.rawPayload),
   };
 
   const { error } = await supabase.rpc('upsert_emusys_matriculas_estado_atual', {
@@ -2689,7 +2690,7 @@ serve(async (req: Request) => {
         evento: body?.evento ?? 'matricula_desconhecido',
         acao: 'webhook_recebido',
         aluno_nome: body?.matricula?.nome_aluno ?? '(desconhecido)',
-        payload_bruto: body,
+        payload_bruto: removerCpfClaro(body),
         workflow_id: 'processar-matricula-emusys',
         execution_id: new Date().toISOString(),
       }).select('id').maybeSingle();
@@ -2699,7 +2700,7 @@ serve(async (req: Request) => {
       console.error(`[${VERSAO}] [raw] falha ao arquivar payload bruto:`, e?.message ?? e);
     }
 
-    const p = parsePayload(body);
+    const p = parsePayload(removerCpfClaro(body));
 
     if (!p) {
       return new Response(JSON.stringify({ error: 'Payload inválido ou escola não mapeada', escola_id: body?.escola_id }),

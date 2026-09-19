@@ -107,6 +107,11 @@ verify_jwt = false
 # (segredo dedicado validado no proprio codigo, sem JWT).
 verify_jwt = false
 
+[functions.resolver-emusys-cpf-hash]
+# Integracao servidor-servidor com o Super Folha. O codigo valida o segredo
+# compartilhado antes de aceitar o HMAC; nenhum CPF em claro passa por aqui.
+verify_jwt = false
+
 [functions.sync-financeiro-emusys]
 # Cron envia JWT anon valido mais x-sync-token; a funcao valida o segredo antes
 # de abrir execucao. TRUE impede chamadas sem JWT de chegarem ao codigo.
