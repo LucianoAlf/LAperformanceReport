@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-16 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-19 -->
 
 <!-- fim do cabecalho gerado -->
 # Funções
 
-1488 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
+1541 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
 chamadas diretas ao PostgREST não são visíveis para o gerador.
 
 ## aluno
@@ -13,7 +13,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 |---|---|---|---|
 | `_compute_situacao_alunos_v1(p_unidade_id uuid, p_referencia date, p_apenas_pendentes boolean)` | SO-INTERNA | DEFINER | funcao:get_situacao_alunos_v1, funcao:refresh_situacao_alunos_snapshot |
 | `aluno_comunidade_estado_v1(p_aluno_id integer)` | SO-INTERNA | DEFINER | funcao:get_estrelas_matriculador_v1, funcao:radar_pendencias_comerciais_v1 |
-| `app_aluno_ficha(p_aluno_id integer)` | ORFA | DEFINER | sem consumidor conhecido |
+| `app_aluno_ficha(p_aluno_id integer)` | SO-INTERNA | DEFINER | funcao:fn_exigir_equipe_para_anamnese |
 | `app_radar_config()` | ORFA | DEFINER | sem consumidor conhecido |
 | `app_radar_config_salvar(p_chave text, p_valor numeric)` | ORFA | DEFINER | sem consumidor conhecido |
 | `arquivar_movimentacao_admin(p_id integer, p_motivo text)` | ATIVA | DEFINER | front:src/components/App/Administrativo/AdministrativoPage.tsx, front:src/components/App/Administrativo/TabelaAvisosVencidos.tsx, front:src/components/App/Retencao/PlanilhaRetencao.tsx, funcao:fn_bloqueia_delete_movimentacao_admin |
@@ -81,6 +81,9 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `criar_ficha_pessoa(p_nome text, p_whatsapp text, p_unidade_id uuid, p_departamento text, p_situacao text, p_cargo_contexto text)` | ATIVA | DEFINER · 🔓 anon | front:src/components/App/Time/ModalAdicionarPessoa.tsx |
 | `criar_pesquisa_evasao(p_evasao_id integer, p_criado_por text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `enfileirar_repescagem_evasao(p_pesquisa_ids uuid[])` | ATIVA | DEFINER | front:src/components/App/SucessoCliente/hooks/useRepescagemEvasao.ts, front:src/components/App/SucessoCliente/pesquisaEvasao.types.ts |
+| `evento_apresentacao_adicionar_v1(p_bloco_id bigint, p_aluno_id integer, p_curso_id integer)` | ATIVA | INVOKER | front:src/hooks/useEventos.ts |
+| `evento_bloco_reordenar_v1(p_evento_id bigint, p_ids bigint[])` | ATIVA | INVOKER | front:src/hooks/useEventos.ts |
+| `evento_grade_reordenar_v1(p_evento_id bigint, p_itens jsonb)` | ATIVA | INVOKER | front:src/hooks/useEventos.ts |
 | `falhar_repescagem_evasao_job(p_id uuid, p_worker_id uuid, p_erro text, p_terminal boolean)` | ATIVA | DEFINER | edge:supabase/functions/processar-fila-repescagem-evasao/index.ts |
 | `features_churn_alunos_ativos()` | ATIVA | DEFINER | edge:supabase/functions/calcular-risco-evasao/index.ts |
 | `features_churn_alunos_ativos_v2_sombra()` | ORFA | DEFINER | sem consumidor conhecido |
@@ -99,6 +102,10 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_alunos_valor_parcela_comercial_emusys()` | ATIVA | INVOKER · 🔓 anon | trigger:alunos.trg_alunos_valor_parcela_comercial_emusys |
 | `fn_alunos_vinculo_emusys_anamnese()` | ATIVA | DEFINER · 🔓 anon | trigger:alunos.trg_alunos_vinculo_emusys_anamnese |
 | `fn_anamnese_define_pessoa_chave()` | ATIVA | DEFINER · 🔓 anon | trigger:anamneses.trg_anamnese_pessoa_chave |
+| `fn_anamnese_do_aluno(p_aluno_id integer)` | SO-INTERNA | DEFINER | funcao:app_aluno_ficha |
+| `fn_anamnese_lista(p jsonb)` | SO-INTERNA | INVOKER | funcao:fn_anamnese_do_aluno |
+| `fn_anamnese_resposta(p text)` | SO-INTERNA | INVOKER | funcao:fn_anamnese_do_aluno |
+| `fn_anamnese_valor(p text)` | SO-INTERNA | INVOKER | funcao:fn_anamnese_do_aluno, funcao:fn_anamnese_lista |
 | `fn_aplicar_jornada_curso_grade_atual_v1()` | ATIVA | DEFINER | trigger:aluno_jornada_matricula_disciplina.trg_resolver_jornada_curso_grade_atual_v1 |
 | `fn_aplicar_opt_out_pesquisa_evasao()` | ATIVA | DEFINER · 🔓 anon | trigger:pesquisa_evasao_mensagens.trg_aplicar_opt_out_pesquisa_evasao |
 | `fn_atribuir_rodada_pesquisa_evasao()` | ATIVA | DEFINER · 🔓 anon | trigger:pesquisa_evasao_mensagens.trg_atribuir_rodada_pesquisa_evasao |
@@ -106,6 +113,11 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_bloqueia_delete_movimentacao_admin()` | ATIVA | INVOKER · 🔓 anon | trigger:movimentacoes_admin.trg_bloqueia_delete_movimentacao_admin |
 | `fn_compor_texto_prontuario(p_tronco jsonb, p_fatia jsonb)` | SO-INTERNA | INVOKER | funcao:app_salvar_rascunho_manual, funcao:fabio_complementar_registro_aula, funcao:fabio_corrigir_registro_confirmado, funcao:fabio_criar_registro, funcao:fn_atualizar_fatia_core, funcao:fn_confirmar_registro_core, +2 outros |
 | `fn_dever_de_casa_sinal_do_aluno(p_aluno_id integer, p_professor_id integer, p_ate date)` | SO-INTERNA | DEFINER · 🔓 anon | funcao:fabio_briefing_matinal |
+| `fn_evento_apresentacao_deriva()` | ATIVA | INVOKER · 🔓 anon | trigger:evento_apresentacao.trg_evento_apresentacao_deriva |
+| `fn_evento_participacao_deriva()` | ATIVA | INVOKER · 🔓 anon | trigger:evento_participacao.trg_evento_participacao_deriva |
+| `fn_evento_touch()` | ATIVA | INVOKER · 🔓 anon | trigger:evento_apresentacao.trg_evento_apresentacao_touch, trigger:evento_bloco.trg_evento_bloco_touch, trigger:evento_participacao.trg_evento_participacao_touch, trigger:evento.trg_evento_touch |
+| `fn_eventos_operacionais_aluno_da_aula(p_aula_id integer, p_unidade_id uuid, p_matricula_disciplina_id bigint)` | SO-INTERNA | DEFINER | funcao:fn_eventos_operacionais_carga_inicial_v1, funcao:trg_eventos_operacionais_aula_cancelada, funcao:trg_eventos_operacionais_aula_reagendada, funcao:trg_eventos_operacionais_professor_aula |
+| `fn_exigir_equipe_para_anamnese()` | SO-INTERNA | DEFINER | funcao:buscar_anamnese_pendente, funcao:buscar_anamneses_pendentes, funcao:get_anamnese_aluno, funcao:vincular_anamnese_aluno |
 | `fn_gavetas_so_do_aluno(p_tronco jsonb, p_fatia jsonb)` | SO-INTERNA | INVOKER · 🔓 anon | funcao:fn_gavetas_da_aula |
 | `fn_jornada_marca_ciclo_sucedido()` | ATIVA | INVOKER | trigger:aluno_jornada_matricula_disciplina.trg_jornada_ciclo_sucedido |
 | `fn_pesquisa_evasao_alguem_respondeu_depois_v1(p_pesquisa_id uuid, p_analise_versao integer)` | ATIVA | INVOKER | edge:supabase/functions/enviar-agradecimento-evasao/index.ts |
@@ -118,7 +130,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_pesquisa_evasao_mensagem_append_only()` | ATIVA | INVOKER · 🔓 anon | trigger:pesquisa_evasao_mensagens.trg_pesquisa_evasao_mensagem_append_only |
 | `fn_pesquisa_evasao_preview_original_insert()` | ATIVA | INVOKER | trigger:pesquisa_evasao_previews.trg_pesquisa_evasao_preview_original_insert |
 | `fn_pesquisa_evasao_usuario_interno_ativo()` | SO-INTERNA | DEFINER | funcao:cancelar_repescagem_evasao, funcao:classificar_resposta_evasao, funcao:concluir_acao_pesquisa_evasao_v1, funcao:contar_followups_pesquisa_evasao_grupos_v1, funcao:contar_followups_pesquisa_evasao_v1, funcao:enfileirar_repescagem_evasao, +16 outros |
-| `fn_pessoa_chave_aluno(p_aluno_id integer)` | SO-INTERNA | DEFINER | funcao:fn_anamnese_define_pessoa_chave, funcao:radar_pauta_v1, funcao:sol_porta_registrar_desfecho_v1 |
+| `fn_pessoa_chave_aluno(p_aluno_id integer)` | SO-INTERNA | DEFINER | funcao:fn_anamnese_define_pessoa_chave, funcao:fn_evento_apresentacao_deriva, funcao:fn_evento_participacao_deriva, funcao:radar_pauta_v1, funcao:sol_porta_registrar_desfecho_v1 |
 | `fn_pode_ler_aluno_pedagogico(p_aluno_id integer)` | SO-INTERNA | DEFINER | funcao:get_historico_pedagogico_aluno, funcao:get_relatorio_pedagogico_aluno |
 | `fn_prontuario_aluno_interno(p_aluno_id integer, p_professor_id integer, p_limite integer)` | SO-INTERNA | DEFINER | funcao:coord_prontuario_aluno, funcao:fabio_prontuario_aluno |
 | `fn_proteger_opt_out_pesquisa_evasao()` | ATIVA | INVOKER · 🔓 anon | trigger:pesquisa_evasao.trg_proteger_opt_out_pesquisa_evasao |
@@ -238,6 +250,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `sol_porta_renovacoes_v1(p_solicitante_telefone text, p_unidade text)` | SO-INTERNA | DEFINER | funcao:sol_governanca_snapshot_operacional_v1 |
 | `sol_porta_situacao_alunos_v1(p_solicitante_telefone text, p_unidade text, p_referencia date)` | SO-INTERNA | DEFINER | funcao:sol_governanca_snapshot_operacional_v1 |
 | `stats_pesquisa_evasao(p_unidade_id uuid, p_ano integer, p_mes integer)` | ATIVA | DEFINER | front:src/components/App/SucessoCliente/PesquisaEvasaoTab.tsx |
+| `trg_eventos_operacionais_aviso_previo()` | ATIVA | DEFINER | trigger:movimentacoes_admin.trg_eventos_operacionais_aviso_previo |
 | `vincular_alunos_checklist(p_checklist_id uuid, p_farmer_id integer, p_tipo_vinculo text, p_filtro_ids integer[])` | ATIVA | DEFINER | front:src/components/App/Administrativo/PainelFarmer/ChecklistsTab.tsx |
 | `vincular_anamnese_aluno(p_anamnese_id integer, p_aluno_id integer)` | ATIVA | DEFINER | front:src/components/App/Alunos/ModalFichaAluno.tsx |
 
@@ -268,6 +281,12 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `experimental_tem_par_na_grade(p_unidade_id uuid, p_nome_aluno text, p_data date, p_horario time without time zone)` | ATIVA | INVOKER | edge:supabase/functions/debug-webhook-emusys-observador/index.ts |
 | `finalizar_refresh_snapshot_experimentais_v1(p_admissao_id uuid, p_execucao_id uuid, p_sucesso boolean, p_erro_codigo text)` | ATIVA | DEFINER | edge:supabase/functions/relatorio-admin-whatsapp/index.ts |
 | `fn_celular_canonico(p_tel text)` | SO-INTERNA | INVOKER | funcao:app_confirmar_meu_whatsapp, funcao:app_meu_acesso, funcao:app_meu_onboarding, funcao:fabio_identidade_whatsapp, funcao:fn_professor_por_whatsapp |
+| `fn_eventos_operacionais_carga_inicial_experimentais_sem_aula_v1(p_desde timestamp with time zone)` | ORFA | DEFINER | sem consumidor conhecido |
+| `fn_eventos_operacionais_carga_inicial_experimental_convertida_v(p_desde timestamp with time zone)` | ORFA | DEFINER | sem consumidor conhecido |
+| `fn_eventos_operacionais_experimental_sem_aula_ligada(p_unidade_id uuid, p_emusys_aula_id integer)` | SO-INTERNA | DEFINER | funcao:fn_eventos_operacionais_processar_log_experimental, funcao:fn_eventos_operacionais_registrar_experimental_mudanca |
+| `fn_eventos_operacionais_processar_log_experimental(p_log_id bigint, p_origem text)` | SO-INTERNA | DEFINER | funcao:fn_eventos_operacionais_carga_inicial_experimentais_sem_aula_v1, funcao:trg_eventos_operacionais_log_experimental |
+| `fn_eventos_operacionais_registrar_experimental_convertida(p_jornada_id uuid, p_origem text)` | SO-INTERNA | DEFINER | funcao:fn_eventos_operacionais_carga_inicial_experimental_convertida_v, funcao:trg_eventos_operacionais_experimental_convertida |
+| `fn_eventos_operacionais_registrar_experimental_mudanca(p_lead_experimental_id integer, p_tipo text, p_antes jsonb, p_depois jsonb, p_ocorreu_em timestamp with time zone, p_origem text)` | SO-INTERNA | DEFINER | funcao:fn_eventos_operacionais_processar_log_experimental, funcao:trg_eventos_operacionais_experimental_cancelada, funcao:trg_eventos_operacionais_experimental_remarcada |
 | `fn_experimentais_a_extrair(p_dias integer, p_limite integer)` | ORFA | DEFINER | sem consumidor conhecido |
 | `fn_experimental_contexto_seguro(p_contexto jsonb)` | ATIVA | INVOKER | view:vw_fabio_contexto_experimental, view:vw_fabio_experimental_agendada, funcao:app_experimental_do_professor |
 | `fn_experimental_escalonadas()` | SO-INTERNA | DEFINER | funcao:fn_experimental_pendencia_do_professor |
@@ -278,13 +297,14 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_experimental_tem_registro(p_aula_local_id bigint)` | SO-INTERNA | DEFINER · 🔓 anon | funcao:app_minha_agenda_sessao_canonica_v2, funcao:fn_sessao_tem_registro |
 | `fn_lead_estado_pauta_v1(p_lead_id bigint)` | SO-INTERNA | DEFINER | funcao:radar_detectar_sinais_comercial_v1 |
 | `fn_matriculas_trancadas_do_professor(p_professor_id integer)` | SO-INTERNA | INVOKER | funcao:fabio_contexto_professor |
-| `fn_normalizar_telefone_br_key(p_telefone text)` | ATIVA | INVOKER · 🔓 anon | edge:supabase/functions/sincronizar-comunidade-whatsapp/index.ts, view:vw_aluno_comunidade_wa_v1, view:vw_jornada_lead_v1, funcao:aluno_comunidade_estado_v1, funcao:exec_normalizar_telefone_atendimento, funcao:get_situacao_alunos_sem_contrato_assinado_core_v1, +3 outros |
+| `fn_normalizar_telefone_br_key(p_telefone text)` | ATIVA | INVOKER · 🔓 anon | edge:supabase/functions/sincronizar-comunidade-whatsapp/index.ts, view:vw_aluno_comunidade_wa_v1, view:vw_jornada_lead_v1, funcao:aluno_comunidade_estado_v1, funcao:buscar_anamneses_pendentes, funcao:exec_normalizar_telefone_atendimento, +4 outros |
 | `fn_propagar_professor_experimental()` | ATIVA | DEFINER | trigger:lead_experimentais.trg_propagar_professor_experimental |
 | `fn_reconciliar_experimental_aulas(p_dias integer, p_limite integer)` | SO-INTERNA | DEFINER | funcao:fn_reconciliar_experimental_tick |
 | `fn_reconciliar_experimental_por_lead(p_dias_atras integer, p_dias_frente integer, p_limite integer)` | SO-INTERNA | DEFINER | funcao:fn_reconciliar_experimental_tick |
 | `fn_reconciliar_experimental_tick(p_dias integer, p_limite integer)` | ATIVA | DEFINER | cron:reconciliar-experimental-aulas |
 | `fn_registrar_experimental_interno(p_vinculo_id bigint, p_anotacao_pedagogica text, p_devolutiva_familia text, p_proximos_passos text, p_leitura_de_conversao text, p_origem text)` | SO-INTERNA | DEFINER | funcao:app_confirmar_registro_experimental, funcao:app_registrar_experimental, funcao:fabio_gravar_registro_experimental_de_audio, funcao:fn_fila_audio_experimental_retomar |
 | `fn_resolver_prazo_retomada(p_texto text, p_base date)` | ATIVA | INVOKER | edge:supabase/functions/extrair-sinais-conversa/contract.ts, funcao:fn_upsert_retomada |
+| `fn_texto_emusys_experimental(p_registro_id uuid)` | SO-INTERNA | INVOKER | funcao:fn_emusys_escrita_pendentes |
 | `fn_upsert_retomada(p_lead_id bigint, p_frase text, p_prazo_texto text, p_motivo text, p_origem text, p_criado_por text, p_conversation_id bigint)` | SO-INTERNA | DEFINER | funcao:mila_registrar_retomada_v1, funcao:registrar_retomada_de_conversa_v1 |
 | `fn_variantes_telefone_br(p_numero text)` | SO-INTERNA | INVOKER · 🔓 anon | funcao:fn_pedir_codigo_de_acesso |
 | `get_conversa_pesquisa_evasao(p_pesquisa_id uuid)` | ATIVA | DEFINER | front:src/components/App/SucessoCliente/ConversaPesquisaEvasao.tsx |
@@ -359,6 +379,12 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `sol_tel_chave(p_tel text)` | SO-INTERNA | INVOKER | funcao:sol_caixa_ator_operacao_ok, funcao:sol_caixa_autorizar_payload_v1, funcao:sol_caixa_quem_e |
 | `texto_indica_sem_instagram(p_text text)` | ORFA | INVOKER · 🔓 anon | sem consumidor conhecido |
 | `toggle_mila_conversa(p_conversa_id uuid, p_pausar boolean, p_operador character varying)` | ATIVA | DEFINER | front:src/components/App/PreAtendimento/components/chat/ChatPanel.tsx |
+| `trg_eventos_operacionais_experimental()` | ATIVA | DEFINER | trigger:lead_experimentais.trg_eventos_operacionais_experimental_atribuicao, trigger:lead_experimentais.trg_eventos_operacionais_experimental_insert |
+| `trg_eventos_operacionais_experimental_cancelada()` | ATIVA | DEFINER | trigger:lead_experimentais.trg_eventos_operacionais_experimental_cancelada |
+| `trg_eventos_operacionais_experimental_convertida()` | ATIVA | DEFINER | trigger:aluno_jornada_matricula_disciplina.trg_eventos_operacionais_experimental_convertida_insert, trigger:aluno_jornada_matricula_disciplina.trg_eventos_operacionais_experimental_convertida_update |
+| `trg_eventos_operacionais_experimental_remarcada()` | ATIVA | DEFINER | trigger:lead_experimentais.trg_eventos_operacionais_experimental_remarcada |
+| `trg_eventos_operacionais_jornada_matricula()` | ATIVA | DEFINER | trigger:aluno_jornada_matricula_disciplina.trg_eventos_operacionais_jornada_matricula |
+| `trg_eventos_operacionais_log_experimental()` | ATIVA | DEFINER | trigger:leads_automacao_log.trg_eventos_operacionais_log_experimental |
 | `trg_experimental_preenche_curso_do_lead()` | ATIVA | DEFINER · 🔓 anon | trigger:lead_experimentais.trg_experimental_preenche_curso |
 | `trg_lead_herda_consultor_da_unidade()` | ATIVA | INVOKER · 🔓 anon | trigger:leads.trg_lead_herda_consultor |
 | `trigger_normalize_telefone()` | ATIVA | INVOKER · 🔓 anon | trigger:leads.tr_normalize_telefone_leads |
@@ -745,6 +771,17 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `update_projetos_updated_at()` | ATIVA | INVOKER · 🔓 anon | trigger:projetos.trigger_projetos_updated_at |
 | `visitas_set_updated_at()` | ATIVA | INVOKER · 🔓 anon | trigger:feriados.feriados_updated_at, trigger:visitas_config.visitas_config_updated_at, trigger:visitas.visitas_updated_at |
 
+## outros
+
+| Função | Estado | Segurança | Consumidores |
+|---|---|---|---|
+| `app_marcar_notificacoes_lidas(p_evento_ids text[])` | ORFA | DEFINER | sem consumidor conhecido |
+| `app_notificacoes_nao_lidas()` | ORFA | DEFINER | sem consumidor conhecido |
+| `fn_eventos_operacionais_carga_inicial_v1(p_desde timestamp with time zone)` | ORFA | DEFINER | sem consumidor conhecido |
+| `fn_eventos_operacionais_origem(p_fonte text)` | SO-INTERNA | INVOKER | funcao:fn_eventos_operacionais_registrar_experimental_convertida, funcao:trg_eventos_operacionais_aviso_previo, funcao:trg_eventos_operacionais_professor_jornada |
+| `fn_eventos_operacionais_registrar(p_evento_id text, p_tipo text, p_ocorreu_em timestamp with time zone, p_origem text, p_unidade_id uuid, p_aluno_id integer, p_aluno_nome text, p_aula_id integer, p_curso text, p_aula jsonb, p_mudanca jsonb, p_motivo text, p_detalhe text, p_audiencia jsonb)` | SO-INTERNA | DEFINER | funcao:fn_eventos_operacionais_carga_inicial_v1, funcao:fn_eventos_operacionais_registrar_experimental_convertida, funcao:fn_eventos_operacionais_registrar_experimental_mudanca, funcao:trg_eventos_operacionais_aula_cancelada, funcao:trg_eventos_operacionais_aula_reagendada, funcao:trg_eventos_operacionais_aviso_previo, +4 outros |
+| `fn_eventos_operacionais_timestamptz(p_valor text)` | SO-INTERNA | INVOKER | funcao:fn_eventos_operacionais_carga_inicial_v1 |
+
 ## plataforma
 
 | Função | Estado | Segurança | Consumidores |
@@ -752,6 +789,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `admin_alterar_presenca_rollout_v1(p_unidade_id uuid, p_superficie text, p_modo text, p_motivo text, p_request_id uuid, p_evidencia jsonb)` | ORFA | DEFINER | sem consumidor conhecido |
 | `admin_confirmar_presencas_aula(p_aula_emusys_id integer, p_motivo text)` | ATIVA | DEFINER | front:src/components/App/Alunos/ConciliacaoPresencas.tsx |
 | `admin_conversa_nova_mensagem(p_conversa_id uuid, p_preview text, p_whatsapp_jid text)` | ATIVA | DEFINER | edge:supabase/functions/webhook-whatsapp-inbox/index.ts |
+| `admin_conversa_usar_numero_do_cadastro_v1(p_conversa_id uuid)` | ATIVA | DEFINER | front:src/components/App/Administrativo/CaixaEntrada/AdminChatPanel.tsx, front:src/lib/numeroDaConversa.ts |
 | `admin_corrigir_presenca(p_aluno_presenca_id uuid, p_status_presenca text, p_motivo text)` | SO-INTERNA | DEFINER | funcao:admin_revisar_presenca_conciliacao |
 | `admin_decidir_proposta_disponibilidade(p_proposta_id uuid, p_decisao text, p_motivo text)` | ATIVA | DEFINER | front:src/components/App/Professores/GradeDisponibilidadeProfessores.tsx |
 | `admin_efetivar_proposta_disponibilidade(p_proposta_id uuid, p_confirmacao_emusys boolean)` | ATIVA | DEFINER | front:src/components/App/Professores/GradeDisponibilidadeProfessores.tsx |
@@ -780,6 +818,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `app_minha_disponibilidade()` | ORFA | DEFINER | sem consumidor conhecido |
 | `app_minha_divida()` | SO-INTERNA | DEFINER | funcao:app_minha_home |
 | `app_minha_home(p_ontem date, p_hoje date)` | ORFA | DEFINER | sem consumidor conhecido |
+| `app_minhas_notificacoes_v1()` | ORFA | DEFINER | sem consumidor conhecido |
 | `app_minhas_pendencias(p_incluir_passivo boolean)` | ORFA | DEFINER | sem consumidor conhecido |
 | `app_minhas_preferencias_fabio()` | ORFA | DEFINER | sem consumidor conhecido |
 | `atualizar_updated_at_conversas()` | ATIVA | INVOKER · 🔓 anon | trigger:crm_conversas.tr_updated_at_conversas |
@@ -811,16 +850,20 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_data_corte_cobranca_do_professor(p_professor_id integer)` | ATIVA | INVOKER · 🔓 anon | view:vw_aderencia_registro_professor, view:vw_registro_pendencia, funcao:fabio_contexto_professor |
 | `fn_data_corte_experimental()` | ATIVA | INVOKER · 🔓 anon | view:vw_experimental_pendencia |
 | `fn_data_inicio_medicao()` | ATIVA | INVOKER · 🔓 anon | view:vw_aderencia_registro_professor |
+| `fn_diag_audio_cortado(p_horas integer)` | ORFA | DEFINER | sem consumidor conhecido |
 | `fn_diag_audio_preso_no_aparelho(p_horas integer)` | ORFA | DEFINER | sem consumidor conhecido |
+| `fn_diag_fora_do_prazo_antes_do_acesso(p_limite_dias integer)` | ORFA | DEFINER | sem consumidor conhecido |
 | `fn_diag_porta_do_professor(p_professor_id integer)` | ORFA | DEFINER | sem consumidor conhecido |
 | `fn_diag_saude_experimental(p_dias_ficha integer, p_so_teste boolean)` | ORFA | DEFINER | sem consumidor conhecido |
 | `fn_dias_de_reagendamento(p_aula_id integer)` | ORFA | INVOKER | sem consumidor conhecido |
+| `fn_eventos_operacionais_na_janela_aula(p_inicio_anterior timestamp with time zone, p_inicio_atual timestamp with time zone)` | SO-INTERNA | INVOKER | funcao:fn_eventos_operacionais_carga_inicial_v1, funcao:fn_eventos_operacionais_registrar_experimental_mudanca, funcao:trg_eventos_operacionais_aula_cancelada, funcao:trg_eventos_operacionais_aula_reagendada, funcao:trg_eventos_operacionais_experimental, funcao:trg_eventos_operacionais_professor_aula |
 | `fn_hoje_brt()` | SO-INTERNA | INVOKER | funcao:app_coordenacao_feedback_mes, funcao:app_professor_feedback_mesa, funcao:app_professor_feedback_progresso, funcao:fn_competencia_feedback, funcao:fn_feedback_cobranca_do_dia, funcao:fn_janela_feedback_aberta, +2 outros |
 | `fn_janela_experimental_dias()` | SO-INTERNA | INVOKER · 🔓 anon | funcao:fn_experimental_escalonadas, funcao:fn_experimental_pendencia_do_professor |
 | `fn_janela_feedback_aberta(p_dia date)` | SO-INTERNA | INVOKER | funcao:app_coordenacao_feedback_mes, funcao:app_professor_feedback_mesa, funcao:app_professor_feedback_progresso |
 | `fn_janela_registro_dias()` | SO-INTERNA | INVOKER · 🔓 anon | funcao:app_abrir_rascunho_manual, funcao:app_enfileirar_audio_experimental, funcao:app_minha_agenda_semana_v1, funcao:app_minha_agenda_sessao_canonica_v2, funcao:fabio_aulas_candidatas, funcao:fn_aplicar_comando_presenca_core_v2, +3 outros |
 | `fn_liberar_acesso_professor(p_professor_id integer, p_auth_user_id uuid, p_email text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `fn_log_ocorrencia_criada()` | ATIVA | DEFINER | trigger:professor_360_ocorrencias.trg_log_ocorrencia_criada |
+| `fn_novidades_na_janela(p_itens jsonb)` | SO-INTERNA | INVOKER | funcao:fn_novidades_do_professor |
 | `fn_pedir_codigo_de_acesso(p_telefone text, p_ip_hint text, p_user_agent text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `fn_registrar_codigo_enviado(p_professor_id integer, p_telefone text, p_email text, p_enviou boolean, p_ip_hint text, p_user_agent text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `fn_remover_campos_comuns_da_fatia(p_tronco jsonb, p_fatia jsonb)` | SO-INTERNA | DEFINER | funcao:fabio_complementar_registro_aula, funcao:fabio_corrigir_registro_confirmado, funcao:fabio_criar_registro, funcao:fn_atualizar_fatia_core, funcao:fn_editar_registro_confirmado_core |
@@ -927,6 +970,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `app_editar_registro_confirmado(p_registro_id uuid, p_versao integer, p_tronco jsonb, p_fatias jsonb)` | ORFA | DEFINER | sem consumidor conhecido |
 | `app_enfileirar_audio(p_aula_id integer, p_storage_path text, p_duracao_segundos integer, p_registro_id uuid)` | ORFA | DEFINER | sem consumidor conhecido |
 | `app_enfileirar_audio_experimental(p_vinculo_id bigint, p_storage_path text, p_duracao_segundos integer)` | ORFA | DEFINER | sem consumidor conhecido |
+| `app_fabio_do_dia(p_dia date)` | ORFA | DEFINER | sem consumidor conhecido |
 | `app_falta_professor_cancelar_aulas(p_professor_id integer, p_data date, p_unidade_id uuid, p_motivo text)` | ORFA | DEFINER · 🔓 anon | sem consumidor conhecido |
 | `app_historico_turma(p_turma_nome text, p_limite integer)` | SO-INTERNA | DEFINER | funcao:fabio_corrigir_registro_confirmado |
 | `app_justificar_falta(p_aluno_presenca_id uuid, p_motivo text, p_evidencia_path text)` | ORFA | DEFINER | sem consumidor conhecido |
@@ -1110,6 +1154,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fingerprint_health_score_professor_v3_escopo(p_competencia date, p_periodicidade text, p_escopo text, p_unidade_id uuid)` | ORFA | DEFINER | sem consumidor conhecido |
 | `fn_agenda_dia_legado_envelope_v1(p_data date, p_unidade_id uuid)` | SO-INTERNA | DEFINER | funcao:get_agenda_dia_v2 |
 | `fn_amarrar_email_do_professor(p_professor_id integer, p_email text)` | ORFA | DEFINER | sem consumidor conhecido |
+| `fn_aniversariantes_do_professor_v1(p_professor_id integer, p_de date, p_ate date)` | SO-INTERNA | DEFINER | funcao:fn_novidades_do_professor |
 | `fn_aplicar_comando_presenca_core_v2(p_request_id uuid)` | SO-INTERNA | DEFINER | funcao:app_aplicar_comando_presenca_v2 |
 | `fn_aula_alunos_emusys_casar_aluno()` | ATIVA | DEFINER | trigger:aula_alunos_emusys.trg_aula_alunos_emusys_casar_aluno |
 | `fn_aula_alunos_emusys_reconcilia_chave()` | ATIVA | INVOKER · 🔓 anon | trigger:aula_alunos_emusys.trg_aula_alunos_emusys_reconcilia_chave |
@@ -1138,6 +1183,9 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_enfileirar_audio_core(p_aula_id integer, p_storage_path text, p_duracao_segundos integer, p_registro_id uuid, p_origem text)` | SO-INTERNA | DEFINER | funcao:app_enfileirar_audio, funcao:fabio_enfileirar_audio |
 | `fn_enfileirar_audio_core(p_aula_id integer, p_storage_path text, p_duracao_segundos integer, p_registro_id uuid, p_origem text, p_professor_id integer)` | SO-INTERNA | DEFINER | funcao:app_enfileirar_audio, funcao:fabio_enfileirar_audio |
 | `fn_enfileirar_registro_recibo(p_registro_id uuid, p_professor_id integer)` | SO-INTERNA | DEFINER | funcao:fn_confirmar_registro_core |
+| `fn_enfileirar_resumo_mensal_presenca_v1(p_ano integer, p_mes integer, p_dry_run boolean, p_desativar_diario boolean)` | ATIVA | DEFINER | cron:relatorio-presenca-resumo-mensal-dia1 |
+| `fn_eventos_operacionais_chave_sessao_aula(p_unidade_id uuid, p_turma_nome text, p_curso_emusys_id integer, p_inicio_referencia timestamp with time zone, p_emusys_id integer, p_aula_id integer)` | SO-INTERNA | INVOKER | funcao:trg_eventos_operacionais_aula_cancelada, funcao:trg_eventos_operacionais_aula_reagendada, funcao:trg_eventos_operacionais_professor_aula |
+| `fn_eventos_operacionais_professor_v1(p_professor_id integer, p_desde timestamp with time zone, p_cursor_detectado_em timestamp with time zone, p_cursor_evento_id text, p_limite integer, p_tipos text[])` | SO-INTERNA | DEFINER | funcao:fn_novidades_do_professor |
 | `fn_fabio_audio_do_registro(p_registro_id uuid)` | SO-INTERNA | DEFINER | funcao:fn_fabio_diario_coletar |
 | `fn_fabio_audio_recusa_causa(p_audio_id uuid)` | SO-INTERNA | DEFINER | funcao:fn_fabio_ocorrencia_classe |
 | `fn_fabio_canario_correcao_de_ficha()` | ATIVA | DEFINER | cron:fabio-canario-escrita |
@@ -1252,6 +1300,9 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_health_score_v3_unidades_permitidas_sombra(p_unidade_id uuid)` | SO-INTERNA | DEFINER | funcao:get_health_score_prof_v3_metricas_base_20260728_c95, funcao:get_health_score_professor_v3_carteira_periodo, funcao:get_health_score_professor_v3_conversao_base_v2, funcao:get_health_score_professor_v3_conversao_periodo_canonico, funcao:get_health_score_professor_v3_metricas_periodo_base_20260719, funcao:get_health_score_professor_v3_permanencia_periodo_v2, +13 outros |
 | `fn_materializar_health_score_professor_v3(p_competencia date, p_config_id uuid, p_modo text, p_professor_id integer, p_unidade_id uuid, p_escopo_unico boolean, p_snapshot_anterior_id uuid, p_justificativa_retificacao text)` | SO-INTERNA | DEFINER | funcao:materializar_health_score_professor_v3, funcao:retificar_health_score_professor_v3 |
 | `fn_materializar_presenca_padrao(p_registro_id uuid, p_professor_id integer)` | SO-INTERNA | DEFINER | funcao:fn_confirmar_registro_core |
+| `fn_novidades_dedup_turma(p_itens jsonb)` | SO-INTERNA | INVOKER | funcao:fn_novidades_do_professor |
+| `fn_novidades_do_fabio(p_professor_id integer, p_desde timestamp with time zone)` | SO-INTERNA | DEFINER | funcao:fn_novidades_do_professor |
+| `fn_novidades_do_professor(p_professor_id integer)` | SO-INTERNA | DEFINER | funcao:app_minhas_notificacoes_v1, funcao:app_notificacoes_nao_lidas |
 | `fn_participacao_append_only()` | ATIVA | INVOKER · 🔓 anon | trigger:fabio_participacao_ocorrencia_eventos.trg_participacao_eventos_append_only, trigger:fabio_participacao_ocorrencias.trg_participacao_ocorrencias_append_only |
 | `fn_participacao_nome_casa(p_nome_a text, p_nome_b text)` | SO-INTERNA | INVOKER | funcao:fabio_resolver_participante |
 | `fn_participacao_nome_tokens(p_nome text)` | SO-INTERNA | INVOKER | funcao:fn_participacao_nome_casa |
@@ -1261,6 +1312,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_pendencias_escalonadas(p_dias integer, p_professor_id integer, p_max_aulas integer)` | ORFA | DEFINER | sem consumidor conhecido |
 | `fn_ponto_professor_diario(p_professor_id integer, p_data_inicio date, p_data_fim date)` | SO-INTERNA | DEFINER | funcao:app_meu_ponto |
 | `fn_presenca_bloquear_slot_rosters_v2(p_aula_id integer)` | SO-INTERNA | DEFINER | funcao:app_criar_comando_chamada_professor_v2, funcao:fabio_criar_comando_chamada_v2, funcao:fn_validar_comando_roster_reservado_v2 |
+| `fn_presenca_candidatos_periodo_v1(p_unidade_id uuid, p_data_inicio date, p_data_fim date)` | SO-INTERNA | DEFINER | funcao:fn_presenca_resumo_mensal_v1 |
 | `fn_presenca_comando_arbitrar_insert()` | ATIVA | DEFINER | trigger:presenca_comandos.trg_presenca_comando_arbitrar_insert |
 | `fn_presenca_comando_eventos_append_only()` | ATIVA | DEFINER | trigger:presenca_acao_eventos.trg_presenca_acao_eventos_append_only |
 | `fn_presenca_dados_frescos_interno_v1(p_unidade_id uuid, p_data_alvo date)` | SO-INTERNA | DEFINER | funcao:app_minha_agenda_sessao_canonica_v2, funcao:app_minha_agenda_sessao_canonica_v2_referencia_lenta, funcao:fabio_professor_presencas_periodo_canonico_v2, funcao:fn_presenca_dados_frescos_v1, funcao:fn_presenca_estado_publicacao_periodo_v2, funcao:fn_presenca_pendencias_do_dia_v2, +1 outros |
@@ -1275,15 +1327,16 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_presenca_fonte_legivel(p_respondido_por text)` | ORFA | INVOKER · 🔓 anon | sem consumidor conhecido |
 | `fn_presenca_ocorrencia_canonica_escopada_v2(p_unidade_id uuid, p_data_inicio date, p_data_fim date)` | SO-INTERNA | INVOKER | funcao:fn_presenca_ocorrencias_escopo_interno_v2 |
 | `fn_presenca_ocorrencias_escopo_interno_v2(p_unidade_id uuid, p_data_inicio date, p_data_fim date, p_professor_id integer, p_aluno_id integer)` | SO-INTERNA | DEFINER | funcao:fn_presenca_estado_publicacao_periodo_v2, funcao:get_health_score_professor_v3_presenca_periodo_v2, funcao:get_presenca_metricas_canonicas_v2, funcao:get_presenca_ocorrencias_periodo_canonico_v2 |
-| `fn_presenca_pendencia_elegivel(p_unidade_id uuid, p_aluno_id integer, p_data_aula date, p_matricula_disciplina_id bigint, p_curso_nome text)` | ATIVA | DEFINER | view:vw_presenca_pendencia, funcao:fn_presenca_estado_publicacao_periodo_v2, funcao:fn_presenca_pendencias_do_dia_v2, funcao:get_presenca_metricas_canonicas_v2 |
+| `fn_presenca_pendencia_elegivel(p_unidade_id uuid, p_aluno_id integer, p_data_aula date, p_matricula_disciplina_id bigint, p_curso_nome text)` | ATIVA | DEFINER | view:vw_presenca_pendencia, funcao:fn_presenca_candidatos_periodo_v1, funcao:fn_presenca_estado_publicacao_periodo_v2, funcao:fn_presenca_pendencias_do_dia_v2, funcao:get_presenca_metricas_canonicas_v2 |
 | `fn_presenca_pendencias_do_dia(p_unidade_id uuid, p_data date)` | SO-INTERNA | DEFINER | funcao:fn_agenda_dia_legado_envelope_v1, funcao:fn_texto_relatorio_presenca_legado_v1, funcao:sol_porta_presenca_pendente_v1 |
 | `fn_presenca_pendencias_do_dia_v2(p_unidade_id uuid, p_data date)` | SO-INTERNA | DEFINER | funcao:fn_enfileirar_relatorio_presenca, funcao:fn_presenca_pendencias_do_dia, funcao:get_agenda_dia_canonica_v2, funcao:get_presenca_contexto_agente_canonico_v1 |
 | `fn_presenca_politica_impedir_sobreposicao()` | ATIVA | INVOKER | trigger:presenca_politicas_confiabilidade.trg_presenca_politica_impedir_sobreposicao |
+| `fn_presenca_resumo_mensal_v1(p_ano integer, p_mes integer, p_unidade_id uuid)` | SO-INTERNA | DEFINER | funcao:fn_enfileirar_resumo_mensal_presenca_v1, funcao:fn_texto_resumo_mensal_presenca_v1 |
 | `fn_presenca_rollout_modo_escopo_interno_v1(p_unidade_id uuid, p_superficie text)` | SO-INTERNA | DEFINER | funcao:fn_presenca_fila_proveniencia_rollout_v1, funcao:fn_texto_relatorio_presenca_consolidado, funcao:get_agenda_dia_v2 |
 | `fn_presenca_rollout_modo_interno_v1(p_unidade_id uuid, p_superficie text)` | SO-INTERNA | DEFINER | funcao:app_registrar_presencas_aula, funcao:fabio_confirmar_chamada_acao, funcao:fabio_emitir_presenca_por_registro, funcao:fabio_professor_presencas_periodo, funcao:fn_absenteismo_aluno_rollout_v1, funcao:fn_presenca_rollout_modo_escopo_interno_v1, +6 outros |
 | `fn_presenca_roster_lock_key_v2(p_aula_emusys_id integer)` | SO-INTERNA | INVOKER | funcao:fn_presenca_bloquear_slot_rosters_v2, funcao:fn_presenca_estado_roster_lock_trigger_v2, funcao:fn_presenca_roster_lock_trigger_v2, funcao:fn_presenca_slot_lock_trigger_v2, funcao:reconciliar_grade_snapshot_emusys_v2 |
 | `fn_presenca_roster_lock_trigger_v2()` | ATIVA | DEFINER | trigger:aula_alunos_emusys.trg_presenca_roster_lock_v2 |
-| `fn_presenca_slot_key_v2(p_aluno_id integer, p_unidade_id uuid, p_professor_id integer, p_data_hora_inicio timestamp with time zone, p_data_hora_fim timestamp with time zone, p_curso_nome text)` | ATIVA | INVOKER | view:vw_presenca_ocorrencia_canonica_v2, funcao:fn_presenca_estado_publicacao_periodo_v2, funcao:fn_presenca_ocorrencia_canonica_escopada_v2, funcao:fn_presenca_pendencias_do_dia_v2, funcao:get_presenca_metricas_canonicas_v2, funcao:get_presenca_shadow_comparacao_v2 |
+| `fn_presenca_slot_key_v2(p_aluno_id integer, p_unidade_id uuid, p_professor_id integer, p_data_hora_inicio timestamp with time zone, p_data_hora_fim timestamp with time zone, p_curso_nome text)` | ATIVA | INVOKER | view:vw_presenca_ocorrencia_canonica_v2, funcao:fn_presenca_candidatos_periodo_v1, funcao:fn_presenca_estado_publicacao_periodo_v2, funcao:fn_presenca_ocorrencia_canonica_escopada_v2, funcao:fn_presenca_pendencias_do_dia_v2, funcao:get_presenca_metricas_canonicas_v2, +1 outros |
 | `fn_presenca_slot_lock_key_v2(p_unidade_id uuid, p_professor_id integer, p_data_hora_inicio timestamp with time zone, p_data_hora_fim timestamp with time zone, p_curso_nome text)` | SO-INTERNA | INVOKER | funcao:app_criar_comando_chamada_professor_v2, funcao:fabio_criar_comando_chamada_v2, funcao:fn_presenca_bloquear_slot_rosters_v2, funcao:fn_presenca_estado_roster_lock_trigger_v2, funcao:fn_presenca_roster_lock_trigger_v2, funcao:fn_presenca_slot_lock_trigger_v2, +2 outros |
 | `fn_presenca_slot_lock_trigger_v2()` | ATIVA | DEFINER | trigger:aulas_emusys.trg_presenca_slot_lock_v2 |
 | `fn_presenca_status_efetivo(p_status_presenca text, p_status text)` | ORFA | INVOKER · 🔓 anon | sem consumidor conhecido |
@@ -1293,10 +1346,10 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_professor_curso_modalidade_evidencias_v2(p_data_referencia date, p_unidade_id uuid, p_professor_id integer)` | SO-INTERNA | DEFINER | funcao:get_prof_curso_modalidade_excecoes_v2_raw, funcao:reconciliar_professor_curso_modalidade_v2 |
 | `fn_professor_curso_modalidade_impedir_sobreposicao_v1()` | ATIVA | DEFINER | trigger:professor_unidade_curso_modalidade.trg_professor_curso_modalidade_impedir_sobreposicao |
 | `fn_professor_curso_modalidade_proteger_historico_v1()` | ATIVA | DEFINER | trigger:professor_unidade_curso_modalidade.trg_professor_curso_modalidade_proteger_historico |
-| `fn_professor_do_usuario()` | ATIVA | DEFINER | view:vw_disponibilidade_professores, funcao:app_abrir_rascunho_manual, funcao:app_aluno_ficha, funcao:app_atualizar_fatia, funcao:app_atualizar_perfil, funcao:app_atualizar_preferencia_fabio, +60 outros |
+| `fn_professor_do_usuario()` | ATIVA | DEFINER | view:vw_disponibilidade_professores, funcao:app_abrir_rascunho_manual, funcao:app_aluno_ficha, funcao:app_atualizar_fatia, funcao:app_atualizar_perfil, funcao:app_atualizar_preferencia_fabio, +64 outros |
 | `fn_professor_ponto_canonicalizar_ocorrencia()` | ATIVA | DEFINER | trigger:professor_ponto_confirmacoes.trg_professor_ponto_canonicalizar_ocorrencia |
 | `fn_professor_por_whatsapp(p_telefone text)` | SO-INTERNA | DEFINER | funcao:fabio_identidade_whatsapp |
-| `fn_professor_usa_app(p_professor_id integer)` | ATIVA | INVOKER · 🔓 anon | view:vw_experimental_pendencia, view:vw_fabio_ocorrencia_do_teste, view:vw_registro_pendencia, funcao:fn_diag_saude_experimental, funcao:fn_emusys_escrita_pendentes, funcao:fn_fabio_laudo |
+| `fn_professor_usa_app(p_professor_id integer)` | ATIVA | INVOKER · 🔓 anon | view:vw_experimental_pendencia, view:vw_fabio_ocorrencia_do_teste, view:vw_registro_pendencia, funcao:fn_diag_audio_cortado, funcao:fn_diag_fora_do_prazo_antes_do_acesso, funcao:fn_diag_saude_experimental, +2 outros |
 | `fn_proteger_anotacoes_fabio()` | ATIVA | DEFINER | trigger:aulas_emusys.trg_proteger_anotacoes_fabio |
 | `fn_proteger_decisao_humana_aula()` | ATIVA | DEFINER | trigger:aulas_emusys.trg_proteger_decisao_humana_aula |
 | `fn_reagendamento_limpa_chamada_alunos()` | ATIVA | DEFINER | trigger:aulas_emusys.trg_reagendamento_limpa_chamada_alunos |
@@ -1311,6 +1364,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_roster_da_sessao(p_aula_id integer)` | SO-INTERNA | DEFINER | funcao:app_abrir_rascunho_manual, funcao:app_salvar_rascunho_manual, funcao:fabio_criar_registro, funcao:fn_enfileirar_audio_core, funcao:fn_fabio_caso_sem_aluno_no_emusys, funcao:fn_fabio_det_audio_recusado |
 | `fn_sessao_tem_registro(p_aula_ancora bigint, p_roster_tem_registro boolean, p_slot_tem_registro boolean)` | SO-INTERNA | INVOKER | funcao:app_minha_agenda_semana_v1 |
 | `fn_sincronizar_gemeos_presenca(p_aula_ancora_id integer)` | ATIVA | DEFINER | cron:reconciliar-gemeas-presenca-diario, funcao:app_corrigir_presenca_do_aluno, funcao:fabio_lancar_presenca_professor, funcao:fn_registrar_presencas_core, funcao:trg_sincronizar_gemeos_presenca |
+| `fn_texto_resumo_mensal_presenca_v1(p_ano integer, p_mes integer)` | SO-INTERNA | DEFINER | funcao:fn_enfileirar_resumo_mensal_presenca_v1 |
 | `fn_textos_emusys_do_registro(p_registro_id uuid)` | SO-INTERNA | INVOKER | funcao:app_historico_turma, funcao:app_status_emusys_do_registro, funcao:app_texto_emusys_do_registro, funcao:app_textos_emusys_da_aula, funcao:fn_emusys_escrita_pendentes |
 | `fn_validar_comando_roster_reservado_v2(p_request_id uuid)` | SO-INTERNA | DEFINER | funcao:fn_aplicar_comando_presenca_core_v2 |
 | `get_agenda_dia(p_data date, p_unidade_id uuid)` | ATIVA | INVOKER | front:src/components/App/Agenda/Chamada/ChamadaDia.tsx, funcao:fn_agenda_dia_legado_envelope_v1, funcao:get_agenda_dia_canonica_v2, funcao:sol_porta_agenda_do_dia_v1 |
@@ -1526,6 +1580,10 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `sol_porta_pendencias_cadastro_v1(p_solicitante_telefone text, p_amostra integer)` | SO-INTERNA | DEFINER | funcao:sol_governanca_snapshot_operacional_v1 |
 | `sol_porta_presenca_pendente_v1(p_solicitante_telefone text, p_unidade text, p_data date)` | SO-INTERNA | DEFINER | funcao:sol_governanca_snapshot_operacional_v1 |
 | `trg_atualiza_projecao_por_reposicao()` | ATIVA | DEFINER · 🔓 anon | trigger:aluno_reposicoes.trg_atualiza_projecao_por_reposicao |
+| `trg_eventos_operacionais_aula_cancelada()` | ATIVA | DEFINER | trigger:aulas_emusys.trg_eventos_operacionais_aula_cancelada, trigger:aulas_emusys.trg_eventos_operacionais_aula_cancelada_insert |
+| `trg_eventos_operacionais_aula_reagendada()` | ATIVA | DEFINER | trigger:aulas_emusys.trg_eventos_operacionais_aula_reagendada |
+| `trg_eventos_operacionais_professor_aula()` | ATIVA | DEFINER | trigger:aulas_emusys.trg_eventos_operacionais_professor_aula |
+| `trg_eventos_operacionais_professor_jornada()` | ATIVA | DEFINER | trigger:aluno_professor_transicoes.trg_eventos_operacionais_professor_jornada |
 | `trg_fabio_fila_dispara()` | ATIVA | DEFINER | trigger:fabio_fila_audios.trg_fabio_fila_novo |
 | `trg_professor_presente_quando_aluno_presente()` | ATIVA | INVOKER · 🔓 anon | trigger:aluno_presenca.trg_professor_presente_quando_aluno_presente |
 | `trg_sincronizar_gemeos_presenca()` | ATIVA | DEFINER | trigger:aluno_presenca.trg_sincronizar_gemeos_presenca |

@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-15 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-19 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — aluno
 
-142 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+149 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## aluno_acoes
 
@@ -172,6 +172,7 @@
 | `trancamento_data_final` | date | sim |  |  |
 | `sucedida_por` | bigint | sim |  |  |
 | `sucedida_em` | timestamp with time zone | sim |  |  |
+| `alteracao_descricao_emusys` | text | sim |  |  |
 
 **Únicos:**
 - `aluno_jornada_matricula_disciplina_pkey`
@@ -179,6 +180,9 @@
 
 **Triggers:**
 - `trg_aluno_jornada_matricula_disciplina_updated_at → update_updated_at_column()`
+- `trg_eventos_operacionais_experimental_convertida_insert → trg_eventos_operacionais_experimental_convertida()`
+- `trg_eventos_operacionais_experimental_convertida_update → trg_eventos_operacionais_experimental_convertida()`
+- `trg_eventos_operacionais_jornada_matricula → trg_eventos_operacionais_jornada_matricula()`
 - `trg_jornada_ciclo_sucedido → fn_jornada_marca_ciclo_sucedido()`
 - `trg_materializar_projecao_jornada → trg_materializar_projecao_jornada()`
 - `trg_resolver_jornada_curso_grade_atual_v1 → fn_aplicar_jornada_curso_grade_atual_v1()`
@@ -377,6 +381,9 @@
 **Únicos:**
 - `aluno_professor_transicoes_pkey`
 - `uq_aluno_professor_transicoes_evento`
+
+**Triggers:**
+- `trg_eventos_operacionais_professor_jornada → trg_eventos_operacionais_professor_jornada()`
 
 ## aluno_reposicoes
 
@@ -681,6 +688,20 @@
 - `anamnese_convites_pkey`
 - `anamnese_convites_prematricula_vivo`
 - `anamnese_convites_token_key`
+
+## anamnese_insights
+
+> Insights Pedagógicos da anamnese (o texto que vai ao professor). origem=recuperado: carga única de 18/09/2026 a partir de fila_anamnese_sol_hermes.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `anamnese_id` | integer | não |  | anamneses.id |
+| `texto` | text | não |  |  |
+| `gerado_em` | timestamp with time zone | não | now() |  |
+| `origem` | text | não |  |  |
+
+**Únicos:**
+- `anamnese_insights_pkey`
 
 ## anamnese_respostas_perfil
 
@@ -1063,6 +1084,127 @@
 | `curso_id` | integer | sim |  |  |
 | `aluno_nome` | character varying(255) | sim |  |  |
 | `telefone_snapshot` | character varying(20) | sim |  |  |
+
+## evento
+
+> Recital de UMA unidade, com data propria. Modulo estanque: nao alimenta frequencia, KPI, carteira nem score do professor. NAO confundir com banda_evento (shows/ensaios de banda) nem com eventos_operacionais (log de sistema).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('evento_id_seq'::regclass) |  |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `tipo` | text | não | 'recital'::text |  |
+| `titulo` | text | não |  |  |
+| `data_evento` | date | não |  |  |
+| `horario_inicio` | time without time zone | não | '09:00:00'::time without time zone |  |
+| `local` | text | sim |  |  |
+| `status` | text | não | 'rascunho'::text |  |
+| `duracao_padrao_segundos` | integer | não | 300 |  |
+| `observacoes` | text | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+| `intervalo_entre_blocos_segundos` | integer | não | 2700 |  |
+
+**Únicos:**
+- `evento_pkey`
+
+**Triggers:**
+- `trg_evento_touch → fn_evento_touch()`
+
+## evento_apresentacao
+
+> Uma apresentacao por (pessoa, curso). A UNIQUE evento_apresentacao_pessoa_curso_unica e quem garante que 2 matriculas do MESMO curso viram 1 apresentacao e 2 cursos DIFERENTES viram 2 — sem nenhum `if` no codigo.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('evento_apresentacao_id_seq'::regclass) |  |
+| `bloco_id` | bigint | não |  | evento_bloco.id |
+| `evento_id` | bigint | não |  | evento.id |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `pessoa_chave` | text | não |  |  |
+| `aluno_id` | integer | não |  | alunos.id |
+| `curso_id` | integer | não |  | cursos.id |
+| `professor_id` | integer | sim |  | professores.id |
+| `ordem` | integer | não | 0 |  |
+| `musica` | text | sim |  |  |
+| `duracao_segundos` | integer | sim |  |  |
+| `tem_playback` | boolean | não | false |  |
+| `observacao_mapa` | text | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `evento_apresentacao_pessoa_curso_unica`
+- `evento_apresentacao_pkey`
+
+**Triggers:**
+- `trg_evento_apresentacao_deriva → fn_evento_apresentacao_deriva()`
+- `trg_evento_apresentacao_touch → fn_evento_touch()`
+
+## evento_apresentacao_item
+
+> Instrumentos e equipamentos que a apresentacao precisa no palco.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('evento_apresentacao_item_id_seq'::regclass) |  |
+| `apresentacao_id` | bigint | não |  | evento_apresentacao.id |
+| `tipo` | text | não |  |  |
+| `nome` | text | não |  |  |
+| `quantidade` | integer | não | 1 |  |
+| `observacao` | text | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `evento_apresentacao_item_pkey`
+
+## evento_bloco
+
+> Bloco de apresentacoes. Na pratica dura de 1h a 1h30 (ata de 17/09/2026).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('evento_bloco_id_seq'::regclass) |  |
+| `evento_id` | bigint | não |  | evento.id |
+| `nome` | text | não |  |  |
+| `ordem` | integer | não | 0 |  |
+| `horario_inicial` | time without time zone | sim |  |  |
+| `inicio_manual` | boolean | não | false |  |
+| `observacoes` | text | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `evento_bloco_pkey`
+
+**Triggers:**
+- `trg_evento_bloco_touch → fn_evento_touch()`
+
+## evento_participacao
+
+> Quem entra no evento, por PESSOA (nao por matricula). Check-in e certificado moram aqui: quem toca em 2 cursos faz UM check-in.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('evento_participacao_id_seq'::regclass) |  |
+| `evento_id` | bigint | não |  | evento.id |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `pessoa_chave` | text | não |  |  |
+| `aluno_id` | integer | não |  | alunos.id |
+| `status` | text | não | 'indefinido'::text |  |
+| `checkin_em` | timestamp with time zone | sim |  |  |
+| `certificado_status` | text | sim |  |  |
+| `observacoes` | text | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `evento_participacao_pessoa_unica`
+- `evento_participacao_pkey`
+
+**Triggers:**
+- `trg_evento_participacao_deriva → fn_evento_participacao_deriva()`
+- `trg_evento_participacao_touch → fn_evento_touch()`
 
 ## farmer_checklist_contatos
 
@@ -1481,6 +1623,7 @@
 - `trg_audit → fn_audit_log()`
 - `trg_bloqueia_delete_movimentacao_admin → fn_bloqueia_delete_movimentacao_admin()`
 - `trg_capturar_telefone_snapshot_movimentacao_retencao → capturar_telefone_snapshot_movimentacao_retencao()`
+- `trg_eventos_operacionais_aviso_previo → trg_eventos_operacionais_aviso_previo()`
 - `trg_preencher_campos_retencao_movimentacoes_admin → preencher_campos_retencao_movimentacoes_admin()`
 - `trg_resolver_motivo_saida_movimentacao_admin → fn_resolver_motivo_saida_movimentacao_admin()`
 - `trg_sync_evasao_dados_mensais → sync_evasao_to_dados_mensais()`
@@ -1815,7 +1958,7 @@
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
 | `id` | uuid | não | gen_random_uuid() |  |
-| `pesquisa_id` | uuid | sim |  | pesquisa_evasao_analises.pesquisa_id |
+| `pesquisa_id` | uuid | sim |  | pesquisa_evasao.id |
 | `caixa_id` | integer | não |  | whatsapp_caixas.id |
 | `direcao` | text | não |  |  |
 | `provider_message_id` | text | sim |  |  |
@@ -2835,6 +2978,23 @@
 | `motivo_mudanca` | bigint | sim |  |  |
 | `motivo_desinteresse` | bigint | sim |  |  |
 | `motivo_inadimplencia` | bigint | sim |  |  |
+
+## vw_evento_aluno_elegivel_v1
+
+> Candidatos ao recital por PESSOA (unidade_id, pessoa_chave), derivada de alunos ativos. Banda filtra CURSO, nunca pessoa, e nunca e a matricula de referencia quando ha outra. motivo_sem_curso separa a regra (so_atividade_extra) do defeito (curso_nao_cadastrado). security_invoker: herda a RLS de alunos.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `unidade_id` | uuid | sim |  |  |
+| `pessoa_chave` | text | sim |  |  |
+| `aluno_id_referencia` | integer | sim |  |  |
+| `nome` | character varying | sim |  |  |
+| `data_nascimento` | date | sim |  |  |
+| `idade_anos` | integer | sim |  |  |
+| `cursos_no_recital` | bigint | sim |  |  |
+| `cursos` | jsonb | sim |  |  |
+| `faz_banda` | boolean | sim |  |  |
+| `motivo_sem_curso` | text | sim |  |  |
 
 ## vw_evolucao_alunos
 

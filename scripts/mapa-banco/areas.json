@@ -72,6 +72,7 @@
     "radar": "aluno",
     "evasao": "aluno",
     "evasoes": "aluno",
+    "evento": "aluno",
     "renovacao": "aluno",
     "renovacoes": "aluno",
     "retencao": "aluno",

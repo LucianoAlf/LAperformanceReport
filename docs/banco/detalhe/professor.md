@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-16 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-18 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — professor
@@ -179,6 +179,10 @@
 - `aulas_emusys_pkey`
 
 **Triggers:**
+- `trg_eventos_operacionais_aula_cancelada → trg_eventos_operacionais_aula_cancelada()`
+- `trg_eventos_operacionais_aula_cancelada_insert → trg_eventos_operacionais_aula_cancelada()`
+- `trg_eventos_operacionais_aula_reagendada → trg_eventos_operacionais_aula_reagendada()`
+- `trg_eventos_operacionais_professor_aula → trg_eventos_operacionais_professor_aula()`
 - `trg_presenca_slot_lock_v2 → fn_presenca_slot_lock_trigger_v2()`
 - `trg_proteger_anotacoes_fabio → fn_proteger_anotacoes_fabio()`
 - `trg_proteger_decisao_humana_aula → fn_proteger_decisao_humana_aula()`
@@ -598,7 +602,7 @@
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
 | `id` | bigint | não | nextval('fabio_emusys_escrita_id_seq'::regclass) |  |
-| `registro_id` | uuid | não |  | fabio_registros_aula.id |
+| `registro_id` | uuid | sim |  | fabio_registros_aula.id |
 | `emusys_aula_id` | integer | sim |  |  |
 | `unidade` | text | sim |  |  |
 | `texto_md5` | text | não |  |  |
@@ -608,6 +612,7 @@
 | `anotacao_antes` | text | sim |  |  |
 | `erro` | text | sim |  |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
+| `experimental_registro_id` | uuid | sim |  | lead_experimental_registros.id |
 
 **Únicos:**
 - `fabio_emusys_escrita_pkey`
@@ -1321,8 +1326,8 @@
 | `id` | uuid | não | gen_random_uuid() |  |
 | `snapshot_metrica_id` | uuid | não |  | health_score_professor_v3_snapshot_metricas.id |
 | `config_meta_segmento_id` | uuid | sim |  | health_score_professor_v3_config_metas_curso_modalidade.id |
-| `unidade_id` | uuid | não |  | unidades.id |
-| `curso_id` | integer | não |  | professor_unidade_curso_modalidade.curso_id |
+| `unidade_id` | uuid | não |  | health_score_professor_v3_config_metas_curso_modalidade.unidade_id |
+| `curso_id` | integer | não |  | health_score_professor_v3_config_metas_curso_modalidade.curso_id |
 | `modalidade` | text | não |  | professor_unidade_curso_modalidade.modalidade |
 | `pessoas_unicas` | integer | não | 0 |  |
 | `vinculos_ativos` | integer | não | 0 |  |

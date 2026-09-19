@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, BarChart3, Target, Settings,
   Phone, Megaphone, MousePointerClick, Briefcase, CalendarClock,
-  ClipboardList, Users, Guitar, ReceiptText, Heart, GraduationCap,
+  ClipboardList, Users, Guitar, Mic2, ReceiptText, Heart, GraduationCap,
   Building2, FolderKanban, UserCog, Shield, Activity, FolderArchive,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -34,6 +34,7 @@ export const MENU_OPERACIONAL: ItemMenu[] = [
   { path: '/app/administrativo', label: 'Administrativo', labelCurto: 'Admin', icon: ClipboardList },
   { path: '/app/alunos', label: 'Alunos', icon: Users },
   { path: '/app/bandas', label: 'Bandas', icon: Guitar },
+  { path: '/app/eventos', label: 'Eventos', icon: Mic2, visibilidade: 'eventos' },
   { path: '/app/faturas', label: 'Faturas', icon: ReceiptText },
   { path: '/app/sucesso-aluno', label: 'Sucesso do Aluno', labelCurto: 'Sucesso', icon: Heart },
   { path: '/app/professores', label: 'Professores', labelCurto: 'Profs.', icon: GraduationCap },

@@ -10,11 +10,12 @@ const PATHS_ESPERADOS = [
   '/app', '/app/gestao-mensal', '/app/metas', '/app/config',
   '/app/pre-atendimento', '/app/campanhas', '/app/trafego-pago', '/app/comercial',
   '/app/agenda', '/app/administrativo', '/app/alunos', '/app/bandas',
+  '/app/eventos',
   '/app/faturas', '/app/sucesso-aluno', '/app/professores', '/app/time',
   '/app/salas', '/app/projetos',
 ];
 
-test('menuItems concentra os 18 modulos do menu', () => {
+test('menuItems concentra os 19 modulos do menu', () => {
   for (const p of PATHS_ESPERADOS) {
     assert.match(itens, new RegExp(`path: '${p.replace(/\//gu, '\\/')}'`, 'u'), `falta ${p}`);
   }
@@ -23,6 +24,7 @@ test('menuItems concentra os 18 modulos do menu', () => {
 test('itens sensiveis declaram a regra de visibilidade', () => {
   assert.match(itens, /path: '\/app\/campanhas'[\s\S]{0,220}?visibilidade: 'campanhas'/u);
   assert.match(itens, /path: '\/app\/trafego-pago'[\s\S]{0,220}?visibilidade: 'trafego_pago'/u);
+  assert.match(itens, /path: '\/app\/eventos'[\s\S]{0,220}?visibilidade: 'eventos'/u);
 });
 
 test('a barra inferior aprovada: Inicio, Alunos, Agenda, Administrativo', () => {

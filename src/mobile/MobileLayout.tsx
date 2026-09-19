@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { PageTitleProvider } from '@/contexts/PageTitleContext';
 import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 import { useUnidadeFiltro } from '@/hooks/useUnidadeFiltro';
+import { podeVerEventos } from '@/lib/menuVisibilidade';
 import { supabase } from '@/lib/supabase';
 import { AvisoNaoOtimizado } from './AvisoNaoOtimizado';
 import { MobileBottomNav } from './MobileBottomNav';
@@ -59,6 +60,9 @@ export function MobileLayout() {
     isAdmin,
     campanhasVisivel,
     trafegoPagoVisivel: TRAFEGO_PAGO_EMAILS.includes((usuario?.email ?? '').toLowerCase()),
+    // Eventos nao repete a regra aqui: ela mora em podeVerEventos (LAPE-39), que e o
+    // unico ponto a trocar quando o modulo virar RBAC.
+    eventosVisivel: podeVerEventos(usuario?.email),
   };
 
   // "Consolidado" so quando filtroAtivo e' null (rede inteira, escopo de

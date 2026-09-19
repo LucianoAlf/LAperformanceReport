@@ -37,6 +37,7 @@ import { LoginPage, PrivateRoute } from './components/App/Auth';
 import { useAuth } from './contexts/AuthContext';
 import { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
+import { podeVerEventos } from './lib/menuVisibilidade';
 
 // Tráfego Pago: acesso restrito a um conjunto fixo de e-mails (custo de mídia sensível)
 const TRAFEGO_PAGO_EMAILS = ['hugo@gmail.com', 'lucianoalf.la@gmail.com']
@@ -45,6 +46,14 @@ function TrafegoPagoGuard({ children }: { children: React.ReactNode }) {
   const { usuario } = useAuth()
   const email = usuario?.email?.toLowerCase()
   if (!email || !TRAFEGO_PAGO_EMAILS.includes(email)) return <Navigate to="/app" replace />
+  return <>{children}</>
+}
+
+// Eventos (recital): em teste. A regra de quem enxerga mora em `podeVerEventos` —
+// fonte unica compartilhada com a sidebar e o menu mobile (LAPE-39).
+function EventosGuard({ children }: { children: React.ReactNode }) {
+  const { usuario } = useAuth()
+  if (!podeVerEventos(usuario?.email)) return <Navigate to="/app" replace />
   return <>{children}</>
 }
 
@@ -105,6 +114,8 @@ const PreAtendimentoPage = lazy(() => import('./components/App/PreAtendimento').
 const CampanhasPage = lazy(() => import('./components/App/Campanhas').then(m => ({ default: m.CampanhasPage })));
 const CampanhaDetalhePage = lazy(() => import('./components/App/Campanhas').then(m => ({ default: m.CampanhaDetalhePage })));
 const TrafegoPagoPage = lazy(() => import('./components/App/TrafegoPago').then(m => ({ default: m.TrafegoPagoPage })));
+const EventosPage = lazy(() => import('./components/App/Eventos'));
+const EventoDetalhePage = lazy(() => import('./components/App/Eventos/EventoDetalhePage'));
 
 // Metas
 const MetasPageNew = lazy(() => import('./components/App/Metas').then(m => ({ default: m.MetasPageNew })));
@@ -260,6 +271,16 @@ export const router = createBrowserRouter([
           {
             path: 'trafego-pago',
             element: <TrafegoPagoGuard><Suspense fallback={<PageLoader />}><TrafegoPagoPage /></Suspense></TrafegoPagoGuard>,
+          },
+          {
+            path: 'eventos',
+            element: <EventosGuard><Suspense fallback={<PageLoader />}><EventosPage /></Suspense></EventosGuard>,
+          },
+          {
+            // O guard e o MESMO da lista: rota filha nao herda guard de irma, e sem ele
+            // a URL direta do detalhe seria a porta dos fundos do modulo em teste.
+            path: 'eventos/:eventoId',
+            element: <EventosGuard><Suspense fallback={<PageLoader />}><EventoDetalhePage /></Suspense></EventosGuard>,
           },
           {
             path: 'agenda',
