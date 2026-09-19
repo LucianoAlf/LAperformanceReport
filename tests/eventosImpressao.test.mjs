@@ -29,7 +29,13 @@ const lib = await (async () => {
   return import(pathToFileURL(arquivo).href);
 })();
 
-const { gerarProgramaHtml, gerarFolhaDePalcoHtml, gerarPlanilhaCsv, nomeDoArquivo } = lib;
+const {
+  gerarProgramaHtml,
+  gerarFolhaDePalcoHtml,
+  gerarPlanilhaCsv,
+  gerarCertificadosHtml,
+  nomeDoArquivo,
+} = lib;
 
 const EVENTO = {
   titulo: 'Recital de Primavera',
@@ -354,4 +360,90 @@ test('o nome do arquivo sai seguro e reconhecivel', () => {
   const nome = nomeDoArquivo(dados([]), 'grade.csv');
   assert.equal(nome, '2026-09-21-recital-de-primavera-grade.csv');
   assert.doesNotMatch(nome, /[^a-z0-9.-]/u, 'sem acento, espaco ou caractere de caminho');
+});
+
+/* ─────────────────────────── certificado ─────────────────────────── */
+
+const pessoa = (nome, apresentacoes = []) => ({ nome, apresentacoes });
+
+test('cada pessoa vira UMA pagina, com quebra entre elas', () => {
+  const html = gerarCertificadosHtml(dados([]), [pessoa('Ana'), pessoa('Bruno'), pessoa('Carla')]);
+  assert.equal((html.match(/class="cert"/gu) ?? []).length, 3);
+  assert.match(html, /page-break-after: always/u);
+  // ⚠️ Sem isto, um lote de 200 certificados sai com uma folha em branco no fim.
+  assert.match(html, /\.cert:last-child \{ page-break-after: auto/u);
+});
+
+test('imprime em A4 DEITADO', () => {
+  const html = gerarCertificadosHtml(dados([]), [pessoa('Ana')]);
+  assert.match(html, /@page \{ size: A4 landscape/u);
+});
+
+test('o nome vai escapado — o papel vai para a familia do aluno', () => {
+  const html = gerarCertificadosHtml(dados([]), [pessoa('Ana <script>alert(1)</script> Silva')]);
+  assert.doesNotMatch(html, /<script>alert/u);
+  assert.match(html, /&lt;script&gt;/u);
+});
+
+test('a data sai por extenso, sem deslocar o fuso', () => {
+  // `new Date('2026-09-21')` e UTC: em BRT o certificado sairia com 20 de setembro, e
+  // ninguem confere a data de um papel que ja foi impresso.
+  const html = gerarCertificadosHtml(dados([]), [pessoa('Ana')]);
+  assert.match(html, /21 de setembro de 2026/u);
+  assert.doesNotMatch(html, /20 de setembro/u);
+});
+
+test('quem tem repertorio leva curso e musica; quem nao tem, nao leva linha vazia', () => {
+  const comRepertorio = gerarCertificadosHtml(dados([]), [
+    pessoa('Ana', [{ cursoNome: 'Violão', musica: 'Asa Branca' }]),
+  ]);
+  assert.match(comRepertorio, /Viol&atilde;o|Violão/u);
+  assert.match(comRepertorio, /Asa Branca/u);
+
+  // Quem confirmou e nao subiu ao palco: o bloco inteiro some, em vez de imprimir um
+  // retangulo vazio que parece erro de impressao.
+  const sem = gerarCertificadosHtml(dados([]), [pessoa('Bruno', [])]);
+  assert.doesNotMatch(sem, /class="repertorio"/u);
+});
+
+test('apresentacao sem curso NEM musica nao vira item', () => {
+  const html = gerarCertificadosHtml(dados([]), [
+    pessoa('Ana', [{ cursoNome: null, musica: null }]),
+  ]);
+  assert.doesNotMatch(html, /class="item"/u);
+});
+
+test('nome vazio nao gera certificado — papel sem nome ninguem entrega', () => {
+  const html = gerarCertificadosHtml(dados([]), [pessoa('Ana'), pessoa('   '), pessoa('')]);
+  assert.equal((html.match(/class="cert"/gu) ?? []).length, 1);
+  assert.match(html, /1 certificado\b/u, 'e a contagem da barra reflete o que saiu');
+});
+
+test('lista vazia diz isso, em vez de abrir uma pagina em branco', () => {
+  const html = gerarCertificadosHtml(dados([]), []);
+  assert.match(html, /Nenhuma pessoa selecionada/u);
+});
+
+test('NAO dispara a impressao sozinho', () => {
+  // Mesma regra dos outros documentos: conferir e o caso comum, imprimir e o eventual.
+  const html = gerarCertificadosHtml(dados([]), [pessoa('Ana')]);
+  assert.doesNotMatch(html, /onload[^>]*print/u);
+  assert.match(html, /onclick="window\.print\(\)"/u);
+});
+
+test('generico de proposito: sem carga horaria, registro ou nome de diretor', () => {
+  // 🔴 Cada um desses seria dado INVENTADO impresso num documento que vai para fora. O
+  // formato ainda vai mudar (pedido do Hugo em 19/09/2026) — o que nao pode mudar e isso.
+  const html = gerarCertificadosHtml(dados([]), [
+    pessoa('Ana', [{ cursoNome: 'Violão', musica: 'Asa Branca' }]),
+  ]);
+  assert.doesNotMatch(html, /carga hor[áa]ria/iu);
+  assert.doesNotMatch(html, /registro n|n[ºo°]\s*\d+\s*\/\s*\d{4}/iu);
+  assert.doesNotMatch(html, /diretor|coordenador\(a\)|respons[áa]vel t[ée]cnico/iu);
+});
+
+test('o titulo do evento e a unidade saem do dado, nao de texto fixo', () => {
+  const html = gerarCertificadosHtml(dados([]), [pessoa('Ana')]);
+  assert.match(html, /Recital de Primavera/u);
+  assert.match(html, /Barra/u);
 });

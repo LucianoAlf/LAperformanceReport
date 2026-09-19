@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { CheckCircle2, Clock, ListOrdered, Search, UserCheck, Users, X } from 'lucide-react';
+import { Award, CheckCircle2, Clock, ListOrdered, Search, UserCheck, Users, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,10 +8,13 @@ import { cn } from '@/lib/utils';
 import {
   montarListaDeChegada,
   ordenarPessoasDaPorta,
+  selecionarParaCertificado,
   type EntradaDaChegada,
   type LinhaDaChegada,
   type PessoaNaChegada,
+  type PublicoDoCertificado,
 } from '@/lib/eventos';
+import { abrirDocumento, gerarCertificadosHtml, type DadosDaImpressao } from '@/lib/eventosImpressao';
 import {
   marcarChegada,
   useCheckinDoEvento,
@@ -153,6 +156,40 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
     });
   };
 
+  const [publicoCert, setPublicoCert] = useState<PublicoDoCertificado>('chegou');
+  const recebemCertificado = useMemo(
+    () => selecionarParaCertificado(lista.pessoas, publicoCert),
+    [lista.pessoas, publicoCert],
+  );
+
+  const abrirCertificados = () => {
+    const dados: DadosDaImpressao = {
+      evento: {
+        titulo: evento.titulo,
+        data_evento: evento.data_evento,
+        local: evento.local,
+        unidade_nome: evento.unidade_nome,
+        horario_inicio: evento.horario_inicio,
+        duracao_padrao_segundos: evento.duracao_padrao_segundos,
+        intervalo_entre_blocos_segundos: evento.intervalo_entre_blocos_segundos ?? 2700,
+      },
+      // O certificado não usa a grade para nada além do repertório de cada pessoa, que já
+      // vem resolvido na lista — por isso `blocos` vai vazio em vez de ser remontado.
+      blocos: [],
+      origem: typeof window === 'undefined' ? undefined : window.location.origin,
+    };
+    const html = gerarCertificadosHtml(
+      dados,
+      recebemCertificado.map((p) => ({
+        nome: p.nome,
+        apresentacoes: p.apresentacoes.map((a) => ({ cursoNome: a.cursoNome, musica: a.musica })),
+      })),
+    );
+    if (!abrirDocumento(html)) {
+      toast.error('O navegador bloqueou a janela. Permita pop-ups para este site e tente de novo.');
+    }
+  };
+
   const erro = erroGrade ?? erroCheckin;
   if (erro) {
     return (
@@ -203,6 +240,67 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
           Ninguém confirmado nem alocado ainda. O check-in lista quem está na grade e quem
           confirmou participação na aba Alunos.
         </p>
+      )}
+
+      {resumo.esperados > 0 && (
+        <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <Award className="h-3.5 w-3.5" />
+                Certificados
+              </h3>
+              <p className="mt-0.5 text-[12px] text-slate-500">
+                Um certificado por página, em A4 deitado. Abre numa aba nova, com botão para
+                salvar em PDF.
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-1">
+                <span className="mr-1 text-[11px] text-slate-500">Emitir para:</span>
+                <Chip
+                  rotulo={`quem chegou (${lista.resumo.chegaram})`}
+                  ativo={publicoCert === 'chegou'}
+                  onClick={() => setPublicoCert('chegou')}
+                />
+                <Chip
+                  rotulo="todos os esperados"
+                  ativo={publicoCert === 'todos'}
+                  onClick={() => setPublicoCert('todos')}
+                />
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={abrirCertificados}
+              disabled={recebemCertificado.length === 0}
+            >
+              <Award className="h-3.5 w-3.5" />
+              {recebemCertificado.length === 1
+                ? '1 certificado'
+                : `${recebemCertificado.length} certificados`}
+            </Button>
+          </div>
+
+          {/* ⚠️ Diz por que está vazio em vez de só desabilitar o botão: "quem chegou" com
+              zero check-in é o estado normal de quem ainda não usou a aba, e um botão morto
+              sem explicação parece defeito. */}
+          {recebemCertificado.length === 0 && (
+            <p className="mt-2 text-[11.5px] text-amber-200/80">
+              {publicoCert === 'chegou'
+                ? 'Ninguém com check-in ainda. Marque as chegadas abaixo ou emita para todos os esperados.'
+                : 'Ninguém na lista do dia.'}
+            </p>
+          )}
+
+          {/* O formato é provisório e isso não pode ficar só no commit: quem abrir a tela
+              precisa saber que o papel ainda vai mudar. */}
+          <p className="mt-2 text-[11px] text-slate-500">
+            Modelo genérico, sem carga horária nem número de registro — o texto ainda vai ser
+            definido. Quem faz dois cursos recebe <strong>um</strong> certificado, com os dois
+            no repertório.
+          </p>
+        </section>
       )}
 
       {resumo.esperados > 0 && (

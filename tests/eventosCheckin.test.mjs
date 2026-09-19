@@ -23,7 +23,7 @@ const lib = await (async () => {
   return import(pathToFileURL(arquivo).href);
 })();
 
-const { montarListaDeChegada, ordenarPessoasDaPorta } = lib;
+const { montarListaDeChegada, ordenarPessoasDaPorta, selecionarParaCertificado } = lib;
 
 const EVENTO = {
   horario_inicio: '09:00',
@@ -427,6 +427,128 @@ test('ordenar a porta devolve todo mundo, sem perder nem duplicar', () => {
     ['a', 'b', 'c'],
     'ordenar não é filtrar',
   );
+});
+
+/* ─────────────────────── quem recebe certificado ─────────────────────── */
+
+const listaCom = (blocos, participacoes) =>
+  montarListaDeChegada(entrada(blocos, participacoes)).pessoas;
+
+test('"quem chegou" exige check-in, e so ele', () => {
+  const pessoas = listaCom(
+    [
+      bloco('Bloco 1', [
+        ap({ pessoa_chave: 'a', aluno_nome: 'Ana' }),
+        ap({ pessoa_chave: 'b', aluno_nome: 'Bruno' }),
+      ]),
+    ],
+    [
+      participacao({ pessoa_chave: 'a', nome: 'Ana', checkin_em: '2026-09-19T21:00:00Z' }),
+      participacao({ pessoa_chave: 'b', nome: 'Bruno' }),
+    ],
+  );
+  assert.deepEqual(
+    selecionarParaCertificado(pessoas, 'chegou').map((p) => p.nome),
+    ['Ana'],
+  );
+});
+
+test('"todos os esperados" inclui quem nao fez check-in', () => {
+  // O caso do primeiro recital: a aba acabou de nascer e ninguém usou o check-in. Sem esta
+  // opção, a escola não conseguiria emitir certificado nenhum.
+  const pessoas = listaCom(
+    [
+      bloco('Bloco 1', [
+        ap({ pessoa_chave: 'a', aluno_nome: 'Ana' }),
+        ap({ pessoa_chave: 'b', aluno_nome: 'Bruno' }),
+      ]),
+    ],
+    [],
+  );
+  assert.equal(selecionarParaCertificado(pessoas, 'chegou').length, 0);
+  assert.equal(selecionarParaCertificado(pessoas, 'todos').length, 2);
+});
+
+test('quem marcou "nao participa" fica FORA da lista de esperados', () => {
+  // Certificar quem declarou que não viria é afirmar no papel uma participação que ninguém
+  // observou — e o papel vai para a família do aluno.
+  const pessoas = listaCom(
+    [bloco('Bloco 1', [ap({ pessoa_chave: 'x', aluno_nome: 'Desistente' })])],
+    [participacao({ pessoa_chave: 'x', nome: 'Desistente', status: 'nao' })],
+  );
+  assert.equal(selecionarParaCertificado(pessoas, 'todos').length, 0);
+});
+
+test('mas quem marcou "nao" e APARECEU recebe — a evidencia vence a declaracao', () => {
+  const pessoas = listaCom(
+    [bloco('Bloco 1', [ap({ pessoa_chave: 'x', aluno_nome: 'Voltou Atrás' })])],
+    [
+      participacao({
+        pessoa_chave: 'x',
+        nome: 'Voltou Atrás',
+        status: 'nao',
+        checkin_em: '2026-09-19T21:00:00Z',
+      }),
+    ],
+  );
+  assert.equal(selecionarParaCertificado(pessoas, 'chegou').length, 1);
+});
+
+test('quem faz 2 cursos recebe UM certificado, com os dois no repertorio', () => {
+  // 🔴 Decisão pendente, não conclusão: se a escola definir um por curso, o grão muda para
+  // (pessoa, curso) e `certificado_status` muda de tabela. Este formato atende as duas
+  // leituras sem escolher nenhuma.
+  const pessoas = listaCom(
+    [
+      bloco('Bloco 1', [
+        ap({ pessoa_chave: 'maria', aluno_nome: 'Maria', curso_nome: 'Violão', musica: 'Asa Branca' }),
+        ap({ pessoa_chave: 'maria', aluno_nome: 'Maria', curso_nome: 'Canto', musica: 'Trem Bala' }),
+      ]),
+    ],
+    [participacao({ pessoa_chave: 'maria', nome: 'Maria', checkin_em: '2026-09-19T21:00:00Z' })],
+  );
+  const recebem = selecionarParaCertificado(pessoas, 'chegou');
+  assert.equal(recebem.length, 1, 'uma pessoa, um papel');
+  assert.deepEqual(
+    recebem[0].apresentacoes.map((a) => [a.cursoNome, a.musica]),
+    [
+      ['Violão', 'Asa Branca'],
+      ['Canto', 'Trem Bala'],
+    ],
+  );
+});
+
+test('a pilha de certificados sai em ordem alfabetica', () => {
+  // Quem entrega procura por NOME, não por ordem de palco.
+  const pessoas = listaCom(
+    [
+      bloco('Bloco 1', [
+        ap({ pessoa_chave: 'z', aluno_nome: 'Zuleica' }),
+        ap({ pessoa_chave: 'an', aluno_nome: 'Ângela' }),
+        ap({ pessoa_chave: 'al', aluno_nome: 'Alice' }),
+      ]),
+    ],
+    [],
+  );
+  assert.deepEqual(
+    selecionarParaCertificado(pessoas, 'todos').map((p) => p.nome),
+    ['Alice', 'Ângela', 'Zuleica'],
+  );
+});
+
+test('selecionar nao muta a lista recebida', () => {
+  const pessoas = listaCom(
+    [
+      bloco('Bloco 1', [
+        ap({ pessoa_chave: 'z', aluno_nome: 'Zuleica' }),
+        ap({ pessoa_chave: 'a', aluno_nome: 'Ana' }),
+      ]),
+    ],
+    [],
+  );
+  const antes = pessoas.map((p) => p.nome);
+  selecionarParaCertificado(pessoas, 'todos');
+  assert.deepEqual(pessoas.map((p) => p.nome), antes);
 });
 
 /* ─────────────────────────── a aba existe ─────────────────────────── */

@@ -539,6 +539,197 @@ export function gerarPlanilhaCsv(dados: DadosDaImpressao, apenasBlocoId?: number
   return `\uFEFF${[cabecalho.join(';'), ...linhas].join('\r\n')}\r\n`;
 }
 
+/* ─────────────────────────── certificado ─────────────────────────── */
+
+/**
+ * Uma pessoa que recebe certificado.
+ *
+ * ⚠️ O grao e a PESSOA, nao a apresentacao — o mesmo do check-in, e pelo mesmo motivo: quem
+ * faz Violao e Canto e uma pessoa so, e hoje `certificado_status` mora em
+ * `evento_participacao`, cuja UNIQUE e `(evento_id, pessoa_chave)`.
+ *
+ * 🔴 **Isto e uma DECISAO PENDENTE, nao uma conclusao.** Se a escola decidir que quem faz dois
+ * cursos recebe dois certificados, o grao muda para `(pessoa, curso)` e a coluna muda de
+ * tabela. Ate la, as apresentacoes entram como uma LINHA de repertorio dentro de um unico
+ * papel — formato que atende as duas leituras sem escolher nenhuma.
+ */
+export interface CertificadoParaGerar {
+  nome: string;
+  /** Vazio = certificado sem linha de repertorio (quem confirmou e nao subiu ao palco). */
+  apresentacoes: { cursoNome: string | null; musica: string | null }[];
+}
+
+const ESTILO_CERTIFICADO = `
+  :root { --marca: #b45309; --marca-escura: #7c2d12; --tinta: #1f2937; --suave: #6b7280; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+         color: var(--tinta); margin: 0; background: #f1f5f9; }
+
+  .acoes { position: sticky; top: 0; z-index: 10; background: #0f172a; color: #e2e8f0;
+           padding: 10px 0; font-size: 12.5px; }
+  .acoes .dentro { max-width: 1040px; margin: 0 auto; padding: 0 16px;
+                   display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .acoes .qual { font-weight: 600; margin-right: auto; }
+  .acoes .qual span { display: block; font-weight: 400; font-size: 11px; color: #94a3b8; }
+  .acoes button { font: inherit; font-size: 12.5px; border-radius: 6px; padding: 7px 14px;
+                  cursor: pointer; border: 1px solid transparent; }
+  .acoes .pdf { background: #b45309; color: #fff; font-weight: 600; }
+  .acoes .pdf:hover { background: #92400e; }
+  .acoes .imprimir { background: transparent; color: #e2e8f0; border-color: #334155; }
+  .dica { width: 100%; font-size: 11px; color: #94a3b8; margin: -2px 0 0; }
+
+  /* Uma folha A4 DEITADA por pessoa. 297x210mm e a medida real da pagina: na tela vira um
+     retangulo com a mesma proporcao do que vai sair na impressora, entao o que se confere e
+     o que se imprime. */
+  .cert { background: #fff; width: 297mm; height: 210mm; margin: 22px auto; padding: 14mm;
+          box-shadow: 0 1px 3px rgba(15,23,42,.1), 0 12px 32px rgba(15,23,42,.08);
+          display: flex; }
+  .moldura { border: 2px solid var(--marca); border-radius: 3px; flex: 1; padding: 12mm 16mm;
+             display: flex; flex-direction: column; align-items: center; text-align: center;
+             position: relative; }
+  /* Fio interno: dobra a borda sem pesar a impressao com fundo colorido. */
+  .moldura::before { content: ''; position: absolute; inset: 3mm; border: 1px solid #fde68a;
+                     border-radius: 2px; pointer-events: none; }
+
+  .cert img { height: 15mm; width: auto; object-fit: contain; }
+  .titulo { font-size: 26px; letter-spacing: .18em; text-transform: uppercase;
+            color: var(--marca-escura); margin: 8mm 0 0; font-weight: 700; }
+  .subtitulo { font-size: 12px; letter-spacing: .1em; text-transform: uppercase;
+               color: var(--suave); margin-top: 2mm; }
+  .corpo { margin-top: 9mm; font-size: 14px; line-height: 1.9; max-width: 190mm; }
+  .nome { display: block; font-size: 30px; font-weight: 600; color: var(--marca-escura);
+          margin: 4mm 0; line-height: 1.25; }
+  .repertorio { margin-top: 6mm; font-size: 12.5px; color: #374151; }
+  .repertorio .item { display: block; }
+  .repertorio .curso { color: var(--marca); font-weight: 600; }
+  .repertorio .musica { font-style: italic; }
+
+  /* Empurra a assinatura para o rodape do papel, qualquer que seja o tamanho do texto. */
+  .assinatura { margin-top: auto; padding-top: 6mm; }
+  .assinatura .linha { width: 78mm; border-top: 1px solid #9ca3af; margin: 0 auto 2mm; }
+  .assinatura .quem { font-size: 12px; font-weight: 600; }
+  .assinatura .onde { font-size: 10.5px; color: var(--suave); }
+
+  @media print {
+    body { background: #fff; }
+    .acoes { display: none !important; }
+    /* Sem sombra, sem margem e SEM quebra depois do ultimo: uma pagina em branco no fim de um
+       lote de 200 certificados e uma folha desperdicada por lote. */
+    .cert { margin: 0; box-shadow: none; page-break-after: always; }
+    .cert:last-child { page-break-after: auto; }
+    @page { size: A4 landscape; margin: 0; }
+  }
+`;
+
+/**
+ * Certificados de participacao, um por pagina, num documento so.
+ *
+ * ⚠️ **Generico de proposito** (pedido do Hugo em 19/09/2026: "crie um generico mesmo,
+ * provavelmente vamos alterar depois"). Por isso NAO ha carga horaria, numero de registro,
+ * QR de validacao nem nome de diretor: cada um desses seria um dado inventado impresso num
+ * documento que vai para a familia do aluno. O que sai no papel e so o que o sistema sabe.
+ *
+ * ⚠️ Nao dispara a impressao sozinho, como os outros documentos — abrir para CONFERIR e o caso
+ * comum, imprimir e o eventual.
+ */
+export function gerarCertificadosHtml(
+  dados: DadosDaImpressao,
+  pessoas: CertificadoParaGerar[],
+): string {
+  const { evento } = dados;
+  const logo = dados.origem
+    ? `<img src="${escapeHtml(dados.origem)}/logo-la-music-light-completa.svg" alt="LA Music"
+            onerror="this.style.display='none'" />`
+    : '';
+
+  // Certificado sem nome e papel inutil — ninguem consegue entregar. Sai da lista, e a
+  // contagem no cabecalho da barra reflete o que de fato foi gerado.
+  const validas = pessoas.filter((p) => p.nome.trim() !== '');
+
+  const ondeQuando = [
+    dataPorExtenso(evento.data_evento),
+    evento.local ? escapeHtml(evento.local) : null,
+  ]
+    .filter(Boolean)
+    .join(', ');
+
+  const folhas = validas
+    .map((pessoa) => {
+      const repertorio = pessoa.apresentacoes
+        .map((a) => {
+          const curso = a.cursoNome ? `<span class="curso">${escapeHtml(a.cursoNome)}</span>` : '';
+          const musica = a.musica?.trim()
+            ? `<span class="musica">${escapeHtml(a.musica.trim())}</span>`
+            : '';
+          // Sem curso nem musica nao ha item: uma linha vazia no papel parece erro de
+          // impressao, e a ausencia de repertorio ja e dita pela ausencia do bloco inteiro.
+          if (!curso && !musica) return null;
+          return `<span class="item">${[curso, musica].filter(Boolean).join(' &middot; ')}</span>`;
+        })
+        .filter(Boolean)
+        .join('');
+
+      return `  <div class="cert">
+    <div class="moldura">
+      ${logo}
+      <h1 class="titulo">Certificado</h1>
+      <p class="subtitulo">de participação</p>
+
+      <div class="corpo">
+        Certificamos que
+        <strong class="nome">${escapeHtml(pessoa.nome)}</strong>
+        participou do <strong>${escapeHtml(evento.titulo)}</strong>${
+          ondeQuando ? `, realizado em ${ondeQuando}` : ''
+        }.
+        ${repertorio ? `<div class="repertorio">${repertorio}</div>` : ''}
+      </div>
+
+      <div class="assinatura">
+        <div class="linha"></div>
+        <p class="quem">LA Music Escola de Música</p>
+        ${evento.unidade_nome ? `<p class="onde">${escapeHtml(evento.unidade_nome)}</p>` : ''}
+      </div>
+    </div>
+  </div>`;
+    })
+    .join('\n');
+
+  const corpo =
+    validas.length > 0
+      ? folhas
+      : `  <div class="cert"><div class="moldura">
+      <div class="corpo">Nenhuma pessoa selecionada para receber certificado.</div>
+    </div></div>`;
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(evento.titulo)} — Certificados</title>
+  <style>${ESTILO_CERTIFICADO}</style>
+</head>
+<body>
+  <div class="acoes">
+    <div class="dentro">
+      <div class="qual">
+        ${validas.length} ${validas.length === 1 ? 'certificado' : 'certificados'}
+        <span>${escapeHtml(evento.titulo)}</span>
+      </div>
+      <button type="button" class="pdf" onclick="window.print()">Salvar em PDF</button>
+      <button type="button" class="imprimir" onclick="window.print()">Imprimir</button>
+      <p class="dica">
+        Um certificado por página, em A4 deitado. Confira a orientação
+        <strong>Paisagem</strong> antes de imprimir.
+      </p>
+    </div>
+  </div>
+
+${corpo}
+</body>
+</html>`;
+}
+
 /** Nome de arquivo seguro, derivado do evento. */
 export function nomeDoArquivo(dados: DadosDaImpressao, sufixo: string): string {
   const base = `${dados.evento.data_evento}-${dados.evento.titulo}`

@@ -885,7 +885,14 @@ export interface PessoaNaChegada {
   status: string;
   chegouEm: string | null;
   /** Vazio = confirmou presenca e nao entrou em bloco nenhum. Ela vem ao evento assim mesmo. */
-  apresentacoes: { apresentacaoId: number; blocoNome: string; horario: string; cursoNome: string | null }[];
+  apresentacoes: {
+    apresentacaoId: number;
+    blocoNome: string;
+    horario: string;
+    cursoNome: string | null;
+    /** Carregada ate aqui porque o CERTIFICADO a imprime — a porta nao a usa. */
+    musica: string | null;
+  }[];
 }
 
 export interface ResumoDaChegada {
@@ -998,6 +1005,7 @@ export function montarListaDeChegada(entrada: EntradaDaChegada): ListaDeChegada 
         blocoNome: bloco.nome,
         horario,
         cursoNome: ap.curso_nome,
+        musica: ap.musica,
       });
       apresentacoesPorPessoa.set(ap.pessoa_chave, lista);
     }
@@ -1108,6 +1116,42 @@ export function ordenarPessoasDaPorta(pessoas: PessoaNaChegada[]): PessoaNaChega
       Number(a.chegouEm !== null) - Number(b.chegouEm !== null) ||
       a.nome.localeCompare(b.nome, 'pt-BR'),
   );
+}
+
+/* ─────────────────────────── certificado ─────────────────────────── */
+
+/**
+ * Quem recebe certificado.
+ *
+ * `chegou` — so quem tem check-in. E a evidencia mais forte que o sistema tem de que a pessoa
+ * esteve la, e por isso e o padrao.
+ * `todos` — toda a lista do dia, para quando a equipe nao usou o check-in (o caso do primeiro
+ * recital, em que a aba acabou de nascer). Emite para quem era esperado, nao para quem veio.
+ */
+export type PublicoDoCertificado = 'chegou' | 'todos';
+
+/**
+ * Filtra quem recebe certificado, em ordem alfabetica.
+ *
+ * ⚠️ Quem marcou **"nao participa"** so entra pelo check-in. Pela lista de esperados ele fica
+ * de fora: certificar quem declarou que nao viria e afirmar no papel uma participacao que
+ * ninguem observou. Mas se ele apareceu e alguem marcou a chegada, ele veio — e ai a
+ * evidencia vence a declaracao antiga.
+ *
+ * ⚠️ A ordem e alfabetica porque a saida e uma PILHA DE PAPEL: quem entrega procura por nome,
+ * nao por ordem de palco. E a mesma razao da lista da porta, com o desfecho oposto — la o
+ * estado de chegada ordena, aqui todo mundo da pilha ja tem o mesmo estado.
+ */
+export function selecionarParaCertificado(
+  pessoas: PessoaNaChegada[],
+  publico: PublicoDoCertificado,
+): PessoaNaChegada[] {
+  const elegiveis =
+    publico === 'chegou'
+      ? pessoas.filter((p) => p.chegouEm !== null)
+      : pessoas.filter((p) => p.status !== 'nao');
+
+  return [...elegiveis].sort((a, b) => ordenarNomes(a.nome, b.nome));
 }
 
 export interface ResumoDoEvento {
