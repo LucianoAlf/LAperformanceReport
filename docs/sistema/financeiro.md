@@ -11,6 +11,7 @@
 - **Autorização:** segredo interno dedicado no header `x-super-folha-sync-secret`; não aceita sessão de navegador nem expõe a service role do LA Report.
 - **Contrato:** `emusys_faturas` continua como espelho canônico atual; `sync_run_items` congela cada competência e seus tombstones. `la_report_fatura_id` é o UUID estável da linha canônica, nunca o UUID técnico do snapshot.
 - **Consistência:** um mutex parcial global permite só um run `running`; as 3 unidades são coletadas antes de uma RPC de publicação atômica. O export nunca lê a tabela mutável: aceita um `sync_run_id` live completo, valida o mais recente com `require_latest`, ou seleciona o último completo para fallback read-only.
+- **Refresh sob demanda:** uma competência com snapshot live completo e `stale_after` vigente responde 200 com o run existente. Mês fechado específico não expande `include_backlog`; job já ativo responde 202 com o mesmo UUID da fila.
 - **Hash:** usa apenas unidade UUID, ID Emusys, competência, dados financeiros e estado/motivo de ausência; IDs de run/item e timestamps operacionais ficam fora.
 - **Cron:** competências atual e anterior, sequenciais, com segredo lido do Vault.
 >
