@@ -818,6 +818,298 @@ export function levantarPendencias(entrada: EntradaDaRevisao): Pendencia[] {
   );
 }
 
+/* ─────────────────────── check-in (o dia do recital) ─────────────────────── */
+
+/**
+ * ⚠️ O check-in e da PESSOA, nunca da apresentacao.
+ *
+ * Quem faz Violao e Canto sobe ao palco duas vezes e chega ao teatro UMA. Guardar a chegada
+ * por apresentacao produziria duas respostas possiveis para "o Joao chegou?" — e a segunda
+ * seria escrita por quem marcasse a segunda apresentacao, horas depois. Por isso `checkin_em`
+ * mora em `evento_participacao`, cuja UNIQUE e `(evento_id, pessoa_chave)`.
+ *
+ * A consequencia aparece na tela: marcar a chegada numa linha acende TODAS as linhas daquela
+ * pessoa, e a lista diz isso em vez de deixar a coordenacao descobrir sozinha.
+ */
+export interface ApresentacaoParaChegada {
+  id: number;
+  ordem: number;
+  duracao_segundos: number | null;
+  pessoa_chave: string;
+  aluno_id: number;
+  aluno_nome: string;
+  curso_nome: string | null;
+  musica: string | null;
+}
+
+export interface ParticipacaoParaChegada {
+  pessoa_chave: string;
+  nome: string;
+  status: string;
+  /** ISO do momento da chegada. `null` = ainda nao chegou (ou ninguem marcou). */
+  checkin_em: string | null;
+  aluno_id: number;
+}
+
+export interface EntradaDaChegada {
+  evento: EventoParaCalculo;
+  blocos: (BlocoParaCalculo & { nome: string; apresentacoes: ApresentacaoParaChegada[] })[];
+  participacoes: ParticipacaoParaChegada[];
+}
+
+/** Uma apresentacao na ordem do recital, do ponto de vista de quem opera o dia. */
+export interface LinhaDaChegada {
+  apresentacaoId: number;
+  pessoaChave: string;
+  alunoId: number;
+  alunoNome: string;
+  cursoNome: string | null;
+  musica: string | null;
+  blocoId: number;
+  blocoNome: string;
+  /** Horario PREVISTO, calculado da grade. O recital atrasa; isto nao e o relogio. */
+  horario: string;
+  /** 1..N na ordem do recital inteiro — e o numero que o mestre de cerimonias anuncia. */
+  posicao: number;
+  chegouEm: string | null;
+  /** Participacao declarada. 'nao' aqui e o caso que a Revisao acusa como impedimento. */
+  status: string;
+  /** Quantas OUTRAS apresentacoes a mesma pessoa tem. > 0 = um check-in vale para todas. */
+  outrasApresentacoes: number;
+}
+
+export interface PessoaNaChegada {
+  pessoaChave: string;
+  alunoId: number;
+  nome: string;
+  status: string;
+  chegouEm: string | null;
+  /** Vazio = confirmou presenca e nao entrou em bloco nenhum. Ela vem ao evento assim mesmo. */
+  apresentacoes: { apresentacaoId: number; blocoNome: string; horario: string; cursoNome: string | null }[];
+}
+
+export interface ResumoDaChegada {
+  /** Pessoas que devem aparecer no dia. Ver a regra em `montarListaDeChegada`. */
+  esperados: number;
+  chegaram: number;
+  faltam: number;
+  /** Apresentacoes cuja pessoa ainda nao chegou — o que o mestre de cerimonias precisa saber. */
+  apresentacoesSemChegada: number;
+  apresentacoes: number;
+}
+
+/**
+ * O check-in de UM bloco — o recorte com que o recital e de fato operado.
+ *
+ * ⚠️ O bloco tem contagem PROPRIA e ela nao e um pedaco do total: quem toca em dois blocos
+ * conta nos dois, porque cada um precisa saber se a pessoa dele esta no teatro. Somar os
+ * `esperados` dos blocos NAO devolve o `esperados` geral, e isso e a resposta certa para
+ * duas perguntas diferentes — o total pergunta "quantas pessoas esperamos hoje", o bloco
+ * pergunta "quem tem de estar aqui agora".
+ */
+export interface BlocoDaChegada {
+  blocoId: number;
+  nome: string;
+  ordem: number;
+  /** Horario previsto de inicio do bloco, calculado da grade. */
+  inicio: string;
+  linhas: LinhaDaChegada[];
+  /** Pessoas DISTINTAS deste bloco — quem toca duas vezes nele conta uma. */
+  pessoas: number;
+  chegaram: number;
+  faltam: number;
+}
+
+export interface ListaDeChegada {
+  /** Uma linha por apresentacao, na ordem do recital: a visao do palco. */
+  ordem: LinhaDaChegada[];
+  /** A mesma ordem, cortada por bloco, com contagem propria de cada um. */
+  blocos: BlocoDaChegada[];
+  /** Uma linha por pessoa, em ordem alfabetica: a visao da porta. */
+  pessoas: PessoaNaChegada[];
+  resumo: ResumoDaChegada;
+}
+
+/**
+ * A lista do dia, nas duas visoes que o recital precisa ao mesmo tempo.
+ *
+ * Quem esta na porta procura por NOME e marca a chegada; quem esta na coxia acompanha a
+ * ORDEM e precisa saber se o proximo ja chegou. E a mesma informacao lida por dois caminhos,
+ * e por isso sai das duas formas de uma passada so — recalcular no componente faria a
+ * contagem do topo divergir da lista de baixo no primeiro ajuste.
+ *
+ * ⚠️ Nao recebe "agora" de proposito. O horario aqui e o PREVISTO da grade, e recital atrasa:
+ * destacar "a apresentacao atual" pelo relogio anunciaria a pessoa errada com a confianca de
+ * um sistema. Quem sabe onde o recital esta e quem esta na sala.
+ */
+export function montarListaDeChegada(entrada: EntradaDaChegada): ListaDeChegada {
+  const horarios = calcularHorariosDaGrade(entrada.evento, entrada.blocos);
+  const horarioPorApresentacao = new Map<number, string>();
+  for (const bloco of horarios) {
+    for (const ap of bloco.apresentacoes) horarioPorApresentacao.set(ap.id, ap.inicio);
+  }
+
+  const porChave = new Map<string, ParticipacaoParaChegada>(
+    entrada.participacoes.map((p) => [p.pessoa_chave, p]),
+  );
+
+  // Conta quantas vezes cada pessoa sobe ao palco, ANTES de montar as linhas: e o que
+  // permite cada linha dizer "esta pessoa se apresenta mais uma vez".
+  const vezesPorPessoa = new Map<string, number>();
+  for (const bloco of entrada.blocos) {
+    for (const ap of bloco.apresentacoes) {
+      vezesPorPessoa.set(ap.pessoa_chave, (vezesPorPessoa.get(ap.pessoa_chave) ?? 0) + 1);
+    }
+  }
+
+  const blocosOrdenados = [...entrada.blocos].sort((a, b) => a.ordem - b.ordem || a.id - b.id);
+  const ordem: LinhaDaChegada[] = [];
+  const apresentacoesPorPessoa = new Map<string, PessoaNaChegada['apresentacoes']>();
+
+  let posicao = 0;
+  for (const bloco of blocosOrdenados) {
+    const apresentacoes = [...bloco.apresentacoes].sort((a, b) => a.ordem - b.ordem || a.id - b.id);
+    for (const ap of apresentacoes) {
+      posicao += 1;
+      const participacao = porChave.get(ap.pessoa_chave);
+      const horario = horarioPorApresentacao.get(ap.id) ?? '';
+
+      ordem.push({
+        apresentacaoId: ap.id,
+        pessoaChave: ap.pessoa_chave,
+        alunoId: ap.aluno_id,
+        alunoNome: ap.aluno_nome,
+        cursoNome: ap.curso_nome,
+        musica: ap.musica,
+        blocoId: bloco.id,
+        blocoNome: bloco.nome,
+        horario,
+        posicao,
+        chegouEm: participacao?.checkin_em ?? null,
+        // Sem linha de participacao o estado e 'indefinido', o mesmo default do banco —
+        // inventar 'participa' aqui faria a tela afirmar uma decisao que ninguem tomou.
+        status: participacao?.status ?? 'indefinido',
+        outrasApresentacoes: (vezesPorPessoa.get(ap.pessoa_chave) ?? 1) - 1,
+      });
+
+      const lista = apresentacoesPorPessoa.get(ap.pessoa_chave) ?? [];
+      lista.push({
+        apresentacaoId: ap.id,
+        blocoNome: bloco.nome,
+        horario,
+        cursoNome: ap.curso_nome,
+      });
+      apresentacoesPorPessoa.set(ap.pessoa_chave, lista);
+    }
+  }
+
+  // Nome vem da GRADE quando existe, e da participacao quando a pessoa nao subiu ao palco:
+  // a grade guarda o nome pela procedencia, entao continua legivel mesmo depois de a pessoa
+  // sair da base ativa — o recital ja aconteceu, e apagar o nome reescreveria a historia.
+  const nomeNaGrade = new Map<string, { nome: string; alunoId: number }>();
+  for (const linha of ordem) {
+    if (!nomeNaGrade.has(linha.pessoaChave)) {
+      nomeNaGrade.set(linha.pessoaChave, { nome: linha.alunoNome, alunoId: linha.alunoId });
+    }
+  }
+
+  const chaves = new Set<string>([...nomeNaGrade.keys()]);
+  for (const p of entrada.participacoes) {
+    // Quem confirmou e nao entrou na grade tambem vai ao teatro. Deixar de fora faria a
+    // pessoa aparecer na porta e nao existir na lista de quem a recebe.
+    if (p.status === 'participa') chaves.add(p.pessoa_chave);
+  }
+
+  const pessoas: PessoaNaChegada[] = [...chaves]
+    .map((chave) => {
+      const daGrade = nomeNaGrade.get(chave);
+      const participacao = porChave.get(chave);
+      return {
+        pessoaChave: chave,
+        alunoId: daGrade?.alunoId ?? participacao?.aluno_id ?? 0,
+        nome: daGrade?.nome ?? participacao?.nome ?? '(sem nome)',
+        status: participacao?.status ?? 'indefinido',
+        chegouEm: participacao?.checkin_em ?? null,
+        apresentacoes: apresentacoesPorPessoa.get(chave) ?? [],
+      };
+    })
+    .sort((a, b) => ordenarNomes(a.nome, b.nome));
+
+  const chegaram = pessoas.filter((p) => p.chegouEm !== null).length;
+
+  const inicioPorBloco = new Map(horarios.map((h) => [h.blocoId, h.inicio]));
+  const blocosDaChegada: BlocoDaChegada[] = blocosOrdenados.map((bloco) => {
+    const linhas = ordem.filter((l) => l.blocoId === bloco.id);
+    // Contagem por PESSOA distinta dentro do bloco: quem toca duas vezes no mesmo bloco
+    // chega uma vez, e contar as linhas diria que falta gente que ja esta na coxia.
+    const chegadaPorPessoa = new Map<string, boolean>();
+    for (const l of linhas) chegadaPorPessoa.set(l.pessoaChave, l.chegouEm !== null);
+    const presentes = [...chegadaPorPessoa.values()].filter(Boolean).length;
+
+    return {
+      blocoId: bloco.id,
+      nome: bloco.nome,
+      ordem: bloco.ordem,
+      inicio: inicioPorBloco.get(bloco.id) ?? '',
+      linhas,
+      pessoas: chegadaPorPessoa.size,
+      chegaram: presentes,
+      faltam: chegadaPorPessoa.size - presentes,
+    };
+  });
+
+  return {
+    ordem,
+    blocos: blocosDaChegada,
+    pessoas,
+    resumo: {
+      esperados: pessoas.length,
+      chegaram,
+      faltam: pessoas.length - chegaram,
+      apresentacoesSemChegada: ordem.filter((l) => l.chegouEm === null).length,
+      apresentacoes: ordem.length,
+    },
+  };
+}
+
+/**
+ * Ordem em que a lista da PORTA aparece na tela.
+ *
+ * Nao e detalhe de renderizacao: e a decisao de quem a coordenacao ve primeiro com o teatro
+ * enchendo. As duas leituras defensaveis se contradizem, e por isso a regra mora aqui, num
+ * lugar so, em vez de virar um `.sort()` solto dentro do componente.
+ *
+ * A entrada nunca e mutada — `montarListaDeChegada` devolve a mesma lista para as duas
+ * visoes, e ordenar no lugar mudaria a ordem do palco junto.
+ */
+export function ordenarPessoasDaPorta(pessoas: PessoaNaChegada[]): PessoaNaChegada[] {
+  const copia = [...pessoas];
+
+  // Quem falta primeiro, e dentro de cada grupo em ordem alfabetica.
+  //
+  // As tres leituras possiveis se contradizem, e esta e o meio-termo:
+  //   • alfabetica pura e previsivel, mas com o teatro enchendo mantem no topo justamente
+  //     quem ja chegou — a lista fica pior conforme o evento avanca, que e quando ela mais
+  //     e usada;
+  //   • so por chegada responde "quem falta" e nao diz onde procurar um nome;
+  //   • esta responde as duas: a metade de cima e a lista de pendentes, e dentro dela a
+  //     posicao de cada nome continua previsivel.
+  //
+  // ⚠️ A comparacao e sobre `chegouEm !== null`, NUNCA sobre `chegouEm` direto: `null` em
+  // comparacao ja produziu bug neste projeto — `visto_em >= x` com `visto_em` nulo caia
+  // sempre no ramo errado e declarava `sanou` todo sinal recem-nascido. Reduzir a um
+  // booleano antes de comparar tira a duvida.
+  //
+  // ⚠️ Marcar a chegada MOVE a linha para baixo. E deliberado (a pessoa sai da lista de
+  // pendentes), e o custo — perder de vista quem acabou de ser marcado — e coberto pela
+  // busca por nome, que alcanca os dois grupos.
+  return copia.sort(
+    (a, b) =>
+      Number(a.chegouEm !== null) - Number(b.chegouEm !== null) ||
+      a.nome.localeCompare(b.nome, 'pt-BR'),
+  );
+}
+
 export interface ResumoDoEvento {
   participantes: number;
   /** Apresentacoes que o recital VAI ter se ninguem mexer mais: as que estao na grade. */

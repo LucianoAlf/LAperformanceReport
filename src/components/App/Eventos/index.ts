@@ -5,5 +5,7 @@ export { GradeTab } from './GradeTab';
 export { SeletorApresentacao } from './SeletorApresentacao';
 export { PalcoTab } from './PalcoTab';
 export { PalcoApresentacao } from './PalcoApresentacao';
+export { RevisaoTab } from './RevisaoTab';
+export { CheckinTab } from './CheckinTab';
 export { AvisoEmDesenvolvimento } from './AvisoEmDesenvolvimento';
 export { default } from './EventosPage';

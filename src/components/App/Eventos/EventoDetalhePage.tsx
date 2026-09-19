@@ -2,7 +2,17 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Mic2, ArrowLeft, CalendarDays, MapPin, Users, LayoutList, Speaker, ClipboardCheck } from 'lucide-react';
+import {
+  Mic2,
+  ArrowLeft,
+  CalendarDays,
+  MapPin,
+  Users,
+  LayoutList,
+  Speaker,
+  ClipboardCheck,
+  UserCheck,
+} from 'lucide-react';
 
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
@@ -13,9 +23,10 @@ import { AlunosTab } from './AlunosTab';
 import { GradeTab } from './GradeTab';
 import { PalcoTab } from './PalcoTab';
 import { RevisaoTab } from './RevisaoTab';
+import { CheckinTab } from './CheckinTab';
 import { AvisoEmDesenvolvimento } from './AvisoEmDesenvolvimento';
 
-type TabAtiva = 'alunos' | 'grade' | 'palco' | 'revisao';
+type TabAtiva = 'alunos' | 'grade' | 'palco' | 'revisao' | 'checkin';
 
 const STATUS_VARIANT: Record<EventoStatus, 'default' | 'success' | 'warning' | 'error'> = {
   rascunho: 'warning',
@@ -24,7 +35,7 @@ const STATUS_VARIANT: Record<EventoStatus, 'default' | 'success' | 'warning' | '
   cancelado: 'error',
 };
 
-const TABS_VALIDAS: TabAtiva[] = ['alunos', 'grade', 'palco', 'revisao'];
+const TABS_VALIDAS: TabAtiva[] = ['alunos', 'grade', 'palco', 'revisao', 'checkin'];
 
 // O `AbaFutura` (placeholder "Fase N — em breve") foi removido: as quatro abas passaram a
 // ter tela de verdade. Ele nao fica "por via das duvidas" porque placeholder esquecido e o
@@ -70,6 +81,9 @@ export function EventoDetalhePage() {
     { id: 'grade', label: 'Grade', shortLabel: 'Grade', icon: LayoutList },
     { id: 'palco', label: 'Palco', shortLabel: 'Palco', icon: Speaker },
     { id: 'revisao', label: 'Revisão', shortLabel: 'Revisão', icon: ClipboardCheck },
+    // Ultima aba de proposito: a ordem das abas e a ordem do trabalho, e o check-in so
+    // acontece no dia — depois de participacao, grade, palco e revisao estarem prontos.
+    { id: 'checkin', label: 'Check-in', shortLabel: 'Check-in', icon: UserCheck },
   ];
 
   if (loading) {
@@ -123,6 +137,7 @@ export function EventoDetalhePage() {
       {tabAtiva === 'grade' && <GradeTab evento={evento} />}
       {tabAtiva === 'palco' && <PalcoTab evento={evento} />}
       {tabAtiva === 'revisao' && <RevisaoTab evento={evento} onIrPara={alterarTab} />}
+      {tabAtiva === 'checkin' && <CheckinTab evento={evento} />}
     </div>
   );
 }

@@ -603,6 +603,130 @@ export async function reordenarBlocos(eventoId: number, idsNaOrdem: number[]) {
   });
 }
 
+/* ────────────────────────────── check-in ────────────────────────────── */
+
+export interface ParticipacaoComChegada {
+  pessoa_chave: string;
+  aluno_id: number;
+  nome: string;
+  status: ParticipacaoStatus;
+  checkin_em: string | null;
+}
+
+/**
+ * Participacao do evento com a chegada — a fonte do dia do recital.
+ *
+ * ⚠️ Le `evento_participacao` DIRETO, nao a view de elegiveis que a aba Alunos usa. A view
+ * mostra a base ativa de hoje; esta tela precisa continuar funcionando depois do recital,
+ * quando alguem pode ja ter saido da escola. O nome vem pela procedencia (`alunos(nome)`),
+ * pelo mesmo motivo que a grade guarda o nome assim.
+ */
+export function useCheckinDoEvento(eventoId: number | null) {
+  const [participacoes, setParticipacoes] = useState<ParticipacaoComChegada[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const recarregar = useCallback(async () => {
+    if (!eventoId) {
+      setParticipacoes([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setErro(null);
+
+    const { data, error } = await supabase
+      .from('evento_participacao')
+      .select('pessoa_chave, aluno_id, status, checkin_em, alunos(nome)')
+      .eq('evento_id', eventoId);
+
+    if (error) {
+      setErro(error.message);
+      setParticipacoes([]);
+    } else {
+      type Linha = Omit<ParticipacaoComChegada, 'nome'> & { alunos: { nome: string } | null };
+      setParticipacoes(
+        ((data ?? []) as unknown as Linha[]).map((p) => ({
+          pessoa_chave: p.pessoa_chave,
+          aluno_id: p.aluno_id,
+          status: p.status,
+          checkin_em: p.checkin_em,
+          nome: p.alunos?.nome ?? '(aluno removido)',
+        })),
+      );
+    }
+    setLoading(false);
+  }, [eventoId]);
+
+  useEffect(() => {
+    recarregar();
+  }, [recarregar]);
+
+  return { participacoes, loading, erro, recarregar };
+}
+
+/**
+ * Registra (ou desfaz) a chegada de uma PESSOA no evento.
+ *
+ * 🔴 O UPDATE nao pode ser cego. Provado contra o banco em 19/09/2026, nos 3 perfis: um
+ * usuario de Campo Grande atualizando a participacao de um evento da Barra recebe
+ * **zero linhas e NENHUM erro** — a policy FILTRA pelo `using`, nao recusa. Sem o `.select()`
+ * e a checagem do retorno, a tela pintaria "chegou" e o banco continuaria intacto.
+ *
+ * Os dois motivos de "zero linhas" sao separados pelo INSERT que vem depois:
+ *   • a pessoa entrou na grade sem ninguem marcar participacao — nenhuma RPC da grade cria a
+ *     linha de `evento_participacao`, entao este caso e normal, e o INSERT resolve;
+ *   • a policy escondeu — aqui o INSERT falha com erro de RLS, que e o que a tela mostra.
+ */
+export async function marcarChegada(
+  eventoId: number,
+  pessoaChave: string,
+  alunoIdReferencia: number,
+  chegou: boolean,
+) {
+  const quando = chegou ? new Date().toISOString() : null;
+
+  const { data, error } = await supabase
+    .from('evento_participacao')
+    .update({ checkin_em: quando, updated_at: new Date().toISOString() })
+    .eq('evento_id', eventoId)
+    .eq('pessoa_chave', pessoaChave)
+    .select('id');
+
+  if (error) return { error };
+  if ((data ?? []).length > 0) return { error: null };
+
+  // Desfazer o que nao existe nao tem INSERT que resolva: nao ha chegada registrada, e
+  // criar uma participacao vazia aqui esconderia o motivo real (quase sempre, escopo).
+  if (!chegou) {
+    return {
+      error: {
+        message:
+          'Não foi possível desfazer: esta pessoa não tem participação registrada neste evento.',
+      },
+    };
+  }
+
+  // `status: 'participa'` e deliberado, nao efeito colateral: alguem acabou de confirmar
+  // que a pessoa chegou ao teatro. Deixar 'indefinido' faria a mesma tela dizer que ela
+  // chegou e que ninguem sabe se ela vem.
+  const insercao = await supabase
+    .from('evento_participacao')
+    .insert({
+      evento_id: eventoId,
+      aluno_id: alunoIdReferencia,
+      status: 'participa',
+      checkin_em: quando,
+    })
+    .select('id');
+
+  if (insercao.error) return { error: insercao.error };
+  if ((insercao.data ?? []).length === 0) {
+    return { error: { message: 'A chegada não foi gravada. Confira se o evento é da sua unidade.' } };
+  }
+  return { error: null };
+}
+
 /** Marca em lote (botoes "todos participam" / "limpar"). Mesma chave, mesmo colapso. */
 export async function definirParticipacaoEmLote(
   eventoId: number,
