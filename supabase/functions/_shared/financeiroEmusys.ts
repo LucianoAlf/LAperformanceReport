@@ -149,11 +149,62 @@ export function resumoJanela(inicio: string, fim: string): string[] {
   return dias;
 }
 
+const dataUtc = (data: string): Date => {
+  if (!DATA_PATTERN.test(data)) throw new Error(`data invalida: ${data}`);
+  const valor = new Date(`${data}T00:00:00Z`);
+  if (Number.isNaN(valor.getTime()) || valor.toISOString().slice(0, 10) !== data) {
+    throw new Error(`data invalida: ${data}`);
+  }
+  return valor;
+};
+
+const isoData = (data: Date): string => data.toISOString().slice(0, 10);
+
 export function janelaRotinaDiaria(hojeBrt: string): { inicio: string; fim: string } {
-  if (!DATA_PATTERN.test(hojeBrt)) throw new Error(`hojeBrt invalido: ${hojeBrt}`);
-  const [ano, mes] = hojeBrt.split('-').map(Number);
-  const inicio = new Date(Date.UTC(ano, mes - 3, 1)); // mês corrente + 2 anteriores
-  return { inicio: inicio.toISOString().slice(0, 10), fim: hojeBrt };
+  const hoje = dataUtc(hojeBrt);
+  const fim = new Date(hoje);
+  fim.setUTCDate(fim.getUTCDate() - 1);
+  const inicio = new Date(hoje);
+  inicio.setUTCDate(inicio.getUTCDate() - 10);
+  return { inicio: isoData(inicio), fim: isoData(fim) };
+}
+
+export function janelaRevarreduraSemanal(hojeBrt: string): { inicio: string; fim: string } {
+  const hoje = dataUtc(hojeBrt);
+  const fim = new Date(hoje);
+  fim.setUTCDate(fim.getUTCDate() - 1);
+  const inicio = new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth() - 1, 1));
+  return { inicio: isoData(inicio), fim: isoData(fim) };
+}
+
+export function validarJanelaEncerrada(
+  inicio: string,
+  fim: string,
+  hojeBrt: string,
+): { inicio: string; fim: string } {
+  dataUtc(hojeBrt);
+  resumoJanela(inicio, fim);
+  if (fim >= hojeBrt) {
+    throw new Error(`DIA_CORRENTE_NAO_ENCERRADO: data_final ${fim} deve ser anterior a ${hojeBrt}`);
+  }
+  return { inicio, fim };
+}
+
+export function dividirJanela(
+  inicio: string,
+  fim: string,
+  tamanhoMaximo = 10,
+): Array<{ inicio: string; fim: string }> {
+  if (!Number.isInteger(tamanhoMaximo) || tamanhoMaximo < 1) {
+    throw new Error(`tamanho de bloco invalido: ${tamanhoMaximo}`);
+  }
+  const dias = resumoJanela(inicio, fim);
+  const blocos: Array<{ inicio: string; fim: string }> = [];
+  for (let indice = 0; indice < dias.length; indice += tamanhoMaximo) {
+    const bloco = dias.slice(indice, indice + tamanhoMaximo);
+    blocos.push({ inicio: bloco[0], fim: bloco.at(-1)! });
+  }
+  return blocos;
 }
 
 export { canonicalStringify, sha256 };
