@@ -3,6 +3,7 @@ export { EventoDetalhePage } from './EventoDetalhePage';
 export { AlunosTab } from './AlunosTab';
 export { GradeTab } from './GradeTab';
 export { SeletorApresentacao } from './SeletorApresentacao';
+export { PalcoTab } from './PalcoTab';
 export { PalcoApresentacao } from './PalcoApresentacao';
 export { AvisoEmDesenvolvimento } from './AvisoEmDesenvolvimento';
 export { default } from './EventosPage';

@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { useEvento, EVENTO_STATUS_LABEL, type EventoStatus } from '@/hooks/useEventos';
 import { AlunosTab } from './AlunosTab';
 import { GradeTab } from './GradeTab';
+import { PalcoTab } from './PalcoTab';
 import { AvisoEmDesenvolvimento } from './AvisoEmDesenvolvimento';
 
 type TabAtiva = 'alunos' | 'grade' | 'palco' | 'revisao';
@@ -125,13 +126,7 @@ export function EventoDetalhePage() {
 
       {tabAtiva === 'alunos' && <AlunosTab eventoId={evento.id} unidadeId={evento.unidade_id} />}
       {tabAtiva === 'grade' && <GradeTab evento={evento} />}
-      {tabAtiva === 'palco' && (
-        <AbaFutura
-          titulo="Instrumentos e equipamentos"
-          descricao="O que cada apresentação precisa no palco — instrumento, equipamento, playback e observação de mapa."
-          fase="Fase 4"
-        />
-      )}
+      {tabAtiva === 'palco' && <PalcoTab evento={evento} />}
       {tabAtiva === 'revisao' && (
         <AbaFutura
           titulo="Pendências antes do recital"

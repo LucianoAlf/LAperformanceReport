@@ -50,6 +50,26 @@ test('chaveDoItem NAO colapsa plural nem sinonimo — seriam pedidos diferentes'
   assert.notEqual(chaveDoItem('Cubo'), chaveDoItem('Amplificador'));
 });
 
+/* ─────────────── a aba existe e nao e placeholder ─────────────── */
+
+test('a aba Palco renderiza a tela, nao o placeholder "em breve"', () => {
+  // Defeito real: a fase 4 foi entregue com o palco dentro da aba Grade e a aba que leva o
+  // NOME dele ficou dois commits dizendo "Fase 4 — em breve". Tela que anuncia como futuro
+  // algo que ja esta no ar e pior que tela vazia: ensina a pessoa a nao voltar ali.
+  const pagina = readFileSync('src/components/App/Eventos/EventoDetalhePage.tsx', 'utf8');
+  assert.match(pagina, /tabAtiva === 'palco' && <PalcoTab/u);
+
+  // E nenhuma aba pode continuar anunciando uma fase ja concluida.
+  const fasesConcluidas = [1, 2, 3, 4];
+  for (const n of fasesConcluidas) {
+    assert.doesNotMatch(
+      pagina,
+      new RegExp(`fase="Fase ${n}"`, 'u'),
+      `a Fase ${n} ja foi entregue — nenhuma aba pode anuncia-la como futura`,
+    );
+  }
+});
+
 /* ─────────────── instrumento derivado do curso ─────────────── */
 
 test('o instrumento sai do CURSO — ninguem digita "Violao" numa apresentacao de Violao', () => {
