@@ -4,14 +4,15 @@
 
 Corrigir o espelho de lançamentos financeiros para que um dia só seja considerado concluído depois de encerrado no fuso de São Paulo, seja revalidado enquanto ainda pode receber lançamentos tardios e nunca desapareça silenciosamente quando a API Emusys devolver HTTP 429.
 
-O formato das tabelas `financeiro_emusys_*`, o formato do export e a granularidade item a item permanecem iguais. A fila operacional nova fica em `sync_financeiro_emusys_queue`.
+O formato das tabelas `financeiro_emusys_*`, os campos já existentes do export e a granularidade item a item permanecem iguais. A fila operacional nova fica em `sync_financeiro_emusys_queue`; o campo aditivo `varredura[].dias` segue o gate descrito no aceite.
 
 ## Regras de frescor
 
 - A rotina diária varre sempre os dez dias encerrados mais recentes, inclusive os que já estejam com `status='completo'`.
 - O limite superior é ontem no fuso `America/Sao_Paulo`. Uma chamada explícita também não pode concluir hoje ou uma data futura.
 - Cada passada bem-sucedida substitui `concluido_em` pela hora dessa última varredura e atualiza `itens`.
-- Um erro mantém o dia pendente, grava `ultimo_erro` e impede o avanço de `ultima_varredura_completa_em`.
+- Se o dia nunca concluiu, um erro mantém o dia pendente, grava `ultimo_erro` e impede o avanço de `ultima_varredura_completa_em`.
+- Se uma revarredura falhar para um dia já `completo`, o dia preserva `status='completo'` e o `concluido_em` da última passada boa; somente `ultimo_erro` registra a falha transitória.
 - Execuções sem catálogos preservam `catalogos_erro`; não apagam a última evidência disponível.
 - A revarredura semanal cobre o primeiro dia do mês anterior até ontem, aos domingos às 04:00 UTC.
 
@@ -46,6 +47,8 @@ Baseline de itens ativos em `financeiro_emusys_lancamentos`, capturado em 19/09:
 | Recreio | 30 | 0 | 18 | 2 | 0 | 8 |
 
 Depois da recuperação serão registrados, por unidade e dia, itens ativos, itens marcados com `sumiu_em`, `status`, `itens`, `iniciado_em`, `concluido_em`, `ultima_tentativa_em` e erro. A aceitação final compara esse quadro com o extrato bancário sem agregar ou alterar os itens exportados.
+
+Depois desse aceite, cada item de `varredura` no export recebe o campo aditivo `dias`, com `{data, status, concluido_em}` para todos os registros da competência pedida e da mesma unidade, ordenados por data. Nenhum campo existente muda. A Edge do export só pode ser publicada depois da recuperação jul–set concluir e do quadro 14–19/09 ser capturado.
 
 ## Verificação
 

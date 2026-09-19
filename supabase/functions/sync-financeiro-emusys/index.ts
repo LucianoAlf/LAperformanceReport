@@ -9,7 +9,8 @@
 //   14/09/2026 — bug da origem: registramos e seguimos; NUNCA apaga o que havia.
 // - Lançamentos revarridos DIA A DIA (fonte não tem updated_em). Rotina diária:
 //   os 10 dias encerrados mais recentes, mesmo se já estavam completos.
-//   Erro nunca grava dia como vazio: o dia fica 'erro'/pendente.
+//   Erro nunca grava dia como vazio: preserva um fechamento anterior; se o dia
+//   nunca concluiu, ele fica 'erro'/pendente.
 // - Item vivo que some numa varredura completa do dia → sumiu_em. Nada é apagado.
 // - ~1,1 s entre chamadas. HTTP 429 sai imediatamente para a fila durável;
 //   não há espera longa dentro da Edge Function.
@@ -17,6 +18,7 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.89.0';
 import {
+  decidirPersistenciaFalhaDia,
   dividirJanela,
   extrairCodigoPlano,
   janelaRevarreduraSemanal,
@@ -239,6 +241,40 @@ async function gravarStatusDia(
   if (error) throw error;
 }
 
+async function gravarFalhaDia(
+  client: SupabaseClient,
+  unidadeId: string,
+  data: string,
+  mensagem: string,
+  tentativas: number,
+  iniciadoEm: string,
+) {
+  const { data: anterior, error: erroAnterior } = await client
+    .from('financeiro_emusys_varredura_dias')
+    .select('status,concluido_em')
+    .eq('unidade_id', unidadeId)
+    .eq('data', data)
+    .maybeSingle();
+  if (erroAnterior) throw erroAnterior;
+
+  const decisao = decidirPersistenciaFalhaDia(
+    anterior as { status: 'completo' | 'erro'; concluido_em: string | null } | null,
+    mensagem,
+    { tentativas, iniciado_em: iniciadoEm },
+  );
+  if (decisao.modo === 'preservar_completo') {
+    const { error } = await client
+      .from('financeiro_emusys_varredura_dias')
+      .update(decisao.atualizacao)
+      .eq('unidade_id', unidadeId)
+      .eq('data', data)
+      .eq('status', 'completo');
+    if (error) throw error;
+    return;
+  }
+  await gravarStatusDia(client, unidadeId, data, decisao.registro);
+}
+
 // ── catálogos ────────────────────────────────────────────────────────────────
 
 async function sincronizarCatalogo(
@@ -447,10 +483,7 @@ async function processarUnidade(
     } catch (erro) {
       const mensagem = erro instanceof Error ? erro.message : String(erro);
       await garantirLease?.();
-      await gravarStatusDia(client, unidade.id, dia, {
-        status: 'erro', itens: 0, ultimo_erro: mensagem.slice(0, 400),
-        tentativas: tentativaNumero, iniciado_em: iniciou,
-      });
+      await gravarFalhaDia(client, unidade.id, dia, mensagem, tentativaNumero, iniciou);
       console.error(`[sync-financeiro] dia ${dia} ${unidade.codigo}:`, erro);
       throw erro;
     }

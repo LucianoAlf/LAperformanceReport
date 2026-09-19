@@ -11,6 +11,7 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.89.0';
+import { agruparDiasVarreduraPorUnidade } from '../_shared/financeiroEmusysExport.ts';
 
 const INTERNAL_SECRET = Deno.env.get('SUPER_FOLHA_FINANCEIRO_SECRET')?.trim()
   || Deno.env.get('SUPER_FOLHA_CONTAS_RECEBER_SECRET')?.trim()
@@ -116,7 +117,8 @@ serve(async (request) => {
       .from('financeiro_emusys_varredura_dias')
       .select('unidade_id,data,status,concluido_em')
       .gte('data', inicio)
-      .lte('data', fim);
+      .lte('data', fim)
+      .order('data', { ascending: true });
     if (unidadeId) diasQuery = diasQuery.eq('unidade_id', unidadeId);
     const { data: dias, error: erroDias } = await diasQuery;
     if (erroDias) throw erroDias;
@@ -125,9 +127,10 @@ serve(async (request) => {
     const [anoComp, mesComp] = inicio.split('-').map(Number);
     const totalDiasCompetencia = new Date(Date.UTC(anoComp, mesComp, 0)).getUTCDate();
 
-    const diasPorUnidade = new Map<string, { completos: number; erro: number; ultimoCompletoEm: string | null }>();
+    const diasPorUnidade = agruparDiasVarreduraPorUnidade(dias ?? []);
+    const coberturaPorUnidade = new Map<string, { completos: number; erro: number; ultimoCompletoEm: string | null }>();
     for (const dia of dias ?? []) {
-      const atual = diasPorUnidade.get(dia.unidade_id) ?? { completos: 0, erro: 0, ultimoCompletoEm: null };
+      const atual = coberturaPorUnidade.get(dia.unidade_id) ?? { completos: 0, erro: 0, ultimoCompletoEm: null };
       if (dia.status === 'completo') {
         atual.completos += 1;
         if (dia.concluido_em && (!atual.ultimoCompletoEm || dia.concluido_em > atual.ultimoCompletoEm)) {
@@ -136,12 +139,12 @@ serve(async (request) => {
       } else {
         atual.erro += 1;
       }
-      diasPorUnidade.set(dia.unidade_id, atual);
+      coberturaPorUnidade.set(dia.unidade_id, atual);
     }
 
     const varredura = (resumos ?? []).map((r) => {
       const unidade = unidades.get(r.unidade_id) as { nome?: string; codigo?: string } | undefined;
-      const cobertura = diasPorUnidade.get(r.unidade_id) ?? { completos: 0, erro: 0, ultimoCompletoEm: null };
+      const cobertura = coberturaPorUnidade.get(r.unidade_id) ?? { completos: 0, erro: 0, ultimoCompletoEm: null };
       // competencia_ultima_varredura_completa_em: só é preenchido quando TODOS os dias
       // da competência estão completos — é a data mais recente em que a competência
       // inteira foi conferida. Distingue "mês conferido ontem" de "foto de 3 meses atrás".
@@ -161,6 +164,7 @@ serve(async (request) => {
         dias_competencia_completos: cobertura.completos,
         dias_competencia_com_erro: cobertura.erro,
         ultimo_erro: r.ultimo_erro,
+        dias: diasPorUnidade.get(r.unidade_id) ?? [],
       };
     });
 

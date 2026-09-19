@@ -1,6 +1,7 @@
 /// <reference lib="deno.ns" />
 import { assert, assertEquals, assertRejects, assertThrows } from 'https://deno.land/std@0.177.0/testing/asserts.ts';
 import {
+  decidirPersistenciaFalhaDia,
   dividirJanela,
   extrairCodigoPlano,
   janelaRevarreduraSemanal,
@@ -11,6 +12,40 @@ import {
   validarData,
   validarNatureza,
 } from './financeiroEmusys.ts';
+
+Deno.test('falha de revarredura preserva o último fechamento completo', () => {
+  assertEquals(
+    decidirPersistenciaFalhaDia(
+      { status: 'completo', concluido_em: '2026-09-19T09:05:00.000Z' },
+      'EMUSYS_HTTP_429: limite excedido',
+      { tentativas: 2, iniciado_em: '2026-09-20T09:05:00.000Z' },
+    ),
+    {
+      modo: 'preservar_completo',
+      atualizacao: { ultimo_erro: 'EMUSYS_HTTP_429: limite excedido' },
+    },
+  );
+});
+
+Deno.test('falha mantém erro para dia que nunca concluiu', () => {
+  assertEquals(
+    decidirPersistenciaFalhaDia(
+      { status: 'erro', concluido_em: null },
+      'timeout',
+      { tentativas: 3, iniciado_em: '2026-09-20T09:05:00.000Z' },
+    ),
+    {
+      modo: 'registrar_erro',
+      registro: {
+        status: 'erro',
+        itens: 0,
+        ultimo_erro: 'timeout',
+        tentativas: 3,
+        iniciado_em: '2026-09-20T09:05:00.000Z',
+      },
+    },
+  );
+});
 
 Deno.test('extrairCodigoPlano pega o código do INÍCIO do nome', () => {
   assertEquals(extrairCodigoPlano('5.2.4 Aluguel'), '5.2.4');
