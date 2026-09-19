@@ -22,7 +22,7 @@ versionada e contagens explícitas de presença/indicadores. Ver
 
 | Domínio | Cobre | Arquivo | Banco |
 |---|---|---|---|
-| **aluno** | Alunos, Sucesso do Aluno, Retenção, Bandas | [sistema/aluno.md](sistema/aluno.md) | [detalhe/aluno.md](banco/detalhe/aluno.md) |
+| **aluno** | Alunos, Sucesso do Aluno, Retenção, Bandas, Eventos (recital) | [sistema/aluno.md](sistema/aluno.md) | [detalhe/aluno.md](banco/detalhe/aluno.md) |
 | **comercial** | Comercial, Pré-Atendimento, Campanhas, Tráfego Pago | [sistema/comercial.md](sistema/comercial.md) | [detalhe/comercial.md](banco/detalhe/comercial.md) |
 | **professor** | Professores, Agenda, Health Score V3, LA Teacher, Feedback público | [sistema/professor.md](sistema/professor.md) | [detalhe/professor.md](banco/detalhe/professor.md) |
 | **financeiro** | Administrativo, Faturas, Fechamento mensal, Super Folha | [sistema/financeiro.md](sistema/financeiro.md) | [detalhe/financeiro.md](banco/detalhe/financeiro.md) |
@@ -49,6 +49,8 @@ versionada e contagens explícitas de presença/indicadores. Ver
 | `/app/bandas` | Bandas | [aluno](sistema/aluno.md) |
 | `/app/sucesso-aluno` | Sucesso do Aluno | [aluno](sistema/aluno.md) |
 | `/app/retencao` | Retenção | [aluno](sistema/aluno.md) |
+| `/app/eventos` | Eventos — recital (lista) | [aluno](sistema/aluno.md) |
+| `/app/eventos/:eventoId` | Recital: alunos, grade, palco, revisão, check-in | [aluno](sistema/aluno.md) |
 | `/app/professores` | Professores | [professor](sistema/professor.md) |
 | `/app/agenda` | Agenda (grade do dia) | [professor](sistema/professor.md) |
 | `/feedback/:token` | Feedback do professor (público) | [professor](sistema/professor.md) |

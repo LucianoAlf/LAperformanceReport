@@ -87,3 +87,90 @@ Planilha operacional (`Retencao/PlanilhaRetencao.tsx`) + dashboard analítico (`
 - **Hooks:** `useEvasoesData`, `useProfessoresPerformance`, `useMotivosScoreProfessor`
 - **RPCs:** nenhuma (queries diretas a `evasoes` + view `professores_performance`)
 - **Edge functions:** nenhuma
+
+## Eventos — recital (`/app/eventos`, `/app/eventos/:eventoId`)
+Gestão do recital das 3 unidades, portada do protótipo standalone que o Arthur Côrtes
+apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **LAPE-39**.
+- **Componentes:** `Eventos/EventosPage.tsx` (lista + criar) e `EventoDetalhePage.tsx` com 5 abas —
+  **Alunos** (`AlunosTab`, participação tri-state), **Grade** (`GradeTab` + `SeletorApresentacao`,
+  blocos e apresentações com `@dnd-kit`), **Palco** (`PalcoTab` + `PalcoApresentacao`, rider
+  consolidado), **Revisão** (`RevisaoTab`, pendências + documentos) e **Check-in** (`CheckinTab`,
+  o dia do recital). `AvisoEmDesenvolvimento` é a fonte única do aviso na lista e no detalhe.
+- **Hooks:** `useEventos` (`src/hooks/useEventos.ts`) — `useEventos`, `useEvento`,
+  `useAlunosDoEvento`, `useGradeDoEvento`, `useCheckinDoEvento` + as funções de escrita.
+- **Regras puras:** [`src/lib/eventos.ts`](../../src/lib/eventos.ts) (elegibilidade, cálculo de
+  horário, consolidação de palco, pendências, lista de chegada, certificado) e
+  [`src/lib/eventosImpressao.ts`](../../src/lib/eventosImpressao.ts) (programação, folha de palco,
+  CSV, certificado). **Não reimplementar no componente** — a impressão e a tela fazem as mesmas
+  perguntas, e duas implementações divergiriam no primeiro ajuste.
+- **RPCs:** `evento_apresentacao_adicionar_v1` (resolve a matrícula do curso e traduz a UNIQUE
+  numa frase legível), `evento_grade_reordenar_v1` e `evento_bloco_reordenar_v1` (lote numa
+  transação; abortam se não alcançarem TODOS os itens pedidos — sem isso uma linha escondida pela
+  policy deixaria a grade metade movida com resposta de sucesso). O resto é PostgREST direto: as 5
+  tabelas têm policy escopada por unidade.
+- **Edge functions:** nenhuma. **Nenhum cron.**
+- 🔴 **O módulo é ISOLADO — medido em 19/09/2026, não deduzido.** Zero views e zero funções fora
+  dele leem `evento_participacao`/`_apresentacao`/`_bloco`; as 6 triggers das tabelas `evento*` são
+  todas do próprio módulo (`updated_at` + derivação de `pessoa_chave`/`unidade_id`); e **nenhuma
+  função do módulo escreve fora dele**. Ele LÊ `alunos`, `cursos`, `professores` e
+  `vw_aluno_pessoa_chave`, e só. **Nada entra em KPI, carteira, health score, score de professor,
+  `aluno_presenca` ou `movimentacoes_admin`** — por isso dá para testar o módulo à vontade em
+  produção.
+- **Modelo:** a `UNIQUE (evento_id, pessoa_chave, curso_id)` de `evento_apresentacao` **é o coração
+  do schema** — implementa "2 cursos = 2 apresentações, 2 matrículas do mesmo curso = 1" sem
+  nenhum `if` no código. `pessoa_chave` é derivada por trigger de `fn_pessoa_chave_aluno(aluno_id)`,
+  **nunca escrita à mão**, e `aluno_id` é PROCEDÊNCIA (mesmo padrão da anamnese). Banda **não entra
+  na grade** (decisão do Arthur); `banda_evento` é outra coisa e fica intocado. Migrations:
+  `20260918120000_modulo_eventos_recital.sql` (base) + `20260918140000`, `20260918170000`,
+  `20260918173000`, `20260919020000`, `20260919030000`, `20260919050000`.
+- **Horário é CALCULADO, nunca persistido** (`calcularHorariosDaGrade`): `inicio(N+1) = fim(N) +
+  intervalo`, com o intervalo configurável por evento (2700s = os 45 min do protótipo).
+  `evento_bloco.horario_inicial` guarda só o que o humano DIGITOU (`inicio_manual`). ⚠️ Persistir o
+  derivado daria duas verdades, e qualquer caminho de escrita que esquecesse de recalcular deixaria
+  a programação impressa mentindo.
+- **Impressão** (aba Revisão): programação (público), folha de palco (produção) e planilha CSV —
+  cada uma com recorte opcional por bloco. ⚠️ **O recorte por bloco é de EXIBIÇÃO, aplicado DEPOIS
+  do cálculo**: filtrar antes faria o bloco 3 começar às 09:00, e a folha diria a hora errada para
+  quem monta o palco. ⚠️ **CSV e não `.xlsx`**: o protótipo embute o SheetJS inteiro (498 KB), e
+  trazer a lib somaria ~800 KB ao bundle do app inteiro por um botão que roda algumas vezes por
+  semestre. ⚠️ Os documentos **abrem para VER** — nenhum dispara `window.print()` sozinho.
+- **Limite de 22:00** (`LIMITE_TERMINO_SEGUNDOS`): regra fundamental do protótipo
+  (`MAX_FINISH_MINUTES`). Entra como pendência de **atenção**, nunca impedimento — o protótipo diz
+  "recomendado", e quem decide esticar o recital é a coordenação. Terminar **exatamente** às 22:00
+  não acusa.
+- **Check-in** (aba Check-in): duas visões da mesma informação — **Por nome** (a porta, ordenada por
+  quem falta primeiro) e **Por bloco** (a coxia, cada bloco com horário e contagem própria).
+  🔴 **O check-in é da PESSOA, nunca da apresentação**: `checkin_em` mora em `evento_participacao`,
+  cuja UNIQUE é `(evento_id, pessoa_chave)` — quem toca em 2 cursos sobe 2 vezes e chega 1. ⚠️ **A
+  contagem do bloco não é um pedaço do total**: quem toca em 2 blocos conta nos 2, e somar os blocos
+  não devolve o total (são perguntas diferentes). ⚠️ A tela **não adivinha** onde o recital está pelo
+  relógio: o horário é o previsto, e recital atrasa.
+- 🔴 **A RLS de `evento_participacao` FILTRA, não recusa** (provado nos 3 perfis em 19/09/2026):
+  um UPDATE fora de escopo devolve **zero linhas e nenhum erro**. Por isso `marcarChegada` faz
+  `.select('id')` e confere o retorno — sem isso a tela pintaria "chegou" sobre um banco intacto.
+  ⚠️ **Nenhuma RPC da grade cria linha em `evento_participacao`**: quem foi alocado sem ninguém
+  marcar participação não tem o que atualizar, e é o INSERT seguinte que separa "não existe linha"
+  (normal) de "a policy escondeu" (erro real).
+- **Certificado** (aba Check-in): `gerarCertificadosHtml`, um por página, A4 **deitado**. Público =
+  quem fez check-in (padrão) ou todos os esperados; quem marcou "não participa" só entra pelo
+  check-in. ⚠️ **Modelo genérico e provisório** (pedido do Hugo, 19/09/2026): sem carga horária,
+  número de registro ou nome de diretor — cada um seria dado inventado num papel que vai para a
+  família do aluno. 🔴 **`certificado_status` NÃO é escrita**: quantos certificados recebe quem faz
+  2 cursos é decisão em aberto, e se a resposta for "um por curso" a coluna muda de tabela. Hoje o
+  papel traz UM certificado com os dois cursos no repertório — formato que atende as duas leituras
+  sem escolher nenhuma.
+- **Acesso:** `podeVerEventos()` em [`src/lib/menuVisibilidade.ts`](../../src/lib/menuVisibilidade.ts)
+  é a **fonte única** — consumida pelo guard da rota, pelo `AppSidebar` e pelo `MobileLayout`. Hoje
+  devolve `true` para todos, com aviso de "em desenvolvimento" na tela; a virada é trocar o corpo
+  dela por `hasPermission('eventos.ver')` (as permissões `eventos.ver`/`eventos.editar` já existem
+  na tabela desde a migration base). ⚠️ É o oposto do Tráfego Pago, que tem a resposta escrita em 3
+  lugares (LAPE-32).
+- **Testes:** `eventosAcesso`, `eventosElegibilidade`, `eventosHorario`, `eventosPalco`,
+  `eventosRevisao`, `eventosImpressao`, `eventosCheckin`.
+- ⚠️ **Buracos de UI conhecidos** (o schema suporta, a tela não faz): editar evento
+  (título/data/local/duração/intervalo), **excluir evento** (`excluirEvento` existe no hook e
+  nenhuma tela o chama), mudar status (rascunho → publicado → realizado) e renomear bloco.
+- ⚠️ **Do protótipo, ainda em aberto:** convidados especiais e participações em conjunto — o grão é
+  `(pessoa, curso)` da base, e convidado não tem matrícula.
+- 🔴 **Nenhuma tela do módulo foi exercitada no navegador** até 19/09/2026. Só os documentos de
+  impressão foram validados visualmente (Playwright, incluindo `emulateMedia({media:'print'})`).

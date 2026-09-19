@@ -188,6 +188,48 @@ VITE_GEMINI_API_KEY=...  # opcional
 - **Edge `calcular-risco-evasao`**: cron diário → busca features → pontua → grava em `risco_evasao` (histórico por dia, upsert por `aluno_id+calculado_em+modelo_versao`). `vw_risco_evasao_atual` é a **fonte canônica de leitura** (não usar `risco_evasao` bruta — ver `.agents/skills/operar-dominio-aluno-la/SKILL.md`).
 - ⚠️ Ainda não separa evasão voluntária de involuntária (inadimplência), sem valor esperado/custo-benefício nas ações de retenção, sem survival analysis pra LTV. A feature engineering é específica pro modelo — não é uma "assinatura do aluno" reutilizável por outros módulos (upsell, RFM etc.). Detalhes em `.claude/memory/dominio-alunos.md`.
 
+## Módulo de Eventos — recital (`/app/eventos`, desde 2026-09-18, LAPE-39)
+
+Gestão do recital das 3 unidades, portada do protótipo standalone do Arthur Côrtes (reunião de
+17/09/2026). **Um evento por unidade.** 5 abas: Alunos (participação), Grade (blocos e
+apresentações com drag-and-drop), Palco (rider consolidado), Revisão (pendências + impressão) e
+Check-in (o dia). Detalhe completo em [`docs/sistema/aluno.md`](docs/sistema/aluno.md).
+
+- 🔴 **O módulo é ISOLADO, e isso foi MEDIDO em 19/09/2026** (não deduzido do plano): zero views e
+  zero funções de fora leem `evento_participacao`/`_apresentacao`/`_bloco`; as 6 triggers das
+  tabelas `evento*` são todas do próprio módulo; **nenhuma função do módulo escreve fora dele**. Ele
+  lê `alunos`/`cursos`/`professores`/`vw_aluno_pessoa_chave` e só. **Nada entra em KPI, carteira,
+  health score, score de professor, `aluno_presenca` ou `movimentacoes_admin`** — testar em produção
+  é seguro. ⚠️ Ao acrescentar consumidor novo, essa propriedade deixa de valer sozinha: ela é
+  consequência de ninguém ler as tabelas, não de uma trava.
+- **A `UNIQUE (evento_id, pessoa_chave, curso_id)` é o coração do schema**: implementa "2 cursos = 2
+  apresentações, 2 matrículas do mesmo curso = 1" sem nenhum `if`. `pessoa_chave` é derivada por
+  trigger de `fn_pessoa_chave_aluno`, **nunca escrita à mão**; `aluno_id` é PROCEDÊNCIA (padrão da
+  anamnese). **Banda não entra na grade** (decisão do Arthur) — `banda_evento` é outra coisa.
+- **Horário é CALCULADO, nunca persistido** (`calcularHorariosDaGrade` em `src/lib/eventos.ts`):
+  `inicio(N+1) = fim(N) + intervalo`. `evento_bloco.horario_inicial` guarda só o que o humano
+  digitou. ⚠️ Persistir o derivado daria duas verdades e a programação impressa mentiria no primeiro
+  caminho de escrita que esquecesse de recalcular. ⚠️ O recorte por bloco na impressão é de
+  **exibição, depois do cálculo** — filtrar antes faria o bloco 3 começar às 09:00.
+- 🔴 **A RLS de `evento_participacao` FILTRA, não recusa** (provado nos 3 perfis como
+  `authenticated`): UPDATE fora de escopo devolve **zero linhas e nenhum erro**. `marcarChegada` faz
+  `.select('id')` e confere o retorno — sem isso a tela pinta "chegou" sobre um banco intacto. Vale
+  para qualquer escrita nova nessas tabelas. ⚠️ Nenhuma RPC da grade cria linha de participação, e é
+  o INSERT seguinte que separa "não existe linha" de "a policy escondeu".
+- **Check-in é da PESSOA, nunca da apresentação** (`checkin_em` em `evento_participacao`): quem faz 2
+  cursos sobe 2 vezes e chega 1. A contagem por bloco **não** é um pedaço do total — quem toca em 2
+  blocos conta nos 2.
+- 🔴 **`certificado_status` existe e NÃO é escrita.** Quantos certificados recebe quem faz 2 cursos é
+  decisão em aberto; se for "um por curso", a coluna muda de tabela. O certificado de hoje é modelo
+  **genérico e provisório** (sem carga horária, número de registro ou nome de diretor — seria dado
+  inventado num papel que vai para a família do aluno).
+- **Acesso:** `podeVerEventos()` em `src/lib/menuVisibilidade.ts` é **fonte única** (guard da rota +
+  `AppSidebar` + `MobileLayout`). Hoje devolve `true` com aviso de "em desenvolvimento"; a virada é
+  trocar o corpo por `hasPermission('eventos.ver')` — as permissões já existem na tabela. É o oposto
+  do Tráfego Pago, que tem a resposta escrita em 3 lugares (LAPE-32).
+- ⚠️ **Nenhuma tela do módulo foi exercitada no navegador** até 19/09/2026 — só os documentos de
+  impressão foram validados visualmente.
+
 ## Módulo de Agenda (`/app/agenda`, desde 2026-08-02)
 
 Grade do dia por unidade. Fonte é `aulas_emusys` + `aula_alunos_emusys`; leitura pela RPC `get_agenda_dia`, que **agrupa** porque `aulas_emusys` guarda uma linha por aluno em turmas e o Emusys duplica cada slot em `tipo=turma` + `tipo=individual`. **Nenhum cron novo**: reusa `sync-metadados-aulas-15m-u0/u1/u2` (15 min) e `sync-grade-futura-*`. **Nenhuma edge function no caminho de leitura** — a tela chama a RPC direto pelo client Supabase. Fase 2 (pendente): cancelar/reagendar (a API já suporta) e visão Semana.
