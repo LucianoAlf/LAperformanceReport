@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  coletarPaginaFaturasPagasPorJanela,
   coletarFaturasUnidade,
   EmusysRateLimitError,
   GlobalRateLimiter,
@@ -201,4 +202,29 @@ test('429 respeita Retry-After e devolve o controle para o backoff persistente',
 
   assert.equal(calls, 1);
   assert.deepEqual(clock.sleeps, []);
+});
+
+test('pagina de pagas retoma do cursor persistido e devolve o proximo checkpoint', async () => {
+  const limiter = new GlobalRateLimiter(0, async () => {}, () => 0);
+  let requestedUrl = '';
+  const result = await coletarPaginaFaturasPagasPorJanela({
+    apiBaseUrl: 'https://api.example/v1',
+    dataVencimentoInicial: '2025-01-01',
+    dataVencimentoFinal: '2027-01-31',
+    unidade: UNIDADE,
+    limiter,
+    cursor: 'cursor-persistido',
+    fetchFn: async (url) => {
+      requestedUrl = String(url);
+      return jsonResponse({
+        items: [rawFatura()],
+        paginacao: { tem_mais: true, proximo_cursor: 'cursor-seguinte' },
+      });
+    },
+  });
+
+  assert.match(requestedUrl, /cursor=cursor-persistido/);
+  assert.equal(result.temMais, true);
+  assert.equal(result.proximoCursor, 'cursor-seguinte');
+  assert.equal(result.rawItems.length, 1);
 });

@@ -1,8 +1,6 @@
-// Backfill único jan–set/2026 do espelho financeiro Emusys, mês a mês.
-// Dirige a edge sync-financeiro-emusys (mesma lógica da rotina diária):
-// cada POST cobre um mês; a função é resumível por dia, então repetir o mês
-// até janela_completa=true é o caminho normal sob teto de tempo/API.
-// Tokens nunca entram em log. Uso: node scripts/backfill-financeiro-emusys.mjs
+// Backfill jan-set/2026 do espelho financeiro Emusys pela fila duravel.
+// Enfileira blocos, acompanha cada job e so anuncia conclusao quando todos
+// estiverem em status succeeded. Tokens nunca entram em log.
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -23,32 +21,35 @@ if (!SERVICE_ROLE) throw new Error('VITE_SUPABASE_SERVICE_ROLE ausente no .env')
 
 const UNIDADES = ['cg', 'barra', 'recreio'];
 const HOJE = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+const ontemData = new Date(`${HOJE}T12:00:00Z`);
+ontemData.setUTCDate(ontemData.getUTCDate() - 1);
+const ONTEM = ontemData.toISOString().slice(0, 10);
 const MESES = [];
 for (let mes = 1; mes <= 9; mes += 1) {
   const inicio = `2026-${String(mes).padStart(2, '0')}-01`;
+  if (inicio > ONTEM) continue;
   const ultimoDia = new Date(Date.UTC(2026, mes, 0)).toISOString().slice(0, 10);
-  MESES.push({ inicio, fim: ultimoDia < HOJE ? ultimoDia : HOJE, rotulo: inicio.slice(0, 7) });
+  MESES.push({ inicio, fim: ultimoDia < ONTEM ? ultimoDia : ONTEM, rotulo: inicio.slice(0, 7) });
 }
 
 const espera = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function rodar(corpo, etiqueta) {
+async function chamar(corpo, etiqueta) {
   for (let tentativa = 1; tentativa <= 3; tentativa += 1) {
     try {
       const resposta = await fetch(FUNCTION_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          // gateway valida a assinatura; a função confere role=service_role do projeto
           'Authorization': `Bearer ${SERVICE_ROLE}`,
         },
         body: JSON.stringify(corpo),
-        signal: AbortSignal.timeout(480000),
+        signal: AbortSignal.timeout(60000),
       });
       const json = await resposta.json();
       if (resposta.status === 429 || resposta.status >= 500) {
-        const recuo = 30000 * tentativa;
-        console.log(`  ${etiqueta}: HTTP ${resposta.status} — recuo ${recuo / 1000}s`);
+        const recuo = 15000 * tentativa;
+        console.log(`  ${etiqueta}: HTTP ${resposta.status} - nova consulta em ${recuo / 1000}s`);
         await espera(recuo);
         continue;
       }
@@ -56,39 +57,71 @@ async function rodar(corpo, etiqueta) {
       return json;
     } catch (erro) {
       if (tentativa === 3) throw erro;
-      console.log(`  ${etiqueta}: ${erro.message} — tentando de novo`);
-      await espera(15000);
+      console.log(`  ${etiqueta}: ${erro.message} - tentando de novo`);
+      await espera(10000);
     }
+  }
+  throw new Error(`${etiqueta}: tentativas esgotadas`);
+}
+
+const jobIds = new Set();
+async function enfileirar(corpo, etiqueta) {
+  const resposta = await chamar({ mode: 'enqueue_range', ...corpo }, etiqueta);
+  for (const job of resposta.jobs ?? []) {
+    if (job?.id) jobIds.add(String(job.id));
+  }
+  console.log(`${etiqueta}: ${resposta.jobs?.length ?? 0} bloco(s) na fila`);
+}
+
+async function aguardarConclusao() {
+  const ids = [...jobIds];
+  if (!ids.length) throw new Error('nenhum job foi retornado pela fila');
+  while (true) {
+    const resposta = await chamar({ mode: 'queue_status', job_ids: ids }, 'status da fila');
+    const jobs = resposta.jobs ?? [];
+    if (jobs.length !== ids.length) {
+      throw new Error(`fila retornou ${jobs.length}/${ids.length} jobs`);
+    }
+    const falhos = jobs.filter((job) => job.status === 'failed');
+    if (falhos.length) {
+      throw new Error(`backfill falhou: ${JSON.stringify(falhos).slice(0, 1000)}`);
+    }
+    const concluidos = jobs.filter((job) => job.status === 'succeeded').length;
+    const ativos = jobs.length - concluidos;
+    console.log(`fila: ${concluidos}/${jobs.length} concluidos; ${ativos} ativos`);
+    if (ativos === 0) return;
+    await espera(30000);
   }
 }
 
-console.log(`Backfill financeiro Emusys jan–set/2026 (hoje BRT: ${HOJE})\n`);
+console.log(`Backfill financeiro Emusys jan-set/2026 (dias encerrados ate ${ONTEM} BRT)\n`);
 const inicioGeral = Date.now();
 
 for (const unidade of UNIDADES) {
   for (const mes of MESES) {
-    for (let rodada = 1; rodada <= 4; rodada += 1) {
-      const sai = await rodar({
-        unidade,
-        data_inicial: mes.inicio,
-        data_final: mes.fim,
-        catalogos: false,
-        orcamento_segundos: 200,
-      }, `${unidade}/${mes.rotulo}`);
-      const r = sai.resultados?.[0] ?? {};
-      console.log(`${unidade} ${mes.rotulo} (rodada ${rodada}): +${r.dias_processados ?? 0} dias, pendentes=${r.dias_pendentes ?? '?'}${sai.resultados?.[0]?.falhas ? ' ERRO: ' + JSON.stringify(sai.resultados[0].falhas).slice(0, 160) : ''}`);
-      if (r.janela_completa === true) break;
-      if (rodada === 4) console.log(`  AVISO: ${unidade}/${mes.rotulo} não fechou em 4 rodadas — o resumo ficará pendente`);
-    }
+    await enfileirar({
+      unidade,
+      data_inicial: mes.inicio,
+      data_final: mes.fim,
+      catalogos: false,
+      trigger_source: 'script_backfill_financeiro_2026',
+      priority: 100,
+    }, `${unidade}/${mes.rotulo}`);
   }
 }
 
-// rodada final: catálogos completos + ponte da janela diária até hoje
-console.log('\nRodada final: catálogos completos + janela diária (mês corrente + 2 anteriores)');
 for (const unidade of UNIDADES) {
-  const sai = await rodar({ unidade, catalogos: true, orcamento_segundos: 200 }, `${unidade}/final`);
-  const r = sai.resultados?.[0] ?? {};
-  console.log(`${unidade} final: catalogos=${JSON.stringify(r.catalogos)} pendentes=${r.dias_pendentes ?? '?'}`);
+  const resposta = await chamar({
+    mode: 'enqueue_daily',
+    unidade,
+    catalogos: true,
+    trigger_source: 'script_backfill_financeiro_final',
+    priority: 50,
+  }, `${unidade}/final`);
+  for (const job of resposta.jobs ?? []) {
+    if (job?.id) jobIds.add(String(job.id));
+  }
 }
 
-console.log(`\nConcluído em ${Math.round((Date.now() - inicioGeral) / 60000)} min.`);
+await aguardarConclusao();
+console.log(`\nConcluido em ${Math.round((Date.now() - inicioGeral) / 60000)} min; ${jobIds.size} jobs confirmados.`);

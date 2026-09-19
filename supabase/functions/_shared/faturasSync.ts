@@ -342,6 +342,50 @@ export async function coletarFaturasUnidade(options: {
 // Coleta faturas PAGAS por janela de vencimento ampla (para capturar adiantamentos
 // e cheques pré-datados pagos em M com vencimento futuro). O caller filtra por
 // data_pagamento depois. Não valida competencia (a janela cruza meses).
+export async function coletarPaginaFaturasPagasPorJanela(options: {
+  apiBaseUrl: string;
+  dataVencimentoInicial: string;
+  dataVencimentoFinal: string;
+  unidade: UnidadeSyncConfig;
+  limiter: GlobalRateLimiter;
+  cursor?: string | null;
+  fetchFn?: typeof fetch;
+}) {
+  const cursor = String(options.cursor ?? '').trim();
+  const params = new URLSearchParams({
+    status: 'paga',
+    data_vencimento_inicial: options.dataVencimentoInicial,
+    data_vencimento_final: options.dataVencimentoFinal,
+    limite: '50',
+  });
+  if (cursor) params.set('cursor', cursor);
+  const payload = await fetchPage({
+    url: `${options.apiBaseUrl}/faturas?${params.toString()}`,
+    unidade: options.unidade,
+    limiter: options.limiter,
+    fetchFn: options.fetchFn ?? fetch,
+  });
+  const rawItems = (Array.isArray(payload?.items)
+    ? payload.items
+    : (Array.isArray(payload?.dados) ? payload.dados : [])) as FaturaEmusys[];
+  const nextCursor = String(
+    payload?.paginacao?.proximo_cursor ?? payload?.proximo_cursor ?? '',
+  ).trim();
+  const temMaisRaw = payload?.paginacao?.tem_mais ?? payload?.tem_mais;
+  const temMais = temMaisRaw == null ? Boolean(nextCursor) : temMaisRaw === true;
+
+  if (temMais && !nextCursor) {
+    throw new Error(`Emusys /faturas ${options.unidade.nome}: tem_mais exige cursor`);
+  }
+  if (temMais && rawItems.length === 0) {
+    throw new Error(`Emusys /faturas ${options.unidade.nome}: pagina vazia com tem_mais`);
+  }
+  if (temMais && nextCursor === cursor) {
+    throw new Error(`Emusys /faturas ${options.unidade.nome}: cursor repetido`);
+  }
+  return { rawItems, temMais, proximoCursor: temMais ? nextCursor : null };
+}
+
 export async function coletarFaturasPagasPorJanela(options: {
   apiBaseUrl: string;
   dataVencimentoInicial: string;

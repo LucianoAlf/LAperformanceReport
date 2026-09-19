@@ -1,10 +1,13 @@
 /// <reference lib="deno.ns" />
 import { assert, assertEquals, assertRejects, assertThrows } from 'https://deno.land/std@0.177.0/testing/asserts.ts';
 import {
+  dividirJanela,
   extrairCodigoPlano,
+  janelaRevarreduraSemanal,
   janelaRotinaDiaria,
   mapearLancamento,
   resumoJanela,
+  validarJanelaEncerrada,
   validarData,
   validarNatureza,
 } from './financeiroEmusys.ts';
@@ -76,9 +79,36 @@ Deno.test('resumoJanela lista os dias e rejeita janela invertida', () => {
   assertThrows(() => resumoJanela('2026-09-05', '2026-09-01'));
 });
 
-Deno.test('janelaRotinaDiaria = mês corrente + 2 anteriores, teto em hoje', () => {
-  assertEquals(janelaRotinaDiaria('2026-09-14'), { inicio: '2026-07-01', fim: '2026-09-14' });
-  assertEquals(janelaRotinaDiaria('2026-01-10'), { inicio: '2025-11-01', fim: '2026-01-10' });
+Deno.test('janelaRotinaDiaria revarre os 10 dias encerrados mais recentes', () => {
+  assertEquals(janelaRotinaDiaria('2026-09-20'), { inicio: '2026-09-10', fim: '2026-09-19' });
+  assertEquals(janelaRotinaDiaria('2026-01-05'), { inicio: '2025-12-26', fim: '2026-01-04' });
+});
+
+Deno.test('janela semanal cobre mês anterior até ontem', () => {
+  assertEquals(janelaRevarreduraSemanal('2026-09-20'), {
+    inicio: '2026-08-01',
+    fim: '2026-09-19',
+  });
+});
+
+Deno.test('janela explícita nunca aceita hoje ou futuro', () => {
+  assertEquals(
+    validarJanelaEncerrada('2026-09-10', '2026-09-19', '2026-09-20'),
+    { inicio: '2026-09-10', fim: '2026-09-19' },
+  );
+  assertThrows(
+    () => validarJanelaEncerrada('2026-09-10', '2026-09-20', '2026-09-20'),
+    Error,
+    'DIA_CORRENTE_NAO_ENCERRADO',
+  );
+});
+
+Deno.test('divide recuperação em blocos de no máximo 10 dias', () => {
+  assertEquals(dividirJanela('2026-07-01', '2026-07-25'), [
+    { inicio: '2026-07-01', fim: '2026-07-10' },
+    { inicio: '2026-07-11', fim: '2026-07-20' },
+    { inicio: '2026-07-21', fim: '2026-07-25' },
+  ]);
 });
 
 Deno.test('validarData exige ISO YYYY-MM-DD', () => {
