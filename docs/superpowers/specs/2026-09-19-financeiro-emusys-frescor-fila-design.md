@@ -24,7 +24,7 @@ O formato das tabelas `financeiro_emusys_*`, o formato do export e a granularida
 - Um job em execução ou aguardando retry do espelho bloqueia o claim da fila de faturas. O claim das duas filas usa o mesmo mutex transacional para impedir corrida.
 - A janela diária do financeiro fica reservada entre 09:00 e 10:59 UTC. Novos claims de faturas param às 08:45 UTC, antes de um lease de 15 minutos poder atravessar a janela.
 - `faturas_pagas_no_mes` usa uma fila durável própria. O cron das 05:00 UTC sempre persiste o pedido; o worker pode drenar essa fila às 05:00 e a retoma depois se a fila de lançamentos ainda estiver ativa. Os outros produtores de faturas ficam pausados nessa hora.
-- Cada competência de `faturas_pagas_no_mes` vira três jobs, um por unidade. Cada worker usa orçamento de 100 segundos, com margem para o limite hospedado da Edge Function.
+- Cada competência de `faturas_pagas_no_mes` vira três jobs, um por unidade. Cada worker usa orçamento de 100 segundos e processa no máximo 25 páginas por claim. Cursor e contadores são gravados a cada página; quando ainda há páginas, o job libera o lease e continua do cursor no worker seguinte, limitado a 200 páginas.
 
 ## Recuperações de 20/09
 
@@ -33,7 +33,7 @@ O formato das tabelas `financeiro_emusys_*`, o formato do export e a granularida
 - Às 03:30 UTC, enfileirar as competências de faturas de janeiro a maio de 2026. O processamento espera a fila de lançamentos terminar e continua serialmente.
 - Os jobs extraordinários se removem do `pg_cron` depois do disparo.
 - O script legado de backfill agora enfileira somente dias encerrados e acompanha os IDs até todos chegarem a `succeeded`; resposta `202` não é tratada como conclusão.
-- No rollout, `sync-faturas-emusys` tolera temporariamente a ausência das novas RPCs. Assim as duas Edges podem ser publicadas primeiro e a migration pode instalar fila e crons de forma atômica sem interromper o worker já ativo.
+- No rollout, as duas Edges toleram temporariamente a ausência das novas RPCs. `sync-faturas-emusys` continua drenando a fila atual e `sync-financeiro-emusys` atende o cron antigo pelo caminho direto até a migration instalar filas e crons de forma atômica.
 
 ## Aceite e evidência
 

@@ -7,6 +7,7 @@ const migrationUrl = new URL(
   import.meta.url,
 );
 const faturasUrl = new URL('../supabase/functions/sync-faturas-emusys/index.ts', import.meta.url);
+const financeiroUrl = new URL('../supabase/functions/sync-financeiro-emusys/index.ts', import.meta.url);
 const source = () => existsSync(migrationUrl) ? readFileSync(migrationUrl, 'utf8') : '';
 
 test('fila de varredura é durável, serial e limitada a três retries', () => {
@@ -55,18 +56,35 @@ test('pagas no mes persiste em fila propria e e retomada pelo worker', () => {
   for (const rpc of [
     'enqueue_sync_faturas_pagas_mes_jobs',
     'claim_sync_faturas_pagas_mes_job',
+    'checkpoint_sync_faturas_pagas_mes_job',
     'retry_sync_faturas_pagas_mes_job',
     'complete_sync_faturas_pagas_mes_job',
     'fail_sync_faturas_pagas_mes_job',
   ]) {
     assert.match(sql, new RegExp(`create or replace function public\\.${rpc}`, 'i'));
-    assert.match(edge, new RegExp(rpc, 'i'));
   }
+  for (const rpc of [
+    'enqueue_sync_faturas_pagas_mes_jobs',
+    'claim_sync_faturas_pagas_mes_job',
+    'checkpoint_sync_faturas_pagas_mes_job',
+    'retry_sync_faturas_pagas_mes_job',
+    'fail_sync_faturas_pagas_mes_job',
+  ]) assert.match(edge, new RegExp(rpc, 'i'));
   assert.match(sql, /sync_faturas_pagas_mes_queue_one_running_uniq/i);
   assert.match(sql, /values\s*\(\s*'cg'\s*\)\s*,\s*\(\s*'barra'\s*\)\s*,\s*\(\s*'recreio'\s*\)/i);
   assert.match(edge, /mode\s*===\s*['"]worker['"][\s\S]*processarProximoPagasMes/is);
   assert.match(edge, /WORKER_BUDGET_MS\s*=\s*100\s*\*\s*1000/i);
+  assert.match(edge, /MAX_PAGAS_PAGES_PER_CLAIM\s*=\s*25/i);
   assert.match(edge, /rpcFilaPagasAusente[\s\S]*return\s+null/is);
+  assert.match(sql, /resume_cursor[\s\S]*paginas_processadas/i);
+  assert.match(sql, /p_release[\s\S]*attempt_count\s*=\s*0/is);
+});
+
+test('edge financeira preserva o cron antigo durante o intervalo antes da migration', () => {
+  const edge = readFileSync(financeiroUrl, 'utf8');
+  assert.match(edge, /rpcFilaFinanceiroAusente/i);
+  assert.match(edge, /rollout_fallback/is);
+  assert.match(edge, /processarUnidade/is);
 });
 
 test('agenda reserva financeiro, isola pagas no mês e instala semanal', () => {

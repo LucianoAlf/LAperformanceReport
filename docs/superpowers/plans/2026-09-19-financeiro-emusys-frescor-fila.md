@@ -62,7 +62,7 @@
 
 - [ ] Escrever teste para impedir `pagas_no_mes` e claim de faturas enquanto houver job ativo em `sync_financeiro_emusys_queue`.
 - [ ] Implementar consulta fail-safe da fila nova; ausência da tabela durante o rollout significa “sem bloqueio”, outros erros falham fechados.
-- [ ] Persistir `pagas_no_mes` em fila própria para que bloqueio às 05:00 UTC não descarte a execução.
+- [ ] Persistir `pagas_no_mes` em fila própria, por competência e unidade, com checkpoint de cursor a cada página e liberação cooperativa após 25 páginas.
 - [ ] Adicionar prioridade explícita ao trigger `backfill_super_folha_dre_2026`.
 - [ ] Rodar os testes focados das duas filas.
 
@@ -73,6 +73,6 @@
 
 - [ ] Rodar testes Deno, contratos Node, `deno check` das duas Edges, `git diff --check` e build do projeto.
 - [ ] Fazer commit e push da branch; criar PR com problema, comportamento final e validações.
-- [ ] Publicar primeiro `sync-faturas-emusys` com fallback para RPC ausente e `sync-financeiro-emusys`, ambas com `verify_jwt=true`; aplicar a migration em seguida e confirmar versões/migration/crons no projeto `ouqwbbermlzqqvtqwlul`.
+- [ ] Publicar primeiro as duas Edges com fallback para RPC ausente e `verify_jwt=true`; aplicar a migration em seguida e confirmar versões/migration/crons no projeto `ouqwbbermlzqqvtqwlul`.
 - [ ] Confirmar que 19/09 ficou inválido até a passada pós-virada, que as filas estão sem corrida e que os jobs de 20/09 estão instalados.
 - [ ] Depois da execução noturna, consultar 14–19/09 antes × depois e a cobertura Jan–Mai de `emusys_faturas`; registrar qualquer 429 e seus retries sem atribuir conclusão antes da evidência.

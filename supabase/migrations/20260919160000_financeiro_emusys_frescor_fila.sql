@@ -69,7 +69,7 @@ comment on table public.sync_financeiro_emusys_queue is
 create table public.sync_faturas_pagas_mes_queue (
   id uuid primary key default gen_random_uuid(),
   competencia date not null,
-  unidade_codigo text,
+  unidade_codigo text not null,
   trigger_source text not null,
   status text not null default 'pending',
   attempt_count integer not null default 0,
@@ -80,6 +80,11 @@ create table public.sync_faturas_pagas_mes_queue (
   last_http_status integer,
   last_error_code text,
   last_error_detail text,
+  resume_cursor text,
+  paginas_processadas integer not null default 0,
+  recebidas_api integer not null default 0,
+  pagas_no_mes integer not null default 0,
+  itens_upserted integer not null default 0,
   started_at timestamptz,
   completed_at timestamptz,
   created_at timestamptz not null default now(),
@@ -88,13 +93,19 @@ create table public.sync_faturas_pagas_mes_queue (
     competencia = date_trunc('month', competencia)::date
   ),
   constraint sync_faturas_pagas_mes_queue_unidade_chk check (
-    unidade_codigo is null or unidade_codigo in ('cg', 'barra', 'recreio')
+    unidade_codigo in ('cg', 'barra', 'recreio')
   ),
   constraint sync_faturas_pagas_mes_queue_status_chk check (
     status in ('pending', 'running', 'retry_wait', 'succeeded', 'failed')
   ),
   constraint sync_faturas_pagas_mes_queue_attempts_chk check (
     attempt_count >= 0 and max_attempts between 1 and 10 and attempt_count <= max_attempts
+  ),
+  constraint sync_faturas_pagas_mes_queue_progress_chk check (
+    paginas_processadas between 0 and 200
+    and recebidas_api >= 0
+    and pagas_no_mes >= 0
+    and itens_upserted >= 0
   ),
   constraint sync_faturas_pagas_mes_queue_running_chk check (
     (status = 'running' and worker_id is not null and lease_expires_at is not null)
@@ -661,6 +672,88 @@ exception
 end;
 $function$;
 
+create or replace function public.checkpoint_sync_faturas_pagas_mes_job(
+  p_job_id uuid,
+  p_worker_id uuid,
+  p_next_cursor text,
+  p_tem_mais boolean,
+  p_release boolean,
+  p_recebidas integer,
+  p_pagas_no_mes integer,
+  p_upserted integer,
+  p_lease_seconds integer default 900
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $function$
+declare
+  v_job public.sync_faturas_pagas_mes_queue%rowtype;
+  v_result jsonb;
+  v_paginas integer;
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'SYNC_FATURAS_PAGAS_QUEUE_FORBIDDEN: service_role obrigatoria'
+      using errcode = '42501';
+  end if;
+  if p_worker_id is null
+     or p_tem_mais is null
+     or p_release is null
+     or p_recebidas is null or p_recebidas < 0
+     or p_pagas_no_mes is null or p_pagas_no_mes < 0
+     or p_upserted is null or p_upserted < 0
+     or p_lease_seconds not between 60 and 3600
+     or (p_tem_mais and nullif(btrim(p_next_cursor), '') is null)
+     or (not p_tem_mais and p_release) then
+    raise exception 'SYNC_FATURAS_PAGAS_CHECKPOINT_INVALIDO';
+  end if;
+
+  select queue.* into v_job
+  from public.sync_faturas_pagas_mes_queue queue
+  where queue.id = p_job_id
+    and queue.status = 'running'
+    and queue.worker_id = p_worker_id
+    and queue.lease_expires_at > now()
+  for update;
+  if not found then
+    raise exception 'SYNC_FATURAS_PAGAS_JOB_NAO_REIVINDICADO';
+  end if;
+
+  if p_tem_mais and btrim(p_next_cursor) = coalesce(v_job.resume_cursor, '') then
+    raise exception 'SYNC_FATURAS_PAGAS_CURSOR_REPETIDO';
+  end if;
+  v_paginas := v_job.paginas_processadas + 1;
+  if v_paginas > 200 or (v_paginas = 200 and p_tem_mais) then
+    raise exception 'SYNC_FATURAS_PAGAS_PAGINACAO_EXCEDEU_200';
+  end if;
+
+  update public.sync_faturas_pagas_mes_queue queue
+  set
+    resume_cursor = case when p_tem_mais then btrim(p_next_cursor) else null end,
+    paginas_processadas = v_paginas,
+    recebidas_api = queue.recebidas_api + p_recebidas,
+    pagas_no_mes = queue.pagas_no_mes + p_pagas_no_mes,
+    itens_upserted = queue.itens_upserted + p_upserted,
+    status = case when not p_tem_mais then 'succeeded' when p_release then 'pending' else 'running' end,
+    attempt_count = 0,
+    next_attempt_at = case when p_release then now() else queue.next_attempt_at end,
+    worker_id = case when not p_tem_mais or p_release then null else queue.worker_id end,
+    lease_expires_at = case
+      when not p_tem_mais or p_release then null
+      else now() + make_interval(secs => p_lease_seconds)
+    end,
+    last_http_status = null,
+    last_error_code = null,
+    last_error_detail = null,
+    completed_at = case when not p_tem_mais then now() else null end,
+    updated_at = now()
+  where queue.id = p_job_id
+  returning to_jsonb(queue.*) into v_result;
+  return v_result;
+end;
+$function$;
+
 create or replace function public.retry_sync_faturas_pagas_mes_job(
   p_job_id uuid,
   p_worker_id uuid,
@@ -685,6 +778,7 @@ begin
   select queue.* into v_job
   from public.sync_faturas_pagas_mes_queue queue
   where queue.id = p_job_id and queue.status = 'running' and queue.worker_id = p_worker_id
+    and queue.lease_expires_at > now()
   for update;
   if not found then
     raise exception 'SYNC_FATURAS_PAGAS_JOB_NAO_REIVINDICADO';
@@ -728,6 +822,7 @@ begin
       last_http_status = null, last_error_code = null, last_error_detail = null,
       completed_at = now(), updated_at = now()
   where queue.id = p_job_id and queue.status = 'running' and queue.worker_id = p_worker_id
+    and queue.lease_expires_at > now()
   returning to_jsonb(queue.*) into v_result;
   if v_result is null then raise exception 'SYNC_FATURAS_PAGAS_JOB_NAO_REIVINDICADO'; end if;
   return v_result;
@@ -760,6 +855,7 @@ begin
       last_error_detail = left(coalesce(p_error_detail, 'erro sem detalhe'), 1000),
       completed_at = now(), updated_at = now()
   where queue.id = p_job_id and queue.status = 'running' and queue.worker_id = p_worker_id
+    and queue.lease_expires_at > now()
   returning to_jsonb(queue.*) into v_result;
   if v_result is null then raise exception 'SYNC_FATURAS_PAGAS_JOB_NAO_REIVINDICADO'; end if;
   return v_result;
@@ -768,11 +864,13 @@ $function$;
 
 revoke all on function public.enqueue_sync_faturas_pagas_mes_jobs(date[], text, text) from public, anon, authenticated;
 revoke all on function public.claim_sync_faturas_pagas_mes_job(uuid, integer) from public, anon, authenticated;
+revoke all on function public.checkpoint_sync_faturas_pagas_mes_job(uuid, uuid, text, boolean, boolean, integer, integer, integer, integer) from public, anon, authenticated;
 revoke all on function public.retry_sync_faturas_pagas_mes_job(uuid, uuid, text, text, integer) from public, anon, authenticated;
 revoke all on function public.complete_sync_faturas_pagas_mes_job(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.fail_sync_faturas_pagas_mes_job(uuid, uuid, text, text, integer) from public, anon, authenticated;
 grant execute on function public.enqueue_sync_faturas_pagas_mes_jobs(date[], text, text) to service_role;
 grant execute on function public.claim_sync_faturas_pagas_mes_job(uuid, integer) to service_role;
+grant execute on function public.checkpoint_sync_faturas_pagas_mes_job(uuid, uuid, text, boolean, boolean, integer, integer, integer, integer) to service_role;
 grant execute on function public.retry_sync_faturas_pagas_mes_job(uuid, uuid, text, text, integer) to service_role;
 grant execute on function public.complete_sync_faturas_pagas_mes_job(uuid, uuid) to service_role;
 grant execute on function public.fail_sync_faturas_pagas_mes_job(uuid, uuid, text, text, integer) to service_role;

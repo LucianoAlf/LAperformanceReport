@@ -523,6 +523,16 @@ async function rpcOrThrow<T>(
   return data as T;
 }
 
+const rpcFilaFinanceiroAusente = (erro: unknown): boolean => {
+  const codigo = erro && typeof erro === 'object' && 'code' in erro ? String(erro.code) : '';
+  const mensagem = erro instanceof Error
+    ? erro.message
+    : (erro && typeof erro === 'object' && 'message' in erro ? String(erro.message) : String(erro));
+  return codigo === 'PGRST202'
+    || codigo === '42883'
+    || /sync_financeiro_emusys_job[\s\S]*(does not exist|schema cache|nao existe)/i.test(mensagem);
+};
+
 const unidadesDoAlvo = (alvo: string): UnidadeConfig[] => {
   const unidades = alvo === 'todas' ? UNIDADES : UNIDADES.filter((unidade) => unidade.codigo === alvo);
   if (!unidades.length) throw new Error(`unidade desconhecida: ${alvo}`);
@@ -714,11 +724,32 @@ serve(async (request) => {
       return json({ success: false, erro: 'priority deve ser inteiro entre 0 e 10000' }, 400);
     }
     const comCatalogos = corpo.catalogos != null ? corpo.catalogos === true : mode === 'enqueue_daily';
-    const jobs = await enfileirarJanela(client, unidades, janela, {
-      catalogos: comCatalogos,
-      triggerSource,
-      priority,
-    });
+    let jobs: unknown[];
+    try {
+      jobs = await enfileirarJanela(client, unidades, janela, {
+        catalogos: comCatalogos,
+        triggerSource,
+        priority,
+      });
+    } catch (erro) {
+      if (!rpcFilaFinanceiroAusente(erro)) throw erro;
+      const comecouEm = Date.now();
+      const resultados = [];
+      const modoResumo: ModoResumo = ehResumoDiario(triggerSource) ? 'diario' : 'manutencao';
+      for (const unidade of unidades) {
+        resultados.push(await processarUnidade(
+          client,
+          unidade,
+          janela,
+          comCatalogos,
+          ORCAMENTO_PADRAO_SEGUNDOS * 1000,
+          comecouEm,
+          modoResumo,
+          1,
+        ));
+      }
+      return json({ success: true, rollout_fallback: true, janela, resultados });
+    }
     return json({ success: true, queued: true, queue_status: 'pending', janela, jobs }, 202);
   } catch (erro) {
     console.error('[sync-financeiro]', erro);

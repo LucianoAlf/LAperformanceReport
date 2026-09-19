@@ -4,6 +4,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.89.0';
 import {
   coletarFaturasUnidade,
+  coletarPaginaFaturasPagasPorJanela,
   coletarFaturasPagasPorJanela,
   GlobalRateLimiter,
   type UnidadeSyncConfig,
@@ -22,6 +23,7 @@ const SUPABASE_PROJECT_REF = new URL(SUPABASE_URL).hostname.split('.')[0] ?? '';
 const EMUSYS_API = 'https://api.emusys.com.br/v1';
 const EMUSYS_FETCH_TIMEOUT_MS = 30000;
 const WORKER_BUDGET_MS = 100 * 1000;
+const MAX_PAGAS_PAGES_PER_CLAIM = 25;
 
 const fetchComPrazo = (deadlineMs: number): typeof fetch => (async (input, init) => {
   const restante = deadlineMs - Date.now();
@@ -106,6 +108,11 @@ type PagasMesQueueJob = {
   trigger_source: string;
   attempt_count: number;
   max_attempts: number;
+  resume_cursor: string | null;
+  paginas_processadas: number;
+  recebidas_api: number;
+  pagas_no_mes: number;
+  itens_upserted: number;
 };
 
 async function validarAcessoSync(req: Request): Promise<AccessResult> {
@@ -359,6 +366,123 @@ async function processarPagasNoMes(
   return resultado;
 }
 
+async function processarPagasNoMesComCheckpoint(
+  supabase: ServiceClient,
+  job: PagasMesQueueJob,
+  workerId: string,
+): Promise<ProcessResult> {
+  const codigo = job.unidade_codigo;
+  if (!codigo || !Object.hasOwn(UNIDADES, codigo)) {
+    throw new Error(`unidade desconhecida na fila pagas_no_mes: ${codigo ?? 'null'}`);
+  }
+  const unidade = UNIDADES[codigo];
+  const competencia = job.competencia;
+  const ano = Number(competencia.slice(0, 4));
+  const mes = Number(competencia.slice(5, 7));
+  const inicioVenc = new Date(Date.UTC(ano, mes - 13, 1)).toISOString().slice(0, 10);
+  const fimVenc = new Date(Date.UTC(ano, mes + 11, 0)).toISOString().slice(0, 10);
+  const pagInicio = competencia;
+  const pagFim = new Date(Date.UTC(ano, mes, 0)).toISOString().slice(0, 10);
+  const limiter = new GlobalRateLimiter();
+  const fetchFn = fetchComPrazo(Date.now() + WORKER_BUDGET_MS);
+  let cursor = job.resume_cursor;
+
+  for (let indice = 0; indice < MAX_PAGAS_PAGES_PER_CLAIM; indice += 1) {
+    const pagina = await coletarPaginaFaturasPagasPorJanela({
+      apiBaseUrl: EMUSYS_API,
+      dataVencimentoInicial: inicioVenc,
+      dataVencimentoFinal: fimVenc,
+      unidade,
+      limiter,
+      cursor,
+      fetchFn,
+    });
+    const pagasNoMes = pagina.rawItems.filter((item) => {
+      const dataPagamento = String(item.data_pagamento ?? '').trim();
+      return dataPagamento >= pagInicio && dataPagamento <= pagFim;
+    });
+    const linhas = pagasNoMes.map((item) => {
+      const dataVencimento = String(item.data_vencimento ?? '').trim();
+      const dataPagamento = String(item.data_pagamento ?? '').trim();
+      return {
+        unidade_id: unidade.id,
+        unidade_codigo: codigo,
+        emusys_fatura_id: Number(item.id),
+        emusys_matricula_id: item.matricula_id != null ? Number(item.matricula_id) : null,
+        emusys_contrato_id: item.contrato_id != null ? Number(item.contrato_id) : null,
+        emusys_student_id: item.aluno_id != null ? Number(item.aluno_id) : null,
+        descricao: String(item.descricao ?? ''),
+        status: 'paga',
+        data_vencimento: dataVencimento,
+        data_pagamento: dataPagamento,
+        competencia_vencimento: `${dataVencimento.slice(0, 7)}-01`,
+        competencia_pagamento: competencia,
+        valor_original: Number(item.valor_original ?? 0),
+        valor_pago: item.valor_pago != null ? Number(item.valor_pago) : null,
+        juros_e_multa: Number(item.juros_e_multa ?? 0),
+        desconto_aplicado: Number(item.desconto_aplicado ?? 0),
+        desconto_fixo: Number(item.desconto_fixo ?? 0),
+        desconto_condicional: Number(item.desconto_condicional ?? 0),
+        payload: item as unknown as Record<string, unknown>,
+      };
+    });
+    if (linhas.length > 0) {
+      const { error } = await supabase
+        .from('faturas_pagas_mes')
+        .upsert(linhas, { onConflict: 'unidade_id,emusys_fatura_id' });
+      if (error) throw error;
+    }
+
+    const release = pagina.temMais && indice + 1 >= MAX_PAGAS_PAGES_PER_CLAIM;
+    const fila = await rpcOrThrow<QueueRpcResult>(
+      supabase,
+      'checkpoint_sync_faturas_pagas_mes_job',
+      {
+        p_job_id: job.id,
+        p_worker_id: workerId,
+        p_next_cursor: pagina.proximoCursor,
+        p_tem_mais: pagina.temMais,
+        p_release: release,
+        p_recebidas: pagina.rawItems.length,
+        p_pagas_no_mes: pagasNoMes.length,
+        p_upserted: linhas.length,
+        p_lease_seconds: 900,
+      },
+    );
+
+    if (!pagina.temMais) {
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          mode: 'pagas_no_mes',
+          queued: false,
+          queue_status: 'succeeded',
+          competencia,
+          unidade: codigo,
+          progresso: fila,
+        },
+      };
+    }
+    cursor = pagina.proximoCursor;
+    if (release) {
+      return {
+        status: 202,
+        body: {
+          ok: true,
+          mode: 'pagas_no_mes',
+          queued: true,
+          queue_status: 'pending',
+          competencia,
+          unidade: codigo,
+          progresso: fila,
+        },
+      };
+    }
+  }
+  throw new Error('SYNC_FATURAS_PAGAS_CHECKPOINT_AUSENTE');
+}
+
 async function processarProximoPagasMes(supabase: ServiceClient): Promise<ProcessResult | null> {
   const workerId = crypto.randomUUID();
   let job: PagasMesQueueJob | null;
@@ -377,23 +501,7 @@ async function processarProximoPagasMes(supabase: ServiceClient): Promise<Proces
   if (!job) return null;
 
   try {
-    const resultado = await processarPagasNoMes(supabase, job.competencia, job.unidade_codigo);
-    const fila = await rpcOrThrow<QueueRpcResult>(
-      supabase,
-      'complete_sync_faturas_pagas_mes_job',
-      { p_job_id: job.id, p_worker_id: workerId },
-    );
-    return {
-      status: 200,
-      body: {
-        ok: true,
-        mode: 'pagas_no_mes',
-        queued: false,
-        queue_status: fila.status ?? 'succeeded',
-        competencia: job.competencia,
-        resultado,
-      },
-    };
+    return await processarPagasNoMesComCheckpoint(supabase, job, workerId);
   } catch (erro) {
     const classificado = classifyFinanceiroSyncError(erro);
     if (classificado.retryable) {
