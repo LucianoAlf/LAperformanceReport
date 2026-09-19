@@ -1,6 +1,18 @@
 import { useMemo } from 'react';
-import { AlertTriangle, ArrowRight, CheckCircle2, Clock, LayoutList, Music, Users } from 'lucide-react';
+import { toast } from 'sonner';
+import {
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+  Clock,
+  LayoutList,
+  Music,
+  Printer,
+  Speaker,
+  Users,
+} from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
   formatarDuracao,
@@ -9,6 +21,12 @@ import {
   type EntradaDaRevisao,
   type Pendencia,
 } from '@/lib/eventos';
+import {
+  abrirParaImpressao,
+  gerarFolhaDePalcoHtml,
+  gerarProgramaHtml,
+  type DadosDaImpressao,
+} from '@/lib/eventosImpressao';
 import { useGradeDoEvento, useAlunosDoEvento, type EventoComResumo } from '@/hooks/useEventos';
 
 /**
@@ -72,6 +90,55 @@ export function RevisaoTab({
 
   const pendencias = useMemo(() => levantarPendencias(entrada), [entrada]);
   const resumo = useMemo(() => resumirEvento(entrada), [entrada]);
+  const impedimentos = pendencias.filter((p) => p.gravidade === 'impede');
+
+  const dadosDaImpressao = useMemo<DadosDaImpressao>(
+    () => ({
+      evento: {
+        titulo: evento.titulo,
+        data_evento: evento.data_evento,
+        local: evento.local,
+        unidade_nome: evento.unidade_nome,
+        horario_inicio: evento.horario_inicio,
+        duracao_padrao_segundos: evento.duracao_padrao_segundos,
+        intervalo_entre_blocos_segundos: evento.intervalo_entre_blocos_segundos ?? 2700,
+      },
+      blocos: blocos.map((b) => ({
+        id: b.id,
+        nome: b.nome,
+        ordem: b.ordem,
+        horario_inicial: b.horario_inicial,
+        inicio_manual: b.inicio_manual,
+        apresentacoes: b.apresentacoes.map((a) => ({
+          id: a.id,
+          ordem: a.ordem,
+          duracao_segundos: a.duracao_segundos,
+          aluno_nome: a.aluno_nome,
+          curso_nome: a.curso_nome,
+          professor_nome: a.professor_nome,
+          musica: a.musica,
+          tem_playback: a.tem_playback,
+          observacao_mapa: a.observacao_mapa,
+          itens: a.itens.map((i) => ({
+            tipo: i.tipo,
+            nome: i.nome,
+            quantidade: i.quantidade,
+          })),
+        })),
+      })),
+    }),
+    [evento, blocos],
+  );
+
+  const imprimir = (qual: 'programa' | 'palco') => {
+    const html =
+      qual === 'programa'
+        ? gerarProgramaHtml(dadosDaImpressao)
+        : gerarFolhaDePalcoHtml(dadosDaImpressao);
+    if (!abrirParaImpressao(html)) {
+      toast.error('O navegador bloqueou a janela. Permita pop-ups para este site e tente de novo.');
+    }
+  };
 
   const erro = erroGrade ?? erroAlunos;
   if (erro) {
@@ -87,7 +154,6 @@ export function RevisaoTab({
     return <p className="p-8 text-center text-sm text-slate-400">Carregando revisão…</p>;
   }
 
-  const impedimentos = pendencias.filter((p) => p.gravidade === 'impede');
 
   return (
     <div className="space-y-4">
@@ -121,6 +187,59 @@ export function RevisaoTab({
           duração medida.
         </p>
       )}
+
+      {/* ── impressão ── */}
+      <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              <Printer className="h-3.5 w-3.5" />
+              Imprimir
+            </h3>
+            <p className="mt-0.5 text-[12px] text-slate-500">
+              Dois documentos, dois públicos: a programação vai para a plateia, a folha de
+              palco fica com a produção.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => imprimir('programa')}
+              disabled={resumo.apresentacoes === 0}
+            >
+              <Printer className="h-3.5 w-3.5" />
+              Programação
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => imprimir('palco')}
+              disabled={resumo.apresentacoes === 0}
+            >
+              <Speaker className="h-3.5 w-3.5" />
+              Folha de palco
+            </Button>
+          </div>
+        </div>
+
+        {/* ⚠️ Avisa, nunca BLOQUEIA. Imprimir uma prévia com pendência conhecida é uso
+            legítimo — quem monta o recital precisa do papel na mão para conferir com os
+            professores. Travar o botão obrigaria a resolver tudo antes de poder olhar. */}
+        {impedimentos.length > 0 && resumo.apresentacoes > 0 && (
+          <p className="mt-2 flex items-start gap-1.5 rounded border border-rose-500/30 bg-rose-500/5 px-2 py-1.5 text-[11.5px] text-rose-200/90">
+            <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0 text-rose-400" />
+            <span>
+              {impedimentos.length === 1
+                ? 'Há 1 pendência que sai errada no papel'
+                : `Há ${impedimentos.length} pendências que saem erradas no papel`}{' '}
+              — dá para imprimir assim mesmo, é prévia.
+            </span>
+          </p>
+        )}
+      </section>
 
       {/* ── pendências ── */}
       {pendencias.length === 0 ? (
