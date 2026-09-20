@@ -20,6 +20,13 @@ const resolverMigrationName = fs.readdirSync(path.join(root, 'supabase', 'migrat
 const resolverMigrationPath = resolverMigrationName
   ? path.join(root, 'supabase', 'migrations', resolverMigrationName)
   : '';
+const resolverBatchMigrationName = fs.readdirSync(path.join(root, 'supabase', 'migrations'))
+  .filter((entry) => /_emusys_cpf_hmac_resolver_lote\.sql$/u.test(entry))
+  .sort()
+  .at(-1);
+const resolverBatchMigrationPath = resolverBatchMigrationName
+  ? path.join(root, 'supabase', 'migrations', resolverBatchMigrationName)
+  : '';
 
 function docker(args, input, timeout = 120_000) {
   return spawnSync('docker', args, {
@@ -178,6 +185,10 @@ test('migration deriva HMAC, limpa o passivo, protege novos writes e amplia o ba
     resolverMigrationPath && fs.existsSync(resolverMigrationPath),
     'migration do resolver com nomes ausente',
   );
+  assert.ok(
+    resolverBatchMigrationPath && fs.existsSync(resolverBatchMigrationPath),
+    'migration do resolver em lote ausente',
+  );
   const dockerInfo = docker(['info'], undefined, 5_000);
   if (dockerInfo.status !== 0 || dockerInfo.error) {
     t.skip('Docker indisponivel para fixture PostgreSQL de CPF HMAC');
@@ -197,6 +208,7 @@ test('migration deriva HMAC, limpa o passivo, protege novos writes e amplia o ba
     ok(psql(container, fixture), 'fixture');
     ok(psql(container, fs.readFileSync(migrationPath, 'utf8')), 'migration');
     ok(psql(container, fs.readFileSync(resolverMigrationPath, 'utf8')), 'migration resolver');
+    ok(psql(container, fs.readFileSync(resolverBatchMigrationPath, 'utf8')), 'migration resolver lote');
 
     const saneamento = ok(psql(container, `
       select
@@ -230,6 +242,18 @@ test('migration deriva HMAC, limpa o passivo, protege novos writes e amplia o ba
     `), 'resolver historico').at(-1);
     assert.equal(fallbackHistorico, 'Aluno Historico|Responsavel Historico|93|702');
 
+    const resolverLote = ok(psql(container, `
+      select set_config('app.test_role', 'service_role', false);
+      with hashes as (
+        select array_agg(cpf_hmac order by papel) as valores
+        from private.emusys_cpf_hmac_vinculos
+        where emusys_matricula_id = 701
+      )
+      select count(*) || '|' || count(distinct cpf_hmac)
+      from public.resolver_emusys_cpf_hmac_lote((select valores from hashes));
+    `), 'resolver lote').at(-1);
+    assert.equal(resolverLote, '2|2');
+
     const substituicao = ok(psql(container, `
       select set_config('app.test_role', 'service_role', false);
       select public.replace_emusys_cpf_hmac_vinculos(
@@ -253,6 +277,14 @@ test('migration deriva HMAC, limpa o passivo, protege novos writes e amplia o ba
         has_table_privilege('authenticated', 'private.emusys_cpf_hmac_vinculos', 'select');
     `), 'acl').at(-1);
     assert.equal(acl, 'false|false|true|false');
+
+    const aclLote = ok(psql(container, `
+      select
+        has_function_privilege('anon', 'public.resolver_emusys_cpf_hmac_lote(text[])', 'execute') || '|' ||
+        has_function_privilege('authenticated', 'public.resolver_emusys_cpf_hmac_lote(text[])', 'execute') || '|' ||
+        has_function_privilege('service_role', 'public.resolver_emusys_cpf_hmac_lote(text[])', 'execute');
+    `), 'acl lote').at(-1);
+    assert.equal(aclLote, 'false|false|true');
 
     const trigger = ok(psql(container, `
       insert into public.automacao_log(payload_bruto, detalhes)

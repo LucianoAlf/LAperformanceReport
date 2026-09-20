@@ -25,6 +25,15 @@ function resolverNamesMigrationSource() {
   return fs.readFileSync(path.join(migrationsDir, name), 'utf8');
 }
 
+function resolverBatchMigrationSource() {
+  const name = fs.readdirSync(migrationsDir)
+    .filter((entry) => /_emusys_cpf_hmac_resolver_lote\.sql$/u.test(entry))
+    .sort()
+    .at(-1);
+  assert.ok(name, 'migration do resolvedor CPF HMAC em lote ausente');
+  return fs.readFileSync(path.join(migrationsDir, name), 'utf8');
+}
+
 test('migration usa Vault e guarda somente HMAC-SHA256 em schema privado', () => {
   const sql = migrationSource();
 
@@ -105,4 +114,25 @@ test('resolver devolve nomes do snapshot sanitizado quando nao existe aluno loca
   assert.match(sql, /payload_snapshot#>>'\{responsavel,nome\}'/iu);
   assert.match(sql, /coalesce\(\s*aluno\.nome/iu);
   assert.match(sql, /coalesce\(\s*aluno\.responsavel_nome/iu);
+});
+
+test('resolvedor em lote consulta o indice privado em uma RPC restrita', () => {
+  const sql = resolverBatchMigrationSource();
+
+  assert.match(sql, /resolver_emusys_cpf_hmac_lote/iu);
+  assert.match(sql, /p_cpfs_hmac\s+text\[\]/iu);
+  assert.match(sql, /private\.emusys_cpf_hmac_vinculos/iu);
+  assert.match(sql, /auth\.role\(\)\s+is\s+distinct\s+from\s+'service_role'/iu);
+  assert.match(sql, /revoke all on function[\s\S]+from public, anon, authenticated/iu);
+  assert.match(sql, /grant execute on function[\s\S]+to service_role/iu);
+});
+
+test('endpoint preserva cpf_hash unitario e aceita cpf_hashes sem consultar o Emusys', () => {
+  const edge = read('supabase/functions/resolver-emusys-cpf-hash/index.ts');
+
+  assert.match(edge, /body\.cpf_hash/iu);
+  assert.match(edge, /body\.cpf_hashes/iu);
+  assert.match(edge, /resolver_emusys_cpf_hmac_lote/iu);
+  assert.match(edge, /resultados/iu);
+  assert.doesNotMatch(edge, /fetch\s*\(/iu);
 });

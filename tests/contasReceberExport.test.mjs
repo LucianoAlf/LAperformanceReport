@@ -34,6 +34,11 @@ const faturas = [
     desconto_aplicado: 0,
     desconto_fixo: 0,
     desconto_condicional: 0,
+    payload: {
+      forma_pagamento_transacao: 'Cartão de Crédito à Vista',
+      valor_liquido_recebido: 487.65,
+      tarifa_meio_pagamento: 12.35,
+    },
     synced_at: '2026-07-17T10:00:00Z',
     updated_at: '2026-07-17T10:00:00Z',
     source_missing: false,
@@ -59,6 +64,7 @@ const faturas = [
     desconto_aplicado: 1,
     desconto_fixo: 0,
     desconto_condicional: 0,
+    payload: {},
     synced_at: '2026-07-17T10:00:00Z',
     updated_at: '2026-07-17T10:00:00Z',
     source_missing: true,
@@ -101,18 +107,58 @@ test('join por unidade e matricula preserva uma linha por fatura e explicita dup
   assert.equal(rows[0].emusys_fatura_id, '9007199254740993');
   assert.equal(rows[0].emusys_matricula_id, '9007199254740995');
   assert.equal(rows[0].emusys_student_id, '9007199254740997');
+  assert.equal(rows[0].forma_pagamento_transacao, 'Cartão de Crédito à Vista');
+  assert.equal(rows[0].valor_liquido_recebido, 487.65);
+  assert.equal('tarifa_meio_pagamento' in rows[0], false);
   assert.deepEqual(rows[0].curso_candidatos, [{ aluno_id: 1, aluno_nome: 'Alice', curso_id: 7, curso_nome: 'Piano' }]);
 
   assert.equal(rows[1].cadastro_match_status, 'duplicado');
   assert.equal(rows[1].curso_nome, null);
   assert.equal(rows[1].curso_candidatos.length, 2);
   assert.equal(rows[1].valor_liquido, 21);
+  assert.equal(rows[1].forma_pagamento_transacao, null);
+  assert.equal(rows[1].valor_liquido_recebido, null);
 });
 
 test('fronteira Data API converte ids bigint para texto antes do JavaScript', () => {
   assert.match(exportFunctionSource, /emusys_fatura_id::text/);
   assert.match(exportFunctionSource, /emusys_matricula_id::text/);
   assert.match(exportFunctionSource, /emusys_student_id::text/);
+  assert.equal((exportFunctionSource.match(/\.select\('[^']*payload/gu) ?? []).length, 2);
+});
+
+test('campos de transacao preservam a forma crua e nunca inventam liquido', async () => {
+  const variantes = [
+    {
+      ...faturas[0],
+      payload: {
+        forma_pagamento_transacao: 'Crédito à Vista ',
+        valor_liquido_recebido: 0,
+        tarifa_meio_pagamento: 10,
+      },
+    },
+    {
+      ...faturas[0],
+      payload: {
+        forma_pagamento_transacao: 'Débito',
+        valor_liquido_recebido: null,
+      },
+    },
+    {
+      ...faturas[0],
+      payload: {
+        forma_pagamento_transacao: 'Pix',
+      },
+    },
+  ];
+  const rows = await buildExportRows({ faturas: variantes, alunos, cursos });
+
+  assert.equal(rows[0].forma_pagamento_transacao, 'Crédito à Vista ');
+  assert.equal(rows[0].valor_liquido_recebido, null);
+  assert.equal(rows[1].forma_pagamento_transacao, 'Débito');
+  assert.equal(rows[1].valor_liquido_recebido, null);
+  assert.equal(rows[2].forma_pagamento_transacao, 'Pix');
+  assert.equal(rows[2].valor_liquido_recebido, null);
 });
 
 test('modo snapshot, autenticacao propria e respostas 400 ou 409 permanecem preservados', () => {
@@ -198,6 +244,23 @@ test('hash canonico ignora ids tecnicos de run/item e reage ao estado de ausenci
     cursos,
   });
   assert.notEqual(rows[0].row_source_hash, rowsWithMissingReasonChanged[0].row_source_hash);
+
+  const formaMudou = faturas.map((fatura, index) => index === 0
+    ? {
+      ...fatura,
+      payload: { ...fatura.payload, forma_pagamento_transacao: 'Débito' },
+    }
+    : fatura);
+  const liquidoMudou = faturas.map((fatura, index) => index === 0
+    ? {
+      ...fatura,
+      payload: { ...fatura.payload, valor_liquido_recebido: 486.65 },
+    }
+    : fatura);
+  const rowsWithChangedForma = await buildExportRows({ faturas: formaMudou, alunos, cursos });
+  const rowsWithChangedLiquido = await buildExportRows({ faturas: liquidoMudou, alunos, cursos });
+  assert.notEqual(rows[0].row_source_hash, rowsWithChangedForma[0].row_source_hash);
+  assert.notEqual(rows[0].row_source_hash, rowsWithChangedLiquido[0].row_source_hash);
 });
 
 test('exportacao canonica rejeita source_missing em vez de transforma-lo em cobranca', async () => {

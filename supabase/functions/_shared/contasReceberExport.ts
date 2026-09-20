@@ -20,6 +20,7 @@ export interface FaturaSource {
   desconto_aplicado: number | string;
   desconto_fixo: number | string;
   desconto_condicional: number | string;
+  payload?: unknown | null;
   synced_at?: string | null;
   updated_at?: string | null;
   source_missing?: boolean;
@@ -58,6 +59,27 @@ const money = (value: unknown) => {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : 0;
 };
+
+function camposTransacao(payload: unknown) {
+  const dados = payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? payload as Record<string, unknown>
+    : null;
+  const forma = dados?.forma_pagamento_transacao;
+  const liquido = dados?.valor_liquido_recebido;
+
+  return {
+    // O Emusys fornece este texto como classificacao operacional. Preservar a
+    // string original, inclusive acentos e espacos, para o consumidor normalizar.
+    forma_pagamento_transacao: typeof forma === 'string' ? forma : null,
+    // Zero e' o sentinela do Emusys para "nao informado". Nao arredondar nem
+    // converter outros tipos: ausente, nulo e invalido permanecem desconhecidos.
+    valor_liquido_recebido: typeof liquido === 'number'
+      && Number.isFinite(liquido)
+      && liquido !== 0
+      ? liquido
+      : null,
+  };
+}
 
 const normalizeUnit = (value: unknown) => {
   const unit = String(value ?? '').trim().toLowerCase();
@@ -117,6 +139,8 @@ function rowHashPayload(row: Record<string, unknown>) {
     desconto_fixo: row.desconto_fixo,
     desconto_condicional: row.desconto_condicional,
     valor_liquido: row.valor_liquido,
+    forma_pagamento_transacao: row.forma_pagamento_transacao,
+    valor_liquido_recebido: row.valor_liquido_recebido,
     source_missing: row.source_missing,
     source_missing_reason: row.source_missing_reason,
   };
@@ -161,6 +185,7 @@ export async function buildExportRows({
     const valorOriginal = money(fatura.valor_original);
     const juros = money(fatura.juros_e_multa);
     const descontoAplicado = money(fatura.desconto_aplicado);
+    const transacao = camposTransacao(fatura.payload);
     const row: Record<string, unknown> = {
       la_report_fatura_id: fatura.canonical_fatura_id,
       sync_run_id: fatura.sync_run_id,
@@ -182,6 +207,8 @@ export async function buildExportRows({
       desconto_fixo: money(fatura.desconto_fixo),
       desconto_condicional: money(fatura.desconto_condicional),
       valor_liquido: Number((valorOriginal + juros - descontoAplicado).toFixed(2)),
+      forma_pagamento_transacao: transacao.forma_pagamento_transacao,
+      valor_liquido_recebido: transacao.valor_liquido_recebido,
       cadastro_match_status: matchStatus,
       aluno_nome: matchStatus === 'unico' ? candidates[0].nome : null,
       curso_nome: matchStatus === 'unico' && candidates[0].curso_id != null

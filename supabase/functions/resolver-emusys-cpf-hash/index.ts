@@ -7,6 +7,7 @@ const INTERNAL_SECRET = Deno.env.get('SUPER_FOLHA_FINANCEIRO_SECRET')?.trim()
   || Deno.env.get('SUPER_FOLHA_CONTAS_RECEBER_SECRET')?.trim()
   || '';
 const HASH_PATTERN = /^[0-9a-f]{64}$/;
+const MAX_HASHES_POR_LOTE = 1000;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -29,6 +30,14 @@ function safeEqual(left: string, right: string) {
   return diff === 0;
 }
 
+function normalizarHash(valor: unknown) {
+  return String(valor ?? '').trim().toLowerCase();
+}
+
+function validarHash(hash: string) {
+  return HASH_PATTERN.test(hash);
+}
+
 serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (request.method !== 'POST') return json({ success: false, erro: 'metodo nao permitido' }, 405);
@@ -41,9 +50,10 @@ serve(async (request) => {
 
   try {
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
-    const digest = String(body.cpf_hash ?? '').trim().toLowerCase();
-    if (!HASH_PATTERN.test(digest)) {
-      return json({ success: false, erro: 'cpf_hash deve ter 64 caracteres hexadecimais' }, 400);
+    const recebeuHashUnitario = body.cpf_hash !== undefined;
+    const recebeuHashes = body.cpf_hashes !== undefined;
+    if (recebeuHashUnitario && recebeuHashes) {
+      return json({ success: false, erro: 'informe cpf_hash ou cpf_hashes, nunca os dois' }, 400);
     }
 
     const client = createClient(
@@ -51,6 +61,56 @@ serve(async (request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
       { auth: { persistSession: false, autoRefreshToken: false } },
     );
+
+    if (recebeuHashes) {
+      if (!Array.isArray(body.cpf_hashes)) {
+        return json({ success: false, erro: 'cpf_hashes deve ser uma lista de hashes hexadecimais' }, 400);
+      }
+      if (body.cpf_hashes.length === 0 || body.cpf_hashes.length > MAX_HASHES_POR_LOTE) {
+        return json({
+          success: false,
+          erro: `cpf_hashes deve ter entre 1 e ${MAX_HASHES_POR_LOTE} itens`,
+        }, 400);
+      }
+
+      const hashes = body.cpf_hashes.map(normalizarHash);
+      if (hashes.some((hash) => !validarHash(hash))) {
+        return json({ success: false, erro: 'cpf_hashes contem hash invalido' }, 400);
+      }
+
+      const hashesUnicos = [...new Set(hashes)];
+      const { data, error } = await client.rpc('resolver_emusys_cpf_hmac_lote', {
+        p_cpfs_hmac: hashesUnicos,
+      });
+      if (error) throw error;
+
+      const porHash = new Map<string, Record<string, unknown>[]>();
+      for (const linha of Array.isArray(data) ? data : []) {
+        if (!linha || typeof linha !== 'object') continue;
+        const { cpf_hmac: hashInterno, ...vinculo } = linha as Record<string, unknown>;
+        const hash = normalizarHash(hashInterno);
+        if (!validarHash(hash)) continue;
+        porHash.set(hash, [...(porHash.get(hash) ?? []), vinculo]);
+      }
+
+      // A posicao do resultado corresponde a do hash recebido. O HMAC nao e
+      // ecoado: o consumidor ja conhece a chave de cada posicao da sua lista.
+      const resultados = hashes.map((hash) => {
+        const vinculos = porHash.get(hash) ?? [];
+        return { total: vinculos.length, vinculos };
+      });
+      return json({
+        success: true,
+        total_hashes: hashes.length,
+        total_vinculos: resultados.reduce((soma, resultado) => soma + resultado.total, 0),
+        resultados,
+      });
+    }
+
+    const digest = normalizarHash(body.cpf_hash);
+    if (!validarHash(digest)) {
+      return json({ success: false, erro: 'cpf_hash deve ter 64 caracteres hexadecimais' }, 400);
+    }
     const { data, error } = await client.rpc('resolver_emusys_cpf_hmac', { p_cpf_hmac: digest });
     if (error) throw error;
 
@@ -62,5 +122,3 @@ serve(async (request) => {
     return json({ success: false, erro: 'falha ao consultar vinculos' }, 500);
   }
 });
-
-\n

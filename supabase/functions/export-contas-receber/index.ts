@@ -38,7 +38,7 @@ async function fetchFaturasPagasMes(client: SupabaseClient, competencia: string,
   for (let from = 0; ; from += PAGE_SIZE) {
     let query = client
       .from('faturas_pagas_mes')
-      .select('unidade_id,unidade_codigo,emusys_fatura_id::text,emusys_matricula_id::text,emusys_student_id::text,descricao,status,data_vencimento,data_pagamento,competencia_vencimento,competencia_pagamento,valor_original,valor_pago,juros_e_multa,desconto_aplicado,desconto_fixo,desconto_condicional')
+      .select('unidade_id,unidade_codigo,emusys_fatura_id::text,emusys_matricula_id::text,emusys_student_id::text,descricao,status,data_vencimento,data_pagamento,competencia_vencimento,competencia_pagamento,valor_original,valor_pago,juros_e_multa,desconto_aplicado,desconto_fixo,desconto_condicional,payload')
       .eq('competencia_pagamento', competencia)
       .order('unidade_id', { ascending: true })
       .order('emusys_fatura_id', { ascending: true })
@@ -68,6 +68,7 @@ async function fetchFaturasPagasMes(client: SupabaseClient, competencia: string,
       desconto_aplicado: row.desconto_aplicado as number,
       desconto_fixo: row.desconto_fixo as number,
       desconto_condicional: row.desconto_condicional as number,
+      payload: row.payload,
       source_missing: false,
     } as FaturaSource));
     rows.push(...pageRows);
@@ -81,7 +82,7 @@ async function fetchFaturas(client: SupabaseClient, competencia: string, syncRun
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data, error } = await client
       .from('sync_run_items')
-      .select('id,canonical_fatura_id,run_id,unidade_id,unidade_codigo,emusys_fatura_id::text,emusys_matricula_id::text,emusys_student_id::text,descricao,status,data_vencimento,data_pagamento,competencia,valor_original,valor_pago,juros_e_multa,desconto_aplicado,desconto_fixo,desconto_condicional,source_missing,source_missing_reason,source_last_seen_at,source_missing_detected_at,source_missing_resolved_at')
+      .select('id,canonical_fatura_id,run_id,unidade_id,unidade_codigo,emusys_fatura_id::text,emusys_matricula_id::text,emusys_student_id::text,descricao,status,data_vencimento,data_pagamento,competencia,valor_original,valor_pago,juros_e_multa,desconto_aplicado,desconto_fixo,desconto_condicional,payload,source_missing,source_missing_reason,source_last_seen_at,source_missing_detected_at,source_missing_resolved_at')
       .eq('run_id', syncRunId)
       .eq('competencia', competencia)
       .order('unidade_id', { ascending: true })
