@@ -38,6 +38,30 @@ function validarHash(hash: string) {
   return HASH_PATTERN.test(hash);
 }
 
+function vinculoPublico(linha: unknown): Record<string, unknown> | null {
+  if (!linha || typeof linha !== 'object') return null;
+  const origem = linha as Record<string, unknown>;
+  return {
+    papel_cpf: origem.papel_cpf ?? null,
+    unidade_id: origem.unidade_id ?? null,
+    unidade_nome: origem.unidade_nome ?? null,
+    aluno_id: origem.aluno_id ?? null,
+    aluno_nome: origem.aluno_nome ?? null,
+    responsavel_nome: origem.responsavel_nome ?? null,
+    emusys_aluno_id: origem.emusys_aluno_id ?? null,
+    emusys_responsavel_id: origem.emusys_responsavel_id ?? null,
+    emusys_matricula_id: origem.emusys_matricula_id ?? null,
+  };
+}
+
+function vinculosPublicos(data: unknown) {
+  if (!Array.isArray(data)) return [];
+  return data.flatMap((linha) => {
+    const vinculo = vinculoPublico(linha);
+    return vinculo ? [vinculo] : [];
+  });
+}
+
 serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (request.method !== 'POST') return json({ success: false, erro: 'metodo nao permitido' }, 405);
@@ -87,9 +111,12 @@ serve(async (request) => {
       const porHash = new Map<string, Record<string, unknown>[]>();
       for (const linha of Array.isArray(data) ? data : []) {
         if (!linha || typeof linha !== 'object') continue;
-        const { cpf_hmac: hashInterno, ...vinculo } = linha as Record<string, unknown>;
+        const origem = linha as Record<string, unknown>;
+        const hashInterno = origem.cpf_hmac;
         const hash = normalizarHash(hashInterno);
         if (!validarHash(hash)) continue;
+        const vinculo = vinculoPublico(origem);
+        if (!vinculo) continue;
         porHash.set(hash, [...(porHash.get(hash) ?? []), vinculo]);
       }
 
@@ -114,7 +141,7 @@ serve(async (request) => {
     const { data, error } = await client.rpc('resolver_emusys_cpf_hmac', { p_cpf_hmac: digest });
     if (error) throw error;
 
-    const vinculos = Array.isArray(data) ? data : [];
+    const vinculos = vinculosPublicos(data);
     return json({ success: true, total: vinculos.length, vinculos });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

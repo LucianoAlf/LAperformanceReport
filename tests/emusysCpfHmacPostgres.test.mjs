@@ -254,6 +254,32 @@ test('migration deriva HMAC, limpa o passivo, protege novos writes e amplia o ba
     `), 'resolver lote').at(-1);
     assert.equal(resolverLote, '2|2');
 
+    const responsavelCompartilhado = ok(psql(container, `
+      select set_config('app.test_role', 'service_role', false);
+      insert into public.emusys_matriculas_estado_atual (
+        unidade_id, emusys_matricula_id, emusys_aluno_id, aluno_id, payload_snapshot, payload_hash
+      ) values (
+        '${unidade}', 703, 95, null,
+        '{"aluno":{"id":95,"nome":"Outro Aluno"},"responsavel":{"id":92,"nome":"Responsavel Compartilhado"}}'::jsonb,
+        'snapshot-seguro-703'
+      );
+      select public.replace_emusys_cpf_hmac_vinculos(
+        '${unidade}',
+        '[{"emusys_matricula_id":703,"emusys_aluno_id":95,"aluno_id":null,"emusys_responsavel_id":92,"aluno_cpf":null,"responsavel_cpf":"98765432100"}]'::jsonb
+      );
+      with responsavel as (
+        select cpf_hmac
+        from private.emusys_cpf_hmac_vinculos
+        where emusys_matricula_id = 701 and papel = 'responsavel'
+      )
+      select
+        string_agg(papel_cpf, ',' order by emusys_matricula_id) || '|' ||
+        count(*) || '|' ||
+        bool_and(emusys_responsavel_id = 92)
+      from public.resolver_emusys_cpf_hmac_lote(array[(select cpf_hmac from responsavel)]);
+    `), 'responsavel compartilhado').at(-1);
+    assert.equal(responsavelCompartilhado, 'responsavel,responsavel|2|true');
+
     const substituicao = ok(psql(container, `
       select set_config('app.test_role', 'service_role', false);
       select public.replace_emusys_cpf_hmac_vinculos(

@@ -86,6 +86,19 @@ test('Edges sanitizam snapshots e logs antes da persistencia', () => {
   assert.match(logs, /detalhes:\s*removerCpfClaro\(params\.detalhes/iu);
 });
 
+test('indice preserva aluno e responsavel como papeis independentes', () => {
+  const sql = migrationSource();
+  const edge = read('supabase/functions/resolver-emusys-cpf-hash/index.ts');
+
+  assert.match(sql, /aluno_cpf/iu);
+  assert.match(sql, /responsavel_cpf/iu);
+  assert.match(sql, /'aluno'::text/iu);
+  assert.match(sql, /'responsavel'::text/iu);
+  assert.match(sql, /union all[\s\S]{0,900}'responsavel'::text/iu);
+  assert.match(edge, /papel_cpf/iu);
+  assert.match(edge, /emusys_responsavel_id/iu);
+});
+
 test('endpoint do Super Folha valida segredo, aceita somente hash e nao o ecoa', () => {
   const edge = read('supabase/functions/resolver-emusys-cpf-hash/index.ts');
   const config = read('supabase/config.toml');
