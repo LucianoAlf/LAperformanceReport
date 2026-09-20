@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-18 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-19 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — operacao
