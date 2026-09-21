@@ -35,6 +35,7 @@ export function AgendaDrawer({
   presenca,
   onFechar,
   mostrarUnidade = false,
+  variante = 'painel',
 }: {
   aula: AulaAgenda;
   // Dia exibido ('yyyy-MM-dd'), para saber se a aula ja aconteceu — o que
@@ -42,6 +43,20 @@ export function AgendaDrawer({
   data: string;
   presenca: PresencaEnvelopeAgenda;
   onFechar: () => void;
+  /**
+   * A CASCA do painel — o conteudo e o mesmo nas duas.
+   *
+   * `painel` (o padrao) e a coluna de 296px colada a direita da grade, irma da
+   * timeline. `folha` e a folha de baixo do celular, onde nao ha grade nem
+   * 296px sobrando.
+   *
+   * ⚠️ Duas cascas, um conteudo, de proposito: sao ~400 linhas decidindo o que
+   * se mostra de uma aula (presenca canonica, risco e seu frescor, progresso
+   * no contrato, turma, leads da experimental). Reescrever isso numa tela
+   * mobile criaria a segunda versao da mesma resposta — o padrao que gerou as
+   * duplicatas de renovacao.
+   */
+  variante?: 'painel' | 'folha';
   // Na agenda consolidada o painel tambem precisa dizer de qual escola e a
   // aula: o rotulo do trilho pode ter ficado fora da viewport apos rolagem
   // horizontal. Com unidade selecionada, repetir seria ruido.
@@ -82,13 +97,8 @@ export function AgendaDrawer({
       ? Math.min(100, Math.round((aula.nr_da_aula / aula.qtd_aulas_contrato) * 100))
       : null;
 
-  return (
-    // Sem `overflow-y-auto`: o painel e irmao da timeline num flex com
-    // align-items:stretch, entao a altura dele ja e a da grade e o conteudo
-    // nunca precisa rolar por dentro. Com `auto`, o arredondamento fracionario
-    // da altura fazia scrollHeight passar clientHeight por 1px e o navegador
-    // desenhava uma barra de rolagem fantasma assim que o painel abria.
-    <aside className="flex w-[296px] shrink-0 flex-col gap-3.5 border-l border-slate-700 bg-slate-800/50 p-4">
+  const conteudo = (
+    <>
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <p className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-400">
@@ -368,6 +378,43 @@ export function AgendaDrawer({
           <p className="whitespace-pre-wrap text-[12.5px] text-slate-300">{aula.anotacoes_fabio}</p>
         </>
       )}
+    </>
+  );
+
+  if (variante === 'folha') {
+    return (
+      <>
+        <button
+          type="button"
+          aria-label="Fechar detalhe da aula"
+          onClick={onFechar}
+          className="fixed inset-0 z-50 bg-slate-950/70"
+        />
+        {/* Aqui a rolagem interna E necessaria — ao contrario do painel, a
+            folha nao herda a altura de uma grade irma: ela tem um teto e o
+            conteudo de uma turma cheia passa dele. */}
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Detalhe da aula"
+          className="fixed inset-x-0 bottom-0 z-50 flex max-h-[88%] flex-col gap-3.5 overflow-y-auto rounded-t-2xl border-t border-slate-800 bg-slate-900 px-4 pt-2"
+          style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
+        >
+          <div className="mx-auto h-1 w-9 flex-none rounded-full bg-slate-700" aria-hidden="true" />
+          {conteudo}
+        </div>
+      </>
+    );
+  }
+
+  return (
+    // Sem `overflow-y-auto`: o painel e irmao da timeline num flex com
+    // align-items:stretch, entao a altura dele ja e a da grade e o conteudo
+    // nunca precisa rolar por dentro. Com `auto`, o arredondamento fracionario
+    // da altura fazia scrollHeight passar clientHeight por 1px e o navegador
+    // desenhava uma barra de rolagem fantasma assim que o painel abria.
+    <aside className="flex w-[296px] shrink-0 flex-col gap-3.5 border-l border-slate-700 bg-slate-800/50 p-4">
+      {conteudo}
     </aside>
   );
 }

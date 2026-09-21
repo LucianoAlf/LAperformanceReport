@@ -671,6 +671,19 @@ export default function AgendaPage() {
             resumo={resumoMobile}
             seletorVisao={seletorVisaoMobile}
           />
+          {/* Tocar numa aula nao abria NADA no celular: o painel de detalhe so
+              era montado no ramo do desktop, entao as 158 linhas da lista eram
+              botoes mudos. Mesmo componente, casca de folha. */}
+          {selecionada && (
+            <AgendaDrawer
+              aula={selecionada}
+              data={data}
+              presenca={presenca}
+              onFechar={() => setSelecionada(null)}
+              mostrarUnidade={unidadeId === null}
+              variante="folha"
+            />
+          )}
         </Suspense>
       ) : aulas.length === 0 && filtrando ? (
         <p className="p-8 text-center text-sm text-slate-400">
