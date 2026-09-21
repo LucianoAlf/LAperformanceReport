@@ -97,3 +97,34 @@ test('dia sem aula do professor filtrado explica e oferece saida — nao some co
 test('o palco monta os 3 dias e o vizinho vem do cache, nunca de busca nova', () => {
   assert.match(tela, /lerDoCache\(/);
 });
+
+test('o reancoramento e por RELOGIO, nunca por onTransitionEnd', () => {
+  // 🔴 Defeito real, achado na revisao da Task 5 e originado no plano:
+  // `motion-reduce:transition-none` apaga a transicao para quem pede menos
+  // animacao, e transicao que nao existe nunca termina. Com `onTransitionEnd`
+  // o reancoramento nao acontecia e o dia NUNCA trocava por arrasto — o palco
+  // ficava travado no vizinho com a data errada no cabecalho.
+  // A proibicao vale para o CODIGO, nao para a prosa: o comentario que explica
+  // a armadilha cita `onTransitionEnd` de proposito, e deve continuar citando.
+  // Mesmo corte de tests/mobileDashboardLigado.test.mjs.
+  const semComentarios = tela
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^[ 	]*\/\/.*$/gm, '');
+  assert.doesNotMatch(
+    semComentarios,
+    /onTransitionEnd/,
+    'onTransitionEnd nao dispara sob prefers-reduced-motion: o dia nunca trocaria',
+  );
+  assert.match(tela, /setTimeout\(/, 'o reancoramento precisa de relogio proprio');
+  // Timeout sem limpeza vaza: trocar de dia pelas setas no meio da animacao,
+  // ou desmontar a tela, deixaria um reancoramento agendado para um estado que
+  // ja nao existe.
+  assert.match(tela, /clearTimeout\(/, 'o timeout do reancoramento precisa de clearTimeout');
+});
+
+test('a duracao da troca vive numa constante, nao repetida a mao', () => {
+  // O relogio e a transicao do JSX precisam falar da mesma duracao; dois
+  // numeros soltos divergem no primeiro ajuste.
+  assert.match(tela, /DURACAO_TROCA_MS\s*=\s*260/);
+  assert.match(tela, /duration-\[260ms\]/);
+});

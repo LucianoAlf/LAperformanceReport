@@ -43,6 +43,9 @@ interface Props {
 
 const DELTAS = [-1, 0, 1] as const;
 
+/** Igual a duracao da transicao no JSX. Se um mudar, o outro muda junto. */
+const DURACAO_TROCA_MS = 260;
+
 export function AgendaMobile({
   aulasDoDia,
   data,
@@ -115,7 +118,8 @@ export function AgendaMobile({
   }, [opcoesSwipe]);
 
   /**
-   * A troca de dia so acontece DEPOIS que a animacao termina.
+   * A troca de dia so acontece DEPOIS que a animacao termina — por RELOGIO,
+   * nunca por `onTransitionEnd`.
    *
    * Trocar a data no `aoSoltar` faria o conteudo se remontar sob o painel que
    * ainda esta deslizando — o dia novo apareceria antes de chegar ao lugar.
@@ -127,14 +131,25 @@ export function AgendaMobile({
    * apareceria duas vezes. O duplo requestAnimationFrame existe para religar a
    * transicao so depois que o quadro do salto ja foi pintado — um rAF so ainda
    * cai no mesmo quadro.
+   *
+   * 🔴 Por que NAO `onTransitionEnd`: com `prefers-reduced-motion: reduce` a
+   * classe `motion-reduce:transition-none` apaga a transicao, e transicao que
+   * nao existe nunca termina — o evento nao dispara, o reancoramento nao
+   * acontece e o dia NUNCA troca por arrasto. Quem pede menos animacao ficaria
+   * com o palco travado no vizinho, exibindo a data errada no cabecalho. O
+   * relogio funciona nos dois casos, e o `clearTimeout` cobre o desmonte e a
+   * troca de dia pelas setas no meio do caminho.
    */
-  const aoFimDaTransicao = useCallback(() => {
-    if (swipe.indice === 1) return;
+  useEffect(() => {
+    if (swipe.indice === 1) return undefined;
     const delta = swipe.indice - 1;
-    setReancorando(true);
-    onTrocarDia(format(addDays(parseISO(data), delta), 'yyyy-MM-dd'));
-    setSwipe((s) => ({ ...s, indice: 1 }));
-    requestAnimationFrame(() => requestAnimationFrame(() => setReancorando(false)));
+    const id = setTimeout(() => {
+      setReancorando(true);
+      onTrocarDia(format(addDays(parseISO(data), delta), 'yyyy-MM-dd'));
+      setSwipe((s) => ({ ...s, indice: 1 }));
+      requestAnimationFrame(() => requestAnimationFrame(() => setReancorando(false)));
+    }, DURACAO_TROCA_MS + 20);
+    return () => clearTimeout(id);
   }, [swipe.indice, data, onTrocarDia]);
 
   const escolherProfessor = (nome: string | null) => onFiltrar({ ...filtros, professor: nome });
@@ -229,7 +244,6 @@ export function AgendaMobile({
             semTransicao ? 'transition-none' : 'transition-transform duration-[260ms]',
           )}
           style={{ transform: `translateX(calc(${-swipe.indice * (100 / 3)}% + ${swipe.dx}px))` }}
-          onTransitionEnd={aoFimDaTransicao}
         >
           {paineis.map((painel) => (
             <PainelDoDia
