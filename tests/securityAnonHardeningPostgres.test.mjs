@@ -5,7 +5,7 @@ import test from 'node:test';
 
 const IMAGE = process.env.SECURITY_ANON_POSTGRES_IMAGE || 'postgres:17-alpine';
 const migrationPath = new URL('../supabase/migrations/20260921013120_security_anon_hardening_20260920.sql', import.meta.url);
-const correctionPath = new URL('../supabase/migrations/20260921013309_security_anamnese_public_acl_minima.sql', import.meta.url);
+const correctionPath = new URL('../supabase/migrations/20260921013409_security_anamnese_public_acl_minima.sql', import.meta.url);
 const container = 'la-security-anon-' + process.pid + '-' + Date.now();
 
 function docker(args, options = {}) {
