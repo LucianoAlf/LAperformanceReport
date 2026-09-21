@@ -894,7 +894,9 @@ test('falha de contrato é distinta de falha operacional ao encerrar storage', (
 test('as quatro portas de escrita de presenca mandam p_request_id', () => {
   const fontes = {
     'src/components/App/Agenda/Chamada/useChamadaAcoes.ts': ['app_registrar_chamada_agenda'],
-    'src/components/App/Agenda/Chamada/ProfessorPresencaToggle.tsx': [
+    // A orquestracao saiu do componente para o hook em 21/09 (LAPE-32): o
+    // toggle passou a desenhar, e quem fala com o banco e `useProfessorPresenca`.
+    'src/hooks/useProfessorPresenca.ts': [
       'app_marcar_presenca_professor_aula',
       'app_registrar_presenca_professor_dia',
       'app_remover_presenca_professor_dia',
@@ -962,23 +964,37 @@ test('chamada de alunos identifica usuário e só encerra após interpretar', ()
   assertMensagensDoProtocolo(codigo, caminho);
 });
 
-test('presença de professor usa recibo durável nos três caminhos diretos', () => {
-  const caminho = 'src/components/App/Agenda/Chamada/ProfessorPresencaToggle.tsx';
+test('presença de professor usa recibo durável nos dois caminhos diretos', () => {
+  // 🔴 Eram TRES caminhos ate 21/09 e hoje sao DOIS — nao porque a trava
+  // afrouxou, mas porque o terceiro era um clone: `marcarDia` e
+  // `marcarTodasAulas` foram medidas identicas byte a byte (mesmo payload
+  // `professor_dia`, mesmas duas RPCs, mesma reserva) e diferiam so na string
+  // do toast. O que sobrou sao as duas escritas reais: o DIA e a AULA.
+  const caminho = 'src/hooks/useProfessorPresenca.ts';
   const codigo = arquivo(caminho);
 
   assert.match(codigo, /useAuth\(\)/u);
   assert.match(codigo, /chaveDoPedido\(user\.id,\s*'professor_dia'/u);
   assert.match(codigo, /chaveDoPedido\(user\.id,\s*'professor_aula'/u);
-  assert.equal((codigo.match(/const requestId = requestIdDoPedido\(chave\)/gu) ?? []).length, 3);
-  assert.equal((codigo.match(/interpretarEEncerrarPedido\(chave,\s*requestId,\s*recibo\)/gu) ?? []).length, 3);
+  assert.equal((codigo.match(/const requestId = requestIdDoPedido\(chave\)/gu) ?? []).length, 2);
+  assert.equal((codigo.match(/interpretarEEncerrarPedido\(chave,\s*requestId,\s*recibo\)/gu) ?? []).length, 2);
+  // ⚠️ O invariante que interessa nao e o NUMERO, e a paridade: toda escrita
+  // que sai daqui tem de voltar por um recibo interpretado. Contagem fixa
+  // envelhece a cada refatoracao; esta amarra sobrevive a elas.
+  assert.equal(
+    (codigo.match(/supabase\.rpc\('app_(registrar|remover|marcar)_presenca_professor/gu) ?? []).length
+      - (codigo.match(/interpretarEEncerrarPedido\(/gu) ?? []).length,
+    1,
+    'as 3 RPCs de escrita (2 do dia + 1 da aula) fecham em 2 recibos: o dia usa uma OU outra',
+  );
   assert.match(codigo, /adquirirTravaPresenca\(/u);
   assert.match(codigo, /adquirirTravaDoDia\(user\.id\)/u);
   assert.match(codigo, /chaveTravaProfessorDia\(usuarioId,\s*unidadeId,\s*data\)/u);
-  assert.equal((codigo.match(/reservarIntencaoProfessorPendente\(/gu) ?? []).length, 3);
+  assert.equal((codigo.match(/reservarIntencaoProfessorPendente\(/gu) ?? []).length, 2);
   assert.equal(
     (codigo.match(/encerrarIntencaoProfessorPendente\(/gu) ?? []).length,
-    4,
-    'três escritas diretas e a reconciliação precisam encerrar seus estados terminais',
+    3,
+    'duas escritas diretas e a reconciliação precisam encerrar seus estados terminais',
   );
   assert.match(codigo, /listarIntencoesProfessorPendentes\(/u);
   assert.match(codigo, /app_status_comando_presenca_v1/u);
@@ -992,6 +1008,12 @@ test('presença de professor usa recibo durável nos três caminhos diretos', ()
   assert.doesNotMatch(codigo, /\bencerrarPedido\(|\binterpretarRecibo\(/u);
   assert.match(codigo, /Sessão inválida/u);
   assertMensagensDoProtocolo(codigo, caminho);
+
+  // E o componente nao pode voltar a escrever por fora do hook: um segundo
+  // caminho de escrita e como o protocolo de recibo morre em silencio.
+  const toggle = arquivo('src/components/App/Agenda/Chamada/ProfessorPresencaToggle.tsx');
+  assert.doesNotMatch(toggle, /supabase\.rpc\(/u, 'o toggle voltou a chamar RPC direto');
+  assert.match(toggle, /useProfessorPresenca\(/u);
 });
 
 test('operação em lote isola recibo e estado pendente por professor', () => {
