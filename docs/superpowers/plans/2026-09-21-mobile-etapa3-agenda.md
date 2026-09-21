@@ -22,7 +22,7 @@
 - **A tela mobile não consulta o banco.** Nada de `supabase`, nada de `.rpc(` em `src/mobile/telas/agenda/`. Os dados chegam por props.
 - **Ciano é exclusivo de navegação** (§6 do spec). O chip de filtro ligado é pílula clara sólida; a data usa setas; nenhum dos dois é ciano.
 - **Alvo de toque ≥ 44px** em todo controle.
-- **`npm run build` NÃO type-checa** (é `vite build`, com `noUnusedLocals` desligado). `npx tsc -p tsconfig.ci.json` tem **336 erros pré-existentes** — o portão é *saída idêntica antes e depois*, nunca "zero erros".
+- **`npm run build` NÃO type-checa** (é `vite build`, com `noUnusedLocals` desligado). `npx tsc -p tsconfig.ci.json` tem **172 erros pré-existentes** (medido em 21/09/2026 no commit `290d6a52`; o número de 336 que circulava vinha da etapa 2 e envelheceu — sempre remedir antes de usar como portão) — o portão é *saída idêntica antes e depois*, nunca "zero erros".
 - **`npm test` não roda direto** (o `pretest` exige Docker). Rodar a chave `"test"` do `package.json` diretamente. Há **1 falha pré-existente alheia**: `faturasAlunosPage`.
 - **Todo teste novo entra na chave `"test"` do `package.json`** no mesmo commit. Teste que não está na lista nunca roda.
 - Português nos identificadores e comentários; comentário explica *por que*, nunca *o quê*.
@@ -1294,7 +1294,47 @@ export const ABAS_PORTADAS: Readonly<Record<string, readonly string[]>> = {
 };
 ```
 
-Em `AgendaPage.tsx`: importar `useShellMobile`, `abaFoiPortada`, `AvisoNaoOtimizado` e a `AgendaMobile` por `lazy`; declarar `const ehCelular = useShellMobile() === 'mobile';`; renderizar o aviso quando a visão não foi portada; e inserir o ramo mobile **antes** do `aulas.length === 0`:
+Em `AgendaPage.tsx`, quatro edições e nada mais.
+
+**(a)** A primeira linha do arquivo ganha `lazy` e `Suspense`:
+
+```tsx
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+```
+
+**(b)** Junto dos demais imports:
+
+```tsx
+import { useShellMobile } from '@/hooks/useShellMobile';
+import { abaFoiPortada } from '@/mobile/abasPortadas';
+import { AvisoNaoOtimizado } from '@/mobile/AvisoNaoOtimizado';
+
+// Lazy: o desktop nao pode pagar o bundle de uma tela que nunca vai montar.
+const AgendaMobile = lazy(() => import('@/mobile/telas/agenda/AgendaMobile'));
+```
+
+**(c)** Ao lado das outras declarações de estado, logo depois de `const [visao, setVisao] = ...`:
+
+```tsx
+  const ehCelular = useShellMobile() === 'mobile';
+```
+
+E `lerDoCache` passa a ser desestruturado do hook, junto dos demais:
+
+```tsx
+  const { aulas: todasAsAulas, presenca, carregando, erro, frescor, recarregar, prefetch, lerDoCache } = useAgendaDia({
+    data,
+    unidadeId,
+  });
+```
+
+**(d)** O aviso, imediatamente antes do bloco que hoje abre a área de conteúdo — mesma forma literal do `AlunosPage.tsx:2240`:
+
+```tsx
+      {ehCelular && !abaFoiPortada('/app/agenda', visao) && <AvisoNaoOtimizado />}
+```
+
+**(e)** O ramo mobile, inserido **antes** do `aulas.length === 0`:
 
 ```tsx
       ) : ehCelular && !ehChamada && !ehCalendario ? (
@@ -1318,7 +1358,7 @@ Em `AgendaPage.tsx`: importar `useShellMobile`, `abaFoiPortada`, `AvisoNaoOtimiz
 - [ ] **Step 5: provar que o desktop não mudou**
 
 ```bash
-npx tsc -p tsconfig.ci.json 2>&1 | wc -l    # tem de bater com a baseline (336 erros)
+npx tsc -p tsconfig.ci.json 2>&1 | grep -c "error TS"    # tem de devolver 172
 node --test $(node -e "console.log(require('./package.json').scripts.test.replace('node --test ',''))")
 ```
 
