@@ -643,11 +643,13 @@ export default function AgendaPage() {
         </p>
       ) : primeiraCarga ? (
         <p className="p-8 text-center text-sm text-slate-400">Carregando agenda…</p>
-      ) : aulas.length === 0 && filtrando ? (
-        <p className="p-8 text-center text-sm text-slate-400">
-          Nenhuma aula corresponde ao filtro.
-        </p>
       ) : ehCelular && !ehChamada && !ehCalendario ? (
+        /* ⚠️ ANTES dos dois curto-circuitos de vazio, e nao so do sem-filtro.
+           A AgendaMobile trata o vazio por dentro — e precisa renderizar
+           SEMPRE, porque e ela que carrega o trilho de chips, as setas de dia
+           e o botao de limpar. Quando o ramo do desktop vinha antes, um filtro
+           que nao casava nada deixava a tela SEM SAIDA: so a frase "Nenhuma
+           aula corresponde ao filtro", sem nenhum controle para desfazer. */
         <Suspense fallback={<div className="p-8 text-center text-sm text-slate-400">Carregando…</div>}>
           <AgendaMobile
             aulasDoDia={todasAsAulas}
@@ -660,6 +662,10 @@ export default function AgendaPage() {
             onAbrir={setSelecionada}
           />
         </Suspense>
+      ) : aulas.length === 0 && filtrando ? (
+        <p className="p-8 text-center text-sm text-slate-400">
+          Nenhuma aula corresponde ao filtro.
+        </p>
       ) : aulas.length === 0 ? (
         <p className="p-8 text-center text-sm text-slate-400">Nenhuma aula neste dia.</p>
       ) : ehChamada ? (

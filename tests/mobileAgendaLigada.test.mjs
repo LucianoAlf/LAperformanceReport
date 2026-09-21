@@ -6,6 +6,7 @@ import { abaFoiPortada, rotaTemFaixaPorAba } from '../src/mobile/abasPortadas.ts
 
 const le = (p) => readFileSync(new URL(p, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const pagina = le('../src/components/App/Agenda/AgendaPage.tsx');
+const tela = le('../src/mobile/telas/agenda/AgendaMobile.tsx');
 const rotas = le('../src/mobile/rotasPortadas.ts');
 
 test('as visoes portadas sao professor e sala — chamada e calendario continuam avisando', () => {
@@ -32,13 +33,31 @@ test('o aviso aparece so nas visoes nao portadas', () => {
   assert.match(pagina, /ehCelular\s*&&\s*!abaFoiPortada\('\/app\/agenda',\s*visao\)/);
 });
 
-test('o ramo mobile vem ANTES do curto-circuito de dia vazio', () => {
-  // Dia sem aula ainda precisa do palco para deslizar. Se o "Nenhuma aula
-  // neste dia" vier antes, o arrasto morre justamente no domingo.
-  const vazio = pagina.indexOf('Nenhuma aula neste dia');
+test('o ramo mobile vem ANTES de TODOS os curto-circuitos de vazio', () => {
+  // 🔴 A versao anterior deste teste checava so 'Nenhuma aula neste dia' e
+  // passava com a tela quebrada: ha DUAS mensagens de vazio, e a outra
+  // ('Nenhuma aula corresponde ao filtro') vinha antes do ramo mobile. Com um
+  // filtro que nao casava nada, a AgendaMobile nem renderizava — sumiam o
+  // trilho de chips, as setas de dia e qualquer jeito de desfazer o filtro.
+  // A tela ficava SEM SAIDA, com uma frase e mais nada. Relatado com print.
   const mobile = pagina.indexOf('<AgendaMobile');
   assert.ok(mobile > -1, 'AgendaMobile nao foi montada');
-  assert.ok(mobile < vazio, 'o ramo mobile precisa vir antes do curto-circuito de dia vazio');
+
+  for (const frase of ['Nenhuma aula corresponde ao filtro', 'Nenhuma aula neste dia']) {
+    const pos = pagina.indexOf(frase);
+    assert.ok(pos > -1, `nao achei a mensagem de vazio: ${frase}`);
+    assert.ok(mobile < pos, `o ramo mobile precisa vir antes de "${frase}"`);
+  }
+});
+
+test('no celular sempre ha como desfazer o filtro', () => {
+  // O filtro que trava a tela pode ter vindo da busca ou da categoria,
+  // herdadas do desktop — limpar so o professor nao destravaria.
+  assert.match(tela, /onFiltrar\(FILTROS_AGENDA_VAZIOS\)/);
+  assert.match(tela, /Limpar filtros/);
+  // E o titulo nao pode assumir que o filtro e de professor: com professor
+  // nulo, o template renderizava "null nao tem aula neste dia".
+  assert.match(tela, /filtros\.professor !== null/);
 });
 
 test('a AgendaMobile entra por lazy — o desktop nao paga o bundle dela', () => {

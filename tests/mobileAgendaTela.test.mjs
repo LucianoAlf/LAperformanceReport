@@ -91,7 +91,10 @@ test('a colisao e calculada sobre o dia CRU, nunca sobre a lista filtrada', () =
 
 test('dia sem aula do professor filtrado explica e oferece saida — nao some com o filtro', () => {
   assert.match(tela, /não tem aula neste dia|nao tem aula neste dia/);
-  assert.match(tela, /Ver todos/);
+  // O rotulo deixou de ser "Ver todos os professores": o filtro que esvazia a
+  // tela pode ter vindo da busca ou da categoria, herdadas do desktop, e o
+  // botao precisa cobrir qualquer um deles.
+  assert.match(tela, /Limpar filtros/);
 });
 
 test('o palco monta os 3 dias e o vizinho vem do cache, nunca de busca nova', () => {

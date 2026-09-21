@@ -14,6 +14,7 @@ import type { AgendaDiaV2, AulaAgenda } from '@/hooks/useAgendaDia';
 import {
   colisoesDeSala,
   filtrarAulas,
+  FILTROS_AGENDA_VAZIOS,
   iniciaisDoNome,
   minutosAgora,
   minutosDeHHMM,
@@ -254,7 +255,7 @@ export function AgendaMobile({
               agora={agora}
               ehHoje={painel.data === hoje}
               onAbrir={onAbrir}
-              onLimparFiltro={() => escolherProfessor(null)}
+              onLimparFiltro={() => onFiltrar(FILTROS_AGENDA_VAZIOS)}
             />
           ))}
         </div>
@@ -298,21 +299,23 @@ function PainelDoDia({ data, cru, filtros, agora, ehHoje, onAbrir, onLimparFiltr
     return (
       <div className="w-1/3 flex-shrink-0 overflow-y-auto px-6 pt-12 text-center">
         <div className="text-[14px] font-semibold text-slate-300">
-          {porFiltro
-            ? `${filtros.professor} não tem aula neste dia`
-            : 'Sem aulas neste dia'}
+          {!porFiltro
+            ? 'Sem aulas neste dia'
+            : filtros.professor !== null
+              ? `${filtros.professor} não tem aula neste dia`
+              : 'Nenhuma aula corresponde ao filtro'}
         </div>
         {porFiltro && (
           <>
             <p className="mt-1.5 text-[12.5px] leading-relaxed text-slate-400">
-              O dia tem {cru.length} aulas de outros professores. O filtro continua ligado.
+              O dia tem {cru.length} {cru.length === 1 ? 'aula' : 'aulas'}. O filtro continua ligado.
             </p>
             <button
               type="button"
               onClick={onLimparFiltro}
               className="mt-3.5 min-h-[44px] rounded-[10px] border border-slate-700 bg-slate-800 px-4 text-[13px] font-semibold text-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
             >
-              Ver todos os professores
+              Limpar filtros
             </button>
           </>
         )}
