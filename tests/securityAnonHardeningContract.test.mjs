@@ -4,6 +4,8 @@ import test from 'node:test';
 
 const migrationPath = new URL('../supabase/migrations/20260921013120_security_anon_hardening_20260920.sql', import.meta.url);
 const rollbackPath = new URL('../scripts/rollback/20260921013120_security_anon_hardening_20260920.sql', import.meta.url);
+const sequenceMigrationPath = new URL('../supabase/migrations/20260921021929_security_anon_sequences_defaults.sql', import.meta.url);
+const sequenceRollbackPath = new URL('../scripts/rollback/20260921021929_security_anon_sequences_defaults.sql', import.meta.url);
 
 function migration() {
   assert.ok(existsSync(migrationPath), 'a migration versionada deve existir');
@@ -70,4 +72,15 @@ test('inclui roteiro versionado de desfazer para ACLs capturadas antes do lote',
   assert.match(sql, /security_anon_hardening_20260920_acl_backup/i);
   assert.match(sql, /grant .* on table/i);
   assert.match(sql, /grant execute on function/i);
+});
+
+test('fecha sequencias existentes e futuras para anon e preserva rollback versionado', () => {
+  assert.ok(existsSync(sequenceMigrationPath), 'a migration de sequencias deve existir');
+  assert.ok(existsSync(sequenceRollbackPath), 'o rollback de sequencias deve existir');
+  const sql = readFileSync(sequenceMigrationPath, 'utf8');
+  const rollback = readFileSync(sequenceRollbackPath, 'utf8');
+  assert.match(sql, /revoke all privileges on all sequences in schema public from anon, public/i);
+  assert.match(sql, /alter default privileges for role postgres in schema public\s+revoke all on sequences from anon, public/i);
+  assert.match(sql, /object_kind in \('table', 'sequence', 'function'\)/i);
+  assert.match(rollback, /grant .* on sequence/i);
 });

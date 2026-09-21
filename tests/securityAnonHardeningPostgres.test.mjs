@@ -6,6 +6,7 @@ import test from 'node:test';
 const IMAGE = process.env.SECURITY_ANON_POSTGRES_IMAGE || 'postgres:17-alpine';
 const migrationPath = new URL('../supabase/migrations/20260921013120_security_anon_hardening_20260920.sql', import.meta.url);
 const correctionPath = new URL('../supabase/migrations/20260921013409_security_anamnese_public_acl_minima.sql', import.meta.url);
+const sequenceMigrationPath = new URL('../supabase/migrations/20260921021929_security_anon_sequences_defaults.sql', import.meta.url);
 const container = 'la-security-anon-' + process.pid + '-' + Date.now();
 
 function docker(args, options = {}) {
@@ -74,6 +75,7 @@ test('migration fecha anon de verdade e preserva somente os quatro contratos pub
     papeis.map((role) => 'create role ' + role + ';').join('\n'),
     tabelasP1.map((table) => 'create table public.' + table + ' (id integer, unidade_id uuid);').join('\n'),
     'create table public.internal_p4 (id integer);',
+    'create sequence public.security_fixture_sequence;',
     'create table public.unidades (id uuid primary key, nome text);',
     'create table public.alunos (id integer primary key, nome text, data_nascimento date);',
     'create table public.leads (id integer primary key, unidade_id uuid);',
@@ -94,8 +96,10 @@ test('migration fecha anon de verdade e preserva somente os quatro contratos pub
     'grant all on table public.leads_campanhas to anon, authenticated, service_role;',
     'grant all on table public.calendario_escolar to anon, authenticated, service_role;',
     'grant insert, update, delete on table public.internal_p4 to anon;',
+    'grant usage, select, update on sequence public.security_fixture_sequence to anon;',
     'alter default privileges for role postgres in schema public grant all on tables to anon;',
     'alter default privileges for role postgres in schema public grant execute on functions to anon;',
+    'alter default privileges for role postgres in schema public grant usage, select, update on sequences to anon;',
     'alter default privileges for role supabase_admin in schema public grant all on tables to anon;',
     'alter default privileges for role supabase_admin in schema public grant execute on functions to anon;',
     'grant supabase_admin to postgres;',
@@ -103,6 +107,8 @@ test('migration fecha anon de verdade e preserva somente os quatro contratos pub
   sql(bootstrap);
   sql(readFileSync(migrationPath, 'utf8'));
   sql(readFileSync(correctionPath, 'utf8'));
+  sql(readFileSync(sequenceMigrationPath, 'utf8'));
+  sql('create sequence public.security_default_sequence;');
 
   const tableList = tabelasP1.map((table) => "'" + table + "'").join(',');
   const evidence = sql([
@@ -110,6 +116,10 @@ test('migration fecha anon de verdade e preserva somente os quatro contratos pub
     "'leads_anon_insert', has_table_privilege('anon', 'public.leads_campanhas', 'INSERT'),",
     "'calendario_anon_select', has_table_privilege('anon', 'public.calendario_escolar', 'SELECT'),",
     "'p4_anon_insert', has_table_privilege('anon', 'public.internal_p4', 'INSERT'),",
+    "'fixture_sequence_anon_usage', has_sequence_privilege('anon', 'public.security_fixture_sequence', 'USAGE'),",
+    "'fixture_sequence_anon_select', has_sequence_privilege('anon', 'public.security_fixture_sequence', 'SELECT'),",
+    "'fixture_sequence_anon_update', has_sequence_privilege('anon', 'public.security_fixture_sequence', 'UPDATE'),",
+    "'default_sequence_anon_usage', has_sequence_privilege('anon', 'public.security_default_sequence', 'USAGE'),",
     "'internal_anon_execute', has_function_privilege('anon', 'public.internal_anon_fn()', 'EXECUTE'),",
     "'trigger_anon_execute', has_function_privilege('anon', 'public.internal_anon_trigger()', 'EXECUTE'),",
     "'public_anamnese_execute', has_function_privilege('anon', 'public.get_anamnese_publica(text)', 'EXECUTE'),",
@@ -117,13 +127,18 @@ test('migration fecha anon de verdade e preserva somente os quatro contratos pub
     "'app_anon_functions', (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and has_function_privilege('anon', p.oid, 'EXECUTE') and not exists (select 1 from pg_depend d join pg_extension e on e.oid = d.refobjid where d.classid = 'pg_proc'::regclass and d.objid = p.oid and d.deptype = 'e')),",
     "'definer_sem_path', (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.prosecdef and not exists (select 1 from unnest(coalesce(p.proconfig, array[]::text[])) c where c like 'search_path=%')),",
     "'p1_sem_rls', (select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relname = any (array[" + tableList + "]) and not c.relrowsecurity),",
-    "'default_anon_tables', (select count(*) from pg_default_acl d cross join lateral aclexplode(d.defaclacl) a where d.defaclnamespace = 'public'::regnamespace and d.defaclobjtype = 'r' and a.grantee = 'anon'::regrole)",
+    "'default_anon_tables', (select count(*) from pg_default_acl d cross join lateral aclexplode(d.defaclacl) a where d.defaclnamespace = 'public'::regnamespace and d.defaclobjtype = 'r' and a.grantee = 'anon'::regrole),",
+    "'default_anon_sequences', (select count(*) from pg_default_acl d cross join lateral aclexplode(d.defaclacl) a where d.defaclnamespace = 'public'::regnamespace and d.defaclobjtype = 'S' and d.defaclrole = 'postgres'::regrole and a.grantee in ('anon'::regrole, 0))",
     ')::text;',
   ].join('\n'));
   assert.deepEqual(JSON.parse(evidence), {
     leads_anon_insert: false,
     calendario_anon_select: false,
     p4_anon_insert: false,
+    fixture_sequence_anon_usage: false,
+    fixture_sequence_anon_select: false,
+    fixture_sequence_anon_update: false,
+    default_sequence_anon_usage: false,
     internal_anon_execute: false,
     trigger_anon_execute: false,
     public_anamnese_execute: true,
@@ -132,6 +147,7 @@ test('migration fecha anon de verdade e preserva somente os quatro contratos pub
     definer_sem_path: 0,
     p1_sem_rls: 0,
     default_anon_tables: 0,
+    default_anon_sequences: 0,
   });
 
   // A unica tentativa de escrita anon roda em transacao e sempre e desfeita.
