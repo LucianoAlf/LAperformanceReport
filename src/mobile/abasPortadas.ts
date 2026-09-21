@@ -17,7 +17,7 @@
  */
 
 /** Rotas que exibem a própria faixa, por aba, em vez da faixa do shell. */
-export const ROTAS_COM_FAIXA_POR_ABA: readonly string[] = ['/app/alunos'];
+export const ROTAS_COM_FAIXA_POR_ABA: readonly string[] = ['/app/alunos', '/app/agenda'];
 
 /**
  * Abas com versão mobile, por rota. Cresce uma linha por aba portada.
@@ -27,6 +27,9 @@ export const ROTAS_COM_FAIXA_POR_ABA: readonly string[] = ['/app/alunos'];
  */
 export const ABAS_PORTADAS: Readonly<Record<string, readonly string[]>> = {
   '/app/alunos': ['lista'],
+  // Chamada e Calendário seguem abrindo no desktop, com a faixa. A grade do
+  // dia é o que esta etapa portou.
+  '/app/agenda': ['professor', 'sala'],
 };
 
 export function rotaTemFaixaPorAba(

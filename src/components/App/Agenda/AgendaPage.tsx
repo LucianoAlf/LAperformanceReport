@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { addDays, addWeeks, format, isValid, parseISO, startOfWeek, endOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -63,6 +63,12 @@ import { AgendaDrawer } from './AgendaDrawer';
 import { ChamadaView } from './Chamada';
 import { CalendarioEscolar } from './CalendarioEscolar';
 import { cn } from '@/lib/utils';
+import { useShellMobile } from '@/hooks/useShellMobile';
+import { abaFoiPortada } from '@/mobile/abasPortadas';
+import { AvisoNaoOtimizado } from '@/mobile/AvisoNaoOtimizado';
+
+// Lazy: o desktop nao pode pagar o bundle de uma tela que nunca vai montar.
+const AgendaMobile = lazy(() => import('@/mobile/telas/agenda/AgendaMobile'));
 
 /**
  * Rotulo do dia tolerante a data invalida. `format` da date-fns lanca
@@ -114,6 +120,7 @@ export default function AgendaPage() {
   const [data, setData] = useState(hoje);
   const [agruparPor, setAgruparPor] = useState<'professor' | 'sala'>('professor');
   const [visao, setVisao] = useState<'professor' | 'sala' | 'chamada' | 'calendario'>('professor');
+  const ehCelular = useShellMobile() === 'mobile';
   const ehChamada = visao === 'chamada';
   const ehCalendario = visao === 'calendario';
   // Sub-visao da Chamada (dia/semana/lista). Quando 'semana', as setas do
@@ -146,7 +153,7 @@ export default function AgendaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inicio, fim, hoje]);
 
-  const { aulas: todasAsAulas, presenca, carregando, erro, frescor, recarregar, prefetch } = useAgendaDia({
+  const { aulas: todasAsAulas, presenca, carregando, erro, frescor, recarregar, prefetch, lerDoCache } = useAgendaDia({
     data,
     unidadeId,
   });
@@ -428,6 +435,13 @@ export default function AgendaPage() {
         </span>
       </header>
 
+      {/* A faixa e' da VISAO, nao da rota: professor/sala ja tem tela propria,
+          chamada/calendario ainda nao — uma faixa unica mentiria nos dois
+          sentidos. O shell nao sabe qual visao esta aberta — por isso ela
+          mora aqui, e o MobileLayout suprime a dele nesta rota
+          (ROTAS_COM_FAIXA_POR_ABA). */}
+      {ehCelular && !abaFoiPortada('/app/agenda', visao) && <AvisoNaoOtimizado />}
+
       {/* Enquanto o proximo dia carrega, o dia anterior continua na tela
           esmaecido em vez de virar tela em branco: a troca fica continua e
           `aria-busy` avisa o leitor de tela que o conteudo esta defasado. */}
@@ -567,6 +581,19 @@ export default function AgendaPage() {
         <p className="p-8 text-center text-sm text-slate-400">
           Nenhuma aula corresponde ao filtro.
         </p>
+      ) : ehCelular && !ehChamada && !ehCalendario ? (
+        <Suspense fallback={<div className="p-8 text-center text-sm text-slate-400">Carregando…</div>}>
+          <AgendaMobile
+            aulasDoDia={todasAsAulas}
+            data={data}
+            hoje={hoje}
+            onTrocarDia={irPara}
+            lerDoCache={lerDoCache}
+            filtros={filtros}
+            onFiltrar={setFiltros}
+            onAbrir={setSelecionada}
+          />
+        </Suspense>
       ) : aulas.length === 0 ? (
         <p className="p-8 text-center text-sm text-slate-400">Nenhuma aula neste dia.</p>
       ) : ehChamada ? (
