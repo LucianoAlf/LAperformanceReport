@@ -97,3 +97,5 @@ outputs/comparacao-canonica.json
 .local/
 # backups locais gerados por teste de patch — a historia vive na VPS
 vps/la-hq/sol/runtime/*.bak-*
+# Worktrees locais de desenvolvimento nao fazem parte do repositorio.
+.worktrees/
