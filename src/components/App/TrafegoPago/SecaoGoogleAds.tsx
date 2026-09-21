@@ -27,6 +27,14 @@ import {
 import { usePaginacaoTabela, PaginacaoTabela } from './PaginacaoTabela';
 
 // ============================================================================
+// A conversion action que a Fase 3 criou na conta (id 7785226299, "Matricula (LA Report)").
+//
+// ⚠️ Reconhecida pelo NOME porque o recorte por acao da API devolve o nome, nunca o id --
+// renomear a action no painel do Google quebra este destaque em silencio (a linha volta a ser
+// pintada como as dos outros). Se isso acontecer, o numero segue certo; so o realce se perde.
+const MARCA_ACAO_NOSSA = 'LA Report';
+const ehAcaoNossa = (nome: string) => nome.includes(MARCA_ACAO_NOSSA);
+
 // Tipos (espelham o retorno da edge)
 // ============================================================================
 
@@ -454,12 +462,18 @@ export function SecaoGoogleAds({ preset }: { preset: PresetGoogle }) {
           <div className="space-y-2">
             {dados!.conversoes_por_acao.filter(a => a.conversoes > 0).map(a => {
               const pct = Math.max((a.conversoes / maxAcao) * 100, 2);
+              const nossa = ehAcaoNossa(a.acao);
               return (
                 <div key={a.acao} className="flex items-center gap-3">
-                  <span className="text-xs text-slate-300 w-52 flex-shrink-0 truncate" title={a.acao}>{a.acao}</span>
+                  <span
+                    className={`text-xs w-52 flex-shrink-0 truncate ${nossa ? 'text-indigo-300 font-semibold' : 'text-slate-300'}`}
+                    title={nossa ? `${a.acao} — enviada por nos (Fase 3)` : a.acao}
+                  >
+                    {nossa ? `★ ${a.acao}` : a.acao}
+                  </span>
                   <div className="flex-1 bg-slate-900/60 rounded-full h-6 overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full flex items-center px-2"
+                      className={`h-full bg-gradient-to-r rounded-full flex items-center px-2 ${nossa ? 'from-indigo-600 to-indigo-400' : 'from-emerald-600 to-emerald-400'}`}
                       style={{ width: `${pct}%` }}
                     >
                       <span className="text-[11px] font-bold text-white whitespace-nowrap">{dec(a.conversoes)}</span>
@@ -469,6 +483,39 @@ export function SecaoGoogleAds({ preset }: { preset: PresetGoogle }) {
               );
             })}
           </div>
+
+          {/* A nota so aparece quando a NOSSA acao ja tem numero. Antes do primeiro envio ela
+              nao teria a que se referir, e explicar uma linha inexistente confunde mais que
+              esclarece. */}
+          {dados!.conversoes_por_acao.some(a => a.conversoes > 0 && ehAcaoNossa(a.acao)) && (
+            <div className="mt-4 rounded-lg border border-indigo-500/30 bg-indigo-500/5 p-3">
+              <p className="text-[11px] text-indigo-200 font-semibold mb-1">
+                ★ A linha destacada e nossa: matricula real, enviada por nos.
+              </p>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Ela <strong>nao vai bater</strong> com a tabela "Leads atribuidos a anuncios" abaixo, e
+                isso e esperado — os dois numeros medem coisas diferentes:
+              </p>
+              <ul className="text-[11px] text-slate-400 leading-relaxed mt-1.5 space-y-1 list-disc pl-4">
+                <li>
+                  <strong>A data e outra.</strong> O Google lanca a conversao no dia do <em>clique</em>;
+                  nos contamos no dia da <em>matricula</em>. O mesmo aluno cai em meses diferentes.
+                </li>
+                <li>
+                  <strong>O Google reparte credito em fracoes</strong> entre pontos de contato (e por isso
+                  os numeros deste painel tem decimais). Para nos, uma matricula e sempre 1 inteira.
+                </li>
+                <li>
+                  <strong>Clique com mais de 90 dias e recusado</strong> por ele. A matricula existe no
+                  nosso lado de todo jeito.
+                </li>
+              </ul>
+              <p className="text-[11px] text-slate-500 mt-2">
+                Para decisao de verba, use o numero <strong>nosso</strong>. Este aqui e o que o Google usa
+                para otimizar, e segue as regras dele.
+              </p>
+            </div>
+          )}
         </Painel>
       )}
 
