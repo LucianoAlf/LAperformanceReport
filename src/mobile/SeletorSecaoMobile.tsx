@@ -1,6 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { ChevronDown } from 'lucide-react';
 
+import { cn } from '@/lib/utils';
+
 interface Props {
   /** Fora do celular o seletor não existe: o chamador renderiza as abas como sempre. */
   ehCelular: boolean;
@@ -8,6 +10,16 @@ interface Props {
   rotuloAtual: string;
   /** Rótulo da folha — "Seção", "Etapa", conforme a ficha. */
   titulo?: string;
+  /**
+   * Pílula inline em vez da caixa de largura total.
+   *
+   * Na ficha do aluno a seção é o comando principal da tela e merece a faixa
+   * inteira. Na Agenda ela dividia o topo com a data, o resumo e o trilho de
+   * professores — quatro faixas de largura total empilhadas empurravam a
+   * primeira aula para além da metade da tela, e a visão é o que menos se
+   * troca das quatro.
+   */
+  compacto?: boolean;
   /**
    * A `TabsList` inteira, com os seus gatilhos.
    *
@@ -36,7 +48,13 @@ interface Props {
  * conteúdo segue rotulado; desmontar deixaria os 9 `TabsContent` apontando
  * para ids que não existem.
  */
-export function SeletorSecaoMobile({ ehCelular, rotuloAtual, titulo = 'Seção', children }: Props) {
+export function SeletorSecaoMobile({
+  ehCelular,
+  rotuloAtual,
+  titulo = 'Seção',
+  compacto = false,
+  children,
+}: Props) {
   const [aberto, setAberto] = useState(false);
 
   useEffect(() => {
@@ -55,10 +73,25 @@ export function SeletorSecaoMobile({ ehCelular, rotuloAtual, titulo = 'Seção',
         onClick={() => setAberto(true)}
         aria-haspopup="dialog"
         aria-expanded={aberto}
-        className="flex min-h-[44px] w-full flex-shrink-0 items-center justify-between gap-2 rounded-lg border border-slate-700 bg-slate-800/60 px-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-purple-500"
+        className={cn(
+          'flex flex-shrink-0 items-center border border-slate-700 bg-slate-800/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-purple-500',
+          compacto
+            ? 'min-h-[32px] max-w-[55%] gap-1 rounded-full px-2.5'
+            : 'min-h-[44px] w-full justify-between gap-2 rounded-lg px-3',
+        )}
       >
-        <span className="truncate text-sm font-semibold text-slate-100">{rotuloAtual}</span>
-        <ChevronDown className="h-4 w-4 flex-none text-slate-500" aria-hidden="true" />
+        <span
+          className={cn(
+            'truncate font-semibold',
+            compacto ? 'text-[12px] text-slate-200' : 'text-sm text-slate-100',
+          )}
+        >
+          {rotuloAtual}
+        </span>
+        <ChevronDown
+          className={cn('flex-none text-slate-500', compacto ? 'h-3.5 w-3.5' : 'h-4 w-4')}
+          aria-hidden="true"
+        />
       </button>
 
       {aberto ? (

@@ -6,8 +6,9 @@ import {
   useRef,
   useState,
   type PointerEvent,
+  type ReactNode,
 } from 'react';
-import { ChevronLeft, ChevronRight, ListFilter } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Users } from 'lucide-react';
 import { addDays, format, parseISO } from 'date-fns';
 
 import type { AgendaDiaV2, AulaAgenda } from '@/hooks/useAgendaDia';
@@ -15,10 +16,10 @@ import {
   colisoesDeSala,
   filtrarAulas,
   FILTROS_AGENDA_VAZIOS,
-  iniciaisDoNome,
   minutosAgora,
   minutosDeHHMM,
   normalizarBusca,
+  ordenarPorHora,
   professoresPorVolume,
   rotuloDiaCurto,
   type FiltrosAgenda,
@@ -42,6 +43,17 @@ interface Props {
   filtros: FiltrosAgenda;
   onFiltrar: (filtros: FiltrosAgenda) => void;
   onAbrir: (aula: AulaAgenda) => void;
+  /**
+   * Resumo do dia ("158 aulas / 19 agora / 17 em risco") e seletor de visao,
+   * montados pela AgendaPage — ela e quem tem os KPIs e o estado da visao.
+   *
+   * Chegam como SLOTS, e nao como faixas soltas acima desta tela, porque o
+   * cabecalho precisa ser um bloco so: quatro faixas de largura total
+   * empilhadas (visao, resumo, dia, chips) somavam ~216px e empurravam a
+   * primeira aula para alem da metade do telefone.
+   */
+  resumo?: ReactNode;
+  seletorVisao?: ReactNode;
 }
 
 const DELTAS = [-1, 0, 1] as const;
@@ -58,6 +70,8 @@ export function AgendaMobile({
   filtros,
   onFiltrar,
   onAbrir,
+  resumo,
+  seletorVisao,
 }: Props) {
   // O palco comeca ancorado no do meio: ha sempre um dia de cada lado.
   const [swipe, setSwipe] = useState<EstadoSwipe>({ ...swipeInicial, indice: 1 });
@@ -182,95 +196,126 @@ export function AgendaMobile({
   const semTransicao = swipe.arrastando || reancorando;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-shrink-0 items-center gap-2.5 px-4 pb-3">
-        <button
-          type="button"
-          aria-label="Dia anterior"
-          onClick={() => onTrocarDia(format(addDays(parseISO(data), -1), 'yyyy-MM-dd'))}
-          className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[10px] border border-slate-700 bg-slate-800 text-slate-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
-        >
-          <ChevronLeft className="h-5 w-5" aria-hidden="true" />
-        </button>
-        <div className="min-w-0 flex-1 text-center">
-          <div className="truncate text-[15px] font-bold tabular-nums text-slate-100">
+    <div className="flex flex-col">
+      {/* 🔴 O cabecalho e FIXO (sticky), nao rola com a lista.
+          O <main> do shell e o container de rolagem e esta tela vive dentro
+          dele — sem sticky, a data e o trilho de professores saiam da tela no
+          primeiro arrasto para baixo, e num dia de 158 aulas eles passavam a
+          maior parte do tempo fora de vista: trocar de dia com o dedo mudava o
+          conteudo inteiro sem nada na tela dizendo para qual dia se foi.
+          ⚠️ A sangria negativa vai ate a borda do telefone (o <main> tem p-3),
+          senao o fundo opaco deixaria uma fresta de 12px de cada lado por onde
+          a lista apareceria passando por baixo. */}
+      <div className="sticky top-0 z-20 -mx-3 flex flex-col gap-2 border-b border-slate-800 bg-slate-950 px-3 pb-2.5 pt-1">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            aria-label="Dia anterior"
+            onClick={() => onTrocarDia(format(addDays(parseISO(data), -1), 'yyyy-MM-dd'))}
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-slate-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 active:bg-slate-800"
+          >
+            <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+          </button>
+          {/* A data e o titulo da tela, nao um widget: uma linha so, com o
+              "hoje" embutido. A versao anterior reservava uma segunda linha
+              para ele e a deixava VAZIA nos outros dias — 11px de buraco que
+              faziam a data pular de lugar ao trocar de dia. */}
+          <h2 className="min-w-0 flex-1 truncate text-center text-[16px] font-bold text-slate-100">
             {rotuloDiaCurto(data)}
-          </div>
-          <div className="text-[11px] text-slate-400">{ehHoje ? 'hoje' : ''}</div>
+            {ehHoje && <span className="ml-1.5 text-[12px] font-semibold text-cyan-300">hoje</span>}
+          </h2>
+          <button
+            type="button"
+            aria-label="Próximo dia"
+            onClick={() => onTrocarDia(format(addDays(parseISO(data), 1), 'yyyy-MM-dd'))}
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-slate-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 active:bg-slate-800"
+          >
+            <ChevronRight className="h-5 w-5" aria-hidden="true" />
+          </button>
         </div>
-        <button
-          type="button"
-          aria-label="Próximo dia"
-          onClick={() => onTrocarDia(format(addDays(parseISO(data), 1), 'yyyy-MM-dd'))}
-          className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[10px] border border-slate-700 bg-slate-800 text-slate-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
-        >
-          <ChevronRight className="h-5 w-5" aria-hidden="true" />
-        </button>
-      </div>
 
-      {/* chip — trilho de professores. Rola no proprio eixo; o gesto de dia
-          vive so no palco, abaixo. Ligado e pilula clara solida: ciano e
-          exclusivo de navegacao (§6 do spec). */}
-      <div className="flex flex-shrink-0 items-center gap-1.5 px-4 pb-3">
-      <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto [scrollbar-width:none]">
-        <button
-          type="button"
-          aria-pressed={filtros.professor === null}
-          onClick={() => escolherProfessor(null)}
-          className={cn(
-            'inline-flex min-h-[40px] flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 text-[12.5px]',
-            filtros.professor === null
-              ? 'border-slate-500 bg-slate-200 font-bold text-slate-900'
-              : 'border-slate-700 bg-slate-800 font-semibold text-slate-300',
-          )}
-        >
-          Todos · {aulasDoDia.length}
-        </button>
-        {professores.map(({ nome, qtd }) => {
-          const ativo = filtros.professor === nome;
-          return (
+        <div className="flex items-center gap-2">
+          <p className="min-w-0 flex-1 truncate text-[12px] text-slate-400">{resumo}</p>
+          {/* Sem isto, voltar de uma semana a frente e tocar a seta sete vezes
+              ou arrastar sete telas. So aparece fora do dia de hoje — botao que
+              nao faz nada ensina a ignorar o lugar dele. */}
+          {!ehHoje && (
             <button
-              key={nome}
               type="button"
-              aria-pressed={ativo}
-              onClick={() => escolherProfessor(ativo ? null : nome)}
+              onClick={() => onTrocarDia(hoje)}
+              className="min-h-[32px] flex-shrink-0 rounded-full border border-slate-700 bg-slate-800/60 px-2.5 text-[12px] font-semibold text-cyan-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+            >
+              Hoje
+            </button>
+          )}
+          {seletorVisao}
+        </div>
+
+        {/* Trilho de professores. Rola no proprio eixo; o gesto de dia vive so
+            no palco, abaixo. Ligado e pilula clara solida: ciano e exclusivo de
+            navegacao (§6 do spec). */}
+        <div className="flex items-center gap-1.5">
+          <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto [scrollbar-width:none]">
+            <button
+              type="button"
+              aria-pressed={filtros.professor === null}
+              onClick={() => escolherProfessor(null)}
               className={cn(
-                'inline-flex min-h-[40px] flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-[12.5px]',
-                ativo
+                'inline-flex min-h-[34px] flex-shrink-0 items-center whitespace-nowrap rounded-full border px-3 text-[12.5px]',
+                filtros.professor === null
                   ? 'border-slate-500 bg-slate-200 font-bold text-slate-900'
                   : 'border-slate-700 bg-slate-800 font-semibold text-slate-300',
               )}
             >
-              <span
-                className={cn(
-                  'inline-flex h-5 w-5 items-center justify-center rounded-full text-[8.5px] font-bold',
-                  ativo ? 'bg-slate-400 text-slate-900' : 'bg-slate-700 text-slate-300',
-                )}
-              >
-                {iniciaisDoNome(nome)}
-              </span>
-              {nome.split(' ')[0]} · {qtd}
+              Todos · {aulasDoDia.length}
             </button>
-          );
-        })}
-      </div>
+            {professores.map(({ nome, qtd }) => {
+              const ativo = filtros.professor === nome;
+              return (
+                <button
+                  key={nome}
+                  type="button"
+                  aria-pressed={ativo}
+                  aria-label={`${nome} · ${qtd} ${qtd === 1 ? 'aula' : 'aulas'}`}
+                  onClick={() => escolherProfessor(ativo ? null : nome)}
+                  className={cn(
+                    'inline-flex min-h-[34px] flex-shrink-0 items-center whitespace-nowrap rounded-full border px-3 text-[12.5px]',
+                    ativo
+                      ? 'border-slate-500 bg-slate-200 font-bold text-slate-900'
+                      : 'border-slate-700 bg-slate-800 font-semibold text-slate-300',
+                  )}
+                >
+                  {/* Sem o disco de iniciais que havia aqui: ele repetia, em
+                      20px, a mesma pessoa que o nome ao lado ja nomeia, e os
+                      20px custavam um chip inteiro — cabiam tres professores na
+                      faixa em vez de cinco. */}
+                  {nome.split(' ')[0]} · {qtd}
+                </button>
+              );
+            })}
+          </div>
 
-        {/* FIXO, fora da rolagem: com dezenas de professores, um atalho que so
-            aparece depois de arrastar ate o fim do trilho nao e atalho. O
-            numero diz quantos existem — sem ele nao da para saber se o trilho
-            acabou ou se ha mais 37 escondidos. */}
-        {professores.length > 3 && (
-          <button
-            type="button"
-            onClick={() => { setBuscaProfessor(''); setFolhaAberta(true); }}
-            aria-haspopup="dialog"
-            aria-expanded={folhaAberta}
-            className="inline-flex min-h-[40px] flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-slate-700 bg-slate-800 px-3 text-[12.5px] font-semibold text-slate-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
-          >
-            <ListFilter className="h-3.5 w-3.5" aria-hidden="true" />
-            {professores.length}
-          </button>
-        )}
+          {/* FIXO, fora da rolagem: com dezenas de professores, um atalho que so
+              aparece depois de arrastar ate o fim do trilho nao e atalho.
+              ⚠️ O icone e de PESSOAS, nao de funil: ao lado de chips que dizem
+              "Nome · 11", um funil com "28" se le como 28 filtros ligados. */}
+          {professores.length > 3 && (
+            <button
+              type="button"
+              onClick={() => {
+                setBuscaProfessor('');
+                setFolhaAberta(true);
+              }}
+              aria-haspopup="dialog"
+              aria-expanded={folhaAberta}
+              aria-label={`Ver os ${professores.length} professores do dia`}
+              className="inline-flex min-h-[34px] flex-shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-slate-700 bg-slate-800 px-2.5 text-[12.5px] font-semibold text-slate-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+            >
+              <Users className="h-3.5 w-3.5" aria-hidden="true" />
+              {professores.length}
+            </button>
+          )}
+        </div>
       </div>
 
       {folhaAberta && (
@@ -337,7 +382,7 @@ export function AgendaMobile({
 
       <div
         ref={palcoRef}
-        className="min-h-0 flex-1 overflow-hidden [touch-action:pan-y]"
+        className="overflow-hidden [touch-action:pan-y]"
         onPointerDown={pressionar}
         onPointerMove={mover}
         onPointerUp={soltar}
@@ -345,7 +390,7 @@ export function AgendaMobile({
       >
         <div
           className={cn(
-            'flex h-full w-[300%] ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none',
+            'flex w-[300%] items-start ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none',
             semTransicao ? 'transition-none' : 'transition-transform duration-[260ms]',
           )}
           style={{ transform: `translateX(calc(${-swipe.indice * (100 / 3)}% + ${swipe.dx}px))` }}
@@ -379,7 +424,14 @@ interface PainelProps {
 }
 
 function PainelDoDia({ data, cru, filtros, agora, ehHoje, onAbrir, onLimparFiltro }: PainelProps) {
-  const lista = useMemo(() => (cru ? filtrarAulas(cru, filtros) : []), [cru, filtros]);
+  // ⚠️ `ordenarPorHora` e obrigatorio, nao cosmetico: a RPC devolve as aulas
+  // agrupadas por professor, e nesta tela a hora E a ordem. Sem ele a lista
+  // volta no tempo no meio da rolagem e a regua do "agora" cai em qualquer
+  // ponto.
+  const lista = useMemo(
+    () => (cru ? ordenarPorHora(filtrarAulas(cru, filtros)) : []),
+    [cru, filtros],
+  );
   const colisoes = useMemo(() => colisoesDeSala(cru ?? []), [cru]);
 
   // A regua entra ANTES da primeira aula que ainda nao comecou. Sem nenhuma,
@@ -390,7 +442,7 @@ function PainelDoDia({ data, cru, filtros, agora, ehHoje, onAbrir, onLimparFiltr
 
   if (cru === undefined) {
     return (
-      <div className="w-1/3 flex-shrink-0 space-y-2 overflow-y-auto px-4 pb-4">
+      <div className="w-1/3 flex-shrink-0 space-y-2 pb-4 pt-2.5">
         {[0, 1, 2, 3].map((i) => (
           <div key={i} className="h-16 animate-pulse rounded-[10px] bg-slate-800" />
         ))}
@@ -401,7 +453,7 @@ function PainelDoDia({ data, cru, filtros, agora, ehHoje, onAbrir, onLimparFiltr
   if (lista.length === 0) {
     const porFiltro = (cru?.length ?? 0) > 0;
     return (
-      <div className="w-1/3 flex-shrink-0 overflow-y-auto px-6 pt-12 text-center">
+      <div className="w-1/3 flex-shrink-0 px-6 pt-12 text-center">
         <div className="text-[14px] font-semibold text-slate-300">
           {!porFiltro
             ? 'Sem aulas neste dia'
@@ -428,7 +480,11 @@ function PainelDoDia({ data, cru, filtros, agora, ehHoje, onAbrir, onLimparFiltr
   }
 
   return (
-    <div className="flex w-1/3 flex-shrink-0 flex-col gap-2 overflow-y-auto px-4 pb-4">
+    /* ⚠️ Sem overflow-y-auto: quem rola e o <main> do shell. A rolagem
+       interna aqui era LETRA MORTA — o pai nao tem altura definida, entao o
+       painel nunca chegava a estourar — e, se um dia passasse a valer, criaria
+       duas barras de rolagem aninhadas na mesma tela. */
+    <div className="flex w-1/3 flex-shrink-0 flex-col gap-2 pb-6 pt-2.5">
       {lista.map((aula, k) => (
         <div key={aula.chave}>
           {k === iRegua && (
@@ -446,6 +502,13 @@ function PainelDoDia({ data, cru, filtros, agora, ehHoje, onAbrir, onLimparFiltr
             agora={agora}
             ehHoje={ehHoje}
             colisao={colisoes.get(aula.chave)}
+            ocultarProfessor={filtros.professor !== null}
+            /* ⚠️ A hora repetida ESMAECE, nao some. As 11:00 de um dia cheio
+               sao seis linhas seguidas e o horario batendo seis vezes vira
+               ruido — mas escondê-lo deixa quem rolou para o meio do bloco sem
+               nenhuma hora na tela, que e pior: a hora e a unica coordenada
+               desta lista. */
+            horaRepetida={k > 0 && k !== iRegua && lista[k - 1].hora_inicio === aula.hora_inicio}
             onAbrir={onAbrir}
           />
         </div>

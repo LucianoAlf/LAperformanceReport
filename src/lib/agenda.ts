@@ -53,6 +53,37 @@ export function professoresPorVolume(
     .sort((a, b) => b.qtd - a.qtd || a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
+/**
+ * As aulas em ordem cronologica.
+ *
+ * 🔴 A Agenda do celular troca o eixo do desktop: la a hora e POSICAO numa
+ * grade, aqui ela e ORDEM numa lista. O que a RPC devolve, porem, vem agrupado
+ * por professor — cada grupo cronologico por dentro, o conjunto nao. A tela
+ * mapeava o array como veio, entao a lista parecia certa nas primeiras linhas
+ * (as do primeiro professor) e voltava no tempo mais abaixo: 20:00 acima de
+ * 15:00. No desktop isso nunca apareceu porque `alocarFaixas` ordena por conta
+ * propria antes de posicionar.
+ *
+ * ⚠️ Nao e so estetica: a regua do "agora" e `findIndex(inicio > agora)`, que
+ * so tem sentido em lista ordenada — numa lista fora de ordem ela cai na
+ * primeira aula futura que aparecer, em qualquer ponto da tela.
+ *
+ * O desempate e completo de proposito (duracao, professor, chave): com
+ * criterio parcial, duas aulas do mesmo horario trocariam de lugar entre
+ * renderizacoes, e a lista dancaria a cada atualizacao do relogio.
+ */
+export function ordenarPorHora<
+  T extends { hora_inicio: string; duracao_minutos: number; professor_nome: string | null; chave: string },
+>(aulas: T[]): T[] {
+  return [...aulas].sort(
+    (a, b) =>
+      minutosDeHHMM(a.hora_inicio) - minutosDeHHMM(b.hora_inicio) ||
+      a.duracao_minutos - b.duracao_minutos ||
+      (a.professor_nome ?? '').localeCompare(b.professor_nome ?? '', 'pt-BR') ||
+      a.chave.localeCompare(b.chave),
+  );
+}
+
 export const AGENDA_HORA_INICIO = 8;
 export const AGENDA_HORA_FIM = 22;
 export const AGENDA_LARGURA_HORA_PX = 88;

@@ -333,6 +333,58 @@ export default function AgendaPage() {
     irPara(format(addDays(parseISO(data), dias), 'yyyy-MM-dd'));
   }
 
+  /* A visao e' o unico comando do topo sem equivalente na tela nova.
+     Pilula + folha, o mesmo gesto do periodo e das secoes da ficha do aluno —
+     para nao haver um terceiro vocabulario de navegacao na mesma tela.
+     ⚠️ Uma variavel, dois pontos de render: na Agenda mobile ela entra DENTRO
+     do cabecalho da tela (ao lado do resumo), e em Chamada/Calendario, que nao
+     tem tela nova, continua solta no topo da pagina. Duplicar o JSX deixaria os
+     dois livres para divergir. */
+  const seletorVisaoMobile = (
+    <SeletorSecaoMobile ehCelular compacto rotuloAtual={ROTULO_VISAO[visao]} titulo="Visão">
+      <div role="tablist" aria-label="Visão da agenda" className="flex flex-col gap-1">
+        {(['professor', 'sala', 'chamada', 'calendario'] as const).map((v) => (
+          <button
+            key={v}
+            type="button"
+            role="tab"
+            aria-selected={visao === v}
+            onClick={() => {
+              setVisao(v);
+              if (v === 'professor' || v === 'sala') setAgruparPor(v);
+            }}
+            className={cn(
+              'min-h-[44px] rounded-lg px-3 text-left text-sm font-semibold',
+              visao === v ? 'bg-slate-800 text-cyan-400' : 'text-slate-300',
+            )}
+          >
+            {ROTULO_VISAO[v]}
+          </button>
+        ))}
+      </div>
+    </SeletorSecaoMobile>
+  );
+
+  /* Os 7 KPI cards do desktop viram UMA linha aqui. Empilhados num telefone
+     eles empurravam a primeira aula para depois de ~3 telas de rolagem — numa
+     tela cuja pergunta e "o que esta acontecendo agora". Fica o que e
+     acionavel, e so quando ha o que dizer: numero zerado nao ocupa espaco. */
+  const resumoMobile = (
+    <>
+      <span className="font-semibold text-slate-200">
+        {aulas.length} {aulas.length === 1 ? 'aula' : 'aulas'}
+      </span>
+      {filtrando && <span> de {todasAsAulas.length}</span>}
+      {agora.aulas > 0 && (
+        <span className="font-semibold text-emerald-300"> · {agora.aulas} agora</span>
+      )}
+      {(pendenciasChamada ?? 0) > 0 && (
+        <span className="font-semibold text-amber-300"> · {pendenciasChamada} sem destino</span>
+      )}
+      {emRisco > 0 && <span className="text-amber-300"> · {emRisco} em risco</span>}
+    </>
+  );
+
   return (
     <div className="flex min-w-0 flex-col gap-4">
       {/* Barra de comando unica: navegacao do dia a esquerda, periodo a direita.
@@ -458,55 +510,11 @@ export default function AgendaPage() {
           (ROTAS_COM_FAIXA_POR_ABA). */}
       {ehCelular && !abaFoiPortada('/app/agenda', visao) && <AvisoNaoOtimizado />}
 
-      {/* O unico comando do topo sem equivalente na tela nova e escolher a
-          VISAO. Vira pilula + folha, o mesmo gesto do periodo e das secoes da
-          ficha do aluno — para nao haver um terceiro vocabulario de navegacao
-          na mesma tela. */}
-      {ehCelular && (
-        <SeletorSecaoMobile ehCelular rotuloAtual={ROTULO_VISAO[visao]} titulo="Visão">
-          <div role="tablist" aria-label="Visão da agenda" className="flex flex-col gap-1">
-            {(['professor', 'sala', 'chamada', 'calendario'] as const).map((v) => (
-              <button
-                key={v}
-                type="button"
-                role="tab"
-                aria-selected={visao === v}
-                onClick={() => {
-                  setVisao(v);
-                  if (v === 'professor' || v === 'sala') setAgruparPor(v);
-                }}
-                className={cn(
-                  'min-h-[44px] rounded-lg px-3 text-left text-sm font-semibold',
-                  visao === v ? 'bg-slate-800 text-cyan-400' : 'text-slate-300',
-                )}
-              >
-                {ROTULO_VISAO[v]}
-              </button>
-            ))}
-          </div>
-        </SeletorSecaoMobile>
-      )}
-
-      {/* Os 7 KPI cards do desktop viram UMA linha aqui. Empilhados num
-          telefone eles empurravam a primeira aula para depois de ~3 telas de
-          rolagem — numa tela cuja pergunta e "o que esta acontecendo agora".
-          Fica o que e acionavel, e so quando ha o que dizer: numero zerado nao
-          ocupa espaco. Os 7 continuam inteiros no desktop. */}
-      {ehCelular && !ehCalendario && !ehChamada && (
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-slate-400">
-          <span className="font-semibold text-slate-200">
-            {aulas.length} {aulas.length === 1 ? 'aula' : 'aulas'}
-          </span>
-          {filtrando && <span>de {todasAsAulas.length}</span>}
-          {agora.aulas > 0 && (
-            <span className="font-semibold text-emerald-300">· {agora.aulas} agora</span>
-          )}
-          {(pendenciasChamada ?? 0) > 0 && (
-            <span className="font-semibold text-amber-300">· {pendenciasChamada} sem destino</span>
-          )}
-          {emRisco > 0 && <span className="text-amber-300">· {emRisco} em risco</span>}
-        </p>
-      )}
+      {/* Chamada e Calendario nao tem tela propria no celular: a visao segue
+          solta no topo. Nas duas portadas ela entra no cabecalho da
+          AgendaMobile, junto da data — quatro faixas de largura total
+          empilhadas comiam metade da tela antes da primeira aula. */}
+      {ehCelular && (ehChamada || ehCalendario) && <div>{seletorVisaoMobile}</div>}
 
       {/* Enquanto o proximo dia carrega, o dia anterior continua na tela
           esmaecido em vez de virar tela em branco: a troca fica continua e
@@ -660,6 +668,8 @@ export default function AgendaPage() {
             filtros={filtros}
             onFiltrar={setFiltros}
             onAbrir={setSelecionada}
+            resumo={resumoMobile}
+            seletorVisao={seletorVisaoMobile}
           />
         </Suspense>
       ) : aulas.length === 0 && filtrando ? (

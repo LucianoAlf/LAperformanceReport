@@ -72,9 +72,15 @@ test('o reancoramento religa a transicao so no quadro seguinte', () => {
 test('ciano continua exclusivo de navegacao (§6 do spec)', () => {
   // O chip ligado e pilula clara solida; a data usa setas. Ciano so aparece
   // como anel de foco, nunca como marca de filtro.
-  const blocoChip = tela.match(/\/\* chip[\s\S]{0,1800}/);
-  assert.ok(blocoChip, 'o bloco do trilho de chips precisa do marcador /* chip');
-  assert.doesNotMatch(blocoChip[0], /bg-cyan/, 'filtro ligado nao pode usar ciano');
+  // Ancorado no que o chip E — um botao de estado, `aria-pressed` — e nao num
+  // comentario marcador: a versao anterior deste assert fatiava o arquivo a
+  // partir de `/* chip`, entao reescrever o cabecalho derrubava o teste sem
+  // que nada do comportamento tivesse mudado.
+  const chips = [...tela.matchAll(/aria-pressed=\{[\s\S]{0,2000}?<\/button>/g)];
+  assert.ok(chips.length >= 2, 'o trilho precisa do chip "Todos" e do chip por professor');
+  for (const chip of chips) {
+    assert.doesNotMatch(chip[0], /bg-cyan/, 'filtro ligado nao pode usar ciano');
+  }
 });
 
 test('a colisao de sala vem da funcao unica, nao de um calculo na tela', () => {
@@ -202,4 +208,81 @@ test('a lista inteira de professores fica a um toque, com busca', () => {
   // arrastar ate o fim do trilho nao e atalho.
   assert.match(tela, /\{professores\.length > 3 && \(/);
   assert.match(tela, /aria-haspopup="dialog"/);
+});
+
+test('o cabecalho do dia fica FIXO, nao rola junto com a lista', () => {
+  // Quem rola e o <main> do shell, e esta tela vive dentro dele. Sem sticky, a
+  // data e o trilho de professores saiam da tela no primeiro arrasto para
+  // baixo: num dia de 158 aulas eles passavam a maior parte do tempo fora de
+  // vista, e trocar de dia com o dedo mudava o conteudo inteiro sem nada na
+  // tela dizendo para qual dia se foi.
+  const semComentario = tela.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  const cabecalho = semComentario.match(/className="sticky top-0[^"]*"/);
+  assert.ok(cabecalho, 'o cabecalho do dia precisa ser sticky top-0');
+  // Fundo opaco: a lista passa POR BAIXO dele.
+  assert.match(cabecalho[0], /bg-slate-950/, 'cabecalho fixo sem fundo opaco deixa a lista vazar');
+  // Sangria ate a borda do telefone — o <main> tem p-3, e sem isto sobrariam
+  // 12px de cada lado por onde a lista apareceria.
+  assert.match(cabecalho[0], /-mx-3/, 'o cabecalho fixo precisa sangrar o padding do <main>');
+});
+
+test('a lista NAO tem rolagem propria — uma barra de rolagem por tela', () => {
+  // A rolagem interna que havia aqui era letra morta (o pai nao tem altura
+  // definida, entao o painel nunca estourava) e, se passasse a valer, criaria
+  // duas barras aninhadas: o dedo roubaria a lista de dentro em vez da pagina.
+  const semComentario = tela.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  const paineis = [...semComentario.matchAll(/className="[^"]*w-1\/3[^"]*"/g)];
+  assert.ok(paineis.length >= 3, 'os 3 paineis do palco sumiram');
+  for (const painel of paineis) {
+    assert.doesNotMatch(painel[0], /overflow-y-auto/, `painel do palco com rolagem propria: ${painel[0]}`);
+  }
+});
+
+test('a lista sai em ordem CRONOLOGICA, e a ordem vem da funcao unica', async () => {
+  // Defeito real, visto na tela: a RPC devolve as aulas agrupadas por
+  // professor (cada grupo cronologico por dentro), e a tela mapeava o array
+  // como veio — a lista parecia certa nas primeiras linhas e voltava no tempo
+  // mais abaixo, com 20:00 acima de 15:00. Nesta tela a hora E a ordem.
+  const { ordenarPorHora } = await import('../src/lib/agenda.ts');
+  const aula = (h, dur, prof, chave) => ({
+    hora_inicio: h,
+    duracao_minutos: dur,
+    professor_nome: prof,
+    chave,
+  });
+  // Entrada como a RPC entrega: professor por professor.
+  const entrada = [
+    aula('20:00', 50, 'Alexandre', 'a20'),
+    aula('10:00', 50, 'Alexandre', 'a10'),
+    aula('15:00', 50, 'Bia', 'b15'),
+    aula('09:00', 50, 'Bia', 'b09'),
+  ];
+  assert.deepEqual(
+    ordenarPorHora(entrada).map((a) => a.hora_inicio),
+    ['09:00', '10:00', '15:00', '20:00'],
+  );
+  // Nao muta a entrada: `cru` e o dia do cache, compartilhado pelos 3 paineis.
+  assert.equal(entrada[0].hora_inicio, '20:00');
+  // Empate no horario desempata ate o fim — com criterio parcial, duas aulas
+  // do mesmo horario trocariam de lugar a cada tique do relogio.
+  const empate = [
+    aula('11:00', 50, 'Bia', 'z'),
+    aula('11:00', 50, 'Ana', 'y'),
+    aula('11:00', 30, 'Zeca', 'x'),
+  ];
+  assert.deepEqual(
+    ordenarPorHora(empate).map((a) => a.chave),
+    ['x', 'y', 'z'],
+    'a ordem de aulas empatadas precisa ser deterministica',
+  );
+});
+
+test('a tela ORDENA antes de renderizar — e nao reimplementa a comparacao', () => {
+  assert.match(tela, /ordenarPorHora\(filtrarAulas\(/, 'a lista precisa passar por ordenarPorHora');
+  const semComentario = tela.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  assert.doesNotMatch(
+    semComentario,
+    /\.sort\(/,
+    'a ordem e regra unica de lib/agenda; um sort local seria a segunda versao dela',
+  );
 });
