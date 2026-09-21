@@ -65,10 +65,20 @@ import { CalendarioEscolar } from './CalendarioEscolar';
 import { cn } from '@/lib/utils';
 import { useShellMobile } from '@/hooks/useShellMobile';
 import { abaFoiPortada } from '@/mobile/abasPortadas';
+import { SeletorSecaoMobile } from '@/mobile/SeletorSecaoMobile';
 import { AvisoNaoOtimizado } from '@/mobile/AvisoNaoOtimizado';
 
 // Lazy: o desktop nao pode pagar o bundle de uma tela que nunca vai montar.
 const AgendaMobile = lazy(() => import('@/mobile/telas/agenda/AgendaMobile'));
+
+/** Rotulo de cada visao. Fonte unica: o trilho do desktop e a folha do
+ *  celular nao podem chamar a mesma visao por nomes diferentes. */
+const ROTULO_VISAO: Record<string, string> = {
+  professor: 'Professores',
+  sala: 'Salas',
+  chamada: 'Chamada',
+  calendario: 'Calendário',
+};
 
 /**
  * Rotulo do dia tolerante a data invalida. `format` da date-fns lanca
@@ -336,6 +346,13 @@ export default function AgendaPage() {
           Como a Agenda e diaria, ela funciona como salto: escolher Ago/2026 leva
           ao dia de hoje se ele cair no mes, senao ao dia 1. As setas seguem
           movendo dia a dia. */}
+      {/* A barra de comando NAO renderiza no celular. Ela duplicava duas
+          coisas que a AgendaMobile ja faz: a navegacao de dia (la com
+          arrasto) e o filtro de professor (la como trilho de chips). Alem
+          disso o segmented de 4 opcoes e a busca de 224px fixos nao cabem
+          em 375px. O que sobra do topo — escolher a visao — vira a folha
+          logo abaixo. */}
+      {!ehCelular && (
       <header className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => mover(-1)} aria-label="Dia anterior"
           className="grid h-[30px] w-[30px] place-items-center rounded-md border border-slate-700 text-slate-300 hover:text-white">
@@ -383,12 +400,10 @@ export default function AgendaPage() {
         <span className="mx-1 h-5 w-px bg-slate-700" aria-hidden="true" />
 
         <Grupo
-          opcoes={[
-            { valor: 'professor', rotulo: 'Professores' },
-            { valor: 'sala', rotulo: 'Salas' },
-            { valor: 'chamada', rotulo: 'Chamada' },
-            { valor: 'calendario', rotulo: 'Calendário' },
-          ]}
+          opcoes={(['professor', 'sala', 'chamada', 'calendario'] as const).map((valor) => ({
+            valor,
+            rotulo: ROTULO_VISAO[valor],
+          }))}
           valor={visao}
           onChange={(v) => {
             setVisao(v as 'professor' | 'sala' | 'chamada' | 'calendario');
@@ -434,6 +449,7 @@ export default function AgendaPage() {
           Sincronizado {frescor}
         </span>
       </header>
+      )}
 
       {/* A faixa e' da VISAO, nao da rota: professor/sala ja tem tela propria,
           chamada/calendario ainda nao — uma faixa unica mentiria nos dois
@@ -441,6 +457,56 @@ export default function AgendaPage() {
           mora aqui, e o MobileLayout suprime a dele nesta rota
           (ROTAS_COM_FAIXA_POR_ABA). */}
       {ehCelular && !abaFoiPortada('/app/agenda', visao) && <AvisoNaoOtimizado />}
+
+      {/* O unico comando do topo sem equivalente na tela nova e escolher a
+          VISAO. Vira pilula + folha, o mesmo gesto do periodo e das secoes da
+          ficha do aluno — para nao haver um terceiro vocabulario de navegacao
+          na mesma tela. */}
+      {ehCelular && (
+        <SeletorSecaoMobile ehCelular rotuloAtual={ROTULO_VISAO[visao]} titulo="Visão">
+          <div role="tablist" aria-label="Visão da agenda" className="flex flex-col gap-1">
+            {(['professor', 'sala', 'chamada', 'calendario'] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                role="tab"
+                aria-selected={visao === v}
+                onClick={() => {
+                  setVisao(v);
+                  if (v === 'professor' || v === 'sala') setAgruparPor(v);
+                }}
+                className={cn(
+                  'min-h-[44px] rounded-lg px-3 text-left text-sm font-semibold',
+                  visao === v ? 'bg-slate-800 text-cyan-400' : 'text-slate-300',
+                )}
+              >
+                {ROTULO_VISAO[v]}
+              </button>
+            ))}
+          </div>
+        </SeletorSecaoMobile>
+      )}
+
+      {/* Os 7 KPI cards do desktop viram UMA linha aqui. Empilhados num
+          telefone eles empurravam a primeira aula para depois de ~3 telas de
+          rolagem — numa tela cuja pergunta e "o que esta acontecendo agora".
+          Fica o que e acionavel, e so quando ha o que dizer: numero zerado nao
+          ocupa espaco. Os 7 continuam inteiros no desktop. */}
+      {ehCelular && !ehCalendario && !ehChamada && (
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-slate-400">
+          <span className="font-semibold text-slate-200">
+            {aulas.length} {aulas.length === 1 ? 'aula' : 'aulas'}
+          </span>
+          {filtrando && <span>de {todasAsAulas.length}</span>}
+          {agora.aulas > 0 && (
+            <span className="font-semibold text-emerald-300">· {agora.aulas} agora</span>
+          )}
+          {(pendenciasChamada ?? 0) > 0 && (
+            <span className="font-semibold text-amber-300">· {pendenciasChamada} sem destino</span>
+          )}
+          {emRisco > 0 && <span className="text-amber-300">· {emRisco} em risco</span>}
+        </p>
+      )}
 
       {/* Enquanto o proximo dia carrega, o dia anterior continua na tela
           esmaecido em vez de virar tela em branco: a troca fica continua e
@@ -500,7 +566,7 @@ export default function AgendaPage() {
         </button>
       )}
 
-      {!ehCalendario && (
+      {!ehCalendario && !ehCelular && (
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
         <KPICard
           label="Aulas no dia"

@@ -49,3 +49,49 @@ test('o desktop continua recebendo a AgendaTimeline intacta', () => {
   assert.match(pagina, /<AgendaTimeline/);
   assert.match(pagina, /agruparPor=\{agruparPor\}/);
 });
+
+test('no celular a barra de comando do desktop NAO renderiza', () => {
+  // Ela duplicava duas coisas que a AgendaMobile ja faz: a navegacao de dia
+  // (la com arrasto) e o filtro de professor (la como trilho de chips). Alem
+  // disso o segmented de 4 opcoes e a busca de 224px fixos nao cabem em 375px.
+  assert.match(
+    pagina,
+    /\{!ehCelular && \(\s*<header/,
+    'o <header> da barra de comando precisa estar atras de !ehCelular',
+  );
+});
+
+test('os 7 KPI cards nao renderizam no celular', () => {
+  // Empilhados num telefone, empurravam a primeira aula para depois de ~3
+  // telas de rolagem — numa tela cuja pergunta e "o que esta acontecendo
+  // agora". Continuam inteiros no desktop.
+  assert.match(pagina, /\{!ehCalendario && !ehCelular && \(/);
+});
+
+test('a visao e escolhida por folha no celular — mesmo gesto do periodo', () => {
+  assert.match(pagina, /<SeletorSecaoMobile/);
+  assert.match(pagina, /rotuloAtual=\{ROTULO_VISAO\[visao\]\}/);
+  // A folha fecha por delegacao, procurando [role="tab"] no alvo do clique
+  // (SeletorSecaoMobile). Sem o papel, escolher a visao deixaria a folha
+  // aberta por cima da agenda.
+  assert.match(pagina, /role="tab"/, 'os gatilhos da folha precisam de role="tab"');
+});
+
+test('os rotulos das visoes tem FONTE UNICA', () => {
+  assert.match(pagina, /const ROTULO_VISAO/);
+  // O trilho do desktop e a folha do celular nao podem chamar a mesma visao
+  // por nomes diferentes. Os literais sairam do <Grupo>.
+  assert.doesNotMatch(
+    pagina,
+    /rotulo: 'Professores'/,
+    'o trilho do desktop voltou a ter rotulo literal em vez de ler ROTULO_VISAO',
+  );
+});
+
+test('o resumo do celular so mostra o que e acionavel, e so quando ha o que dizer', () => {
+  // Numero zerado nao ocupa espaco: "0 sem destino" e ruido numa faixa de uma
+  // linha so.
+  assert.match(pagina, /agora\.aulas > 0 &&/);
+  assert.match(pagina, /\(pendenciasChamada \?\? 0\) > 0 &&/);
+  assert.match(pagina, /emRisco > 0 &&/);
+});
