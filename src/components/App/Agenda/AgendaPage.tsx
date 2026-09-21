@@ -70,6 +70,7 @@ import { AvisoNaoOtimizado } from '@/mobile/AvisoNaoOtimizado';
 
 // Lazy: o desktop nao pode pagar o bundle de uma tela que nunca vai montar.
 const AgendaMobile = lazy(() => import('@/mobile/telas/agenda/AgendaMobile'));
+const ChamadaMobile = lazy(() => import('@/mobile/telas/agenda/ChamadaMobile'));
 
 /** Rotulo de cada visao. Fonte unica: o trilho do desktop e a folha do
  *  celular nao podem chamar a mesma visao por nomes diferentes. */
@@ -514,7 +515,10 @@ export default function AgendaPage() {
           solta no topo. Nas duas portadas ela entra no cabecalho da
           AgendaMobile, junto da data — quatro faixas de largura total
           empilhadas comiam metade da tela antes da primeira aula. */}
-      {ehCelular && (ehChamada || ehCalendario) && <div>{seletorVisaoMobile}</div>}
+      {/* A ChamadaMobile recebe o seletor como SLOT no proprio cabecalho
+          sticky; deixa-lo tambem aqui daria dois seletores na mesma tela. O
+          Calendario segue com a faixa solta, porque nao tem cabecalho proprio. */}
+      {ehCelular && ehCalendario && <div>{seletorVisaoMobile}</div>}
 
       {/* Enquanto o proximo dia carrega, o dia anterior continua na tela
           esmaecido em vez de virar tela em branco: a troca fica continua e
@@ -691,6 +695,31 @@ export default function AgendaPage() {
         </p>
       ) : aulas.length === 0 ? (
         <p className="p-8 text-center text-sm text-slate-400">Nenhuma aula neste dia.</p>
+      ) : ehCelular && ehChamada ? (
+        /* A fila do que falta, no lugar da tela do desktop. O ramo vem ANTES
+           do `ehChamada` do desktop e DEPOIS dos curto-circuitos de vazio, que
+           aqui sao corretos: fila sem aula nenhuma nao tem o que enfileirar. */
+        <Suspense fallback={<div className="p-8 text-center text-sm text-slate-400">Carregando…</div>}>
+          <ChamadaMobile
+            aulas={aulas}
+            data={data}
+            unidadeId={unidadeId}
+            presenca={presenca}
+            recarregar={recarregar}
+            onAbrirAula={setSelecionada}
+            seletorVisao={seletorVisaoMobile}
+          />
+          {selecionada && (
+            <AgendaDrawer
+              aula={selecionada}
+              data={data}
+              presenca={presenca}
+              onFechar={() => setSelecionada(null)}
+              mostrarUnidade={unidadeId === null}
+              variante="folha"
+            />
+          )}
+        </Suspense>
       ) : ehChamada ? (
         <ChamadaView
           data={data}

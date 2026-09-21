@@ -9,10 +9,13 @@ const pagina = le('../src/components/App/Agenda/AgendaPage.tsx');
 const tela = le('../src/mobile/telas/agenda/AgendaMobile.tsx');
 const rotas = le('../src/mobile/rotasPortadas.ts');
 
-test('as visoes portadas sao professor e sala — chamada e calendario continuam avisando', () => {
+test('professor, sala e chamada portadas — o calendario continua avisando', () => {
+  // A chamada entrou na etapa 4 (a fila do que falta). O calendario segue
+  // FORA de proposito: ele abre a tela do desktop, com a faixa ambar, e e o
+  // que impede esta linha de virar 'a rota inteira esta pronta'.
   assert.equal(abaFoiPortada('/app/agenda', 'professor'), true);
   assert.equal(abaFoiPortada('/app/agenda', 'sala'), true);
-  assert.equal(abaFoiPortada('/app/agenda', 'chamada'), false);
+  assert.equal(abaFoiPortada('/app/agenda', 'chamada'), true);
   assert.equal(abaFoiPortada('/app/agenda', 'calendario'), false);
 });
 

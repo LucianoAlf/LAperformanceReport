@@ -27,9 +27,10 @@ export const ROTAS_COM_FAIXA_POR_ABA: readonly string[] = ['/app/alunos', '/app/
  */
 export const ABAS_PORTADAS: Readonly<Record<string, readonly string[]>> = {
   '/app/alunos': ['lista'],
-  // Chamada e Calendário seguem abrindo no desktop, com a faixa. A grade do
-  // dia é o que esta etapa portou.
-  '/app/agenda': ['professor', 'sala'],
+  // ⚠️ `'calendario'` continua FORA de propósito: ele segue abrindo a tela do
+  // desktop, com a faixa âmbar. Marcar a rota inteira apagaria a faixa dele
+  // junto — que é exatamente o erro cometido com Alunos em 14/09.
+  '/app/agenda': ['professor', 'sala', 'chamada'],
 };
 
 export function rotaTemFaixaPorAba(
