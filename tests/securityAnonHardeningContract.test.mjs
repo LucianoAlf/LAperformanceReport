@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const migrationPath = new URL('../supabase/migrations/20260921012032_security_anon_hardening_20260920.sql', import.meta.url);
-const rollbackPath = new URL('../scripts/rollback/20260921012032_security_anon_hardening_20260920.sql', import.meta.url);
+const migrationPath = new URL('../supabase/migrations/20260921013120_security_anon_hardening_20260920.sql', import.meta.url);
+const rollbackPath = new URL('../scripts/rollback/20260921013120_security_anon_hardening_20260920.sql', import.meta.url);
 
 function migration() {
   assert.ok(existsSync(migrationPath), 'a migration versionada deve existir');

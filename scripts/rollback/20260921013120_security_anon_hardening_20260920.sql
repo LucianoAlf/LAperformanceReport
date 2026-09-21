@@ -1,4 +1,4 @@
--- Roteiro de desfazer da migration 20260921012032_security_anon_hardening_20260920.
+-- Roteiro de desfazer da migration 20260921013120_security_anon_hardening_20260920.
 -- Execute somente como administrador do banco, apos decisao de rollback.
 -- Restaura as ACLs anon/PUBLIC capturadas pela migration; nao imprime dados de linhas.
 

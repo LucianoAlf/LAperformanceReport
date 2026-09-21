@@ -4,7 +4,8 @@ import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
 const IMAGE = process.env.SECURITY_ANON_POSTGRES_IMAGE || 'postgres:17-alpine';
-const migrationPath = new URL('../supabase/migrations/20260921012032_security_anon_hardening_20260920.sql', import.meta.url);
+const migrationPath = new URL('../supabase/migrations/20260921013120_security_anon_hardening_20260920.sql', import.meta.url);
+const correctionPath = new URL('../supabase/migrations/20260921013309_security_anamnese_public_acl_minima.sql', import.meta.url);
 const container = 'la-security-anon-' + process.pid + '-' + Date.now();
 
 function docker(args, options = {}) {
@@ -101,6 +102,7 @@ test('migration fecha anon de verdade e preserva somente os quatro contratos pub
   ].join('\n');
   sql(bootstrap);
   sql(readFileSync(migrationPath, 'utf8'));
+  sql(readFileSync(correctionPath, 'utf8'));
 
   const tableList = tabelasP1.map((table) => "'" + table + "'").join(',');
   const evidence = sql([
@@ -111,6 +113,7 @@ test('migration fecha anon de verdade e preserva somente os quatro contratos pub
     "'internal_anon_execute', has_function_privilege('anon', 'public.internal_anon_fn()', 'EXECUTE'),",
     "'trigger_anon_execute', has_function_privilege('anon', 'public.internal_anon_trigger()', 'EXECUTE'),",
     "'public_anamnese_execute', has_function_privilege('anon', 'public.get_anamnese_publica(text)', 'EXECUTE'),",
+    "'public_anamnese_internal_execute', has_function_privilege('fabio_agent', 'public.get_anamnese_publica(text)', 'EXECUTE'),",
     "'app_anon_functions', (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and has_function_privilege('anon', p.oid, 'EXECUTE') and not exists (select 1 from pg_depend d join pg_extension e on e.oid = d.refobjid where d.classid = 'pg_proc'::regclass and d.objid = p.oid and d.deptype = 'e')),",
     "'definer_sem_path', (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.prosecdef and not exists (select 1 from unnest(coalesce(p.proconfig, array[]::text[])) c where c like 'search_path=%')),",
     "'p1_sem_rls', (select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relname = any (array[" + tableList + "]) and not c.relrowsecurity),",
@@ -124,6 +127,7 @@ test('migration fecha anon de verdade e preserva somente os quatro contratos pub
     internal_anon_execute: false,
     trigger_anon_execute: false,
     public_anamnese_execute: true,
+    public_anamnese_internal_execute: false,
     app_anon_functions: 4,
     definer_sem_path: 0,
     p1_sem_rls: 0,
