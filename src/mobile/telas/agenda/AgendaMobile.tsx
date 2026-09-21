@@ -13,6 +13,7 @@ import { addDays, format, parseISO } from 'date-fns';
 
 import type { AgendaDiaV2, AulaAgenda } from '@/hooks/useAgendaDia';
 import {
+  agruparPorHora,
   colisoesDeSala,
   filtrarAulas,
   FILTROS_AGENDA_VAZIOS,
@@ -203,10 +204,15 @@ export function AgendaMobile({
           primeiro arrasto para baixo, e num dia de 158 aulas eles passavam a
           maior parte do tempo fora de vista: trocar de dia com o dedo mudava o
           conteudo inteiro sem nada na tela dizendo para qual dia se foi.
-          ⚠️ A sangria negativa vai ate a borda do telefone (o <main> tem p-3),
-          senao o fundo opaco deixaria uma fresta de 12px de cada lado por onde
-          a lista apareceria passando por baixo. */}
-      <div className="sticky top-0 z-20 -mx-3 flex flex-col gap-2 border-b border-slate-800 bg-slate-950 px-3 pb-2.5 pt-1">
+          ⚠️ A sangria negativa vai ate a borda do telefone nos QUATRO lados: o
+          <main> tem p-3 e `top-0` gruda no topo do CONTEUDO, nao do padding —
+          medido: sobravam 12px acima do cabecalho por onde as aulas passavam,
+          numa faixa entre ele e a barra do aplicativo. `-mx-3 px-3` cobre os
+          lados; o pseudo-elemento `before` pinta a faixa de 12px de cima.
+          ⚠️ Nao adianta `-mt-3`: margem negativa move o elemento no FLUXO, e
+          grudado ele obedece ao `top`, entao a fresta continuava igual — so o
+          conteudo de baixo e que subia. */}
+      <div className="sticky top-0 z-20 -mx-3 flex flex-col gap-2 border-b border-slate-800 bg-slate-950 px-3 pb-2.5 pt-1 before:absolute before:inset-x-0 before:bottom-full before:h-3 before:bg-slate-950">
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -262,8 +268,12 @@ export function AgendaMobile({
               onClick={() => escolherProfessor(null)}
               className={cn(
                 'inline-flex min-h-[34px] flex-shrink-0 items-center whitespace-nowrap rounded-full border px-3 text-[12.5px]',
+                // ⚠️ "Todos" ligado NAO usa a pilula clara solida do chip de
+                // professor: ele e o estado PADRAO, e o elemento mais claro da
+                // tela nao pode ser "nenhum filtro". A pilula clara fica
+                // reservada a uma escolha que a pessoa fez.
                 filtros.professor === null
-                  ? 'border-slate-500 bg-slate-200 font-bold text-slate-900'
+                  ? 'border-slate-600 bg-slate-700 font-bold text-slate-100'
                   : 'border-slate-700 bg-slate-800 font-semibold text-slate-300',
               )}
             >
@@ -434,11 +444,13 @@ function PainelDoDia({ data, cru, filtros, agora, ehHoje, onAbrir, onLimparFiltr
   );
   const colisoes = useMemo(() => colisoesDeSala(cru ?? []), [cru]);
 
-  // A regua entra ANTES da primeira aula que ainda nao comecou. Sem nenhuma,
+  const grupos = useMemo(() => agruparPorHora(lista), [lista]);
+
+  // A regua entra ANTES do primeiro BLOCO que ainda nao comecou. Sem nenhum,
   // o dia ja acabou e ela nao e desenhada.
   const minutos = ehHoje ? minutosAgora(agora) : null;
   const iRegua =
-    minutos === null ? -1 : lista.findIndex((a) => minutosDeHHMM(a.hora_inicio) > minutos);
+    minutos === null ? -1 : grupos.findIndex((g) => minutosDeHHMM(g.hora) > minutos);
 
   if (cru === undefined) {
     return (
@@ -484,11 +496,11 @@ function PainelDoDia({ data, cru, filtros, agora, ehHoje, onAbrir, onLimparFiltr
        interna aqui era LETRA MORTA — o pai nao tem altura definida, entao o
        painel nunca chegava a estourar — e, se um dia passasse a valer, criaria
        duas barras de rolagem aninhadas na mesma tela. */
-    <div className="flex w-1/3 flex-shrink-0 flex-col gap-2 pb-6 pt-2.5">
-      {lista.map((aula, k) => (
-        <div key={aula.chave}>
-          {k === iRegua && (
-            <div className="mb-2.5 flex items-center gap-2">
+    <div className="w-1/3 flex-shrink-0 pb-6">
+      {grupos.map((grupo, g) => (
+        <div key={`${grupo.hora}-${g}`}>
+          {g === iRegua && (
+            <div className="flex items-center gap-2 pb-1 pt-4">
               <span className="text-[11px] font-bold tabular-nums text-emerald-300">
                 {String(Math.floor((minutos ?? 0) / 60)).padStart(2, '0')}:
                 {String((minutos ?? 0) % 60).padStart(2, '0')}
@@ -496,21 +508,40 @@ function PainelDoDia({ data, cru, filtros, agora, ehHoje, onAbrir, onLimparFiltr
               <span className="h-px flex-1 bg-emerald-500" />
             </div>
           )}
-          <LinhaAula
-            aula={aula}
-            data={data}
-            agora={agora}
-            ehHoje={ehHoje}
-            colisao={colisoes.get(aula.chave)}
-            ocultarProfessor={filtros.professor !== null}
-            /* ⚠️ A hora repetida ESMAECE, nao some. As 11:00 de um dia cheio
-               sao seis linhas seguidas e o horario batendo seis vezes vira
-               ruido — mas escondê-lo deixa quem rolou para o meio do bloco sem
-               nenhuma hora na tela, que e pior: a hora e a unica coordenada
-               desta lista. */
-            horaRepetida={k > 0 && k !== iRegua && lista[k - 1].hora_inicio === aula.hora_inicio}
-            onAbrir={onAbrir}
-          />
+          {/* O horario como CABECALHO do bloco, nao como coluna: uma vez por
+              horario em vez de uma vez por aula, e a linha fica com a largura
+              inteira do telefone. */}
+          <div className="flex items-baseline gap-2 pb-1 pt-3.5">
+            <span className="text-[13px] font-bold tabular-nums text-slate-200">{grupo.hora}</span>
+            {grupo.duracaoComum !== null && (
+              <span className="text-[11px] tabular-nums text-slate-500">
+                {grupo.duracaoComum} min
+              </span>
+            )}
+            <span className="h-px flex-1 bg-slate-800" />
+            {grupo.aulas.length > 1 && (
+              <span className="text-[11px] tabular-nums text-slate-500">
+                {grupo.aulas.length} aulas
+              </span>
+            )}
+          </div>
+          {grupo.aulas.map((aula) => (
+            <LinhaAula
+              key={aula.chave}
+              aula={aula}
+              data={data}
+              agora={agora}
+              ehHoje={ehHoje}
+              colisao={colisoes.get(aula.chave)}
+              ocultarProfessor={filtros.professor !== null}
+              duracao={grupo.duracaoComum === null ? aula.duracao_minutos : null}
+              /* `iRegua === -1` quer dizer "nao ha bloco por vir": o dia
+                 acabou, ou nem e hoje. Sem futuro na tela, esmaecer o passado
+                 nao separa nada — so apaga a lista inteira. */
+              esmaecerPassado={iRegua !== -1}
+              onAbrir={onAbrir}
+            />
+          ))}
         </div>
       ))}
     </div>

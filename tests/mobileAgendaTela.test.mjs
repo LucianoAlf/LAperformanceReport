@@ -224,6 +224,15 @@ test('o cabecalho do dia fica FIXO, nao rola junto com a lista', () => {
   // Sangria ate a borda do telefone — o <main> tem p-3, e sem isto sobrariam
   // 12px de cada lado por onde a lista apareceria.
   assert.match(cabecalho[0], /-mx-3/, 'o cabecalho fixo precisa sangrar o padding do <main>');
+  // ⚠️ E a faixa DE CIMA. Medido: com `top-0` o cabecalho gruda no topo do
+  // conteudo, nao do padding, e sobravam 12px por onde as aulas passavam por
+  // cima dele. Margem negativa nao resolve — ela move o elemento no fluxo, e
+  // grudado ele obedece ao `top`.
+  assert.match(
+    cabecalho[0],
+    /before:bottom-full/,
+    'sem a faixa de cima, o padding do <main> deixa a lista passar por cima do cabecalho',
+  );
 });
 
 test('a lista NAO tem rolagem propria — uma barra de rolagem por tela', () => {
@@ -285,4 +294,47 @@ test('a tela ORDENA antes de renderizar — e nao reimplementa a comparacao', ()
     /\.sort\(/,
     'a ordem e regra unica de lib/agenda; um sort local seria a segunda versao dela',
   );
+});
+
+test('as aulas do mesmo horario formam um BLOCO, com a hora em cabecalho', async () => {
+  // A coluna de hora de 50px repetia "09:00" em quatro linhas seguidas e, com
+  // os paddings, sobravam 272px de texto num telefone de 390 — era o que fazia
+  // o nome do curso truncar. Medido depois: 342px.
+  const { agruparPorHora } = await import('../src/lib/agenda.ts');
+  const a = (h, dur) => ({ hora_inicio: h, duracao_minutos: dur });
+  const grupos = agruparPorHora([a('09:00', 50), a('09:00', 50), a('10:00', 50)]);
+  assert.deepEqual(grupos.map((g) => [g.hora, g.aulas.length]), [['09:00', 2], ['10:00', 1]]);
+  // Duracao no cabecalho quando todo o bloco concorda — o caso normal da casa.
+  assert.equal(grupos[0].duracaoComum, 50);
+  // Divergindo, o cabecalho se cala e cada linha declara a sua: e justamente
+  // quando a duracao deixa de ser obvia.
+  assert.equal(agruparPorHora([a('09:00', 50), a('09:00', 30)])[0].duracaoComum, null);
+  // ⚠️ Agrupa CONSECUTIVOS. Lista fora de ordem produz dois blocos de 09:00 —
+  // de proposito: agrupar por chave global esconderia o defeito de ordenacao
+  // em vez de deixa-lo aparecer.
+  assert.equal(agruparPorHora([a('09:00', 50), a('10:00', 50), a('09:00', 50)]).length, 3);
+});
+
+test('a linha NORMAL nao usa o vocabulario de excecao', () => {
+  // A borda de 3px era `border-l-slate-600` nas 158 linhas do dia: o marcador
+  // de excecao pintado no que nao e excecao. Com tudo marcado, nada fica
+  // marcado. Ela continua existindo, transparente, so para o texto da linha
+  // normal alinhar com o da excepcional.
+  const normal = linha.match(/normal:\s*'([^']*)'/);
+  assert.ok(normal, 'o mapa de bordas precisa da entrada normal');
+  assert.match(normal[1], /border-l-transparent/);
+  assert.doesNotMatch(normal[1], /slate-[45678]00/, 'a linha normal voltou a ter barra cinza');
+});
+
+test('o passado so esmaece quando ha futuro na mesma tela', () => {
+  // Medido as 21h de um dia util: 130 das 158 linhas a 50% de opacidade —
+  // quatro quintos da tela ilegiveis para marcar uma distincao que ja nao
+  // existia. Num dia passado seriam 100%.
+  assert.match(
+    tela,
+    /esmaecerPassado=\{iRegua !== -1\}/,
+    'o esmaecido precisa depender de haver bloco por vir',
+  );
+  assert.doesNotMatch(linha, /opacity-50/, 'metade da opacidade deixa o texto ilegivel no escuro');
+  assert.match(linha, /esmaecerPassado && 'opacity-70'/);
 });

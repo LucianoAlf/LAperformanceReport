@@ -84,6 +84,41 @@ export function ordenarPorHora<
   );
 }
 
+/**
+ * As aulas em blocos de mesmo horario de inicio.
+ *
+ * A lista do celular tinha uma coluna de hora de 50px repetindo "09:00" em
+ * quatro linhas seguidas. Com o padding do <main>, o da linha e a coluna, o
+ * texto ficava com 272px num telefone de 390 — por isso o nome do curso
+ * truncava. Levando a hora para um cabecalho de bloco, a linha recupera ~30% de
+ * largura e o horario vira ancora, nao carimbo.
+ *
+ * ⚠️ Agrupa CONSECUTIVOS, nao por chave. A entrada e a lista ja passada por
+ * `ordenarPorHora`; agrupar por chave global "consertaria" silenciosamente uma
+ * lista fora de ordem — e uma lista fora de ordem e um defeito que precisa
+ * aparecer, nao ser escondido (foi exatamente o que aconteceu ate 21/09).
+ *
+ * `duracaoComum` e a duracao quando TODAS as aulas do bloco tem a mesma — o
+ * caso normal da casa, onde quase tudo dura 50 min. Divergindo, vem `null` e
+ * cada linha declara a sua: e justamente quando a duracao deixa de ser obvia.
+ */
+export function agruparPorHora<T extends { hora_inicio: string; duracao_minutos: number }>(
+  aulas: T[],
+): Array<{ hora: string; duracaoComum: number | null; aulas: T[] }> {
+  const grupos: Array<{ hora: string; duracaoComum: number | null; aulas: T[] }> = [];
+  for (const aula of aulas) {
+    const hora = aula.hora_inicio.slice(0, 5);
+    const ultimo = grupos[grupos.length - 1];
+    if (ultimo !== undefined && ultimo.hora === hora) ultimo.aulas.push(aula);
+    else grupos.push({ hora, duracaoComum: null, aulas: [aula] });
+  }
+  for (const grupo of grupos) {
+    const duracoes = new Set(grupo.aulas.map((a) => a.duracao_minutos));
+    grupo.duracaoComum = duracoes.size === 1 ? grupo.aulas[0].duracao_minutos : null;
+  }
+  return grupos;
+}
+
 export const AGENDA_HORA_INICIO = 8;
 export const AGENDA_HORA_FIM = 22;
 export const AGENDA_LARGURA_HORA_PX = 88;
