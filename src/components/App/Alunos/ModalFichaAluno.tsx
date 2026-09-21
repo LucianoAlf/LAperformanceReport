@@ -300,8 +300,28 @@ interface AnamneseAluno {
   perfil_baby?: boolean | null;
   observacoes_entrevistador?: string | null;
   share_token?: string | null;
+  share_token_expira_em?: string | null;
+  share_token_revogado_em?: string | null;
   created_at: string;
   anamnese_respostas_perfil?: AnamneseRespostaPerfil[];
+}
+
+type AcaoShareToken = 'regenerar_anamnese_share_token' | 'revogar_anamnese_share_token';
+
+interface ResultadoShareToken {
+  token?: string;
+  expira_em?: string;
+  revogado_em?: string;
+}
+
+async function chamarAcaoShareToken(acao: AcaoShareToken, anamneseId: number) {
+  const cliente = supabase as unknown as {
+    rpc: (nome: string, parametros: Record<string, unknown>) => Promise<{
+      data: ResultadoShareToken | null;
+      error: { message: string } | null;
+    }>;
+  };
+  return cliente.rpc(acao, { p_anamnese_id: anamneseId });
 }
 
 // Em qual matrícula a anamnese foi respondida. A anamnese vale para todos os
@@ -1141,9 +1161,16 @@ export function ModalFichaAluno({
     (c) => String(c?.match_label || '').startsWith('Sem semelhanca'),
   );
   const [vinculandoAnamnese, setVinculandoAnamnese] = useState(false);
+  const [acaoShareToken, setAcaoShareToken] = useState<AcaoShareToken | null>(null);
 
   const perfisAtivos = perfis.map((perfil) => perfil.perfil_nome.toLowerCase());
   const podeReenviarWhatsapp = usuario?.perfil === 'admin' || perfisAtivos.includes('admin') || perfisAtivos.includes('gerente');
+  const podeGerenciarShareToken = podeReenviarWhatsapp;
+  const shareTokenAtivo = Boolean(
+    anamnese?.share_token
+      && !anamnese.share_token_revogado_em
+      && (!anamnese.share_token_expira_em || new Date(anamnese.share_token_expira_em) > new Date()),
+  );
 
   const telefonesWhatsapp = [anamnese?.telefone_aluno, dadosCompletos?.telefone, dadosCompletos?.responsavel_telefone, aluno.telefone, aluno.responsavel_telefone]
     .map(normalizarTelefoneWhatsapp)
@@ -1626,15 +1653,61 @@ export function ModalFichaAluno({
   }
 
   function abrirPerfilAnamnese() {
-    if (!anamnese?.share_token) return;
+    if (!anamnese?.share_token || !shareTokenAtivo) return;
     window.open(`https://anamnese-la-music.vercel.app/perfil/${anamnese.share_token}`, '_blank', 'noopener,noreferrer');
   }
 
   function reenviarWhatsappAnamnese() {
-    if (!anamnese?.share_token || !telefoneWhatsapp) return;
+    if (!anamnese?.share_token || !shareTokenAtivo || !telefoneWhatsapp) return;
     const link = `https://anamnese-la-music.vercel.app/perfil/${anamnese.share_token}`;
     const mensagem = encodeURIComponent(`Olá! Segue o link da anamnese de ${dadosCompletos?.nome || aluno.nome}: ${link}`);
     window.open(`https://wa.me/${telefoneWhatsapp}?text=${mensagem}`, '_blank', 'noopener,noreferrer');
+  }
+
+  async function regenerarShareTokenAnamnese() {
+    if (!anamnese || !Number.isInteger(Number(anamnese.id))) return;
+    if (!window.confirm('Gerar um novo link invalida imediatamente o link anterior. Deseja continuar?')) return;
+
+    setAcaoShareToken('regenerar_anamnese_share_token');
+    try {
+      const { data, error } = await chamarAcaoShareToken('regenerar_anamnese_share_token', Number(anamnese.id));
+      if (error) throw error;
+      if (!data?.token || !data.expira_em) throw new Error('A geraÃ§Ã£o do novo link nÃ£o retornou o prazo.');
+      setAnamnese(anterior => anterior ? {
+        ...anterior,
+        share_token: data.token,
+        share_token_expira_em: data.expira_em,
+        share_token_revogado_em: null,
+      } : anterior);
+      toast.success('Novo link criado com validade de 90 dias. O anterior foi invalidado.');
+    } catch (error: any) {
+      console.error('Erro ao gerar novo link da anamnese:', error);
+      toast.error(error.message || 'NÃ£o foi possÃ­vel gerar o novo link.');
+    } finally {
+      setAcaoShareToken(null);
+    }
+  }
+
+  async function revogarShareTokenAnamnese() {
+    if (!anamnese || !Number.isInteger(Number(anamnese.id))) return;
+    if (!window.confirm('Revogar este link corta o acesso pÃºblico Ã  anamnese. Deseja continuar?')) return;
+
+    setAcaoShareToken('revogar_anamnese_share_token');
+    try {
+      const { data, error } = await chamarAcaoShareToken('revogar_anamnese_share_token', Number(anamnese.id));
+      if (error) throw error;
+      if (!data?.revogado_em) throw new Error('A revogaÃ§Ã£o do link nÃ£o foi confirmada.');
+      setAnamnese(anterior => anterior ? {
+        ...anterior,
+        share_token_revogado_em: data.revogado_em,
+      } : anterior);
+      toast.success('Link pÃºblico revogado. Gere um novo link se precisar reenviar a anamnese.');
+    } catch (error: any) {
+      console.error('Erro ao revogar link da anamnese:', error);
+      toast.error(error.message || 'NÃ£o foi possÃ­vel revogar o link.');
+    } finally {
+      setAcaoShareToken(null);
+    }
   }
 
   async function handleBuscarAnamnese() {
@@ -2668,16 +2741,50 @@ export function ModalFichaAluno({
 
                   <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4">
                     <h4 className="text-sm font-medium text-slate-200 mb-3">🔗 Ações</h4>
+                    <p className="mb-3 text-xs text-slate-400">
+                      {anamnese.share_token_revogado_em
+                        ? 'Link público revogado.'
+                        : anamnese.share_token_expira_em
+                          ? `Link válido até ${formatarData(anamnese.share_token_expira_em)}.`
+                          : 'Link sem prazo registrado.'}
+                    </p>
                     <div className="flex flex-wrap gap-3">
-                      <Button type="button" variant="outline" onClick={abrirPerfilAnamnese} disabled={!anamnese.share_token}>
+                      <Button type="button" variant="outline" onClick={abrirPerfilAnamnese} disabled={!shareTokenAtivo}>
                         <ExternalLink className="w-4 h-4 mr-2" />
                         Ver anamnese completa
                       </Button>
                       {podeReenviarWhatsapp && (
-                        <Button type="button" variant="outline" onClick={reenviarWhatsappAnamnese} disabled={!anamnese.share_token || !telefoneWhatsapp}>
+                        <Button type="button" variant="outline" onClick={reenviarWhatsappAnamnese} disabled={!shareTokenAtivo || !telefoneWhatsapp}>
                           <MessageCircle className="w-4 h-4 mr-2" />
                           Reenviar WhatsApp
                         </Button>
+                      )}
+                      {podeGerenciarShareToken && (
+                        <>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={regenerarShareTokenAnamnese}
+                            disabled={acaoShareToken !== null}
+                          >
+                            {acaoShareToken === 'regenerar_anamnese_share_token'
+                              ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              : <RotateCcw className="w-4 h-4 mr-2" />}
+                            Gerar novo link
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="border-red-500/50 text-red-300 hover:bg-red-500/10 hover:text-red-200"
+                            onClick={revogarShareTokenAnamnese}
+                            disabled={!shareTokenAtivo || acaoShareToken !== null}
+                          >
+                            {acaoShareToken === 'revogar_anamnese_share_token'
+                              ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              : <X className="w-4 h-4 mr-2" />}
+                            Revogar link
+                          </Button>
+                        </>
                       )}
                       <Button type="button" variant="outline" onClick={abrirModalMensagemAnamnese}>
                         <Send className="w-4 h-4 mr-2" />
