@@ -1,4 +1,57 @@
 // Geometria da timeline da Agenda. Sem React, sem Supabase: tudo testavel isoladamente.
+import { format, isValid, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+
+/**
+ * Rotulo curto do dia para telas estreitas: "Segunda, 21/09".
+ *
+ * ⚠️ Existe para o locale nao ser esquecido. `format(d, "EEEE, dd/MM")` sem o
+ * terceiro argumento devolve INGLES — e foi exatamente o que chegou ao
+ * celular: o cabecalho da Agenda dizia "Monday, 21/09". O default do date-fns
+ * e en-US e nada avisa; o erro so aparece lendo a tela.
+ *
+ * "-feira" sai: ocupa quatro caracteres numa barra de 375px e nao acrescenta
+ * nada que "Segunda" ja nao diga. Mesma decisao do `rotuloDoDia` do desktop.
+ *
+ * Data invalida devolve a string crua em vez de lancar: `format` estoura com
+ * RangeError, e no corpo de um componente isso derruba a pagina inteira.
+ */
+export function rotuloDiaCurto(data: string): string {
+  const d = parseISO(data);
+  if (!isValid(d)) return data;
+  const bruto = format(d, 'EEEE, dd/MM', { locale: ptBR }).replace('-feira', '');
+  // O ptBR devolve o dia em minuscula ("segunda"). Aqui o rotulo abre uma
+  // linha e e o titulo do dia, entao vai capitalizado.
+  return bruto.charAt(0).toUpperCase() + bruto.slice(1);
+}
+
+/**
+ * Professores do dia, do que tem mais aula para o que tem menos.
+ *
+ * O trilho do celular mostra tres ou quatro chips de cada vez; o resto fica
+ * atras de rolagem horizontal. Em ordem alfabetica — que e o que
+ * `opcoesDoCampo` devolve — quem aparece primeiro e quem tem nome comecando em
+ * A, o que nao tem relacao nenhuma com a chance de ser procurado. Por volume,
+ * os primeiros chips respondem a maior parte do dia.
+ *
+ * Desempate alfabetico para a ordem ser estavel: sem ele, dois professores com
+ * a mesma contagem trocariam de lugar entre renderizacoes.
+ *
+ * ⚠️ Aula cancelada CONTA. Ela ainda esta na agenda do professor, e tira-la
+ * esconderia justamente o dia que deu errado.
+ */
+export function professoresPorVolume(
+  aulas: Array<{ professor_nome: string | null }>,
+): Array<{ nome: string; qtd: number }> {
+  const contagem = new Map<string, number>();
+  for (const aula of aulas) {
+    if (!aula.professor_nome) continue;
+    contagem.set(aula.professor_nome, (contagem.get(aula.professor_nome) ?? 0) + 1);
+  }
+  return [...contagem.entries()]
+    .map(([nome, qtd]) => ({ nome, qtd }))
+    .sort((a, b) => b.qtd - a.qtd || a.nome.localeCompare(b.nome, 'pt-BR'));
+}
 
 export const AGENDA_HORA_INICIO = 8;
 export const AGENDA_HORA_FIM = 22;

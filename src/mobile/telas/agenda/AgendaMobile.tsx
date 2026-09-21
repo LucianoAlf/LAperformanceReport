@@ -7,7 +7,7 @@ import {
   useState,
   type PointerEvent,
 } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ListFilter } from 'lucide-react';
 import { addDays, format, parseISO } from 'date-fns';
 
 import type { AgendaDiaV2, AulaAgenda } from '@/hooks/useAgendaDia';
@@ -18,7 +18,9 @@ import {
   iniciaisDoNome,
   minutosAgora,
   minutosDeHHMM,
-  opcoesDoCampo,
+  normalizarBusca,
+  professoresPorVolume,
+  rotuloDiaCurto,
   type FiltrosAgenda,
 } from '@/lib/agenda';
 import { aoMover, aoPressionar, aoSoltar, swipeInicial, type EstadoSwipe } from '@/lib/swipeDia';
@@ -101,7 +103,29 @@ export function AgendaMobile({
     [data, aulasDoDia, lerDoCache],
   );
 
-  const professores = useMemo(() => opcoesDoCampo(aulasDoDia, 'professor_nome'), [aulasDoDia]);
+  // Por VOLUME, nao alfabetica: os primeiros chips tem de ser os que
+  // respondem a maior parte do dia.
+  const professores = useMemo(() => professoresPorVolume(aulasDoDia), [aulasDoDia]);
+
+  // A lista inteira mora numa folha com busca. No Consolidado sao dezenas de
+  // professores, e achar alguem arrastando um trilho horizontal as cegas nao e
+  // navegacao, e sorte.
+  const [folhaAberta, setFolhaAberta] = useState(false);
+  const [buscaProfessor, setBuscaProfessor] = useState('');
+  const professoresFiltrados = useMemo(() => {
+    const termo = normalizarBusca(buscaProfessor);
+    if (termo === '') return professores;
+    return professores.filter((p) => normalizarBusca(p.nome).includes(termo));
+  }, [professores, buscaProfessor]);
+
+  useEffect(() => {
+    if (!folhaAberta) return undefined;
+    const aoTeclar = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFolhaAberta(false);
+    };
+    window.addEventListener('keydown', aoTeclar);
+    return () => window.removeEventListener('keydown', aoTeclar);
+  }, [folhaAberta]);
 
   const pressionar = useCallback((e: PointerEvent<HTMLDivElement>) => {
     setSwipe((s) => aoPressionar(s, { x: e.clientX, y: e.clientY }));
@@ -170,7 +194,7 @@ export function AgendaMobile({
         </button>
         <div className="min-w-0 flex-1 text-center">
           <div className="truncate text-[15px] font-bold tabular-nums text-slate-100">
-            {format(parseISO(data), "EEEE, dd/MM")}
+            {rotuloDiaCurto(data)}
           </div>
           <div className="text-[11px] text-slate-400">{ehHoje ? 'hoje' : ''}</div>
         </div>
@@ -187,7 +211,8 @@ export function AgendaMobile({
       {/* chip — trilho de professores. Rola no proprio eixo; o gesto de dia
           vive so no palco, abaixo. Ligado e pilula clara solida: ciano e
           exclusivo de navegacao (§6 do spec). */}
-      <div className="flex flex-shrink-0 gap-1.5 overflow-x-auto px-4 pb-3 [scrollbar-width:none]">
+      <div className="flex flex-shrink-0 items-center gap-1.5 px-4 pb-3">
+      <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto [scrollbar-width:none]">
         <button
           type="button"
           aria-pressed={filtros.professor === null}
@@ -201,9 +226,8 @@ export function AgendaMobile({
         >
           Todos · {aulasDoDia.length}
         </button>
-        {professores.map((nome) => {
+        {professores.map(({ nome, qtd }) => {
           const ativo = filtros.professor === nome;
-          const qtd = aulasDoDia.filter((a) => a.professor_nome === nome).length;
           return (
             <button
               key={nome}
@@ -230,6 +254,86 @@ export function AgendaMobile({
           );
         })}
       </div>
+
+        {/* FIXO, fora da rolagem: com dezenas de professores, um atalho que so
+            aparece depois de arrastar ate o fim do trilho nao e atalho. O
+            numero diz quantos existem — sem ele nao da para saber se o trilho
+            acabou ou se ha mais 37 escondidos. */}
+        {professores.length > 3 && (
+          <button
+            type="button"
+            onClick={() => { setBuscaProfessor(''); setFolhaAberta(true); }}
+            aria-haspopup="dialog"
+            aria-expanded={folhaAberta}
+            className="inline-flex min-h-[40px] flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-slate-700 bg-slate-800 px-3 text-[12.5px] font-semibold text-slate-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+          >
+            <ListFilter className="h-3.5 w-3.5" aria-hidden="true" />
+            {professores.length}
+          </button>
+        )}
+      </div>
+
+      {folhaAberta && (
+        <>
+          <button
+            type="button"
+            aria-label="Fechar lista de professores"
+            onClick={() => setFolhaAberta(false)}
+            className="fixed inset-0 z-50 bg-slate-950/70"
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Professores do dia"
+            className="fixed inset-x-0 bottom-0 z-50 flex max-h-[84%] flex-col rounded-t-2xl border-t border-slate-800 bg-slate-900 px-3 pt-2"
+            style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
+          >
+            <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-slate-700" aria-hidden="true" />
+            <h2 className="mb-2 px-1 font-grotesk text-sm font-bold text-slate-50">
+              Professores do dia · {professores.length}
+            </h2>
+            <input
+              type="search"
+              value={buscaProfessor}
+              onChange={(e) => setBuscaProfessor(e.target.value)}
+              placeholder="Buscar professor…"
+              aria-label="Buscar professor"
+              className="mb-2 min-h-[44px] w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none"
+            />
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <button
+                type="button"
+                onClick={() => { escolherProfessor(null); setFolhaAberta(false); }}
+                className="flex min-h-[44px] w-full items-center justify-between rounded-lg px-3 text-left text-sm font-semibold text-slate-300"
+              >
+                Todos os professores
+                <span className="tabular-nums text-slate-400">{aulasDoDia.length}</span>
+              </button>
+              {professoresFiltrados.map(({ nome, qtd }) => (
+                <button
+                  key={nome}
+                  type="button"
+                  onClick={() => { escolherProfessor(nome); setFolhaAberta(false); }}
+                  className={cn(
+                    'flex min-h-[44px] w-full items-center justify-between gap-2 rounded-lg px-3 text-left text-sm',
+                    filtros.professor === nome
+                      ? 'bg-slate-800 font-bold text-cyan-400'
+                      : 'font-semibold text-slate-300',
+                  )}
+                >
+                  <span className="min-w-0 truncate">{nome}</span>
+                  <span className="flex-shrink-0 tabular-nums text-slate-400">{qtd}</span>
+                </button>
+              ))}
+              {professoresFiltrados.length === 0 && (
+                <p className="px-3 py-6 text-center text-[13px] text-slate-400">
+                  Nenhum professor com esse nome hoje.
+                </p>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       <div
         ref={palcoRef}

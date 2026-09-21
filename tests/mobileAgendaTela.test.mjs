@@ -131,3 +131,75 @@ test('a duracao da troca vive numa constante, nao repetida a mao', () => {
   assert.match(tela, /DURACAO_TROCA_MS\s*=\s*260/);
   assert.match(tela, /duration-\[260ms\]/);
 });
+
+test('o rotulo do dia vem em portugues, de fonte unica', async () => {
+  // 🔴 O cabecalho saiu em INGLES em producao ("Monday, 21/09"): o default do
+  // date-fns e en-US e `format()` sem o terceiro argumento nao avisa nada.
+  const { rotuloDiaCurto } = await import('../src/lib/agenda.ts');
+  assert.equal(rotuloDiaCurto('2026-09-21'), 'Segunda, 21/09');
+  assert.equal(rotuloDiaCurto('2026-09-20'), 'Domingo, 20/09');
+  // "-feira" sai: 4 caracteres numa barra de 375px sem acrescentar nada.
+  assert.doesNotMatch(rotuloDiaCurto('2026-09-22'), /feira/);
+  // Data invalida devolve a string crua em vez de derrubar a pagina: `format`
+  // lanca RangeError, e no corpo de um componente isso mata a tela inteira.
+  assert.equal(rotuloDiaCurto('nao-e-data'), 'nao-e-data');
+});
+
+test('nenhuma data com TEXTO e formatada na tela sem locale', () => {
+  // A trava que faltava. Qualquer padrao com nome de dia (EEE) ou de mes (MMM)
+  // precisa do locale; sem ele sai em ingles e ninguem percebe ate abrir a
+  // tela. Padroes numericos ('yyyy-MM-dd') nao tem texto e ficam de fora.
+  const comTexto = [...tela.matchAll(/format\([^)]*?['"`]([^'"`]*(?:EEE|MMM)[^'"`]*)['"`][^)]*\)/g)];
+  for (const achado of comTexto) {
+    assert.match(
+      achado[0],
+      /locale/,
+      `format com texto e sem locale sairia em ingles: ${achado[0]}`,
+    );
+  }
+});
+
+test('o trilho vem ordenado por VOLUME, nao alfabeticamente', async () => {
+  // Em ordem alfabetica, os 3 chips visiveis sao os que comecam em A — o que
+  // nao tem relacao com a chance de serem procurados.
+  const { professoresPorVolume } = await import('../src/lib/agenda.ts');
+  const r = professoresPorVolume([
+    { professor_nome: 'Zoe Prado' },
+    { professor_nome: 'Ana Lima' },
+    { professor_nome: 'Zoe Prado' },
+    { professor_nome: 'Zoe Prado' },
+    { professor_nome: 'Bia Nogueira' },
+    { professor_nome: 'Bia Nogueira' },
+  ]);
+  assert.deepEqual(r, [
+    { nome: 'Zoe Prado', qtd: 3 },
+    { nome: 'Bia Nogueira', qtd: 2 },
+    { nome: 'Ana Lima', qtd: 1 },
+  ]);
+});
+
+test('empate desempata por nome — a ordem nao pode dancar entre renderizacoes', async () => {
+  const { professoresPorVolume } = await import('../src/lib/agenda.ts');
+  const r = professoresPorVolume([
+    { professor_nome: 'Bruno' },
+    { professor_nome: 'Ana' },
+  ]);
+  assert.deepEqual(r.map((p) => p.nome), ['Ana', 'Bruno']);
+});
+
+test('aula sem professor nao vira chip fantasma', async () => {
+  const { professoresPorVolume } = await import('../src/lib/agenda.ts');
+  assert.deepEqual(professoresPorVolume([{ professor_nome: null }]), []);
+});
+
+test('a lista inteira de professores fica a um toque, com busca', () => {
+  // Com dezenas de professores no Consolidado, o trilho mostrava ~3 e escondia
+  // o resto atras de rolagem horizontal as cegas.
+  assert.match(tela, /professoresFiltrados/, 'a folha precisa filtrar por busca');
+  assert.match(tela, /aria-label="Buscar professor"/);
+  assert.match(tela, /role="dialog"/, 'a lista inteira abre em folha');
+  // O botao fica FORA do contêiner rolavel: um atalho que so aparece depois de
+  // arrastar ate o fim do trilho nao e atalho.
+  assert.match(tela, /\{professores\.length > 3 && \(/);
+  assert.match(tela, /aria-haspopup="dialog"/);
+});
