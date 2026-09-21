@@ -652,3 +652,57 @@ export function formatarDataCalculo(calculadoEm: string | null): string {
   const mes = String(data.getUTCMonth() + 1).padStart(2, '0');
   return `${dia}/${mes}`;
 }
+
+export type AulaColidivel = {
+  chave: string;
+  sala_nome: string | null;
+  hora_inicio: string;
+  duracao_minutos: number;
+  cancelada: boolean;
+};
+
+/**
+ * Aulas que disputam a MESMA sala no mesmo horario, com o texto pronto para a
+ * linha.
+ *
+ * Existe porque a grade do desktop nao mostra este caso: agrupada por
+ * professor, a aula de Teclado da Bia e a de Guitarra do Ramon — as duas na
+ * Sala 2 as 11:00 — ficam em trilhos separados, cada uma sozinha no seu, e
+ * `resumoSobreposicao` (que opera DENTRO de um trilho) nao ve nada. A colisao
+ * so aparece ao trocar o agrupamento para Sala, ou seja, depende do modo em
+ * que a pessoa esta. Na lista do celular nao ha modo: ela e dita em toda linha.
+ *
+ * ⚠️ Nao usar `resumoSobreposicao` para isto. Ela responde "quantas aulas
+ * simultaneas ha neste conjunto", e sobre o dia inteiro devolveria 4 as 11:00
+ * — a escola funcionando, nao um problema.
+ */
+export function colisoesDeSala(aulas: AulaColidivel[]): Map<string, string> {
+  // Quem OCUPA uma sala. Cancelada sai — ela nao ocupa nada, mesmo criterio
+  // que `resumoSobreposicao` ja usa. Sala nula sai porque "sem sala" nao e uma
+  // sala: duas aulas sem sala nao disputam coisa alguma.
+  //
+  // ⚠️ Aula SEM ALUNO vinculado FICA, de proposito. O horario segue reservado,
+  // e ela e justamente a que alguem vai querer remanejar ao descobrir o
+  // conflito — some-la esconderia a saida mais obvia do problema.
+  const ocupantes = aulas.filter((a) => !a.cancelada && a.sala_nome !== null);
+
+  const marcadas = new Map<string, string>();
+
+  for (const a of ocupantes) {
+    const inicioA = minutosDeHHMM(a.hora_inicio);
+    const fimA = inicioA + a.duracao_minutos;
+
+    const colide = ocupantes.some((b) => {
+      if (b.chave === a.chave) return false;
+      if (b.sala_nome !== a.sala_nome) return false;
+      const inicioB = minutosDeHHMM(b.hora_inicio);
+      // Estrito nas duas pontas: terminar as 09:50 e comecar as 09:50 e o
+      // intervalo normal entre aulas, nao um conflito.
+      return inicioA < inicioB + b.duracao_minutos && inicioB < fimA;
+    });
+
+    if (colide) marcadas.set(a.chave, `${a.sala_nome} tem outra aula neste horário`);
+  }
+
+  return marcadas;
+}
