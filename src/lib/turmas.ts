@@ -43,6 +43,33 @@ export function diaDeHojeNaGrade(agora: Date = new Date()): string {
   return DIAS_SEMANA_TURMAS[indice - 1]?.valor ?? '';
 }
 
+/**
+ * 🔴 O MESMO DIA CHEGA EM DUAS FORMAS, e a forma longa sumia das telas.
+ *
+ * Medido em 22/09 nas 895 turmas: **135 (15%) gravam "Quarta-feira" em vez de
+ * "Quarta"** — 32 na quinta, 30 na quarta, 28 na sexta, 24 na segunda e 21 na
+ * terça. A causa esta documentada no CLAUDE.md: sao DOIS caminhos de escrita.
+ * `handleMatriculaNova` grava `agendamentos.dia_da_semana_nome` ("Quarta-feira")
+ * e o sync deriva do `nome_turma` ("Quarta").
+ *
+ * Quem agrupa por dia comparando texto cru descarta essas 135 em SILENCIO —
+ * elas nao aparecem na grade por dia, nem no mapa de calor, nem nas contagens
+ * por dia. Nao e defeito do celular: o computador faz o mesmo desde sempre.
+ *
+ * ⚠️ Isto normaliza para LER. A escrita continua como esta; consertar a fonte
+ * e outra frente (e ela tem dois donos).
+ */
+export function normalizarDiaSemana(dia: string | null | undefined): string {
+  if (!dia) return '';
+  const limpo = dia.trim();
+  // "Quarta-feira" e "quarta feira" viram "Quarta"; "Sábado" nao tem sufixo.
+  const semSufixo = limpo.replace(/[-\s]*feira$/i, '').trim();
+  const casado = DIAS_SEMANA_TURMAS.find(
+    (d) => d.valor.localeCompare(semSufixo, 'pt-BR', { sensitivity: 'base' }) === 0,
+  );
+  return casado ? casado.valor : semSufixo;
+}
+
 export type OcupacaoFiltro = '' | '0' | '1' | '2' | '3+';
 
 export interface FiltroTurmas {
@@ -58,7 +85,7 @@ export function filtrarTurmas<T extends TurmaParaLista>(
 ): T[] {
   return turmas.filter((t) => {
     if (professor_id && t.professor_id !== Number.parseInt(professor_id, 10)) return false;
-    if (dia && t.dia_semana !== dia) return false;
+    if (dia && normalizarDiaSemana(t.dia_semana) !== dia) return false;
     if (ocupacao === '0' && t.total_alunos !== 0) return false;
     if (ocupacao === '1' && t.total_alunos !== 1) return false;
     if (ocupacao === '2' && t.total_alunos !== 2) return false;
@@ -79,7 +106,7 @@ export function agruparTurmasPorDia<T extends TurmaParaLista>(
   const agrupado: Record<string, T[]> = {};
   for (const dia of DIAS_SEMANA_TURMAS) {
     agrupado[dia.valor] = turmas
-      .filter((t) => t.dia_semana === dia.valor)
+      .filter((t) => normalizarDiaSemana(t.dia_semana) === dia.valor)
       .sort((a, b) => a.horario_inicio.localeCompare(b.horario_inicio));
   }
   return agrupado;

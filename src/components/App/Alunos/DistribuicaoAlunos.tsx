@@ -1,4 +1,18 @@
 import { useMemo, useState } from 'react';
+import { useShellMobile } from '@/hooks/useShellMobile';
+import { DistribuicaoMobile } from '@/mobile/telas/alunos/DistribuicaoMobile';
+import {
+  avisosDoMapaDeCalor,
+  estatisticasPorCurso,
+  estatisticasPorDia,
+  estatisticasPorHorario,
+  estatisticasPorProfessor,
+  montarMapaDeCalor,
+  nivelDoCalor,
+  HORARIOS_SEG_SEX,
+  HORARIOS_SABADO,
+  DIAS_DISTRIBUICAO,
+} from '@/lib/distribuicaoTurmas';
 import { AlertTriangle, BarChart3, Music, Calendar, Clock, Flame, ChevronDown, ChevronUp, Lightbulb } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -13,198 +27,52 @@ interface DistribuicaoAlunosProps {
 
 export function DistribuicaoAlunos({ alunos, turmas, professores, cursos }: DistribuicaoAlunosProps) {
   const [mostrarTodosProfessores, setMostrarTodosProfessores] = useState(false);
+  const ehCelular = useShellMobile() === 'mobile';
   
-  // Estatísticas por professor - TODOS os professores ativos
-  const estatsPorProfessor = useMemo(() => {
-    const stats: Record<number, { nome: string, totalAlunos: number, totalTurmas: number, mediaAlunos: number }> = {};
-    
-    professores.forEach(p => {
-      const turmasProf = turmas.filter(t => t.professor_id === p.id);
-      const totalAlunos = turmasProf.reduce((sum, t) => sum + t.total_alunos, 0);
-      stats[p.id] = {
-        nome: p.nome,
-        totalAlunos,
-        totalTurmas: turmasProf.length,
-        mediaAlunos: turmasProf.length > 0 ? totalAlunos / turmasProf.length : 0
-      };
-    });
-    
-    // Ordenar por total de alunos (professores com turmas primeiro, depois sem turmas)
-    return Object.values(stats)
-      .sort((a, b) => b.totalAlunos - a.totalAlunos || a.nome.localeCompare(b.nome));
-  }, [turmas, professores]);
-
-  // Estatísticas por curso
-  const estatsPorCurso = useMemo(() => {
-    const stats: Record<string, { nome: string, totalAlunos: number, totalTurmas: number }> = {};
-    
-    turmas.forEach(t => {
-      const cursoNome = t.curso_nome || 'Sem curso';
-      if (!stats[cursoNome]) {
-        stats[cursoNome] = { nome: cursoNome, totalAlunos: 0, totalTurmas: 0 };
-      }
-      stats[cursoNome].totalAlunos += t.total_alunos;
-      stats[cursoNome].totalTurmas += 1;
-    });
-    
-    return Object.values(stats).sort((a, b) => b.totalAlunos - a.totalAlunos);
-  }, [turmas]);
-
-  // Estatísticas por dia
-  const estatsPorDia = useMemo(() => {
-    const dias = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
-    return dias.map(dia => {
-      const turmasDia = turmas.filter(t => t.dia_semana === dia);
-      return {
-        dia,
-        totalTurmas: turmasDia.length,
-        totalAlunos: turmasDia.reduce((sum, t) => sum + t.total_alunos, 0),
-        turmasSozinhas: turmasDia.filter(t => t.total_alunos === 1).length
-      };
-    });
-  }, [turmas]);
-
-  // Estatísticas por horário
-  const estatsPorHorario = useMemo(() => {
-    const horarios: Record<string, { horario: string, totalTurmas: number, totalAlunos: number }> = {};
-    
-    turmas.forEach(t => {
-      const h = t.horario_inicio?.substring(0, 5) || '00:00';
-      if (!horarios[h]) {
-        horarios[h] = { horario: h, totalTurmas: 0, totalAlunos: 0 };
-      }
-      horarios[h].totalTurmas += 1;
-      horarios[h].totalAlunos += t.total_alunos;
-    });
-    
-    return Object.values(horarios).sort((a, b) => a.horario.localeCompare(b.horario));
-  }, [turmas]);
-
-  // Mapa de calor: Dia x Horário
+  // As cinco leituras vivem em `@/lib/distribuicaoTurmas`, compartilhadas com
+  // a tela do celular: "horario de pico" nao pode ter duas respostas para o
+  // mesmo dia.
+  const estatsPorProfessor = useMemo(
+    () => estatisticasPorProfessor(turmas, professores),
+    [turmas, professores],
+  );
+  const estatsPorCurso = useMemo(() => estatisticasPorCurso(turmas), [turmas]);
+  const estatsPorDia = useMemo(() => estatisticasPorDia(turmas), [turmas]);
+  const estatsPorHorario = useMemo(() => estatisticasPorHorario(turmas), [turmas]);
   const mapaCalor = useMemo(() => {
-    const dias = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
-    // Horários: Seg-Sex 08:00-21:00, Sáb 08:00-16:00
-    const horariosSegSex = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00'];
-    const horariosSab = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'];
-    
-    const mapa: Record<string, Record<string, { alunos: number, turmas: number }>> = {};
-    let maxAlunos = 0;
-    
-    dias.forEach(dia => {
-      mapa[dia] = {};
-      const horariosDia = dia === 'Sábado' ? horariosSab : horariosSegSex;
-      horariosDia.forEach(h => {
-        mapa[dia][h] = { alunos: 0, turmas: 0 };
-      });
-    });
-    
-    turmas.forEach(t => {
-      const dia = t.dia_semana;
-      const horarioCompleto = t.horario_inicio;
-      
-      if (!dia || !horarioCompleto) return;
-      
-      // Extrair hora do horário (pode vir como "16:00" ou "16:00:00")
-      const h = horarioCompleto.substring(0, 5);
-      
-      // Debug: logar turmas de 16h que não estão sendo contadas
-      if (h === '16:00' && (!mapa[dia] || mapa[dia][h] === undefined)) {
-        console.log('⚠️ Turma 16h não mapeada:', { dia, horario: h, alunos: t.total_alunos, mapa_dia_existe: !!mapa[dia], horario_existe: mapa[dia] ? mapa[dia][h] !== undefined : false });
-      }
-      
-      // Verificar se o dia existe no mapa e se o horário está disponível para aquele dia
-      if (mapa[dia] && mapa[dia][h] !== undefined) {
-        mapa[dia][h].alunos += t.total_alunos;
-        mapa[dia][h].turmas += 1;
-        if (mapa[dia][h].alunos > maxAlunos) {
-          maxAlunos = mapa[dia][h].alunos;
-        }
-      }
-    });
-    
-    return { mapa, maxAlunos, dias, horariosSegSex, horariosSab };
+    const montado = montarMapaDeCalor(turmas);
+    // O restante do JSX espera estes quatro campos com estes nomes.
+    return {
+      ...montado,
+      dias: [...DIAS_DISTRIBUICAO],
+      horariosSegSex: [...HORARIOS_SEG_SEX],
+      horariosSab: [...HORARIOS_SABADO],
+    };
   }, [turmas]);
 
-  // Insights do mapa de calor
-  const insightsCalor = useMemo(() => {
-    const { mapa, dias, horariosSegSex } = mapaCalor;
-    const insights: string[] = [];
-    
-    // Encontrar horário de pico geral
-    let maxTotal = 0;
-    let horarioPico = '';
-    let diaPico = '';
-    
-    dias.forEach(dia => {
-      const horarios = dia === 'Sábado' ? mapaCalor.horariosSab : horariosSegSex;
-      horarios.forEach(h => {
-        if (mapa[dia][h].alunos > maxTotal) {
-          maxTotal = mapa[dia][h].alunos;
-          horarioPico = h;
-          diaPico = dia;
-        }
-      });
-    });
-    
-    if (horarioPico) {
-      insights.push(`Horário de pico: ${diaPico} às ${horarioPico} com ${maxTotal} alunos`);
-    }
-    
-    // Horários com baixa ocupação (manhã)
-    let totalManha = 0;
-    let totalTarde = 0;
-    dias.forEach(dia => {
-      const horarios = dia === 'Sábado' ? mapaCalor.horariosSab : horariosSegSex;
-      horarios.forEach(h => {
-        const hora = parseInt(h.split(':')[0]);
-        if (hora < 12) {
-          totalManha += mapa[dia][h].alunos;
-        } else {
-          totalTarde += mapa[dia][h].alunos;
-        }
-      });
-    });
-    
-    const percentManha = Math.round((totalManha / (totalManha + totalTarde)) * 100) || 0;
-    if (percentManha < 30) {
-      insights.push(`Manhãs subutilizadas: apenas ${percentManha}% dos alunos estudam antes das 12h`);
-    }
-    
-    // Sábado vs dias úteis
-    let totalSab = 0;
-    let totalSemana = 0;
-    dias.forEach(dia => {
-      const horarios = dia === 'Sábado' ? mapaCalor.horariosSab : horariosSegSex;
-      horarios.forEach(h => {
-        if (dia === 'Sábado') {
-          totalSab += mapa[dia][h].alunos;
-        } else {
-          totalSemana += mapa[dia][h].alunos;
-        }
-      });
-    });
-    
-    const mediaSemana = totalSemana / 5;
-    if (totalSab > mediaSemana * 1.2) {
-      insights.push(`Sábado é o dia mais procurado: ${totalSab} alunos (${Math.round((totalSab / mediaSemana - 1) * 100)}% acima da média)`);
-    }
-    
-    return insights;
-  }, [mapaCalor]);
+  // Os avisos saem da mesma lib — cada um com o seu limiar.
+  const insightsCalor = useMemo(() => avisosDoMapaDeCalor(mapaCalor), [mapaCalor]);
 
-  // Função para obter cor do mapa de calor
+  // A regua de intensidade tambem e da lib; aqui fica so a roupa dela.
   const getCorCalor = (alunos: number, max: number) => {
-    if (alunos === 0) return 'bg-slate-800/50';
-    const intensidade = alunos / max;
-    if (intensidade < 0.25) return 'bg-blue-900/60 text-blue-300';
-    if (intensidade < 0.5) return 'bg-cyan-800/60 text-cyan-300';
-    if (intensidade < 0.75) return 'bg-amber-700/60 text-amber-300';
+    const nivel = nivelDoCalor(alunos, max);
+    if (nivel === 'vazio') return 'bg-slate-800/50';
+    if (nivel === 'baixo') return 'bg-blue-900/60 text-blue-300';
+    if (nivel === 'medio') return 'bg-cyan-800/60 text-cyan-300';
+    if (nivel === 'alto') return 'bg-amber-700/60 text-amber-300';
     return 'bg-orange-600/70 text-orange-100';
   };
 
   const maxAlunosProfessor = Math.max(...estatsPorProfessor.map(p => p.totalAlunos), 1);
   const maxAlunosCurso = Math.max(...estatsPorCurso.map(c => c.totalAlunos), 1);
   const maxAlunosDia = Math.max(...estatsPorDia.map(d => d.totalAlunos), 1);
+
+  // No celular os cinco paineis viram barras horizontais e o mapa ganha 6
+  // colunas de ~52px. A bifurcacao fica depois dos hooks; o JSX do desktop
+  // segue intocado abaixo.
+  if (ehCelular) {
+    return <DistribuicaoMobile turmas={turmas} professores={professores} />;
+  }
 
   return (
     <div className="p-6 space-y-8">

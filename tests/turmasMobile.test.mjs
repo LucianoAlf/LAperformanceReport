@@ -9,6 +9,7 @@ import {
   diaDeHojeNaGrade,
   filtrarTurmas,
   formatarHorarioTurma,
+  normalizarDiaSemana,
   nivelOcupacaoTurma,
   textoOcupacaoTurma,
 } from '../src/lib/turmas.ts';
@@ -223,6 +224,31 @@ test('🔴 o curso fica sozinho na primeira linha', () => {
   );
   // E o professor desceu para a segunda linha, junto da sala.
   assert.match(linha, /const onde = \[abreviarNome\(turma\.professor_nome\), turma\.sala_nome/);
+});
+
+test('🔴 "Quarta-feira" e "Quarta" são o MESMO dia', () => {
+  // Medido em 22/09: 135 das 895 turmas (15%) gravam a forma longa, porque há
+  // dois caminhos de escrita — o webhook usa `dia_da_semana_nome`
+  // ("Quarta-feira") e o sync deriva do `nome_turma` ("Quarta"). Quem compara
+  // texto cru descarta essas 135 em silêncio.
+  assert.equal(normalizarDiaSemana('Quarta-feira'), 'Quarta');
+  assert.equal(normalizarDiaSemana('Quarta'), 'Quarta');
+  assert.equal(normalizarDiaSemana('segunda-feira'), 'Segunda');
+  assert.equal(normalizarDiaSemana('TERÇA-FEIRA'), 'Terça');
+  assert.equal(normalizarDiaSemana('Sábado'), 'Sábado', 'sábado não tem sufixo');
+  assert.equal(normalizarDiaSemana(null), '');
+  // Valor que não é dia volta como veio — inventar um dia seria pior.
+  assert.equal(normalizarDiaSemana('Feriado'), 'Feriado');
+});
+
+test('🔴 a turma de "Quinta-feira" aparece na quinta', () => {
+  const agrupado = agruparTurmasPorDia([
+    turma({ dia_semana: 'Quinta', horario_inicio: '09:00:00' }),
+    turma({ dia_semana: 'Quinta-feira', horario_inicio: '10:00:00' }),
+  ]);
+  assert.equal(agrupado['Quinta'].length, 2, 'a forma longa sumiu do agrupamento');
+  // E o filtro por dia também tem de alcançá-la.
+  assert.equal(filtrarTurmas([turma({ dia_semana: 'Quinta-feira' })], { dia: 'Quinta' }).length, 1);
 });
 
 // ------------------------------------------------------- contrato do código ----

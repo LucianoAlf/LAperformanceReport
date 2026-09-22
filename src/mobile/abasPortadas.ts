@@ -26,7 +26,7 @@ export const ROTAS_COM_FAIXA_POR_ABA: readonly string[] = ['/app/alunos', '/app/
  * faixa. É o contrário de bloquear.
  */
 export const ABAS_PORTADAS: Readonly<Record<string, readonly string[]>> = {
-  '/app/alunos': ['lista', 'historico', 'turmas', 'automacao'],
+  '/app/alunos': ['lista', 'historico', 'turmas', 'automacao', 'distribuicao'],
   // ⚠️ `'calendario'` continua FORA de propósito: ele segue abrindo a tela do
   // desktop, com a faixa âmbar. Marcar a rota inteira apagaria a faixa dele
   // junto — que é exatamente o erro cometido com Alunos em 14/09.
