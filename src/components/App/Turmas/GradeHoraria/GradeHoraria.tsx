@@ -18,6 +18,9 @@ import {
   calcularHorarioFim
 } from '@/lib/horarios';
 import { detectarConflitos } from '@/lib/conflitos';
+import { chaveDaTurma, normalizarDiaSemana } from '@/lib/turmas';
+import { useShellMobile } from '@/hooks/useShellMobile';
+import { GradeMobile } from '@/mobile/telas/alunos/GradeMobile';
 import { gerarSugestoes, type Sugestao } from '@/lib/sugestoes-horarios';
 import { TurmaGrade, FiltrosGrade } from './types';
 import { CelulaTurma } from './CelulaTurma';
@@ -72,6 +75,7 @@ export function GradeHoraria({
   
   // Estados Drag & Drop
   const [dragEnabled, setDragEnabled] = useState(false);
+  const ehCelular = useShellMobile() === 'mobile';
   const [turmaArrastando, setTurmaArrastando] = useState<TurmaGrade | null>(null);
   const [movimentoPendente, setMovimentoPendente] = useState<MovimentoTurma | null>(null);
   const [conflitosMovimento, setConflitosMovimento] = useState<any[]>([]);
@@ -217,7 +221,13 @@ export function GradeHoraria({
     }
 
     for (const turma of turmasFiltradas) {
-      const dia = turma.dia_semana;
+      // 🔴 O dia vinha CRU do banco, e 135 das 896 turmas (15%) gravam
+      // "Quarta-feira" em vez de "Quarta" — medido em 22/09. Como `grade` so
+      // tem a chave curta, elas caiam fora da matriz em silencio: o contador
+      // ao lado dizia "896 turma(s) encontrada(s)" e a tabela renderizava
+      // 761. Normalizar na LEITURA conserta as duas telas; a escrita tem dois
+      // donos e e outra frente.
+      const dia = normalizarDiaSemana(turma.dia_semana);
       const hora = turma.horario_inicio;
       
       if (grade[dia] && grade[dia][hora]) {
@@ -384,6 +394,44 @@ export function GradeHoraria({
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-500" />
       </div>
+    );
+  }
+
+  // No celular a matriz hora x dia vira uma lista: o dia e uma escolha e a
+  // hora e um bloco que abre. A bifurcacao fica DEPOIS de todos os hooks; o
+  // JSX do computador segue intocado abaixo.
+  if (ehCelular) {
+    return (
+      <>
+        <GradeMobile
+          turmas={turmasFiltradas}
+          chaveDe={(turma) => chaveDaTurma(turma as never)}
+          onAbrirTurma={(turma) => handleTurmaClick(turma as TurmaGrade)}
+        />
+
+        {/* ⚠️ O modal vive no JSX do computador, DEPOIS deste return — sem
+            repeti-lo aqui, tocar numa turma no celular guardava a selecao e
+            nao abria nada. Ele e o MESMO componente, com os mesmos handlers:
+            sao ~350 linhas decidindo o que se mostra de uma turma (alunos,
+            sala, vinculo), e reescreve-las seria a segunda versao da mesma
+            resposta. `onEditar` fica de fora: editar turma e formulario do
+            computador. */}
+        {turmaSelecionada && (
+          <ModalDetalhesTurma
+            turma={turmaSelecionada}
+            aberto={modalAberto}
+            onClose={() => {
+              setModalAberto(false);
+              setTurmaSelecionada(null);
+            }}
+            onSalaVinculada={() => {
+              carregarDados();
+              setModalAberto(false);
+              setTurmaSelecionada(null);
+            }}
+          />
+        )}
+      </>
     );
   }
 
@@ -592,7 +640,7 @@ export function GradeHoraria({
                             <div className="flex flex-col gap-1">
                               {turmasSlot.map(turma => (
                                 <CelulaTurma
-                                  key={turma.id}
+                                  key={chaveDaTurma(turma)}
                                   turma={turma}
                                   onClick={() => handleTurmaClick(turma)}
                                   draggable={dragEnabled}
