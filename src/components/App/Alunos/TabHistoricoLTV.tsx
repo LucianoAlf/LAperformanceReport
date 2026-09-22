@@ -13,6 +13,9 @@ import {
   ArrowUpDown, ChevronLeft, ChevronRight, Table2, Info, History,
 } from 'lucide-react';
 import { ModalPassagensAluno } from './ModalPassagensAluno';
+import { useShellMobile } from '@/hooks/useShellMobile';
+import { HistoricoLtvMobile } from '@/mobile/telas/alunos/HistoricoLtvMobile';
+import { validarNovoRegistroLtv } from '@/lib/historicoLtv';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -60,6 +63,7 @@ export function TabHistoricoLTV({ unidadeAtual }: TabHistoricoLTVProps) {
     dadosSobrevivencia, dadosHistograma, dadosEvolucao,
   } = useHistoricoLTV(unidadeAtual);
   const { user } = useAuth();
+  const ehCelular = useShellMobile() === 'mobile';
 
   // View toggle
   const [visao, setVisao] = useState<'tabela' | 'analytics'>('tabela');
@@ -153,10 +157,17 @@ export function TabHistoricoLTV({ unidadeAtual }: TabHistoricoLTVProps) {
   }
 
   async function handleAdicionarRegistro() {
-    const tempo = parseInt(novoRegistro.tempo);
-    if (!novoRegistro.nome.trim() || isNaN(tempo) || tempo < 1) {
+    // Mesma regra que a folha do celular usa. Duas validacoes para o mesmo
+    // formulario divergiriam na primeira vez que alguem mexesse numa delas.
+    if (!validarNovoRegistroLtv({
+      nome: novoRegistro.nome,
+      tempo: novoRegistro.tempo,
+      categoria: novoRegistro.categoria,
+      mes_saida: novoRegistro.mes_saida,
+    }).ok) {
       return;
     }
+    const tempo = parseInt(novoRegistro.tempo);
     await adicionarRegistro({
       nome: novoRegistro.nome.trim(),
       tempo_permanencia_meses: tempo,
@@ -173,6 +184,37 @@ export function TabHistoricoLTV({ unidadeAtual }: TabHistoricoLTVProps) {
       <div className="flex items-center justify-center py-20">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500" />
       </div>
+    );
+  }
+
+  // No celular a matriz de 7 colunas vira uma lista. A bifurcacao fica AQUI,
+  // depois dos hooks (a ordem deles nao pode mudar entre renderizacoes) e
+  // antes do JSX do desktop, que segue intocado abaixo.
+  if (ehCelular) {
+    return (
+      <>
+        <HistoricoLtvMobile
+          registros={registros}
+          onVerPassagens={setPessoaSelecionada}
+          atualizarRegistro={atualizarRegistro}
+          excluirRegistro={excluirRegistro}
+          adicionarRegistro={adicionarRegistro}
+          unidadeParaNovo={unidadeAtual !== 'todos' ? unidadeAtual : null}
+        />
+        {/* O historico de passagens e o MESMO componente do desktop: uma
+            segunda versao dele seria a segunda resposta para "quem e esta
+            pessoa e quantas vezes ela passou pela escola". */}
+        {pessoaSelecionada && passagensDaPessoa.length > 0 && (
+          <ModalPassagensAluno
+            nome={nomePessoaSelecionada}
+            passagens={passagensDaPessoa}
+            userName={user?.email || 'sistema'}
+            onClose={() => setPessoaSelecionada(null)}
+            onAnular={anularPassagem}
+            onReverter={reverterAnulacao}
+          />
+        )}
+      </>
     );
   }
 
