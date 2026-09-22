@@ -13,6 +13,20 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ConciliacaoPresencas } from './ConciliacaoPresencas';
+import { useShellMobile } from '@/hooks/useShellMobile';
+import { ConciliacaoMobile } from '@/mobile/telas/alunos/ConciliacaoMobile';
+import {
+  ATRIBUTO_CAMPOS_APLICAVEIS,
+  ATRIBUTO_TIPO_ROTULO,
+  STATUS_PAGAMENTO_LABEL,
+  chaveAlunoAtributo,
+  descricaoAtributo,
+  fmtDataCurta,
+  fmtStatus,
+  grupoAtributo,
+  origemAtributo,
+  textoCurtoValor,
+} from '@/lib/conciliacao';
 import { separarPatchConciliacaoMatricula } from '../../../../supabase/functions/_shared/conciliacao-matricula-dominios.mjs';
 
 interface ConciliacaoItem {
@@ -140,33 +154,29 @@ const ATRIBUTO_GRUPOS: Record<string, { label: string; descricao: string; icon: 
   },
 };
 
-const ATRIBUTO_TIPO_META: Record<string, { label: string; grupo: string; cor: string; icon: typeof Link2 }> = {
-  foto_ausente: { label: 'Foto ausente', grupo: 'imagem', cor: 'violet', icon: ImageIcon },
-  instagram_ausente: { label: 'Instagram ausente', grupo: 'imagem', cor: 'violet', icon: AtSign },
-  instagram_divergente: { label: 'Instagram diverge', grupo: 'imagem', cor: 'violet', icon: AtSign },
-  contato_divergente: { label: 'Contato do cadastro', grupo: 'cadastro', cor: 'sky', icon: Phone },
-  responsavel_divergente: { label: 'Responsavel do cadastro', grupo: 'cadastro', cor: 'sky', icon: Phone },
-  status_financeiro_divergente: { label: 'Status financeiro', grupo: 'financeiro', cor: 'orange', icon: CreditCard },
-  forma_pagamento_divergente: { label: 'Forma de pagamento', grupo: 'financeiro', cor: 'orange', icon: CreditCard },
-  aguardando_renovacao_divergente: { label: 'Aguardando renovacao', grupo: 'financeiro', cor: 'orange', icon: CreditCard },
-  anamnese_pendente: { label: 'Anamnese pendente', grupo: 'contrato', cor: 'amber', icon: FileText },
-  contrato_assinatura_pendente: { label: 'Contrato sem assinatura', grupo: 'contrato', cor: 'amber', icon: FileText },
-  data_nascimento_divergente: { label: 'Nascimento diverge', grupo: 'cadastro', cor: 'red', icon: Cake },
+// ⚠️ Rótulo, grupo e cor vêm de `@/lib/conciliacao` — a tela do celular lê os
+// MESMOS. Aqui fica só o ícone, que é JSX e não atravessa para uma lib pura.
+const ATRIBUTO_TIPO_ICONE: Record<string, typeof Link2> = {
+  foto_ausente: ImageIcon,
+  instagram_ausente: AtSign,
+  instagram_divergente: AtSign,
+  contato_divergente: Phone,
+  responsavel_divergente: Phone,
+  status_financeiro_divergente: CreditCard,
+  forma_pagamento_divergente: CreditCard,
+  aguardando_renovacao_divergente: CreditCard,
+  anamnese_pendente: FileText,
+  contrato_assinatura_pendente: FileText,
+  data_nascimento_divergente: Cake,
 };
 
-// rótulos legíveis dos campos que o sync aplica sozinho (chaves do upd da edge)
-const ATRIBUTO_CAMPOS_APLICAVEIS = new Set([
-  'foto_url',
-  'instagram',
-  'telefone',
-  'email',
-  'responsavel_nome',
-  'responsavel_telefone',
-  'status_pagamento',
-  'forma_pagamento_id',
-  'aguardando_renovacao',
-  'data_nascimento',
-]);
+const ATRIBUTO_TIPO_META: Record<string, { label: string; grupo: string; cor: string; icon: typeof Link2 }> =
+  Object.fromEntries(
+    Object.entries(ATRIBUTO_TIPO_ROTULO).map(([tipo, meta]) => [
+      tipo,
+      { ...meta, icon: ATRIBUTO_TIPO_ICONE[tipo] ?? Link2 },
+    ]),
+  );
 
 const CAMPO_LABEL: Record<string, string> = {
   status: 'status', data_fim_contrato: 'fim do contrato', data_saida: 'data de saída',
@@ -175,20 +185,6 @@ const CAMPO_LABEL: Record<string, string> = {
   dia_aula: 'dia da aula', horario_aula: 'horário',
 };
 const CAMPO_MONETARIO = new Set(['valor_cheio', 'valor_parcela', 'desconto_fixo', 'desconto_condicional']);
-
-// status cru do Emusys ('ativa'/'trancada'/'finalizada') e do nosso ('ativo'/'trancado'/'evadido') em pt-BR legível
-const STATUS_LABEL: Record<string, string> = {
-  ativa: 'Ativa', trancada: 'Trancada', finalizada: 'Finalizada',
-  ativo: 'Ativo', trancado: 'Trancado', evadido: 'Evadido', inativo: 'Inativo',
-};
-function fmtStatus(s: any): string {
-  return STATUS_LABEL[String(s || '').toLowerCase()] || String(s || '—');
-}
-function fmtDataCurta(d: any): string {
-  if (!d) return '—';
-  const data = new Date(String(d) + 'T00:00:00');
-  return Number.isNaN(data.getTime()) ? '—' : data.toLocaleDateString('pt-BR');
-}
 
 const PER_PAGE = 20;
 const EMAILS_SYNC_TECNICO = new Set([
@@ -357,40 +353,6 @@ function temSugestaoAplicavel(item: ConciliacaoItem): boolean {
   return item.tipo_divergencia === 'classificacao_divergente' && item.sugestao != null;
 }
 
-const STATUS_PAGAMENTO_LABEL: Record<string, string> = {
-  em_dia: 'Em dia', inadimplente: 'Inadimplente', atrasado: 'Atrasado',
-};
-
-function textoCurtoValor(v: any): string {
-  if (v == null || v === '') return '—';
-  if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return String(v);
-  if (Array.isArray(v)) return v.map(textoCurtoValor).filter(Boolean).join(', ') || '—';
-  if (typeof v !== 'object') return String(v);
-
-  const preferidos = [
-    'status_pagamento', 'status_financeiro', 'inadimplente', 'forma_pagamento',
-    'cobranca_automatica_status', 'telefone', 'email', 'responsavel', 'instagram',
-    'foto_url', 'anamnese_preenchida', 'contrato_assinado', 'aguardando_renovacao', 'valor_parcela',
-  ];
-  const partes = preferidos
-    .filter(chave => v[chave] != null && v[chave] !== '')
-    .map(chave => `${chave.replaceAll('_', ' ')}: ${String(v[chave])}`);
-
-  if (partes.length) return partes.join(' · ');
-  return Object.entries(v)
-    .slice(0, 3)
-    .map(([chave, valor]) => `${chave.replaceAll('_', ' ')}: ${textoCurtoValor(valor)}`)
-    .join(' · ') || '—';
-}
-
-function grupoAtributo(item: AtributoDivergencia): string {
-  if (item.severidade === 'alta') return 'criticas';
-  if (item.tipo_divergencia === 'status_financeiro_divergente' && item.valor_emusys?.status_pagamento === 'inadimplente') {
-    return 'criticas';
-  }
-  return ATRIBUTO_TIPO_META[item.tipo_divergencia]?.grupo || 'cadastro';
-}
-
 const ATRIBUTO_GRUPO_PRIORIDADE: Record<string, number> = {
   criticas: 0,
   financeiro: 1,
@@ -398,66 +360,6 @@ const ATRIBUTO_GRUPO_PRIORIDADE: Record<string, number> = {
   imagem: 3,
   contrato: 4,
 };
-
-function origemAtributo(item: AtributoDivergencia): string {
-  const grupo = grupoAtributo(item);
-  if (grupo === 'contrato') return 'Checklist interno LA Report';
-  if (item.tipo_divergencia === 'foto_ausente' || item.tipo_divergencia.includes('instagram')) return 'Emusys -> LA Report';
-  if (grupo === 'financeiro') return 'Contrato Emusys';
-  return 'LA Report x Emusys';
-}
-
-function descricaoAtributo(item: AtributoDivergencia): { nosso: string; emusys: string; sugestao: string } {
-  if (item.tipo_divergencia === 'foto_ausente') {
-    return { nosso: 'Sem foto no LA Report', emusys: 'Foto disponivel no Emusys', sugestao: 'Aplicar foto do Emusys' };
-  }
-  if (item.tipo_divergencia === 'anamnese_pendente') {
-    return { nosso: 'Anamnese nao preenchida', emusys: 'Checklist interno do LA Report', sugestao: 'Cobrar preenchimento' };
-  }
-  if (item.tipo_divergencia === 'contrato_assinatura_pendente') {
-    return { nosso: 'Contrato sem assinatura', emusys: 'Checklist interno do LA Report', sugestao: 'Regularizar assinatura' };
-  }
-  if (item.tipo_divergencia === 'forma_pagamento_divergente') {
-    const nossaForma = item.valor_nosso?.nome
-      ? `${item.valor_nosso.nome}${item.valor_nosso.sigla ? ` (${item.valor_nosso.sigla})` : ''}`
-      : 'Sem forma de pagamento definida';
-    const formaEmusys = item.valor_emusys?.forma_pagamento || '—';
-    return {
-      nosso: nossaForma,
-      emusys: formaEmusys,
-      sugestao: item.sugestao?.forma_pagamento ? `Definir como ${item.sugestao.forma_pagamento}` : '—',
-    };
-  }
-  if (item.tipo_divergencia === 'status_financeiro_divergente') {
-    const label = (s: any) => STATUS_PAGAMENTO_LABEL[String(s || '').toLowerCase()] || String(s || '—');
-    return {
-      nosso: label(item.valor_nosso?.status_pagamento),
-      emusys: label(item.valor_emusys?.status_pagamento),
-      sugestao: item.sugestao?.status_pagamento ? `Definir como ${label(item.sugestao.status_pagamento)}` : '—',
-    };
-  }
-  if (item.tipo_divergencia === 'data_nascimento_divergente') {
-    return {
-      nosso: fmtDataCurta(item.valor_nosso?.data_nascimento),
-      emusys: fmtDataCurta(item.valor_emusys?.data_nascimento),
-      sugestao: item.sugestao?.data_nascimento
-        ? `Definir como ${fmtDataCurta(item.sugestao.data_nascimento)} (confirmar com a escola antes)`
-        : '—',
-    };
-  }
-  return {
-    nosso: textoCurtoValor(item.valor_nosso),
-    emusys: textoCurtoValor(item.valor_emusys),
-    sugestao: textoCurtoValor(item.sugestao),
-  };
-}
-
-function chaveAlunoAtributo(item: AtributoDivergencia): string {
-  if (item.aluno_id) return `aluno:${item.aluno_id}`;
-  if (item.emusys_matricula_id) return `mat:${item.emusys_matricula_id}`;
-  if (item.emusys_student_id) return `student:${item.emusys_student_id}`;
-  return `atributo:${item.id}`;
-}
 
 function resumirGruposAluno(itens: AtributoDivergencia[]): Record<string, number> {
   const grupos: Record<string, number> = {};
@@ -627,6 +529,7 @@ function descreverApi(item: ConciliacaoItem, tiposMap: Map<string, TipoMatricula
 
 export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null }) {
   const { user, usuario, session } = useAuth();
+  const ehCelular = useShellMobile() === 'mobile';
   const [dados, setDados] = useState<ConciliacaoPayload>({ resumo: {}, items: [] });
   const [loading, setLoading] = useState(true);
   const [loadingAtributos, setLoadingAtributos] = useState(true);
@@ -1212,6 +1115,36 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   const previewAtivo = filtroTipo === 'auto_preview';
   const totalPreviewFiltrado = itemsFiltrados.filter(i => i.tipo_divergencia === 'auto_preview').length;
   const totalDecisaoFiltrado = totalAberto - totalPreviewFiltrado;
+
+  // 🔴 Esta e a UNICA aba em que o toque escreve no cadastro. No celular o
+  // recorte e de PERMISSAO, nao so de layout: decide-se ali apenas o que e
+  // binario (o sync propos um valor e os dois lados cabem lado a lado), uma
+  // decisao por vez, sem lote. A regua mora em `@/lib/conciliacao`.
+  if (ehCelular) {
+    return (
+      <ConciliacaoMobile
+        matriculas={dados.items as never}
+        atributos={atributos as never}
+        tiposMatricula={new Map(tipos.map(t => [t.codigo, t.nome]))}
+        salvandoMatricula={salvando}
+        salvandoAtributo={salvandoAtributo}
+        onDecidirMatricula={(item, decisao) => {
+          const original = (dados.items || []).find(i => i.id === item.id);
+          if (!original) return;
+          void executarRPC(
+            original,
+            decisao === 'aprovar' ? 'aprovar' : 'manter',
+            decisao === 'aprovar' ? (original.sugestao || {}) : {},
+          );
+        }}
+        onDecidirAtributo={(item, decisao) => {
+          const original = atributos.find(a => a.id === item.id);
+          if (!original) return;
+          void executarAtributoRPC(original, decisao);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-4 pb-24">
