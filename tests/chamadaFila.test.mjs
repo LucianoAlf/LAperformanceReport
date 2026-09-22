@@ -29,7 +29,9 @@ const { montarFilaDaChamada } = await (async () => {
   return import(pathToFileURL(saida).href);
 })();
 
-const AGORA = new Date('2026-09-21T16:30:00-03:00');
+// A regra abaixo recebe o relógio local do app. Construir com offset BRT e ler
+// via getHours() fazia o runner UTC enxergar 19:30, quebrando a própria fixture.
+const AGORA = new Date(2026, 8, 21, 16, 30, 0);
 const DIA = '2026-09-21';
 
 /** Aluno sem destino: status cru do Emusys, sem resposta humana. */
