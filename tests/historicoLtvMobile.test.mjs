@@ -228,15 +228,24 @@ test('os dois trilhos não repetem a MESMA palavra', () => {
   assert.match(tela, /Todas as fontes/);
 });
 
-test('a aba entrou na lista de portadas, e as não adaptadas seguem com a faixa', () => {
+test('a aba entrou nas portadas, e a função responde pela lista viva', () => {
   assert.equal(abaFoiPortada('/app/alunos', 'historico'), true);
-  // ⚠️ Aqui NÃO se congela a lista inteira: cada aba portada quebraria o teste
-  // da anterior, e vermelho de rotina é assert que ninguém mais lê. O que se
-  // trava é o par — esta entrou, e quem ainda não foi adaptada continua fora.
-  for (const pendente of ['grade', 'distribuicao', 'automacao', 'conciliacao', 'importar']) {
-    assert.equal(abaFoiPortada('/app/alunos', pendente), false, `${pendente} entrou sem ter sido portada`);
+
+  // ⚠️ A lista de pendentes é DERIVADA, nunca escrita à mão: cada aba nova
+  // deixava vermelho o teste da anterior, e vermelho de rotina é assert que
+  // ninguém mais lê.
+  const TODAS = ['lista', 'turmas', 'grade', 'distribuicao', 'importar', 'automacao', 'historico', 'conciliacao'];
+  const portadas = ABAS_PORTADAS['/app/alunos'];
+  for (const aba of TODAS) {
+    assert.equal(
+      abaFoiPortada('/app/alunos', aba),
+      portadas.includes(aba),
+      `${aba}: a função discorda da lista`,
+    );
   }
-  assert.ok(ABAS_PORTADAS['/app/alunos'].includes('lista'), 'a Lista saiu das portadas');
+  // E aba que ninguém declarou nunca é "portada" — o padrão é avisar.
+  assert.equal(abaFoiPortada('/app/alunos', 'aba_que_nao_existe'), false);
+  assert.equal(abaFoiPortada('/rota/desconhecida', 'lista'), false);
 });
 
 test('⚠️ a bifurcação fica DEPOIS dos hooks', () => {

@@ -12,7 +12,7 @@ import {
   registroSemProfessor,
   rotuloDoEvento,
 } from '../src/lib/automacaoLog.ts';
-import { abaFoiPortada } from '../src/mobile/abasPortadas.ts';
+import { ABAS_PORTADAS, abaFoiPortada } from '../src/mobile/abasPortadas.ts';
 
 const le = (p) => readFileSync(new URL(p, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const tela = le('../src/mobile/telas/alunos/AutomacaoMobile.tsx');
@@ -144,11 +144,24 @@ test('🔴 o payload não é truncado', () => {
   assert.doesNotMatch(bloco, /<dd[^>]*truncate/);
 });
 
-test('a aba entrou nas portadas', () => {
+test('a aba entrou nas portadas, e a função responde pela lista viva', () => {
   assert.equal(abaFoiPortada('/app/alunos', 'automacao'), true);
-  for (const pendente of ['grade', 'distribuicao', 'conciliacao', 'importar']) {
-    assert.equal(abaFoiPortada('/app/alunos', pendente), false, `${pendente} entrou sem ter sido portada`);
+
+  // ⚠️ A lista de pendentes é DERIVADA, nunca escrita à mão: cada aba nova
+  // deixava vermelho o teste da anterior, e vermelho de rotina é assert que
+  // ninguém mais lê.
+  const TODAS = ['lista', 'turmas', 'grade', 'distribuicao', 'importar', 'automacao', 'historico', 'conciliacao'];
+  const portadas = ABAS_PORTADAS['/app/alunos'];
+  for (const aba of TODAS) {
+    assert.equal(
+      abaFoiPortada('/app/alunos', aba),
+      portadas.includes(aba),
+      `${aba}: a função discorda da lista`,
+    );
   }
+  // E aba que ninguém declarou nunca é "portada" — o padrão é avisar.
+  assert.equal(abaFoiPortada('/app/alunos', 'aba_que_nao_existe'), false);
+  assert.equal(abaFoiPortada('/rota/desconhecida', 'lista'), false);
 });
 
 test('⚠️ a bifurcação fica depois dos hooks e o JSX do desktop segue lá', () => {
