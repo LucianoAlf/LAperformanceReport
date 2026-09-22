@@ -228,11 +228,15 @@ test('os dois trilhos não repetem a MESMA palavra', () => {
   assert.match(tela, /Todas as fontes/);
 });
 
-test('a aba entrou na lista de portadas — e só ela', () => {
+test('a aba entrou na lista de portadas, e as não adaptadas seguem com a faixa', () => {
   assert.equal(abaFoiPortada('/app/alunos', 'historico'), true);
-  assert.equal(abaFoiPortada('/app/alunos', 'turmas'), false);
-  assert.equal(abaFoiPortada('/app/alunos', 'conciliacao'), false);
-  assert.deepEqual([...ABAS_PORTADAS['/app/alunos']].sort(), ['historico', 'lista']);
+  // ⚠️ Aqui NÃO se congela a lista inteira: cada aba portada quebraria o teste
+  // da anterior, e vermelho de rotina é assert que ninguém mais lê. O que se
+  // trava é o par — esta entrou, e quem ainda não foi adaptada continua fora.
+  for (const pendente of ['grade', 'distribuicao', 'automacao', 'conciliacao', 'importar']) {
+    assert.equal(abaFoiPortada('/app/alunos', pendente), false, `${pendente} entrou sem ter sido portada`);
+  }
+  assert.ok(ABAS_PORTADAS['/app/alunos'].includes('lista'), 'a Lista saiu das portadas');
 });
 
 test('⚠️ a bifurcação fica DEPOIS dos hooks', () => {
