@@ -3,7 +3,7 @@ import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
-import { normalizarContatos, type ComunidadeWaContato, type ComunidadeWaDeQuem } from '@/lib/comunidadeWaContato';
+import { type ComunidadeWaNomeCadastrado, normalizarContatos, normalizarNomesCadastrados, type ComunidadeWaContato, type ComunidadeWaDeQuem } from '@/lib/comunidadeWaContato';
 import { format } from 'date-fns';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import { ptBR } from 'date-fns/locale';
@@ -152,7 +152,7 @@ export interface Aluno {
   // Comunidade WhatsApp (LAPE-33) — leitura de vw_aluno_comunidade_wa_v1,
   // captura diaria (cron 190, 07h BRT). Busca em TODOS os grupos ativos, nao
   // so o da propria unidade — grupo_mesma_unidade=false sinaliza esse caso.
-  comunidade_wa_estado?: 'na_comunidade' | 'fora_da_comunidade' | 'sem_captura' | 'captura_desatualizada' | 'sem_grupo_configurado' | null;
+  comunidade_wa_estado?: 'na_comunidade' | 'fora_da_comunidade' | 'sem_telefone_cadastrado' | 'sem_captura' | 'captura_desatualizada' | 'sem_grupo_configurado' | null;
   comunidade_wa_grupo_nome?: string | null;
   comunidade_wa_mesma_unidade?: boolean | null;
   comunidade_wa_capturado_em?: string | null;
@@ -163,6 +163,8 @@ export interface Aluno {
   comunidade_wa_contato_de_quem?: ComunidadeWaDeQuem | null;
   comunidade_wa_contato_nome?: string | null;
   comunidade_wa_contato_parentesco?: string | null;
+  // TODOS os cadastros daquele numero (o proprio aluno E o responsavel, tipicamente).
+  comunidade_wa_contato_nomes?: ComunidadeWaNomeCadastrado[] | null;
   comunidade_wa_contatos_total?: number | null;
   comunidade_wa_contatos?: ComunidadeWaContato[];
 }
@@ -197,8 +199,12 @@ export interface KPIsAlunos {
   mediaAlunosTurma: number | null;
   mediaAlunosTurmaNumerador: number;
   mediaAlunosTurmaDenominador: number;
-  turmasUmAluno: number;
-  turmasUmAlunoPercentual: number;
+  // null = a fonte canonica nao respondeu. NAO pode ser 0: o card SOZINHOS e' de ALERTA,
+  // entao 0 e' justamente o valor tranquilizador -- ele apagaria o alarme afirmando que
+  // nao ha turma sozinha, na mesma tela em que a aba conta 700. Mesma regua de
+  // mediaAlunosTurma, que ja dizia "Indisponivel" sobre a MESMA resposta que falhou.
+  turmasUmAluno: number | null;
+  turmasUmAlunoPercentual: number | null;
   ticketMedio: number;
   ltvMedio: number;
   totalTurmas: number;
@@ -394,8 +400,8 @@ export function AlunosPage() {
     mediaAlunosTurma: null,
     mediaAlunosTurmaNumerador: 0,
     mediaAlunosTurmaDenominador: 0,
-    turmasUmAluno: 0,
-    turmasUmAlunoPercentual: 0,
+    turmasUmAluno: null,
+    turmasUmAlunoPercentual: null,
     ticketMedio: 0,
     ltvMedio: 0,
     totalTurmas: 0,
@@ -813,7 +819,7 @@ export function AlunosPage() {
     // ordenacao estavel, paginar por range pode repetir e pular linha.
     const buildComunidadeWaQuery = () => {
       let q = supabase.from('vw_aluno_comunidade_wa_v1')
-        .select('aluno_id, estado, grupo_nome, grupo_mesma_unidade, capturado_em, contato_telefone, contato_de_quem, contato_nome, contato_parentesco, contatos_no_grupo_total, contatos_no_grupo')
+        .select('aluno_id, estado, grupo_nome, grupo_mesma_unidade, capturado_em, contato_telefone, contato_de_quem, contato_nome, contato_parentesco, contato_nomes, contatos_no_grupo_total, contatos_no_grupo')
         .order('aluno_id');
       if (unidadeAtual && unidadeAtual !== 'todos') q = q.eq('unidade_id', unidadeAtual);
       return q;
@@ -966,7 +972,7 @@ export function AlunosPage() {
       });
 
       // Mapa de comunidade WhatsApp (LAPE-33) — 1 linha por aluno_id na view
-      const comunidadeWaMap = new Map<number, { estado: string; grupo_nome: string | null; grupo_mesma_unidade: boolean | null; capturado_em: string | null; contato_telefone: string | null; contato_de_quem: string | null; contato_nome: string | null; contato_parentesco: string | null; contatos_no_grupo_total: number | null; contatos_no_grupo: unknown }>();
+      const comunidadeWaMap = new Map<number, { estado: string; grupo_nome: string | null; grupo_mesma_unidade: boolean | null; capturado_em: string | null; contato_telefone: string | null; contato_de_quem: string | null; contato_nome: string | null; contato_parentesco: string | null; contato_nomes: unknown; contatos_no_grupo_total: number | null; contatos_no_grupo: unknown }>();
       (comunidadeWaR as any)?.data?.forEach((c: any) => {
         comunidadeWaMap.set(c.aluno_id, {
           estado: c.estado,
@@ -977,6 +983,7 @@ export function AlunosPage() {
           contato_de_quem: c.contato_de_quem,
           contato_nome: c.contato_nome,
           contato_parentesco: c.contato_parentesco,
+          contato_nomes: c.contato_nomes,
           contatos_no_grupo_total: c.contatos_no_grupo_total,
           contatos_no_grupo: c.contatos_no_grupo,
         });
@@ -1009,6 +1016,7 @@ export function AlunosPage() {
           comunidade_wa_contato_de_quem: (comunidadeWaMap.get(a.id)?.contato_de_quem as ComunidadeWaDeQuem | null) ?? null,
           comunidade_wa_contato_nome: comunidadeWaMap.get(a.id)?.contato_nome ?? null,
           comunidade_wa_contato_parentesco: comunidadeWaMap.get(a.id)?.contato_parentesco ?? null,
+          comunidade_wa_contato_nomes: normalizarNomesCadastrados(comunidadeWaMap.get(a.id)?.contato_nomes),
           comunidade_wa_contatos_total: comunidadeWaMap.get(a.id)?.contatos_no_grupo_total ?? null,
           comunidade_wa_contatos: normalizarContatos(comunidadeWaMap.get(a.id)?.contatos_no_grupo),
         };
@@ -1239,8 +1247,8 @@ export function AlunosPage() {
           : Math.round(mediaAlunosTurma * 100) / 100,
         mediaAlunosTurmaNumerador: totaisKpisTurmas?.totalOcupacoes ?? 0,
         mediaAlunosTurmaDenominador: totaisKpisTurmas?.totalTurmas ?? 0,
-        turmasUmAluno: totaisKpisTurmas?.totalTurmasUmAluno ?? 0,
-        turmasUmAlunoPercentual: totaisKpisTurmas?.percentualTurmasUmAluno ?? 0,
+        turmasUmAluno: totaisKpisTurmas?.totalTurmasUmAluno ?? null,
+        turmasUmAlunoPercentual: totaisKpisTurmas?.percentualTurmasUmAluno ?? null,
         ticketMedio: Math.round(ticketMedioCanonico || ticketMedio),
         ltvMedio: Math.round((tempoPermanenciaCanonico || ltvMedio) * 10) / 10,
         totalTurmas,
@@ -1558,8 +1566,11 @@ export function AlunosPage() {
       }
     }
 
-    // Comunidade WhatsApp (LAPE-33) — sem_captura/desatualizada/sem_grupo contam
-    // como "fora", nunca como "dentro" (nao sei != esta dentro).
+    // Comunidade WhatsApp (LAPE-33) — os "nao sei" (sem_captura, desatualizada,
+    // sem_grupo e sem_telefone_cadastrado) contam como "fora" AQUI, nunca como
+    // "dentro": o filtro e de acao -- serve para achar quem precisa ser olhado --,
+    // e "nao sei" != "esta dentro". A COLUNA, essa, nao pode afirmar "Fora" para
+    // eles; quem faz essa distincao e explicarEstadoComunidade().
     if (filtros.comunidade_wa === 'dentro') {
       resultado = resultado.filter(a => a.comunidade_wa_estado === 'na_comunidade');
     }
@@ -2208,18 +2219,20 @@ export function AlunosPage() {
           variant="green"
           onClick={() => setModalPermanenciaOpen(true)}
         />
-        <div className={`bg-red-900/30 border border-red-500/50 rounded-xl p-4 ${kpis.turmasUmAluno > 0 ? 'animate-pulse' : ''}`}>
+        <div className={`bg-red-900/30 border border-red-500/50 rounded-xl p-4 ${(kpis.turmasUmAluno ?? 0) > 0 ? 'animate-pulse' : ''}`}>
           <div className="flex items-center justify-between mb-2">
             <span className="text-red-400 text-xs font-medium uppercase">Sozinhos</span>
             <div className="w-8 h-8 bg-red-500/20 rounded-lg flex items-center justify-center">
               <AlertTriangle className="w-4 h-4 text-red-400" />
             </div>
           </div>
-          <p className="text-3xl font-bold text-red-400">{kpis.turmasUmAluno}</p>
+          <p className="text-3xl font-bold text-red-400">{kpis.turmasUmAluno ?? '—'}</p>
           <p className="text-xs text-red-300 mt-1">
-            {kpis.mediaAlunosTurmaDenominador > 0
-              ? `${kpis.turmasUmAlunoPercentual.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% das turmas com 1 aluno`
-              : 'turmas com 1 aluno'
+            {kpis.turmasUmAluno === null
+              ? 'fonte canonica indisponivel'
+              : kpis.turmasUmAlunoPercentual !== null && kpis.mediaAlunosTurmaDenominador > 0
+                ? `${kpis.turmasUmAlunoPercentual.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% das turmas com 1 aluno`
+                : 'turmas com 1 aluno'
             }
           </p>
         </div>

@@ -9,7 +9,7 @@ import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/contexts/AuthContext';
 import { getStatusPagamentoOperacional, isMatriculaAtivaParaInadimplencia } from '@/lib/alunosStatus';
-import { rotuloDeQuem, rotuloDeQuemCurto, nomeDoContato } from '@/lib/comunidadeWaContato';
+import { rotuloDeQuem, rotuloDeQuemCurto, nomeDoContato, explicarEstadoComunidade, rotuloEstadoComunidade } from '@/lib/comunidadeWaContato';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 import { useToast } from '@/hooks/useToast';
@@ -1454,7 +1454,11 @@ export function TabelaAlunos({
       const linhas = [
         grupo ? `${grupo}${outraUnidade ? ' (outra unidade)' : ''}` : 'Na comunidade',
         telefone ? `${telefone} — ${rotuloDeQuem(deQuem)}` : null,
-        nomeDoContato({ nome: aluno.comunidade_wa_contato_nome ?? null, parentesco: aluno.comunidade_wa_contato_parentesco ?? null }),
+        nomeDoContato({
+          nome: aluno.comunidade_wa_contato_nome ?? null,
+          parentesco: aluno.comunidade_wa_contato_parentesco ?? null,
+          nomes: aluno.comunidade_wa_contato_nomes ?? null,
+        }),
         outros > 0 ? `+${outros} contato${outros > 1 ? 's' : ''} desta pessoa no grupo` : null,
       ].filter(Boolean).join('\n');
       return (
@@ -1473,7 +1477,25 @@ export function TabelaAlunos({
       );
     }
     if (estado === 'fora_da_comunidade') {
-      return <span className="bg-slate-600/20 text-slate-400 px-2 py-1 rounded text-xs font-medium">Fora</span>;
+      // Rotulo por extenso, da fonte unica: "Fora" sozinho, ao lado de status e contrato,
+      // e lido como "fora da escola".
+      return (
+        <span className="bg-slate-600/20 text-slate-400 px-2 py-1 rounded text-xs font-medium whitespace-nowrap">
+          {rotuloEstadoComunidade(estado)}
+        </span>
+      );
+    }
+    // Sem telefone NAO e "fora": nao ha numero para procurar. Ambar porque e
+    // acionavel (cadastrar o contato), diferente do cinza de quem foi verificado.
+    if (estado === 'sem_telefone_cadastrado') {
+      const exp = explicarEstadoComunidade(estado);
+      return (
+        <Tooltip content={exp?.motivo ?? ''}>
+          <span className="bg-amber-500/20 text-amber-400 px-2 py-1 rounded text-xs font-medium">
+            {exp?.rotulo ?? 'Sem telefone'}
+          </span>
+        </Tooltip>
+      );
     }
     // sem_captura / captura_desatualizada / sem_grupo_configurado / null
     return (
@@ -1837,7 +1859,7 @@ export function TabelaAlunos({
               <SelectContent>
                 <SelectItem value="todos">Comunidade</SelectItem>
                 <SelectItem value="dentro">Na comunidade</SelectItem>
-                <SelectItem value="fora">Fora</SelectItem>
+                <SelectItem value="fora">Fora da comunidade</SelectItem>
               </SelectContent>
             </Select>
 
