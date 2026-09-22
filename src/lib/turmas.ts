@@ -30,6 +30,19 @@ export const DIAS_SEMANA_TURMAS = [
   { valor: 'Sábado', nome: 'Sábado', curto: 'Sáb' },
 ] as const;
 
+/**
+ * O dia de hoje no vocabulario da grade ("Segunda", "Terca"...).
+ *
+ * ⚠️ Domingo nao existe na grade da escola, entao ele devolve `''` — que a
+ * tela le como "semana toda". Devolver "Domingo" daria uma lista vazia sem
+ * dizer por que.
+ */
+export function diaDeHojeNaGrade(agora: Date = new Date()): string {
+  const indice = agora.getDay(); // 0 = domingo
+  if (indice === 0) return '';
+  return DIAS_SEMANA_TURMAS[indice - 1]?.valor ?? '';
+}
+
 export type OcupacaoFiltro = '' | '0' | '1' | '2' | '3+';
 
 export interface FiltroTurmas {
@@ -72,26 +85,79 @@ export function agruparTurmasPorDia<T extends TurmaParaLista>(
   return agrupado;
 }
 
+/**
+ * A identidade de uma turma.
+ *
+ * 🔴 Medido em 22/09, nas 895 turmas implicitas: (professor, dia, horario)
+ * COLIDE em 7 casos — o mesmo professor, no mesmo horario, com dois cursos:
+ * Piano x Teclado (Kaio, sabado 11h), Guitarra x Violao (Lucas, sabado 10h),
+ * Musicalizacao Infantil x Preparatoria (Ana Beatriz, sexta 19h). Nao e
+ * defeito de cadastro: sao aulas distintas que acontecem juntas.
+ *
+ * Com o CURSO junto, as colisoes vao a zero. A unidade tambem entra, porque o
+ * Consolidado poe as tres na mesma lista.
+ *
+ * ⚠️ Nao usar o indice da lista como identidade (e o que a tela do computador
+ * faz na `key`): indice identifica a POSICAO, entao ele se conserva ao trocar
+ * de filtro e passa a apontar para outra turma.
+ */
+export function chaveDaTurma(turma: {
+  turma_explicita_id?: number;
+  id?: number;
+  unidade_id?: string;
+  professor_id: number;
+  curso_id?: number;
+  curso_nome?: string;
+  dia_semana: string;
+  horario_inicio: string;
+}): string {
+  if (turma.turma_explicita_id) return `exp:${turma.turma_explicita_id}`;
+  // `curso_id` pode faltar em turma implicita antiga; o nome sustenta a
+  // distincao nesse caso, e voltar a colidir seria pior que uma chave longa.
+  const curso = turma.curso_id ?? turma.curso_nome ?? '?';
+  return [
+    'imp',
+    turma.unidade_id ?? '?',
+    turma.professor_id,
+    curso,
+    turma.dia_semana,
+    turma.horario_inicio,
+  ].join('|');
+}
+
 export type NivelOcupacao = 'vazia' | 'sozinho' | 'dupla' | 'cheia' | 'ok';
 
 /**
  * Quão cheia está a turma.
  *
- * `sozinho` é o nível que importa: é o mesmo caso que o KPI SOZINHOS da
- * própria página conta, e o que a coordenação usa para remanejar. Por isso ele
- * é alerta, não informação.
+ * 🔴 `sozinho` NÃO é alerta, ao contrário do que o nome sugere. Medido em
+ * 22/09 nas 895 turmas: **745 (83,2%) têm um aluno só** — na LA quase toda
+ * disciplina é contratada como turma e roda individual. Quem pinta 83% da
+ * lista de vermelho não está avisando nada; está escolhendo uma cor de fundo.
+ * O nível existe para o FILTRO ("Sozinhas"), e quem decide se merece cor é a
+ * tela.
+ *
+ * ⚠️ Capacidade desconhecida (630 das 895 turmas, 70%) nunca vira `cheia`:
+ * `3 >= null` é `true` em JavaScript, e era isso que fazia a tela do
+ * computador escrever "3/null ✓" numa turma cuja lotação ninguém declarou.
  */
-export function nivelOcupacaoTurma(totalAlunos: number, capacidade = 4): NivelOcupacao {
+export function nivelOcupacaoTurma(totalAlunos: number, capacidade?: number | null): NivelOcupacao {
   if (totalAlunos === 0) return 'vazia';
   if (totalAlunos === 1) return 'sozinho';
   if (totalAlunos === 2) return 'dupla';
-  if (totalAlunos >= capacidade) return 'cheia';
+  if (capacidade != null && totalAlunos >= capacidade) return 'cheia';
   return 'ok';
 }
 
-/** "3/4 alunos" — o texto que acompanha o nível. */
-export function textoOcupacaoTurma(totalAlunos: number, capacidade = 4): string {
+/**
+ * "3/4 alunos" — ou "3 alunos", quando a lotação não foi declarada.
+ *
+ * ⚠️ Sem capacidade não se inventa denominador: dizer "3/4" onde ninguém
+ * declarou 4 afirma uma lotação que o cadastro não tem.
+ */
+export function textoOcupacaoTurma(totalAlunos: number, capacidade?: number | null): string {
   const unidade = totalAlunos === 1 ? 'aluno' : 'alunos';
+  if (capacidade == null) return `${totalAlunos} ${unidade}`;
   return `${totalAlunos}/${capacidade} ${unidade}`;
 }
 

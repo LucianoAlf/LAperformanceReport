@@ -13,8 +13,8 @@ import type { Turma } from '@/components/App/Alunos/AlunosPage';
 /**
  * Uma turma na lista do celular.
  *
- *   14:00  Violão · G. Ribeiro              1/4
- *          Sala 2                        sozinho
+ *   14:00  Violão                            1/4
+ *          G. Ribeiro · Sala 2
  *
  * O horário vira âncora à esquerda porque a lista é lida em ordem de
  * horário — é por ele que se procura "o que tem depois do almoço".
@@ -24,14 +24,27 @@ import type { Turma } from '@/components/App/Alunos/AlunosPage';
  * depois dele — aqui, a sala, que é justamente para onde a pessoa vai.
  */
 
+/**
+ * 🔴 A cor marca EXCEÇÃO, e "um aluno" não é exceção aqui.
+ *
+ * A primeira versão desta tela pintava `sozinho` de vermelho, como a tela do
+ * computador faz. Medido a 390px: **105 das 160 linhas do dia** acendiam —
+ * e, na base inteira, 745 de 895 turmas (83,2%) têm um aluno só, porque na LA
+ * quase toda disciplina é contratada como turma e roda individual.
+ *
+ * Alerta que acende em 83% das linhas não avisa nada: vira o fundo da tela.
+ * É a mesma lição que a Agenda pagou em 21/09 com o `opacity-50` no passado e
+ * com a barra cinza em toda linha normal.
+ *
+ * Sobra como exceção a turma SEM NENHUM aluno — vínculo faltando, não lotação
+ * baixa. Quem procura ocupação baixa usa o filtro "Sozinhas", que continua ali.
+ */
 const TOM: Record<NivelOcupacao, { texto: string; marca: string }> = {
-  // Sozinho é o caso que a coordenação remaneja — o mesmo que o KPI SOZINHOS
-  // conta. Por isso é o único em vermelho.
-  sozinho: { texto: 'text-red-400', marca: 'border-l-red-500/70' },
-  vazia: { texto: 'text-slate-500', marca: 'border-l-slate-600' },
-  dupla: { texto: 'text-amber-400', marca: 'border-l-amber-500/60' },
-  cheia: { texto: 'text-emerald-400', marca: 'border-l-emerald-500/60' },
-  ok: { texto: 'text-emerald-400', marca: 'border-l-emerald-500/60' },
+  vazia: { texto: 'text-amber-400', marca: 'border-l-amber-500/70' },
+  sozinho: { texto: 'text-slate-300', marca: 'border-l-transparent' },
+  dupla: { texto: 'text-slate-300', marca: 'border-l-transparent' },
+  cheia: { texto: 'text-slate-300', marca: 'border-l-transparent' },
+  ok: { texto: 'text-slate-300', marca: 'border-l-transparent' },
 };
 
 interface Props {
@@ -42,8 +55,13 @@ interface Props {
 export function LinhaTurma({ turma, onAbrir }: Props) {
   const nivel = nivelOcupacaoTurma(turma.total_alunos, turma.capacidade_maxima);
   const tom = TOM[nivel];
-  const quem = [turma.curso_nome, abreviarNome(turma.professor_nome)].filter(Boolean).join(' · ');
-  const onde = turma.sala_nome || 'sem sala';
+  // 🔴 Medido a 390px: com "Curso · Professor" numa linha so, 106 das 895
+  // linhas truncavam — "Musicalizacao Preparatoria · Leticia" e cortado no
+  // meio do nome. Sobram ~250px depois do horario, da ocupacao e da seta, e
+  // um nome de curso longo ja os ocupa sozinho. Entao o curso fica com a
+  // primeira linha inteira, e professor e sala dividem a segunda.
+  const quem = turma.curso_nome || 'sem curso';
+  const onde = [abreviarNome(turma.professor_nome), turma.sala_nome || 'sem sala'].filter(Boolean).join(' · ');
 
   return (
     <button
@@ -64,6 +82,10 @@ export function LinhaTurma({ turma, onAbrir }: Props) {
         <p className="truncate text-[11px] leading-tight text-slate-500">{onde}</p>
       </div>
 
+      {/* Só o número; a palavra "aluno(a)s" não cabe e o cabeçalho da lista já
+          diz do que se trata. Sem capacidade declarada (630 das 895 turmas), o
+          texto vem sem denominador — inventar "/4" afirmaria uma lotação que
+          ninguém cadastrou. */}
       <span className={cn('flex-none text-[12px] font-semibold tabular-nums', tom.texto)}>
         {textoOcupacaoTurma(turma.total_alunos, turma.capacidade_maxima).split(' ')[0]}
       </span>

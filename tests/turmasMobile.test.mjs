@@ -5,6 +5,8 @@ import { readFileSync } from 'node:fs';
 import {
   DIAS_SEMANA_TURMAS,
   agruparTurmasPorDia,
+  chaveDaTurma,
+  diaDeHojeNaGrade,
   filtrarTurmas,
   formatarHorarioTurma,
   nivelOcupacaoTurma,
@@ -84,17 +86,49 @@ test('agrupar não altera o array de quem chamou', () => {
   assert.deepEqual(base.map((t) => t.horario_inicio), antes);
 });
 
-test('🔴 um aluno só é ALERTA — é o que o indicador SOZINHOS conta', () => {
+test('os níveis de ocupação', () => {
   assert.equal(nivelOcupacaoTurma(0), 'vazia');
   assert.equal(nivelOcupacaoTurma(1), 'sozinho');
   assert.equal(nivelOcupacaoTurma(2), 'dupla');
   assert.equal(nivelOcupacaoTurma(3), 'ok');
-  assert.equal(nivelOcupacaoTurma(4), 'cheia');
-  assert.equal(nivelOcupacaoTurma(5), 'cheia');
+  assert.equal(nivelOcupacaoTurma(4, 4), 'cheia');
+  assert.equal(nivelOcupacaoTurma(5, 4), 'cheia');
+  // Sem capacidade declarada NÃO existe "cheia": quem quer o padrão da casa
+  // passa o 4 explicitamente, como o desktop faz (`capacidade_maxima || 4`).
+  assert.equal(nivelOcupacaoTurma(4), 'ok');
   // Capacidade diferente move o "cheia", não o "sozinho".
   assert.equal(nivelOcupacaoTurma(2, 2), 'dupla');
   assert.equal(nivelOcupacaoTurma(6, 6), 'cheia');
   assert.equal(nivelOcupacaoTurma(1, 8), 'sozinho');
+});
+
+test('🔴 capacidade desconhecida NUNCA vira "cheia" — `3 >= null` é true', () => {
+  // 630 das 895 turmas (70%) não têm capacidade cadastrada. Sem esta guarda,
+  // a comparação com null é verdadeira e a turma sai como lotada.
+  assert.equal(nivelOcupacaoTurma(3, null), 'ok');
+  assert.equal(nivelOcupacaoTurma(9, undefined), 'ok');
+  assert.equal(nivelOcupacaoTurma(0, null), 'vazia');
+  assert.equal(nivelOcupacaoTurma(1, null), 'sozinho');
+});
+
+test('🔴 sem capacidade não se inventa denominador', () => {
+  // "1/4" onde ninguém declarou 4 afirma uma lotação que o cadastro não tem —
+  // e era o "1/null" que a tela mostrava antes.
+  assert.equal(textoOcupacaoTurma(1, null), '1 aluno');
+  assert.equal(textoOcupacaoTurma(3, undefined), '3 alunos');
+  assert.doesNotMatch(textoOcupacaoTurma(1, null), /null|\//);
+});
+
+test('🔴 a cor da linha NÃO marca "um aluno" — são 83% da base', () => {
+  // Medido: 745 de 895 turmas têm um aluno só, e 105 das 160 linhas do dia
+  // acendiam. Alerta que acende na maioria vira fundo.
+  const bloco = linha.slice(linha.indexOf('const TOM'), linha.indexOf('interface Props'));
+  const sozinho = /sozinho:\s*\{[^}]*\}/.exec(bloco)?.[0] ?? '';
+  assert.ok(sozinho, 'o mapa de tons sumiu');
+  assert.doesNotMatch(sozinho, /red|rose|amber/, 'a linha de um aluno voltou a acender');
+  // Sobra como exceção quem não tem NENHUM aluno: vínculo faltando.
+  const vazia = /vazia:\s*\{[^}]*\}/.exec(bloco)?.[0] ?? '';
+  assert.match(vazia, /amber|red|rose/, 'turma sem aluno deixou de ser exceção');
 });
 
 test('o texto da ocupação concorda com o número', () => {
@@ -108,6 +142,87 @@ test('o horário perde os segundos', () => {
   assert.equal(formatarHorarioTurma('08:30'), '08:30');
   assert.equal(formatarHorarioTurma(null), '');
   assert.equal(formatarHorarioTurma('manhã'), 'manhã');
+});
+
+test('🔴 (professor, dia, horário) NÃO identifica uma turma — o curso separa', () => {
+  // Casos REAIS, medidos em 22/09 nas 895 turmas implícitas: o mesmo
+  // professor, no mesmo horário, com dois cursos. Sem o curso na identidade,
+  // as duas viram a mesma turma — e a folha abre a errada.
+  const kaioPiano = turma({ professor_id: 91, curso_id: 7, curso_nome: 'Piano', dia_semana: 'Sábado', horario_inicio: '11:00:00', unidade_id: 'cg' });
+  const kaioTeclado = { ...kaioPiano, curso_id: 8, curso_nome: 'Teclado' };
+  assert.notEqual(chaveDaTurma(kaioPiano), chaveDaTurma(kaioTeclado));
+
+  const lucasGuitarra = turma({ professor_id: 12, curso_id: 3, curso_nome: 'Guitarra', dia_semana: 'Sábado', horario_inicio: '10:00:00', unidade_id: 'rec' });
+  const lucasViolao = { ...lucasGuitarra, curso_id: 4, curso_nome: 'Violão' };
+  assert.notEqual(chaveDaTurma(lucasGuitarra), chaveDaTurma(lucasViolao));
+
+  // A mesma turma, em dois instantes, continua sendo a mesma.
+  assert.equal(chaveDaTurma(kaioPiano), chaveDaTurma({ ...kaioPiano, total_alunos: 3 }));
+});
+
+test('a unidade entra na identidade — o Consolidado junta as três', () => {
+  const base = turma({ professor_id: 5, curso_id: 1, dia_semana: 'Terça', horario_inicio: '14:00:00' });
+  assert.notEqual(
+    chaveDaTurma({ ...base, unidade_id: 'cg' }),
+    chaveDaTurma({ ...base, unidade_id: 'barra' }),
+  );
+});
+
+test('turma explícita é identificada pelo id dela', () => {
+  const a = turma({ turma_explicita_id: 42, professor_id: 1, dia_semana: 'Terça', horario_inicio: '14:00:00' });
+  // O mesmo id manda, mesmo que o resto tenha sido editado.
+  assert.equal(chaveDaTurma(a), chaveDaTurma({ ...a, dia_semana: 'Quinta', horario_inicio: '09:00:00' }));
+  assert.notEqual(chaveDaTurma(a), chaveDaTurma({ ...a, turma_explicita_id: 43 }));
+});
+
+test('🔴 a tela não identifica turma pelo índice da lista', () => {
+  // Índice identifica POSIÇÃO: ele se conserva ao trocar de filtro e passa a
+  // apontar para outra turma. É o que a tela do computador usa na `key`.
+  assert.match(tela, /key=\{chaveDaTurma\(t\)\}/);
+  assert.doesNotMatch(tela, /key=\{[^}]*index[^}]*\}/);
+  // E a folha relê pela identidade, não pelo trio que colide.
+  assert.match(tela, /chaveDaTurma\(t\) === chaveNaFolha/);
+  assert.doesNotMatch(
+    semComentarios(tela),
+    /t\.professor_id === naFolha\.professor_id/,
+    'a folha voltou a procurar a turma pelo trio que colide',
+  );
+});
+
+test('o dia de hoje sai no vocabulário da grade', () => {
+  // Datas locais, sem fuso: a grade é lida pelo relógio de quem está na
+  // recepção. (2026-09-21 é uma segunda-feira.)
+  assert.equal(diaDeHojeNaGrade(new Date(2026, 8, 21)), 'Segunda');
+  assert.equal(diaDeHojeNaGrade(new Date(2026, 8, 22)), 'Terça');
+  assert.equal(diaDeHojeNaGrade(new Date(2026, 8, 26)), 'Sábado');
+});
+
+test('🔴 domingo devolve vazio — a grade não tem domingo', () => {
+  // Devolver "Domingo" daria uma lista vazia sem dizer por quê; vazio é lido
+  // pela tela como "semana toda".
+  assert.equal(diaDeHojeNaGrade(new Date(2026, 8, 20)), '');
+});
+
+test('a tela abre no dia de hoje e monta por lote', () => {
+  // 🔴 Medido a 390px com "semana toda" como padrão: 895 linhas montadas de
+  // uma vez, 55 telas de rolagem e 927 alvos.
+  assert.match(tela, /useState\(\(\) => diaDeHojeNaGrade\(\)\)/);
+  assert.match(tela, /const LOTE = \d+;/);
+  assert.match(tela, /IntersectionObserver/);
+  // O corte precisa atravessar os dias, senão cada dia montaria inteiro.
+  assert.match(tela, /restante -= Math\.min\(restante, doDia\.length\)/);
+});
+
+test('🔴 o curso fica sozinho na primeira linha', () => {
+  // Com "Curso · Professor" juntos, 106 das 895 linhas truncavam a 390px.
+  assert.match(linha, /const quem = turma\.curso_nome/);
+  assert.doesNotMatch(
+    semComentarios(linha),
+    /const quem = \[turma\.curso_nome, abreviarNome/,
+    'curso e professor voltaram para a mesma linha',
+  );
+  // E o professor desceu para a segunda linha, junto da sala.
+  assert.match(linha, /const onde = \[abreviarNome\(turma\.professor_nome\), turma\.sala_nome/);
 });
 
 // ------------------------------------------------------- contrato do código ----

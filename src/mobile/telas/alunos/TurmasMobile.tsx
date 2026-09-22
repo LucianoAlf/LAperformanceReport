@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { DoorOpen, Loader2, Plus, Search, Trash2, UserMinus, UserPlus, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -6,6 +6,8 @@ import { normalizarBusca } from '@/lib/agenda';
 import {
   DIAS_SEMANA_TURMAS,
   agruparTurmasPorDia,
+  chaveDaTurma,
+  diaDeHojeNaGrade,
   filtrarTurmas,
   formatarHorarioTurma,
   nivelOcupacaoTurma,
@@ -31,6 +33,9 @@ import { LinhaTurma } from './LinhaTurma';
  * ⚠️ Recorte, agrupamento e a régua de ocupação moram em `@/lib/turmas`; a
  * escrita da sala, em `@/lib/turmaSala`. Nada disso nasce aqui.
  */
+
+/** Quantas linhas montam de uma vez na visao de semana inteira. */
+const LOTE = 60;
 
 const OCUPACOES = [
   { id: '', label: 'Todas' },
@@ -61,9 +66,14 @@ export function TurmasMobile({
   onAdicionarAlunoTurma,
   onRemoverAlunoTurma,
 }: Props) {
-  const [dia, setDia] = useState('');
+  // 🔴 "Semana toda" como padrao renderizava as 895 turmas de uma vez: 55
+  // telas de rolagem e 927 alvos montados. O padrao passa a ser HOJE, que e a
+  // pergunta de quem abre esta aba no balcao; a semana inteira continua a um
+  // toque, e com lote.
+  const [dia, setDia] = useState(() => diaDeHojeNaGrade());
   const [ocupacao, setOcupacao] = useState<string>('');
   const [busca, setBusca] = useState('');
+  const [visiveis, setVisiveis] = useState(LOTE);
   const [naFolha, setNaFolha] = useState<Turma | null>(null);
 
   const porDia = useMemo(() => {
@@ -87,13 +97,44 @@ export function TurmasMobile({
     .flat()
     .filter((t) => nivelOcupacaoTurma(t.total_alunos, t.capacidade_maxima) === 'sozinho').length;
 
-  const turmaDaFolha = naFolha
-    ? turmas.find(
-        (t) =>
-          t.professor_id === naFolha.professor_id &&
-          t.dia_semana === naFolha.dia_semana &&
-          t.horario_inicio === naFolha.horario_inicio,
-      ) ?? naFolha
+  // O corte do lote atravessa os dias: sem isso, "semana toda" montaria as
+  // 895 linhas de uma vez (medido: 55 telas de rolagem, 927 alvos).
+  const blocos: Array<{ dia: (typeof DIAS_SEMANA_TURMAS)[number]; linhas: Turma[]; total: number }> = [];
+  let restante = visiveis;
+  for (const d of diasComConteudo) {
+    if (restante <= 0) break;
+    const doDia = porDia[d.valor];
+    blocos.push({ dia: d, linhas: doDia.slice(0, restante), total: doDia.length });
+    restante -= Math.min(restante, doDia.length);
+  }
+
+  // Voltar ao primeiro lote quando o conjunto muda.
+  useEffect(() => {
+    setVisiveis(LOTE);
+  }, [dia, ocupacao, busca]);
+
+  const sentinela = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const alvo = sentinela.current;
+    if (!alvo) return undefined;
+    const observador = new IntersectionObserver(
+      (entradas) => {
+        if (entradas.some((e) => e.isIntersecting)) {
+          setVisiveis((n) => (n >= total ? n : n + LOTE));
+        }
+      },
+      { rootMargin: '400px' },
+    );
+    observador.observe(alvo);
+    return () => observador.disconnect();
+  }, [total]);
+
+  // 🔴 Reler a turma pela IDENTIDADE, nunca por (professor, dia, horario):
+  // medido, esse trio colide em 7 casos reais (o mesmo professor com dois
+  // cursos no mesmo horario) e a folha abriria a outra turma.
+  const chaveNaFolha = naFolha ? chaveDaTurma(naFolha) : null;
+  const turmaDaFolha = chaveNaFolha
+    ? turmas.find((t) => chaveDaTurma(t) === chaveNaFolha) ?? naFolha
     : null;
 
   return (
@@ -157,25 +198,32 @@ export function TurmasMobile({
       <p className="px-1 text-[11px] text-slate-500">
         {total === 0 ? 'Nenhuma turma neste recorte' : `${total} ${total === 1 ? 'turma' : 'turmas'}`}
         {sozinhas > 0 && (
-          <span className="text-red-400"> · {sozinhas} com um aluno só</span>
+          // Em cinza, não em vermelho: 83% da base tem um aluno só. O número
+          // ajuda a dimensionar o recorte; ele não é um aviso.
+          <span className="text-slate-600"> · {sozinhas} com um aluno</span>
         )}
       </p>
 
-      {diasComConteudo.map((d) => (
+      {blocos.map(({ dia: d, linhas, total: totalDoDia }) => (
         <section key={d.valor}>
           {/* O cabeçalho do dia gruda no topo: numa lista da semana inteira,
               rolar sem ele faz perder de vista em que dia se está. */}
           <h3 className="sticky top-0 z-10 -mx-3 bg-slate-950/95 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 backdrop-blur before:absolute before:inset-x-0 before:bottom-full before:h-3 before:bg-slate-950/95">
             {d.nome}
             <span className="ml-1.5 font-normal normal-case text-slate-600">
-              {porDia[d.valor].length} {porDia[d.valor].length === 1 ? 'turma' : 'turmas'}
+              {totalDoDia} {totalDoDia === 1 ? 'turma' : 'turmas'}
             </span>
           </h3>
-          {porDia[d.valor].map((t) => (
-            <LinhaTurma key={`${t.professor_id}-${t.dia_semana}-${t.horario_inicio}`} turma={t} onAbrir={setNaFolha} />
+          {linhas.map((t) => (
+            <LinhaTurma key={chaveDaTurma(t)} turma={t} onAbrir={setNaFolha} />
           ))}
         </section>
       ))}
+
+      <div ref={sentinela} aria-hidden="true" className="h-1" />
+      {visiveis < total && (
+        <p className="py-2 text-center text-[11px] text-slate-600">carregando mais…</p>
+      )}
 
       {turmaDaFolha && (
         <FolhaTurma
