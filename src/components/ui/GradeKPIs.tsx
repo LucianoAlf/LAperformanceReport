@@ -43,6 +43,11 @@ export function GradeKPIs({ children, className, 'data-tour': dataTour }: GradeK
         aria-label="Indicadores"
         className={cn(
           'flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1',
+          // A barra de rolagem aqui e REDUNDANTE: o cartao a 63% ja deixa o
+          // vizinho aparecendo, e e ele quem diz que a faixa corre. Sobrava
+          // uma faixa cinza de 10px logo acima das abas — duas barras na mesma
+          // tela, nenhuma delas informando nada que o layout ja nao diga.
+          'scrollbar-hide',
           // `[&>*]:` alcança os cartões sem que cada tela precise saber disso.
           // 63% deixa o vizinho aparecendo ~1/3 — a affordance da faixa.
           '[&>*]:w-[63%] [&>*]:flex-none [&>*]:snap-start',

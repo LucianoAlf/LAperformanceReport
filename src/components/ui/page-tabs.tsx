@@ -94,9 +94,17 @@ export function PageTabs<T extends string = string>({
 
       {/* Mobile Tabs */}
       <div className="lg:hidden">
+        {/* ⚠️ O desvanecimento na borda direita e a pista de que o trilho rola —
+            ele substitui a barra de rolagem que `scrollbar-hide` agora esconde
+            de verdade. Sem ele o trilho pareceria completo e as abas alem da
+            dobra ficariam invisiveis: esconder a barra sem repor o sinal e pior
+            que a barra feia.
+            `mask-image` em vez de um gradiente sobreposto porque o trilho tem
+            fundo proprio e borda arredondada — uma camada por cima cobriria a
+            borda e brigaria com o `rounded-xl`. */}
         <div
           data-tour={dataTour}
-          className="relative flex bg-[#0f172a] p-1 rounded-xl border border-slate-800/50 shadow-inner overflow-x-auto scrollbar-hide"
+          className="relative flex bg-[#0f172a] p-1 rounded-xl border border-slate-800/50 shadow-inner overflow-x-auto scrollbar-hide [mask-image:linear-gradient(to_right,black_calc(100%-24px),transparent)]"
         >
           {tabs.filter(t => !t.disabled).map(tab => {
             const isActive = activeTab === tab.id;
@@ -106,7 +114,12 @@ export function PageTabs<T extends string = string>({
                 key={tab.id}
                 onClick={() => onTabChange(tab.id)}
                 className={cn(
-                  "relative z-10 flex-shrink-0 px-3 py-3 font-bold uppercase tracking-wider transition-all duration-300 whitespace-nowrap text-[10px]",
+                  // 10px com `uppercase` era o pior par possivel: o caixa alta
+                  // tira as ascendentes e descendentes que o olho usa para
+                  // reconhecer a palavra, justo no tamanho em que ela ja esta
+                  // no limite. 12px em caixa normal le melhor e ocupa menos.
+                  // `min-h-[44px]`: o alvo media 41px, abaixo do minimo tatil.
+                  "relative z-10 flex min-h-[44px] flex-shrink-0 items-center px-3 py-2 font-semibold transition-all duration-300 whitespace-nowrap text-[12px]",
                   isActive
                     ? "text-violet-400 bg-slate-800/80 rounded-lg border border-slate-700/30"
                     : "text-slate-500 hover:text-slate-200"

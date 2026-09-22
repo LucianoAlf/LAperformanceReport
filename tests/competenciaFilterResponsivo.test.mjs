@@ -242,10 +242,18 @@ test('a faixa de KPIs deixa de empilhar no celular — medido, nao estimado', ()
   // O vizinho cortado e' a affordance: faixa que termina na borda parece
   // completa, e ai a rolagem vira informacao escondida.
   assert.match(grade, /\[&>\*\]:w-\[63%\]/);
-  // ⚠️ `scrollbar-hide` aparece em 2 telas deste repo e NAO esta definida em
-  // lugar nenhum (plugin que o projeto nao tem — Tailwind roda pelo Play CDN,
-  // sem config). Copia-la aqui seria fingir um no-op.
-  assert.doesNotMatch(grade, /scrollbar-hide/);
+  // 🔴 A PREMISSA DESTE ASSERT SE INVERTEU EM 22/09.
+  // Ele nasceu certo: `scrollbar-hide` era usada em 2 telas e NAO estava
+  // definida em lugar nenhum, entao aplica-la aqui seria fingir um no-op — e o
+  // assert proibia justamente isso. Mas a conclusao parou um passo antes:
+  // ninguem DEFINIU a classe, e o buraco ficou congelado por um teste.
+  // O custo apareceu a 390px: barra cinza de 10px na faixa de KPIs e de 12px
+  // no trilho de abas, em 14 telas. Hoje `.scrollbar-hide` existe em
+  // `src/index.css` e a classe faz o que promete.
+  assert.match(grade, /scrollbar-hide/, 'a faixa voltou a exibir a barra de rolagem');
+  // ⚠️ Esconder a barra so vale porque a affordance esta no LAYOUT: o cartao a
+  // 63% deixa o vizinho aparecendo. Sem isso, seria esconder a informacao.
+  assert.match(grade, /\[&>\*\]:w-\[63%\]/);
   // No desktop nada muda: a grade recebida pela tela e' usada como esta.
   assert.match(grade, /<section data-tour=\{dataTour\} className=\{className\}>/);
 });

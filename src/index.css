@@ -26,6 +26,23 @@
   background: rgb(51 65 85);
 }
 
+/* 🔴 `scrollbar-hide` era USADA em 2 lugares e NUNCA foi definida — uma
+   promessa vazia. No computador a barra nativa e discreta e ninguem percebeu;
+   a 390px ela vira uma faixa cinza de 12px sob o trilho de abas, em 14 telas.
+
+   ⚠️ Esconder a barra so e aceitavel com OUTRA pista de que ha conteudo alem
+   da dobra (no trilho de abas, o desvanecimento na borda direita). Barra
+   escondida sem substituto e pior que barra feia: o trilho passa a parecer
+   completo e as abas seguintes viram invisiveis. */
+.scrollbar-hide {
+  scrollbar-width: none;          /* Firefox */
+  -ms-overflow-style: none;       /* Edge legado */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;                  /* WebKit: Chrome, Safari, iOS */
+}
+
 /* Estilos customizados para react-day-picker v9 - Dark Mode Premium */
 .rdp-custom {
   /* Cores principais */
