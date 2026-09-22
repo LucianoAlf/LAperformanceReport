@@ -3231,7 +3231,7 @@ function categoriaEhSaida(categoria) {
   return ['seguranca', 'despesa', 'retirada', 'troco'].includes(String(categoria || '').toLowerCase());
 }
 
-function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, finalizarPreviewV3Fn = finalizarPreviewV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, resolverEnvelopeFn = resolverEnvelopeCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, log = () => {}, governanceFn = () => Promise.resolve({ ok: false, disabled: true }), janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
+function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, finalizarPreviewV3Fn = finalizarPreviewV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, resolverEnvelopeFn = resolverEnvelopeCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, identificarAlunoNovoFn = identificarAlunoNovo, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, log = () => {}, governanceFn = () => Promise.resolve({ ok: false, disabled: true }), janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
   // SOL_CAIXA_V3_LEDGER_FAKE=1 (suite de testes): fiacao V3 ativa, banco intacto.
   // Sem isto, teste que nao mocka os registradores grava preview/approval REAL
   // no ledger de producao — 62% dos previews de 24-31/08 eram artefato de teste.
@@ -5618,7 +5618,7 @@ _Não lanço nada pela metade._`);
           // (7 dos 12 dos ultimos 30 dias nao estao em `alunos`); isto so devolve a
           // identificacao que faltava, sem criar trava nova.
           try {
-            const novo = await identificarAlunoNovo(grp.unidade_id, aluno);
+            const novo = await identificarAlunoNovoFn(grp.unidade_id, aluno);
             if (novo && novo.ok) {
               aluno = novo.nome || aluno;
               alunoNovoOrigem = (novo.origem !== 'aluno_matriculado') ? (novo.rotulo || novo.origem) : null;
@@ -5633,6 +5633,22 @@ _Não lanço nada pela metade._`);
           } catch (e) { log({ acao: 'aluno_novo_erro', chatId, erro: String(e && e.message) }); }
           if (!alunoConfirmado) confiancaBaixa = true;
         }
+      }
+      // Passaporte declarado pela equipe nao depende de fatura de mensalidade.
+      // A fonte canonica pode falhar apenas na janela de competencias futuras e,
+      // no retry, confirmar que nao existe uma fatura compativel. Se a identidade
+      // do aluno foi resolvida de forma unica e a categoria humana e exatamente
+      // passaporte, essa indisponibilidade lateral nao pode contaminar o preview
+      // nem fazer o `pode` recusar um lancamento que nunca exigiu fatura.
+      const passaporteDeclaradoSemFatura = categoriaExplicitaTaxa
+        && String(categoria || '').toLowerCase() === 'passaporte'
+        && alunoConfirmado && !confiancaBaixa && !candidatosAluno
+        && nomePlausivel(aluno) && Number(valor) > 0
+        && !canonica && !parcela;
+      if (passaporteDeclaradoSemFatura) {
+        canonicaIndisponivel = false;
+        bloqueiaFonteIndisponivel = false;
+        log({ acao: 'passaporte_declarado_independe_fatura', chatId });
       }
       // Aluno com dois cursos/parcelas no mesmo mes (caso Pedro 18/08):
       // se a legenda diz 08/2026 e o comprovante e a soma de Canto+Guitarra,
@@ -5821,7 +5837,7 @@ _Não lanço nada pela metade._`);
         log({ acao: 'evidence_resolver_shadow', trilho: 'legado_midia', chatId,
           divergencias: cmp.divergencias, conflitos: cmp.conflitos, ok: cmp.ok });
       }
-      let texto = montarPreview({ unidadeNome: grp.nome, valor, forma, categoria, aluno, competencia, parcela, confiancaBaixa, alunoNovoOrigem, responsavelFinanceiro, formaIncerta, cartaoModalidade, cartaoParcelas, multiplas, alunoViaPagador, pagadorNome, candidatosAluno, canonica, duplicata, quitacao, faturaIndisponivel: canonicaIndisponivel, composto, bloqueiaLancamento, itemLojinha: lojinhaInfo && lojinhaInfo.item, valorMaiorNaLegenda });
+      let texto = montarPreview({ unidadeNome: grp.nome, valor, forma, categoria, aluno, competencia, parcela, confiancaBaixa, alunoNovoOrigem, responsavelFinanceiro, formaIncerta, cartaoModalidade, cartaoParcelas, multiplas, alunoViaPagador, pagadorNome, candidatosAluno, canonica, duplicata, quitacao, faturaIndisponivel: canonicaIndisponivel || bloqueiaFonteIndisponivel, composto, bloqueiaLancamento, itemLojinha: lojinhaInfo && lojinhaInfo.item, valorMaiorNaLegenda });
       if (dryRun) texto += '\n\n_(modo teste — nada será gravado no caixa)_';
       const previewId = await sendFn(chatId, texto);
       const arr = limparVelhos(chatId, agora);
