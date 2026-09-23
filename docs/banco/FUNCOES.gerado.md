@@ -1021,8 +1021,8 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `app_falta_professor_cancelar_aulas(p_professor_id integer, p_data date, p_unidade_id uuid, p_motivo text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `app_historico_turma(p_turma_nome text, p_limite integer)` | SO-INTERNA | DEFINER | funcao:fabio_corrigir_registro_confirmado, funcao:fn_prontuario_aluno_interno |
 | `app_justificar_falta(p_aluno_presenca_id uuid, p_motivo text, p_evidencia_path text)` | ORFA | DEFINER | sem consumidor conhecido |
-| `app_marcar_presenca_professor_aula(p_aula_emusys_id integer, p_presente boolean)` | ATIVA | DEFINER | front:src/components/App/Agenda/Chamada/ProfessorPresencaToggle.tsx, funcao:app_aplicar_comando_presenca_v1 |
-| `app_marcar_presenca_professor_aula(p_aula_emusys_id integer, p_presente boolean, p_request_id uuid)` | ATIVA | DEFINER | front:src/components/App/Agenda/Chamada/ProfessorPresencaToggle.tsx, funcao:app_aplicar_comando_presenca_v1 |
+| `app_marcar_presenca_professor_aula(p_aula_emusys_id integer, p_presente boolean)` | ATIVA | DEFINER | front:src/hooks/useProfessorPresenca.ts, funcao:app_aplicar_comando_presenca_v1 |
+| `app_marcar_presenca_professor_aula(p_aula_emusys_id integer, p_presente boolean, p_request_id uuid)` | ATIVA | DEFINER | front:src/hooks/useProfessorPresenca.ts, funcao:app_aplicar_comando_presenca_v1 |
 | `app_onde_parou_da_agenda(p_data date)` | ORFA | DEFINER | sem consumidor conhecido |
 | `app_preparar_rascunho_manual(p_registro_id uuid, p_versao integer)` | ORFA | DEFINER | sem consumidor conhecido |
 | `app_professor_carteira_contagem(p_professor_id integer)` | ORFA | DEFINER | sem consumidor conhecido |
@@ -1034,8 +1034,8 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `app_registrar_chamada_agenda(p_itens jsonb)` | ATIVA | DEFINER | front:src/components/App/Agenda/Chamada/useChamadaAcoes.ts, funcao:app_aplicar_comando_presenca_v1, funcao:app_justificar_falta |
 | `app_registrar_chamada_agenda(p_itens jsonb, p_request_id uuid)` | ATIVA | DEFINER | front:src/components/App/Agenda/Chamada/useChamadaAcoes.ts, funcao:app_aplicar_comando_presenca_v1, funcao:app_justificar_falta |
 | `app_registrar_presenca_experimental(p_experimental_id integer, p_status text)` | ATIVA | DEFINER | front:src/components/App/Agenda/Chamada/useChamadaAcoes.ts |
-| `app_registrar_presenca_professor_dia(p_professor_id integer, p_data date, p_unidade_id uuid, p_hora_chegada time without time zone, p_hora_saida time without time zone)` | ATIVA | DEFINER | front:src/components/App/Agenda/Chamada/ChamadaDia.tsx, front:src/components/App/Agenda/Chamada/ProfessorPresencaToggle.tsx, funcao:app_aplicar_comando_presenca_v1 |
-| `app_registrar_presenca_professor_dia(p_professor_id integer, p_data date, p_unidade_id uuid, p_hora_chegada time without time zone, p_hora_saida time without time zone, p_request_id uuid)` | ATIVA | DEFINER | front:src/components/App/Agenda/Chamada/ChamadaDia.tsx, front:src/components/App/Agenda/Chamada/ProfessorPresencaToggle.tsx, funcao:app_aplicar_comando_presenca_v1 |
+| `app_registrar_presenca_professor_dia(p_professor_id integer, p_data date, p_unidade_id uuid, p_hora_chegada time without time zone, p_hora_saida time without time zone)` | ATIVA | DEFINER | front:src/components/App/Agenda/Chamada/ChamadaDia.tsx, front:src/hooks/useProfessorPresenca.ts, funcao:app_aplicar_comando_presenca_v1 |
+| `app_registrar_presenca_professor_dia(p_professor_id integer, p_data date, p_unidade_id uuid, p_hora_chegada time without time zone, p_hora_saida time without time zone, p_request_id uuid)` | ATIVA | DEFINER | front:src/components/App/Agenda/Chamada/ChamadaDia.tsx, front:src/hooks/useProfessorPresenca.ts, funcao:app_aplicar_comando_presenca_v1 |
 | `app_registrar_presencas_aula(p_aula_emusys_id integer, p_alunos_ausentes integer[])` | ORFA | DEFINER | sem consumidor conhecido |
 | `app_registrar_presencas_aula(p_aula_emusys_id integer, p_alunos_ausentes integer[], p_request_id uuid)` | ORFA | DEFINER | sem consumidor conhecido |
 | `app_registrar_presencas_aula_canonica_v2_interno(p_request_id uuid, p_aula_emusys_id integer, p_alunos_ausentes integer[])` | SO-INTERNA | DEFINER | funcao:app_registrar_presencas_aula |
@@ -1043,14 +1043,14 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `app_registro_completo(p_registro_id uuid)` | SO-INTERNA | DEFINER | funcao:app_abrir_rascunho_manual, funcao:app_preparar_rascunho_manual, funcao:app_registro_para_editar, funcao:app_salvar_rascunho_manual |
 | `app_registro_para_editar(p_registro_id uuid)` | ORFA | DEFINER | sem consumidor conhecido |
 | `app_registros_pendentes()` | SO-INTERNA | DEFINER | funcao:app_minha_home |
-| `app_remover_presenca_professor_dia(p_professor_id integer, p_data date, p_unidade_id uuid)` | ATIVA | DEFINER | front:src/components/App/Agenda/Chamada/ChamadaDia.tsx, front:src/components/App/Agenda/Chamada/ProfessorPresencaToggle.tsx, funcao:app_aplicar_comando_presenca_v1 |
-| `app_remover_presenca_professor_dia(p_professor_id integer, p_data date, p_unidade_id uuid, p_request_id uuid)` | ATIVA | DEFINER | front:src/components/App/Agenda/Chamada/ChamadaDia.tsx, front:src/components/App/Agenda/Chamada/ProfessorPresencaToggle.tsx, funcao:app_aplicar_comando_presenca_v1 |
+| `app_remover_presenca_professor_dia(p_professor_id integer, p_data date, p_unidade_id uuid)` | ATIVA | DEFINER | front:src/components/App/Agenda/Chamada/ChamadaDia.tsx, front:src/hooks/useProfessorPresenca.ts, funcao:app_aplicar_comando_presenca_v1 |
+| `app_remover_presenca_professor_dia(p_professor_id integer, p_data date, p_unidade_id uuid, p_request_id uuid)` | ATIVA | DEFINER | front:src/components/App/Agenda/Chamada/ChamadaDia.tsx, front:src/hooks/useProfessorPresenca.ts, funcao:app_aplicar_comando_presenca_v1 |
 | `app_reportar_audio_preso(p_presos integer, p_terminais integer, p_mais_antigo timestamp with time zone)` | ORFA | DEFINER | sem consumidor conhecido |
 | `app_responder_confirmacao_ponto(p_aula_emusys_id integer, p_estava_presente boolean)` | ORFA | DEFINER | sem consumidor conhecido |
 | `app_responder_presenca(p_registro_alvo_id uuid, p_presenca text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `app_salvar_rascunho_manual(p_registro_id uuid, p_versao integer, p_tronco_campos jsonb, p_fatias jsonb)` | ORFA | DEFINER | sem consumidor conhecido |
 | `app_status_audio_fila(p_audio_id uuid)` | ORFA | DEFINER | sem consumidor conhecido |
-| `app_status_comando_presenca_v1(p_request_id uuid)` | ATIVA | DEFINER | front:src/components/App/Agenda/Chamada/ChamadaDia.tsx, front:src/components/App/Agenda/Chamada/ProfessorPresencaToggle.tsx, front:src/components/App/Agenda/Chamada/useChamadaAcoes.ts, funcao:app_aplicar_comando_presenca_v1, funcao:app_aplicar_comando_presenca_v2, funcao:app_criar_comando_chamada_professor_v2, +6 outros |
+| `app_status_comando_presenca_v1(p_request_id uuid)` | ATIVA | DEFINER | front:src/components/App/Agenda/Chamada/ChamadaDia.tsx, front:src/components/App/Agenda/Chamada/useChamadaAcoes.ts, front:src/hooks/useProfessorPresenca.ts, funcao:app_aplicar_comando_presenca_v1, funcao:app_aplicar_comando_presenca_v2, funcao:app_criar_comando_chamada_professor_v2, +6 outros |
 | `app_status_emusys_do_registro(p_registro_id uuid)` | SO-INTERNA | DEFINER | funcao:app_registro_para_editar |
 | `app_texto_emusys_do_registro(p_registro_id uuid)` | ORFA | DEFINER | sem consumidor conhecido |
 | `ativar_health_score_professor_v3_config(p_config_id uuid, p_justificativa text)` | ATIVA | DEFINER | front:src/hooks/useHealthScoreProfessorV3Config.ts |

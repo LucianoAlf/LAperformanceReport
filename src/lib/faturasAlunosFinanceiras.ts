@@ -77,6 +77,39 @@ export interface FaturaFinanceiraItem {
   sync_fresh_until: string | null;
 }
 
+export interface ProvaPagamentoItem {
+  valor: number;
+  data: string;
+  forma: string | null;
+}
+
+export interface ProvaPagamento {
+  caixa: ProvaPagamentoItem[];
+  lancamentos: ProvaPagamentoItem[];
+}
+
+const PROVA_PAGAMENTO_VAZIA: ProvaPagamento = { caixa: [], lancamentos: [] };
+
+function parseProvaPagamentoItem(value: unknown): ProvaPagamentoItem | null {
+  const row = asRecord(value);
+  if (!row) return null;
+  const valor = asFiniteNumberOrNull(row.valor);
+  const data = asText(row.data);
+  if (valor == null || !isNonNegative(valor) || !data || !isIsoDate(data)) return null;
+  return { valor, data, forma: asText(row.forma) };
+}
+
+function parseProvaPagamento(value: unknown): ProvaPagamento {
+  const row = asRecord(value);
+  if (!row) return PROVA_PAGAMENTO_VAZIA;
+  const caixa = Array.isArray(row.caixa) ? row.caixa : [];
+  const lancamentos = Array.isArray(row.lancamentos) ? row.lancamentos : [];
+  return {
+    caixa: caixa.flatMap((item) => { const p = parseProvaPagamentoItem(item); return p ? [p] : []; }),
+    lancamentos: lancamentos.flatMap((item) => { const p = parseProvaPagamentoItem(item); return p ? [p] : []; }),
+  };
+}
+
 export interface FaturaFinanceiraReconciliacaoItem {
   canonical_fatura_id: string;
   unidade_id: string;
@@ -106,6 +139,7 @@ export interface FaturaFinanceiraReconciliacaoItem {
     juros_e_multa_snapshot: number;
   };
   motivos: string[];
+  prova_pagamento: ProvaPagamento;
   validation_issues: unknown[];
   source_missing_reason: string | null;
   sync_completed_at: string | null;
@@ -143,6 +177,7 @@ export interface FaturasFinanceirasState {
   items: FaturaFinanceiraItem[];
   reconciliation: {
     sourceMissing: number;
+    pagamentoDetectado: number;
     identidadeInvalida: number;
     statusDesconhecido: number;
     validacoesOrigem: number;
@@ -240,6 +275,7 @@ const emptyState = (status: FaturasFinanceirasStatusLeitura, error: string | nul
   items: [],
   reconciliation: {
     sourceMissing: 0,
+    pagamentoDetectado: 0,
     identidadeInvalida: 0,
     statusDesconhecido: 0,
     validacoesOrigem: 0,
@@ -539,6 +575,7 @@ function parseReconciliationItem(value: unknown): FaturaFinanceiraReconciliacaoI
     motivos: Array.isArray(row.motivos)
       ? row.motivos.flatMap((motivo) => asText(motivo) ? [asText(motivo) as string] : [])
       : [],
+    prova_pagamento: parseProvaPagamento(row.prova_pagamento),
     validation_issues: Array.isArray(row.validation_issues) ? row.validation_issues : [],
     source_missing_reason: asText(row.source_missing_reason),
     sync_completed_at: syncCompletedAt,
@@ -637,6 +674,8 @@ export function normalizarFaturasAlunosFinanceiras(payload: unknown, error?: { m
   }
   const collectionAllowed = status !== 'stale' && operational.collection_allowed;
   const inadimplenciaCanonica = normalizarInadimplenciaCanonica(root.inadimplencia_canonica);
+  // Emitido a partir de 23/09/2026: respostas antigas nao trazem a chave.
+  const pagamentoDetectado = asFiniteNumberOrNull(reconciliation.pagamento_detectado) ?? 0;
   const resolvidasManualmente = asFiniteNumberOrNull(reconciliation.resolvidas_manualmente) ?? 0;
   const foraOperacao = asRecord(reconciliation.fora_operacao);
   const foraHistorico = asFiniteNumberOrNull(foraOperacao?.historico_ex_aluno) ?? 0;
@@ -679,6 +718,7 @@ export function normalizarFaturasAlunosFinanceiras(payload: unknown, error?: { m
     items: parsedItems,
     reconciliation: {
       sourceMissing: reconciliationCounts[0],
+      pagamentoDetectado,
       identidadeInvalida: reconciliationCounts[1],
       statusDesconhecido: reconciliationCounts[2],
       validacoesOrigem: reconciliationCounts[3],

@@ -15,6 +15,12 @@ export type ReconciliationGuidance =
       options: Array<{ value: ReconciliationDecisionType; label: string }>;
     }
   | {
+      kind: 'detected_payment';
+      title: string;
+      instruction: string;
+      options: Array<{ value: ReconciliationDecisionType; label: string }>;
+    }
+  | {
       kind: 'payment_method';
       title: string;
       instruction: string;
@@ -68,6 +74,17 @@ export function getReconciliationGuidance(item: ReconciliationGuidanceInput): Re
       title: 'Fora da cobrança operacional',
       instruction: 'Este registro fica no histórico e não entra na fila de cobrança de alunos.',
       options: [],
+    };
+  }
+  // Prova de pagamento ja' existe (baixa no caixa ou lancamento que a Rose
+  // reconciliou no Emusys): a duvida nao e' "o que aconteceu", e' registrar a
+  // decisao que encerra o caso. A evidencia e' renderizada pela pagina.
+  if (motivos.has('pagamento_detectado_fora_origem') && item.aluno?.id != null) {
+    return {
+      kind: 'detected_payment',
+      title: 'Pagamento já identificado fora do Emusys',
+      instruction: 'A origem ainda não redevolveu a fatura, mas o dinheiro entrou — a prova está abaixo. Confirme a decisão para encerrar sem nova investigação.',
+      options: DECISION_OPTIONS,
     };
   }
   if (motivos.has('source_missing') && item.aluno?.id != null) {
