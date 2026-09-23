@@ -343,7 +343,7 @@
 | `emusys_experimentais_snapshot_execucoes` | tabela | integracao | 10 | 25263 | sim (3) | 1 |  |
 | `emusys_experimentais_snapshot_publicacoes_vigentes` | tabela | integracao | 6 | 3 | sim (0) | 2 | Ponteiro transacional da ultima publicacao completa por unidade para validar leituras admitidas. |
 | `emusys_fatura_source_events` | tabela | integracao | 12 | 8455571 | sim (1) | 4 | Trilha append-only das confirmacoes, ausencias e resolucoes observadas por competencia. |
-| `emusys_faturas` | tabela | integracao | 22 | 13596 | sim (1) | 1 |  |
+| `emusys_faturas` | tabela | integracao | 22 | 14513 | sim (1) | 1 |  |
 | `emusys_historico_backfill_execucoes_v1` | tabela | integracao | 20 | 147 | sim (0) | 2 | Checkpoint retomavel do coletor historico Emusys do Health Score Professor V3. |
 | `emusys_matriculas_estado_atual` | tabela | integracao | 23 | 4954 | sim (1) | 2 | Fonte bruta backend-only do estado atual de cada matricula Emusys, escopada por unidade. |
 | `emusys_matriculas_sync_execucoes` | tabela | integracao | 13 | 235 | sim (1) | 1 | Manifesto auditavel das fotografias Emusys. Somente execucao operacional concluida e fresca pode alimentar KPIs vivos. |
@@ -459,9 +459,9 @@
 | `anotacoes` | tabela | professor | 11 | 0 | sim (2) | 1 |  |
 | `anotacoes_alunos` | tabela | professor | 8 | 36 | sim (4) | 1 | Anotações e observações sobre alunos |
 | `app_audio_preso_no_aparelho` | tabela | professor | 5 | 11 | sim (0) | 1 | Farol do app (20260827170000): estado ATUAL da fila local de audios de cada professor. Uma linha por professor, sobrescrita — e o zero tambem e reportado, senao o alarme de ontem nunca apaga. Sem isto, audio recusado fica so no aparelho e nenhuma auditoria pode ve-lo (caso Valdo/Bruno, 26/08/2026). |
-| `aula_alunos_emusys` | tabela | professor | 16 | 41028 | sim (3) | 3 | Roster operacional de aulas do Emusys, sem contato ou dados financeiros. |
+| `aula_alunos_emusys` | tabela | professor | 16 | 41968 | sim (3) | 3 | Roster operacional de aulas do Emusys, sem contato ou dados financeiros. |
 | `aula_registros_fabio_log` | tabela | professor | 8 | 1129 | sim (0) | 1 | Auditoria das gravações do Fábio em aulas_emusys.anotacoes_fabio. É trilha de rastreabilidade, não o lar do registro (o registro vive em anotacoes_fabio). |
-| `aula_roster_sync_estado` | tabela | professor | 9 | 21964 | sim (0) | 2 |  |
+| `aula_roster_sync_estado` | tabela | professor | 9 | 21966 | sim (0) | 2 |  |
 | `aulas_emusys` | tabela | professor | 35 | 67380 | sim (4) | 3 | Metadados completos de cada aula importada do Emusys (turma, curso, sala, professor, horários) |
 | `config_health_score` | tabela | professor | 13 | 1 | sim (2) | 1 | Configuração dos pesos e limites do Health Score do Professor |
 | `config_health_score_aluno` | tabela | professor | 11 | 1 | sim (2) | 1 | Configuração de pesos do Health Score de Alunos - ajustável por unidade |

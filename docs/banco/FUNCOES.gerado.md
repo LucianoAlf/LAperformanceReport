@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Funções
 
-1616 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
+1617 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
 chamadas diretas ao PostgREST não são visíveis para o gerador.
 
 ## aluno
@@ -167,7 +167,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `get_kpis_alunos_canonicos(p_unidade_id uuid, p_ano integer, p_mes integer)` | ATIVA | DEFINER | front:src/lib/kpisAlunosVivosCanonicos.ts, funcao:get_dados_relatorio_gerencial_legacy_p02r_20260620, funcao:get_dados_retencao_ia, funcao:get_kpis_alunos_canonicos_cache_v1, funcao:gravar_snapshot_fechamento_mensal, funcao:preview_fechamento_mensal |
 | `get_kpis_alunos_canonicos_base_p01q(p_unidade_id uuid, p_ano integer, p_mes integer)` | SO-INTERNA | DEFINER | funcao:get_kpis_alunos_canonicos_base_p01t |
 | `get_kpis_alunos_canonicos_base_p01t(p_unidade_id uuid, p_ano integer, p_mes integer)` | SO-INTERNA | DEFINER | funcao:get_kpis_alunos_canonicos_base_v131 |
-| `get_kpis_alunos_canonicos_base_ticket_denominador_v1(p_unidade_id uuid, p_ano integer, p_mes integer)` | SO-INTERNA | DEFINER | funcao:get_kpis_alunos_canonicos |
+| `get_kpis_alunos_canonicos_base_ticket_denominador_v1(p_unidade_id uuid, p_ano integer, p_mes integer)` | SO-INTERNA | DEFINER | funcao:kpis_alunos_sem_cache_20260924 |
 | `get_kpis_alunos_canonicos_base_v131(p_unidade_id uuid, p_ano integer, p_mes integer, p_admin jsonb)` | SO-INTERNA | DEFINER | funcao:get_kpis_alunos_canonicos_base_ticket_denominador_v1 |
 | `get_kpis_alunos_canonicos_cache_v1(p_unidade_id uuid, p_ano integer, p_mes integer)` | ORFA | DEFINER | sem consumidor conhecido |
 | `get_kpis_alunos_vinculos_vivo_canonico(p_unidade_id uuid, p_ano integer, p_mes integer)` | SO-INTERNA | DEFINER | funcao:get_kpis_alunos_canonicos_base_v131 |
@@ -187,7 +187,8 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `get_trancamentos_periodo_canonicos(p_unidade_id uuid, p_data_inicial date, p_data_final date)` | ATIVA | DEFINER | front:src/lib/estadoOperacionalAlunos.ts |
 | `iniciar_revisao_pesquisa_evasao(p_analise_id uuid)` | ATIVA | DEFINER | front:src/components/App/SucessoCliente/ConversaPesquisaEvasao.tsx |
 | `is_movimentacao_admin_retencao_valida(p_movimentacao_id integer)` | ATIVA | DEFINER | edge:supabase/functions/enviar-pesquisa-evasao/index.ts, view:vw_alertas_inteligentes, view:vw_dashboard_unidade, view:vw_evasoes_motivos, view:vw_evasoes_professores, view:vw_evasoes_resumo, +24 outros |
-| `kpis_alunos_cache_impressao_v1()` | SO-INTERNA | DEFINER | funcao:get_kpis_alunos_admin_operacional_cache_v1, funcao:get_kpis_alunos_canonicos_cache_v1 |
+| `kpis_alunos_cache_impressao_v1()` | SO-INTERNA | DEFINER | funcao:get_kpis_alunos_admin_operacional_cache_v1, funcao:get_kpis_alunos_canonicos, funcao:get_kpis_alunos_canonicos_cache_v1 |
+| `kpis_alunos_sem_cache_20260924(p_unidade_id uuid, p_ano integer, p_mes integer)` | SO-INTERNA | DEFINER | funcao:get_kpis_alunos_canonicos |
 | `listar_evadidos_para_pesquisa(p_unidade_id uuid, p_limite integer, p_offset integer, p_status character varying)` | LEGADO | DEFINER | existe versao maior: listar_evadidos_para_pesquisa_v4 — sem consumidor conhecido |
 | `listar_evadidos_para_pesquisa(p_unidade_id uuid, p_limite integer, p_offset integer, p_status character varying, p_ano integer, p_mes integer)` | LEGADO | DEFINER | existe versao maior: listar_evadidos_para_pesquisa_v4 — sem consumidor conhecido |
 | `listar_evadidos_para_pesquisa_v2(p_unidade_id uuid, p_limite integer, p_offset integer, p_status character varying, p_ano integer, p_mes integer, p_busca text)` | SO-INTERNA | DEFINER | funcao:listar_evadidos_para_pesquisa_v3 |
@@ -389,7 +390,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | Função | Estado | Segurança | Consumidores |
 |---|---|---|---|
 | `_compute_pix_migracao_v1(p_unidade_id uuid, p_referencia date)` | SO-INTERNA | DEFINER | funcao:get_pix_migracao_v1, funcao:refresh_pix_migracao_snapshot |
-| `aplicar_denominador_ticket_kpis_v1(p_base jsonb, p_unidade_id uuid, p_ano integer, p_mes integer)` | SO-INTERNA | DEFINER | funcao:get_kpis_alunos_canonicos |
+| `aplicar_denominador_ticket_kpis_v1(p_base jsonb, p_unidade_id uuid, p_ano integer, p_mes integer)` | SO-INTERNA | DEFINER | funcao:kpis_alunos_sem_cache_20260924 |
 | `aplicar_financeiro_ticket_contratual_v1(p_base jsonb, p_ano integer, p_mes integer)` | SO-INTERNA | DEFINER | funcao:aplicar_financeiro_ticket_contratual_v2, funcao:aplicar_financeiro_ticket_contratual_v3 |
 | `aplicar_financeiro_ticket_contratual_v2(p_base jsonb, p_unidade_id uuid, p_ano integer, p_mes integer)` | LEGADO | DEFINER | existe versao maior: aplicar_financeiro_ticket_contratual_v4 — sem consumidor conhecido |
 | `aplicar_financeiro_ticket_contratual_v3(p_base jsonb, p_unidade_id uuid, p_ano integer, p_mes integer)` | LEGADO | DEFINER | existe versao maior: aplicar_financeiro_ticket_contratual_v4 — sem consumidor conhecido |
