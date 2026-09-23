@@ -40,7 +40,8 @@ import {
   ChevronUp,
   ArrowUpDown,
   ClipboardCheck,
-  ReceiptText
+  ReceiptText,
+  XCircle
 } from 'lucide-react';
 import { TarefasRapidasTab } from '@/components/shared/TarefasRapidas';
 import { CanalOrigemBadge } from '@/components/shared/CanalOrigemBadge';
@@ -56,6 +57,11 @@ import { ehMatriculaComercialCanonica } from '@/lib/comercialMatriculasCanonicas
 import { criarUrlFaturasAlunos } from '@/lib/faturasAlunosCanonicas';
 import { resolverProfessorExperimentalCanonico } from '@/lib/comercialProfessorExperimental.js';
 import { calcularRangeRelatorioMensalComercial } from '@/lib/relatorioComercialMensal';
+import {
+  CANAL_VISITA_PLACA, procedenciaDaVisita, presencaDaVisita, podeConfirmarPresenca,
+  rotuloProcedenciaCurto, rotuloPresenca, resumoVisitas, textoComposicaoVisitas,
+  type PresencaVisita, type ProcedenciaVisita, type ResumoVisitas,
+} from '@/lib/visitasComercial';
 import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
 import {
   CancelamentoCompetenciaError,
@@ -233,6 +239,8 @@ interface ResumoMes {
   experimentais: number;
   /** `null` = nao foi possivel medir (ver buscarVisitasCanonicas). Nunca confundir com 0. */
   visitas: number | null;
+  /** Como esse numero se divide: agendadas (e quantas confirmadas) x sem hora marcada. */
+  visitasComposicao: ResumoVisitas | null;
   matriculas: number;
   matriculasPorCanal: { canal: string; quantidade: number }[];
   matriculasPorCurso: { curso: string; quantidade: number }[];
@@ -615,6 +623,7 @@ export function ComercialPage() {
     leads: 0,
     experimentais: 0,
     visitas: 0,
+    visitasComposicao: null,
     matriculas: 0,
     matriculasPorCanal: [],
     matriculasPorCurso: [],
@@ -799,6 +808,11 @@ export function ComercialPage() {
   const [filtroCursoFunil, setFiltroCursoFunil] = useState<string>('todos');
   const [filtroProfessorFunil, setFiltroProfessorFunil] = useState<string>('todos');
   const [filtroCampanhaFunil, setFiltroCampanhaFunil] = useState<string>('todos');
+  // Filtros exclusivos da aba Visitas: as outras etapas do funil nao tem presenca nem
+  // procedencia, entao pendura-los na barra geral criaria controle morto em 3 das 4 abas.
+  const [filtroPresencaVisita, setFiltroPresencaVisita] = useState<'todos' | PresencaVisita>('todos');
+  const [filtroProcedenciaVisita, setFiltroProcedenciaVisita] = useState<'todos' | ProcedenciaVisita>('todos');
+  const [marcandoPresencaId, setMarcandoPresencaId] = useState<string | null>(null);
   const [filtroTipoExp, setFiltroTipoExp] = useState<'leads_novos' | 'todos' | 'alunos' | 'agendadas_periodo'>('leads_novos');
   // Filtro de presença na aba Experimentais: compareceram (vieram) vs faltaram
   const [filtroPresencaExp, setFiltroPresencaExp] = useState<'todas' | 'compareceram' | 'faltaram'>('compareceram');
@@ -1176,11 +1190,32 @@ export function ComercialPage() {
 
       // Calcular resumo (usa mês inteiro quando filtro é "Hoje")
       const leads = registrosParaResumo.reduce((acc, r) => acc + r.quantidade, 0);
-      const visitas = await contarVisitasCanonicas(
+      // O card conta as DUAS formas de visitar: a agendada (tabela `visitas`) e quem
+      // chegou sem hora marcada (canal Visita/Placa). Continua usando o range do RESUMO,
+      // que e o mes inteiro quando o filtro e "Hoje" -- por isso nao da para derivar de
+      // `visitasMes`, que segue o periodo selecionado.
+      const visitasItensResumo = await buscarVisitasCanonicas(
         unidadeResumoId,
         matriculasResumoStartDate,
         matriculasResumoEndDate
       );
+      const leadsAgendadosResumo = new Set(
+        (visitasItensResumo || []).map(v => v.lead_id).filter((id): id is number => id != null)
+      );
+      const visitasComposicao = visitasItensResumo === null ? null : resumoVisitas([
+        ...visitasItensResumo.map(v => ({
+          visita_id: v.id, visita_status: v.status, visita_criado_por: v.criado_por,
+        })),
+        ...registrosParaResumo
+          .filter((r: any) => r.canal_origem_id === CANAL_VISITA_PLACA && !leadsAgendadosResumo.has(r.id))
+          .map(() => ({ canal_origem_id: CANAL_VISITA_PLACA })),
+      ]);
+      // O numero de VISITA e o COMPARECIMENTO (decisao do Hugo, 23/09):
+      //   agendada que compareceu + quem apareceu sem agendar horario.
+      // Agendada que ninguem confirmou nao entra -- e promessa, nao visita. O total
+      // continua na composicao, que e onde se ve quanto falta confirmar.
+      // `null` = nao foi possivel medir. Continua nunca virando 0.
+      const visitas = visitasComposicao === null ? null : visitasComposicao.aconteceram;
       const matriculas = registrosParaResumo.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0);
       const experimentaisConfirmadas = taxaExpMatResumo.realizadasConfirmadas;
 
@@ -1214,6 +1249,7 @@ export function ComercialPage() {
         leads,
         experimentais: experimentaisConfirmadas,
         visitas,
+        visitasComposicao,
         matriculas,
         matriculasPorCanal,
         matriculasPorCurso,
@@ -1231,7 +1267,16 @@ export function ComercialPage() {
       setRegistrosHoje(registrosEntradaHoje);
       // Visita de hoje = visita cuja DATA e hoje. Antes contava lead que ENTROU hoje
       // e ja estava em `visita_escola` -- coisa diferente, e quase sempre zero.
-      setVisitasHoje(await contarVisitasCanonicas(unidadeResumoId, hoje, hoje));
+      // Mesma definicao do card: comparecimento, nao agendamento. Contar a agendada
+      // ainda nao confirmada aqui faria o "+N hoje" somar alguem que pode nao ter vindo.
+      const visitasDeHoje = await buscarVisitasCanonicas(unidadeResumoId, hoje, hoje);
+      const semHoraHoje = registrosEntradaHoje
+        .filter((r: any) => r.canal_origem_id === CANAL_VISITA_PLACA).length;
+      setVisitasHoje(
+        visitasDeHoje === null
+          ? null
+          : visitasDeHoje.filter(v => v.status === 'realizada').length + semHoraHoje
+      );
 
       // ════════════════════════════════════════════════════════════════
       // Matrículas do período — FONTE: tabela `alunos` (cada aluno com
@@ -1477,7 +1522,30 @@ export function ComercialPage() {
           curso_nome: lead?.cursos?.nome || '',
         };
       });
-      setVisitasMes(visitasDoMes as any);
+
+      // Quem visitou SEM hora marcada: o lead de canal Visita/Placa. Ele nao tem linha em
+      // `visitas` porque ninguem agendou nada -- a visita e a razao de o lead existir,
+      // alguem so o cadastrou porque a pessoa estava na porta. Mesmo range e mesma unidade
+      // de `registros`, entao nao ha recorte novo aqui.
+      // ⚠️ Exclui quem JA aparece como visita agendada: hoje sao 0 casos (medido 23/09 nos
+      // 233 leads do canal contra as 139 visitas), mas sem isso a mesma pessoa que chegou
+      // na porta e depois marcou uma visita viraria duas linhas.
+      const leadsComVisitaAgendada = new Set(
+        (visitasCanonicas || []).map(v => v.lead_id).filter((id): id is number => id != null)
+      );
+      const visitasSemHoraMarcada = registros
+        .filter((r: any) => r.canal_origem_id === CANAL_VISITA_PLACA && !leadsComVisitaAgendada.has(r.id))
+        .map((r: any) => ({
+          ...r,
+          visita_id: undefined,
+          visita_status: undefined,
+          visita_criado_por: undefined,
+          horario_visita: null,
+          canal_nome: r.canais_origem?.nome || '',
+          curso_nome: r.cursos?.nome || '',
+        }));
+
+      setVisitasMes([...visitasDoMes, ...visitasSemHoraMarcada] as any);
 
       // Experimentais AGENDADAS dentro do período (filtra por created_at do agendamento),
       // mas só as cuja AULA (data_experimental) cai FORA do range — pra não duplicar com a
@@ -1769,6 +1837,61 @@ export function ComercialPage() {
     etapa_pipeline_id: lead.etapa_pipeline_id,
     professor_experimental_id: lead.professor_experimental_id,
   } as LeadCRM);
+
+  /**
+   * Confirma se a pessoa apareceu na visita AGENDADA.
+   *
+   * Grava so `visitas.status`: e o unico campo que responde a pergunta. Mexer no lead
+   * junto (etapa, status) faria a confirmacao de presenca disputar com o funil, que tem
+   * caminho proprio -- e a visita e da pessoa, nao da etapa em que o lead esta hoje.
+   *
+   * ⚠️ Falhar em silencio deixaria a consultora achando que marcou enquanto o card
+   * segue dizendo que ninguem confirmou nada. Por isso o erro vai para a tela com o
+   * identificador da visita.
+   */
+  const marcarPresencaVisita = async (
+    visitaId: string, compareceu: boolean, presencaAnterior: PresencaVisita
+  ) => {
+    setMarcandoPresencaId(visitaId);
+    const novoStatus = compareceu ? 'realizada' : 'nao_compareceu';
+    try {
+      const { error } = await supabase
+        .from('visitas')
+        .update({ status: novoStatus, updated_at: new Date().toISOString() })
+        .eq('id', visitaId);
+      if (error) throw error;
+
+      setVisitasMes(prev => prev.map((v: any) => (
+        v.visita_id === visitaId ? { ...v, visita_status: novoStatus } : v
+      )));
+
+      // O card e do MES e a lista pode ser de um recorte menor (filtro "Hoje"), mas o
+      // recorte menor sempre cabe dentro do mes -- entao mover o contador aqui nunca
+      // conta uma visita que o card nao tinha. Sem isto o numero so corrigiria no
+      // proximo carregamento, e a tela diria "0 confirmadas" logo apos confirmar uma.
+      const presencaNova: PresencaVisita = compareceu ? 'compareceu' : 'nao_compareceu';
+      if (presencaAnterior !== presencaNova) {
+        setResumo(prev => {
+          if (!prev.visitasComposicao) return prev;
+          const c = { ...prev.visitasComposicao };
+          if (presencaAnterior === 'compareceu') { c.aconteceram -= 1; c.confirmadas -= 1; }
+          else if (presencaAnterior === 'nao_compareceu') c.naoCompareceram -= 1;
+          else c.aguardando -= 1;
+          if (presencaNova === 'compareceu') { c.aconteceram += 1; c.confirmadas += 1; }
+          else c.naoCompareceram += 1;
+          return { ...prev, visitasComposicao: c };
+        });
+      }
+
+      toast.success(compareceu ? 'Visita confirmada' : 'Marcada como não compareceu');
+    } catch (err) {
+      const detalhe = err instanceof Error ? err.message : String(err);
+      console.error(`[comercial] presenca da visita ${visitaId}: ${detalhe}`);
+      toast.error('Não foi possível marcar a presença', { description: detalhe });
+    } finally {
+      setMarcandoPresencaId(null);
+    }
+  };
 
   const handleMoverEtapa = async (leadId: number, novaEtapa: number, extras?: Record<string, any>) => {
     // Visita tem data e horario proprios -- e nao sao o dia do arrasto. Em vez de
@@ -3790,13 +3913,18 @@ export function ComercialPage() {
                   <p className="text-2xl font-bold text-purple-400">{resumo.experimentais}</p>
                 </div>
               </Tooltip>
-              <Tooltip content="Leads que visitaram a escola no mês." side="bottom">
+              <Tooltip content="Quem de fato veio à escola no mês: as visitas agendadas com presença confirmada MAIS quem apareceu sem marcar horário (pela fachada). Visita agendada que ninguém confirmou ainda não entra nesta conta — ela aparece na linha de baixo, como o que falta confirmar." side="bottom">
                 <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30 cursor-help">
                   <div className="flex items-center gap-2 mb-2">
                     <Building2 className="w-4 h-4 text-amber-400" />
                     <span className="text-xs text-slate-400 font-medium">Visitas</span>
                   </div>
                   <p className="text-2xl font-bold text-amber-400">{resumo.visitas ?? '—'}</p>
+                  {resumo.visitasComposicao && textoComposicaoVisitas(resumo.visitasComposicao) && (
+                    <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+                      {textoComposicaoVisitas(resumo.visitasComposicao)}
+                    </p>
+                  )}
                   {hojeVisitas !== null && hojeVisitas > 0 && (
                     <p className="text-xs text-emerald-400 mt-1">+{hojeVisitas} hoje</p>
                   )}
@@ -5377,8 +5505,11 @@ export function ComercialPage() {
             if (filtroCanalFunil !== 'todos' && String(l.canal_origem_id) !== filtroCanalFunil) return false;
             if (filtroCursoFunil !== 'todos' && String(l.curso_interesse_id) !== filtroCursoFunil) return false;
             if (filtroProfessorFunil !== 'todos' && String(l.professor_experimental_id) !== filtroProfessorFunil) return false;
+            if (filtroPresencaVisita !== 'todos' && presencaDaVisita(l as any) !== filtroPresencaVisita) return false;
+            if (filtroProcedenciaVisita !== 'todos' && procedenciaDaVisita(l as any) !== filtroProcedenciaVisita) return false;
             return true;
           });
+          const resumoDaLista = resumoVisitas(visitasFiltradasRaw as any);
           type VisitaComCampos = LeadDiario & { canal_nome?: string; curso_nome?: string; telefone?: string; curso_id?: number };
           const visitasFiltradas = sortArray(visitasFiltradasRaw as VisitaComCampos[], sortVisitas, (v: VisitaComCampos, col) => {
             switch (col) {
@@ -5389,11 +5520,38 @@ export function ComercialPage() {
               case 'curso': return v.curso_nome;
               case 'qtd': return v.quantidade;
               case 'unidade': return v.unidades?.codigo;
+              case 'presenca': return presencaDaVisita(v as any);
+              case 'tipo': return procedenciaDaVisita(v as any);
               default: return null;
             }
           });
+          const botaoFiltro = (ativo: boolean) => cn(
+            'px-2 py-1 rounded text-xs border transition-colors',
+            ativo
+              ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
+              : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'
+          );
           return (
           <div className="p-4 overflow-x-auto">
+            {/* Filtros SO desta aba. Presenca e procedencia nao existem nas outras
+                etapas do funil -- na barra geral virariam controle morto em 3 de 4 abas. */}
+            <div className="flex flex-wrap items-center gap-1.5 mb-3">
+              <span className="text-xs text-slate-500 mr-0.5">Presença:</span>
+              {([['todos', 'Todas'], ['compareceu', 'Compareceu'], ['aguardando', 'Aguardando'], ['nao_compareceu', 'Não compareceu']] as const).map(([valor, label]) => (
+                <button key={valor} onClick={() => setFiltroPresencaVisita(valor as any)} className={botaoFiltro(filtroPresencaVisita === valor)}>
+                  {label}
+                </button>
+              ))}
+              <span className="text-xs text-slate-500 ml-3 mr-0.5">Tipo:</span>
+              {([['todos', 'Todos'], ['mila', 'Mila'], ['manual', 'Equipe'], ['sem_hora_marcada', 'Sem hora marcada']] as const).map(([valor, label]) => (
+                <button key={valor} onClick={() => setFiltroProcedenciaVisita(valor as any)} className={botaoFiltro(filtroProcedenciaVisita === valor)}>
+                  {label}
+                </button>
+              ))}
+              {textoComposicaoVisitas(resumoDaLista) && (
+                <span className="ml-auto text-xs text-slate-500">{textoComposicaoVisitas(resumoDaLista)}</span>
+              )}
+            </div>
             {visitasFiltradas.length > 0 ? (
               <table className="w-full text-sm">
                 <thead>
@@ -5402,6 +5560,8 @@ export function ComercialPage() {
                     <SortableTh col="data" label="Data" sort={sortVisitas} onSort={(c) => setSortVisitas(prev => nextSort(prev, c))} />
                     <SortableTh col="nome" label="Nome" sort={sortVisitas} onSort={(c) => setSortVisitas(prev => nextSort(prev, c))} />
                     <SortableTh col="telefone" label="Telefone" sort={sortVisitas} onSort={(c) => setSortVisitas(prev => nextSort(prev, c))} />
+                    <SortableTh col="tipo" label="Tipo" sort={sortVisitas} onSort={(c) => setSortVisitas(prev => nextSort(prev, c))} />
+                    <SortableTh col="presenca" label="Presença" sort={sortVisitas} onSort={(c) => setSortVisitas(prev => nextSort(prev, c))} />
                     <SortableTh col="canal" label="Canal" sort={sortVisitas} onSort={(c) => setSortVisitas(prev => nextSort(prev, c))} />
                     <SortableTh col="curso" label="Curso" sort={sortVisitas} onSort={(c) => setSortVisitas(prev => nextSort(prev, c))} />
                     <SortableTh col="qtd" label="Qtd" sort={sortVisitas} onSort={(c) => setSortVisitas(prev => nextSort(prev, c))} />
@@ -5411,8 +5571,10 @@ export function ComercialPage() {
                 </thead>
                 <tbody>
                   {visitasFiltradas.map((visita, index) => (
-                    <tr 
-                      key={visita.id} 
+                    <tr
+                      // A visita orfa (sem lead vinculado) tem `id` indefinido -- 12 hoje.
+                      // Usar so `visita.id` daria a mesma chave a todas elas.
+                      key={(visita as any).visita_id || visita.id || `linha-${index}`}
                       className="border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors"
                     >
                       <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">{index + 1}</td>
@@ -5441,6 +5603,65 @@ export function ComercialPage() {
                           textClassName="text-emerald-400"
                           placeholder="-"
                         />
+                      </td>
+                      <td className="py-3 px-2 border-r border-slate-700/30">
+                        {(() => {
+                          const procedencia = procedenciaDaVisita(visita as any);
+                          const horario = (visita as any).horario_visita as string | null;
+                          return (
+                            <div className="flex flex-col leading-tight">
+                              <span className={cn(
+                                'text-xs font-medium',
+                                procedencia === 'sem_hora_marcada' ? 'text-sky-400' : 'text-slate-300'
+                              )}>
+                                {rotuloProcedenciaCurto(procedencia)}
+                              </span>
+                              {horario && (
+                                <span className="text-[10px] text-slate-500">{String(horario).substring(0, 5)}</span>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </td>
+                      <td className="py-3 px-2 border-r border-slate-700/30">
+                        {(() => {
+                          const presenca = presencaDaVisita(visita as any);
+                          const visitaId = (visita as any).visita_id as string | undefined;
+                          const marcando = marcandoPresencaId === visitaId;
+                          const cor = presenca === 'compareceu' ? 'text-emerald-400'
+                            : presenca === 'nao_compareceu' ? 'text-rose-400' : 'text-amber-400';
+                          return (
+                            <div className="flex items-center gap-1.5">
+                              <span className={cn('text-xs font-medium whitespace-nowrap', cor)}>
+                                {rotuloPresenca(presenca)}
+                              </span>
+                              {/* Confirmar so faz sentido para a visita AGENDADA: quem chegou
+                                  sem hora marcada ja esteve aqui. */}
+                              {podeConfirmarPresenca(visita as any) && visitaId && (
+                                marcando ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
+                                ) : (
+                                  <span className="flex items-center gap-0.5">
+                                    <button
+                                      onClick={() => marcarPresencaVisita(visitaId, true, presenca)}
+                                      title="Marcar que compareceu"
+                                      className="p-0.5 rounded text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                                    >
+                                      <CheckCircle2 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => marcarPresencaVisita(visitaId, false, presenca)}
+                                      title="Marcar que não compareceu"
+                                      className="p-0.5 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                                    >
+                                      <XCircle className="w-3.5 h-3.5" />
+                                    </button>
+                                  </span>
+                                )
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <CelulaEditavelInline
