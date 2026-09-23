@@ -34,6 +34,7 @@ import { exigeIdentidade } from '@/lib/caixaIdentidade';
 import {
   filtrarFaturasPorBusca,
   resolverFaturaId,
+  sugerirFaturasPorValor,
   useFaturasParaCaixa,
   type FaturaParaCaixa,
 } from '@/hooks/useFaturasParaCaixa';
@@ -103,18 +104,23 @@ export function CaixaMovimentacaoForm({
   const [erroCategoria, setErroCategoria] = useState<string | null>(null);
   const [buscaAluno, setBuscaAluno] = useState('');
   const [faturaEscolhida, setFaturaEscolhida] = useState<FaturaParaCaixa | null>(null);
+  // Salvar sem fatura so' com confirmacao consciente: sem isso o lancamento vira
+  // pendencia de conciliacao no extrato/DRE — que e' o buraco que estamos fechando.
+  const [semFaturaConfirmada, setSemFaturaConfirmada] = useState(false);
 
   // Identidade do dinheiro: com fatura o caixa e baixa (a receita ja entrou pelo sync
   // do Emusys); sem fatura e receita nova. Sem esse campo nao da para ligar o caixa ao
-  // DRE sem duplicar. Nunca bloqueia o lancamento — cego e aviso, nao erro.
+  // DRE sem duplicar.
   const pedeIdentidade = exigeIdentidade(tipo, categoria);
   const { faturas, carregando: carregandoFaturas, erro: erroFaturas } = useFaturasParaCaixa(
     pedeIdentidade ? unidadeId : null,
   );
-  const sugestoes = useMemo(
-    () => (faturaEscolhida ? [] : filtrarFaturasPorBusca(faturas, buscaAluno)),
-    [buscaAluno, faturaEscolhida, faturas],
-  );
+  const sugestoes = useMemo(() => {
+    if (faturaEscolhida) return [];
+    const porBusca = filtrarFaturasPorBusca(faturas, buscaAluno);
+    if (porBusca.length) return porBusca;
+    return sugerirFaturasPorValor(faturas, parseMoedaCaixa(valor));
+  }, [buscaAluno, faturaEscolhida, faturas, valor]);
 
   const categoriasDisponiveis = useMemo(
     () => filtrarCategoriasCaixaPorAmbiente(categorias, ambiente),
@@ -153,6 +159,7 @@ export function CaixaMovimentacaoForm({
     setDescricao(initialValues?.descricao || '');
     setValor(formatarNumeroComoInputMoedaCaixa(initialValues?.valor));
     setResponsavel(initialValues?.responsavel || '');
+    setSemFaturaConfirmada(false);
     setErro(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialValues]);
@@ -199,6 +206,14 @@ export function CaixaMovimentacaoForm({
       return;
     }
 
+    if (pedeIdentidade && !faturaEscolhida && !semFaturaConfirmada) {
+      setErro({
+        campo: null,
+        msg: 'Vincule a fatura do aluno ou marque "receita sem fatura" para confirmar que nao e parcela de aluno.',
+      });
+      return;
+    }
+
     let faturaId: string | null = null;
     if (faturaEscolhida && unidadeId) {
       try {
@@ -233,6 +248,7 @@ export function CaixaMovimentacaoForm({
       setLinkPagamento('');
       setBuscaAluno('');
       setFaturaEscolhida(null);
+      setSemFaturaConfirmada(false);
     }
     setErro(null);
   }
@@ -449,29 +465,45 @@ export function CaixaMovimentacaoForm({
                 className="mt-2 rounded-lg bg-slate-950/70"
               />
               {sugestoes.length > 0 && (
-                <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto">
-                  {sugestoes.map((f) => (
-                    <li key={f.chave}>
-                      <button
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => setFaturaEscolhida(f)}
-                        className="w-full rounded-lg px-3 py-2 text-left transition hover:bg-slate-800/60"
-                      >
-                        <span className="block truncate text-sm text-slate-100">{f.alunoNome}</span>
-                        <span className="block text-[11px] text-slate-500">
-                          {`fatura ${f.emusysFaturaId} · ${f.competencia} · ${f.status}`}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  {!buscaAluno.trim() && (
+                    <p className="mt-2 text-[11px] font-medium text-sky-300">
+                      Faturas em aberto com esse valor — confira o aluno antes de vincular:
+                    </p>
+                  )}
+                  <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto">
+                    {sugestoes.map((f) => (
+                      <li key={f.chave}>
+                        <button
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => { setFaturaEscolhida(f); setSemFaturaConfirmada(false); }}
+                          className="w-full rounded-lg px-3 py-2 text-left transition hover:bg-slate-800/60"
+                        >
+                          <span className="block truncate text-sm text-slate-100">{f.alunoNome}</span>
+                          <span className="block text-[11px] text-slate-500">
+                            {`fatura ${f.emusysFaturaId} · ${f.competencia} · ${f.status}`}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
               )}
-              <p className="mt-2 text-[11px] text-slate-500">
-                {erroFaturas
-                  ? 'Nao consegui carregar as faturas. Da para lancar assim mesmo.'
-                  : 'Sem fatura vinculada o lancamento entra como receita nova. Pode salvar assim.'}
-              </p>
+              <label className="mt-2 flex items-start gap-2 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-[11px] text-slate-400">
+                <input
+                  type="checkbox"
+                  checked={semFaturaConfirmada}
+                  disabled={disabled}
+                  onChange={(e) => setSemFaturaConfirmada(e.target.checked)}
+                  className="mt-0.5 accent-amber-500"
+                />
+                <span>
+                  {erroFaturas
+                    ? 'Nao consegui carregar as faturas — confirmo que revisei e e receita sem fatura.'
+                    : 'Receita nova sem fatura (lojinha, taxa, outro) — confirmo que nao e parcela/mensalidade de aluno.'}
+                </span>
+              </label>
             </>
           )}
         </div>

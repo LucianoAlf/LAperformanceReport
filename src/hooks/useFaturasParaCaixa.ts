@@ -16,7 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
   carregarFaturasAlunosFinanceiras,
-  type FaturasFinanceirasItem,
+  type FaturaFinanceiraItem,
 } from '@/lib/faturasAlunosFinanceiras';
 
 export interface FaturaParaCaixa {
@@ -40,7 +40,19 @@ export function filtrarFaturasPorBusca(faturas: FaturaParaCaixa[], busca: string
   return faturas.filter((f) => semAcento(f.alunoNome).includes(termo)).slice(0, 12);
 }
 
-function paraOpcao(item: FaturasFinanceirasItem): FaturaParaCaixa {
+/**
+ * Sugestao por valor: quem paga no balcao costuma pagar o valor exato da parcela
+ * aberta. So em aberto — fatura paga nao e candidata. Centavos tem que bater:
+ * sugestao frouxa ensina link errado, e link errado e' pior que nenhum.
+ */
+export function sugerirFaturasPorValor(faturas: FaturaParaCaixa[], valor: number): FaturaParaCaixa[] {
+  if (!valor || valor <= 0) return [];
+  return faturas
+    .filter((f) => f.valor !== null && Math.abs(f.valor - valor) < 0.005 && f.status === 'aberta')
+    .slice(0, 12);
+}
+
+function paraOpcao(item: FaturaFinanceiraItem): FaturaParaCaixa {
   return {
     chave: item.canonical_fatura_id,
     emusysFaturaId: String(item.emusys_fatura_id),
@@ -96,7 +108,7 @@ export function useFaturasParaCaixa(unidadeId?: string | null) {
         situacao: 'todas',
         asOfDate: hoje.toISOString().slice(0, 10),
       });
-      if (estado.erro) throw new Error(estado.erro);
+      if (estado.error) throw new Error(estado.error);
       setFaturas(estado.items.map(paraOpcao));
     } catch (err: unknown) {
       // Falhar aqui nao pode travar o caixa: sem a lista o lancamento segue sem
