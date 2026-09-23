@@ -182,8 +182,14 @@ export function SeletorApresentacao({
           pessoas.map((p) => (
             <div key={p.chave} className="rounded px-2 py-1.5 hover:bg-slate-800/50">
               <div className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate text-[12.5px] text-white">
-                  {p.aluno.nome}
+                <span className="flex min-w-0 flex-1 items-baseline gap-2">
+                  <span className="truncate text-[12.5px] text-white">{p.aluno.nome}</span>
+                  {/* Mesmo campo e mesmo formato da aba Alunos (pedido do Arthur, 23/09). */}
+                  {p.aluno.idade_anos != null && (
+                    <span className="shrink-0 text-[11px] text-slate-500">
+                      {p.aluno.idade_anos} anos
+                    </span>
+                  )}
                 </span>
                 {/* Os dois estados marcados, nunca só o negativo: sem o selo verde, quem
                     confirmou fica igual a quem ninguém perguntou ainda. */}
