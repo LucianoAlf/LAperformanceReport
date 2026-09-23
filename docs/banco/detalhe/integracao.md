@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — integracao
 
-63 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+64 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## admin_conversas
 
@@ -221,6 +221,19 @@
 **Únicos:**
 - `boas_vindas_enviadas_chave_idempotencia_key`
 - `boas_vindas_enviadas_pkey`
+
+## conciliacao_experimentais_v2_cache
+
+> Cache de get_conciliacao_experimentais_v2 (jsonb). Chave = md5(params+dia+fingerprint das fontes). TTL 30min. Auth resolvida antes do cache. Lido/escrito apenas via SECURITY DEFINER.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `cache_key` | text | não |  |  |
+| `payload` | jsonb | não |  |  |
+| `built_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `conciliacao_experimentais_v2_cache_pkey`
 
 ## conversa_estado_whatsapp
 
@@ -646,7 +659,7 @@
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
 | `id` | uuid | não | gen_random_uuid() |  |
-| `unidade_id` | uuid | não |  | emusys_disciplinas_catalogo.unidade_id |
+| `unidade_id` | uuid | não |  | unidades.id |
 | `emusys_professor_id` | integer | não |  |  |
 | `emusys_disciplina_id` | integer | não |  | emusys_disciplinas_catalogo.emusys_disciplina_id |
 | `ativo_origem` | boolean | não | true |  |

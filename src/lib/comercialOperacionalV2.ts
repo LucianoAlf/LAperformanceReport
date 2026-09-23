@@ -148,6 +148,19 @@ export function normalizarMesRange(mesInicio: number, mesFim: number): number[] 
   return Array.from({ length: fim - inicio + 1 }, (_, index) => inicio + index);
 }
 
+export async function executarEmLotes<T, R>(
+  itens: T[],
+  tamanhoLote: number,
+  executar: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const resultados: R[] = [];
+  for (let i = 0; i < itens.length; i += tamanhoLote) {
+    const lote = itens.slice(i, i + tamanhoLote);
+    resultados.push(...await Promise.all(lote.map(executar)));
+  }
+  return resultados;
+}
+
 export function normalizarUnidadeOperacionalV2(unidadeId: UnidadeOperacionalV2): string | null {
   return !unidadeId || unidadeId === 'todos' ? null : unidadeId;
 }

@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — plataforma
 
-24 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+26 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## _auditoria_chave_natural_20260809
 
@@ -187,6 +187,31 @@
 **Únicos:**
 - `permissoes_codigo_key`
 - `permissoes_pkey`
+
+## porteiro_config
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | boolean | não | true |  |
+| `modo` | text | não |  |  |
+
+**Únicos:**
+- `porteiro_config_pkey`
+
+## porteiro_recusa
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `quando` | timestamp with time zone | não | now() |  |
+| `usuario_id` | integer | sim |  |  |
+| `auth_user_id` | uuid | sim |  |  |
+| `caminho` | text | sim |  |  |
+| `metodo` | text | sim |  |  |
+| `modo` | text | sim |  |  |
+
+**Únicos:**
+- `porteiro_recusa_pkey`
 
 ## rbac_piloto_usuarios
 

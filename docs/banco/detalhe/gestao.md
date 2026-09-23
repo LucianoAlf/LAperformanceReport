@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — gestao
 
-40 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+41 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## bi_agent_config_lamusic
 
@@ -324,6 +324,19 @@
 
 **Triggers:**
 - `trigger_update_insights_salvos_timestamp → update_insights_salvos_timestamp()`
+
+## kpis_comercial_v2_cache
+
+> Cache de get_kpis_comercial_canonicos_v2 (jsonb). Chave = md5(params+dia+fingerprint das fontes). TTL 30min. Lido/escrito apenas via SECURITY DEFINER.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `cache_key` | text | não |  |  |
+| `payload` | jsonb | não |  |  |
+| `built_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `kpis_comercial_v2_cache_pkey`
 
 ## metas
 

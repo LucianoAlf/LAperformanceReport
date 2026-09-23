@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — professor
 
-152 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+155 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## anotacoes
 
@@ -261,6 +261,19 @@
 - `trg_audit → fn_audit_log()`
 - `trigger_update_config_health_score_professor → update_config_health_score_professor_updated_at()`
 
+## dash_prof_resumo_cache
+
+> Cache do resumo de professores do dashboard (5 colunas). TTL 5 min + fingerprint leve. Lido/escrito apenas via SECURITY DEFINER.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `cache_key` | text | não |  |  |
+| `payload` | jsonb | não |  |  |
+| `built_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `dash_prof_resumo_cache_pkey`
+
 ## disponibilidade_professor_propostas
 
 > Propostas de disponibilidade. Aprovar nao altera o espelho; efetivar exige confirmacao da operacao no Emusys.
@@ -291,6 +304,45 @@
 
 **Triggers:**
 - `set_updated_at_disponibilidade_professor_propostas → set_updated_at()`
+
+## eventos_operacionais
+
+> Fatos operacionais append-only para consumo por servicos. Nunca armazena financeiro, saude, presenca, observacoes livres ou payload bruto.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `evento_id` | text | não |  |  |
+| `tipo` | text | não |  |  |
+| `ocorreu_em` | timestamp with time zone | sim |  |  |
+| `detectado_em` | timestamp with time zone | não | clock_timestamp() |  |
+| `origem` | text | não |  |  |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `aluno_id` | integer | sim |  | alunos.id |
+| `aluno_nome` | text | sim |  |  |
+| `aula_id` | integer | sim |  | aulas_emusys.id |
+| `curso` | text | sim |  |  |
+| `aula` | jsonb | sim |  |  |
+| `mudanca` | jsonb | não | '{}'::jsonb |  |
+| `motivo` | text | sim |  |  |
+| `detalhe` | text | sim |  |  |
+| `created_at` | timestamp with time zone | não | clock_timestamp() |  |
+
+**Únicos:**
+- `eventos_operacionais_pkey`
+
+## eventos_operacionais_audiencia
+
+> Audiencia por professor da projecao de eventos operacionais; detectado_em e denormalizado para leitura paginada.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `evento_id` | text | não |  | eventos_operacionais.evento_id |
+| `professor_id` | integer | não |  | professores.id |
+| `participacao` | text | não |  |  |
+| `detectado_em` | timestamp with time zone | não |  |  |
+
+**Únicos:**
+- `eventos_operacionais_audiencia_pkey`
 
 ## fabio_acao_eventos
 
@@ -1373,8 +1425,8 @@
 | `id` | uuid | não | gen_random_uuid() |  |
 | `snapshot_metrica_id` | uuid | não |  | health_score_professor_v3_snapshot_metricas.id |
 | `config_meta_segmento_id` | uuid | sim |  | health_score_professor_v3_config_metas_curso_modalidade.id |
-| `unidade_id` | uuid | não |  | professor_unidade_curso_modalidade.unidade_id |
-| `curso_id` | integer | não |  | professor_unidade_curso_modalidade.curso_id |
+| `unidade_id` | uuid | não |  | health_score_professor_v3_config_metas_curso_modalidade.unidade_id |
+| `curso_id` | integer | não |  | cursos.id |
 | `modalidade` | text | não |  | professor_unidade_curso_modalidade.modalidade |
 | `pessoas_unicas` | integer | não | 0 |  |
 | `vinculos_ativos` | integer | não | 0 |  |

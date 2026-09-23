@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — financeiro
 
-42 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+44 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## caixa_categorias
 
@@ -50,6 +50,23 @@
 
 **Triggers:**
 - `tr_caixa_financeiro_grupos_updated_at → set_updated_at_caixa()`
+
+## caixa_movimentacao_faturas
+
+> Faturas quitadas por uma movimentacao composta (1 pagamento -> N faturas). Movimentacao simples segue em caixa_movimentacoes.fatura_id; composto tem fatura_id NULL e N linhas aqui.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `movimentacao_id` | uuid | não |  | caixa_movimentacoes.id |
+| `fatura_id` | uuid | não |  | emusys_faturas.id |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `created_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `caixa_movimentacao_faturas_pkey`
+
+**Triggers:**
+- `trg_cmf_herda_unidade → cmf_herda_unidade()`
 
 ## caixa_movimentacoes
 
@@ -890,6 +907,13 @@
 - `sol_caixa_v3_caixa_operacoes__unidade_id_data_caixa_operaca_key`
 - `sol_caixa_v3_caixa_operacoes_v1_idempotency_key_key`
 - `sol_caixa_v3_caixa_operacoes_v1_pkey`
+
+## vw_caixa_movimentacao_fatura_links
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `movimentacao_id` | uuid | sim |  |  |
+| `fatura_id` | uuid | sim |  |  |
 
 ## vw_caixa_reconciliacao_entradas
 

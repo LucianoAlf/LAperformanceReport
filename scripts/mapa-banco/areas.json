@@ -361,7 +361,12 @@
     "google_ads": "comercial",
     "grants": "plataforma",
     "papel": "plataforma",
-    "retomada": "comercial"
+    "retomada": "comercial",
+    "dash_prof": "professor",
+    "eventos_operacionais": "professor",
+    "novidades": "professor",
+    "onde_parou": "professor",
+    "porteiro": "plataforma"
   },
   "excecoes": {
     "reconciliar_saida_automatica_cancelada_v1": "aluno",
@@ -398,7 +403,10 @@
     "repertorio_contem": "professor",
     "complementar_gaveta": "professor",
     "_compute_pix_migracao_v1": "financeiro",
-    "get_pix_migracao_v1": "financeiro"
+    "get_pix_migracao_v1": "financeiro",
+    "porteiro_rota_professor": "professor",
+    "app_marcar_notificacoes_lidas": "professor",
+    "app_notificacoes_nao_lidas": "professor"
   },
   "tokens": {
     "kpis": "gestao"
