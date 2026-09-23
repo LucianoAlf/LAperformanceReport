@@ -434,7 +434,7 @@ export function ChecklistDetail({ checklistId, unidadeId, onVoltar }: ChecklistD
       </div>
 
       {/* Sub-tabs internas (mesmo padrão do PainelFarmer) */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 overflow-x-auto scrollbar-hide [mask-image:linear-gradient(to_right,black_calc(100%-20px),transparent)] lg:mask-none">
         {subTabs.map(tab => (
           <button
             key={tab.id}
@@ -615,7 +615,7 @@ export function ChecklistDetail({ checklistId, unidadeId, onVoltar }: ChecklistD
               />
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="text-xs font-medium text-slate-400 mb-1.5 block">Periodicidade</label>
                 <Select value={editPeriodicidade} onValueChange={setEditPeriodicidade}>
@@ -1289,7 +1289,7 @@ function CarteiraSubTab({ contatos, onAtualizarContato, cursosUnidade, professor
       </div>
 
       {/* Cards resumo (wireframe L435-436) */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-slate-800/50 border border-slate-700/20 rounded-xl p-3 text-center">
           <p className="text-xl font-bold text-white">{filtrados.length}</p>
           <p className="text-[10px] text-slate-500 mt-0.5">Meus Alunos</p>
@@ -1615,7 +1615,7 @@ function SucessoSubTab({
       {totalContatos > 0 && (
         <div className="bg-slate-800/30 rounded-xl border border-slate-700/30 p-5">
           <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">Resumo Geral</h4>
-          <div className="grid grid-cols-3 gap-6 text-center">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center">
             <div>
               <p className={cn('text-2xl font-bold', taxaSucesso >= 80 ? 'text-emerald-400' : taxaSucesso >= 50 ? 'text-amber-400' : 'text-rose-400')}>
                 {taxaSucesso}%

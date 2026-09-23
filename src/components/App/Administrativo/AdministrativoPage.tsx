@@ -46,6 +46,11 @@ import { PainelFarmer } from './PainelFarmer';
 import { Trophy, ShoppingBag, ClipboardList, MessageSquare, Wallet } from 'lucide-react';
 import { CaixaEntradaTab } from './CaixaEntrada';
 import { CaixaFinanceiroTab } from './CaixaFinanceiro';
+import { useShellMobile } from '@/hooks/useShellMobile';
+import { AdministrativoMobile } from '@/mobile/telas/administrativo/AdministrativoMobile';
+import { AvisoNaoOtimizado } from '@/mobile/AvisoNaoOtimizado';
+import { abaFoiPortada } from '@/mobile/abasPortadas';
+import type { LancamentoId } from '@/lib/administrativoMobile';
 import { ModalPermanenciaDetalhe } from '@/components/GestaoMensal/ModalPermanenciaDetalhe';
 import { ModalDetalheKPI, BadgeUnidade, ValorParcela, TextoCurso } from '@/components/App/Dashboard/ModalDetalheKPI';
 import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
@@ -264,6 +269,11 @@ export function AdministrativoPage() {
 
   // Hook de filtro de competência (período)
   const competenciaFiltro = useCompetenciaFiltro();
+
+  // ⚠️ Depois de TODOS os hooks: a bifurcacao e de RENDER, nunca de
+  // montagem. Sair mais cedo mudaria a ordem dos hooks entre os dois
+  // shells, que e o erro que o React nao perdoa.
+  const ehCelular = useShellMobile() === 'mobile';
   const periodoFideliza = getTrimestreLabelFromMes(competenciaFiltro.filtro.mes);
 
   // Estado
@@ -1249,6 +1259,29 @@ export function AdministrativoPage() {
     }
   }
 
+  /**
+   * O celular pede um lancamento pelo nome; quem abre o modal continua sendo
+   * esta pagina, com os MESMOS `setModal*` dos oito cards do computador.
+   *
+   * ⚠️ Nao existe modal proprio do celular. Medidos a 390px, os quatro
+   * principais ja cabem (390px de largura, zero rolagem lateral, 0,7-0,9 tela,
+   * Esc fecha) -- reescreve-los criaria uma segunda versao de cada regra de
+   * escrita do Administrativo, que e a origem das duplicatas de renovacao.
+   */
+  function abrirLancamento(id: LancamentoId) {
+    setEditingItem(null);
+    switch (id) {
+      case 'renovacao': openModalRenovacao('confirmada'); break;
+      case 'renovacao_pendente': openModalRenovacao('pendente_validacao'); break;
+      case 'renovacao_antecipada': openModalRenovacao('antecipada_pendente'); break;
+      case 'nao_renovacao': setModalNaoRenovacao(true); break;
+      case 'aviso_previo': setModalAvisoPrevio(true); break;
+      case 'trancamento': setModalTrancamento(true); break;
+      case 'transferencia': setModalTransferencia(true); break;
+      case 'cancelamento': setModalEvasao(true); break;
+    }
+  }
+
   function handleEdit(item: MovimentacaoAdmin) {
     setEditingItem(item);
     switch (item.tipo) {
@@ -1339,12 +1372,21 @@ export function AdministrativoPage() {
               onDataInicioChange={competenciaFiltro.setDataInicio}
               onDataFimChange={competenciaFiltro.setDataFim}
             />
+            {/* ⚠️ No celular ele deixa de ser um botão em gradiente de meia
+                tela. Olhando a tela a 390px: dois gradientes gigantes
+                empilhados — este ciano e o roxo de "Lançar movimentação" —
+                competiam, e o que gritava mais alto era o SECUNDÁRIO. Gerar
+                relatório é uma ação ocasional; lançar movimentação é o motivo
+                de a ADM abrir a tela. O desktop não muda: lá os dois não se
+                empilham, e o gradiente é o padrão da barra de filtros. */}
             <button
               onClick={() => setModalRelatorio(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-cyan-500/20"
+              className={ehCelular
+                ? "flex min-h-[44px] items-center gap-2 rounded-xl border border-slate-700 px-3 text-[13px] font-medium text-slate-300 active:bg-slate-800"
+                : "flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-cyan-500/20"}
             >
               <FileText className="w-4 h-4" />
-              Gerar Relatório WhatsApp
+              {ehCelular ? 'Relatório' : 'Gerar Relatório WhatsApp'}
             </button>
           </>
         )}
@@ -1364,6 +1406,13 @@ export function AdministrativoPage() {
         activeTab={mainTab}
         onTabChange={setMainTab}
       />
+
+      {/* 🔴 A faixa fica AQUI, no nivel da rota, e nao dentro do ramo
+          `lancamentos`: as outras seis abas continuam abrindo a tela do
+          computador, e cada uma precisa do seu aviso. Deixa-la la dentro
+          apagaria a faixa de Contratos, Fideliza+, Lojinha, Farmer, Caixa e
+          Entrada de uma vez -- o erro cometido com Alunos em 14/09. */}
+      {ehCelular && !abaFoiPortada('/app/administrativo', mainTab) && <AvisoNaoOtimizado />}
 
       {/* Conteúdo baseado na tab principal */}
       {mainTab === 'contratos' ? (
@@ -1389,6 +1438,31 @@ export function AdministrativoPage() {
           unidadeId={unidade} 
           ano={competenciaFiltro.filtro.ano}
           mes={competenciaFiltro.filtro.mes}
+        />
+      ) : (
+        <>
+      {/* 🔴 A bifurcacao fica DENTRO do ramo `lancamentos`, e o conteudo do
+          computador segue byte-identico no `else`. Os modais NAO entram aqui:
+          eles vivem logo abaixo, no mesmo fragmento, e o celular os alcanca
+          pelo `abrirLancamento`/`handleEdit`. Bifurcar antes deles deixaria
+          cada botao de lancamento mudo no telefone. */}
+      {ehCelular ? (
+        <AdministrativoMobile
+          listas={{
+            renovacoes,
+            renovacoes_pendentes: renovacoesPendentesConfirmacao,
+            renovacoes_antecipadas: renovacoesAntecipadas,
+            nao_renovacoes: naoRenovacoes,
+            avisos: avisosPrevios,
+            cancelamentos: evasoes,
+            trancamentos,
+            transferencias,
+            alunos_novos: alunosNovos.filter(isNovoAlunoPaganteOperacional),
+          }}
+          resumo={resumo}
+          onLancar={abrirLancamento}
+          onEditar={(mov) => handleEdit(mov as MovimentacaoAdmin)}
+          periodo={competenciaFiltro.range.label}
         />
       ) : (
         <>
@@ -2028,6 +2102,8 @@ export function AdministrativoPage() {
         </div>
         </div>
       </section>
+        </>
+      )}
 
       {/* Modais */}
       <ModalRenovacao
@@ -2098,11 +2174,19 @@ export function AdministrativoPage() {
       />
 
       {/* Plano de Ação Inteligente - IA de Retenção */}
-      <PlanoAcaoRetencao
-        unidadeId={unidade}
-        ano={ano}
-        mes={mes}
-      />
+      {/* ⚠️ Ele mora no bloco dos MODAIS mas é um painel VISÍVEL — foi assim que
+          vazou para a tela do celular mesmo com a bifurcação feita acima, com
+          426px de largura dentro de 354px. Medido no navegador a 390px; nenhum
+          teste teria pego, porque o arquivo está correto do ponto de vista da
+          bifurcação. Fica fora do celular pela mesma régua dos motivos de saída
+          e do LTV: é análise de gestão, que ninguém aciona de pé no balcão. */}
+      {!ehCelular && (
+        <PlanoAcaoRetencao
+          unidadeId={unidade}
+          ano={ano}
+          mes={mes}
+        />
+      )}
 
       {/* Modal de Confirmação de Destrancamento */}
       <ModalConfirmacao

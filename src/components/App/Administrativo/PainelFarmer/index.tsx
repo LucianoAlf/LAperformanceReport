@@ -59,7 +59,11 @@ export function PainelFarmer({ unidadeId, ano, mes }: PainelFarmerProps) {
       </div>
 
       {/* Sub-tabs - estilo arredondado em cima, reto embaixo */}
-      <div className="flex gap-2">
+      {/* ⚠️ Rola no celular: medido 632px de trilho em 356px de tela, sem
+          nenhuma pista de que havia aba escondida. Mesmo padrao do
+          `PageTabs` mobile — o desvanecimento substitui a barra de rolagem
+          que `scrollbar-hide` esconde. */}
+      <div className="flex gap-2 overflow-x-auto scrollbar-hide [mask-image:linear-gradient(to_right,black_calc(100%-20px),transparent)] lg:mask-none">
         {subTabs.map(tab => {
           const Icon = tab.icon;
           return (
@@ -67,7 +71,7 @@ export function PainelFarmer({ unidadeId, ano, mes }: PainelFarmerProps) {
               key={tab.id}
               onClick={() => setActiveSubTab(tab.id)}
               className={cn(
-                'px-4 py-2 rounded-t-xl rounded-b-none text-sm font-medium transition-all flex items-center gap-2 border border-b-0',
+                'shrink-0 whitespace-nowrap px-4 py-2 rounded-t-xl rounded-b-none text-sm font-medium transition-all flex items-center gap-2 border border-b-0',
                 activeSubTab === tab.id
                   ? 'bg-gradient-to-r from-violet-600 to-purple-600 text-white border-violet-600'
                   : 'bg-slate-800/50 text-slate-400 hover:text-white hover:bg-slate-700/50 border-slate-700/50'

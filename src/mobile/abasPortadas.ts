@@ -17,7 +17,11 @@
  */
 
 /** Rotas que exibem a própria faixa, por aba, em vez da faixa do shell. */
-export const ROTAS_COM_FAIXA_POR_ABA: readonly string[] = ['/app/alunos', '/app/agenda'];
+export const ROTAS_COM_FAIXA_POR_ABA: readonly string[] = [
+  '/app/alunos',
+  '/app/agenda',
+  '/app/administrativo',
+];
 
 /**
  * Abas com versão mobile, por rota. Cresce uma linha por aba portada.
@@ -35,6 +39,17 @@ export const ABAS_PORTADAS: Readonly<Record<string, readonly string[]>> = {
   // desktop, com a faixa âmbar. Marcar a rota inteira apagaria a faixa dele
   // junto — que é exatamente o erro cometido com Alunos em 14/09.
   '/app/agenda': ['professor', 'sala', 'chamada'],
+  // ⚠️ SÓ `'lancamentos'`. As outras seis abas do Administrativo (Contratos,
+  // Fideliza+, Lojinha, Farmer, Caixa e Entrada) seguem abrindo a tela do
+  // computador com a faixa âmbar — e Caixa e Entrada são frentes próprias, com
+  // escrita de dinheiro e conversa de WhatsApp.
+  //
+  // ⚠️ `'lancamentos'` entra com RECORTE declarado: no celular a aba responde
+  // "o que lançar e o que já lancei", não "como foi o mês". Motivos de saída,
+  // MRR perdido e LTV ficam no computador, e a tela diz isso por escrito (ver
+  // `@/lib/administrativoMobile`). A faixa some porque a aba foi adaptada, não
+  // porque faz tudo o que a do computador faz.
+  '/app/administrativo': ['lancamentos'],
 };
 
 export function rotaTemFaixaPorAba(

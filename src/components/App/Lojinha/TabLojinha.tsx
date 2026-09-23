@@ -32,10 +32,14 @@ export function TabLojinha({ unidadeId }: TabLojinhaProps) {
   return (
     <div className="space-y-6">
       {/* Header actions */}
-      <div className="flex items-center justify-end">
+      {/* `justify-end` sozinho no celular cola o botao na borda direita e
+          deixa um buraco de 130px a esquerda — o mesmo defeito que o
+          `PageFilterBar` ja descreve no proprio comentario. Aqui o botao e
+          a unica acao da faixa, entao ele ocupa a largura toda. */}
+      <div className="flex items-center justify-end max-lg:items-stretch">
         <Button
           onClick={() => setModalRelatorio(true)}
-          className="bg-cyan-600 hover:bg-cyan-700"
+          className="bg-cyan-600 hover:bg-cyan-700 max-lg:w-full"
         >
           <FileText className="w-4 h-4 mr-2" />
           Gerar Relatório WhatsApp

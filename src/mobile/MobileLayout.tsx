@@ -1,7 +1,8 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { useTabelaComoCards } from './useTabelaComoCards';
 import { PageTitleProvider } from '@/contexts/PageTitleContext';
 import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 import { useUnidadeFiltro } from '@/hooks/useUnidadeFiltro';
@@ -99,6 +100,11 @@ export function MobileLayout() {
   // overflow-x-hidden cortaria justamente as que dependem da degradacao.
   const faixaPorAba = rotaTemFaixaPorAba(location.pathname);
 
+  // Rotula as celulas das tabelas com o nome da coluna, para o CSS de
+  // tabela-vira-card. Fora do celular o hook sai na primeira linha.
+  const refConteudo = useRef<HTMLElement>(null);
+  useTabelaComoCards(true, refConteudo);
+
   return (
     <PageTitleProvider>
       <div className="flex h-[100dvh] flex-col bg-slate-950">
@@ -119,7 +125,14 @@ export function MobileLayout() {
             largo demais vira rolagem horizontal em vez de aparecer como o
             defeito de layout que e. Tela portada que rola para o lado nao esta
             portada. */}
+        {/* `data-cards-mobile` liga o CSS que transforma <table> em cards
+            (src/index.css). Tabela nao encolhe — a largura minima dela e a
+            soma das colunas — entao num telefone ela sempre vira arrasto
+            lateral. O card troca o eixo: coluna vira linha rotulada, e a
+            tela cresce para baixo, que e o eixo que sobra. */}
         <main
+          ref={refConteudo}
+          data-cards-mobile=""
           className={`min-h-0 flex-1 overflow-y-auto p-3 ${
             portada ? 'overflow-x-hidden' : 'overflow-x-auto'
           }`}

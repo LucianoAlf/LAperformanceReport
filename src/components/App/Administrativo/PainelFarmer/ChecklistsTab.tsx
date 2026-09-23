@@ -548,7 +548,7 @@ export function ChecklistsTab({ unidadeId, departamentoFixo }: ChecklistsTabProp
             </div>
 
             {/* Periodicidade + Departamento + Prioridade */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="text-xs font-medium text-slate-400 mb-1.5 block">Periodicidade</label>
                 <Select value={periodicidade} onValueChange={(v: typeof periodicidade) => setPeriodicidade(v)}>

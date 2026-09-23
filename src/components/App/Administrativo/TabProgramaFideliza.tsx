@@ -411,11 +411,11 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
 
     return (
       <div key={farmer.unidade_id} className={cn(
-        "bg-gradient-to-br border-2 rounded-2xl p-6 relative",
+        "bg-gradient-to-br border-2 rounded-2xl p-6 max-lg:p-4 relative",
         bgGradient
       )}>
         {/* Badge de posicao */}
-        <div className={cn("absolute -top-3 -right-3 font-bold px-3 py-1 rounded-full text-sm", badgeBg)}>
+        <div className={cn("absolute -top-3 -right-3 max-lg:-top-2 max-lg:right-2 font-bold px-3 py-1 rounded-full text-sm", badgeBg)}>
           {posicao === 1 ? '🥇' : posicao === 2 ? '🥈' : '🥉'} {posicao}o Lugar
         </div>
 
@@ -501,7 +501,7 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
     return (
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between max-lg:flex-col max-lg:items-stretch max-lg:gap-3">
           <div>
             <h2 className="text-xl font-bold text-white flex items-center gap-3">
               <Trophy className="w-6 h-6 text-yellow-400" />
@@ -515,7 +515,7 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
             variant="outline"
             size="sm"
             onClick={() => setShowModalPenalidade(true)}
-            className="border-red-500/30 text-red-400 hover:bg-red-500/10"
+            className="border-red-500/30 text-red-400 hover:bg-red-500/10 max-lg:h-11"
           >
             <Plus className="w-4 h-4 mr-2" />
             Registrar Penalidade
@@ -525,7 +525,7 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
         <FidelizaFonteBadge />
 
         {/* Abas internas (padrao cockpit) */}
-        <div className="flex gap-2 border-b border-slate-700 pb-2">
+        <div className="flex gap-2 overflow-x-auto scrollbar-hide border-b border-slate-700 pb-2 [mask-image:linear-gradient(to_right,black_calc(100%-20px),transparent)] lg:mask-none">
           {ABAS_CONFIG.map(aba => {
             const Icon = aba.icon;
             const isActive = abaInterna === aba.id;
@@ -535,7 +535,7 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
                 key={aba.id}
                 onClick={() => setAbaInterna(aba.id)}
                 className={cn(
-                  "px-4 py-2 rounded-t-lg text-sm font-medium transition-colors flex items-center gap-2",
+                  "shrink-0 whitespace-nowrap px-4 py-2 max-lg:min-h-[44px] rounded-t-lg text-sm font-medium transition-colors flex items-center gap-2",
                   isActive 
                     ? `${aba.bgColor} text-white` 
                     : "bg-slate-800 text-slate-400 hover:bg-slate-700"
@@ -552,7 +552,7 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
         {abaInterna === 'ranking' && (
           <div className="space-y-6">
             {/* Cards de Ranking */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {farmers.map((farmer, index) => renderFarmerCard(farmer, index))}
             </div>
 
@@ -563,7 +563,7 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
                 Comparativo Detalhado - {TRIMESTRES.find(t => t.value === trimestreEfetivo)?.label}
               </h3>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm max-lg:[&_td]:whitespace-nowrap max-lg:[&_th]:whitespace-nowrap max-lg:[&_td]:px-2.5 max-lg:[&_th]:px-2.5 max-lg:[&_tr>*:first-child]:sticky max-lg:[&_tr>*:first-child]:left-0 max-lg:[&_tr>*:first-child]:bg-slate-900 max-lg:[&_tr>*:first-child]:z-10">
                   <thead>
                     <tr className="text-slate-400 border-b border-slate-700">
                       <th className="text-left py-3">Metrica</th>
@@ -666,8 +666,8 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
             </div>
 
             {/* Historico Trimestral - 2026 */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-              <div className="flex items-center justify-between mb-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-lg:p-4">
+              <div className="flex items-center justify-between mb-4 max-lg:flex-col max-lg:items-start max-lg:gap-3">
                 <h3 className="text-lg font-semibold flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-cyan-400" />
                   Historico Trimestral - {ano}
@@ -676,7 +676,7 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
                   <button
                     onClick={() => setHistoricoView('tabela')}
                     className={cn(
-                      "px-3 py-1 rounded text-sm transition-colors",
+                      "px-3 py-1 max-lg:min-h-[44px] max-lg:px-4 rounded text-sm transition-colors",
                       historicoView === 'tabela' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
                     )}
                   >
@@ -685,7 +685,7 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
                   <button
                     onClick={() => setHistoricoView('grafico')}
                     className={cn(
-                      "px-3 py-1 rounded text-sm transition-colors",
+                      "px-3 py-1 max-lg:min-h-[44px] max-lg:px-4 rounded text-sm transition-colors",
                       historicoView === 'grafico' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'
                     )}
                   >
@@ -696,7 +696,7 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
 
               {historicoView === 'tabela' ? (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full text-sm max-lg:[&_td]:whitespace-nowrap max-lg:[&_th]:whitespace-nowrap max-lg:[&_td]:px-2.5 max-lg:[&_th]:px-2.5 max-lg:[&_tr>*:first-child]:sticky max-lg:[&_tr>*:first-child]:left-0 max-lg:[&_tr>*:first-child]:bg-slate-900 max-lg:[&_tr>*:first-child]:z-10">
                     <thead>
                       <tr className="text-slate-400 border-b border-slate-700">
                         <th className="text-left py-3">Trimestre</th>
@@ -856,7 +856,7 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
             </div>
 
             {/* Metas vs Media do Grupo */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-lg:p-4">
               <h3 className="text-lg font-semibold flex items-center gap-2 mb-2">
                 <Target className="w-5 h-5 text-purple-400" />
                 Comparativo: Unidades vs Media do Grupo
@@ -865,7 +865,7 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
                 Compare o desempenho de cada unidade com a media das 3 escolas (sem revelar posicoes individuais)
               </p>
               
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {/* Churn */}
                 <div className="bg-slate-800/50 rounded-xl p-4">
                   <div className="text-sm text-slate-400 mb-3">Churn (Desempate)</div>
@@ -1006,7 +1006,7 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
         {abaInterna === 'penalidades' && (
           <div className="space-y-6">
             {/* Cards de Penalidades por Dupla */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {farmers.map(f => (
                 <div key={f.unidade_id} className="bg-slate-900 border border-slate-800 rounded-xl p-4">
                   <div className="flex items-center gap-3 mb-2">
@@ -1032,7 +1032,7 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
             </div>
 
             {/* Tabela de Penalidades */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-lg:p-4">
               <h3 className="text-lg font-semibold mb-4">
                 Historico de Penalidades - {ano}
               </h3>
@@ -1042,7 +1042,7 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
                   Nenhuma penalidade registrada este ano
                 </div>
               ) : (
-                <table className="w-full text-sm">
+                <table className="w-full text-sm max-lg:[&_td]:whitespace-nowrap max-lg:[&_th]:whitespace-nowrap max-lg:[&_td]:px-2.5 max-lg:[&_th]:px-2.5 max-lg:[&_tr>*:first-child]:sticky max-lg:[&_tr>*:first-child]:left-0 max-lg:[&_tr>*:first-child]:bg-slate-900 max-lg:[&_tr>*:first-child]:z-10">
                   <thead>
                     <tr className="text-slate-400 border-b border-slate-700">
                       <th className="text-left py-3">Data</th>
@@ -1100,7 +1100,7 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
             </div>
 
             {/* Grid 3 colunas: Metas, Lojinha, Pontuacao */}
-            <div className="grid grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
               {/* Metas de Retencao */}
               <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
                 <h4 className="font-medium text-slate-300 border-b border-slate-700 pb-2 mb-4">Metas de Retencao (Trimestral)</h4>
@@ -1369,7 +1369,7 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
 
             {/* Experiencias Cadastradas */}
             <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-4 max-lg:flex-col max-lg:items-start max-lg:gap-3">
                 <h4 className="font-medium text-slate-300 flex items-center gap-2">
                   <Gift className="w-5 h-5 text-purple-400" />
                   Experiencias Cadastradas
@@ -1791,9 +1791,9 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
         <div className="mb-4">
           <FidelizaFonteBadge />
         </div>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex -space-x-3">
+        <div className="flex items-center justify-between max-lg:flex-col max-lg:items-start max-lg:gap-4">
+          <div className="flex items-center gap-4 max-lg:w-full">
+            <div className="flex -space-x-3 max-lg:shrink-0">
               {iniciais.map((inicial, i) => (
                 <div key={i} className={cn(
                   "w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold",
@@ -1812,12 +1812,12 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
               <p className="text-slate-400">
                 {farmerAtual.unidade_nome} • Programa Fideliza+ LA {ano}
               </p>
-              <div className="mt-2 inline-flex items-center rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-xs font-medium text-cyan-300">
+              <div className="mt-2 inline-flex items-center rounded-full max-lg:rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-xs font-medium text-cyan-300">
                 Visao trimestral • {periodoTrimestralLabel}
               </div>
             </div>
           </div>
-          <div className="text-right">
+          <div className="text-right max-lg:text-left">
             <div className={cn(
               "text-5xl font-bold",
               pontos >= (config?.nota_corte || 60) ? "text-emerald-400" : "text-amber-400"
@@ -1836,7 +1836,7 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
       </div>
 
       {/* Cards de Metricas */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-4 max-lg:grid-cols-1">
         <MetricaCardFarmer
           titulo="Churn Premiado"
           meta={`Meta: <= ${config?.metas.churn_maximo || 4}%`}
@@ -1961,8 +1961,8 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
       </div>
 
       {/* Historico Trimestral - Tabela e Grafico */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-lg:p-4">
+        <div className="flex items-center justify-between mb-4 max-lg:flex-col max-lg:items-start max-lg:gap-3">
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-cyan-400" />
             Historico Trimestral - {ano}
@@ -1971,7 +1971,7 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
             <button
               onClick={() => setHistoricoView('tabela')}
               className={cn(
-                "px-3 py-1 rounded text-sm transition-colors",
+                "px-3 py-1 max-lg:min-h-[44px] max-lg:px-4 rounded text-sm transition-colors",
                 historicoView === 'tabela' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
               )}
             >
@@ -1980,7 +1980,7 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
             <button
               onClick={() => setHistoricoView('grafico')}
               className={cn(
-                "px-3 py-1 rounded text-sm transition-colors",
+                "px-3 py-1 max-lg:min-h-[44px] max-lg:px-4 rounded text-sm transition-colors",
                 historicoView === 'grafico' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'
               )}
             >
@@ -1991,7 +1991,7 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
 
         {historicoView === 'tabela' ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm max-lg:[&_td]:whitespace-nowrap max-lg:[&_th]:whitespace-nowrap max-lg:[&_td]:px-2.5 max-lg:[&_th]:px-2.5 max-lg:[&_tr>*:first-child]:sticky max-lg:[&_tr>*:first-child]:left-0 max-lg:[&_tr>*:first-child]:bg-slate-900 max-lg:[&_tr>*:first-child]:z-10">
               <thead>
                 <tr className="text-slate-400 border-b border-slate-700">
                   <th className="text-left py-3">Trimestre</th>
@@ -2203,7 +2203,7 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
           <Trophy className="w-5 h-5 text-emerald-400" />
           Evolucao Trimestral - {ano}
         </h3>
-        <div className="grid grid-cols-4 gap-4 text-center text-sm">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center text-sm">
           {TRIMESTRES.map(t => {
             const hist = historico.find(h => h.trimestre === t.value && h.unidade_id === farmerAtual.unidade_id);
             const isAtual = t.value === trimestreAtual;
@@ -2303,8 +2303,8 @@ function MetricaCardFarmer({
 }) {
   return (
     <div className="bg-slate-900 rounded-xl p-5">
-      <div className="flex items-center justify-between mb-3">
-        <div>
+      <div className="flex items-center justify-between max-lg:gap-3 mb-3">
+        <div className="max-lg:min-w-0">
           <h4 className="font-medium flex items-center gap-2">
             {icon}
             {titulo}

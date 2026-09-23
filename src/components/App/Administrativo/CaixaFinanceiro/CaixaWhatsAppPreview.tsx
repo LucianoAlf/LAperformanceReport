@@ -112,7 +112,7 @@ export function CaixaWhatsAppPreview({
             <p className="text-xs text-slate-400">Conferencia manual antes do envio ao financeiro.</p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 max-lg:w-full max-lg:flex-wrap">
           <Button type="button" variant="outline" size="sm" disabled={!caixa} onClick={() => void copiar()}>
             <Copy className="h-4 w-4" />
             Copiar

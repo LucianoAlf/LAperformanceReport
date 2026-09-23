@@ -738,7 +738,7 @@ export function PlanoAcaoRetencao({ unidadeId, ano, mes }: PlanoAcaoRetencaoProp
                   </h4>
                   <div className="p-4 bg-gradient-to-r from-violet-500/10 to-purple-500/10 rounded-xl border border-violet-500/20">
                     <p className="text-sm text-slate-300 mb-3">{String(insights.sazonalidade.comparativo_ano_anterior || '')}</p>
-                    <div className="grid grid-cols-3 gap-2 mb-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
                       {insights.sazonalidade.variacao_alunos_pct !== null && (
                         <div className="p-2 bg-slate-800/50 rounded-lg text-center">
                           <p className="text-xs text-slate-400">Alunos</p>
@@ -1005,7 +1005,7 @@ export function PlanoAcaoRetencao({ unidadeId, ano, mes }: PlanoAcaoRetencaoProp
                     <Target className="w-4 h-4 text-indigo-400" />
                     Ritmo e Projeção
                   </h4>
-                  <div className="grid grid-cols-3 gap-3 mb-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
                     <div className="text-center">
                       <p className="text-lg font-bold text-indigo-400">{String(insights.ritmo.atual || '')}</p>
                       <p className="text-xs text-slate-400">Atual</p>
@@ -1029,7 +1029,7 @@ export function PlanoAcaoRetencao({ unidadeId, ano, mes }: PlanoAcaoRetencaoProp
                     <Calendar className="w-4 h-4 text-cyan-400" />
                     Renovações Próximas
                   </h4>
-                  <div className="grid grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {insights.renovacoes_proximas.total_vencidos !== undefined && (
                       <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-center">
                         <p className="text-2xl font-bold text-rose-400">{insights.renovacoes_proximas.total_vencidos}</p>

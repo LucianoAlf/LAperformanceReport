@@ -297,3 +297,132 @@ input[type="number"] {
 .animate-slide-out-right {
   animation: slide-out-right 0.3s ease-in;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   TABELA VIRA CARD NO CELULAR
+   ══════════════════════════════════════════════════════════════════════
+   Pedido do Hugo, e ele tem razao: "se continuar usando tabela, tem que
+   ficar arrastando para o lado, e em dispositivo movel a gente nao tem
+   espaco horizontal".
+
+   Uma tabela nao encolhe: ela tem uma largura minima que e a soma das
+   colunas, e num telefone isso sempre estoura. Card nao tem esse problema
+   porque troca o eixo — o que era coluna vira LINHA rotulada dentro do
+   card, e a tela cresce para baixo, que e o eixo que sobra.
+
+   🔴 Sao 85 arquivos com <table> no app. Converter um a um seria refazer
+   85 telas e deixar a 86a nascendo tabela de novo. Isto age sobre o
+   elemento, dentro do shell mobile, e por isso vale para todas — as que
+   existem e as que vierem.
+
+   ⚠️ Escopo triplo, para nao vazar: `@media (max-width:1023px)` (o
+   `LARGURA_MAXIMA_MOBILE` do app), `main[data-cards-mobile]` (so dentro do
+   shell mobile) e `table:not([data-cards='nao'])` (saida para a tabela em
+   que isto ficar pior que rolar).
+
+   O rotulo de cada celula vem do <thead> por `data-rotulo`, injetado em
+   runtime — ver `useTabelaComoCards`. Sem rotulo, uma data solta nao diz
+   se e "ultima aula" ou "vencimento da fatura".
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width: 1023px) {
+  main[data-cards-mobile] table:not([data-cards='nao']) {
+    display: block;
+    width: 100%;
+  }
+
+  /* O cabecalho vira o rotulo de cada celula; repetido em cima seria lido
+     duas vezes. */
+  main[data-cards-mobile] table:not([data-cards='nao']) thead {
+    display: none;
+  }
+
+  main[data-cards-mobile] table:not([data-cards='nao']) tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  main[data-cards-mobile] table:not([data-cards='nao']) tr {
+    display: block;
+    border: 1px solid rgb(30 41 59);
+    border-radius: 0.75rem;
+    background: rgb(15 23 42 / 0.55);
+    padding: 0.75rem;
+  }
+
+  main[data-cards-mobile] table:not([data-cards='nao']) td {
+    display: flex;
+    align-items: baseline;
+    /* ⚠️ `space-between` aqui SEPARAVA o valor do seu proprio icone: com o
+       `td` virando flex, cada no filho (o texto "4.5%" e o <svg> do ✓/×)
+       vira um item independente, e o navegador espalhava os tres pela
+       linha. Quem empurra e o rotulo, com `margin-right:auto` abaixo —
+       assim tudo que veio do `td` continua junto, do lado direito. */
+    justify-content: flex-end;
+    gap: 0.3rem;
+    padding: 0.3rem 0;
+    text-align: right;
+    border: 0;
+    white-space: normal;
+    /* a linha `sticky` da versao anterior nao faz sentido em card */
+    position: static;
+  }
+
+  main[data-cards-mobile] table:not([data-cards='nao']) td::before {
+    content: attr(data-rotulo);
+    flex: 0 1 auto;
+    min-width: 0;
+    margin-right: auto;
+    padding-right: 0.75rem;
+    text-align: left;
+    font-size: 0.6875rem;
+    line-height: 1.2;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: rgb(100 116 139);
+    font-weight: 500;
+  }
+
+  /* A primeira coluna quase sempre e o NOME da coisa — vira o titulo do
+     card, em cima, sem rotulo. `data-titulo` e decidido em runtime: coluna
+     que so tem caixa de selecao ou icone nao vira titulo. */
+  main[data-cards-mobile] table:not([data-cards='nao']) td[data-titulo='sim'] {
+    display: block;
+    text-align: left;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    padding: 0 0 0.5rem;
+    margin-bottom: 0.35rem;
+    border-bottom: 1px solid rgb(30 41 59);
+  }
+  main[data-cards-mobile] table:not([data-cards='nao']) td[data-titulo='sim']::before {
+    display: none;
+  }
+
+  /* Celula sem conteudo vira linha vazia com rotulo orfao. */
+  main[data-cards-mobile] table:not([data-cards='nao']) td[data-vazia='sim'] {
+    display: none;
+  }
+
+  /* Coluna sem cabecalho (foto do produto, selo, botao de acao) nao e um
+     atributo: ela nao tem nome para servir de rotulo. Fica a esquerda, como
+     enfeite da linha, em vez de exibir um rotulo em branco e empurrar o
+     conteudo para a direita como se fosse um valor. */
+  main[data-cards-mobile] table:not([data-cards='nao']) td[data-semrotulo='sim'] {
+    justify-content: flex-start;
+    text-align: left;
+  }
+  main[data-cards-mobile] table:not([data-cards='nao']) td[data-semrotulo='sim']::before {
+    display: none;
+  }
+
+  /* Rodape de totais nao e um item da lista: fica com o desenho de
+     resumo, nao de card. */
+  main[data-cards-mobile] table:not([data-cards='nao']) tfoot {
+    display: block;
+    margin-top: 0.5rem;
+  }
+  main[data-cards-mobile] table:not([data-cards='nao']) tfoot tr {
+    background: rgb(30 41 59 / 0.55);
+  }
+}

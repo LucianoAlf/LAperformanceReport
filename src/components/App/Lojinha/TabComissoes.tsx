@@ -412,7 +412,7 @@ function CarteiraCard({ nome, tipo, unidade, info, saldo, moedasLa, cor, onSaque
       <p className="text-xs text-slate-400 mt-1 mb-4">
         Saldo disponível para saque ou uso na loja
       </p>
-      <div className="flex gap-2">
+      <div className="flex gap-2 max-lg:flex-wrap">
         <Button size="sm" onClick={onUsarLoja}>
           💳 Usar na Loja
         </Button>
@@ -473,7 +473,7 @@ function CarteiraCardProfessor({ nome, instrumento, unidade, saldo, moedasLa, co
         </div>
       )}
       
-      <div className="flex gap-2 mt-4">
+      <div className="flex gap-2 mt-4 max-lg:flex-wrap">
         <Button size="sm" onClick={onUsarLoja}>
           💳 Usar na Loja
         </Button>

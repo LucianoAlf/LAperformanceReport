@@ -1286,7 +1286,7 @@ export function AdminChatPanel({
           </div>
         ) : (
           /* === Modo Normal === */
-          <div className="flex items-end gap-2">
+          <div className="flex items-end gap-2 max-lg:flex-wrap">
             {/* Botão anexo */}
             <div className="relative">
               <button
@@ -1369,7 +1369,7 @@ export function AdminChatPanel({
             </div>
 
             {/* Textarea + dropdown de templates */}
-            <div className="flex-1 relative">
+            <div className="flex-1 relative max-lg:order-first max-lg:basis-full">
               {templateDropdownAberto && (
                 <TemplateSelector
                   modo="dropdown"
