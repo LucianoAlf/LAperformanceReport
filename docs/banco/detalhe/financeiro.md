@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-19 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-23 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — financeiro
 
-40 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+41 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## caixa_categorias
 
@@ -399,6 +399,7 @@
 | `ultima_vez_visto` | timestamp with time zone | não | now() |  |
 | `alterado_em` | timestamp with time zone | sim |  |  |
 | `sumiu_em` | timestamp with time zone | sim |  |  |
+| `emusys_fatura_id` | bigint | sim |  |  |
 
 **Únicos:**
 - `financeiro_emusys_lancamentos_pkey`
@@ -876,6 +877,29 @@
 - `sol_caixa_v3_caixa_operacoes__unidade_id_data_caixa_operaca_key`
 - `sol_caixa_v3_caixa_operacoes_v1_idempotency_key_key`
 - `sol_caixa_v3_caixa_operacoes_v1_pkey`
+
+## vw_caixa_reconciliacao_entradas
+
+> Relatorio de reconciliacao caixa x Emusys: cada entrada sem fatura_id com classe (match_unico/ambigua/composta_2_faturas/sem_match) e candidatas em jsonb. Match por unidade + data_pagamento +-7d + valor_pago exato + nome rigoroso (sol_nome_mesma_pessoa_v1 / boundary). elegivel_backfill = escopo do reparo aprovado (parcela+pix, unico, nao composto). revisar_superfolha = proxy das linhas ja consumidas pelo Super Folha (validar origem_id do lado de la).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `movimentacao_id` | uuid | sim |  |  |
+| `unidade_id` | uuid | sim |  |  |
+| `unidade_nome` | character varying(100) | sim |  |  |
+| `data_movimento` | date | sim |  |  |
+| `competencia` | date | sim |  |  |
+| `forma_pagamento` | text | sim |  |  |
+| `categoria` | text | sim |  |  |
+| `descricao` | text | sim |  |  |
+| `valor` | numeric(12,2) | sim |  |  |
+| `criado_por` | text | sim |  |  |
+| `mov_aluno_id` | integer | sim |  |  |
+| `nome_extraido` | text | sim |  |  |
+| `classe` | text | sim |  |  |
+| `candidatas` | jsonb | sim |  |  |
+| `elegivel_backfill` | boolean | sim |  |  |
+| `revisar_superfolha` | boolean | sim |  |  |
 
 ## vw_contratos_vencendo
 

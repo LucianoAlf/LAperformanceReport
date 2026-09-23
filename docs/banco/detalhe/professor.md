@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-19 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-23 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — professor
@@ -359,6 +359,10 @@
 | `consumido_por_acao` | uuid | sim |  |  |
 | `descartado_em` | timestamp with time zone | sim |  |  |
 | `descartado_motivo` | text | sim |  |  |
+| `limpeza_lease_token` | uuid | sim |  |  |
+| `limpeza_lease_expira_em` | timestamp with time zone | sim |  |  |
+| `storage_removido_em` | timestamp with time zone | sim |  |  |
+| `limpeza_bloqueada_em` | timestamp with time zone | sim |  |  |
 
 **Únicos:**
 - `fabio_audios_parqueados_pkey`
@@ -1369,9 +1373,9 @@
 | `id` | uuid | não | gen_random_uuid() |  |
 | `snapshot_metrica_id` | uuid | não |  | health_score_professor_v3_snapshot_metricas.id |
 | `config_meta_segmento_id` | uuid | sim |  | health_score_professor_v3_config_metas_curso_modalidade.id |
-| `unidade_id` | uuid | não |  | unidades.id |
+| `unidade_id` | uuid | não |  | health_score_professor_v3_config_metas_curso_modalidade.unidade_id |
 | `curso_id` | integer | não |  | health_score_professor_v3_config_metas_curso_modalidade.curso_id |
-| `modalidade` | text | não |  | professor_unidade_curso_modalidade.modalidade |
+| `modalidade` | text | não |  | health_score_professor_v3_config_metas_curso_modalidade.modalidade |
 | `pessoas_unicas` | integer | não | 0 |  |
 | `vinculos_ativos` | integer | não | 0 |  |
 | `turmas_elegiveis` | integer | não | 0 |  |
@@ -1533,6 +1537,9 @@
 
 **Únicos:**
 - `porteiro_rota_professor_pkey`
+
+**Triggers:**
+- `trg_porteiro_rota_segura → fn_porteiro_rota_segura()`
 
 ## presenca_acao_eventos
 

@@ -82,7 +82,7 @@ serve(async (request) => {
       'conta_emusys_id', 'conta_descricao',
       'plano_emusys_id', 'plano_nome', 'plano_codigo',
       'forma_pagamento_emusys_id', 'forma_pagamento_descricao',
-      'descricao',
+      'descricao', 'emusys_fatura_id',
       'primeira_vez_visto', 'ultima_vez_visto', 'alterado_em', 'sumiu_em',
       ...(incluirPayload ? ['payload'] : []),
     ].join(',');
@@ -231,6 +231,7 @@ serve(async (request) => {
           descricao: i.forma_pagamento_descricao,
         },
         descricao: i.descricao,
+        fatura_id: i.emusys_fatura_id,
         primeira_vez_visto: i.primeira_vez_visto,
         ultima_vez_visto: i.ultima_vez_visto,
         alterado_em: i.alterado_em,

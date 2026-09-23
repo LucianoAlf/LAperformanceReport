@@ -18,6 +18,7 @@ export interface LancamentoEmusys {
   plano_contas: { id: number | string | null; nome: string | null } | null;
   forma_pagamento: { id: number | string | null; descricao: string | null } | null;
   descricao: string | null;
+  fatura_id?: number | string | null;
 }
 
 export interface LancamentoEspelhado {
@@ -34,6 +35,7 @@ export interface LancamentoEspelhado {
   forma_pagamento_emusys_id: number | null;
   forma_pagamento_descricao: string | null;
   descricao: string | null;
+  emusys_fatura_id: number | null;
   payload: unknown;
   hash_conteudo: string;
 }
@@ -87,6 +89,7 @@ export function hashLancamento(payload: {
   forma_pagamento_emusys_id: number | null;
   forma_pagamento_descricao: string | null;
   descricao: string | null;
+  emusys_fatura_id: number | null;
 }) {
   return sha256(payload);
 }
@@ -108,6 +111,9 @@ export async function mapearLancamento(
     forma_pagamento_emusys_id: idOpcional(cru.forma_pagamento?.id),
     forma_pagamento_descricao: textoOpcional(cru.forma_pagamento?.descricao),
     descricao: textoOpcional(cru.descricao),
+    // fatura que a conciliacao da Rose vinculou a este lancamento (23/09/2026):
+    // entra no hash — quando ela reconcilia um lancamento antigo, alterado_em marca
+    emusys_fatura_id: idOpcional(cru.fatura_id),
   };
   if (!Number.isFinite(linha.valor)) {
     throw new Error(`valor invalido no lancamento ${cru.id}: ${String(cru.valor)}`);

@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-19 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-23 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — aluno
@@ -45,6 +45,7 @@
 | `parentesco` | character varying(50) | sim |  |  |
 | `principal` | boolean | sim | false |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
+| `telefone_key` | text | sim | fn_normalizar_telefone_br_key((telefone)::text) |  |
 
 **Únicos:**
 - `aluno_contatos_pkey`
@@ -511,6 +512,9 @@
 | `instagram_nao_possui` | boolean | não | false |  |
 | `instagram_nao_possui_marcado_em` | timestamp with time zone | sim |  |  |
 | `instagram_nao_possui_marcado_por` | text | sim |  |  |
+| `telefone_key` | text | sim | fn_normalizar_telefone_br_key((telefone)::text) |  |
+| `whatsapp_key` | text | sim | fn_normalizar_telefone_br_key((whatsapp)::text) |  |
+| `responsavel_telefone_key` | text | sim | fn_normalizar_telefone_br_key((responsavel_telefone)::text) |  |
 
 **Únicos:**
 - `alunos_pkey`
@@ -775,6 +779,8 @@
 | `share_token` | character varying(64) | sim |  |  |
 | `diagnosticos_outro` | text | sim |  |  |
 | `pessoa_chave` | text | sim |  |  |
+| `share_token_expira_em` | timestamp with time zone | sim |  |  |
+| `share_token_revogado_em` | timestamp with time zone | sim |  |  |
 
 **Únicos:**
 - `anamneses_pkey`
@@ -783,6 +789,7 @@
 **Triggers:**
 - `trg_anamnese_atualiza_aluno → fn_atualizar_aluno_anamnese()`
 - `trg_anamnese_pessoa_chave → fn_anamnese_define_pessoa_chave()`
+- `trg_anamneses_validade_share_token → aplicar_validade_share_token()`
 
 ## aviso_previo_veredito
 
@@ -1958,7 +1965,7 @@
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
 | `id` | uuid | não | gen_random_uuid() |  |
-| `pesquisa_id` | uuid | sim |  | pesquisa_evasao.id |
+| `pesquisa_id` | uuid | sim |  | pesquisa_evasao_analises.pesquisa_id |
 | `caixa_id` | integer | não |  | whatsapp_caixas.id |
 | `direcao` | text | não |  |  |
 | `provider_message_id` | text | sim |  |  |
@@ -2547,7 +2554,7 @@
 
 ## vw_aluno_comunidade_wa_v1
 
-> LAPE-33: estado de comunidade WhatsApp por aluno (matricula). Busca em TODOS os grupos ativos, nao so o da propria unidade -- ver grupo_mesma_unidade para distinguir. Fonte: comunidade_wa_participantes (captura diaria, cron 190, 07h BRT). Nao confundir com aluno_comunidade_estado_v1(), que so olha o grupo da propria unidade e e a usada pelos agentes (Mila/Sol).
+> Estado do aluno na comunidade WhatsApp. Le alunos.telefone_key/whatsapp_key/responsavel_telefone_key e aluno_contatos.telefone_key (colunas geradas) -- NAO chamar fn_normalizar_telefone_br_key aqui, era o gargalo (1.104 ms -> 65 ms). contato_nomes declara TODOS os cadastros daquele numero (tipicamente o proprio aluno e o responsavel); contato_nome e so o primeiro, deterministico. Nunca exibir telefone_key: ela descarta o 9o digito.
 
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
@@ -2566,6 +2573,7 @@
 | `contato_parentesco` | text | sim |  |  |
 | `contatos_no_grupo_total` | integer | sim |  |  |
 | `contatos_no_grupo` | jsonb | sim |  |  |
+| `contato_nomes` | jsonb | sim |  |  |
 
 ## vw_aluno_estado_operacional_canonico
 

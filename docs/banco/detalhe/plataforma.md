@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-19 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-23 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — plataforma
@@ -401,6 +401,7 @@
 
 **Triggers:**
 - `trg_usuarios_sincroniza_rbac → fn_usuarios_sincroniza_rbac()`
+- `trg_usuarios_trava_privilegio → fn_usuarios_trava_privilegio()`
 - `update_usuarios_updated_at → update_updated_at_column()`
 
 ## vw_saude_jornada_ciclos
