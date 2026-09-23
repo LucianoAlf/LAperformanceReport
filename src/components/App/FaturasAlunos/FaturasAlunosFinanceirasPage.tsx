@@ -294,14 +294,10 @@ function OperationalViewButton({
 function LeituraNotice({ state }: {
   state: FaturasFinanceirasState;
 }) {
-  const info = state.status === 'ok'
-    ? {
-      Icon: ShieldCheck,
-      className: 'border-emerald-500/25 bg-emerald-500/[0.08] text-emerald-100',
-      title: 'Leitura canônica confirmada',
-      description: 'O histórico e os totais vêm do último snapshot completo das três unidades.',
-    }
-    : state.status === 'partial'
+  // Tudo certo = silencio. Banner verde "confirmado" e' ruido para o time
+  // operacional; o aviso so aparece quando ha algo para agir.
+  if (state.status === 'ok') return null;
+  const info = state.status === 'partial'
       ? {
         Icon: FileWarning,
         className: 'border-amber-500/20 bg-slate-900/65 text-amber-100',
@@ -607,28 +603,13 @@ export function FaturasAlunosFinanceirasPage() {
         </PageFilterBar>
       )}
 
-      <section className="overflow-hidden rounded-2xl border border-cyan-500/20 bg-slate-900/70 shadow-2xl shadow-slate-950/25">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-[radial-gradient(circle_at_top_right,rgba(6,182,212,0.12),transparent_34%),linear-gradient(110deg,rgba(15,23,42,0.95),rgba(2,6,23,0.85))] px-5 py-3.5">
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <span className="inline-flex items-center gap-1.5 font-medium text-cyan-200"><Landmark className="h-3.5 w-3.5" /> Leitura canônica</span>
-            <span className="text-slate-600">•</span>
-            <span>Emusys → snapshot completo</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500">
-            <span>Atual: 15 min</span>
-            <span>Anteriores: 60 min</span>
-            <span>Backlog: 2 h</span>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
-          <p className="text-sm text-slate-300">
-            Corte em <span className="font-semibold text-slate-100">{formatarData(dataCorte)}</span>
-            <span className="mx-2 text-slate-600">•</span>
-            competência {formatarCompetencia(`${ano}-${String(mes).padStart(2, '0')}-01`)}
-          </p>
-          <p className="text-xs text-slate-500">Fonte: {state.source ?? 'aguardando leitura'}</p>
-        </div>
-      </section>
+      <p className="text-xs text-slate-500">
+        Corte em <span className="font-medium text-slate-300">{formatarData(dataCorte)}</span>
+        <span className="mx-1.5 text-slate-700">•</span>
+        competência {formatarCompetencia(`${ano}-${String(mes).padStart(2, '0')}-01`)}
+        <span className="mx-1.5 text-slate-700">•</span>
+        dados do Emusys
+      </p>
 
       {carregando ? <LoadingState /> : state.status === 'error' ? (
         <section role="alert" className="rounded-2xl border border-rose-500/30 bg-rose-500/[0.08] p-5 text-rose-100">
@@ -659,15 +640,17 @@ export function FaturasAlunosFinanceirasPage() {
               tone="amber"
               onClick={() => selecionarSituacao('reconciliacao')}
             />
-            <OperationalViewButton
-              label="Canceladas — histórico"
-              count={totaisDaVisao.canceladas.quantidade}
-              description="Fora dos totais desta competência"
-              Icon={ReceiptText}
-              active={situacao === 'canceladas'}
-              tone="slate"
-              onClick={() => selecionarSituacao('canceladas')}
-            />
+            {(totaisDaVisao.canceladas.quantidade > 0 || situacao === 'canceladas') && (
+              <OperationalViewButton
+                label="Canceladas — histórico"
+                count={totaisDaVisao.canceladas.quantidade}
+                description="Fora dos totais desta competência"
+                Icon={ReceiptText}
+                active={situacao === 'canceladas'}
+                tone="slate"
+                onClick={() => selecionarSituacao('canceladas')}
+              />
+            )}
           </section>
 
           {mostrarReconciliacao ? (
