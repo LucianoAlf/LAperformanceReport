@@ -103,7 +103,9 @@ const optionalIdentifier = (
   field: FaturaValidationIssue['field'],
   issues: FaturaValidationIssue[],
 ) => {
-  if (value == null || String(value).trim() === '') return null;
+  const normalized = String(value).trim();
+  // Emusys manda 0 em vendas de estoque/balcao — sentinela de "sem vinculo", nao valor invalido
+  if (value == null || normalized === '' || normalized === '0') return null;
   try {
     return identifier(value, field);
   } catch {

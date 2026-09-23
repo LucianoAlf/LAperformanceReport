@@ -80,7 +80,6 @@ test('preserva a fatura e audita identificadores opcionais invalidos', () => {
     mapped.validation_issues.map((issue) => [issue.field, issue.code, issue.raw_value]),
     [
       ['matricula_id', 'invalid_optional_identifier', 'matricula-invalida'],
-      ['contrato_id', 'invalid_optional_identifier', '0'],
       ['aluno_id', 'invalid_optional_identifier', '-88'],
     ],
   );
