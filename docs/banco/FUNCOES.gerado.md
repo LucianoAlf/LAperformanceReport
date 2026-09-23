@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Funções
 
-1609 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
+1612 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
 chamadas diretas ao PostgREST não são visíveis para o gerador.
 
 ## aluno
@@ -162,13 +162,15 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `get_jornada_aluno(p_aluno_id integer)` | ATIVA | INVOKER | front:src/hooks/useJornadaAluno.ts |
 | `get_jornada_professor(p_professor_id integer)` | ATIVA | DEFINER | front:src/hooks/useJornadaProfessor.ts, front:src/lib/carteiraProfessorDetalheCanonica.ts |
 | `get_jornada_professor_trancados(p_professor_id integer)` | ATIVA | DEFINER | front:src/lib/carteiraProfessorDetalheCanonica.ts |
-| `get_kpis_alunos_admin_operacional(p_unidade_id uuid, p_ano integer, p_mes integer)` | ATIVA | DEFINER | front:src/components/App/Administrativo/AdministrativoPage.tsx, front:src/components/App/Administrativo/ModalRelatorio.tsx, front:src/components/App/Alunos/AlunosPage.tsx, front:src/lib/estadoOperacionalAlunos.ts, edge:supabase/functions/bi-agent-lamusic/tools.ts, edge:supabase/functions/relatorio-admin-whatsapp/index.ts, +6 outros |
+| `get_kpis_alunos_admin_operacional(p_unidade_id uuid, p_ano integer, p_mes integer)` | ATIVA | DEFINER | front:src/components/App/Administrativo/AdministrativoPage.tsx, front:src/components/App/Administrativo/ModalRelatorio.tsx, front:src/components/App/Alunos/AlunosPage.tsx, front:src/lib/estadoOperacionalAlunos.ts, edge:supabase/functions/bi-agent-lamusic/tools.ts, edge:supabase/functions/relatorio-admin-whatsapp/index.ts, +7 outros |
+| `get_kpis_alunos_admin_operacional_cache_v1(p_unidade_id uuid, p_ano integer, p_mes integer)` | ORFA | DEFINER | sem consumidor conhecido |
 | `get_kpis_alunos_admin_operacional_impl_v2(p_unidade_id uuid, p_ano integer, p_mes integer)` | SO-INTERNA | DEFINER | funcao:get_kpis_alunos_admin_operacional |
-| `get_kpis_alunos_canonicos(p_unidade_id uuid, p_ano integer, p_mes integer)` | ATIVA | DEFINER | front:src/lib/kpisAlunosVivosCanonicos.ts, funcao:get_dados_relatorio_gerencial_legacy_p02r_20260620, funcao:get_dados_retencao_ia, funcao:gravar_snapshot_fechamento_mensal, funcao:preview_fechamento_mensal |
+| `get_kpis_alunos_canonicos(p_unidade_id uuid, p_ano integer, p_mes integer)` | ATIVA | DEFINER | front:src/lib/kpisAlunosVivosCanonicos.ts, funcao:get_dados_relatorio_gerencial_legacy_p02r_20260620, funcao:get_dados_retencao_ia, funcao:get_kpis_alunos_canonicos_cache_v1, funcao:gravar_snapshot_fechamento_mensal, funcao:preview_fechamento_mensal |
 | `get_kpis_alunos_canonicos_base_p01q(p_unidade_id uuid, p_ano integer, p_mes integer)` | SO-INTERNA | DEFINER | funcao:get_kpis_alunos_canonicos_base_p01t |
 | `get_kpis_alunos_canonicos_base_p01t(p_unidade_id uuid, p_ano integer, p_mes integer)` | SO-INTERNA | DEFINER | funcao:get_kpis_alunos_canonicos_base_v131 |
 | `get_kpis_alunos_canonicos_base_ticket_denominador_v1(p_unidade_id uuid, p_ano integer, p_mes integer)` | SO-INTERNA | DEFINER | funcao:get_kpis_alunos_canonicos |
 | `get_kpis_alunos_canonicos_base_v131(p_unidade_id uuid, p_ano integer, p_mes integer, p_admin jsonb)` | SO-INTERNA | DEFINER | funcao:get_kpis_alunos_canonicos_base_ticket_denominador_v1 |
+| `get_kpis_alunos_canonicos_cache_v1(p_unidade_id uuid, p_ano integer, p_mes integer)` | ORFA | DEFINER | sem consumidor conhecido |
 | `get_kpis_alunos_vinculos_vivo_canonico(p_unidade_id uuid, p_ano integer, p_mes integer)` | SO-INTERNA | DEFINER | funcao:get_kpis_alunos_canonicos_base_v131 |
 | `get_kpis_retencao(p_ano integer, p_unidade character varying)` | ORFA | INVOKER | sem consumidor conhecido |
 | `get_progresso_rotinas_hoje(p_colaborador_id integer)` | ATIVA | DEFINER | front:src/components/App/Administrativo/PainelFarmer/hooks/useRotinas.ts |
@@ -186,6 +188,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `get_trancamentos_periodo_canonicos(p_unidade_id uuid, p_data_inicial date, p_data_final date)` | ATIVA | DEFINER | front:src/lib/estadoOperacionalAlunos.ts |
 | `iniciar_revisao_pesquisa_evasao(p_analise_id uuid)` | ATIVA | DEFINER | front:src/components/App/SucessoCliente/ConversaPesquisaEvasao.tsx |
 | `is_movimentacao_admin_retencao_valida(p_movimentacao_id integer)` | ATIVA | DEFINER | edge:supabase/functions/enviar-pesquisa-evasao/index.ts, view:vw_alertas_inteligentes, view:vw_dashboard_unidade, view:vw_evasoes_motivos, view:vw_evasoes_professores, view:vw_evasoes_resumo, +24 outros |
+| `kpis_alunos_cache_impressao_v1()` | SO-INTERNA | DEFINER | funcao:get_kpis_alunos_admin_operacional_cache_v1, funcao:get_kpis_alunos_canonicos_cache_v1 |
 | `listar_evadidos_para_pesquisa(p_unidade_id uuid, p_limite integer, p_offset integer, p_status character varying)` | LEGADO | DEFINER | existe versao maior: listar_evadidos_para_pesquisa_v4 — sem consumidor conhecido |
 | `listar_evadidos_para_pesquisa(p_unidade_id uuid, p_limite integer, p_offset integer, p_status character varying, p_ano integer, p_mes integer)` | LEGADO | DEFINER | existe versao maior: listar_evadidos_para_pesquisa_v4 — sem consumidor conhecido |
 | `listar_evadidos_para_pesquisa_v2(p_unidade_id uuid, p_limite integer, p_offset integer, p_status character varying, p_ano integer, p_mes integer, p_busca text)` | SO-INTERNA | DEFINER | funcao:listar_evadidos_para_pesquisa_v3 |

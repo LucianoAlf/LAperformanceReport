@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — aluno
 
-149 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+150 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## aluno_acoes
 
@@ -1478,6 +1478,20 @@
 
 **Únicos:**
 - `jornada_curso_resolucao_log_pkey`
+
+## kpis_alunos_cache
+
+> LAPE-42. Cache por versao dos KPIs de alunos. Chave = funcao + usuario + parametros + data BRT + impressao digital das tabelas lidas (kpis_alunos_cache_impressao_v1). Lido/escrito so pelas funcoes *_cache_v1.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `cache_key` | text | não |  |  |
+| `funcao` | text | não |  |  |
+| `payload` | jsonb | não |  |  |
+| `built_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `kpis_alunos_cache_pkey`
 
 ## motivos_arquivamento
 
