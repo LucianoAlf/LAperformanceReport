@@ -742,12 +742,21 @@ function LoadingState() {
   );
 }
 
+const FATURAS_POR_PAGINA = 80;
+
 function InvoicesTable({ items, dataCorte, unidadeNome, onDetail }: {
   items: FaturaFinanceiraItem[];
   dataCorte: string;
   unidadeNome: ReadonlyMap<string, string>;
   onDetail: (item: FaturaFinanceiraItem) => void;
 }) {
+  // Renderizacao progressiva: 1.100 linhas de uma vez congelam o navegador
+  // (pior em dev). Renderiza em blocos; o "mostrar mais" revela o restante.
+  const [limite, setLimite] = useState(FATURAS_POR_PAGINA);
+  useEffect(() => { setLimite(FATURAS_POR_PAGINA); }, [items]);
+  const itensVisiveis = items.slice(0, limite);
+  const restantes = items.length - itensVisiveis.length;
+
   if (items.length === 0) {
     return <div className="flex flex-col items-center justify-center px-6 py-16 text-center"><div className="rounded-2xl border border-slate-700 bg-slate-800/70 p-4"><ReceiptText className="h-8 w-8 text-slate-500" /></div><h2 className="mt-4 font-semibold text-slate-200">Nenhuma fatura nesta visão</h2><p className="mt-1 max-w-lg text-sm text-slate-500">Altere os filtros ou consulte outra competência para revisar o histórico financeiro.</p></div>;
   }
@@ -756,7 +765,7 @@ function InvoicesTable({ items, dataCorte, unidadeNome, onDetail }: {
       <table className="min-w-[1480px] w-full text-left text-sm">
         <thead className="border-b border-slate-700/70 bg-slate-950/45 text-[11px] uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3 font-medium">Aluno / curso</th><th className="px-3 py-3 font-medium">Tipo da fatura</th><th className="px-3 py-3 font-medium">Situação</th><th className="px-3 py-3 font-medium">Vencimento</th><th className="px-3 py-3 font-medium">Forma de pagamento</th><th className="px-3 py-3 text-right font-medium">Valor base</th><th className="px-3 py-3 text-right font-medium">Sem desconto condicional</th><th className="px-3 py-3 text-right font-medium">Valor atualizado / pago</th><th className="sticky right-0 z-10 bg-slate-950 px-4 py-3 text-right font-medium">Detalhe</th></tr></thead>
         <tbody className="divide-y divide-slate-800">
-          {items.map((item) => {
+          {itensVisiveis.map((item) => {
             const valorPrincipal = valorPrincipalDaFatura(item);
             const FormaPagamentoIcon = iconeFormaPagamento(item.forma_pagamento.nome);
             const parcela = item.tipo_fatura === 'parcela';
@@ -777,6 +786,24 @@ function InvoicesTable({ items, dataCorte, unidadeNome, onDetail }: {
           })}
         </tbody>
       </table>
+      {restantes > 0 && (
+        <div className="flex items-center justify-center gap-3 border-t border-slate-800 bg-slate-950/40 px-4 py-3">
+          <button
+            type="button"
+            onClick={() => setLimite((valor) => valor + FATURAS_POR_PAGINA)}
+            className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-700 px-4 text-sm text-slate-300 transition hover:bg-slate-800 hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"
+          >
+            Mostrar mais {Math.min(FATURAS_POR_PAGINA, restantes)} de {restantes} faturas
+          </button>
+          <button
+            type="button"
+            onClick={() => setLimite(items.length)}
+            className="text-xs text-slate-500 transition hover:text-slate-300"
+          >
+            Mostrar todas ({items.length})
+          </button>
+        </div>
+      )}
     </div>
   );
 }
