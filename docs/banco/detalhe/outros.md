@@ -4,7 +4,20 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — outros
 
-4 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+5 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+
+## dash_prof_resumo_cache
+
+> Cache do resumo de professores do dashboard (5 colunas). TTL 5 min + fingerprint leve. Lido/escrito apenas via SECURITY DEFINER.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `cache_key` | text | não |  |  |
+| `payload` | jsonb | não |  |  |
+| `built_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `dash_prof_resumo_cache_pkey`
 
 ## eventos_operacionais
 

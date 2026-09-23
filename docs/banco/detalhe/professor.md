@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — professor
 
-151 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+152 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## anotacoes
 
@@ -1373,9 +1373,9 @@
 | `id` | uuid | não | gen_random_uuid() |  |
 | `snapshot_metrica_id` | uuid | não |  | health_score_professor_v3_snapshot_metricas.id |
 | `config_meta_segmento_id` | uuid | sim |  | health_score_professor_v3_config_metas_curso_modalidade.id |
-| `unidade_id` | uuid | não |  | health_score_professor_v3_config_metas_curso_modalidade.unidade_id |
-| `curso_id` | integer | não |  | health_score_professor_v3_config_metas_curso_modalidade.curso_id |
-| `modalidade` | text | não |  | health_score_professor_v3_config_metas_curso_modalidade.modalidade |
+| `unidade_id` | uuid | não |  | professor_unidade_curso_modalidade.unidade_id |
+| `curso_id` | integer | não |  | professor_unidade_curso_modalidade.curso_id |
+| `modalidade` | text | não |  | professor_unidade_curso_modalidade.modalidade |
 | `pessoas_unicas` | integer | não | 0 |  |
 | `vinculos_ativos` | integer | não | 0 |  |
 | `turmas_elegiveis` | integer | não | 0 |  |
@@ -1512,6 +1512,19 @@
 **Únicos:**
 - `health_score_v3_experimental_lead_c_unidade_id_evento_chave_key`
 - `health_score_v3_experimental_lead_conciliacoes_pkey`
+
+## health_score_v3_reader_cache
+
+> Cache do leitor de health score v3. Chave = md5(params + count/max(id) das tabelas de snapshot). Lido/escrito apenas via SECURITY DEFINER.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `cache_key` | text | não |  |  |
+| `payload` | jsonb | não |  |  |
+| `built_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `health_score_v3_reader_cache_pkey`
 
 ## la_teacher_coordenacao
 

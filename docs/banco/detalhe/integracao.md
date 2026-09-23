@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — integracao
 
-60 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+63 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## admin_conversas
 
@@ -1225,6 +1225,89 @@
 **Triggers:**
 - `trg_sync_run_items_append_only → fn_financeiro_snapshot_append_only()`
 
+## sync_run_items_dedup
+
+> LAPE-43 fase 2: sync_run_items deduplicada por conteudo (23 campos). Uma linha por versao distinta de cada fatura, mantendo a ocorrencia mais recente. primeira/ultima_vez_visto preservam o intervalo em que aquela versao esteve vigente. NAO esta em uso -- construida ao lado para validacao antes do swap.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `run_id` | uuid | não |  |  |
+| `canonical_fatura_id` | uuid | não |  |  |
+| `competencia` | date | não |  |  |
+| `unidade_id` | uuid | não |  |  |
+| `unidade_codigo` | text | não |  |  |
+| `emusys_fatura_id` | bigint | não |  |  |
+| `emusys_matricula_id` | bigint | sim |  |  |
+| `emusys_contrato_id` | bigint | sim |  |  |
+| `emusys_student_id` | bigint | sim |  |  |
+| `descricao` | text | não | ''::text |  |
+| `status` | text | não | 'desconhecido'::text |  |
+| `data_vencimento` | date | não |  |  |
+| `data_pagamento` | date | sim |  |  |
+| `valor_original` | numeric(12,2) | não | 0 |  |
+| `valor_pago` | numeric(12,2) | sim |  |  |
+| `juros_e_multa` | numeric(12,2) | não | 0 |  |
+| `desconto_aplicado` | numeric(12,2) | não | 0 |  |
+| `desconto_fixo` | numeric(12,2) | não | 0 |  |
+| `desconto_condicional` | numeric(12,2) | não | 0 |  |
+| `payload` | jsonb | não | '{}'::jsonb |  |
+| `source_missing` | boolean | não | false |  |
+| `source_missing_reason` | text | sim |  |  |
+| `source_last_seen_at` | timestamp with time zone | sim |  |  |
+| `source_missing_detected_at` | timestamp with time zone | sim |  |  |
+| `source_missing_resolved_at` | timestamp with time zone | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `primeira_vez_visto` | timestamp with time zone | sim |  |  |
+| `ultima_vez_visto` | timestamp with time zone | sim |  |  |
+
+**Únicos:**
+- `sync_run_items_dedup_pkey`
+- `sync_run_items_dedup_run_id_competencia_unidade_id_emusys_f_key`
+
+## sync_run_items_historico
+
+> LAPE-43. Historico permanente das faturas vistas pelo sync: uma linha por ILHA (runs contiguos com o mesmo conteudo). Para "o que o Emusys dizia em T": a linha da fatura com primeira_vez_visto <= T <= ultima_vez_visto. Conteudo imutavel; so a ponta (ultima_vez_visto/ultimo_run_id/n_runs) estende. Alimentado so por sync_run_items_consolidar_historico_v1.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `competencia` | date | não |  |  |
+| `unidade_id` | uuid | não |  |  |
+| `emusys_fatura_id` | bigint | não |  |  |
+| `canonical_fatura_id` | uuid | sim |  |  |
+| `unidade_codigo` | text | sim |  |  |
+| `emusys_matricula_id` | bigint | sim |  |  |
+| `emusys_contrato_id` | bigint | sim |  |  |
+| `emusys_student_id` | bigint | sim |  |  |
+| `descricao` | text | sim |  |  |
+| `status` | text | sim |  |  |
+| `data_vencimento` | date | sim |  |  |
+| `data_pagamento` | date | sim |  |  |
+| `valor_original` | numeric | sim |  |  |
+| `valor_pago` | numeric | sim |  |  |
+| `juros_e_multa` | numeric | sim |  |  |
+| `desconto_aplicado` | numeric | sim |  |  |
+| `desconto_fixo` | numeric | sim |  |  |
+| `desconto_condicional` | numeric | sim |  |  |
+| `payload` | jsonb | sim |  |  |
+| `source_missing` | boolean | sim |  |  |
+| `source_missing_reason` | text | sim |  |  |
+| `source_missing_detected_at` | timestamp with time zone | sim |  |  |
+| `source_missing_resolved_at` | timestamp with time zone | sim |  |  |
+| `conteudo_hash` | text | não |  |  |
+| `primeira_vez_visto` | timestamp with time zone | não |  |  |
+| `ultima_vez_visto` | timestamp with time zone | não |  |  |
+| `primeiro_run_id` | uuid | não |  |  |
+| `ultimo_run_id` | uuid | não |  |  |
+| `n_runs` | integer | não |  |  |
+
+**Únicos:**
+- `sync_run_items_historico_pkey`
+
+**Triggers:**
+- `trg_sync_run_items_historico_guard → fn_sync_run_items_historico_guard()`
+
 ## sync_run_overrides
 
 | Coluna | Tipo | Nulo | Default | Referência |
@@ -1245,6 +1328,23 @@
 
 **Triggers:**
 - `trg_sync_run_overrides_append_only → fn_financeiro_snapshot_append_only()`
+
+## sync_run_retencao
+
+> LAPE-43. Uma linha por run ja consolidado em sync_run_items_historico. expurgado_em preenchido = os itens desse run foram podados de sync_run_items (o cabecalho em sync_runs continua). Run expurgado NAO significa "o Emusys devolveu zero faturas".
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `run_id` | uuid | não |  | sync_runs.id |
+| `competencia` | date | não |  |  |
+| `completed_at` | timestamp with time zone | não |  |  |
+| `itens_consolidados` | integer | não |  |  |
+| `consolidado_em` | timestamp with time zone | não | now() |  |
+| `itens_expurgados` | integer | sim |  |  |
+| `expurgado_em` | timestamp with time zone | sim |  |  |
+
+**Únicos:**
+- `sync_run_retencao_pkey`
 
 ## sync_runs
 

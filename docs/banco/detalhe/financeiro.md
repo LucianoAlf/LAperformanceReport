@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — financeiro
 
-41 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+42 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## caixa_categorias
 
@@ -167,6 +167,19 @@
 
 **Únicos:**
 - `contrato_assinatura_sync_execucoes_pkey`
+
+## faturas_leitura_cache
+
+> Cache do payload de get_faturas_alunos_financeiro_v1. Chave = md5(params + max(completed_at) dos runs completos + escopo de unidades). Lido/escrito apenas via SECURITY DEFINER.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `cache_key` | text | não |  |  |
+| `payload` | jsonb | não |  |  |
+| `built_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `faturas_leitura_cache_pkey`
 
 ## faturas_pagas_mes
 

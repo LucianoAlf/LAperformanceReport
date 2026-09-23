@@ -130,6 +130,7 @@ function motivoReconciliacao(motivo: string) {
     contato_pendente: 'Contato local ainda não resolvido',
     registro_nao_aluno: 'Lançamento financeiro sem aluno',
     historico_ex_aluno: 'Histórico de ex-aluno',
+    duplicata_caixa: 'Lançamento duplicado no caixa',
   };
   return labels[motivo] ?? motivo.replaceAll('_', ' ');
 }
@@ -836,6 +837,7 @@ function ReconciliationPanelV2({
     ['Dados da origem', state.reconciliation.validacoesOrigem, 'Metadado recebido incompleto'],
     ['Forma de pagamento', state.reconciliation.formaPagamentoAusente, 'Escolha a forma usada pelo aluno'],
     ['Contato local', state.reconciliation.contatoPendente, 'Contato único ainda não resolvido'],
+    ['Duplicata no caixa', state.reconciliation.duplicataCaixa, 'Entradas repetidas apontando a mesma fatura'],
   ];
 
   return (
@@ -851,7 +853,7 @@ function ReconciliationPanelV2({
         </div>
         <span className="rounded-full border border-amber-500/25 bg-slate-950/35 px-3 py-1 text-sm font-semibold text-amber-100">{state.reconciliation.total} pendências</span>
       </div>
-      <div className="grid gap-px bg-slate-800 sm:grid-cols-2 xl:grid-cols-6">{cards.map(([label, count, description]) => <div key={String(label)} className="bg-slate-900/90 p-4"><p className="text-xs uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 text-2xl font-semibold text-slate-100">{count}</p><p className="mt-1 text-xs text-slate-500">{description}</p></div>)}</div>
+      <div className="grid gap-px bg-slate-800 sm:grid-cols-2 xl:grid-cols-7">{cards.map(([label, count, description]) => <div key={String(label)} className="bg-slate-900/90 p-4"><p className="text-xs uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 text-2xl font-semibold text-slate-100">{count}</p><p className="mt-1 text-xs text-slate-500">{description}</p></div>)}</div>
       <div className="flex flex-wrap gap-3 border-b border-slate-800 bg-slate-950/25 px-5 py-3 text-xs text-slate-400">
         <span><span className="font-semibold text-slate-200">Fora da operação:</span> {state.reconciliation.foraOperacao.total} histórico/avulso</span>
         <span><span className="font-semibold text-emerald-200">Resolvidas aqui:</span> {state.reconciliation.resolvidasManualmente}</span>
@@ -889,8 +891,8 @@ function ReconciliationPanelV2({
               <div><label className="mb-1.5 block text-xs font-medium text-cyan-100" htmlFor={`forma-${key}`}>Forma usada pelo aluno</label><Select value={formaSelecionada} onValueChange={(value) => setFormas((current) => ({ ...current, [key]: value }))}><SelectTrigger id={`forma-${key}`} className="bg-slate-950/60"><SelectValue placeholder="Selecione a forma de pagamento" /></SelectTrigger><SelectContent>{formasPagamento.map((option) => <SelectItem key={option.id} value={String(option.id)}>{option.nome}{option.sigla ? ` (${option.sigla})` : ''}</SelectItem>)}</SelectContent></Select></div>
               <Button type="button" size="sm" disabled={!forma || salvando} onClick={() => forma && void onResolve(item, 'forma_pagamento_manual', `Forma de pagamento conferida pela equipe: ${forma.nome}.`, forma.id)}>{salvando ? <Loader2 className="animate-spin" /> : <BadgeCheck />} Salvar forma</Button>
             </div>}
-            {guidance.kind === 'detected_payment' && <div className="mt-4 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.05] p-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-emerald-200">Prova de pagamento já registrada</p>
+            {(guidance.kind === 'detected_payment' || item.motivos.includes('duplicata_caixa')) && <div className="mt-4 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.05] p-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-emerald-200">{item.motivos.includes('duplicata_caixa') ? 'Entradas no caixa apontando esta fatura' : 'Prova de pagamento já registrada'}</p>
               <ul className="mt-2 space-y-1 text-xs text-emerald-100/90">
                 {item.prova_pagamento.caixa.map((p, i) => <li key={`cx-${i}`}>Caixa {p.forma ? `(${p.forma})` : ''} — <span className="font-semibold tabular-nums">{moeda(p.valor)}</span> em {formatarData(p.data)}</li>)}
                 {item.prova_pagamento.lancamentos.map((p, i) => <li key={`lc-${i}`}>Lançamento Emusys {p.forma ? `(${p.forma})` : ''} — <span className="font-semibold tabular-nums">{moeda(p.valor)}</span> em {formatarData(p.data)}</li>)}
@@ -916,11 +918,12 @@ function ReconciliationPanel({ state, unidadeNome }: { state: FaturasFinanceiras
     ['Validações de origem', state.reconciliation.validacoesOrigem, 'Metadados recebidos em quarentena'],
     ['Forma ausente', state.reconciliation.formaPagamentoAusente, 'Informe a forma antes de depender dela'],
     ['Contato pendente', state.reconciliation.contatoPendente, 'Fatura confirmada sem contato único'],
+    ['Duplicata no caixa', state.reconciliation.duplicataCaixa, 'Entradas repetidas na mesma fatura'],
   ];
   return (
     <section className="overflow-hidden rounded-2xl border border-rose-500/25 bg-slate-900/55 shadow-xl shadow-slate-950/20">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rose-500/20 bg-rose-500/[0.07] px-5 py-4"><div><p className="font-semibold text-rose-100">Reconciliação financeira</p><p className="mt-1 text-sm text-rose-100/70">Resolva as pendências aqui. Elas não compõem os totais de cobrança.</p></div><span className="rounded-full border border-rose-500/25 bg-slate-950/30 px-3 py-1 text-sm font-semibold text-rose-100">{state.reconciliation.total} pendências</span></div>
-      <div className="grid gap-px bg-slate-800 sm:grid-cols-2 xl:grid-cols-6">{cards.map(([label, count, description]) => <div key={String(label)} className="bg-slate-900/90 p-4"><p className="text-xs uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 text-2xl font-semibold text-slate-100">{count}</p><p className="mt-1 text-xs text-slate-500">{description}</p></div>)}</div>
+      <div className="grid gap-px bg-slate-800 sm:grid-cols-2 xl:grid-cols-7">{cards.map(([label, count, description]) => <div key={String(label)} className="bg-slate-900/90 p-4"><p className="text-xs uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 text-2xl font-semibold text-slate-100">{count}</p><p className="mt-1 text-xs text-slate-500">{description}</p></div>)}</div>
       {state.reconciliation.items.length === 0 ? <div className="p-8 text-center text-sm text-slate-500">Nenhuma pendência no recorte atual.</div> : <div className="divide-y divide-slate-800">{state.reconciliation.items.map((item) => <div key={`${item.unidade_id}|${item.canonical_fatura_id}`} className="flex flex-wrap items-center justify-between gap-4 px-5 py-4"><div><p className="font-medium text-slate-100">{item.aluno.nome}</p><p className="mt-0.5 text-xs text-slate-500">{unidadeNome.get(item.unidade_id) ?? item.unidade_codigo ?? 'Unidade'} • fatura {item.emusys_fatura_id} • venc. {formatarData(item.data_vencimento)}</p><div className="mt-2 flex flex-wrap gap-1.5">{item.motivos.map((motivo) => <span key={motivo} className="rounded-md border border-rose-500/20 bg-rose-500/[0.08] px-2 py-1 text-[11px] text-rose-200">{motivoReconciliacao(motivo)}</span>)}</div></div><div className="text-right text-xs text-slate-500"><p>{item.forma_pagamento.nome ?? 'Forma não informada'}</p><p className="mt-1">Sync: {formatarDataHora(item.sync_completed_at)}</p></div></div>)}</div>}
     </section>
   );

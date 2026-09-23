@@ -33,8 +33,21 @@ test('source_missing de aluno ativo vira decisão operacional legível', () => {
     'renovacao',
     'trancamento',
     'ultima_parcela_aviso_previo',
+    'parcela_remarcada',
     'conferido_sem_cobranca',
+    'outro',
   ]);
+});
+
+test('duplicata de caixa pede conferência das duas entradas', () => {
+  const guidance = getReconciliationGuidance(reconciliationItem({
+    motivos: ['duplicata_caixa'],
+  }));
+
+  assert.equal(guidance.kind, 'decision');
+  assert.equal(guidance.title, 'Possível lançamento duplicado no caixa');
+  assert.match(guidance.instruction, /duas entradas de mesmo valor/i);
+  assert.deepEqual(guidance.options.map((option) => option.value), ['duplicata_caixa_confirmada', 'outro']);
 });
 
 test('forma de pagamento ausente vira edição inline e não decisão de pagamento', () => {

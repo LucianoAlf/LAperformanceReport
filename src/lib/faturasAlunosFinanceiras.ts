@@ -183,6 +183,7 @@ export interface FaturasFinanceirasState {
     validacoesOrigem: number;
     formaPagamentoAusente: number;
     contatoPendente: number;
+    duplicataCaixa: number;
     total: number;
     resolvidasManualmente: number;
     foraOperacao: {
@@ -676,6 +677,7 @@ export function normalizarFaturasAlunosFinanceiras(payload: unknown, error?: { m
   const inadimplenciaCanonica = normalizarInadimplenciaCanonica(root.inadimplencia_canonica);
   // Emitido a partir de 23/09/2026: respostas antigas nao trazem a chave.
   const pagamentoDetectado = asFiniteNumberOrNull(reconciliation.pagamento_detectado) ?? 0;
+  const duplicataCaixa = asFiniteNumberOrNull(reconciliation.duplicata_caixa) ?? 0;
   const resolvidasManualmente = asFiniteNumberOrNull(reconciliation.resolvidas_manualmente) ?? 0;
   const foraOperacao = asRecord(reconciliation.fora_operacao);
   const foraHistorico = asFiniteNumberOrNull(foraOperacao?.historico_ex_aluno) ?? 0;
@@ -724,6 +726,7 @@ export function normalizarFaturasAlunosFinanceiras(payload: unknown, error?: { m
       validacoesOrigem: reconciliationCounts[3],
       formaPagamentoAusente: reconciliationCounts[4],
       contatoPendente: reconciliationCounts[5],
+      duplicataCaixa,
       total: reconciliationCounts[6],
       resolvidasManualmente,
       foraOperacao: {
