@@ -59,6 +59,13 @@ import {
   type InadimplenciaCanonicaState,
 } from '@/lib/inadimplenciaCanonica';
 import { criarUrlFaturasAlunos } from '@/lib/faturasAlunosCanonicas';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  chaveCopiaListaAlunos,
+  gravarCopiaListaAlunos,
+  lerCopiaListaAlunos,
+} from '@/lib/alunosListaCopia';
+import '@/lib/alunosListaCopiaSessao';
 import {
   carregarFaturasAlunosFinanceiras,
   FATURAS_FINANCEIRAS_LOADING,
@@ -332,6 +339,8 @@ export function AlunosPage() {
     competencia: ReturnType<typeof useCompetenciaFiltro>;
   }>();
   const unidadeAtual = context?.unidadeSelecionada || 'todos';
+  const { user } = useAuth();
+  const usuarioId = user?.id ?? null;
   const navigate = useNavigate();
   const [pageSearchParams, setPageSearchParams] = useSearchParams();
   const toast = useToast();
@@ -373,7 +382,7 @@ export function AlunosPage() {
   const [faturasFinanceiras, setFaturasFinanceiras] = useState<FaturasFinanceirasState>(
     FATURAS_FINANCEIRAS_LOADING,
   );
-  const carregarDadosRef = useRef<() => Promise<void>>(async () => undefined);
+  const carregarDadosRef = useRef<(opcoes?: { manterTelaAtual?: boolean }) => Promise<void>>(async () => undefined);
 
   // Sequencia de carregamento: a leitura financeira deixou de bloquear a tela (ela chega
   // ~4s depois da lista), entao a resposta da unidade anterior pode voltar quando o usuario
@@ -506,6 +515,13 @@ export function AlunosPage() {
 
   // Estados de UI
   const [loading, setLoading] = useState(true);
+  // Cópia em memória (LAPE-42, src/lib/alunosListaCopia.ts). null = a tela mostra dado desta
+  // carga; preenchido = mostra a última lista vista enquanto a busca nova corre por trás.
+  const [copiaExibida, setCopiaExibida] = useState<{ salvoEm: number; falhou: boolean } | null>(null);
+  // De quem são os dados que ESTÃO no estado. A cópia é gravada com esta chave, nunca com a
+  // da tela: ao trocar de unidade há um render em que a chave já é a nova e a lista ainda é a
+  // velha, e gravar ali guardaria a unidade A sob o nome da B.
+  const [chaveDosDados, setChaveDosDados] = useState<string | null>(null);
   const [confirmRecalcular, setConfirmRecalcular] = useState(false);
   const [recalculando, setRecalculando] = useState(false);
   const [modalNovoAluno, setModalNovoAluno] = useState(false);
@@ -668,13 +684,49 @@ export function AlunosPage() {
 
   carregarDadosRef.current = carregarDados;
 
+  // Grava a copia a cada estado FRESCO da tela — inclusive depois de salvar uma edicao, que
+  // recarrega a lista; assim a copia nunca volta com o dado de antes da edicao. A leitura
+  // financeira e removida dentro de gravarCopiaListaAlunos.
+  useEffect(() => {
+    if (loading || copiaExibida || !chaveDosDados) return;
+    gravarCopiaListaAlunos(chaveDosDados, {
+      alunos, turmas, kpis, professores, cursos, tiposMatricula, salas, horarios,
+    });
+  }, [loading, copiaExibida, chaveDosDados, alunos, turmas, kpis, professores, cursos, tiposMatricula, salas, horarios]);
+
   // Carregar dados iniciais e invalidar imediatamente qualquer leitura da unidade anterior.
   useEffect(() => {
     setInadimplenciaCanonica(INADIMPLENCIA_CANONICA_LOADING);
     setFaturasFinanceiras(FATURAS_FINANCEIRAS_LOADING);
     limparInadimplenciaDerivada();
-    void carregarDadosRef.current();
+
+    // A cópia só preenche o intervalo que seria spinner: a carga abaixo roda SEMPRE.
+    const copia = lerCopiaListaAlunos(chaveCopiaListaAlunos(
+      usuarioId, unidadeAtual, competenciaRange.startDate, competenciaRange.endDate,
+    ));
+    if (copia) {
+      setAlunos(copia.alunos);
+      setTurmas(copia.turmas);
+      setKpis(copia.kpis);
+      setProfessores(copia.professores);
+      setCursos(copia.cursos);
+      setTiposMatricula(copia.tiposMatricula);
+      setSalas(copia.salas);
+      setHorarios(copia.horarios);
+      setCopiaExibida({ salvoEm: copia.salvoEm, falhou: false });
+      setLoading(false);
+    } else {
+      setCopiaExibida(null);
+    }
+
+    void carregarDadosRef.current({ manterTelaAtual: !!copia }).catch((erro) => {
+      console.error('Erro ao atualizar a Lista de Alunos:', erro);
+      // Sem isto a tela ficaria travada em "atualizando" para sempre.
+      setCopiaExibida(prev => prev ? { ...prev, falhou: true } : prev);
+      setLoading(false);
+    });
   }, [
+    usuarioId,
     unidadeAtual,
     competenciaRange.startDate,
     competenciaRange.endDate,
@@ -736,11 +788,16 @@ export function AlunosPage() {
     };
   }, []);
 
-  async function carregarDados() {
-    setLoading(true);
+  async function carregarDados(opcoes?: { manterTelaAtual?: boolean }) {
+    // Com a copia na tela nao ha spinner: ela fica visivel (e travada) ate esta carga terminar.
+    // `=== true` porque este handler tambem e passado direto como onRecarregar/onClick.
+    if (opcoes?.manterTelaAtual !== true) setLoading(true);
 
     // Selo desta carga; a resposta financeira so e aplicada se ainda for a carga corrente.
     const seqCarregamento = ++carregamentoSeqRef.current;
+    const chaveDestaCarga = chaveCopiaListaAlunos(
+      usuarioId, unidadeAtual, competenciaRange.startDate, competenciaRange.endDate,
+    );
 
     // ── FASE 1: disparar TUDO em paralelo ──
 
@@ -1299,6 +1356,15 @@ export function AlunosPage() {
     setTurmas([...turmasImplicitasMarcadas, ...turmasExplicitasFiltradas]);
 
     setLoading(false);
+    if (seqCarregamento === carregamentoSeqRef.current) {
+      if (error) {
+        // A lista nao veio: se havia copia, ela continua, mas a tela diz que nao atualizou.
+        setCopiaExibida(prev => prev ? { ...prev, falhou: true } : prev);
+      } else {
+        setCopiaExibida(null);
+        setChaveDosDados(chaveDestaCarga);
+      }
+    }
   }
 
   // Busca turmas explícitas e retorna Turma[] (chamada em paralelo por carregarDados)
@@ -2164,7 +2230,8 @@ export function AlunosPage() {
           Faturas de alunos
         </button>
         {/* Badge de Alerta - Alunos sem lançamento de pagamento */}
-        {alertaPagamentos.mostrar && (
+        {/* status_pagamento tambem e dinheiro: da copia, nao se afirma nada. */}
+        {alertaPagamentos.mostrar && !copiaExibida && (
           <button
             onClick={() => {
               setTabAtiva('lista');
@@ -2180,11 +2247,50 @@ export function AlunosPage() {
         )}
       </div>
 
-      <div className="inline-flex max-w-full items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-medium text-cyan-200">
-        <BarChart3 className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate">Dados operacionais — carteira ao vivo</span>
-      </div>
+      {copiaExibida ? (
+        // A tela NAO e "ao vivo" enquanto mostra a copia -- o selo de sempre mentiria.
+        <div
+          role="status"
+          className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-200"
+        >
+          {copiaExibida.falhou ? (
+            <>
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              <span>
+                Não consegui atualizar — mostrando a lista de {format(new Date(copiaExibida.salvoEm), 'HH:mm')}, sem ações
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setCopiaExibida(prev => prev ? { ...prev, falhou: false } : prev);
+                  void carregarDadosRef.current({ manterTelaAtual: true }).catch(() => {
+                    setCopiaExibida(prev => prev ? { ...prev, falhou: true } : prev);
+                  });
+                }}
+                className="rounded border border-amber-400/50 px-2 py-0.5 text-amber-100 hover:bg-amber-500/20"
+              >
+                Tentar de novo
+              </button>
+            </>
+          ) : (
+            <>
+              <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" />
+              <span>
+                Atualizando… mostrando a lista de {format(new Date(copiaExibida.salvoEm), 'HH:mm')} — ações liberam ao terminar
+              </span>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="inline-flex max-w-full items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-medium text-cyan-200">
+          <BarChart3 className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">Dados operacionais — carteira ao vivo</span>
+        </div>
+      )}
 
+      {/* Com a copia na tela nada e clicavel: so se age sobre o dado fresco. `inert` tira
+          clique E foco de teclado de uma vez, sem precisar de prop em cada botao. */}
+      <div inert={!!copiaExibida} className={cn('space-y-6', copiaExibida && 'opacity-80')}>
       {/* KPI Cards */}
       <GradeKPIs data-tour="alunos-kpis" className="grid grid-cols-2 gap-2 md:grid-cols-3 md:gap-4 lg:grid-cols-7">
         <KPICard
@@ -2381,6 +2487,7 @@ export function AlunosPage() {
           )}
         </section>
       )}
+      </div>
  
       {/* Ficha do aluno no celular — a MESMA do desktop, em tela cheia.
           Resolvida pelo id a cada render: assim ela acompanha o recarregar da
@@ -2409,7 +2516,7 @@ export function AlunosPage() {
       {modalNovoAluno && (
         <ModalNovoAluno
           onClose={() => setModalNovoAluno(false)}
-          onSalvar={carregarDados}
+          onSalvar={() => carregarDados()}
           professores={professores}
           cursos={cursos}
           tiposMatricula={tiposMatricula}
