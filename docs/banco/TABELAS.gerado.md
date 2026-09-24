@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-23 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-24 -->
 
 <!-- fim do cabecalho gerado -->
 # Tabelas e views
@@ -238,12 +238,12 @@
 | `vw_retomada_eficacia_v1` | view | comercial | 8 | — | não | 0 |  |
 | `caixa_categorias` | tabela | financeiro | 9 | 8 | sim (3) | 0 | Categorias operacionais do caixa diario. Substitui lista fixa do frontend e permite novas categorias pela UI. |
 | `caixa_financeiro_grupos_whatsapp` | tabela | financeiro | 8 | 3 | sim (2) | 1 | JIDs dos grupos financeiros por unidade para envio manual do fechamento de caixa. |
-| `caixa_movimentacao_faturas` | tabela | financeiro | 4 | 0 | sim (3) | 3 | Faturas quitadas por uma movimentacao composta (1 pagamento -> N faturas). Movimentacao simples segue em caixa_movimentacoes.fatura_id; composto tem fatura_id NULL e N linhas aqui. |
+| `caixa_movimentacao_faturas` | tabela | financeiro | 4 | 73 | sim (3) | 3 | Faturas quitadas por uma movimentacao composta (1 pagamento -> N faturas). Movimentacao simples segue em caixa_movimentacoes.fatura_id; composto tem fatura_id NULL e N linhas aqui. |
 | `caixa_movimentacoes` | tabela | financeiro | 19 | 761 | sim (4) | 4 | Lancamentos manuais do caixa diario/cofre. Ambiente cofre afeta saldo fisico em dinheiro; ambiente venda alimenta resumo. |
 | `caixa_reaberturas_log` | tabela | financeiro | 15 | 10 | sim (1) | 2 | Log auditavel de reaberturas do caixa diario. Guarda snapshot do cabecalho e das movimentacoes antes da reabertura. |
 | `caixas_diarios` | tabela | financeiro | 18 | 215 | sim (3) | 1 | Cabecalho do fechamento de caixa diario por unidade. Fase 1 manual. |
 | `contrato_assinatura_sync_execucoes` | tabela | financeiro | 14 | 66 | sim (1) | 1 |  |
-| `faturas_leitura_cache` | tabela | financeiro | 3 | 6 | não | 0 | Cache do payload de get_faturas_alunos_financeiro_v1. Chave = md5(params + max(completed_at) dos runs completos + escopo de unidades). Lido/escrito apenas via SECURITY DEFINER. |
+| `faturas_leitura_cache` | tabela | financeiro | 3 | 0 | não | 0 | Cache do payload de get_faturas_alunos_financeiro_v1. Chave = md5(params + max(completed_at) dos runs completos + escopo de unidades). Lido/escrito apenas via SECURITY DEFINER. |
 | `faturas_pagas_mes` | tabela | financeiro | 21 | 2213 | sim (0) | 1 | Faturas PAGAS capturadas por data de pagamento (DRE caixa). O sync puxa status=paga com vencimento M-2 a M+12, filtra por data_pagamento em M. O export merge com o snapshot de vencimento, dedup por emusys_fatura_id. |
 | `fechamento_mensal_auditoria` | tabela | financeiro | 10 | 258 | sim (1) | 2 | Auditoria das acoes de preview, aprovacao, fechamento, retificacao e compatibilidade mensal. |
 | `fechamento_mensal_execucoes` | tabela | financeiro | 10 | 2 | sim (1) | 0 | Placar do fechamento mensal automatico. Alimenta o vigia da la-hq, que le daqui o motivo da falha por unidade. |
@@ -343,7 +343,7 @@
 | `emusys_experimentais_snapshot_execucoes` | tabela | integracao | 10 | 25263 | sim (3) | 1 |  |
 | `emusys_experimentais_snapshot_publicacoes_vigentes` | tabela | integracao | 6 | 3 | sim (0) | 2 | Ponteiro transacional da ultima publicacao completa por unidade para validar leituras admitidas. |
 | `emusys_fatura_source_events` | tabela | integracao | 12 | 8455571 | sim (1) | 4 | Trilha append-only das confirmacoes, ausencias e resolucoes observadas por competencia. |
-| `emusys_faturas` | tabela | integracao | 22 | 18033 | sim (1) | 1 |  |
+| `emusys_faturas` | tabela | integracao | 22 | 18046 | sim (1) | 1 |  |
 | `emusys_historico_backfill_execucoes_v1` | tabela | integracao | 20 | 147 | sim (0) | 2 | Checkpoint retomavel do coletor historico Emusys do Health Score Professor V3. |
 | `emusys_matriculas_estado_atual` | tabela | integracao | 23 | 4954 | sim (1) | 2 | Fonte bruta backend-only do estado atual de cada matricula Emusys, escopada por unidade. |
 | `emusys_matriculas_sync_execucoes` | tabela | integracao | 13 | 235 | sim (1) | 1 | Manifesto auditavel das fotografias Emusys. Somente execucao operacional concluida e fresca pode alimentar KPIs vivos. |
@@ -459,10 +459,10 @@
 | `anotacoes` | tabela | professor | 11 | 0 | sim (2) | 1 |  |
 | `anotacoes_alunos` | tabela | professor | 8 | 36 | sim (4) | 1 | Anotações e observações sobre alunos |
 | `app_audio_preso_no_aparelho` | tabela | professor | 5 | 11 | sim (0) | 1 | Farol do app (20260827170000): estado ATUAL da fila local de audios de cada professor. Uma linha por professor, sobrescrita — e o zero tambem e reportado, senao o alarme de ontem nunca apaga. Sem isto, audio recusado fica so no aparelho e nenhuma auditoria pode ve-lo (caso Valdo/Bruno, 26/08/2026). |
-| `aula_alunos_emusys` | tabela | professor | 16 | 41202 | sim (3) | 3 | Roster operacional de aulas do Emusys, sem contato ou dados financeiros. |
+| `aula_alunos_emusys` | tabela | professor | 16 | 41636 | sim (3) | 3 | Roster operacional de aulas do Emusys, sem contato ou dados financeiros. |
 | `aula_registros_fabio_log` | tabela | professor | 8 | 1129 | sim (0) | 1 | Auditoria das gravações do Fábio em aulas_emusys.anotacoes_fabio. É trilha de rastreabilidade, não o lar do registro (o registro vive em anotacoes_fabio). |
-| `aula_roster_sync_estado` | tabela | professor | 9 | 21867 | sim (0) | 2 |  |
-| `aulas_emusys` | tabela | professor | 35 | 67382 | sim (4) | 3 | Metadados completos de cada aula importada do Emusys (turma, curso, sala, professor, horários) |
+| `aula_roster_sync_estado` | tabela | professor | 9 | 22301 | sim (0) | 2 |  |
+| `aulas_emusys` | tabela | professor | 35 | 67714 | sim (4) | 3 | Metadados completos de cada aula importada do Emusys (turma, curso, sala, professor, horários) |
 | `config_health_score` | tabela | professor | 13 | 1 | sim (2) | 1 | Configuração dos pesos e limites do Health Score do Professor |
 | `config_health_score_aluno` | tabela | professor | 11 | 1 | sim (2) | 1 | Configuração de pesos do Health Score de Alunos - ajustável por unidade |
 | `config_health_score_professor` | tabela | professor | 12 | 3 | sim (2) | 1 | Configuração de pesos do Health Score de Professores - ajustável por unidade |
@@ -526,7 +526,7 @@
 | `presenca_acao_eventos` | tabela | professor | 15 | 16424 | sim (0) | 1 | Recibo append-only por request_id: recebido, resultado por item e conclusao. |
 | `presenca_comando_itens` | tabela | professor | 9 | 5653 | sim (0) | 1 |  |
 | `presenca_comando_nao_recebidos` | tabela | professor | 3 | 8 | sim (0) | 0 | Tombstone durável de request_id confirmado como não recebido; impede escrita tardia após reconciliação. |
-| `presenca_comandos` | tabela | professor | 18 | 5391 | sim (0) | 0 | Intencao duravel e idempotente de escrita humana de presenca; sem nomes ou payload bruto. |
+| `presenca_comandos` | tabela | professor | 18 | 5494 | sim (0) | 0 | Intencao duravel e idempotente de escrita humana de presenca; sem nomes ou payload bruto. |
 | `presenca_politicas_confiabilidade` | tabela | professor | 12 | 9 | sim (1) | 1 | Decisoes temporais e versionadas que qualificam evidencia de presenca por unidade. |
 | `presenca_rollout_config` | tabela | professor | 7 | 21 | sim (0) | 1 | Estado atual governado por unidade e superficie. Sombra nao ativa consumidor. |
 | `presenca_rollout_eventos` | tabela | professor | 10 | 0 | sim (0) | 1 | Trilha append-only das transicoes e rollbacks de presenca canonica. |
