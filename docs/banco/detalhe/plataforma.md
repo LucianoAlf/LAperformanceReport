@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-23 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-24 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — plataforma
 
-26 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+27 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## _auditoria_chave_natural_20260809
 
@@ -131,6 +131,20 @@
 
 **Únicos:**
 - `migrations_audit_data_nascimento_pkey`
+
+## paginas_rpc_cache
+
+> Cache generico das RPCs pesadas de pagina (agenda, alunos, administrativo, professores). Chave = recorte logico (+escopo de unidades quando a funcao filtra por usuario). TTL na funcao wrapper. Criado em 2026-09-24.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `funcao` | text | não |  |  |
+| `cache_key` | text | não |  |  |
+| `payload` | jsonb | não |  |  |
+| `built_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `paginas_rpc_cache_pkey`
 
 ## perfil_permissoes
 

@@ -406,7 +406,9 @@
     "get_pix_migracao_v1": "financeiro",
     "porteiro_rota_professor": "professor",
     "app_marcar_notificacoes_lidas": "professor",
-    "app_notificacoes_nao_lidas": "professor"
+    "app_notificacoes_nao_lidas": "professor",
+    "paginas_rpc_cache": "plataforma",
+    "paginas_rpc_cache_escopo_v1": "plataforma"
   },
   "tokens": {
     "kpis": "gestao"
