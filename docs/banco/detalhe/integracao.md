@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-23 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-24 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — integracao
 
-64 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+65 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## admin_conversas
 
@@ -654,12 +654,30 @@
 - `emusys_matriculas_sync_execucoes_pkey`
 - `uq_sync_matriculas_execucao_viva_por_unidade`
 
+## emusys_pessoas_documentos
+
+> Espelho de CPFs de aluno/responsável de GET /matriculas (Emusys), todos os status — inclusive alunos sem linha em `alunos`. Resolve "CPF do pagador do Pix -> aluno" também no histórico.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `unidade_id` | uuid | não |  | unidades.id |
+| `emusys_student_id` | text | não |  |  |
+| `aluno_nome` | text | sim |  |  |
+| `aluno_cpf` | text | sim |  |  |
+| `responsavel_emusys_id` | integer | sim |  |  |
+| `responsavel_nome` | text | sim |  |  |
+| `responsavel_cpf` | text | sim |  |  |
+| `synced_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `emusys_pessoas_documentos_pkey`
+
 ## emusys_professor_disciplinas
 
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
 | `id` | uuid | não | gen_random_uuid() |  |
-| `unidade_id` | uuid | não |  | unidades.id |
+| `unidade_id` | uuid | não |  | emusys_disciplinas_catalogo.unidade_id |
 | `emusys_professor_id` | integer | não |  |  |
 | `emusys_disciplina_id` | integer | não |  | emusys_disciplinas_catalogo.emusys_disciplina_id |
 | `ativo_origem` | boolean | não | true |  |

@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-23 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-24 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — aluno
@@ -515,6 +515,9 @@
 | `telefone_key` | text | sim | fn_normalizar_telefone_br_key((telefone)::text) |  |
 | `whatsapp_key` | text | sim | fn_normalizar_telefone_br_key((whatsapp)::text) |  |
 | `responsavel_telefone_key` | text | sim | fn_normalizar_telefone_br_key((responsavel_telefone)::text) |  |
+| `aluno_cpf` | text | sim |  |  |
+| `responsavel_cpf` | text | sim |  |  |
+| `responsavel_emusys_id` | integer | sim |  |  |
 
 **Únicos:**
 - `alunos_pkey`

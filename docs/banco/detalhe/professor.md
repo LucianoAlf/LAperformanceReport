@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-23 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-24 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — professor
 
-155 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+156 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## anotacoes
 
@@ -1695,6 +1695,38 @@
 
 **Triggers:**
 - `trg_presenca_comando_arbitrar_insert → fn_presenca_comando_arbitrar_insert()`
+
+## presenca_emusys_escrita
+
+> Livro de bordo do escritor de presenca no Emusys: uma linha por gatilho (evento de aluno ou ficha de professor), com estado antes, decisao, resposta e modo sombra/ativo.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `request_id` | uuid | sim |  |  |
+| `presenca_evento_id` | bigint | sim |  |  |
+| `ficha_id` | uuid | sim |  |  |
+| `unidade_id` | uuid | não |  |  |
+| `aula_emusys_id` | integer | não |  |  |
+| `aluno_id` | integer | sim |  |  |
+| `professor_id` | integer | sim |  |  |
+| `alvo` | text | não |  |  |
+| `estado_vigente` | text | sim |  |  |
+| `fonte_decisao` | text | sim |  |  |
+| `presente` | boolean | sim |  |  |
+| `estado_antes` | jsonb | sim |  |  |
+| `decisao` | text | não |  |  |
+| `motivo` | text | sim |  |  |
+| `resposta` | jsonb | sim |  |  |
+| `erro` | text | sim |  |  |
+| `modo` | text | não |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `linha_emusys_id` | integer | sim |  |  |
+
+**Únicos:**
+- `presenca_emusys_escrita_evento_uk`
+- `presenca_emusys_escrita_ficha_uk`
+- `presenca_emusys_escrita_pkey`
 
 ## presenca_politicas_confiabilidade
 
