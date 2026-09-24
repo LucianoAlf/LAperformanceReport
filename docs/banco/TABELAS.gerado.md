@@ -193,7 +193,7 @@
 | `lead_experimentais` | tabela | comercial | 19 | 1214 | sim (1) | 6 |  |
 | `lead_experimentais_arquivadas` | tabela | comercial | 23 | 178 | sim (3) | 0 | Lixeira de lead_experimentais, no padrao de alunos_arquivados. Guarda a linha inteira + quem absorveu (consolidado_no_id). A duplicata nasceu porque a API do Emusys so passou a devolver id_lead em 21/06/2026. |
 | `lead_experimentais_decisoes_humanas` | tabela | comercial | 12 | 53 | sim (3) | 2 | P02Q: decisões humanas de auditoria para reconciliar experimentais sem alterar histórico operacional original. |
-| `lead_experimental_aulas` | tabela | comercial | 19 | 496 | sim (0) | 3 | Vinculo lead<->aula da experimental. RLS ligada e SEM policy: so security definer (dono postgres) e service_role entram. O cliente fala com app_experimental_do_professor / app_minha_agenda_sessao. |
+| `lead_experimental_aulas` | tabela | comercial | 19 | 498 | sim (0) | 3 | Vinculo lead<->aula da experimental. RLS ligada e SEM policy: so security definer (dono postgres) e service_role entram. O cliente fala com app_experimental_do_professor / app_minha_agenda_sessao. |
 | `lead_experimental_aulas_arquivadas` | tabela | comercial | 22 | 2 | sim (3) | 0 | Filhas descartadas na consolidacao, quando o sobrevivente ja tinha a sua. So entra aqui filha SEM aula_local_id — vinculo real nunca e descartado. |
 | `lead_experimental_registros` | tabela | comercial | 15 | 32 | sim (0) | 5 | Prontuario da experimental ditado pelo professor. RLS ligada e SEM policy — mesma razao da lead_experimental_aulas. A fronteira family-safe mora nas RPCs, nao na tabela. |
 | `lead_retomada` | tabela | comercial | 18 | 17 | sim (0) | 2 | Agenda de retomada ("bumerangue"): quando o lead pediu para voltar a falar, POR QUE, e a frase original. Dorme ate o dia. Desfecho fecha o laco 3o->2o andar. |
@@ -293,7 +293,7 @@
 | `dados_mensais_retificacoes` | tabela | gestao | 17 | 7 | sim (0) | 1 | Auditoria de retificações em dados_mensais. Cada registro representa uma retificação aplicada com antes/depois/diff. |
 | `dashboard_config` | tabela | gestao | 6 | 6 | sim (2) | 0 |  |
 | `insights_salvos` | tabela | gestao | 10 | 4 | sim (4) | 2 |  |
-| `kpis_comercial_v2_cache` | tabela | gestao | 3 | 57 | não | 0 | Cache de get_kpis_comercial_canonicos_v2 (jsonb). Chave = md5(params+dia+fingerprint das fontes). TTL 30min. Lido/escrito apenas via SECURITY DEFINER. |
+| `kpis_comercial_v2_cache` | tabela | gestao | 3 | 117 | não | 0 | Cache de get_kpis_comercial_canonicos_v2 (jsonb). Chave = md5(params+dia+fingerprint das fontes). TTL 30min. Lido/escrito apenas via SECURITY DEFINER. |
 | `metas` | tabela | gestao | 26 | 7 | sim (4) | 1 | Metas e OKRs unificados por unidade - mensais, trimestrais e anuais. |
 | `metas_comerciais` | tabela | gestao | 10 | 4 | sim (4) | 0 | BACKUP: Metas comerciais originais. Dados consolidados na nova tabela metas em 2026-01-16. Pode ser removida após 30 dias de validação. |
 | `metas_kpi` | tabela | gestao | 8 | 596 | sim (4) | 1 |  |
@@ -330,7 +330,7 @@
 | `automacoes_config` | tabela | integracao | 3 | 5 | sim (3) | 0 |  |
 | `base_conhecimento_blocos` | tabela | integracao | 16 | 16 | sim (1) | 2 | Base de conhecimento da LA Music, em blocos. Consumida pelos agentes SDR Mila (via RPC get_base_conhecimento + edge base-conhecimento) e pela equipe, na subaba Conhecimento em Pré-Atendimento > Configurações. |
 | `boas_vindas_enviadas` | tabela | integracao | 9 | 205 | sim (0) | 0 | Idempotencia da boas-vindas de matricula (1 envio por matricula). Ver edge function enviar-boas-vindas-matricula. |
-| `conciliacao_experimentais_v2_cache` | tabela | integracao | 3 | 57 | não | 0 | Cache de get_conciliacao_experimentais_v2 (jsonb). Chave = md5(params+dia+fingerprint das fontes). TTL 30min. Auth resolvida antes do cache. Lido/escrito apenas via SECURITY DEFINER. |
+| `conciliacao_experimentais_v2_cache` | tabela | integracao | 3 | 117 | não | 0 | Cache de get_conciliacao_experimentais_v2 (jsonb). Chave = md5(params+dia+fingerprint das fontes). TTL 30min. Auth resolvida antes do cache. Lido/escrito apenas via SECURITY DEFINER. |
 | `conversa_estado_whatsapp` | tabela | integracao | 7 | 130 | sim (1) | 0 |  |
 | `curso_emusys_depara` | tabela | integracao | 6 | 87 | sim (0) | 2 | De-para (unidade, disciplina_id Emusys) -> curso. Casamento por ID, imune a renomeação. Fonte: GET /disciplinas. |
 | `emusys_api_payload` | tabela | integracao | 12 | 4755 | sim (0) | 0 | Espelho de debug do payload bruto da API Emusys. Sem FK e sem vínculo com o sistema. Uso: comparar Emusys x base manualmente. Não alimenta nada. |
@@ -343,7 +343,7 @@
 | `emusys_experimentais_snapshot_execucoes` | tabela | integracao | 10 | 25263 | sim (3) | 1 |  |
 | `emusys_experimentais_snapshot_publicacoes_vigentes` | tabela | integracao | 6 | 3 | sim (0) | 2 | Ponteiro transacional da ultima publicacao completa por unidade para validar leituras admitidas. |
 | `emusys_fatura_source_events` | tabela | integracao | 12 | 8455571 | sim (1) | 4 | Trilha append-only das confirmacoes, ausencias e resolucoes observadas por competencia. |
-| `emusys_faturas` | tabela | integracao | 22 | 18047 | sim (1) | 1 |  |
+| `emusys_faturas` | tabela | integracao | 22 | 19206 | sim (1) | 1 |  |
 | `emusys_historico_backfill_execucoes_v1` | tabela | integracao | 20 | 147 | sim (0) | 2 | Checkpoint retomavel do coletor historico Emusys do Health Score Professor V3. |
 | `emusys_matriculas_estado_atual` | tabela | integracao | 23 | 4954 | sim (1) | 2 | Fonte bruta backend-only do estado atual de cada matricula Emusys, escopada por unidade. |
 | `emusys_matriculas_sync_execucoes` | tabela | integracao | 13 | 235 | sim (1) | 1 | Manifesto auditavel das fotografias Emusys. Somente execucao operacional concluida e fresca pode alimentar KPIs vivos. |
@@ -437,7 +437,7 @@
 | `auditoria_acesso` | tabela | plataforma | 10 | 3 | sim (2) | 1 | Log de auditoria para ações de acesso e permissões |
 | `ficha_tokens` | tabela | plataforma | 8 | 15 | sim (0) | 1 | Token pessoal por colaborador. Uso unico: usado_em preenchido trava o reenvio. RLS sem policy por design — so service_role le; token nunca vai para o client. |
 | `migrations_audit_data_nascimento` | tabela | plataforma | 7 | 80 | sim (3) | 0 |  |
-| `paginas_rpc_cache` | tabela | plataforma | 4 | 0 | não | 0 | Cache generico das RPCs pesadas de pagina (agenda, alunos, administrativo, professores). Chave = recorte logico (+escopo de unidades quando a funcao filtra por usuario). TTL na funcao wrapper. Criado em 2026-09-24. |
+| `paginas_rpc_cache` | tabela | plataforma | 4 | 29 | não | 0 | Cache generico das RPCs pesadas de pagina (agenda, alunos, administrativo, professores). Chave = recorte logico (+escopo de unidades quando a funcao filtra por usuario). TTL na funcao wrapper. Criado em 2026-09-24. |
 | `perfil_permissoes` | tabela | plataforma | 4 | 170 | sim (2) | 2 | Relacionamento N:N entre perfis e permissoes |
 | `perfis` | tabela | plataforma | 10 | 7 | sim (2) | 0 | Perfis de acesso do sistema (Admin, Gerente, Farmer, Hunter, etc.) |
 | `permissoes` | tabela | plataforma | 9 | 51 | sim (2) | 0 | Permissões granulares do sistema (ex: alunos.ver, alunos.editar) |
@@ -460,10 +460,10 @@
 | `anotacoes` | tabela | professor | 11 | 0 | sim (2) | 1 |  |
 | `anotacoes_alunos` | tabela | professor | 8 | 36 | sim (4) | 1 | Anotações e observações sobre alunos |
 | `app_audio_preso_no_aparelho` | tabela | professor | 5 | 11 | sim (0) | 1 | Farol do app (20260827170000): estado ATUAL da fila local de audios de cada professor. Uma linha por professor, sobrescrita — e o zero tambem e reportado, senao o alarme de ontem nunca apaga. Sem isto, audio recusado fica so no aparelho e nenhuma auditoria pode ve-lo (caso Valdo/Bruno, 26/08/2026). |
-| `aula_alunos_emusys` | tabela | professor | 16 | 43380 | sim (3) | 3 | Roster operacional de aulas do Emusys, sem contato ou dados financeiros. |
+| `aula_alunos_emusys` | tabela | professor | 16 | 42138 | sim (3) | 3 | Roster operacional de aulas do Emusys, sem contato ou dados financeiros. |
 | `aula_registros_fabio_log` | tabela | professor | 8 | 1129 | sim (0) | 1 | Auditoria das gravações do Fábio em aulas_emusys.anotacoes_fabio. É trilha de rastreabilidade, não o lar do registro (o registro vive em anotacoes_fabio). |
 | `aula_roster_sync_estado` | tabela | professor | 9 | 22301 | sim (0) | 2 |  |
-| `aulas_emusys` | tabela | professor | 35 | 67714 | sim (4) | 3 | Metadados completos de cada aula importada do Emusys (turma, curso, sala, professor, horários) |
+| `aulas_emusys` | tabela | professor | 35 | 67715 | sim (4) | 3 | Metadados completos de cada aula importada do Emusys (turma, curso, sala, professor, horários) |
 | `config_health_score` | tabela | professor | 13 | 1 | sim (2) | 1 | Configuração dos pesos e limites do Health Score do Professor |
 | `config_health_score_aluno` | tabela | professor | 11 | 1 | sim (2) | 1 | Configuração de pesos do Health Score de Alunos - ajustável por unidade |
 | `config_health_score_professor` | tabela | professor | 12 | 3 | sim (2) | 1 | Configuração de pesos do Health Score de Professores - ajustável por unidade |
@@ -550,7 +550,7 @@
 | `professor_passagem_bastao` | tabela | professor | 15 | 96 | sim (2) | 5 | Camada quente: pendencia humana de passagem de bastao para LA Teacher/Fabio. |
 | `professor_perfil_respostas` | tabela | professor | 7 | 390 | sim (1) | 1 | Respostas individuais por aplicação. opcao_canonica (A/B/C/D do gabarito) preserva o recálculo mesmo com opções embaralhadas na exibição. 1-13 fixas; 14-15 desempate (presença = houve empate). |
 | `professor_perfil_testes` | tabela | professor | 26 | 17 | sim (1) | 4 | Aplicações do teste de perfil comportamental do professor (13+2 cenários). Histórico preservado; o vigente desnormaliza em professores.temperamento_codinome. |
-| `professor_periodos_reconstrucao_manifesto_v1` | tabela | professor | 13 | 138919 | sim (0) | 5 | Manifesto privado e imutavel por versao do recorte. Calcula uma vez a particao da pessoa canonica. |
+| `professor_periodos_reconstrucao_manifesto_v1` | tabela | professor | 13 | 146030 | sim (0) | 5 | Manifesto privado e imutavel por versao do recorte. Calcula uma vez a particao da pessoa canonica. |
 | `professor_periodos_reconstrucao_particoes_v1` | tabela | professor | 20 | 124 | sim (0) | 2 | Resultados intermediarios, idempotentes e privados da reconstrucao V3. O detalhe diagnostico fica aqui; a camada final so nasce apos todas as particoes. |
 | `professor_periodos_reconstrucoes_v1` | tabela | professor | 19 | 166 | sim (0) | 2 | Execucao versionada e idempotente do reconstrutor historico de periodos professor-matricula-disciplina. |
 | `professor_periodos_revisoes_v1` | tabela | professor | 16 | 458 | sim (0) | 5 | Trilha append-only de revisoes humanas e promocoes automaticas estruturadas sobre periodos reconstruidos. |
