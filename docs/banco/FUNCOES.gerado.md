@@ -751,7 +751,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `sync_lead_etapa_to_status()` | ATIVA | INVOKER | trigger:leads.tr_sync_etapa_to_status |
 | `sync_leads_to_dados_comerciais()` | ORFA | DEFINER | sem consumidor conhecido |
 | `sync_leads_to_origem_leads()` | ORFA | DEFINER | sem consumidor conhecido |
-| `sync_run_items_consolidar_historico_v1(p_max_runs integer)` | ATIVA | DEFINER | cron:sync-run-items-carga-historico, cron:sync-run-items-consolidar-diario |
+| `sync_run_items_consolidar_historico_v1(p_max_runs integer)` | ATIVA | DEFINER | cron:sync-run-items-consolidar-diario |
 | `sync_run_items_expurgar_v1(p_max_itens integer, p_idade_minima interval)` | ATIVA | DEFINER | cron:sync-run-items-expurgo-diario |
 | `sync_run_items_historico_conferir_v1(p_amostra integer)` | ORFA | DEFINER | sem consumidor conhecido |
 | `upsert_emusys_matriculas_estado_atual(p_unidade_id uuid, p_linhas jsonb)` | ATIVA | DEFINER | edge:supabase/functions/processar-matricula-emusys/index.ts, edge:supabase/functions/sync-matriculas-emusys/index.ts |
@@ -1396,8 +1396,8 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_presenca_ocorrencia_canonica_escopada_v2(p_unidade_id uuid, p_data_inicio date, p_data_fim date)` | SO-INTERNA | INVOKER | funcao:fn_presenca_ocorrencias_escopo_interno_v2 |
 | `fn_presenca_ocorrencias_escopo_interno_v2(p_unidade_id uuid, p_data_inicio date, p_data_fim date, p_professor_id integer, p_aluno_id integer)` | SO-INTERNA | DEFINER | funcao:fn_presenca_estado_publicacao_periodo_v2, funcao:get_health_score_professor_v3_presenca_periodo_v2, funcao:get_presenca_metricas_canonicas_v2, funcao:get_presenca_ocorrencias_periodo_canonico_v2 |
 | `fn_presenca_pendencia_elegivel(p_unidade_id uuid, p_aluno_id integer, p_data_aula date, p_matricula_disciplina_id bigint, p_curso_nome text)` | ATIVA | DEFINER | view:vw_presenca_pendencia, funcao:fn_presenca_candidatos_periodo_v1, funcao:fn_presenca_estado_publicacao_periodo_v2, funcao:fn_presenca_pendencias_do_dia_v2, funcao:get_presenca_metricas_canonicas_v2 |
-| `fn_presenca_pendencias_do_dia(p_unidade_id uuid, p_data date)` | SO-INTERNA | DEFINER | funcao:fn_agenda_dia_legado_envelope_v1, funcao:fn_texto_relatorio_presenca_legado_v1, funcao:sol_porta_presenca_pendente_v1 |
-| `fn_presenca_pendencias_do_dia_v2(p_unidade_id uuid, p_data date)` | SO-INTERNA | DEFINER | funcao:fn_enfileirar_relatorio_presenca, funcao:fn_presenca_pendencias_do_dia, funcao:get_agenda_dia_canonica_v2, funcao:get_presenca_contexto_agente_canonico_v1 |
+| `fn_presenca_pendencias_do_dia(p_unidade_id uuid, p_data date)` | SO-INTERNA | DEFINER | funcao:fn_texto_relatorio_presenca_legado_v1, funcao:sol_porta_presenca_pendente_v1 |
+| `fn_presenca_pendencias_do_dia_v2(p_unidade_id uuid, p_data date)` | SO-INTERNA | DEFINER | funcao:fn_agenda_dia_legado_envelope_v1, funcao:fn_enfileirar_relatorio_presenca, funcao:fn_presenca_pendencias_do_dia, funcao:get_agenda_dia_canonica_v2, funcao:get_presenca_contexto_agente_canonico_v1 |
 | `fn_presenca_politica_impedir_sobreposicao()` | ATIVA | INVOKER | trigger:presenca_politicas_confiabilidade.trg_presenca_politica_impedir_sobreposicao |
 | `fn_presenca_resumo_mensal_v1(p_ano integer, p_mes integer, p_unidade_id uuid)` | SO-INTERNA | DEFINER | funcao:fn_enfileirar_resumo_mensal_presenca_v1, funcao:fn_texto_resumo_mensal_presenca_v1 |
 | `fn_presenca_rollout_modo_escopo_interno_v1(p_unidade_id uuid, p_superficie text)` | SO-INTERNA | DEFINER | funcao:fn_presenca_fila_proveniencia_rollout_v1, funcao:fn_texto_relatorio_presenca_consolidado, funcao:get_agenda_dia_v2_sem_cache_20260924 |

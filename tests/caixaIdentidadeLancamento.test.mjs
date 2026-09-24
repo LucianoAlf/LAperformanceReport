@@ -82,14 +82,20 @@ test('o tipo do insert carrega fatura_id e aluno_id', () => {
   assert.match(input, /aluno_id\?: number \| null;/);
 });
 
-// useCaixaDiario faz `...input` no insert: se o tipo carrega, o banco recebe. O teste
-// existe para que ninguem troque o spread por uma lista de campos e perca os dois em
-// silencio — foi assim que eles ficaram de fora desde o comeco.
+// useCaixaDiario espalha o input no insert: se o tipo carrega, o banco recebe. O
+// teste existe para que ninguem troque o spread por uma lista de campos e perca
+// fatura_id/aluno_id em silencio — foi assim que eles ficaram de fora no comeco.
+// Excecao deliberada: `fatura_ids` NAO e coluna da movimentacao — e' a trilha
+// paralela do pagamento composto (`caixa_movimentacao_faturas`). Se ele vazasse
+// no spread, o insert quebraria por coluna inexistente.
 test('o insert do caixa continua espalhando o input inteiro', () => {
   const hook = readFileSync(new URL('../src/hooks/useCaixaDiario.ts', import.meta.url), 'utf8');
   const insert = hook.match(/\.from\('caixa_movimentacoes'\)\s*\n\s*\.insert\(\{[\s\S]*?\}\)/)?.[0] ?? '';
   assert.notEqual(insert, '', 'insert do caixa nao encontrado');
-  assert.match(insert, /\.\.\.input,/);
+  assert.match(insert, /\.\.\.input(Linha)?,/);
+  // E o composto precisa ir para a tabela filha, nao para a linha do caixa.
+  assert.match(hook, /fatura_ids: faturaIds/);
+  assert.match(hook, /\.from\('caixa_movimentacao_faturas'\)/);
 });
 
 test('o formulario oferece o seletor de fatura na entrada que pede identidade', () => {

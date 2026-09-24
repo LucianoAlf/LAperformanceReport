@@ -23,6 +23,9 @@ export interface FaturaParaCaixa {
   /** Chave composta "<unidade>:<emusys_fatura_id>" — identifica na lista, NAO e a FK. */
   chave: string;
   emusysFaturaId: string;
+  /** UUID real da linha em `emusys_faturas` — preenchido quando a opcao veio do espelho direto. */
+  faturaId?: string | null;
+  emusysStudentId: string | null;
   alunoId: number | null;
   alunoNome: string;
   cursoNome: string | null;
@@ -56,6 +59,7 @@ function paraOpcao(item: FaturaFinanceiraItem): FaturaParaCaixa {
   return {
     chave: item.canonical_fatura_id,
     emusysFaturaId: String(item.emusys_fatura_id),
+    emusysStudentId: item.emusys_student_id ?? null,
     alunoId: item.aluno?.id ?? null,
     alunoNome: item.aluno?.nome ?? '',
     cursoNome: item.aluno?.curso_nome ?? null,
@@ -64,6 +68,43 @@ function paraOpcao(item: FaturaFinanceiraItem): FaturaParaCaixa {
     status: item.status,
     valor: item.valores?.valor_pago ?? item.valores?.valor_com_desconto ?? null,
   };
+}
+
+/**
+ * Todas as faturas do aluno no espelho, sem janela de competencia — e' o que
+ * permite vincular pagamento composto (ex: contrato inteiro pago no cartao,
+ * com parcelas de competencias futuras que a janela_3 nao alcanca).
+ * Vem direto de `emusys_faturas`, entao `faturaId` ja e' a FK real.
+ */
+export async function buscarFaturasDoAluno(
+  unidadeId: string,
+  emusysStudentId: string,
+  alunoNome: string,
+): Promise<FaturaParaCaixa[]> {
+  const { data, error } = await supabase
+    .from('emusys_faturas')
+    .select('id,emusys_fatura_id,emusys_student_id,competencia,data_vencimento,status,valor_original,valor_pago,desconto_fixo,desconto_condicional')
+    .eq('unidade_id', unidadeId)
+    .eq('emusys_student_id', emusysStudentId)
+    .order('competencia', { ascending: true });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Record<string, unknown>[]).map((row) => {
+    const valorOriginal = Number(row.valor_original ?? 0);
+    const liquido = valorOriginal - Number(row.desconto_fixo ?? 0) - Number(row.desconto_condicional ?? 0);
+    return {
+      chave: String(row.id),
+      emusysFaturaId: String(row.emusys_fatura_id),
+      faturaId: String(row.id),
+      emusysStudentId: String(row.emusys_student_id ?? ''),
+      alunoId: null,
+      alunoNome,
+      cursoNome: null,
+      competencia: String(row.competencia ?? ''),
+      dataVencimento: row.data_vencimento ? String(row.data_vencimento) : null,
+      status: String(row.status ?? ''),
+      valor: row.valor_pago != null ? Number(row.valor_pago) : liquido,
+    };
+  });
 }
 
 /**

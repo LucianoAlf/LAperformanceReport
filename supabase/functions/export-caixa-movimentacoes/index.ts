@@ -127,10 +127,35 @@ serve(async (request) => {
       if ((data?.length ?? 0) < PAGE_SIZE) break;
     }
 
+    // Pagamento composto: uma movimentacao pode quitar N faturas via tabela
+    // filha (migration 20260925). Unimos coluna + filhas num mapa mov->faturas.
+    const movIds = itens.map((i) => String(i.id));
+    const filhasPorMov = new Map<string, string[]>();
+    for (let from = 0; from < movIds.length; from += PAGE_SIZE) {
+      const { data, error } = await client
+        .from('caixa_movimentacao_faturas')
+        .select('movimentacao_id,fatura_id')
+        .in('movimentacao_id', movIds.slice(from, from + PAGE_SIZE));
+      if (error) throw error;
+      for (const row of data ?? []) {
+        const lista = filhasPorMov.get(String(row.movimentacao_id)) ?? [];
+        lista.push(String(row.fatura_id));
+        filhasPorMov.set(String(row.movimentacao_id), lista);
+      }
+    }
+    const linksPorMov = new Map<string, string[]>();
+    for (const item of itens) {
+      const links = [...(filhasPorMov.get(String(item.id)) ?? [])];
+      if (item.fatura_id && UUID_PATTERN.test(String(item.fatura_id))) {
+        links.unshift(String(item.fatura_id));
+      }
+      linksPorMov.set(String(item.id), [...new Set(links)]);
+    }
+
     // Resolve a ponte: fatura interna -> ids do Emusys (a fatura_id da API deles
     // e' por unidade, entao devolvemos unidade + emusys_fatura_id juntos).
     const faturaIds = [...new Set(
-      itens.map((i) => String(i.fatura_id ?? '')).filter((v) => UUID_PATTERN.test(v)),
+      itens.flatMap((i) => linksPorMov.get(String(i.id)) ?? []),
     )];
     const faturas = new Map<string, Record<string, unknown>>();
     for (let from = 0; from < faturaIds.length; from += PAGE_SIZE) {
@@ -184,10 +209,11 @@ serve(async (request) => {
       totais_por_tipo: totais,
       controle: {
         itens: itens.length,
-        com_fatura: itens.filter((i) => i.fatura_id != null).length,
-        sem_fatura_entrada: itens.filter((i) => i.fatura_id == null && i.tipo === 'entrada').length,
+        com_fatura: itens.filter((i) => (linksPorMov.get(String(i.id)) ?? []).length > 0).length,
+        sem_fatura_entrada: itens.filter((i) => (linksPorMov.get(String(i.id)) ?? []).length === 0 && i.tipo === 'entrada').length,
       },
       itens: itens.map((i) => {
+        const links = linksPorMov.get(String(i.id)) ?? [];
         const fatura = i.fatura_id ? faturas.get(String(i.fatura_id)) : undefined;
         const unidade = unidades.get(String(i.unidade_id)) as { codigo?: string; nome?: string } | undefined;
         return {
@@ -212,6 +238,17 @@ serve(async (request) => {
           emusys_fatura_id: fatura?.emusys_fatura_id ?? null,
           emusys_matricula_id: fatura?.emusys_matricula_id ?? null,
           emusys_student_id: fatura?.emusys_student_id ?? null,
+          // Composto: TODAS as faturas quitadas por este lancamento (coluna +
+          // filhas). Itens simples trazem 1 elemento; sem vinculo, lista vazia.
+          faturas_vinculadas: links.map((faturaId) => {
+            const f = faturas.get(faturaId);
+            return {
+              fatura_id: faturaId,
+              emusys_fatura_id: f?.emusys_fatura_id ?? null,
+              emusys_matricula_id: f?.emusys_matricula_id ?? null,
+              emusys_student_id: f?.emusys_student_id ?? null,
+            };
+          }),
           cartao_modalidade: i.cartao_modalidade,
           cartao_parcelas: i.cartao_parcelas,
           created_at: i.created_at,

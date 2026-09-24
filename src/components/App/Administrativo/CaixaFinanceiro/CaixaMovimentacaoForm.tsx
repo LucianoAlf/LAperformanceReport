@@ -32,6 +32,7 @@ import {
 import { cn } from '@/lib/utils';
 import { exigeIdentidade } from '@/lib/caixaIdentidade';
 import {
+  buscarFaturasDoAluno,
   filtrarFaturasPorBusca,
   resolverFaturaId,
   sugerirFaturasPorValor,
@@ -103,7 +104,11 @@ export function CaixaMovimentacaoForm({
   const [criandoCategoria, setCriandoCategoria] = useState(false);
   const [erroCategoria, setErroCategoria] = useState<string | null>(null);
   const [buscaAluno, setBuscaAluno] = useState('');
-  const [faturaEscolhida, setFaturaEscolhida] = useState<FaturaParaCaixa | null>(null);
+  // Pagamento composto: o mesmo lancamento pode quitar N faturas (ex: contrato
+  // inteiro pago no cartao). 1 item = fatura_id direto; 2+ = filhas.
+  const [faturasEscolhidas, setFaturasEscolhidas] = useState<FaturaParaCaixa[]>([]);
+  const [irmaos, setIrmaos] = useState<FaturaParaCaixa[] | null>(null);
+  const [carregandoIrmaos, setCarregandoIrmaos] = useState(false);
   // Salvar sem fatura so' com confirmacao consciente: sem isso o lancamento vira
   // pendencia de conciliacao no extrato/DRE — que e' o buraco que estamos fechando.
   const [semFaturaConfirmada, setSemFaturaConfirmada] = useState(false);
@@ -116,11 +121,16 @@ export function CaixaMovimentacaoForm({
     pedeIdentidade ? unidadeId : null,
   );
   const sugestoes = useMemo(() => {
-    if (faturaEscolhida) return [];
+    const escolhidas = new Set(faturasEscolhidas.map((f) => f.chave));
     const porBusca = filtrarFaturasPorBusca(faturas, buscaAluno);
-    if (porBusca.length) return porBusca;
-    return sugerirFaturasPorValor(faturas, parseMoedaCaixa(valor));
-  }, [buscaAluno, faturaEscolhida, faturas, valor]);
+    const base = porBusca.length ? porBusca : sugerirFaturasPorValor(faturas, parseMoedaCaixa(valor));
+    return base.filter((f) => !escolhidas.has(f.chave));
+  }, [buscaAluno, faturasEscolhidas, faturas, valor]);
+
+  const totalEscolhido = useMemo(
+    () => faturasEscolhidas.reduce((acc, f) => acc + (f.valor ?? 0), 0),
+    [faturasEscolhidas],
+  );
 
   const categoriasDisponiveis = useMemo(
     () => filtrarCategoriasCaixaPorAmbiente(categorias, ambiente),
@@ -159,10 +169,26 @@ export function CaixaMovimentacaoForm({
     setDescricao(initialValues?.descricao || '');
     setValor(formatarNumeroComoInputMoedaCaixa(initialValues?.valor));
     setResponsavel(initialValues?.responsavel || '');
+    setFaturasEscolhidas([]);
+    setIrmaos(null);
     setSemFaturaConfirmada(false);
     setErro(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialValues]);
+
+  async function handleListarIrmaos() {
+    const referencia = faturasEscolhidas[faturasEscolhidas.length - 1];
+    if (!referencia?.emusysStudentId || !unidadeId) return;
+    setCarregandoIrmaos(true);
+    try {
+      const lista = await buscarFaturasDoAluno(unidadeId, referencia.emusysStudentId, referencia.alunoNome);
+      setIrmaos(lista);
+    } catch {
+      setIrmaos([]);
+    } finally {
+      setCarregandoIrmaos(false);
+    }
+  }
 
   async function handleCriarCategoria() {
     if (!onCreateCategoria) return;
@@ -206,21 +232,23 @@ export function CaixaMovimentacaoForm({
       return;
     }
 
-    if (pedeIdentidade && !faturaEscolhida && !semFaturaConfirmada) {
+    if (pedeIdentidade && faturasEscolhidas.length === 0 && !semFaturaConfirmada) {
       setErro({
         campo: null,
-        msg: 'Vincule a fatura do aluno ou marque "receita sem fatura" para confirmar que nao e parcela de aluno.',
+        msg: 'Vincule o recebimento a parcela paga ou confirme a opcao de receita avulsa abaixo.',
       });
       return;
     }
 
-    let faturaId: string | null = null;
-    if (faturaEscolhida && unidadeId) {
-      try {
-        faturaId = await resolverFaturaId(unidadeId, faturaEscolhida.emusysFaturaId);
-      } catch {
-        // A FK nao resolveu: grava sem identidade em vez de perder o lancamento.
-        faturaId = null;
+    const faturaIds: string[] = [];
+    if (unidadeId) {
+      for (const f of faturasEscolhidas) {
+        try {
+          const id = f.faturaId ?? await resolverFaturaId(unidadeId, f.emusysFaturaId);
+          if (id && !faturaIds.includes(id)) faturaIds.push(id);
+        } catch {
+          // A FK nao resolveu: ignora essa fatura em vez de perder o lancamento.
+        }
       }
     }
 
@@ -235,8 +263,9 @@ export function CaixaMovimentacaoForm({
       cartao_parcelas: ehCartao && cartaoModalidade === 'credito' ? parcelasNum : null,
       link_pagamento: ehCartao ? (linkPagamento.trim() || null) : null,
       responsavel: responsavel.trim() || undefined,
-      fatura_id: faturaId,
-      aluno_id: faturaEscolhida?.alunoId ?? null,
+      fatura_id: faturaIds.length === 1 ? faturaIds[0] : null,
+      fatura_ids: faturaIds.length > 1 ? faturaIds : null,
+      aluno_id: faturasEscolhidas[0]?.alunoId ?? null,
     });
 
     if (!initialValues) {
@@ -247,7 +276,8 @@ export function CaixaMovimentacaoForm({
       setCartaoParcelas('1');
       setLinkPagamento('');
       setBuscaAluno('');
-      setFaturaEscolhida(null);
+      setFaturasEscolhidas([]);
+      setIrmaos(null);
       setSemFaturaConfirmada(false);
     }
     setErro(null);
@@ -428,83 +458,153 @@ export function CaixaMovimentacaoForm({
       {pedeIdentidade && (
         <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-medium text-slate-300">Fatura do aluno</p>
-            {!faturaEscolhida && (
+            <p className="text-xs font-medium text-slate-300">
+              {faturasEscolhidas.length > 1 ? `Faturas do aluno (${faturasEscolhidas.length})` : 'Fatura do aluno'}
+            </p>
+            {faturasEscolhidas.length === 0 ? (
               <span className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-300">
                 sem identidade
               </span>
-            )}
+            ) : faturasEscolhidas.length > 1 ? (
+              <span className={cn(
+                'rounded-md border px-2 py-0.5 text-[11px]',
+                Math.abs(totalEscolhido - parseMoedaCaixa(valor)) < 0.005
+                  ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300'
+                  : 'border-amber-500/25 bg-amber-500/10 text-amber-300',
+              )}>
+                soma R$ {totalEscolhido.toFixed(2).replace('.', ',')}
+                {Math.abs(totalEscolhido - parseMoedaCaixa(valor)) >= 0.005 ? ' · difere do valor' : ''}
+              </span>
+            ) : null}
           </div>
 
-          {faturaEscolhida ? (
-            <div className="mt-2 flex items-start justify-between gap-3 rounded-lg border border-emerald-500/25 bg-emerald-500/[0.07] px-3 py-2">
+          {faturasEscolhidas.map((f) => (
+            <div
+              key={f.chave}
+              className="mt-2 flex items-start justify-between gap-3 rounded-lg border border-emerald-500/25 bg-emerald-500/[0.07] px-3 py-2"
+            >
               <div className="min-w-0">
-                <p className="truncate text-sm text-emerald-100">{faturaEscolhida.alunoNome}</p>
+                <p className="truncate text-sm text-emerald-100">{f.alunoNome}</p>
                 <p className="mt-0.5 text-[11px] text-emerald-200/70">
-                  fatura {faturaEscolhida.emusysFaturaId}
-                  {faturaEscolhida.cursoNome ? ` · ${faturaEscolhida.cursoNome}` : ''}
-                  {` · ${faturaEscolhida.status}`}
+                  fatura {f.emusysFaturaId}
+                  {` · ${f.competencia}`}
+                  {f.cursoNome ? ` · ${f.cursoNome}` : ''}
+                  {` · ${f.status}`}
+                  {f.valor != null ? ` · R$ ${f.valor.toFixed(2).replace('.', ',')}` : ''}
                 </p>
               </div>
               <button
                 type="button"
                 disabled={disabled}
-                onClick={() => { setFaturaEscolhida(null); setBuscaAluno(''); }}
+                onClick={() => setFaturasEscolhidas((atual) => atual.filter((x) => x.chave !== f.chave))}
                 className="shrink-0 text-[11px] text-emerald-200/80 underline-offset-2 hover:underline"
               >
-                trocar
+                remover
               </button>
             </div>
-          ) : (
-            <>
-              <Input
-                value={buscaAluno}
-                disabled={disabled || !unidadeId}
-                onChange={(e) => setBuscaAluno(e.target.value)}
-                placeholder={carregandoFaturas ? 'Carregando faturas...' : 'Buscar aluno pelo nome'}
-                className="mt-2 rounded-lg bg-slate-950/70"
-              />
-              {sugestoes.length > 0 && (
-                <>
-                  {!buscaAluno.trim() && (
-                    <p className="mt-2 text-[11px] font-medium text-sky-300">
-                      Faturas em aberto com esse valor — confira o aluno antes de vincular:
-                    </p>
-                  )}
-                  <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto">
-                    {sugestoes.map((f) => (
-                      <li key={f.chave}>
-                        <button
-                          type="button"
-                          disabled={disabled}
-                          onClick={() => { setFaturaEscolhida(f); setSemFaturaConfirmada(false); }}
-                          className="w-full rounded-lg px-3 py-2 text-left transition hover:bg-slate-800/60"
-                        >
-                          <span className="block truncate text-sm text-slate-100">{f.alunoNome}</span>
-                          <span className="block text-[11px] text-slate-500">
-                            {`fatura ${f.emusysFaturaId} · ${f.competencia} · ${f.status}`}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </>
+          ))}
+
+          {faturasEscolhidas.length > 0 && faturasEscolhidas[faturasEscolhidas.length - 1]?.emusysStudentId && (
+            <button
+              type="button"
+              disabled={disabled || carregandoIrmaos}
+              onClick={() => { if (irmaos === null) void handleListarIrmaos(); else setIrmaos(null); }}
+              className="mt-2 text-[11px] font-medium text-sky-300 underline-offset-2 hover:underline disabled:opacity-50"
+            >
+              {carregandoIrmaos
+                ? 'Carregando parcelas do aluno...'
+                : irmaos === null
+                  ? 'Pagou mais de uma parcela? Vincular outras faturas deste aluno'
+                  : 'Ocultar parcelas do aluno'}
+            </button>
+          )}
+
+          {irmaos !== null && (
+            <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/60 p-2">
+              {irmaos.length === 0 && (
+                <li className="px-2 py-1 text-[11px] text-slate-500">
+                  Nenhuma outra fatura deste aluno no espelho — se o contrato foi pago adiantado, as parcelas futuras aparecem aqui depois do proximo sync do Emusys.
+                </li>
               )}
-              <label className="mt-2 flex items-start gap-2 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-[11px] text-slate-400">
-                <input
-                  type="checkbox"
-                  checked={semFaturaConfirmada}
-                  disabled={disabled}
-                  onChange={(e) => setSemFaturaConfirmada(e.target.checked)}
-                  className="mt-0.5 accent-amber-500"
-                />
-                <span>
-                  {erroFaturas
-                    ? 'Nao consegui carregar as faturas — confirmo que revisei e e receita sem fatura.'
-                    : 'Receita nova sem fatura (lojinha, taxa, outro) — confirmo que nao e parcela/mensalidade de aluno.'}
-                </span>
-              </label>
+              {irmaos.map((f) => {
+                const marcada = faturasEscolhidas.some((x) => x.chave === f.chave || (f.faturaId && x.faturaId === f.faturaId));
+                return (
+                  <li key={f.chave}>
+                    <button
+                      type="button"
+                      disabled={disabled || marcada}
+                      onClick={() => setFaturasEscolhidas((atual) => [...atual, f])}
+                      className={cn(
+                        'w-full rounded-lg px-3 py-2 text-left transition',
+                        marcada ? 'cursor-default opacity-40' : 'hover:bg-slate-800/60',
+                      )}
+                    >
+                      <span className="block text-[11px] text-slate-300">
+                        {`fatura ${f.emusysFaturaId} · ${f.competencia} · ${f.status}`}
+                        {f.valor != null ? ` · R$ ${f.valor.toFixed(2).replace('.', ',')}` : ''}
+                        {marcada ? ' · vinculada' : ''}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          <Input
+            value={buscaAluno}
+            disabled={disabled || !unidadeId}
+            onChange={(e) => setBuscaAluno(e.target.value)}
+            placeholder={
+              carregandoFaturas
+                ? 'Carregando faturas...'
+                : faturasEscolhidas.length > 0
+                  ? 'Buscar outro aluno para somar neste pagamento'
+                  : 'Buscar aluno pelo nome'
+            }
+            className="mt-2 rounded-lg bg-slate-950/70"
+          />
+          {sugestoes.length > 0 && (
+            <>
+              {!buscaAluno.trim() && (
+                <p className="mt-2 text-[11px] font-medium text-sky-300">
+                  Faturas em aberto com esse valor — confira o aluno antes de vincular:
+                </p>
+              )}
+              <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto">
+                {sugestoes.map((f) => (
+                  <li key={f.chave}>
+                    <button
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => { setFaturasEscolhidas((atual) => [...atual, f]); setSemFaturaConfirmada(false); setBuscaAluno(''); }}
+                      className="w-full rounded-lg px-3 py-2 text-left transition hover:bg-slate-800/60"
+                    >
+                      <span className="block truncate text-sm text-slate-100">{f.alunoNome}</span>
+                      <span className="block text-[11px] text-slate-500">
+                        {`fatura ${f.emusysFaturaId} · ${f.competencia} · ${f.status}`}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </>
+          )}
+          {faturasEscolhidas.length === 0 && (
+            <label className="mt-2 flex items-start gap-2 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-[11px] text-slate-400">
+              <input
+                type="checkbox"
+                checked={semFaturaConfirmada}
+                disabled={disabled}
+                onChange={(e) => setSemFaturaConfirmada(e.target.checked)}
+                className="mt-0.5 accent-amber-500"
+              />
+              <span>
+                {erroFaturas
+                  ? 'Nao consegui carregar as faturas — confirmo que revisei e e receita sem fatura.'
+                  : 'Receita nova sem fatura (lojinha, taxa, outro) — confirmo que nao e parcela/mensalidade de aluno.'}
+              </span>
+            </label>
           )}
         </div>
       )}
