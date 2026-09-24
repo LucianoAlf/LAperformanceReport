@@ -255,3 +255,9 @@ verify_jwt = false
 # envio da Caixa de Entrada morreria em 401 no gateway, antes do codigo rodar.
 [functions.enviar-mensagem-admin]
 verify_jwt = false
+
+# Worker interno (cron): escritor de presenca no Emusys. O gateway nao aceita a
+# service key opaca usada entre Edges; a funcao valida o bearer por comparacao
+# constante com SUPABASE_SERVICE_ROLE_KEY antes de qualquer leitura.
+[functions.presenca-emusys-escritor]
+verify_jwt = false
