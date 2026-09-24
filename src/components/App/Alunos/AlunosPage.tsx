@@ -843,6 +843,93 @@ export function AlunosPage() {
       error: error instanceof Error ? error.message : 'Falha ao consultar faturas financeiras.',
     }));
 
+    // Os dois KPIs canonicos (~4s cada) so dependem de unidade e competencia, mas eram
+    // aguardados um depois do outro DEPOIS da lista montada -- ~8s de spinner com os alunos ja
+    // prontos, porque `loading` so cai no fim. Disparam aqui, correm junto com a lista e sao
+    // aguardados no mesmo ponto de antes: mesmos dados, mesma tela, sem a fila.
+    const kpisAdminOperacionalPromise = fetchKPIsAlunosAdminOperacional({
+      unidadeId: unidadeAtual,
+      ano: competenciaFiltro.ano,
+      mes: competenciaFiltro.mes,
+    }).catch((err) => {
+      console.error('Erro ao buscar KPIs operacionais de alunos:', err);
+      return null;
+    });
+    const kpisAlunosCanonicosPromise = fetchKPIsAlunosCanonicos({
+      unidadeId: unidadeAtual,
+      ano: competenciaFiltro.ano,
+      mes: competenciaFiltro.mes,
+    }).catch((err) => {
+      console.error('Erro ao buscar KPIs financeiros canônicos de alunos:', err);
+      return null;
+    });
+
+    const alunosPromise = fetchAllAlunos(buildMainQuery);
+    const alunosSaidaPromise = buildSaidaQuery
+      ? fetchAllAlunos(buildSaidaQuery)
+      : Promise.resolve({ data: [] as any[], error: null });
+
+    // A anamnese é da PESSOA: casar por aluno_id deixaria o 2º curso fora do
+    // filtro de diagnóstico. A chave vem da view canônica — remontar o
+    // 'emusys:' aqui criaria uma segunda fonte da mesma regra.
+    // Encadeada na LISTA, não no Promise.all: só depende dos ids dos alunos, e esperar as
+    // outras 8 trilhas (KPI de turmas, LTV, comunidade...) só atrasava a tela.
+    const anamnesePorAlunoPromise = Promise.all([alunosPromise, alunosSaidaPromise])
+      .then(async ([principalR, saidaR]) => {
+        const chavePorAluno = new Map<number, string>();
+        const diagnosticosPorPessoa = new Map<string, string[]>();
+        if (principalR.error) return { chavePorAluno, diagnosticosPorPessoa };
+
+        const alunoIds = [...new Set(
+          [...(principalR.data ?? []), ...(saidaR.data ?? [])]
+            .map((registro: any) => registro.id)
+            .filter(Boolean)
+        )];
+        if (alunoIds.length === 0) return { chavePorAluno, diagnosticosPorPessoa };
+
+        const { data: chavesPessoa } = await supabase
+          .from('vw_aluno_pessoa_chave')
+          .select('aluno_id, unidade_id, pessoa_chave')
+          .in('aluno_id', alunoIds);
+
+        const chavesDistintas = new Set<string>();
+        (chavesPessoa || []).forEach((registro: any) => {
+          chavePorAluno.set(registro.aluno_id, `${registro.unidade_id}|${registro.pessoa_chave}`);
+          chavesDistintas.add(registro.pessoa_chave);
+        });
+
+        const { data: anamnesesLista } = chavesDistintas.size
+          ? await supabase
+              .from('anamneses')
+              .select('unidade_id, pessoa_chave, diagnosticos')
+              .in('pessoa_chave', [...chavesDistintas])
+              .eq('status', 'completa')
+              .order('created_at', { ascending: false })
+          : { data: [] as any[] };
+
+        anamnesesLista?.forEach((registro: any) => {
+          const chave = `${registro.unidade_id}|${registro.pessoa_chave}`;
+          if (diagnosticosPorPessoa.has(chave)) return;   // a mais recente vence
+
+          let diagnosticos: string[] = [];
+          if (Array.isArray(registro.diagnosticos)) {
+            diagnosticos = registro.diagnosticos.map((item: any) => {
+              if (typeof item === 'string') return item;
+              if (item && typeof item === 'object') {
+                return String(item.label || item.nome || item.valor || item.value || '').trim();
+              }
+              return String(item).trim();
+            }).filter(Boolean);
+          } else if (typeof registro.diagnosticos === 'string') {
+            diagnosticos = registro.diagnosticos.split(',').map((item: string) => item.trim()).filter(Boolean);
+          }
+
+          diagnosticosPorPessoa.set(chave, diagnosticos);
+        });
+
+        return { chavePorAluno, diagnosticosPorPessoa };
+      });
+
     // Disparar tudo em paralelo: alunos (paginado), turmas operacionais, KPI canônico,
     // anotações, turmas explícitas, opções e LTV.
     const [
@@ -854,8 +941,8 @@ export function AlunosPage() {
       comunidadeWaR,
       ...outrosResults
     ] = await Promise.all([
-      fetchAllAlunos(buildMainQuery),
-      buildSaidaQuery ? fetchAllAlunos(buildSaidaQuery) : Promise.resolve({ data: [] as any[], error: null }),
+      alunosPromise,
+      alunosSaidaPromise,
       qTurmasView,
       kpisTurmasPromise,
       // Anotações pendentes — são poucas, buscar TODAS sem .in() de 1000 IDs
@@ -908,52 +995,7 @@ export function AlunosPage() {
     }
 
     if (!error && alunosMesclados.length > 0) {
-      const alunoIds = alunosMesclados.map((registro: any) => registro.id).filter(Boolean);
-
-      // A anamnese é da PESSOA: casar por aluno_id deixaria o 2º curso fora do
-      // filtro de diagnóstico. A chave vem da view canônica — remontar o
-      // 'emusys:' aqui criaria uma segunda fonte da mesma regra.
-      const { data: chavesPessoa } = await supabase
-        .from('vw_aluno_pessoa_chave')
-        .select('aluno_id, unidade_id, pessoa_chave')
-        .in('aluno_id', alunoIds);
-
-      const chavePorAluno = new Map<number, string>();
-      const chavesDistintas = new Set<string>();
-      (chavesPessoa || []).forEach((registro: any) => {
-        chavePorAluno.set(registro.aluno_id, `${registro.unidade_id}|${registro.pessoa_chave}`);
-        chavesDistintas.add(registro.pessoa_chave);
-      });
-
-      const { data: anamnesesLista } = chavesDistintas.size
-        ? await supabase
-            .from('anamneses')
-            .select('unidade_id, pessoa_chave, diagnosticos')
-            .in('pessoa_chave', [...chavesDistintas])
-            .eq('status', 'completa')
-            .order('created_at', { ascending: false })
-        : { data: [] as any[] };
-
-      const diagnosticosPorPessoa = new Map<string, string[]>();
-      anamnesesLista?.forEach((registro: any) => {
-        const chave = `${registro.unidade_id}|${registro.pessoa_chave}`;
-        if (diagnosticosPorPessoa.has(chave)) return;   // a mais recente vence
-
-        let diagnosticos: string[] = [];
-        if (Array.isArray(registro.diagnosticos)) {
-          diagnosticos = registro.diagnosticos.map((item: any) => {
-            if (typeof item === 'string') return item;
-            if (item && typeof item === 'object') {
-              return String(item.label || item.nome || item.valor || item.value || '').trim();
-            }
-            return String(item).trim();
-          }).filter(Boolean);
-        } else if (typeof registro.diagnosticos === 'string') {
-          diagnosticos = registro.diagnosticos.split(',').map((item: string) => item.trim()).filter(Boolean);
-        }
-
-        diagnosticosPorPessoa.set(chave, diagnosticos);
-      });
+      const { chavePorAluno, diagnosticosPorPessoa } = await anamnesePorAlunoPromise;
 
       const turmasMap = new Map(turmasViewData.map((t: any) => [
         `${t.unidade_id}-${t.professor_id}-${t.dia_semana}-${t.horario_inicio}`,
@@ -1202,26 +1244,10 @@ export function AlunosPage() {
         console.error('Erro ao buscar média canônica de alunos por turma:', kpisTurmasR.error);
       }
 
-      let kpisAdminOperacional: KPIsAlunosAdminOperacional | null = null;
-      let kpisAlunosCanonicos: Awaited<ReturnType<typeof fetchKPIsAlunosCanonicos>> | null = null;
-      try {
-        kpisAdminOperacional = await fetchKPIsAlunosAdminOperacional({
-          unidadeId: unidadeAtual,
-          ano: competenciaFiltro.ano,
-          mes: competenciaFiltro.mes,
-        });
-      } catch (err) {
-        console.error('Erro ao buscar KPIs operacionais de alunos:', err);
-      }
-      try {
-        kpisAlunosCanonicos = await fetchKPIsAlunosCanonicos({
-          unidadeId: unidadeAtual,
-          ano: competenciaFiltro.ano,
-          mes: competenciaFiltro.mes,
-        });
-      } catch (err) {
-        console.error('Erro ao buscar KPIs financeiros canônicos de alunos:', err);
-      }
+      const [kpisAdminOperacional, kpisAlunosCanonicos]: [
+        KPIsAlunosAdminOperacional | null,
+        Awaited<ReturnType<typeof fetchKPIsAlunosCanonicos>> | null,
+      ] = await Promise.all([kpisAdminOperacionalPromise, kpisAlunosCanonicosPromise]);
 
       const usarKpisAdminOperacional = !!kpisAdminOperacional;
       const kpisFinanceirosCanonicos = kpisAlunosCanonicos?.fonte !== 'indisponivel'
