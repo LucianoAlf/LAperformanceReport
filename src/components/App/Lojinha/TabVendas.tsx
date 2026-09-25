@@ -15,6 +15,8 @@ import type {
   LojaProduto, LojaVenda, ItemCarrinho, DadosPDV,
   FormaPagamento, TipoCliente, FORMAS_PAGAMENTO, TIPOS_CLIENTE 
 } from '@/types/lojinha';
+import { useShellMobile } from '@/hooks/useShellMobile';
+import { FolhaMobile } from '@/mobile/FolhaMobile';
 import { ModalVendaDetalhes } from './ModalVendaDetalhes';
 import { ModalEstorno } from './ModalEstorno';
 
@@ -25,7 +27,10 @@ interface TabVendasProps {
 type SubTab = 'pdv' | 'historico';
 
 export function TabVendas({ unidadeId }: TabVendasProps) {
+  const ehCelular = useShellMobile() === 'mobile';
   const [subTab, setSubTab] = useState<SubTab>('pdv');
+  // No celular o carrinho vira folha de baixo — ver o comentario no PDV.
+  const [carrinhoAberto, setCarrinhoAberto] = useState(false);
   const [loading, setLoading] = useState(true);
   
   // PDV State
@@ -340,6 +345,7 @@ export function TabVendas({ unidadeId }: TabVendasProps) {
       }
 
       // Limpar carrinho e dados
+      setCarrinhoAberto(false);
       setCarrinho([]);
       setVendedorId(null);
       setBuscaAluno('');
@@ -385,84 +391,10 @@ export function TabVendas({ unidadeId }: TabVendasProps) {
   const totalMes = vendasMes.reduce((acc, v) => acc + v.total, 0);
   const ticketMedio = vendasMes.length > 0 ? totalMes / vendasMes.length : 0;
 
-  return (
-    <div className="space-y-6">
-      {/* Sub Tabs */}
-      <div className="flex gap-2">
-        <button
-          onClick={() => setSubTab('pdv')}
-          className={cn(
-            'px-4 py-2 rounded-lg text-sm font-medium transition-all',
-            subTab === 'pdv'
-              ? 'bg-sky-500 text-slate-900'
-              : 'bg-slate-800 text-slate-400 hover:text-white'
-          )}
-        >
-          🛒 Novo Pedido
-        </button>
-        <button
-          onClick={() => setSubTab('historico')}
-          className={cn(
-            'px-4 py-2 rounded-lg text-sm font-medium transition-all',
-            subTab === 'historico'
-              ? 'bg-sky-500 text-slate-900'
-              : 'bg-slate-800 text-slate-400 hover:text-white'
-          )}
-        >
-          📋 Histórico
-        </button>
-      </div>
-
-      {/* PDV */}
-      {subTab === 'pdv' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Produtos */}
-          <div className="lg:col-span-2 space-y-4">
-            {/* Busca */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-              <Input
-                placeholder="Buscar produto por nome ou SKU..."
-                value={buscaProduto}
-                onChange={(e) => setBuscaProduto(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-
-            {/* Grid de Produtos */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {produtosFiltrados.slice(0, 12).map((produto) => (
-                <div
-                  key={produto.id}
-                  onClick={() => addToCart(produto)}
-                  className="bg-slate-800/50 border border-slate-700 rounded-xl p-4 cursor-pointer hover:border-sky-500 hover:-translate-y-0.5 transition-all"
-                >
-                  <div className="w-full h-20 bg-slate-700 rounded-lg flex items-center justify-center text-3xl mb-3">
-                    {produto.loja_categorias?.icone || '📦'}
-                  </div>
-                  <p className="font-semibold text-white text-sm truncate">{produto.nome}</p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    {produto.loja_categorias?.nome} • {produto.estoque_total || 0} em estoque
-                  </p>
-                  <p className="font-mono font-bold text-emerald-400 mt-2">
-                    R$ {produto.preco.toFixed(2).replace('.', ',')}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Carrinho */}
-          <div className="bg-slate-800/50 border border-slate-700 rounded-xl flex flex-col h-fit sticky top-4">
-            {/* Header */}
-            <div className="p-4 border-b border-slate-700 flex items-center gap-2">
-              <ShoppingCart className="w-4 h-4" />
-              <span className="font-semibold text-white">Carrinho</span>
-              <Badge variant="secondary" className="ml-auto bg-sky-500/20 text-sky-400">
-                {carrinho.length} {carrinho.length === 1 ? 'item' : 'itens'}
-              </Badge>
-            </div>
-
+  // O MESMO corpo serve ao painel do desktop e a folha do celular. Duas
+  // copias do formulario de venda dariam duas regras para o mesmo dinheiro.
+  const corpoCarrinho = (
+    <>
             {/* Itens */}
             <div className="p-3 max-h-64 overflow-y-auto space-y-2">
               {carrinho.length === 0 ? (
@@ -720,8 +652,138 @@ export function TabVendas({ unidadeId }: TabVendasProps) {
                 ✅ Finalizar Venda (R$ {total.toFixed(2).replace('.', ',')})
               </Button>
             </div>
+    </>
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Sub Tabs */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => setSubTab('pdv')}
+          className={cn(
+            'px-4 py-2 rounded-lg text-sm font-medium transition-all',
+            subTab === 'pdv'
+              ? 'bg-sky-500 text-slate-900'
+              : 'bg-slate-800 text-slate-400 hover:text-white'
+          )}
+        >
+          🛒 Novo Pedido
+        </button>
+        <button
+          onClick={() => setSubTab('historico')}
+          className={cn(
+            'px-4 py-2 rounded-lg text-sm font-medium transition-all',
+            subTab === 'historico'
+              ? 'bg-sky-500 text-slate-900'
+              : 'bg-slate-800 text-slate-400 hover:text-white'
+          )}
+        >
+          📋 Histórico
+        </button>
+      </div>
+
+      {/* PDV */}
+      {subTab === 'pdv' && (
+        <>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Produtos */}
+          <div className="lg:col-span-2 space-y-4">
+            {/* Busca */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <Input
+                placeholder="Buscar produto por nome ou SKU..."
+                value={buscaProduto}
+                onChange={(e) => setBuscaProduto(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+
+            {/* Grid de Produtos */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {produtosFiltrados.slice(0, 12).map((produto) => (
+                <div
+                  key={produto.id}
+                  onClick={() => addToCart(produto)}
+                  className="bg-slate-800/50 border border-slate-700 rounded-xl p-4 cursor-pointer hover:border-sky-500 hover:-translate-y-0.5 transition-all"
+                >
+                  <div className="w-full h-20 bg-slate-700 rounded-lg flex items-center justify-center text-3xl mb-3">
+                    {produto.loja_categorias?.icone || '📦'}
+                  </div>
+                  <p className="font-semibold text-white text-sm truncate">{produto.nome}</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    {produto.loja_categorias?.nome} • {produto.estoque_total || 0} em estoque
+                  </p>
+                  <p className="font-mono font-bold text-emerald-400 mt-2">
+                    R$ {produto.preco.toFixed(2).replace('.', ',')}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
+
+          {/* Carrinho */}
+          {/* 🔴 No celular ele NAO fica aqui: a grade de 12 produtos mede
+              ~1.200px a 390px, entao este painel nascia abaixo da dobra e
+              tocar num produto mandava o que voce acabou de escolher para
+              fora da vista. Abaixo do grid ele vira barra grudada no rodape
+              + folha de baixo. O desktop segue byte a byte o que era. */}
+          {!ehCelular && (
+          <div className="bg-slate-800/50 border border-slate-700 rounded-xl flex flex-col h-fit sticky top-4">
+            {/* Header */}
+            <div className="p-4 border-b border-slate-700 flex items-center gap-2">
+              <ShoppingCart className="w-4 h-4" />
+              <span className="font-semibold text-white">Carrinho</span>
+              <Badge variant="secondary" className="ml-auto bg-sky-500/20 text-sky-400">
+                {carrinho.length} {carrinho.length === 1 ? 'item' : 'itens'}
+              </Badge>
+            </div>
+
+            {corpoCarrinho}
+          </div>
+          )}
         </div>
+
+        {/* A barra e' o recibo do toque: aparece no primeiro item, diz QUAL foi
+            e quanto ja' deu. `sticky bottom-0` (e nao `fixed`) para ela parar
+            exatamente onde o <main> termina — a altura da barra de navegacao do
+            shell nao precisa ser conhecida aqui. */}
+        {ehCelular && carrinho.length > 0 && (
+          <div className="sticky bottom-0 z-30 border-t border-slate-800 bg-slate-950/95 py-2.5 backdrop-blur">
+            <button
+              type="button"
+              onClick={() => setCarrinhoAberto(true)}
+              className="flex min-h-[48px] w-full items-center gap-3 rounded-xl bg-sky-500 px-4 text-left text-slate-950 active:bg-sky-400"
+            >
+              <ShoppingCart className="h-5 w-5 shrink-0" aria-hidden />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[12.5px] font-bold leading-tight">
+                  {carrinho.length} {carrinho.length === 1 ? 'item' : 'itens'} no carrinho
+                </span>
+                <span className="block truncate text-[11px] font-medium opacity-80">
+                  {carrinho[carrinho.length - 1].produto_nome}
+                </span>
+              </span>
+              <span className="shrink-0 font-mono text-sm font-bold">
+                R$ {total.toFixed(2).replace('.', ',')}
+              </span>
+            </button>
+          </div>
+        )}
+
+        {ehCelular && (
+          <FolhaMobile
+            aberto={carrinhoAberto}
+            onFechar={() => setCarrinhoAberto(false)}
+            titulo="Carrinho"
+            subtitulo={`${carrinho.length} ${carrinho.length === 1 ? 'item' : 'itens'} · R$ ${total.toFixed(2).replace('.', ',')}`}
+          >
+            {corpoCarrinho}
+          </FolhaMobile>
+        )}
+        </>
+
       )}
 
       {/* Histórico */}
