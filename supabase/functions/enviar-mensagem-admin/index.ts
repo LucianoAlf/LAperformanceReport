@@ -15,6 +15,19 @@ serve(async (req) => {
   try {
     const body = await req.json();
     if (body.ping) return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    // 25/09/2026: ate hoje qualquer um na internet mandava WhatsApp em nome da escola
+    // (verify_jwt=false e nenhuma checagem). Agora: service_role (interno) ou usuario
+    // da EQUIPE ativo (admin/unidade). Professor e anonimo levam 401/403.
+    const naoPode = (status, erro) => new Response(JSON.stringify({ error: erro }), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    const token = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+    if (!token) return naoPode(401, 'NAO_AUTENTICADO');
+    if (token !== SUPABASE_SERVICE_ROLE_KEY) {
+      const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const { data: { user } } = await admin.auth.getUser(token);
+      if (!user) return naoPode(401, 'NAO_AUTENTICADO');
+      const { data: u } = await admin.from('usuarios').select('perfil, ativo').eq('auth_user_id', user.id).maybeSingle();
+      if (!u || u.ativo !== true || !['admin', 'unidade'].includes(u.perfil)) return naoPode(403, 'ACESSO_NEGADO');
+    }
     const { conversa_id, aluno_id, conteudo, tipo = 'texto', remetente_nome = 'Admin', midia_url, midia_mimetype, midia_nome } = body;
     if (!conversa_id) return new Response(JSON.stringify({ error: 'conversa_id e obrigatorio' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     if (tipo === 'texto' && !conteudo) return new Response(JSON.stringify({ error: 'conteudo e obrigatorio para mensagens de texto' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
