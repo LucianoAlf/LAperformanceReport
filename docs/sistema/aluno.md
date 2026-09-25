@@ -124,7 +124,10 @@ apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **L
   `20260918120000_modulo_eventos_recital.sql` (base) + `20260918140000`, `20260918170000`,
   `20260918173000`, `20260919020000`, `20260919030000`, `20260919050000`.
 - **Horário é CALCULADO, nunca persistido** (`calcularHorariosDaGrade`): `inicio(N+1) = fim(N) +
-  intervalo`, com o intervalo configurável por evento (2700s = os 45 min do protótipo).
+  intervalo`, com o intervalo configurável por evento (2700s = os 45 min do protótipo). Dentro do
+  bloco, 5 min de troca entre uma apresentação e a seguinte (`INTERVALO_ENTRE_APRESENTACOES_PADRAO_SEGUNDOS`,
+  25/09); o campo opcional `intervalo_entre_apresentacoes_segundos` já é aceito pelo cálculo, mas ainda
+  não existe coluna em `evento`.
   `evento_bloco.horario_inicial` guarda só o que o humano DIGITOU (`inicio_manual`). ⚠️ Persistir o
   derivado daria duas verdades, e qualquer caminho de escrita que esquecesse de recalcular deixaria
   a programação impressa mentindo.

@@ -207,7 +207,8 @@ test('termino depois das 22:00 vira pendencia', () => {
   });
   const p = r.find((x) => x.tipo === 'termino_apos_limite');
   assert.ok(p, 'tem de acusar termino apos as 22:00');
-  assert.match(p.titulo, /22:05/u);
+  // 21:50 + 3 x 5 min + 2 trocas de 5 min
+  assert.match(p.titulo, /22:15/u);
 });
 
 test('o limite e RECOMENDADO — avisa, nao impede', () => {

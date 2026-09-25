@@ -36,6 +36,7 @@ import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import {
   calcularHorariosDaGrade,
+  INTERVALO_ENTRE_APRESENTACOES_PADRAO_SEGUNDOS,
   chaveDoItem,
   consolidarItensDoPalco,
   formatarDuracao,
@@ -629,7 +630,8 @@ export function GradeTab({ evento }: { evento: EventoComResumo }) {
             </>
           )}
           {' · intervalo de '}
-          {formatarDuracao(evento.intervalo_entre_blocos_segundos ?? 2700)} entre blocos
+          {formatarDuracao(evento.intervalo_entre_blocos_segundos ?? 2700)} entre blocos e{' '}
+          {formatarDuracao(INTERVALO_ENTRE_APRESENTACOES_PADRAO_SEGUNDOS)} entre apresentações
         </p>
         <Button
           size="sm"

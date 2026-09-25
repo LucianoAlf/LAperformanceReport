@@ -111,7 +111,17 @@ export interface EventoParaCalculo {
   horario_inicio: string;
   duracao_padrao_segundos: number;
   intervalo_entre_blocos_segundos: number;
+  /** Troca de palco entre uma apresentacao e a seguinte do MESMO bloco. Ausente = 5 min. */
+  intervalo_entre_apresentacoes_segundos?: number;
 }
+
+/**
+ * Sem folga, a programacao dava a entender que a apresentacao seguinte comeca no segundo
+ * em que a anterior termina (pedido do Hugo, 25/09). Vale so DENTRO do bloco: entre
+ * blocos quem manda e `intervalo_entre_blocos_segundos`, e depois da ultima apresentacao
+ * nao ha troca, entao o fim do bloco e o fim dela.
+ */
+export const INTERVALO_ENTRE_APRESENTACOES_PADRAO_SEGUNDOS = 300;
 
 export interface BlocoComHorario {
   blocoId: number;
@@ -175,6 +185,8 @@ export function calcularHorariosDaGrade(
   const inicioEvento = horaParaSegundos(evento.horario_inicio) ?? 9 * 3600;
   const resultado: BlocoComHorario[] = [];
   let fimAnterior: number | null = null;
+  const intervaloApresentacoes =
+    evento.intervalo_entre_apresentacoes_segundos ?? INTERVALO_ENTRE_APRESENTACOES_PADRAO_SEGUNDOS;
 
   const ordenados = [...blocos].sort((a, b) => a.ordem - b.ordem || a.id - b.id);
 
@@ -189,7 +201,8 @@ export function calcularHorariosDaGrade(
     let cursor = inicio;
     const apresentacoes = [...bloco.apresentacoes]
       .sort((a, b) => a.ordem - b.ordem || a.id - b.id)
-      .map((ap) => {
+      .map((ap, i) => {
+        if (i > 0) cursor += intervaloApresentacoes;
         const duracao = ap.duracao_segundos ?? evento.duracao_padrao_segundos;
         const linha = { id: ap.id, inicio: segundosParaHora(cursor), duracaoSegundos: duracao };
         cursor += duracao;

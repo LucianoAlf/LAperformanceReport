@@ -60,18 +60,38 @@ test('o primeiro bloco sem inicio manual herda o horario do EVENTO', () => {
   assert.equal(r[0].intervaloAntesSegundos, null, 'nao existe intervalo antes do primeiro');
 });
 
-test('apresentacoes se encadeiam dentro do bloco, na ordem', () => {
+test('apresentacoes se encadeiam dentro do bloco, com 5 min de troca entre elas', () => {
+  // Sem a folga a programacao prometia a seguinte no segundo em que a anterior acaba.
+  // Depois da ULTIMA nao ha troca: o bloco termina quando ela termina.
   const r = calcularHorariosDaGrade(EVENTO, [bloco(1, 1, [ap(10, 1), ap(11, 2), ap(12, 3)])]);
-  assert.deepEqual(r[0].apresentacoes.map((a) => a.inicio), ['09:00', '09:05', '09:10']);
+  assert.deepEqual(r[0].apresentacoes.map((a) => a.inicio), ['09:00', '09:10', '09:20']);
+  assert.equal(r[0].fim, '09:25');
+});
+
+test('o intervalo entre apresentacoes e configuravel e aceita zero', () => {
+  const r = calcularHorariosDaGrade({ ...EVENTO, intervalo_entre_apresentacoes_segundos: 0 }, [
+    bloco(1, 1, [ap(10, 1), ap(11, 2)]),
+  ]);
+  assert.deepEqual(r[0].apresentacoes.map((a) => a.inicio), ['09:00', '09:05']);
+  assert.equal(r[0].fim, '09:10');
+});
+
+test('a troca entre apresentacoes nao se soma ao intervalo entre blocos', () => {
+  const r = calcularHorariosDaGrade(EVENTO, [
+    bloco(1, 1, [ap(10, 1), ap(11, 2)]),
+    bloco(2, 2, [ap(20, 1)]),
+  ]);
+  // 09:00-09:05, troca, 09:10-09:15 -> +45 min = 10:00
   assert.equal(r[0].fim, '09:15');
+  assert.equal(r[1].inicio, '10:00');
 });
 
 test('duracao propria vence a padrao do evento', () => {
   // Numero longo no meio empurra tudo que vem depois — e o motivo de o horario ser
   // derivado e nunca gravado.
   const r = calcularHorariosDaGrade(EVENTO, [bloco(1, 1, [ap(10, 1, 900), ap(11, 2)])]);
-  assert.deepEqual(r[0].apresentacoes.map((a) => a.inicio), ['09:00', '09:15']);
-  assert.equal(r[0].fim, '09:20');
+  assert.deepEqual(r[0].apresentacoes.map((a) => a.inicio), ['09:00', '09:20']);
+  assert.equal(r[0].fim, '09:25');
 });
 
 test('a ordem do array nao manda — manda o campo `ordem`', () => {

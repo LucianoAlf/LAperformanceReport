@@ -119,9 +119,10 @@ test('a ordem segue bloco e posicao, com o horario calculado', () => {
     r.ordem.map((l) => [l.posicao, l.alunoNome, l.horario]),
     [
       [1, 'Primeiro', '09:00'],
-      [2, 'Segundo', '09:05'],
-      // 09:10 (fim do bloco 1) + 45 min de intervalo
-      [3, 'Terceiro', '09:55'],
+      // 09:05 (fim do primeiro) + 5 min de troca
+      [2, 'Segundo', '09:10'],
+      // 09:15 (fim do bloco 1) + 45 min de intervalo
+      [3, 'Terceiro', '10:00'],
     ],
   );
 });
