@@ -110,17 +110,33 @@ test('os trilhos de sub-abas ROLAM em vez de espremer', () => {
   }
 });
 
-test('as seis abas não portadas continuam avisando que são telas de computador', () => {
+test('as abas sem tela própria continuam avisando que são telas de computador', () => {
   const abas = readFileSync(join(RAIZ, 'src/mobile/abasPortadas.ts'), 'utf8');
   // Caber não é o mesmo que ter sido adaptada. A faixa só sai quando a aba
   // ganha uma tela própria — é o contrário de esconder o aviso porque o
   // layout parou de quebrar.
+  //
+  // `contratos` entrou em 24/09 com `ContratosMobile`: lista por urgência,
+  // medida a 390px em 0 vazamento, 0 alvo abaixo de 44px e 3 telas. As outras
+  // cinco seguem sendo a tela do computador dentro do shell.
   const linha = /'\/app\/administrativo':\s*\[([^\]]*)\]/.exec(abas);
   assert.ok(linha, 'a rota sumiu de ABAS_PORTADAS');
   const portadas = [...linha[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
   assert.deepEqual(
     portadas,
-    ['lancamentos'],
-    'colapsar a grade fez a aba caber, não a fez portada — a faixa continua',
+    ['lancamentos', 'contratos'],
+    'aba declarada portada precisa de tela própria — colapsar a grade não basta',
   );
+});
+
+test('🔴 a aba portada tem MESMO tela própria, não só o nome na lista', () => {
+  // A lista é uma afirmação; este assert cobra a prova. Sem ele, marcar a aba
+  // apagaria a faixa de uma tela que continua sendo a do computador.
+  const pagina = readFileSync(
+    join(RAIZ, 'src/components/App/Administrativo/TabContratosVencendo.tsx'),
+    'utf8',
+  );
+  const semComentarios = pagina.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.match(semComentarios, /<ContratosMobile/, 'a aba Contratos deixou de renderizar a tela mobile');
+  assert.match(semComentarios, /useShellMobile\(\)\s*===\s*'mobile'/, 'a bifurcação por shell sumiu');
 });

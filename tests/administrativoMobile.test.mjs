@@ -449,9 +449,13 @@ test('a faixa âmbar fica no nível da ROTA, antes de qualquer ramo de aba', () 
   );
 });
 
-test('só a aba lancamentos está marcada como portada', () => {
-  assert.match(ABAS, /'\/app\/administrativo':\s*\['lancamentos'\]/);
-  for (const outra of ['contratos', 'fideliza', 'lojinha', 'farmer', 'caixa_financeiro', 'caixa_entrada']) {
+test('só as abas COM TELA PRÓPRIA estão marcadas como portadas', () => {
+  // `contratos` entrou em 24/09, com `ContratosMobile` — lista por urgência,
+  // medida a 390px: 0 vazamento, 0 alvo abaixo de 44px, 3 telas de rolagem.
+  // As demais continuam sendo a tela do computador dentro do shell, e a faixa
+  // âmbar delas não pode sair antes da tela existir.
+  assert.match(ABAS, /'\/app\/administrativo':\s*\['lancamentos',\s*'contratos'\]/);
+  for (const outra of ['fideliza', 'lojinha', 'farmer', 'caixa_financeiro', 'caixa_entrada']) {
     assert.doesNotMatch(
       ABAS,
       new RegExp(`'/app/administrativo':[^\\]]*'${outra}'`),
@@ -476,7 +480,20 @@ test('a rota está na lista de faixa-por-aba, senão a faixa do shell some de tu
 
 test('a tela não busca nada no banco', () => {
   assert.doesNotMatch(TELA, /supabase/i, 'a tela do celular não pode ter fonte de dados própria');
-  assert.doesNotMatch(TELA, /useEffect/, 'busca no efeito é fonte própria por outro nome');
+
+  // ⚠️ Este assert já vetou `useEffect` por inteiro, e isso reprovava código
+  // CERTO: o efeito que traz o chip aceso do trilho à vista não busca nada.
+  // Vetar o MECANISMO em vez da substância é o defeito que a suíte de agentes
+  // pagou em 06/09 (regex que reprovava "não traz" por não dizer "não tem").
+  // O que não pode existir é leitura de dados — em efeito ou fora dele.
+  for (const fonte of [/\bfetch\s*\(/, /\.rpc\s*\(/, /\baxios\b/, /use\w*Query\b/]) {
+    assert.doesNotMatch(TELA, fonte, `a tela ganhou fonte de dados própria (${fonte})`);
+  }
+  // E nenhum efeito pode ser assíncrono: `await` dentro de `useEffect` é busca
+  // por outro nome, que era o que o veto amplo tentava alcançar.
+  for (const efeito of TELA.match(/useEffect\([\s\S]*?\}, \[[^\]]*\]\)/g) || []) {
+    assert.doesNotMatch(efeito, /\bawait\b/, 'efeito assíncrono na tela é fonte de dados disfarçada');
+  }
 });
 
 test('a tela não reimplementa as regras — CHAMA as da lib', () => {

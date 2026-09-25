@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useShellMobile } from '@/hooks/useShellMobile';
+import { ContratosMobile } from '@/mobile/telas/contratos/ContratosMobile';
 import {
   useContratosVencendo,
   type JanelaDias,
@@ -158,6 +160,7 @@ export function TabContratosVencendo({
   const ordenarPor = (key: string) => setSortConfig((atual) => alternarOrdenacao(atual, key));
 
   const [pagina, setPagina] = useState(1);
+  const ehCelular = useShellMobile() === 'mobile';
   // Trocar recorte, critério, busca ou ordenação muda a lista inteira — ficar na página 4
   // de uma lista que agora tem 1 página mostraria tabela vazia sem explicação.
   useEffect(() => { setPagina(1); }, [recorte, criterio, termo, sortConfig, unidadeId]);
@@ -166,6 +169,31 @@ export function TabContratosVencendo({
     () => visiveis.slice((pagina - 1) * ITENS_POR_PAGINA_PADRAO, pagina * ITENS_POR_PAGINA_PADRAO),
     [visiveis, pagina],
   );
+
+  // ⚠️ Depois de todos os hooks, nunca antes: um `if` adiantado mudaria a
+  // ordem de chamada entre renderizacoes.
+  if (ehCelular) {
+    return (
+      <div className="space-y-3">
+        <ContratosMobile
+          contratos={visiveis}
+          criterio={criterio}
+          onCriterio={setCriterio}
+          recorte={recorte}
+          onRecorte={setRecorte}
+          faltamNaCompetencia={competencia.faltam}
+          busca={busca}
+          onBusca={setBusca}
+          loading={loading}
+          erro={erro}
+          mostrarUnidade={unidadeId === 'todos'}
+        />
+        {/* "Sem fatura" e outra pergunta, com consulta e colunas proprias: o
+            painel dele ja vira card pelo CSS de tabela-como-card do shell. */}
+        {semFatura && <PainelAlunosSemFatura unidadeId={unidadeId} />}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

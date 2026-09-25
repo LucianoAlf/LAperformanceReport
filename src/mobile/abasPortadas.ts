@@ -49,7 +49,7 @@ export const ABAS_PORTADAS: Readonly<Record<string, readonly string[]>> = {
   // MRR perdido e LTV ficam no computador, e a tela diz isso por escrito (ver
   // `@/lib/administrativoMobile`). A faixa some porque a aba foi adaptada, não
   // porque faz tudo o que a do computador faz.
-  '/app/administrativo': ['lancamentos'],
+  '/app/administrativo': ['lancamentos', 'contratos'],
 };
 
 export function rotaTemFaixaPorAba(
