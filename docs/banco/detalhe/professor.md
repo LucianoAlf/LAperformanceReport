@@ -1716,7 +1716,7 @@
 | `presenca_evento_id` | bigint | sim |  |  |
 | `ficha_id` | uuid | sim |  |  |
 | `unidade_id` | uuid | não |  |  |
-| `aula_emusys_id` | integer | não |  |  |
+| `aula_emusys_id` | integer | sim |  |  |
 | `aluno_id` | integer | sim |  |  |
 | `professor_id` | integer | sim |  |  |
 | `alvo` | text | não |  |  |
