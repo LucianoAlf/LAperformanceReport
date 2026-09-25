@@ -11,6 +11,9 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { filtrarProdutos } from '@/lib/lojinhaMobile';
+import { useShellMobile } from '@/hooks/useShellMobile';
+import { ProdutosMobile } from '@/mobile/telas/lojinha/ProdutosMobile';
 import type { LojaProduto, LojaCategoria, FiltrosProdutos } from '@/types/lojinha';
 import { ModalProduto } from './ModalProduto';
 import { ModalEntradaLote } from './ModalEntradaLote';
@@ -20,6 +23,7 @@ interface TabProdutosProps {
 }
 
 export function TabProdutos({ unidadeId }: TabProdutosProps) {
+  const ehCelular = useShellMobile() === 'mobile';
   const [loading, setLoading] = useState(true);
   const [produtos, setProdutos] = useState<LojaProduto[]>([]);
   const [categorias, setCategorias] = useState<LojaCategoria[]>([]);
@@ -89,25 +93,11 @@ export function TabProdutos({ unidadeId }: TabProdutosProps) {
   }
 
   // Filtrar produtos
-  const produtosFiltrados = produtos.filter((p) => {
-    // Busca
-    if (filtros.busca) {
-      const busca = filtros.busca.toLowerCase();
-      if (!p.nome.toLowerCase().includes(busca) && !p.sku?.toLowerCase().includes(busca)) {
-        return false;
-      }
-    }
-    // Categoria
-    if (filtros.categoria_id && p.categoria_id !== filtros.categoria_id) {
-      return false;
-    }
-    // Status
-    if (filtros.status === 'ativos' && !p.ativo) return false;
-    if (filtros.status === 'inativos' && p.ativo) return false;
-    if (filtros.status === 'estoque_baixo' && (p.estoque_total || 0) >= p.estoque_minimo) return false;
-    
-    return true;
-  });
+  // ⚠️ O predicado mora em `@/lib/lojinhaMobile` (`filtrarProdutos`), fonte
+  // única compartilhada com a tela do celular — que exibe a CONTAGEM nos
+  // chips, o que tornaria qualquer divergência visível na hora. Extraído sem
+  // mudar uma comparação.
+  const produtosFiltrados = filtrarProdutos(produtos, filtros);
 
   // KPIs
   const totalProdutos = produtos.length;
@@ -148,6 +138,25 @@ export function TabProdutos({ unidadeId }: TabProdutosProps) {
 
   return (
     <div className="space-y-6">
+      {/* 🔴 A bifurcacao fica DENTRO do return e os modais ficam FORA dela, no
+          mesmo container: sao os mesmos `ModalProduto` e `ModalEntradaLote` do
+          computador, e o celular os alcanca por `handleEditProduto` /
+          `handleNovoProduto`. Bifurcar antes deles deixaria cada botao mudo no
+          telefone -- o padrao ja usado no `AdministrativoPage`.
+
+          ⚠️ O conteudo do computador segue byte-identico no `else`. */}
+      {ehCelular ? (
+        <ProdutosMobile
+          produtos={produtos}
+          categorias={categorias}
+          onEditar={(id) => {
+            const alvo = produtos.find((p) => p.id === id);
+            if (alvo) handleEditProduto(alvo);
+          }}
+          onNovo={handleNovoProduto}
+        />
+      ) : (
+        <>
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
@@ -355,6 +364,9 @@ export function TabProdutos({ unidadeId }: TabProdutosProps) {
           </table>
         </div>
       </div>
+
+        </>
+      )}
 
       {/* Modais */}
       <ModalProduto
