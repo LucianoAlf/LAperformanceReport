@@ -452,10 +452,12 @@ test('a faixa âmbar fica no nível da ROTA, antes de qualquer ramo de aba', () 
 test('só as abas COM TELA PRÓPRIA estão marcadas como portadas', () => {
   // `contratos` entrou em 24/09, com `ContratosMobile` — lista por urgência,
   // medida a 390px: 0 vazamento, 0 alvo abaixo de 44px, 3 telas de rolagem.
-  // As demais continuam sendo a tela do computador dentro do shell, e a faixa
-  // âmbar delas não pode sair antes da tela existir.
-  assert.match(ABAS, /'\/app\/administrativo':\s*\['lancamentos',\s*'contratos'\]/);
-  for (const outra of ['fideliza', 'lojinha', 'farmer', 'caixa_financeiro', 'caixa_entrada']) {
+  // `fideliza` entrou em 25/09, com `FidelizaMobile` — a dupla primeiro,
+  // medida em 919px no Consolidado (contra 4.198px da matriz) e 740px com
+  // unidade escolhida. As demais continuam sendo a tela do computador dentro
+  // do shell, e a faixa âmbar delas não pode sair antes da tela existir.
+  assert.match(ABAS, /'\/app\/administrativo':\s*\['lancamentos',\s*'contratos',\s*'fideliza'\]/);
+  for (const outra of ['lojinha', 'farmer', 'caixa_financeiro', 'caixa_entrada']) {
     assert.doesNotMatch(
       ABAS,
       new RegExp(`'/app/administrativo':[^\\]]*'${outra}'`),

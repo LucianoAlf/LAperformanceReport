@@ -39,17 +39,24 @@ export const ABAS_PORTADAS: Readonly<Record<string, readonly string[]>> = {
   // desktop, com a faixa âmbar. Marcar a rota inteira apagaria a faixa dele
   // junto — que é exatamente o erro cometido com Alunos em 14/09.
   '/app/agenda': ['professor', 'sala', 'chamada'],
-  // ⚠️ SÓ `'lancamentos'`. As outras seis abas do Administrativo (Contratos,
-  // Fideliza+, Lojinha, Farmer, Caixa e Entrada) seguem abrindo a tela do
-  // computador com a faixa âmbar — e Caixa e Entrada são frentes próprias, com
-  // escrita de dinheiro e conversa de WhatsApp.
+  // ⚠️ Lojinha, Farmer, Caixa e Entrada seguem abrindo a tela do computador
+  // com a faixa âmbar — e Caixa e Entrada são frentes próprias, com escrita de
+  // dinheiro e conversa de WhatsApp.
+  //
+  // ⚠️ `'fideliza'` entra com RECORTE declarado: no celular a aba responde
+  // "como está a dupla e o que falta", que é a sub-aba Ranking. Histórico
+  // trimestral, penalidades e as regras do programa ficam no computador, e a
+  // tela diz isso por escrito (ver `@/lib/fidelizaMobile`). O histórico sai
+  // por não ter dado: `programa_fideliza_historico` tem ZERO linhas nas três
+  // unidades (medido em 25/09/2026), e a tabela do desktop exibe quatro
+  // linhas de traço mais uma "média anual" que repete o único trimestre vivo.
   //
   // ⚠️ `'lancamentos'` entra com RECORTE declarado: no celular a aba responde
   // "o que lançar e o que já lancei", não "como foi o mês". Motivos de saída,
   // MRR perdido e LTV ficam no computador, e a tela diz isso por escrito (ver
   // `@/lib/administrativoMobile`). A faixa some porque a aba foi adaptada, não
   // porque faz tudo o que a do computador faz.
-  '/app/administrativo': ['lancamentos', 'contratos'],
+  '/app/administrativo': ['lancamentos', 'contratos', 'fideliza'],
 };
 
 export function rotaTemFaixaPorAba(

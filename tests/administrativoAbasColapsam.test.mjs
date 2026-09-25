@@ -117,14 +117,19 @@ test('as abas sem tela própria continuam avisando que são telas de computador'
   // layout parou de quebrar.
   //
   // `contratos` entrou em 24/09 com `ContratosMobile`: lista por urgência,
-  // medida a 390px em 0 vazamento, 0 alvo abaixo de 44px e 3 telas. As outras
-  // cinco seguem sendo a tela do computador dentro do shell.
+  // medida a 390px em 0 vazamento, 0 alvo abaixo de 44px e 3 telas.
+  //
+  // `fideliza` entrou em 25/09 com `FidelizaMobile`: a dupla primeiro e a
+  // comparação no pódio, medida em 4.198px → 919px no Consolidado e
+  // 2.751px → 740px com unidade escolhida, sem rolagem lateral e sem nada
+  // truncado. As outras quatro seguem sendo a tela do computador dentro do
+  // shell.
   const linha = /'\/app\/administrativo':\s*\[([^\]]*)\]/.exec(abas);
   assert.ok(linha, 'a rota sumiu de ABAS_PORTADAS');
   const portadas = [...linha[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
   assert.deepEqual(
     portadas,
-    ['lancamentos', 'contratos'],
+    ['lancamentos', 'contratos', 'fideliza'],
     'aba declarada portada precisa de tela própria — colapsar a grade não basta',
   );
 });
@@ -139,4 +144,22 @@ test('🔴 a aba portada tem MESMO tela própria, não só o nome na lista', () 
   const semComentarios = pagina.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
   assert.match(semComentarios, /<ContratosMobile/, 'a aba Contratos deixou de renderizar a tela mobile');
   assert.match(semComentarios, /useShellMobile\(\)\s*===\s*'mobile'/, 'a bifurcação por shell sumiu');
+
+  const fideliza = readFileSync(
+    join(RAIZ, 'src/components/App/Administrativo/TabProgramaFideliza.tsx'),
+    'utf8',
+  );
+  const fidelizaSemComentarios = fideliza
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+  assert.match(fidelizaSemComentarios, /<FidelizaMobile/, 'a aba Fideliza+ deixou de renderizar a tela mobile');
+  assert.match(fidelizaSemComentarios, /useShellMobile\(\)\s*===\s*'mobile'/, 'a bifurcação por shell sumiu do Fideliza+');
+  // 🔴 A bifurcação precisa vir ANTES de `isSuperAdmin`: o desktop tem dois
+  // ramos muito diferentes (a matriz no Consolidado, a própria dupla com
+  // unidade escolhida) e no celular os dois fazem a mesma pergunta. Depois do
+  // `if (isSuperAdmin)` ela só alcançaria metade dos usuários.
+  assert.ok(
+    fidelizaSemComentarios.indexOf('<FidelizaMobile') < fidelizaSemComentarios.indexOf('if (isSuperAdmin)'),
+    'o ramo mobile do Fideliza+ caiu para depois do `isSuperAdmin` e deixou de alcançar o Consolidado',
+  );
 });

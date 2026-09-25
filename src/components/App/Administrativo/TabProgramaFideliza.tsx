@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFidelizaPrograma, FarmerDados } from '@/hooks/useFidelizaPrograma';
+import { useShellMobile } from '@/hooks/useShellMobile';
+import { FidelizaMobile } from '@/mobile/telas/administrativo/FidelizaMobile';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -203,7 +205,8 @@ interface TabProgramaFidelizaProps {
 
 export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoLabelChange }: TabProgramaFidelizaProps) {
   const { user, isAdmin } = useAuth();
-  
+  const ehCelular = useShellMobile() === 'mobile';
+
   // Determinar se e visao admin (consolidado) ou individual (unidade especifica)
   const isSuperAdmin = isAdmin && (!unidadeSelecionada || unidadeSelecionada === 'todos');
   
@@ -491,6 +494,31 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
       <div className="flex items-center justify-center h-96">
         <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
       </div>
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // CELULAR - UMA TELA PARA OS DOIS RAMOS (LAPE-32)
+  // ═══════════════════════════════════════════════════════════════
+  // 🔴 A bifurcacao vem ANTES de `isSuperAdmin` de proposito. O desktop tem
+  // dois ramos muito diferentes — a MATRIZ metrica x dupla no Consolidado
+  // (medida: 4.198px a 390px, 1.609px so no Comparativo Detalhado) e a visao
+  // da propria dupla quando ha unidade escolhida (2.751px, que ja cabe). No
+  // celular os dois fazem a mesma pergunta: "como esta a dupla, e o que
+  // falta". Bifurcar dentro de cada ramo daria duas telas pequenas para uma
+  // pergunta so.
+  //
+  // ⚠️ O conteudo do computador segue byte-identico abaixo: nada foi movido
+  // para dentro do ramo novo.
+  if (ehCelular && config) {
+    return (
+      <FidelizaMobile
+        farmers={farmers}
+        config={config}
+        unidadeSelecionada={unidadeSelecionada}
+        periodoLabel={periodoTrimestralLabel}
+        ano={ano}
+      />
     );
   }
 
