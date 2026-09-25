@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, ChevronDown } from 'lucide-react';
 import {
   LANCAMENTOS,
@@ -15,6 +15,7 @@ import {
   type ResumoLike,
 } from '@/lib/administrativoMobile';
 import { LinhaMovimentacao } from './LinhaMovimentacao';
+import { useTrilhoRolavel } from '@/mobile/useTrilhoRolavel';
 import { cn } from '@/lib/utils';
 
 /**
@@ -63,6 +64,16 @@ export function AdministrativoMobile({
   const filaAtiva: FilaId = filaAberta ?? (filas.find((f) => f.quantidade > 0)?.id ?? 'renovacoes');
 
   const [lancarAberto, setLancarAberto] = useState(false);
+
+  // O trilho de filas esconde 7 dos 9 chips a 390px (medido: 1322px de
+  // conteúdo em 380px de tela). Sem isto ele não diz que há mais, e o chip
+  // aceso pode ficar fora da vista — a lista apareceria filtrada sem que
+  // nada na tela explicasse por quê.
+  const trilho = useTrilhoRolavel<HTMLDivElement>();
+  const { trazerAtivoAVista } = trilho;
+  useEffect(() => {
+    trazerAtivoAVista();
+  }, [filaAtiva, trazerAtivoAVista]);
 
   const itens = (listas[filaAtiva] ?? []) as MovimentacaoLike[];
   const blocos = useMemo(() => agruparPorDia(itens), [itens]);
@@ -177,12 +188,22 @@ export function AdministrativoMobile({
 
         {/* Trilho de filas. Rola na horizontal SÓ ele — o resto da tela nunca
             rola para o lado. Fila vazia continua aqui (ver `filasDoMes`). */}
-        <div className="-mx-3 flex gap-1.5 overflow-x-auto px-3 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {/* ⚠️ O esmaecimento das pontas é DINÂMICO (ver `mascaraDoTrilho`):
+            máscara fixa à direita continuaria prometendo conteúdo depois de
+            a pessoa ter chegado ao fim, e nunca diria que ficou fila para
+            trás. `scroll-smooth` fica com o hook, que respeita
+            `prefers-reduced-motion`. */}
+        <div
+          ref={trilho.refTrilho}
+          style={trilho.estiloDaMascara}
+          className="-mx-3 flex gap-1.5 overflow-x-auto px-3 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
           {filas.map((f) => {
             const ativa = f.id === filaAtiva;
             return (
               <button
                 key={f.id}
+                ref={ativa ? trilho.refAtivo : undefined}
                 type="button"
                 onClick={() => setFilaAberta(f.id)}
                 aria-pressed={ativa}

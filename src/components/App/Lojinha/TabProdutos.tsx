@@ -182,15 +182,20 @@ export function TabProdutos({ unidadeId }: TabProdutosProps) {
             <Package className="w-4 h-4" />
             Catálogo de Produtos
           </h3>
-          <div className="flex flex-wrap items-center gap-2">
+          {/* ⚠️ No celular isto vira GRADE de 2 colunas, nao `flex-wrap`.
+              As larguras aqui sao FIXAS (w-48/w-44/w-40) porque no computador
+              elas convivem numa linha so; a 390px o wrap as empilhava numa
+              escada com ~130px de vazio por linha, cada controle terminando
+              num lugar diferente. A grade faz cada um preencher sua celula. */}
+          <div className="flex flex-wrap items-center gap-2 max-lg:grid max-lg:grid-cols-2">
             {/* Busca */}
-            <div className="relative">
+            <div className="relative max-lg:col-span-2">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
               <Input
                 placeholder="Buscar produto..."
                 value={filtros.busca}
                 onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })}
-                className="pl-9 w-48"
+                className="pl-9 w-48 max-lg:w-full"
               />
             </div>
             {/* Filtro Categoria */}
@@ -198,7 +203,7 @@ export function TabProdutos({ unidadeId }: TabProdutosProps) {
               value={filtros.categoria_id?.toString() || 'todas'}
               onValueChange={(v) => setFiltros({ ...filtros, categoria_id: v === 'todas' ? null : parseInt(v) })}
             >
-              <SelectTrigger className="w-44">
+              <SelectTrigger className="w-44 max-lg:w-full">
                 <SelectValue placeholder="Todas Categorias" />
               </SelectTrigger>
               <SelectContent>
@@ -215,11 +220,11 @@ export function TabProdutos({ unidadeId }: TabProdutosProps) {
               value={filtros.status}
               onValueChange={(v) => setFiltros({ ...filtros, status: v as FiltrosProdutos['status'] })}
             >
-              <SelectTrigger className="w-40">
+              <SelectTrigger className="w-40 max-lg:w-full">
                 <SelectValue placeholder="Todos Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="todos">� Todos Status</SelectItem>
+                <SelectItem value="todos">⚪ Todos Status</SelectItem>
                 <SelectItem value="ativos">🟢 Ativos</SelectItem>
                 <SelectItem value="inativos">🔴 Inativos</SelectItem>
                 <SelectItem value="estoque_baixo">🟡 Estoque Baixo</SelectItem>
