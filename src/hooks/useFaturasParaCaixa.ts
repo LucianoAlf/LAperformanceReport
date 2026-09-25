@@ -74,19 +74,18 @@ function paraOpcao(item: FaturaFinanceiraItem): FaturaParaCaixa {
  * Todas as faturas do aluno no espelho, sem janela de competencia — e' o que
  * permite vincular pagamento composto (ex: contrato inteiro pago no cartao,
  * com parcelas de competencias futuras que a janela_3 nao alcanca).
- * Vem direto de `emusys_faturas`, entao `faturaId` ja e' a FK real.
+ * Leitura via RPC security definer: `emusys_faturas` e' service-only (RLS),
+ * select direto volta vazio para usuario autenticado.
  */
 export async function buscarFaturasDoAluno(
   unidadeId: string,
   emusysStudentId: string,
   alunoNome: string,
 ): Promise<FaturaParaCaixa[]> {
-  const { data, error } = await supabase
-    .from('emusys_faturas')
-    .select('id,emusys_fatura_id,emusys_student_id,competencia,data_vencimento,status,valor_original,valor_pago,desconto_fixo,desconto_condicional')
-    .eq('unidade_id', unidadeId)
-    .eq('emusys_student_id', emusysStudentId)
-    .order('competencia', { ascending: true });
+  const { data, error } = await supabase.rpc('caixa_faturas_do_aluno_v1', {
+    p_unidade_id: unidadeId,
+    p_emusys_student_id: Number(emusysStudentId),
+  });
   if (error) throw new Error(error.message);
   return ((data ?? []) as Record<string, unknown>[]).map((row) => {
     const valorOriginal = Number(row.valor_original ?? 0);
@@ -95,7 +94,7 @@ export async function buscarFaturasDoAluno(
       chave: String(row.id),
       emusysFaturaId: String(row.emusys_fatura_id),
       faturaId: String(row.id),
-      emusysStudentId: String(row.emusys_student_id ?? ''),
+      emusysStudentId,
       alunoId: null,
       alunoNome,
       cursoNome: null,
@@ -116,14 +115,12 @@ export async function resolverFaturaId(
   unidadeId: string,
   emusysFaturaId: string,
 ): Promise<string | null> {
-  const { data, error } = await supabase
-    .from('emusys_faturas')
-    .select('id')
-    .eq('unidade_id', unidadeId)
-    .eq('emusys_fatura_id', emusysFaturaId)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc('caixa_fatura_resolver_id_v1', {
+    p_unidade_id: unidadeId,
+    p_emusys_fatura_id: Number(emusysFaturaId),
+  });
   if (error) throw new Error(error.message);
-  return (data as { id?: string } | null)?.id ?? null;
+  return (data as string | null) ?? null;
 }
 
 export function useFaturasParaCaixa(unidadeId?: string | null) {
