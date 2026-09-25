@@ -7868,10 +7868,66 @@ _Não lanço nada pela metade._`);
     return false;
   }
 
+  // CORRECAO DE ALUNO NO CARD CLASSICO (25/09/2026, Fefe/Recreio, mesmo episodio):
+  // "Sol, o nome do aluno e Bernardo Neumann da Cunha" chegou com o card do
+  // Bernardo aberto. O `handle` ja sabe corrigir isso (`preview_aluno_corrigido`,
+  // remonta o card e revincula o V3), mas este portao so segurava forma/valor, o
+  // texto foi para o agente -- que nao enxerga o card -- e ele respondeu "nome
+  // completo corrigido" sem corrigir nada. Regras: um alvo inequivoco (citacao,
+  // ou card UNICO do mesmo autor), nome ROTULADO ("aluno e X", "aluno: X"; nome
+  // solto continua no fluxo antigo), frase curta, nunca `pode`/`nao`, nunca lote
+  // nem saida (saida nasce sem aluno de proposito).
+  function corrigeAlunoCardClassico(event, agora) {
+    const arr = limparVelhos(event.chatId, agora);
+    if (!arr.length) return false;
+    const q = event.quotedMessageId && String(event.quotedMessageId);
+    const _cita = (p) => !!q && (p.previewId === q || p.origem === q
+      || (Array.isArray(p.msgIds) && p.msgIds.includes(q)));
+    let alvo = null;
+    if (q) {
+      alvo = arr.find(_cita) || null;
+      if (!alvo) return false;
+    } else {
+      if (arr.length !== 1) return false;
+      alvo = arr[0];
+      const autor = String(event.senderPhone || event.senderId || '');
+      const doAutor = !!autor && [alvo.autorPhone, alvo.autorId, alvo.toquePor]
+        .some((x) => x && String(x) === autor);
+      if (!doAutor) return false;
+    }
+    if (alvo.tipoOperacao === 'lancar_recebimento_lote') return false;
+    if (categoriaEhSaida(alvo.categoria)) return false;
+    const texto = bodyLimpo(event.body);
+    if (!texto || texto.split(/\s+/).filter(Boolean).length > 14) return false;
+    if (casarPode(texto, { respondeuPreview: !!q }).pode || casarNao(texto)) return false;
+    const nome = _alunoRotulado(texto);
+    return !!(nome && nomePlausivel(nome));
+  }
+
+  // Resumo MINIMO dos cards abertos para o agente (sem telefone, sem ids de
+  // banco): o card e' enviado pelo handler direto ao WhatsApp e nunca entra na
+  // sessao do Hermes, entao sem isto o modelo "adivinha" pelo historico velho
+  // (25/09: foi atras de um passaporte de 16/09). Nao e' autorizacao de nada;
+  // so contexto para ele nao confundir card aberto com lancamento antigo.
+  function resumoCardsAbertosParaAgente(chatId, agora = Date.now()) {
+    const arr = limparVelhos(chatId, agora);
+    if (!arr.length) return null;
+    const _limpa = (s) => String(s || '').replace(/[\[\]\n\r]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
+    const partes = arr.slice(0, 3).map((p, i) => {
+      const falta = [!p.valor && 'valor', !p.forma && 'forma'].filter(Boolean);
+      return `card ${i + 1}: ${p.valor ? fmtBRL(p.valor) : 'valor ?'} · ${_limpa(p.forma) || 'forma ?'}`
+        + ` · ${_limpa(p.categoria) || 'categoria ?'} · aluno ${_limpa(p.aluno) || '?'}`
+        + (p.competencia ? ` · ${_limpa(p.competencia)}` : '')
+        + (falta.length ? ` · FALTA ${falta.join('+')}` : ' · aguardando pode');
+    });
+    return `${arr.length} card(s) de comprovante AINDA NAO LANCADO(S) neste grupo -- ${partes.join(' | ')}`
+      + (arr.length > 3 ? ' | ...' : '');
+  }
+
   function deveTratarComplementoDeterministico(event, agora = Date.now()) {
     if (!event || event.hasMedia) return false;
     let draft = rascunhosV4.get(event.chatId) || null;
-    if (!draft) return completaCardClassicoIncompleto(event, agora);
+    if (!draft) return completaCardClassicoIncompleto(event, agora) || corrigeAlunoCardClassico(event, agora);
     if (agora - draft.ts >= janelaMs) {
       void finalizarRascunhoV4(event.chatId, 'expired', 'janela_runtime_expirou');
       return false;
@@ -7887,7 +7943,7 @@ _Não lanço nada pela metade._`);
   // o guard de "elogio nao leva nao-entendi" estava morto por undefined.
   return { handle, temPendencia, citaAlgumaPendencia, ehConversaSemComando,
     reidratarPendencias, tratarNaoEntendida, observarRoteadorV4, decidirRoteadorV4, tratarAgentFirst,
-    deveTratarConfirmacaoDeterministica, deveTratarComplementoDeterministico,
+    deveTratarConfirmacaoDeterministica, deveTratarComplementoDeterministico, resumoCardsAbertosParaAgente,
     _pendentes: pendentes, _envelopesV4: envelopesV4, _rascunhosV4: rascunhosV4 };
 }
 

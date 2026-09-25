@@ -1257,7 +1257,17 @@ async function caixaAbf() {
               // Antes, mensagens em standby eram marcadas como handoff e ficavam
               // falsamente abertas mesmo sem jamais entrar na sessão/modelo.
               event.caixaGovernancaAgentFirstCandidate = true;
-              _caixaLog({ step: 'agent_first_text_candidate_pos_abf', chatId: chatId });
+              // O card do comprovante sai do handler direto para o WhatsApp e
+              // nunca entra na sessao do Hermes. Sem esta linha o agente nao sabe
+              // que ha card aberto e "adivinha" pelo historico (Recreio 25/09:
+              // respondeu sobre um passaporte de 16/09). So contexto, nao autoriza.
+              try {
+                const _resumoCards = _fhPrio && _fhPrio.resumoCardsAbertosParaAgente
+                  && _fhPrio.resumoCardsAbertosParaAgente(chatId);
+                if (_resumoCards) event.caixaCardsAbertos = _resumoCards;
+              } catch (_) { /* contexto e' reforco; nunca derruba a mensagem */ }
+              _caixaLog({ step: 'agent_first_text_candidate_pos_abf', chatId: chatId,
+                cards_abertos: !!event.caixaCardsAbertos || undefined });
             } else {
             if (_confirmacaoDeterministica) {
               _govRecord('route_decided', { route: 'legacy', engine: 'legacy_parser', action: 'confirmacao_preview' });
@@ -1500,6 +1510,7 @@ async function caixaAbf() {
       if (event.senderPhone) {
         try {
           const _ep = event.caixaGovernancaEpisode && event.caixaGovernancaEpisode.episode_id;
+          if (event.caixaCardsAbertos) event.body = `[card_caixa_aberto: ${event.caixaCardsAbertos}]\n${event.body || ''}`;
           if (_ep) event.body = `[episode_caixa: ${_ep}]\n${event.body || ''}`;
           const _cr = crachaDoSolicitante(event.senderPhone, chatId);
           if (_cr) {
