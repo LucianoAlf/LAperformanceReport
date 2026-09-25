@@ -71,10 +71,12 @@
 // duas vezes, uma delas numa aula que não vai acontecer. Ver
 // `encerrarExperimentaisSubstituidas` para a regra e por que a grade é quem decide.
 //
-// OBSERVADOR_TOKEN (opcional): quando definido, exige o mesmo valor em
-// `x-observador-token` (header) ou `?token=` (query). Enquanto NÃO estiver definido, a
-// verificação fica desligada — de propósito, para o deploy não derrubar o webhook antes
-// de a gente saber se o Emusys consegue mandar header custom.
+// OBSERVADOR_TOKEN (obrigatório): exige o mesmo valor em `x-observador-token` (header)
+// ou `?token=` (query). 25/09/2026: antes, token vazio DESLIGAVA a verificação e o
+// endereço público aceitava POST de qualquer origem — hoje a escrita de lead está
+// ligada, então sem token configurado tudo leva 401 (fail-closed). Se a env sumir,
+// a captação para em vez de ficar aberta — e o monitor acusa, porque o Emusys não
+// reenvia o que foi recusado.
 // ⚠️ Sem token e escrevendo de verdade, o endereço é público e grava em `leads`.
 //
 // Em modo sombra roda um preview só de leitura, que replica o matching das RPCs para o
@@ -171,6 +173,7 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { tokenObservadorAutoriza } from './auth.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -190,16 +193,9 @@ function escreveDeVerdade(evento: string): boolean {
   return EVENTOS_LIBERADOS.has('*') || EVENTOS_LIBERADOS.has(evento);
 }
 
-/** Token só é exigido quando configurado — ver comentário no cabeçalho. */
+/** Token sempre exigido: sem OBSERVADOR_TOKEN configurado, tudo leva 401 — ver cabeçalho. */
 function autorizado(req: Request): boolean {
-  if (!TOKEN_ESPERADO) return true;
-  const doHeader = req.headers.get('x-observador-token') ?? '';
-  if (doHeader && doHeader === TOKEN_ESPERADO) return true;
-  try {
-    return new URL(req.url).searchParams.get('token') === TOKEN_ESPERADO;
-  } catch (_e) {
-    return false;
-  }
+  return tokenObservadorAutoriza(req, TOKEN_ESPERADO);
 }
 
 const corsHeaders = {
@@ -1151,8 +1147,8 @@ async function repassarParaProcessamentoMatricula(
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
-  // (0) TOKEN — só barra quando OBSERVADOR_TOKEN está configurado. Enquanto não estiver,
-  // nada muda. Rejeição não grava payload (senão vira vetor de flood no log).
+  // (0) TOKEN — fail-closed: sem OBSERVADOR_TOKEN configurado, rejeita tudo com 401.
+  // Rejeição não grava payload (senão vira vetor de flood no log).
   if (!autorizado(req)) {
     console.warn('[observador] requisição sem token válido rejeitada');
     return new Response(JSON.stringify({ status: 'nao_autorizado' }), {

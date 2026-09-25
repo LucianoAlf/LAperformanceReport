@@ -7,6 +7,7 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { autorizarEquipe } from '../_shared/equipeAuthorization.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -23,17 +24,31 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
   headers: { ...corsHeaders, 'Content-Type': 'application/json' },
 });
 
+// 25/09/2026: ate aqui bastava QUALQUER usuario logado (verify_jwt=false no gateway e a
+// chave anon e publica) — um professor autenticado disparava o refresh financeiro de
+// contas a receber. Agora exige usuario ATIVO com perfil admin/unidade, no mesmo padrao
+// de enviar-mensagem-admin. Cron (x-sync-token) e service_role seguem.
 async function validarAcesso(req: Request): Promise<Response | null> {
-  const syncToken = req.headers.get('x-sync-token')?.trim() || '';
-  if (SYNC_ADMIN_TOKEN && syncToken && syncToken === SYNC_ADMIN_TOKEN) return null;
-
-  const token = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
-  if (!token) return json({ ok: false, erro: 'nao autenticado' }, 401);
-  if (token === SUPABASE_SERVICE_ROLE_KEY) return null;
-
   const authClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-  const { data, error } = await authClient.auth.getUser(token);
-  if (error || !data.user) return json({ ok: false, erro: 'token invalido' }, 401);
+  const resultado = await autorizarEquipe(req, {
+    syncAdminToken: SYNC_ADMIN_TOKEN,
+    serviceRoleKey: SUPABASE_SERVICE_ROLE_KEY,
+    getUser: async (token) => {
+      const { data, error } = await authClient.auth.getUser(token);
+      return error || !data.user ? null : { id: data.user.id };
+    },
+    buscarUsuario: async (authUserId) => {
+      const { data } = await authClient
+        .from('usuarios')
+        .select('perfil, ativo')
+        .eq('auth_user_id', authUserId)
+        .maybeSingle();
+      return data;
+    },
+  });
+  if (resultado.ok === false) {
+    return json({ ok: false, erro: resultado.erro }, resultado.status);
+  }
   return null;
 }
 

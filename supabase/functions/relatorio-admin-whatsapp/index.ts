@@ -39,6 +39,7 @@ import {
   competenciaFechadaAnterior,
   rotuloCompetencia,
 } from '../_shared/relatorios-mensais-canonicos.ts';
+import { ehPerfilDaEquipe } from '../_shared/equipeAuthorization.ts';
 
 /**
  * Exceções que significam "não existe fechamento válido para esta competência".
@@ -2161,22 +2162,26 @@ serve(async (req) => {
     // === MODO MANUAL (existente) ===
     // Este ramo dispara mensagem no WhatsApp (grupos de destinatarios ou numero_teste).
     // Como a funcao roda com verify_jwt = false, sem esta checagem qualquer chamada
-    // anonima que conheca a URL enviaria mensagem em nome da escola. Aceita a
-    // service_role (automacoes) ou um usuario autenticado (as telas do front, que
-    // ja mandam o token pelo supabase.functions.invoke).
+    // anonima que conheca a URL enviaria mensagem em nome da escola.
+    // 25/09/2026: "qualquer usuario logado" nao basta — um professor autenticado mandava
+    // texto arbitrario para qualquer numero_teste. Agora exige usuario ATIVO com perfil
+    // admin/unidade (mesmo padrao de enviar-mensagem-admin). service_role passa direto
+    // (automacoes) e usuario do app segue pela checagem em `usuarios`.
     {
-      const bearerManual = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
-      if (!bearerManual) {
+      const authHeaderManual = req.headers.get('Authorization');
+      if (!authHeaderManual?.startsWith('Bearer ')) {
         return new Response(
           JSON.stringify({ success: false, error: 'Autenticação obrigatória para enviar relatório.' }),
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         );
       }
-      if (!serviceRoleKey || bearerManual !== serviceRoleKey) {
+      // crachá de serviço passa direto (aceita JWT legado e sb_secret_ da VPS, como nos
+      // modos dry_run); usuário precisa de cadastro ativo de equipe em `usuarios`.
+      if (!(await bearerEhServiceRole(authHeaderManual))) {
         const anonKeyManual = Deno.env.get('SUPABASE_ANON_KEY');
         if (!anonKeyManual) throw new Error('SUPABASE_ANON_KEY_AUSENTE');
         const userClientManual = createClient(supabaseUrl, anonKeyManual, {
-          global: { headers: { Authorization: `Bearer ${bearerManual}` } },
+          global: { headers: { Authorization: authHeaderManual } },
           auth: { autoRefreshToken: false, persistSession: false },
         });
         const { data: authManual, error: authManualError } = await userClientManual.auth.getUser();
@@ -2184,6 +2189,17 @@ serve(async (req) => {
           return new Response(
             JSON.stringify({ success: false, error: 'Token inválido para enviar relatório.' }),
             { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+        const { data: usuarioEquipe } = await supabase
+          .from('usuarios')
+          .select('perfil, ativo')
+          .eq('auth_user_id', authManual.user.id)
+          .maybeSingle();
+        if (!ehPerfilDaEquipe(usuarioEquipe)) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Acesso restrito à equipe (admin/unidade).' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
           );
         }
       }
