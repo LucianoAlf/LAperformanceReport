@@ -100,6 +100,30 @@ type FichaProfessor = {
   status: string;
 };
 
+type EventoProfessor = {
+  id: number;
+  request_id: string;
+  unidade_id: string;
+  aula_id: number | null;
+  professor_id: number;
+  fonte: string;
+  criado_em: string;
+};
+
+// Par (evento, aula) pronto para decidir: a aula_alvo ja traz o estado
+// vigente do professor (professor_presenca) e as flags de protecao.
+type ParProfessorAula = {
+  evento: EventoProfessor;
+  aula: {
+    id: number;
+    emusys_id: number | null;
+    professor_presenca: string | null;
+    professor_presenca_origem: string | null;
+    cancelada: boolean | null;
+    justificada: boolean | null;
+  };
+};
+
 function linhaAlunoDaAula(aula: EmusysAulaDetalhe, alunoEmusysId: number | null) {
   const alunos = Array.isArray(aula.alunos) ? aula.alunos : [];
   if (alunoEmusysId == null) return { linha: null, identidadeOk: false };
@@ -681,6 +705,307 @@ async function processarFichasProfessor(
   }
 }
 
+// Marca de professor pela Agenda (botoes Presente/Ausente do card e o ajuste
+// fino por aula). As RPCs da Agenda estampam aulas_emusys.professor_presenca
+// (+origem) e gravam item_aplicado com professor_id e aluno_id null — o
+// evento e o gatilho; o valor escrito e o professor_presenca VIGENTE da
+// aula, nunca o status_novo do evento. Dia inteiro chega com aula_id null e
+// expande para as aulas do professor naquele dia (mesmo filtro da RPC:
+// cancelada = false). Por-aula chega com aula_id = id interno.
+async function processarEventosProfessor(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  unidade: (typeof UNIDADES)[number],
+  token: string,
+  modo: 'sombra' | 'ativo',
+  lookbackIso: string,
+  resumo: Record<string, number>,
+  inicio: number,
+): Promise<void> {
+  const { data: eventosRows } = await supabase
+    .from('presenca_acao_eventos')
+    .select('id,request_id,unidade_id,aula_id,professor_id,fonte,criado_em')
+    .eq('tipo', 'item_aplicado')
+    .eq('unidade_id', unidade.id)
+    .is('aluno_id', null)
+    .not('professor_id', 'is', null)
+    .gte('criado_em', lookbackIso)
+    .order('id', { ascending: true })
+    .limit(2000);
+  const eventos = (eventosRows ?? []) as EventoProfessor[];
+  if (!eventos.length) return;
+
+  const eventoIds = eventos.map((e) => e.id);
+
+  // Dedup por PAR (evento, linha): um evento de dia inteiro toca N aulas e
+  // grava uma linha por aula — retomar a meio de um evento so refaz o que
+  // falta. Em modo ativo, 'seria_escrito' nao encerra (sombra nao escreveu).
+  const { data: jaLancados } = await supabase
+    .from('presenca_emusys_escrita')
+    .select('presenca_evento_id,linha_emusys_id,decisao')
+    .eq('unidade_id', unidade.id)
+    .in('presenca_evento_id', eventoIds);
+  const paresFeitos = new Set(
+    (jaLancados ?? [])
+      .filter((l: { decisao: string }) => modo !== 'ativo' || l.decisao !== 'seria_escrito')
+      .map((l: { presenca_evento_id: number; linha_emusys_id: number | null }) =>
+        `${l.presenca_evento_id}:${l.linha_emusys_id ?? 0}`),
+  );
+
+  // Expande para (evento, aula). Por-aula usa a aula do evento; dia inteiro
+  // usa as aulas do professor na data da marca (fuso da escola).
+  const aulaIdsDiretos = eventos.filter((e) => e.aula_id != null).map((e) => e.aula_id as number);
+  const eventosDia = eventos.filter((e) => e.aula_id == null);
+  const professorIds = [...new Set(eventos.map((e) => e.professor_id))];
+
+  const { data: aulasDiretas } = aulaIdsDiretos.length
+    ? await supabase
+      .from('aulas_emusys')
+      .select('id,emusys_id,professor_id,professor_presenca,professor_presenca_origem,cancelada,justificada')
+      .in('id', aulaIdsDiretos)
+    : { data: [] };
+  const aulaPorId = new Map<number, ParProfessorAula['aula']>(
+    (aulasDiretas ?? []).map((a: ParProfessorAula['aula']) => [a.id, a]),
+  );
+
+  // Dia inteiro: a RPC grava professor_presenca nas aulas do professor na
+  // data com cancelada=false — reproduz o mesmo conjunto aqui. A data do
+  // evento e o criado_em no fuso local (a agenda opera no dia da tela).
+  const aulasPorProfessorDia = new Map<string, ParProfessorAula['aula'][]>();
+  if (eventosDia.length) {
+    const datas = [...new Set(eventosDia.map((e) => dataLocal(e.criado_em)))];
+    const profsDia = [...new Set(eventosDia.map((e) => e.professor_id))];
+    const { data: aulasDia } = await supabase
+      .from('aulas_emusys')
+      .select('id,emusys_id,professor_id,professor_presenca,professor_presenca_origem,cancelada,justificada,data_aula')
+      .eq('unidade_id', unidade.id)
+      .in('professor_id', profsDia)
+      .in('data_aula', datas)
+      .eq('cancelada', false);
+    for (const a of aulasDia ?? []) {
+      const chave = `${a.professor_id}:${a.data_aula}`;
+      const lista = aulasPorProfessorDia.get(chave) ?? [];
+      lista.push(a);
+      aulasPorProfessorDia.set(chave, lista);
+      if (!aulaPorId.has(a.id)) aulaPorId.set(a.id, a);
+    }
+  }
+
+  const pares: ParProfessorAula[] = [];
+  for (const evento of eventos) {
+    if (evento.aula_id != null) {
+      const aula = aulaPorId.get(evento.aula_id);
+      if (aula) pares.push({ evento, aula });
+      continue;
+    }
+    const chave = `${evento.professor_id}:${dataLocal(evento.criado_em)}`;
+    for (const aula of aulasPorProfessorDia.get(chave) ?? []) {
+      pares.push({ evento, aula });
+    }
+  }
+  // Evento sem nenhuma aula alvo (ex.: professor sem aula naquele dia):
+  // marca no livro para nao voltar a fila — linha nula, uma por evento.
+  const eventosSemPar = new Set(eventoIds);
+  for (const par of pares) eventosSemPar.delete(par.evento.id);
+  for (const eventoId of eventosSemPar) {
+    if (paresFeitos.has(`${eventoId}:0`)) continue;
+    const evento = eventos.find((e) => e.id === eventoId)!;
+    await registrarLivro(supabase, {
+      request_id: evento.request_id,
+      presenca_evento_id: evento.id,
+      unidade_id: evento.unidade_id,
+      professor_id: evento.professor_id,
+      alvo: 'professor',
+      estado_vigente: null,
+      fonte_decisao: evento.fonte,
+      decisao: 'pulado_identidade_divergente',
+      motivo: evento.aula_id == null ? 'professor_sem_aula_no_dia' : 'aula_sem_registro',
+      modo,
+    });
+    resumo.pulado_identidade_divergente = (resumo.pulado_identidade_divergente ?? 0) + 1;
+  }
+
+  const pendentes = pares
+    .filter((par) => par.aula.emusys_id == null
+      ? !paresFeitos.has(`${par.evento.id}:0`)
+      : !paresFeitos.has(`${par.evento.id}:${par.aula.emusys_id}`))
+    .slice(0, LIMITE_GATILHOS_POR_UNIDADE);
+  if (!pendentes.length) return;
+
+  // professor_id interno -> id do professor no Emusys (vinculo por unidade).
+  const { data: vinculosProf } = await supabase
+    .from('vw_professores_emusys_vinculos')
+    .select('professor_id,emusys_professor_id,qualidade_vinculo')
+    .eq('unidade_id', unidade.id)
+    .in('professor_id', professorIds);
+  const emusysPorProfessor = new Map<number, number>(
+    (vinculosProf ?? [])
+      .filter((v: { emusys_professor_id: number | null; qualidade_vinculo: string }) =>
+        v.emusys_professor_id != null && v.qualidade_vinculo === 'vinculo_utilizavel')
+      .map((v: { professor_id: number; emusys_professor_id: number }) => [v.professor_id, v.emusys_professor_id]),
+  );
+
+  const aulaCache = new Map<number, EmusysRespostaAula | EmusysApiError>();
+  async function lerAula(aulaApiId: number): Promise<EmusysRespostaAula> {
+    const hit = aulaCache.get(aulaApiId);
+    if (hit) {
+      if (hit instanceof EmusysApiError) throw hit;
+      return hit;
+    }
+    try {
+      const leitura = await comRitmoERetry(() => buscarAulaEmusys({ token, aulaId: aulaApiId }));
+      aulaCache.set(aulaApiId, leitura);
+      return leitura;
+    } catch (erro) {
+      if (erro instanceof EmusysApiError) aulaCache.set(aulaApiId, erro);
+      throw erro;
+    }
+  }
+
+  for (const { evento, aula: alvo } of pendentes) {
+    if (Date.now() - inicio > ORCAMENTO_MS) {
+      resumo.truncado = 1;
+      return;
+    }
+    const professorEmusysId = emusysPorProfessor.get(evento.professor_id) ?? null;
+    const aulaApiId = alvo.emusys_id ?? null;
+    // O estado vigente e o professor_presenca da linha — a RPC ja estampou;
+    // 'ausente' vira 'falta' no vocabulario da matriz de decisao.
+    const vigenteBruto = alvo.professor_presenca;
+    const estadoVigente = vigenteBruto === 'ausente' ? 'falta' : vigenteBruto;
+    const fonte = alvo.professor_presenca_origem ?? evento.fonte;
+    const base = {
+      request_id: evento.request_id,
+      presenca_evento_id: evento.id,
+      unidade_id: evento.unidade_id,
+      aula_emusys_id: alvo.id,
+      professor_id: evento.professor_id,
+      alvo: 'professor',
+      estado_vigente: estadoVigente,
+      fonte_decisao: fonte,
+      modo,
+    };
+
+    if (aulaApiId == null || professorEmusysId == null) {
+      const motivo = aulaApiId == null ? 'aula_sem_emusys_id' : 'professor_sem_vinculo_utilizavel';
+      await registrarLivro(supabase, {
+        ...base, decisao: 'pulado_identidade_divergente', motivo,
+      });
+      resumo.pulado_identidade_divergente = (resumo.pulado_identidade_divergente ?? 0) + 1;
+      continue;
+    }
+
+    const precoce = decisaoPrecoceAluno(estadoVigente, fonte);
+    if (precoce && precoce.acao === 'pular') {
+      await registrarLivro(supabase, {
+        ...base, decisao: precoce.decisao, motivo: precoce.motivo,
+        linha_emusys_id: aulaApiId,
+      });
+      resumo[precoce.decisao] = (resumo[precoce.decisao] ?? 0) + 1;
+      continue;
+    }
+
+    let leitura: EmusysRespostaAula;
+    try {
+      leitura = await lerAula(aulaApiId);
+    } catch (erro) {
+      if (erro instanceof EmusysApiError && erro.status < 500) {
+        await registrarLivro(supabase, {
+          ...base, decisao: 'erro', motivo: `get_aula_http_${erro.status}`,
+          linha_emusys_id: aulaApiId,
+        });
+        resumo.erro = (resumo.erro ?? 0) + 1;
+        continue;
+      }
+      throw erro;
+    }
+
+    const aula = leitura.aula;
+    const professorNaAula = aula.professor?.id === professorEmusysId
+      ? aula.professor
+      : (Array.isArray(aula.professores)
+        ? aula.professores.find((p) => p?.id === professorEmusysId) ?? null
+        : null);
+    const identidadeOk = professorNaAula?.id === professorEmusysId;
+    const estadoAntes = {
+      aula_get_id: aulaApiId,
+      aula_cancelada: Boolean(aula.cancelada),
+      professor: professorNaAula,
+    };
+    const marca = marcaDaLinha(professorNaAula);
+    const ultima = await ultimaEscritaNossa(supabase, aulaApiId, null, evento.professor_id);
+
+    // A matriz do aluno cobre a semantica certa: agenda_secretaria corrige
+    // marca humana nos dois sentidos, ausente proprio sem carimbo nao repete
+    // PATCH, e linha justificada/cancelada e protegida.
+    const decisao = decidirEscritaAluno({
+      estadoVigente,
+      fonte,
+      linhaJustificada: Boolean(alvo.justificada),
+      linhaCancelada: Boolean(alvo.cancelada),
+      aulaCancelada: Boolean(aula.cancelada),
+      identidadeOk,
+      marca,
+      ultimaEscrita: ultima,
+    });
+    // Motivo de identidade fala de professor, nao de aluno.
+    const motivo = decisao.motivo === 'id_aluno_divergente' ? 'professor_id_divergente' : decisao.motivo;
+
+    if (decisao.acao === 'pular') {
+      await registrarLivro(supabase, {
+        ...base, decisao: decisao.decisao, motivo,
+        linha_emusys_id: aulaApiId, estado_antes: estadoAntes,
+      });
+      resumo[decisao.decisao] = (resumo[decisao.decisao] ?? 0) + 1;
+      continue;
+    }
+
+    if (modo === 'sombra') {
+      await registrarLivro(supabase, {
+        ...base, decisao: 'seria_escrito', motivo,
+        presente: decisao.presente, linha_emusys_id: aulaApiId, estado_antes: estadoAntes,
+      });
+      resumo.seria_escrito = (resumo.seria_escrito ?? 0) + 1;
+      continue;
+    }
+
+    try {
+      const resposta = await comRitmoERetry(() =>
+        gravarPresencaProfessorEmusys({
+          token, aulaId: aulaApiId, professorId: professorEmusysId,
+          presente: decisao.presente, horario: horarioAgendado(aula),
+        }));
+      await registrarLivro(supabase, {
+        ...base, decisao: 'escrito', motivo,
+        presente: decisao.presente, linha_emusys_id: aulaApiId,
+        estado_antes: estadoAntes, resposta: resposta.bruto,
+      });
+      resumo.escrito = (resumo.escrito ?? 0) + 1;
+      refletirEscritaProfessor(aulaCache, aulaApiId, professorEmusysId, resposta, decisao.presente);
+    } catch (erro) {
+      if (erro instanceof EmusysApiError && erro.status < 500) {
+        await registrarLivro(supabase, {
+          ...base, decisao: 'erro', motivo: `patch_professor_http_${erro.status}`,
+          presente: decisao.presente, linha_emusys_id: aulaApiId, estado_antes: estadoAntes,
+        });
+        resumo.erro = (resumo.erro ?? 0) + 1;
+        continue;
+      }
+      throw erro;
+    }
+  }
+}
+
+// Data local (America/Sao_Paulo) de um timestamptz — a Agenda trabalha no dia
+// da tela, entao a expansao do dia inteiro usa essa data.
+function dataLocal(iso: string): string {
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  });
+  return fmt.format(new Date(iso));
+}
+
 serve(async (requisicao) => {
   const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
@@ -758,6 +1083,11 @@ serve(async (requisicao) => {
         break;
       }
       await processarFichasProfessor(supabase, unidade, token, modo, lookbackIso, resumo, inicio);
+      if (resumo.truncado) {
+        resultado[unidade.nome] = { modo, ...resumo };
+        break;
+      }
+      await processarEventosProfessor(supabase, unidade, token, modo, lookbackIso, resumo, inicio);
       resultado[unidade.nome] = { modo, ...resumo };
       if (resumo.truncado) break;
     } finally {
