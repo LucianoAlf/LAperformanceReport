@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-24 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-25 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — comercial
@@ -248,6 +248,9 @@
 **Únicos:**
 - `canais_origem_pkey`
 - `uk_canais_nome_normalizado`
+
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 
 ## contatos_bloqueados_campanha
 
@@ -716,6 +719,7 @@
 
 **Triggers:**
 - `trg_audit → fn_audit_log()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_eventos_operacionais_experimental_atribuicao → trg_eventos_operacionais_experimental()`
 - `trg_eventos_operacionais_experimental_cancelada → trg_eventos_operacionais_experimental_cancelada()`
 - `trg_eventos_operacionais_experimental_insert → trg_eventos_operacionais_experimental()`
@@ -776,6 +780,9 @@
 **Únicos:**
 - `lead_experimentais_decisoes_humanas_pkey`
 - `lead_experimentais_decisoes_humanas_unique`
+
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 
 ## lead_experimental_aulas
 
@@ -985,6 +992,7 @@
 - `tr_sync_experimentais_professor → sync_experimentais_professor()`
 - `tr_sync_experimentais_unidade → sync_experimentais_unidade()`
 - `trg_audit → fn_audit_log()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_calcular_faixa_etaria_lead → trg_calcular_faixa_etaria_lead()`
 - `trg_lead_herda_consultor → trg_lead_herda_consultor_da_unidade()`
 - `update_leads_updated_at → update_updated_at_column()`

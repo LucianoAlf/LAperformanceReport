@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-24 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-25 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — financeiro
@@ -66,6 +66,7 @@
 - `caixa_movimentacao_faturas_pkey`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_cmf_herda_unidade → cmf_herda_unidade()`
 
 ## caixa_movimentacoes
@@ -100,6 +101,7 @@
 **Triggers:**
 - `tr_caixa_movimentacoes_updated_at → set_updated_at_caixa()`
 - `trg_audit_caixa_movimentacoes → fn_audit_log()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_caixa_movimentacao_recalcula_saldo → trg_caixa_movimentacao_recalcula_saldo()`
 
 ## caixa_reaberturas_log
@@ -326,6 +328,7 @@
 - `ux_fechamento_mensal_snapshots_competencia_dominio`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_fechamento_mensal_snapshot_imutavel → proteger_fechamento_mensal_snapshot_imutavel_v1()`
 - `trg_relatorio_coordenacao_final_v4 → proteger_relatorio_coordenacao_final_v4()`
 
@@ -435,6 +438,9 @@
 - `financeiro_emusys_lancamentos_pkey`
 - `financeiro_emusys_lancamentos_unidade_id_emusys_lancamento__key`
 
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
+
 ## financeiro_emusys_plano_contas
 
 > Catálogo GET /financeiro/plano_contas (Emusys beta), completo a cada rodada. codigo_extraido vem do início do nome; codigo_api é a numeração interna e não classifica nada.
@@ -526,6 +532,7 @@
 
 **Triggers:**
 - `financeiro_fatura_reconciliacao_decisao_immutavel → financeiro_fatura_reconciliacao_decisao_immutavel()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 
 ## financeiro_sync_queue
 
@@ -572,6 +579,9 @@
 **Únicos:**
 - `formas_pagamento_pkey`
 - `uk_formas_nome`
+
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 
 ## historico_pagamentos
 

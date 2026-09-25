@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-24 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-25 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — plataforma
 
-27 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+28 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## _auditoria_chave_natural_20260809
 
@@ -97,6 +97,19 @@
 **Únicos:**
 - `auditoria_acesso_pkey`
 
+## cache_versao_log
+
+> LAPE-42: uma linha por comando de escrita nas tabelas lidas pelos caches de servidor. Versao de cache = count:max:sum dos ids visiveis. Podado por cache_versao_podar_v1.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `tabela` | text | não |  |  |
+| `em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `cache_versao_log_pkey`
+
 ## ficha_tokens
 
 > Token pessoal por colaborador. Uso unico: usado_em preenchido trava o reenvio. RLS sem policy por design — so service_role le; token nunca vai para o client.
@@ -161,6 +174,9 @@
 - `perfil_permissoes_perfil_id_permissao_id_key`
 - `perfil_permissoes_pkey`
 
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
+
 ## perfis
 
 > Perfis de acesso do sistema (Admin, Gerente, Farmer, Hunter, etc.)
@@ -202,6 +218,9 @@
 - `permissoes_codigo_key`
 - `permissoes_pkey`
 
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
+
 ## porteiro_config
 
 | Coluna | Tipo | Nulo | Default | Referência |
@@ -237,6 +256,9 @@
 
 **Únicos:**
 - `rbac_piloto_usuarios_pkey`
+
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 
 ## sol_governanca_eventos
 
@@ -340,6 +362,7 @@
 **Triggers:**
 - `tr_unidades_updated_at → update_updated_at()`
 - `trg_audit → fn_audit_log()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 
 ## unidades_cursos
 
@@ -411,6 +434,9 @@
 - `idx_usuario_perfis_unique_without_unidade`
 - `usuario_perfis_pkey`
 
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
+
 ## usuarios
 
 > Usuários do sistema com controle de acesso por unidade
@@ -439,6 +465,7 @@
 - `usuarios_pkey`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_usuarios_sincroniza_rbac → fn_usuarios_sincroniza_rbac()`
 - `trg_usuarios_trava_privilegio → fn_usuarios_trava_privilegio()`
 - `update_usuarios_updated_at → update_updated_at_column()`

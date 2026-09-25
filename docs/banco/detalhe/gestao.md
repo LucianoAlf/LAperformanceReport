@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-24 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-25 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — gestao
@@ -189,6 +189,9 @@
 - `competencias_mensais_pkey`
 - `competencias_mensais_unidade_ano_mes_key`
 
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
+
 ## dados_comerciais_legado
 
 > LEGADO (aposentada 2026-07-05). Agregacao comercial mensal inflada por trigger incremental bugado (3-17x). Substituida por calculo vivo de leads no Dashboard e alerta CONVERSAO_BAIXA. Historico canonico mensal = dados_mensais + fechamento_mensal_snapshots. Nao usar.
@@ -258,6 +261,7 @@
 - `tr_audit_dados_mensais → audit_dados_mensais()`
 - `tr_dados_mensais_updated_at → update_updated_at()`
 - `trg_audit → fn_audit_log()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 
 ## dados_mensais_retificacoes
 

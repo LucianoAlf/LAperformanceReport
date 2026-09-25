@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-24 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-25 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — aluno
@@ -181,6 +181,7 @@
 
 **Triggers:**
 - `trg_aluno_jornada_matricula_disciplina_updated_at → update_updated_at_column()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_eventos_operacionais_experimental_convertida_insert → trg_eventos_operacionais_experimental_convertida()`
 - `trg_eventos_operacionais_experimental_convertida_update → trg_eventos_operacionais_experimental_convertida()`
 - `trg_eventos_operacionais_jornada_matricula → trg_eventos_operacionais_jornada_matricula()`
@@ -248,6 +249,7 @@
 
 **Triggers:**
 - `trg_atualiza_projecao_por_presenca → trg_atualiza_projecao_por_presenca()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_professor_presente_quando_aluno_presente → trg_professor_presente_quando_aluno_presente()`
 - `trg_sincronizar_gemeos_presenca → trg_sincronizar_gemeos_presenca()`
 
@@ -531,6 +533,7 @@
 - `trg_alunos_valor_parcela_comercial_emusys → fn_alunos_valor_parcela_comercial_emusys()`
 - `trg_alunos_vinculo_emusys_anamnese → fn_alunos_vinculo_emusys_anamnese()`
 - `trg_audit → fn_audit_log()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_costura_vincular_conversa → fn_costura_vincular_conversa_numero()`
 - `trg_enqueue_sync_student_studio → enqueue_sync_student_studio()`
 - `trg_sync_aluno_contatos → sync_aluno_contatos_from_legacy()`
@@ -604,6 +607,9 @@
 | `arquivado_por` | text | sim |  |  |
 | `motivo` | text | sim |  |  |
 
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
+
 ## alunos_health_score_historico
 
 | Coluna | Tipo | Nulo | Default | Referência |
@@ -647,6 +653,7 @@
 - `idx_alunos_historico_aluno_data_saida_uniq`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `update_alunos_historico_updated_at → update_updated_at_column()`
 
 ## alunos_turmas
@@ -847,6 +854,9 @@
 **Únicos:**
 - `banda_pkey`
 - `banda_turma_chave_key`
+
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 
 ## banda_curso_depara
 
@@ -1119,6 +1129,7 @@
 - `evento_pkey`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_evento_touch → fn_evento_touch()`
 
 ## evento_apresentacao
@@ -1592,6 +1603,7 @@
 - `movimentacoes_pkey`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `update_movimentacoes_updated_at → update_updated_at_column()`
 
 ## movimentacoes_admin
@@ -1646,6 +1658,7 @@
 **Triggers:**
 - `trg_audit → fn_audit_log()`
 - `trg_bloqueia_delete_movimentacao_admin → fn_bloqueia_delete_movimentacao_admin()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_capturar_telefone_snapshot_movimentacao_retencao → capturar_telefone_snapshot_movimentacao_retencao()`
 - `trg_eventos_operacionais_aviso_previo → trg_eventos_operacionais_aviso_previo()`
 - `trg_preencher_campos_retencao_movimentacoes_admin → preencher_campos_retencao_movimentacoes_admin()`
@@ -2487,6 +2500,9 @@
 **Únicos:**
 - `tipos_matricula_pkey`
 - `uk_tipos_matricula_codigo`
+
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 
 ## tipos_saida
 

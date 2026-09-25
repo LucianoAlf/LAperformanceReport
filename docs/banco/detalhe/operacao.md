@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-24 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-25 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — operacao
@@ -135,6 +135,7 @@
 
 **Triggers:**
 - `trg_audit → fn_audit_log()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_cursos_updated_at → update_updated_at_column()`
 
 ## feriados
@@ -930,6 +931,7 @@
 - `visitas_pkey`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `visitas_updated_at → visitas_set_updated_at()`
 
 ## visitas_config

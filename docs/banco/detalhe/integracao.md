@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-24 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-25 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — integracao
@@ -270,6 +270,9 @@
 **Únicos:**
 - `curso_emusys_depara_pkey`
 
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
+
 ## emusys_api_payload
 
 > Espelho de debug do payload bruto da API Emusys. Sem FK e sem vínculo com o sistema. Uso: comparar Emusys x base manualmente. Não alimenta nada.
@@ -442,6 +445,7 @@
 - `emusys_experimentais_raw_snapshot_ativo_key_idx`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_emusys_experimentais_raw_updated_at → update_updated_at_column()`
 - `trg_normalizar_payload_emusys_experimental_minimo → normalizar_payload_emusys_experimental_minimo()`
 
@@ -561,6 +565,7 @@
 - `emusys_faturas_unidade_fatura_uniq`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_emusys_faturas_updated_at → touch_emusys_faturas_updated_at()`
 
 ## emusys_historico_backfill_execucoes_v1
@@ -628,6 +633,7 @@
 - `emusys_matriculas_estado_atual_pkey`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_remover_cpf_emusys_matriculas_estado_atual → remover_cpf_claro_jsonb_trigger()`
 
 ## emusys_matriculas_sync_execucoes
@@ -1410,6 +1416,7 @@
 - `sync_runs_pkey`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_sync_runs_guard → fn_financeiro_sync_run_guard()`
 
 ## vcards_unidade

@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-24 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-25 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — professor
@@ -91,6 +91,7 @@
 **Triggers:**
 - `trg_aula_alunos_emusys_casar_aluno → fn_aula_alunos_emusys_casar_aluno()`
 - `trg_aula_alunos_emusys_reconcilia_chave → fn_aula_alunos_emusys_reconcilia_chave()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_experimental_recebe_id_da_aula → fn_experimental_recebe_id_da_aula()`
 - `trg_presenca_roster_lock_v2 → fn_presenca_roster_lock_trigger_v2()`
 
@@ -179,6 +180,7 @@
 - `aulas_emusys_pkey`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_eventos_operacionais_aula_cancelada → trg_eventos_operacionais_aula_cancelada()`
 - `trg_eventos_operacionais_aula_cancelada_insert → trg_eventos_operacionais_aula_cancelada()`
 - `trg_eventos_operacionais_aula_reagendada → trg_eventos_operacionais_aula_reagendada()`
@@ -1091,6 +1093,7 @@
 
 **Triggers:**
 - `trg_fabio_reg_upd → fn_set_atualizado_em()`
+- `trg_presenca_emusys_escritor_ficha → fn_presenca_emusys_escritor_disparar()`
 
 ## fabio_relato_proposto
 
@@ -1262,6 +1265,7 @@
 - `health_score_professor_v3_config_metas_curso_modalidade_pkey`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_health_score_professor_v3_config_meta_segmentada_imutavel → fn_health_score_professor_v3_bloquear_config_meta_segmentada()`
 
 ## health_score_professor_v3_config_metricas
@@ -1286,6 +1290,7 @@
 - `health_score_professor_v3_config_metricas_pkey`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_health_score_professor_v3_config_metrica_imutavel → fn_health_score_professor_v3_bloquear_config_metrica()`
 
 ## health_score_professor_v3_config_simulacoes
@@ -1357,6 +1362,7 @@
 - `health_score_v3_config_chave_criacao_governada_uidx`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_health_score_professor_v3_config_versao_imutavel → fn_health_score_professor_v3_bloquear_config_versao()`
 - `trg_health_score_professor_v3_exigir_simulacao_atual → fn_health_score_professor_v3_exigir_simulacao_atual()`
 
@@ -1495,6 +1501,7 @@
 - `health_score_professor_v3_snapshot_metricas_pkey`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_health_score_professor_v3_snapshot_metrica_imutavel → fn_health_score_professor_v3_bloquear_metrica_fechada()`
 
 ## health_score_professor_v3_snapshots
@@ -1542,6 +1549,7 @@
 - `ux_health_score_professor_v3_snapshot_unidade_revisao`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_health_score_professor_v3_snapshot_imutavel → fn_health_score_professor_v3_bloquear_snapshot_fechado()`
 - `trg_health_score_v3_bloquear_sem_disponibilidade → fn_health_score_v3_bloquear_sem_disponibilidade()`
 
@@ -1634,6 +1642,7 @@
 
 **Triggers:**
 - `trg_presenca_acao_eventos_append_only → fn_presenca_comando_eventos_append_only()`
+- `trg_presenca_emusys_escritor_evento → fn_presenca_emusys_escritor_disparar()`
 
 ## presenca_comando_itens
 
@@ -2068,6 +2077,9 @@
 - `professor_carteira_mensal_canonica_pkey`
 - `professor_carteira_mensal_canonica_unique`
 
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
+
 ## professor_carteira_mensal_detalhe
 
 | Coluna | Tipo | Nulo | Default | Referência |
@@ -2470,6 +2482,7 @@
 
 **Triggers:**
 - `trg_audit → fn_audit_log()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_professores_updated_at → update_updated_at_column()`
 
 ## professores_cursos
@@ -2588,6 +2601,7 @@
 
 **Triggers:**
 - `set_updated_at_professores_unidades → set_updated_at()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 
 ## programa_fideliza_config
 
@@ -2815,6 +2829,9 @@
 **Únicos:**
 - `turmas_pkey`
 - `turmas_unidade_id_professor_id_dia_semana_horario_inicio_key`
+
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 
 ## turmas_alunos
 
