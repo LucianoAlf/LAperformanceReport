@@ -1,15 +1,16 @@
 # Prompt → agente do LA Teacher (Fábio) — escritor de presença no Emusys LIVE
 
 Contexto: a feature LA Report → Emusys da API 1.7.0 está construída,
-testada e **ativa em produção na Barra** desde 25/09 ~17h (modo
-`canonico_v2` em `presenca_rollout_config`, superfície
-`emusys_escrita`). CG e Recreio seguem em `sombra` — mesma decisão
-registrada, sem PATCH.
+testada e **ativa em produção nas três unidades** (Barra desde 25/09
+~17h; Campo Grande e Recreio ativadas logo depois) — modo `canonico_v2`
+em `presenca_rollout_config`, superfície `emusys_escrita`.
 
 ## O que o lado LA Report faz agora
 
-Edge `presenca-emusys-escritor` (Supabase, v6), chamada pelo cron
-`presenca-emusys-escritor-dreno` a cada 5 min:
+Edge `presenca-emusys-escritor` (Supabase, v6). Disparo imediato por
+trigger (`trg_presenca_emusys_escritor_evento` em `presenca_acao_eventos`,
+`trg_presenca_emusys_escritor_ficha` em `fabio_registros_aula`) + cron
+`presenca-emusys-escritor-dreno` a cada 5 min como sweeper:
 
 1. Consome `presenca_acao_eventos` (`tipo='item_aplicado'`, aluno) e
    `fabio_registros_aula` (`status in ('confirmado','gravado_emusys')`,
