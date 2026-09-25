@@ -24,6 +24,7 @@ function caixa(
     waha_url: null,
     waha_session: null,
     waha_api_key: null,
+    webhook_url: null,
     ...overrides,
   };
 }
@@ -233,6 +234,89 @@ Deno.test("destino inesperado ou duplicado e alertado sem expor URL", async () =
       caixaId: 3,
       caixaNome: "Lia - Sucesso do Aluno",
       code: "provider_webhook_destino_inesperado",
+    }],
+  );
+});
+
+Deno.test("destino declarado terceiro nao e inesperado nem exige hash", async () => {
+  const mila = caixa({
+    id: 7,
+    nome: "Mila - Barra",
+    provedor: "waha",
+    uazapi_url: null,
+    uazapi_token: null,
+    waha_url: "https://waha.example.com",
+    waha_session: "mila_barra",
+    waha_api_key: "chave-sintetica",
+    webhook_url: "https://crmchat.example.com/webhooks/whatsapp/+552139550932",
+  });
+  const inspecao = await inspecionarWebhookProvider(
+    mila,
+    inboundEndpoint,
+    async () =>
+      Response.json({
+        name: "mila_barra",
+        status: "WORKING",
+        config: {
+          webhooks: [{
+            url: "https://crmchat.example.com/webhooks/whatsapp/+552139550932",
+            events: ["message"],
+          }],
+        },
+      }),
+  );
+
+  assertEquals(
+    avaliarCoberturaWebhook(mila, inspecao, false, inboundEndpoint),
+    [],
+  );
+});
+
+Deno.test("destino declarado divergente do provedor continua inesperado", async () => {
+  const mila = caixa({
+    id: 7,
+    nome: "Mila - Barra",
+    webhook_url: "https://crmchat.example.com/webhooks/whatsapp/+552139550932",
+  });
+  const inspecao = await inspecionarWebhookProvider(
+    mila,
+    inboundEndpoint,
+    async () =>
+      Response.json([{
+        id: "hook-desviado",
+        enabled: true,
+        url: "https://outro.example.com/hook",
+      }]),
+  );
+
+  assertEquals(
+    avaliarCoberturaWebhook(mila, inspecao, false, inboundEndpoint),
+    [{
+      caixaId: 7,
+      caixaNome: "Mila - Barra",
+      code: "provider_webhook_destino_inesperado",
+    }],
+  );
+});
+
+Deno.test("destino declarado que some do provedor gera ausente", async () => {
+  const mila = caixa({
+    id: 7,
+    nome: "Mila - Barra",
+    webhook_url: "https://crmchat.example.com/webhooks/whatsapp/+552139550932",
+  });
+  const inspecao = await inspecionarWebhookProvider(
+    mila,
+    inboundEndpoint,
+    async () => Response.json([]),
+  );
+
+  assertEquals(
+    avaliarCoberturaWebhook(mila, inspecao, false, inboundEndpoint),
+    [{
+      caixaId: 7,
+      caixaNome: "Mila - Barra",
+      code: "provider_webhook_ausente",
     }],
   );
 });

@@ -62,6 +62,13 @@ verify_jwt = false
 # Operacao privilegiada: o gateway e o codigo exigem JWT; o codigo tambem exige admin ativo.
 verify_jwt = true
 
+[functions.monitor-saude-webhook]
+# Chamada pelo pg_cron (job 23, a cada 10 min) sem JWT: a funcao autentica no codigo por
+# x-sync-token (SYNC_MATRICULAS_ADMIN_TOKEN, lido do vault pelo cron), service_role ou
+# usuario de equipe. Sem esta entrada, um deploy reseta verify_jwt para true e o cron morre
+# em 401 no gateway marcando "succeeded" — a mesma falha silenciosa que a edge vigia.
+verify_jwt = false
+
 [functions.sync-presenca-emusys]
 # O gateway fica aberto apenas para permitir o segredo dedicado dos crons.
 # A funcao valida service_role, x-sync-token ou JWT+permissao antes dos sinks.

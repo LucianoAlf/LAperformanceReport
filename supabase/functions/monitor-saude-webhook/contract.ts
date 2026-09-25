@@ -8,6 +8,7 @@ export interface CaixaWebhookMonitorada {
   waha_url: string | null;
   waha_session: string | null;
   waha_api_key: string | null;
+  webhook_url: string | null;
 }
 
 interface WebhookProviderObservado {
@@ -169,6 +170,19 @@ function matchesExpectedTarget(
   }
 }
 
+function matchesDeclaredUrl(webhookUrl: string, declaredUrl: string): boolean {
+  try {
+    const observed = new URL(webhookUrl);
+    const declared = new URL(declaredUrl);
+    return observed.origin === declared.origin &&
+      observed.pathname.replace(/\/+$/, "") ===
+        declared.pathname.replace(/\/+$/, "") &&
+      observed.search === declared.search;
+  } catch {
+    return false;
+  }
+}
+
 export function temWebhookEfetivoEsperado(
   caixa: CaixaWebhookMonitorada,
   inspecao: InspecaoWebhookProvider,
@@ -201,22 +215,28 @@ export function avaliarCoberturaWebhook(
   if (inspecao.estado !== "ok") return [];
 
   const enabled = inspecao.webhooks.filter((webhook) => webhook.enabled);
-  const expected = enabled.filter((webhook) =>
+  const esperados = enabled.filter((webhook) =>
     matchesExpectedTarget(webhook.url, inboundEndpoint, caixa.id)
   );
+  const declarado = caixa.webhook_url?.trim() || null;
+  const declarados = declarado
+    ? enabled.filter((webhook) => matchesDeclaredUrl(webhook.url, declarado))
+    : [];
 
   if (
     enabled.length > 1 ||
-    (enabled.length > 0 && expected.length !== enabled.length)
+    (enabled.length > 0 &&
+      esperados.length + declarados.length !== enabled.length)
   ) {
     return problem("provider_webhook_destino_inesperado");
   }
-  if (expected.length === 0) {
-    return temHashAtivo ? problem("provider_webhook_ausente") : [];
+  if (esperados.length === 0) {
+    if (declarados.length > 0) return [];
+    return temHashAtivo || declarado ? problem("provider_webhook_ausente") : [];
   }
   if (!temHashAtivo) return problem("provider_webhook_sem_hash");
 
-  const url = new URL(expected[0].url);
+  const url = new URL(esperados[0].url);
   if (!url.searchParams.get("webhook_secret")) {
     return problem("provider_webhook_sem_segredo");
   }
