@@ -119,29 +119,38 @@ Deno.serve(async (req) => {
 
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
     const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
-    // Identifica quem gerou (se houver token). Não bloqueia se ausente — a função é
-    // chamada por usuário autenticado do sistema, mas mantemos tolerância.
-    let geradoPor: string | null = null;
-    const authHeader = req.headers.get('Authorization');
-    if (authHeader) {
-      const token = authHeader.replace('Bearer ', '');
-      const { data: { user } } = await supabase.auth.getUser(token);
-      geradoPor = user?.id ?? null;
+    // 25/09/2026: login OBRIGATÓRIO. Antes a função aceitava chamada sem token e lia
+    // o aluno com a service_role — que passa em fn_pode_ler_aluno_pedagogico — então
+    // qualquer um na internet gerava o relatório de qualquer aluno_id. Agora a leitura
+    // roda COMO o usuário, e a mesma checagem de acesso da ficha do aluno decide.
+    const authHeader = req.headers.get('Authorization') ?? '';
+    const token = authHeader.replace(/^Bearer\s+/i, '');
+    const { data: { user } } = token ? await supabase.auth.getUser(token) : { data: { user: null } };
+    if (!user) {
+      return jsonResponse({ success: false, error: 'NAO_AUTENTICADO' }, 401);
     }
+    const geradoPor: string = user.id;
+    const comoUsuario = createClient(SUPABASE_URL, ANON_KEY, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
 
     const { aluno_id, periodo_tipo, data_inicio, data_fim }: RequestBody = await req.json();
     if (!aluno_id || !periodo_tipo) {
       return jsonResponse({ success: false, error: 'aluno_id e periodo_tipo são obrigatórios' }, 400);
     }
 
-    // 1. Busca os dados consolidados (fonte única de verdade)
-    const { data: rep, error: rpcError } = await supabase.rpc('get_relatorio_pedagogico_aluno', {
+    // 1. Busca os dados consolidados (fonte única de verdade), com a permissão de quem pediu
+    const { data: rep, error: rpcError } = await comoUsuario.rpc('get_relatorio_pedagogico_aluno', {
       p_aluno_id: aluno_id,
       p_data_inicio: data_inicio ?? null,
       p_data_fim: data_fim ?? null,
     });
+    if (rpcError?.code === '42501' || rpcError?.code === 'PGRST301') {
+      return jsonResponse({ success: false, error: 'ACESSO_NEGADO' }, 403);
+    }
     if (rpcError) throw new Error(`Erro ao buscar dados do aluno: ${rpcError.message}`);
     if (!rep) return jsonResponse({ success: false, error: 'Aluno não encontrado' }, 404);
 

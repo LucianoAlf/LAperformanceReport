@@ -79,7 +79,7 @@ verify_jwt = true
 verify_jwt = false
 
 [functions.gerar-relatorio-pedagogico]
-verify_jwt = false
+verify_jwt = true
 
 [functions.backfill-historico-professor-emusys]
 verify_jwt = true
