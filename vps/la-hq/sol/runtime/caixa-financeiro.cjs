@@ -7840,10 +7840,38 @@ _Não lanço nada pela metade._`);
   // recebimento. O bridge consulta isto ANTES do handoff ao agente, evitando
   // que "cartão de crédito" vire um turno probabilístico que pode terminar sem
   // resposta. Só o mesmo remetente ou uma citação explícita alcança o rascunho.
+  // CARD CLASSICO INCOMPLETO (25/09/2026, Fefe/Recreio): o comprovante do Bernardo
+  // saiu com "me confirma a forma" -- pendencia classica em `pendentes`, sem forma.
+  // "Sol, o pagamento foi feito por pix" nao e' `pode` nem rascunho V4, entao este
+  // portao dizia "nao", o texto caia no agente (Recreio e' agent-first) e o modelo
+  // foi procurar lancamento antigo ("achei R$ 440 de passaporte em 16/09") em vez de
+  // completar o card. A rotina que completa ja existia no `handle` ("faltando"):
+  // estas regras sao AS MESMAS dela -- 1 card faltando dado, ate 8 palavras, sem
+  // `pode` -- mais autoria: so quem mandou o comprovante (ou quem cita o card)
+  // completa, para conversa alheia no grupo nao virar complemento por acaso.
+  function completaCardClassicoIncompleto(event, agora) {
+    const faltando = limparVelhos(event.chatId, agora).filter((p) => !p.valor || !p.forma);
+    if (faltando.length !== 1) return false;
+    const alvo = faltando[0];
+    const autor = String(event.senderPhone || event.senderId || '');
+    const doAutor = !!autor && [alvo.autorPhone, alvo.autorId, alvo.toquePor]
+      .some((x) => x && String(x) === autor);
+    const q = event.quotedMessageId && String(event.quotedMessageId);
+    const citou = !!q && (alvo.previewId === q || alvo.origem === q
+      || (Array.isArray(alvo.msgIds) && alvo.msgIds.includes(q)));
+    if (!doAutor && !citou) return false;
+    const texto = bodyLimpo(event.body);
+    if (texto.split(/\s+/).filter(Boolean).length > 8) return false;
+    if (casarPode(texto).pode) return false;
+    if (!alvo.forma && formaExplicitaV4(texto, null).forma) return true;
+    if (!alvo.valor && extrairValor(texto, { allowBare: true })) return true;
+    return false;
+  }
+
   function deveTratarComplementoDeterministico(event, agora = Date.now()) {
     if (!event || event.hasMedia) return false;
     let draft = rascunhosV4.get(event.chatId) || null;
-    if (!draft) return false;
+    if (!draft) return completaCardClassicoIncompleto(event, agora);
     if (agora - draft.ts >= janelaMs) {
       void finalizarRascunhoV4(event.chatId, 'expired', 'janela_runtime_expirou');
       return false;
