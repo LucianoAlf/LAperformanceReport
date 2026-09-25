@@ -106,6 +106,29 @@ Deno.test("mutante 7b: marca la divergente do nosso livro = humana (professor na
   assertEquals(r, { acao: "pular", decisao: "conflito_marca_humana", motivo: "marca_humana_divergente" });
 });
 
+Deno.test("mutante 7c: ausente nosso SEM carimbo rele sem_resposta — nao repete PATCH", () => {
+  // A API nao carimba horario_presenca em ausente (medido 25/09): uma falta
+  // que escrevemos volta como 'sem_resposta'. O livro prova que a marca e
+  // nossa; sem este atalho o sweeper re-PATCHaria a mesma linha a cada 5 min.
+  const r = decidirEscritaAluno({
+    ...base, estadoVigente: "falta", fonte: "agenda_secretaria",
+    marca: "sem_resposta", ultimaEscrita: { presente: false },
+  });
+  assertEquals(r, { acao: "pular", decisao: "ja_coerente", motivo: "ausente_proprio_sem_carimbo" });
+  // Vigente virou presente: a ausente nossa precisa ser corrigida, nao assumida.
+  const corrige = decidirEscritaAluno({
+    ...base, estadoVigente: "presente", fonte: "agenda_secretaria",
+    marca: "sem_resposta", ultimaEscrita: { presente: false },
+  });
+  assertEquals(corrige, { acao: "escrever", presente: true, motivo: "preenche_sem_resposta" });
+  // Sem linha no livro nao ha prova — escreve normal.
+  const semLivro = decidirEscritaAluno({
+    ...base, estadoVigente: "falta", fonte: "agenda_secretaria",
+    marca: "sem_resposta", ultimaEscrita: null,
+  });
+  assertEquals(semLivro, { acao: "escrever", presente: false, motivo: "preenche_sem_resposta" });
+});
+
 Deno.test("mutante 8: marca humana ja igual ao vigente = ja_coerente", () => {
   const r = decidirEscritaAluno({
     ...base, estadoVigente: "falta", fonte: "professor_la_teacher", marca: "ausente_marcada",

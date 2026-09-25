@@ -112,6 +112,14 @@ export function decidirEscritaAluno(input: {
   const desejado = vigente === 'presente';
 
   if (input.marca === 'sem_resposta') {
+    // Medido 25/09: a API nunca carimba horario_presenca num 'ausente' —
+    // nem quando o PATCH manda `horario` explicito. Uma falta que NOS
+    // escrevemos rele como 'sem_resposta'; sem este atalho cada varredura
+    // repetiria o mesmo PATCH (o 23505 do livro absorve a linha, mas a
+    // chamada contra o Emusys acontece de verdade a cada 5 min).
+    if (input.ultimaEscrita?.presente === false && !desejado) {
+      return { acao: 'pular', decisao: 'ja_coerente', motivo: 'ausente_proprio_sem_carimbo' };
+    }
     return { acao: 'escrever', presente: desejado, motivo: 'preenche_sem_resposta' };
   }
 

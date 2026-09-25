@@ -125,6 +125,51 @@ function horarioAgendado(aula: EmusysAulaDetalhe): string | undefined {
   return dh.match(/\b(\d{2}:\d{2})/)?.[1];
 }
 
+// A agenda gera varios item_aplicado por marca (um por sub-tarefa da ficha)
+// e o GET /aula fica cacheado com o estado ANTERIOR ao PATCH: sem refletir
+// a escrita, o proximo evento do mesmo par nesta execucao rele
+// 'sem_resposta' e repete o PATCH — producao mediu ate 8 escritas iguais
+// por marca. Copiado o estado novo para a linha cacheada, o evento seguinte
+// cai em ja_coerente: 'presente' direto pela marca; 'ausente' (que a API
+// nunca carimba) via ultimaEscritaNossa no livro.
+function refletirEscritaAluno(
+  cache: Map<number, EmusysRespostaAula | EmusysApiError>,
+  aulaApiId: number,
+  alunoEmusysId: number,
+  resposta: EmusysRespostaAula,
+  presente: boolean,
+): void {
+  const hit = cache.get(aulaApiId);
+  if (!hit || hit instanceof EmusysApiError) return;
+  const linha = (hit.aula.alunos ?? []).find((i) => i?.id_aluno === alunoEmusysId);
+  if (!linha) return;
+  const linhaResp = (resposta.aula.alunos ?? [])
+    .find((i) => i?.id_aluno === alunoEmusysId);
+  linha.presenca = linhaResp?.presenca ?? (presente ? 'presente' : 'ausente');
+  // O horario em si nao importa — so alimenta o classificador. 'ausente'
+  // nunca carimba na API; em 'presente' sem carimbo na resposta usamos um
+  // placeholder para o cache ler 'presente' e nao 'sem_resposta'.
+  linha.horario_presenca = linhaResp?.horario_presenca ?? (presente ? '00:00' : null);
+}
+
+function refletirEscritaProfessor(
+  cache: Map<number, EmusysRespostaAula | EmusysApiError>,
+  aulaApiId: number,
+  professorEmusysId: number,
+  resposta: EmusysRespostaAula,
+  presente: boolean,
+): void {
+  const hit = cache.get(aulaApiId);
+  if (!hit || hit instanceof EmusysApiError) return;
+  const alvo = [hit.aula.professor, ...(hit.aula.professores ?? [])]
+    .find((p) => p?.id === professorEmusysId);
+  if (!alvo) return;
+  const profResp = [resposta.aula.professor, ...(resposta.aula.professores ?? [])]
+    .find((p) => p?.id === professorEmusysId);
+  alvo.presenca = profResp?.presenca ?? (presente ? 'presente' : 'ausente');
+  alvo.horario_presenca = profResp?.horario_presenca ?? (presente ? '00:00' : null);
+}
+
 // "Marca nossa" = ultimo 'escrito' do livro para o mesmo ALVO de PATCH
 // (linha_emusys_id). Gatilhos distintos (mestre x individual) convergem na
 // mesma linha, entao a chave e o alvo, nao a aula do gatilho.
@@ -190,14 +235,20 @@ async function processarEventosAluno(
 
   const { data: jaLancados } = await supabase
     .from('presenca_emusys_escrita')
-    .select('presenca_evento_id')
+    .select('presenca_evento_id,decisao')
     .eq('unidade_id', unidade.id)
     .not('presenca_evento_id', 'is', null)
     .gte('criado_em', lookbackIso);
+  // Em modo ativo, 'seria_escrito' NAO encerra o gatilho: a sombra previu a
+  // escrita mas nao a fez — o item volta a ser pendente e desta vez vai de
+  // verdade. As demais decisoes (escrito, ja_coerente, pulado_*, conflito)
+  // sao terminais nos dois modos.
   const processados = new Set(
-    (jaLancados ?? []).map((l: { presenca_evento_id: number }) => l.presenca_evento_id),
+    (jaLancados ?? [])
+      .filter((l: { decisao: string }) => modo !== 'ativo' || l.decisao !== 'seria_escrito')
+      .map((l: { presenca_evento_id: number }) => l.presenca_evento_id),
   );
-  const pendentesIds = todosIds.filter((id) => !processados.has(id))
+  const pendentesIds = todosIds.filter((id: number) => !processados.has(id))
     .slice(0, LIMITE_GATILHOS_POR_UNIDADE);
   if (!pendentesIds.length) return;
 
@@ -251,20 +302,23 @@ async function processarEventosAluno(
 
   // Flags da linha individual (justificada/cancelada) moram no espelho
   // aulas_emusys da linha — busca preguiçosa por emusys_id quando a linha
-  // alvo difere da aula lida (turma -> individual).
-  const flagsLinhaCache = new Map<number, { justificada: boolean; cancelada: boolean }>();
-  async function flagsDaLinha(linhaAulaId: number): Promise<{ justificada: boolean; cancelada: boolean }> {
-    const cacheada = flagsLinhaCache.get(linhaAulaId);
-    if (cacheada) return cacheada;
+  // alvo difere da aula lida (turma -> individual). emusys_id se repete
+  // entre unidades (tenants separados): SEMPRE filtrar a unidade, e sem
+  // espelho da linha o retorno e null — na duvida, o chamador protege.
+  const flagsLinhaCache = new Map<number, { justificada: boolean; cancelada: boolean } | null>();
+  async function flagsDaLinha(
+    linhaAulaId: number,
+  ): Promise<{ justificada: boolean; cancelada: boolean } | null> {
+    if (flagsLinhaCache.has(linhaAulaId)) return flagsLinhaCache.get(linhaAulaId) ?? null;
     const { data } = await supabase
       .from('aulas_emusys')
       .select('justificada,cancelada')
       .eq('emusys_id', linhaAulaId)
+      .eq('unidade_id', unidade.id)
       .maybeSingle();
-    const flags = {
-      justificada: Boolean(data?.justificada),
-      cancelada: Boolean(data?.cancelada),
-    };
+    const flags = data == null
+      ? null
+      : { justificada: Boolean(data.justificada), cancelada: Boolean(data.cancelada) };
     flagsLinhaCache.set(linhaAulaId, flags);
     return flags;
   }
@@ -351,6 +405,16 @@ async function processarEventosAluno(
     const flagsLinha = linhaAulaId == null || linhaEhPropriaAula
       ? { justificada: Boolean(aula.justificada), cancelada: Boolean(aula.cancelada) }
       : await flagsDaLinha(linhaAulaId);
+    // Sem espelho confiavel da linha nao da para saber se ela e justificada/
+    // cancelada — na duvida a linha e protegida e nada se escreve.
+    if (flagsLinha === null) {
+      await registrarLivro(supabase, {
+        ...base, decisao: 'pulado_linha_protegida', motivo: 'espelho_linha_indefinido',
+        linha_emusys_id: linhaAulaId,
+      });
+      resumo.pulado_linha_protegida = (resumo.pulado_linha_protegida ?? 0) + 1;
+      continue;
+    }
 
     const estadoAntes = {
       aula_get_id: aulaApiId,
@@ -405,6 +469,7 @@ async function processarEventosAluno(
         estado_antes: estadoAntes, resposta: resposta.bruto,
       });
       resumo.escrito = (resumo.escrito ?? 0) + 1;
+      refletirEscritaAluno(aulaCache, aulaApiId, alunoEmusysId, resposta, decisao.presente);
     } catch (erro) {
       if (erro instanceof EmusysApiError && erro.status < 500) {
         await registrarLivro(supabase, {
@@ -444,12 +509,16 @@ async function processarFichasProfessor(
 
   const { data: jaLancados } = await supabase
     .from('presenca_emusys_escrita')
-    .select('ficha_id')
+    .select('ficha_id,decisao')
     .eq('unidade_id', unidade.id)
     .not('ficha_id', 'is', null)
     .gte('criado_em', lookbackIso);
-  const processados = new Set((jaLancados ?? []).map((l: { ficha_id: string }) => l.ficha_id));
-  const pendentesIds = todosIds.filter((id) => !processados.has(id))
+  const processados = new Set(
+    (jaLancados ?? [])
+      .filter((l: { decisao: string }) => modo !== 'ativo' || l.decisao !== 'seria_escrito')
+      .map((l: { ficha_id: string }) => l.ficha_id),
+  );
+  const pendentesIds = todosIds.filter((id: string) => !processados.has(id))
     .slice(0, LIMITE_GATILHOS_POR_UNIDADE);
   if (!pendentesIds.length) return;
 
@@ -597,6 +666,7 @@ async function processarFichasProfessor(
         estado_antes: estadoAntes, resposta: resposta.bruto,
       });
       resumo.escrito = (resumo.escrito ?? 0) + 1;
+      refletirEscritaProfessor(aulaCache, aulaApiId, professorEmusysId, resposta, decisao.presente);
     } catch (erro) {
       if (erro instanceof EmusysApiError && erro.status < 500) {
         await registrarLivro(supabase, {
@@ -664,15 +734,38 @@ serve(async (requisicao) => {
       resultado[unidade.nome] = { erro: `TOKEN_AUSENTE:${unidade.tokenEnv}` };
       continue;
     }
-    const resumo: Record<string, number> = {};
-    await processarEventosAluno(supabase, unidade, token, modo, lookbackIso, resumo, inicio);
-    if (resumo.truncado) {
-      resultado[unidade.nome] = { modo, ...resumo };
-      break;
+    // Lease por unidade: o trigger dispara uma execucao por marca, entao duas
+    // invocacoes podem se sobrepor. Sem trava, as duas varrem a mesma fila e
+    // mandam o mesmo PATCH (o segundo some no 23505 e ainda conta na rajada
+    // do Emusys). Lease com expiracao: se o dono morrer, a trava vence sozinha
+    // e o sweeper retoma. Nao usar advisory lock de sessao — o pool do
+    // PostgREST pode soltar o unlock em outra conexao.
+    const dono = crypto.randomUUID();
+    const { data: travou } = await supabase.rpc('fn_presenca_escritor_trava', {
+      p_unidade: unidade.id,
+      p_dono: dono,
+      p_ttl_segundos: 200,
+    });
+    if (travou !== true) {
+      resultado[unidade.nome] = { modo, em_execucao: 1 };
+      continue;
     }
-    await processarFichasProfessor(supabase, unidade, token, modo, lookbackIso, resumo, inicio);
-    resultado[unidade.nome] = { modo, ...resumo };
-    if (resumo.truncado) break;
+    try {
+      const resumo: Record<string, number> = {};
+      await processarEventosAluno(supabase, unidade, token, modo, lookbackIso, resumo, inicio);
+      if (resumo.truncado) {
+        resultado[unidade.nome] = { modo, ...resumo };
+        break;
+      }
+      await processarFichasProfessor(supabase, unidade, token, modo, lookbackIso, resumo, inicio);
+      resultado[unidade.nome] = { modo, ...resumo };
+      if (resumo.truncado) break;
+    } finally {
+      await supabase.rpc('fn_presenca_escritor_destrava', {
+        p_unidade: unidade.id,
+        p_dono: dono,
+      });
+    }
   }
 
   return respostaJson({ ok: true, lookback_dias: lookbackDias, unidades: resultado });
