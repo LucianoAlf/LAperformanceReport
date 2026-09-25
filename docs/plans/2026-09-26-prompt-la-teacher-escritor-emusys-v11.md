@@ -24,14 +24,22 @@ edge `presenca-emusys-escritor`: **v11**, deploy 25/09 ~20h UTC.
 Disparo imediato por trigger + cron sweeper a cada 5 min. Lease por
 unidade impede execuções simultâneas.
 
-## Regras que protegem a decisão humana (inalteradas)
+## Regras que protegem a decisão humana (atualizada na v12)
 
 - `ausente` + `horario_presenca` null no Emusys = "sem resposta" → o
-  escritor preenche. `ausente` + horário = falta marcada por gente → só
-  `agenda_secretaria` corrige; fonte do Fábio vira `conflito_marca_humana`
-  no livro, nunca escrita por cima.
+  escritor preenche. ⚠️ Falta NUNCA tem horário — nem pela tela do Emusys,
+  nem pelo PATCH. O que protege uma falta humana não é o carimbo: é o
+  **livro** (o último `escrito` nosso prova que a falta é nossa) e a
+  **fonte/vigente** (`aluno_presenca`/`professor_presenca` com origem
+  humana). Falta marcada direto na tela do Emusys é indistinguível de
+  aula sem chamada — buraco conhecido, já pedido carimbo ao Emusys.
 - Linha `justificada`/`cancelada` e aula cancelada: protegidas.
 - `fonte='emusys'`: anti-laço, nunca dispara.
+- **Ficha não transforma falta da secretaria em presença** (v12): antes
+  de escrever `presente`, o caminho da ficha lê
+  `aulas_emusys.professor_presenca` — `ausente` com origem humana, ou
+  último `escrito` nosso `presente:false`, vira `conflito_marca_humana`.
+  Ponto e folha protegidos.
 - Idempotente por (gatilho, modo, linha): reler a mesma fila não repete
   PATCH. Após cada PATCH o estado novo é refletido no cache de GET da
   execução — a rajada de PATCH duplicado por sub-tarefa está morta.

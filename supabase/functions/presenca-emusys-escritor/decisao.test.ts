@@ -164,10 +164,11 @@ Deno.test("professor: ficha confirmada escreve so em sem_resposta", () => {
   assertEquals(decidirEscritaProfessor({ ...baseProf, marca: "ausente_marcada" }), {
     acao: "pular", decisao: "conflito_marca_humana", motivo: "marca_humana_divergente",
   });
-  // Marca NOSSA de ausente pode ser corrigida para presente pela ficha.
+  // Falta NOSSA (escrita a pedido da secretaria) e' decisao humana:
+  // a ficha conflita, nao corrige — mexe com ponto e folha.
   assertEquals(decidirEscritaProfessor({
     ...baseProf, marca: "ausente_marcada", ultimaEscrita: { presente: false },
-  }), { acao: "escrever", presente: true, motivo: "corrige_marca_propria" });
+  }), { acao: "pular", decisao: "conflito_marca_humana", motivo: "falta_escrita_nossa" });
   // Aula cancelada e identidade divergente bloqueiam.
   assertEquals(decidirEscritaProfessor({ ...baseProf, aulaCancelada: true, marca: "sem_resposta" }), {
     acao: "pular", decisao: "pulado_linha_protegida", motivo: "aula_cancelada",
@@ -175,4 +176,29 @@ Deno.test("professor: ficha confirmada escreve so em sem_resposta", () => {
   assertEquals(decidirEscritaProfessor({ ...baseProf, identidadeOk: false, marca: "sem_resposta" }), {
     acao: "pular", decisao: "pulado_identidade_divergente", motivo: "professor_id_divergente",
   });
+});
+
+Deno.test("mutante 11: ficha NAO troca falta da secretaria por presenca", () => {
+  const baseProf = { aulaCancelada: false, identidadeOk: true, ultimaEscrita: null };
+  // Sinal 1: vigente 'ausente' com origem humana — mesmo com linha parecendo
+  // intocada no Emusys, a decisao da secretaria prevalece.
+  assertEquals(decidirEscritaProfessor({
+    ...baseProf, marca: "sem_resposta",
+    professorPresencaVigente: "ausente", professorPresencaOrigem: "agenda_secretaria",
+  }), { acao: "pular", decisao: "conflito_marca_humana", motivo: "falta_vigente_secretaria" });
+  // Sinal 2: o ultimo 'escrito' nosso foi ausente — a falta la e' nossa,
+  // pedida pela secretaria; a ficha conflita em vez de reescrever.
+  assertEquals(decidirEscritaProfessor({
+    ...baseProf, marca: "sem_resposta", ultimaEscrita: { presente: false },
+  }), { acao: "pular", decisao: "conflito_marca_humana", motivo: "falta_escrita_nossa" });
+  // Se a secretaria depois marcou PRESENTE, a ficha segue o fluxo normal.
+  assertEquals(decidirEscritaProfessor({
+    ...baseProf, marca: "sem_resposta", ultimaEscrita: { presente: false },
+    professorPresencaVigente: "presente", professorPresencaOrigem: "agenda_secretaria",
+  }), { acao: "escrever", presente: true, motivo: "preenche_sem_resposta" });
+  // ausente sem origem (inconclusivo do sync) NAO bloqueia a ficha.
+  assertEquals(decidirEscritaProfessor({
+    ...baseProf, marca: "sem_resposta",
+    professorPresencaVigente: "ausente", professorPresencaOrigem: null,
+  }), { acao: "escrever", presente: true, motivo: "preenche_sem_resposta" });
 });

@@ -16,7 +16,7 @@ import {
   gravarPresencaProfessorEmusys,
   type EmusysAulaDetalhe,
   type EmusysRespostaAula,
-} from '../_shared/emusys-presenca-escrita.ts';
+} from './_shared/emusys-presenca-escrita.ts';
 import {
   classificarMarcaEmusys,
   decisaoPrecoceAluno,
@@ -24,9 +24,9 @@ import {
   decidirEscritaProfessor,
   type DecisaoEscrita,
   type MarcaEmusys,
-} from '../_shared/presenca-escrita-decisao.ts';
-import { EmusysApiError } from '../_shared/emusys-aulas.ts';
-import { tokensIguaisEmTempoConstante } from '../_shared/sync-presenca-authorization.ts';
+} from './_shared/presenca-escrita-decisao.ts';
+import { EmusysApiError } from './_shared/emusys-aulas.ts';
+import { tokensIguaisEmTempoConstante } from './_shared/sync-presenca-authorization.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
