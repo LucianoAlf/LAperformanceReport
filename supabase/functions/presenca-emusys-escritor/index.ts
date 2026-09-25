@@ -114,6 +114,17 @@ function marcaDaLinha(linha: {
   return classificarMarcaEmusys(linha?.presenca, linha?.horario_presenca);
 }
 
+// O PATCH sem `horario` escreve presenca/ausente mas NAO carimba
+// horario_presenca — a linha continuaria lendo como "sem resposta" para o
+// nosso proprio classificador. Mandamos o horario AGENDADO da aula
+// (data_hora_inicio, "2026-09-25 10:00" -> "10:00"), mesmo carimbo que a
+// tela do Emusys grava numa marca humana.
+function horarioAgendado(aula: EmusysAulaDetalhe): string | undefined {
+  const dh = aula.data_hora_inicio;
+  if (typeof dh !== 'string') return undefined;
+  return dh.match(/\b(\d{2}:\d{2})/)?.[1];
+}
+
 // "Marca nossa" = ultimo 'escrito' do livro para o mesmo ALVO de PATCH
 // (linha_emusys_id). Gatilhos distintos (mestre x individual) convergem na
 // mesma linha, entao a chave e o alvo, nao a aula do gatilho.
@@ -384,7 +395,10 @@ async function processarEventosAluno(
 
     try {
       const resposta = await comRitmoERetry(() =>
-        gravarPresencaAlunoEmusys({ token, aulaId: linhaAulaId!, presente: decisao.presente }));
+        gravarPresencaAlunoEmusys({
+          token, aulaId: linhaAulaId!, presente: decisao.presente,
+          horario: horarioAgendado(aula),
+        }));
       await registrarLivro(supabase, {
         ...base, decisao: 'escrito', motivo: decisao.motivo,
         presente: decisao.presente, linha_emusys_id: linhaAulaId,
@@ -574,7 +588,8 @@ async function processarFichasProfessor(
     try {
       const resposta = await comRitmoERetry(() =>
         gravarPresencaProfessorEmusys({
-          token, aulaId: aulaApiId, professorId: professorEmusysId, presente: decisao.presente,
+          token, aulaId: aulaApiId, professorId: professorEmusysId,
+          presente: decisao.presente, horario: horarioAgendado(aula),
         }));
       await registrarLivro(supabase, {
         ...base, decisao: 'escrito', motivo: decisao.motivo,

@@ -33,6 +33,7 @@ export interface EmusysAulaDetalhe {
   cancelada?: boolean | null;
   justificada?: boolean | null;
   reagendada?: boolean | null;
+  data_hora_inicio?: string | null;
   alunos?: EmusysAlunoPresencaLinha[] | null;
   professor?: EmusysProfessorPresencaLinha | null;
   professores?: EmusysProfessorPresencaLinha[] | null;
