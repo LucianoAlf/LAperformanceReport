@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Funções
 
-1632 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
+1639 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
 chamadas diretas ao PostgREST não são visíveis para o gerador.
 
 ## aluno
@@ -449,6 +449,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `proteger_fechamento_mensal_snapshot_imutavel_v1()` | ATIVA | DEFINER | trigger:fechamento_mensal_snapshots.trg_fechamento_mensal_snapshot_imutavel |
 | `publish_financeiro_sync_run(p_run_id uuid, p_items jsonb, p_units_summary jsonb, p_override_reason text)` | ATIVA | DEFINER | edge:supabase/functions/sync-faturas-emusys/index.ts |
 | `reabrir_caixa_diario(p_caixa_diario_id uuid, p_motivo text, p_reaberto_por text)` | ATIVA | DEFINER | front:src/hooks/useCaixaDiario.ts |
+| `reconexao_consultar_caixa(p_waha_session text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `registrar_contrato_assinatura_lote_v1(p_execucao_id uuid, p_unidade_id uuid, p_observado_em timestamp with time zone, p_linhas jsonb)` | ATIVA | DEFINER | edge:supabase/functions/sync-contratos-assinatura-emusys/index.ts |
 | `renew_sync_financeiro_emusys_job_lease(p_job_id uuid, p_worker_id uuid, p_lease_seconds integer)` | ATIVA | DEFINER | edge:supabase/functions/sync-financeiro-emusys/index.ts |
 | `resolver_reconciliacao_fatura(p_unidade_id uuid, p_emusys_fatura_id bigint, p_tipo_decisao text, p_observacao text, p_canonical_fatura_id uuid, p_emusys_matricula_id bigint, p_emusys_student_id bigint, p_forma_pagamento_id integer, p_decidido_por text)` | ATIVA | DEFINER | front:src/components/App/FaturasAlunos/FaturasAlunosFinanceirasPage.tsx |
@@ -801,6 +802,10 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `cache_versao_podar_v1()` | ATIVA | DEFINER | cron:cache-versao-podar |
 | `cache_versao_registrar_trg()` | ATIVA | DEFINER | trigger:aluno_jornada_matricula_disciplina.trg_cache_versao, trigger:aluno_presenca.trg_cache_versao, trigger:alunos_arquivados.trg_cache_versao, trigger:alunos_historico.trg_cache_versao, trigger:alunos.trg_cache_versao, trigger:aula_alunos_emusys.trg_cache_versao, +40 outros |
 | `cache_versao_v1(p_funcao text)` | SO-INTERNA | DEFINER | funcao:get_conciliacao_experimentais_v2, funcao:get_dashboard_professores_resumo_canonico_v1, funcao:get_faturas_alunos_financeiro_v1, funcao:get_financeiro_faturas_emusys, funcao:get_health_score_professor_v3_performance_snapshot_v3, funcao:get_inadimplencia_canonica, +6 outros |
+| `reconexao_abrir_episodio(p_waha_session text, p_avisados jsonb)` | ORFA | DEFINER | sem consumidor conhecido |
+| `reconexao_atualizar_episodio(p_id uuid, p_status text, p_formato text, p_respondido_por_nome text, p_respondido_por_telefone text)` | ORFA | DEFINER | sem consumidor conhecido |
+| `reconexao_autorizar_episodio(p_id uuid, p_telefone text)` | ORFA | DEFINER | sem consumidor conhecido |
+| `reconexao_detalhe_episodio(p_id uuid)` | ORFA | DEFINER | sem consumidor conhecido |
 
 ## plataforma
 
@@ -1399,6 +1404,8 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_presenca_diagnostico_v1(p_res jsonb)` | SO-INTERNA | INVOKER | funcao:fabio_emitir_presenca_por_registro_publicacao_legado_v1, funcao:fabio_emitir_presenca_registro_canonica_v2_interno |
 | `fn_presenca_e_forte(p_respondido_por text)` | ATIVA | INVOKER | view:vw_aluno_presenca_semantica_v1, view:vw_experimental_faltou_sem_afirmacao, view:vw_experimental_registro_comercial, view:vw_fabio_aulas_contexto, view:vw_presenca_slot_canonica_v1, funcao:app_confirmar_registro_experimental, +16 outros |
 | `fn_presenca_emusys_escritor_disparar()` | ATIVA | DEFINER · 🔓 anon | trigger:fabio_registros_aula.trg_presenca_emusys_escritor_ficha, trigger:presenca_acao_eventos.trg_presenca_emusys_escritor_evento |
+| `fn_presenca_escritor_destrava(p_unidade uuid, p_dono text)` | ATIVA | DEFINER | edge:supabase/functions/presenca-emusys-escritor/index.ts |
+| `fn_presenca_escritor_trava(p_unidade uuid, p_dono text, p_ttl_segundos integer)` | ATIVA | DEFINER | edge:supabase/functions/presenca-emusys-escritor/index.ts |
 | `fn_presenca_estado_publicacao_periodo_v2(p_unidade_id uuid, p_data_inicio date, p_data_fim date)` | ATIVA | DEFINER | view:vw_absenteismo_aluno_canonica_v2, view:vw_aluno_frequencia_canonica_v1, view:vw_radar_aluno_sinais_canonica_v2, funcao:get_presenca_ocorrencias_periodo_canonico_v2 |
 | `fn_presenca_estado_roster_lock_trigger_v2()` | ATIVA | DEFINER | trigger:aula_roster_sync_estado.trg_presenca_estado_roster_lock_v2 |
 | `fn_presenca_fecha_chamada(p_status_presenca text, p_respondido_por text)` | ATIVA | INVOKER | edge:supabase/functions/_shared/previsualizacao-reconciliacao-grade.ts, view:vw_presenca_pendencia, view:vw_presenca_slot_canonica_v1, funcao:app_registro_completo, funcao:fabio_aulas_candidatas, funcao:fn_sincronizar_gemeos_presenca, +3 outros |

@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — professor
 
-156 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+157 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## anotacoes
 
@@ -1736,6 +1736,19 @@
 - `presenca_emusys_escrita_evento_uk`
 - `presenca_emusys_escrita_ficha_uk`
 - `presenca_emusys_escrita_pkey`
+
+## presenca_emusys_escritor_lock
+
+> Lease por unidade do escritor de presenca no Emusys: uma execucao por unidade por vez; expira sozinho se o dono morrer.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `unidade_id` | uuid | não |  |  |
+| `dono` | text | não |  |  |
+| `expira_em` | timestamp with time zone | não |  |  |
+
+**Únicos:**
+- `presenca_emusys_escritor_lock_pkey`
 
 ## presenca_politicas_confiabilidade
 

@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Tabelas e views
 
-608 objetos. Uma linha cada; colunas e FKs em `detalhe/<dominio>.md`.
+609 objetos. Uma linha cada; colunas e FKs em `detalhe/<dominio>.md`.
 
 | Objeto | Tipo | Domínio | Colunas | Linhas | RLS | FKs | Comentário |
 |---|---|---|---|---|---|---|---|
@@ -64,7 +64,7 @@
 | `farmer_tarefas` | tabela | aluno | 16 | 10 | sim (4) | 3 | To-do list manual dos Farmers |
 | `farmer_templates` | tabela | aluno | 10 | 14 | sim (3) | 1 | Templates de mensagens para comunicação com alunos/responsáveis |
 | `jornada_curso_resolucao_log` | tabela | aluno | 12 | 83 | sim (0) | 4 | Trilha append-only das trocas de curso canonico resolvidas pela grade recorrente do Emusys. |
-| `kpis_alunos_cache` | tabela | aluno | 4 | 52 | sim (0) | 0 | LAPE-42. Cache por versao dos KPIs de alunos. Chave = funcao + usuario + parametros + data BRT + impressao digital das tabelas lidas (kpis_alunos_cache_impressao_v1). Lido/escrito so pelas funcoes *_cache_v1. |
+| `kpis_alunos_cache` | tabela | aluno | 4 | 55 | sim (0) | 0 | LAPE-42. Cache por versao dos KPIs de alunos. Chave = funcao + usuario + parametros + data BRT + impressao digital das tabelas lidas (kpis_alunos_cache_impressao_v1). Lido/escrito so pelas funcoes *_cache_v1. |
 | `motivos_arquivamento` | tabela | aluno | 5 | 7 | sim (4) | 0 | Motivos para arquivamento de leads que não converteram |
 | `motivos_saida` | tabela | aluno | 9 | 24 | sim (5) | 0 |  |
 | `motivos_saida_aliases` | tabela | aluno | 7 | 6 | sim (0) | 1 | Aliases de textos legados de movimentacoes para o catalogo canonico; nao reescreve o texto historico. |
@@ -98,7 +98,7 @@
 | `radar_padroes` | tabela | aluno | 17 | 12 | sim (1) | 0 | O que a REDE ensinou: padrão medido com amostra, lift e JANELA DE AÇÃO. Recalculado periodicamente — aprendizado vivo, não número cravado. |
 | `radar_regras` | tabela | aluno | 17 | 21 | sim (1) | 1 | Regras do radar com o LASTRO que as fundamentou (nunca peso chutado). Regra com muita improcedencia e rebaixada a observacional. |
 | `radar_rodadas` | tabela | aluno | 7 | 398 | sim (1) | 0 | Uma linha por execucao do detector. Existe para desambiguar "a situacao parou de aparecer" (sanou) de "o detector nao rodou" (nao sei). Sem isso, cron parado esvazia a pauta em silencio. |
-| `radar_sinais` | tabela | aluno | 31 | 1600 | sim (1) | 1 | Mapa de Sinais: cada detecção vira evento com evidência, orientação e desfecho. View=foto, esta tabela=filme. |
+| `radar_sinais` | tabela | aluno | 31 | 1807 | sim (1) | 1 | Mapa de Sinais: cada detecção vira evento com evidência, orientação e desfecho. View=foto, esta tabela=filme. |
 | `renovacoes_legado` | tabela | aluno | 18 | 452 | sim (4) | 5 | ARQUIVO read-only. Aposentada em 2026-07-01: a fonte de verdade de renovacoes passou a ser movimentacoes_admin. NAO usar em codigo novo. Contem historico legado (incl. ~44 renovacoes que so existiam aqui). |
 | `risco_evasao` | tabela | aluno | 9 | 2311 | sim (2) | 2 |  |
 | `tipos_matricula` | tabela | aluno | 10 | 6 | sim (4) | 0 |  |
@@ -164,7 +164,7 @@
 | `agente_orcamento_config` | tabela | comercial | 3 | 2 | sim (1) | 0 | Quantas mensagens por dia um destino aguenta antes de a Sol calar os nudges. Fato operacional (essencial) nunca e cortado — so contado. |
 | `agentes` | tabela | comercial | 22 | 3 | sim (4) | 2 |  |
 | `atendimento_consultor_diario` | tabela | comercial | 15 | 304 | sim (0) | 1 | Instantâneo diário (19:10 BRT) de atendimento_conversa_estado por pessoa. ESTOQUE do que ficou pendurado, não velocidade de resposta — velocidade é do chatwoot-atendimento-insights, ao vivo. |
-| `atendimento_conversa_estado` | tabela | comercial | 22 | 1694 | sim (1) | 0 | T2/1o andar/operacional. Espelho dos FATOS da conversa do Chatwoot (projeto SOL), ingerido pela edge `ingerir-calor-atendimento`. ⚠️ "humano" = agente que nao e Mila. ⚠️ minutos_ate_humano NEGATIVO = nos iniciamos a conversa. ⚠️ departamento comercial so existe desde 03/09/2026. |
+| `atendimento_conversa_estado` | tabela | comercial | 22 | 1698 | sim (1) | 0 | T2/1o andar/operacional. Espelho dos FATOS da conversa do Chatwoot (projeto SOL), ingerido pela edge `ingerir-calor-atendimento`. ⚠️ "humano" = agente que nao e Mila. ⚠️ minutos_ate_humano NEGATIVO = nos iniciamos a conversa. ⚠️ departamento comercial so existe desde 03/09/2026. |
 | `campanha_contatos` | tabela | comercial | 10 | 10040 | sim (1) | 1 |  |
 | `campanhas` | tabela | comercial | 24 | 7 | sim (4) | 4 |  |
 | `campanhas_config` | tabela | comercial | 5 | 1 | sim (2) | 1 |  |
@@ -184,7 +184,7 @@
 | `crm_templates_whatsapp` | tabela | comercial | 8 | 27 | sim (1) | 0 |  |
 | `experimentais_mensal_unidade` | tabela | comercial | 7 | 96 | sim (4) | 1 |  |
 | `experimentais_professor_mensal` | tabela | comercial | 7 | 313 | sim (4) | 2 |  |
-| `google_ads_cliques` | tabela | comercial | 26 | 32 | sim (0) | 1 | Cliques do Google Ads recebidos do webhook da onpromedia (CQC). Guarda EVENTO de clique, nao lead -- `leads` continua fonte unica. Serve de fila de re-tentativa (o webhook chega segundos antes do lead existir), de registro do clique orfao e do historico de cliques por lead. Schema reaproveitado da Fase 2 abandonada (pagina-pedagio propria), que nunca chegou a rodar. |
+| `google_ads_cliques` | tabela | comercial | 26 | 33 | sim (0) | 1 | Cliques do Google Ads recebidos do webhook da onpromedia (CQC). Guarda EVENTO de clique, nao lead -- `leads` continua fonte unica. Serve de fila de re-tentativa (o webhook chega segundos antes do lead existir), de registro do clique orfao e do historico de cliques por lead. Schema reaproveitado da Fase 2 abandonada (pagina-pedagio propria), que nunca chegou a rodar. |
 | `google_ads_conversoes` | tabela | comercial | 15 | 0 | sim (0) | 1 | Registro das conversoes offline enviadas ao Google Ads (UploadClickConversions). Uma linha por aluno+tipo. `enviado_em` nulo = ainda na fila; `ultimo_erro` preenchido com `enviado_em` nulo = tentou e falhou. |
 | `google_ads_conversoes_fila` | view | comercial | 8 | — | não | 0 | Matriculas que tem gclid e ainda nao foram devolvidas ao Google. Fila da edge `enviar-conversoes-google-ads`. A view NAO filtra por janela de lookback de proposito: quem esta velho demais para ser aceito precisa aparecer e ser contado como descartado, nao sumir em silencio. |
 | `google_ads_metricas_diarias` | tabela | comercial | 17 | 325 | sim (1) | 0 | Alicerce/estrategica. Custo diario do Google Ads por CAMPANHA (grao de campanha atravessa Search e Performance Max; anuncio nao). Gemeo de meta_ads_metricas_diarias. Reescrita por janela — o Google revisa conversao por dias. gasto ja vem convertido de cost_micros na ingestao. |
@@ -197,7 +197,7 @@
 | `lead_experimental_aulas_arquivadas` | tabela | comercial | 22 | 2 | sim (3) | 0 | Filhas descartadas na consolidacao, quando o sobrevivente ja tinha a sua. So entra aqui filha SEM aula_local_id — vinculo real nunca e descartado. |
 | `lead_experimental_registros` | tabela | comercial | 15 | 32 | sim (0) | 5 | Prontuario da experimental ditado pelo professor. RLS ligada e SEM policy — mesma razao da lead_experimental_aulas. A fronteira family-safe mora nas RPCs, nao na tabela. |
 | `lead_retomada` | tabela | comercial | 18 | 17 | sim (0) | 2 | Agenda de retomada ("bumerangue"): quando o lead pediu para voltar a falar, POR QUE, e a frase original. Dorme ate o dia. Desfecho fecha o laco 3o->2o andar. |
-| `leads` | tabela | comercial | 72 | 10327 | sim (5) | 15 | Leads comerciais - do primeiro contato até a conversão ou arquivamento |
+| `leads` | tabela | comercial | 72 | 11894 | sim (5) | 15 | Leads comerciais - do primeiro contato até a conversão ou arquivamento |
 | `leads_automacao_log` | tabela | comercial | 11 | 113583 | sim (1) | 0 |  |
 | `leads_backup_flags_20260601` | tabela | comercial | 7 | 17 | sim (0) | 0 |  |
 | `leads_campanhas` | tabela | comercial | 6 | 78 | sim (4) | 2 | Historico de campanhas que trouxeram cada lead (1 linha por lead+campanha). Gravado pela tool transfer do agente-webhook no momento da transferencia. Snapshot: campanha_nome congela agentes.nome da epoca. |
@@ -243,7 +243,7 @@
 | `caixa_reaberturas_log` | tabela | financeiro | 15 | 10 | sim (1) | 2 | Log auditavel de reaberturas do caixa diario. Guarda snapshot do cabecalho e das movimentacoes antes da reabertura. |
 | `caixas_diarios` | tabela | financeiro | 18 | 245 | sim (3) | 1 | Cabecalho do fechamento de caixa diario por unidade. Fase 1 manual. |
 | `contrato_assinatura_sync_execucoes` | tabela | financeiro | 14 | 66 | sim (1) | 1 |  |
-| `faturas_leitura_cache` | tabela | financeiro | 3 | 141 | não | 0 | Cache do payload de get_faturas_alunos_financeiro_v1. Chave = md5(params + max(completed_at) dos runs completos + escopo de unidades). Lido/escrito apenas via SECURITY DEFINER. |
+| `faturas_leitura_cache` | tabela | financeiro | 3 | 137 | não | 0 | Cache do payload de get_faturas_alunos_financeiro_v1. Chave = md5(params + max(completed_at) dos runs completos + escopo de unidades). Lido/escrito apenas via SECURITY DEFINER. |
 | `faturas_pagas_mes` | tabela | financeiro | 21 | 2254 | sim (0) | 1 | Faturas PAGAS capturadas por data de pagamento (DRE caixa). O sync puxa status=paga com vencimento M-2 a M+12, filtra por data_pagamento em M. O export merge com o snapshot de vencimento, dedup por emusys_fatura_id. |
 | `fechamento_mensal_auditoria` | tabela | financeiro | 10 | 258 | sim (1) | 2 | Auditoria das acoes de preview, aprovacao, fechamento, retificacao e compatibilidade mensal. |
 | `fechamento_mensal_execucoes` | tabela | financeiro | 10 | 2 | sim (1) | 0 | Placar do fechamento mensal automatico. Alimenta o vigia da la-hq, que le daqui o motivo da falha por unidade. |
@@ -293,7 +293,7 @@
 | `dados_mensais_retificacoes` | tabela | gestao | 17 | 7 | sim (0) | 1 | Auditoria de retificações em dados_mensais. Cada registro representa uma retificação aplicada com antes/depois/diff. |
 | `dashboard_config` | tabela | gestao | 6 | 6 | sim (2) | 0 |  |
 | `insights_salvos` | tabela | gestao | 10 | 4 | sim (4) | 2 |  |
-| `kpis_comercial_v2_cache` | tabela | gestao | 3 | 518 | não | 0 | Cache de get_kpis_comercial_canonicos_v2 (jsonb). Chave = md5(params+dia+fingerprint das fontes). TTL 30min. Lido/escrito apenas via SECURITY DEFINER. |
+| `kpis_comercial_v2_cache` | tabela | gestao | 3 | 479 | não | 0 | Cache de get_kpis_comercial_canonicos_v2 (jsonb). Chave = md5(params+dia+fingerprint das fontes). TTL 30min. Lido/escrito apenas via SECURITY DEFINER. |
 | `metas` | tabela | gestao | 26 | 7 | sim (4) | 1 | Metas e OKRs unificados por unidade - mensais, trimestrais e anuais. |
 | `metas_comerciais` | tabela | gestao | 10 | 4 | sim (4) | 0 | BACKUP: Metas comerciais originais. Dados consolidados na nova tabela metas em 2026-01-16. Pode ser removida após 30 dias de validação. |
 | `metas_kpi` | tabela | gestao | 8 | 596 | sim (4) | 1 |  |
@@ -306,7 +306,7 @@
 | `relatorios_pedagogicos` | tabela | gestao | 15 | 17 | sim (4) | 1 | Historico de relatorios pedagogicos gerados por IA (Gemini) a partir das anotacoes de aula. Rascunho editavel + reuso pelo agente Fabio. |
 | `simulacoes_metas` | tabela | gestao | 29 | 0 | sim (4) | 0 |  |
 | `simulacoes_turma` | tabela | gestao | 25 | 0 | sim (1) | 1 |  |
-| `situacao_alunos_snapshot` | tabela | gestao | 62 | 11107 | sim (0) | 0 |  |
+| `situacao_alunos_snapshot` | tabela | gestao | 62 | 11108 | sim (0) | 0 |  |
 | `vw_alertas` | view | gestao | 5 | — | não | 0 |  |
 | `vw_alertas_inteligentes` | view | gestao | 10 | — | não | 0 | Alertas do Dashboard. Desde 2026-07-05, o alerta CONVERSAO_BAIXA e calculado ao vivo de leads (formula do Dashboard: exp realizadas -> convertidos), nao mais de dados_comerciais (tabela legado, inflada por trigger incremental bugado). |
 | `vw_consolidado_anual` | view | gestao | 10 | — | não | 0 |  |
@@ -321,7 +321,7 @@
 | `vw_ranking_professores_retencao` | view | gestao | 8 | — | não | 0 |  |
 | `vw_ranking_unidades` | view | gestao | 9 | — | não | 0 |  |
 | `vw_sazonalidade` | view | gestao | 8 | — | não | 0 |  |
-| `admin_conversas` | tabela | integracao | 15 | 393 | sim (1) | 3 | Conversas administrativas com alunos via WhatsApp - uma por aluno por unidade |
+| `admin_conversas` | tabela | integracao | 15 | 401 | sim (1) | 3 | Conversas administrativas com alunos via WhatsApp - uma por aluno por unidade |
 | `admin_mensagens` | tabela | integracao | 18 | 2287 | sim (1) | 2 | Mensagens das conversas administrativas com alunos |
 | `alunos_emusys_atributos_decisoes` | tabela | integracao | 13 | 1043 | sim (1) | 2 |  |
 | `alunos_emusys_atributos_divergencias` | tabela | integracao | 18 | 14592 | sim (1) | 2 |  |
@@ -330,7 +330,7 @@
 | `automacoes_config` | tabela | integracao | 3 | 5 | sim (3) | 0 |  |
 | `base_conhecimento_blocos` | tabela | integracao | 16 | 16 | sim (1) | 2 | Base de conhecimento da LA Music, em blocos. Consumida pelos agentes SDR Mila (via RPC get_base_conhecimento + edge base-conhecimento) e pela equipe, na subaba Conhecimento em Pré-Atendimento > Configurações. |
 | `boas_vindas_enviadas` | tabela | integracao | 9 | 205 | sim (0) | 0 | Idempotencia da boas-vindas de matricula (1 envio por matricula). Ver edge function enviar-boas-vindas-matricula. |
-| `conciliacao_experimentais_v2_cache` | tabela | integracao | 3 | 517 | não | 0 | Cache de get_conciliacao_experimentais_v2 (jsonb). Chave = md5(params+dia+fingerprint das fontes). TTL 30min. Auth resolvida antes do cache. Lido/escrito apenas via SECURITY DEFINER. |
+| `conciliacao_experimentais_v2_cache` | tabela | integracao | 3 | 494 | não | 0 | Cache de get_conciliacao_experimentais_v2 (jsonb). Chave = md5(params+dia+fingerprint das fontes). TTL 30min. Auth resolvida antes do cache. Lido/escrito apenas via SECURITY DEFINER. |
 | `conversa_estado_whatsapp` | tabela | integracao | 7 | 130 | sim (1) | 0 |  |
 | `curso_emusys_depara` | tabela | integracao | 6 | 87 | sim (0) | 2 | De-para (unidade, disciplina_id Emusys) -> curso. Casamento por ID, imune a renomeação. Fonte: GET /disciplinas. |
 | `emusys_api_payload` | tabela | integracao | 12 | 4755 | sim (0) | 0 | Espelho de debug do payload bruto da API Emusys. Sem FK e sem vínculo com o sistema. Uso: comparar Emusys x base manualmente. Não alimenta nada. |
@@ -343,7 +343,7 @@
 | `emusys_experimentais_snapshot_execucoes` | tabela | integracao | 10 | 25263 | sim (3) | 1 |  |
 | `emusys_experimentais_snapshot_publicacoes_vigentes` | tabela | integracao | 6 | 3 | sim (0) | 2 | Ponteiro transacional da ultima publicacao completa por unidade para validar leituras admitidas. |
 | `emusys_fatura_source_events` | tabela | integracao | 12 | 8455571 | sim (1) | 4 | Trilha append-only das confirmacoes, ausencias e resolucoes observadas por competencia. |
-| `emusys_faturas` | tabela | integracao | 22 | 19223 | sim (1) | 1 |  |
+| `emusys_faturas` | tabela | integracao | 22 | 19224 | sim (1) | 1 |  |
 | `emusys_historico_backfill_execucoes_v1` | tabela | integracao | 20 | 153 | sim (0) | 2 | Checkpoint retomavel do coletor historico Emusys do Health Score Professor V3. |
 | `emusys_matriculas_estado_atual` | tabela | integracao | 23 | 4962 | sim (1) | 2 | Fonte bruta backend-only do estado atual de cada matricula Emusys, escopada por unidade. |
 | `emusys_matriculas_sync_execucoes` | tabela | integracao | 13 | 235 | sim (1) | 1 | Manifesto auditavel das fotografias Emusys. Somente execucao operacional concluida e fresca pode alimentar KPIs vivos. |
@@ -437,10 +437,10 @@
 | `assistente_ia_config` | tabela | plataforma | 4 | 1 | sim (2) | 0 |  |
 | `audit_log` | tabela | plataforma | 11 | 239438 | sim (2) | 0 |  |
 | `auditoria_acesso` | tabela | plataforma | 10 | 3 | sim (2) | 1 | Log de auditoria para ações de acesso e permissões |
-| `cache_versao_log` | tabela | plataforma | 3 | 776 | sim (0) | 0 | LAPE-42: uma linha por comando de escrita nas tabelas lidas pelos caches de servidor. Versao de cache = count:max:sum dos ids visiveis. Podado por cache_versao_podar_v1. |
+| `cache_versao_log` | tabela | plataforma | 3 | 911 | sim (0) | 0 | LAPE-42: uma linha por comando de escrita nas tabelas lidas pelos caches de servidor. Versao de cache = count:max:sum dos ids visiveis. Podado por cache_versao_podar_v1. |
 | `ficha_tokens` | tabela | plataforma | 8 | 15 | sim (0) | 1 | Token pessoal por colaborador. Uso unico: usado_em preenchido trava o reenvio. RLS sem policy por design — so service_role le; token nunca vai para o client. |
 | `migrations_audit_data_nascimento` | tabela | plataforma | 7 | 80 | sim (3) | 0 |  |
-| `paginas_rpc_cache` | tabela | plataforma | 4 | 795 | não | 0 | Cache generico das RPCs pesadas de pagina (agenda, alunos, administrativo, professores). Chave = recorte logico (+escopo de unidades quando a funcao filtra por usuario). TTL na funcao wrapper. Criado em 2026-09-24. |
+| `paginas_rpc_cache` | tabela | plataforma | 4 | 758 | não | 0 | Cache generico das RPCs pesadas de pagina (agenda, alunos, administrativo, professores). Chave = recorte logico (+escopo de unidades quando a funcao filtra por usuario). TTL na funcao wrapper. Criado em 2026-09-24. |
 | `perfil_permissoes` | tabela | plataforma | 4 | 170 | sim (2) | 2 | Relacionamento N:N entre perfis e permissoes |
 | `perfis` | tabela | plataforma | 10 | 7 | sim (2) | 0 | Perfis de acesso do sistema (Admin, Gerente, Farmer, Hunter, etc.) |
 | `permissoes` | tabela | plataforma | 9 | 51 | sim (2) | 0 | Permissões granulares do sistema (ex: alunos.ver, alunos.editar) |
@@ -463,14 +463,14 @@
 | `anotacoes` | tabela | professor | 11 | 0 | sim (2) | 1 |  |
 | `anotacoes_alunos` | tabela | professor | 8 | 36 | sim (4) | 1 | Anotações e observações sobre alunos |
 | `app_audio_preso_no_aparelho` | tabela | professor | 5 | 11 | sim (0) | 1 | Farol do app (20260827170000): estado ATUAL da fila local de audios de cada professor. Uma linha por professor, sobrescrita — e o zero tambem e reportado, senao o alarme de ontem nunca apaga. Sem isto, audio recusado fica so no aparelho e nenhuma auditoria pode ve-lo (caso Valdo/Bruno, 26/08/2026). |
-| `aula_alunos_emusys` | tabela | professor | 16 | 42393 | sim (3) | 3 | Roster operacional de aulas do Emusys, sem contato ou dados financeiros. |
+| `aula_alunos_emusys` | tabela | professor | 16 | 42398 | sim (3) | 3 | Roster operacional de aulas do Emusys, sem contato ou dados financeiros. |
 | `aula_registros_fabio_log` | tabela | professor | 8 | 1129 | sim (0) | 1 | Auditoria das gravações do Fábio em aulas_emusys.anotacoes_fabio. É trilha de rastreabilidade, não o lar do registro (o registro vive em anotacoes_fabio). |
-| `aula_roster_sync_estado` | tabela | professor | 9 | 23180 | sim (0) | 2 |  |
-| `aulas_emusys` | tabela | professor | 35 | 68591 | sim (4) | 3 | Metadados completos de cada aula importada do Emusys (turma, curso, sala, professor, horários) |
+| `aula_roster_sync_estado` | tabela | professor | 9 | 23183 | sim (0) | 2 |  |
+| `aulas_emusys` | tabela | professor | 35 | 68594 | sim (4) | 3 | Metadados completos de cada aula importada do Emusys (turma, curso, sala, professor, horários) |
 | `config_health_score` | tabela | professor | 13 | 1 | sim (2) | 1 | Configuração dos pesos e limites do Health Score do Professor |
 | `config_health_score_aluno` | tabela | professor | 11 | 1 | sim (2) | 1 | Configuração de pesos do Health Score de Alunos - ajustável por unidade |
 | `config_health_score_professor` | tabela | professor | 12 | 3 | sim (2) | 1 | Configuração de pesos do Health Score de Professores - ajustável por unidade |
-| `dash_prof_resumo_cache` | tabela | professor | 3 | 169 | não | 0 | Cache do resumo de professores do dashboard (5 colunas). TTL 5 min + fingerprint leve. Lido/escrito apenas via SECURITY DEFINER. |
+| `dash_prof_resumo_cache` | tabela | professor | 3 | 162 | não | 0 | Cache do resumo de professores do dashboard (5 colunas). TTL 5 min + fingerprint leve. Lido/escrito apenas via SECURITY DEFINER. |
 | `disponibilidade_professor_propostas` | tabela | professor | 16 | 0 | sim (1) | 5 | Propostas de disponibilidade. Aprovar nao altera o espelho; efetivar exige confirmacao da operacao no Emusys. |
 | `eventos_operacionais` | tabela | professor | 15 | 642 | sim (0) | 3 | Fatos operacionais append-only para consumo por servicos. Nunca armazena financeiro, saude, presenca, observacoes livres ou payload bruto. |
 | `eventos_operacionais_audiencia` | tabela | professor | 4 | 792 | sim (0) | 2 | Audiencia por professor da projecao de eventos operacionais; detectado_em e denormalizado para leitura paginada. |
@@ -531,7 +531,8 @@
 | `presenca_comando_itens` | tabela | professor | 9 | 5653 | sim (0) | 1 |  |
 | `presenca_comando_nao_recebidos` | tabela | professor | 3 | 8 | sim (0) | 0 | Tombstone durável de request_id confirmado como não recebido; impede escrita tardia após reconciliação. |
 | `presenca_comandos` | tabela | professor | 18 | 5871 | sim (0) | 0 | Intencao duravel e idempotente de escrita humana de presenca; sem nomes ou payload bruto. |
-| `presenca_emusys_escrita` | tabela | professor | 20 | 1555 | sim (0) | 0 | Livro de bordo do escritor de presenca no Emusys: uma linha por gatilho (evento de aluno ou ficha de professor), com estado antes, decisao, resposta e modo sombra/ativo. |
+| `presenca_emusys_escrita` | tabela | professor | 20 | 1778 | sim (0) | 0 | Livro de bordo do escritor de presenca no Emusys: uma linha por gatilho (evento de aluno ou ficha de professor), com estado antes, decisao, resposta e modo sombra/ativo. |
+| `presenca_emusys_escritor_lock` | tabela | professor | 3 | 0 | sim (0) | 0 | Lease por unidade do escritor de presenca no Emusys: uma execucao por unidade por vez; expira sozinho se o dono morrer. |
 | `presenca_politicas_confiabilidade` | tabela | professor | 12 | 9 | sim (1) | 1 | Decisoes temporais e versionadas que qualificam evidencia de presenca por unidade. |
 | `presenca_rollout_config` | tabela | professor | 7 | 21 | sim (0) | 1 | Estado atual governado por unidade e superficie. Sombra nao ativa consumidor. |
 | `presenca_rollout_eventos` | tabela | professor | 10 | 0 | sim (0) | 1 | Trilha append-only das transicoes e rollbacks de presenca canonica. |
@@ -558,7 +559,7 @@
 | `professor_periodos_reconstrucao_particoes_v1` | tabela | professor | 20 | 257 | sim (0) | 2 | Resultados intermediarios, idempotentes e privados da reconstrucao V3. O detalhe diagnostico fica aqui; a camada final so nasce apos todas as particoes. |
 | `professor_periodos_reconstrucoes_v1` | tabela | professor | 19 | 166 | sim (0) | 2 | Execucao versionada e idempotente do reconstrutor historico de periodos professor-matricula-disciplina. |
 | `professor_periodos_revisoes_v1` | tabela | professor | 16 | 458 | sim (0) | 5 | Trilha append-only de revisoes humanas e promocoes automaticas estruturadas sobre periodos reconstruidos. |
-| `professor_ponto_confirmacoes` | tabela | professor | 9 | 7464 | sim (1) | 3 |  |
+| `professor_ponto_confirmacoes` | tabela | professor | 9 | 8078 | sim (1) | 3 |  |
 | `professor_unidade_curso_modalidade` | tabela | professor | 15 | 541 | sim (0) | 4 | Historico temporal canonico das atribuicoes de professor por unidade, curso e modalidade. |
 | `professor_videos` | tabela | professor | 9 | 213 | sim (2) | 2 |  |
 | `professores` | tabela | professor | 21 | 60 | sim (5) | 2 |  |
