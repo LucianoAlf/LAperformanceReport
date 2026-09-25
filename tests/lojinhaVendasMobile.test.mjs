@@ -90,3 +90,64 @@ test('a aba Vendas NAO entra em ABAS_PORTADAS', () => {
   const abas = readFileSync(join(RAIZ, 'src/mobile/abasPortadas.ts'), 'utf8');
   assert.doesNotMatch(abas, /'vendas'/);
 });
+
+// ---------------------------------------------------------------------------
+// Desfazer: tirar um item, ou desistir da venda inteira.
+// ---------------------------------------------------------------------------
+
+test('🔴 tirar um item tem alvo de toque, e so no celular', () => {
+  const i = tela.indexOf('onClick={() => removeFromCart(i)}');
+  assert.ok(i > 0, 'o botao de tirar item sumiu');
+  const botao = tela.slice(i - 200, i + 400);
+
+  // O icone tem 16px. Quem mede alvo de toque mede o elemento que RECEBE o
+  // toque, nao o icone dentro dele.
+  assert.match(botao, /max-lg:min-h-\[44px\]/);
+  assert.match(botao, /max-lg:min-w-\[44px\]/);
+
+  // ⚠️ Toda regra de tamanho aqui e' `max-lg:` — o botao do computador
+  // continua com os mesmos 16px de sempre, por construcao: nenhuma regra
+  // `max-lg:` existe acima de 1024px.
+  const classes = botao.match(/className="([^"]+)"/)?.[1] ?? '';
+  for (const c of classes.split(/\s+/)) {
+    if (/min-h-|min-w-|flex|items-center|justify-center/.test(c)) {
+      assert.ok(c.startsWith('max-lg:'), `a classe ${c} vazou para o computador`);
+    }
+  }
+
+  // Quem so ve o icone precisa saber o que ele tira.
+  assert.match(botao, /aria-label=\{`Tirar \$\{item\.produto_nome\}/);
+});
+
+test('🔴 esvaziar o carrinho pede DOIS toques, e diz quantos itens vao embora', () => {
+  // Um toque so' apagaria trabalho ja' feito sem volta — nao ha desfazer.
+  const i = tela.indexOf('confirmandoEsvaziar');
+  assert.ok(i > 0, 'o botao de esvaziar sumiu');
+
+  assert.match(tela, /if \(!confirmandoEsvaziar\) \{\s*setConfirmandoEsvaziar\(true\);\s*return;/);
+  assert.match(tela, /Tocar de novo para tirar \$\{carrinho\.length\}/);
+
+  // Fechar a folha desarma a confirmacao: reabrir nao pode encontrar o botao
+  // ja' armado, esperando um toque distraido.
+  assert.match(
+    tela,
+    /onFechar=\{\(\) => \{ setCarrinhoAberto\(false\); setConfirmandoEsvaziar\(false\); \}\}/,
+  );
+});
+
+test('esvaziar e destrutivo e fica LONGE do finalizar', () => {
+  const iEsvaziar = tela.indexOf('Esvaziar carrinho');
+  const iCorpo = tela.indexOf('{corpoCarrinho}', iEsvaziar);
+  assert.ok(iEsvaziar > 0 && iCorpo > iEsvaziar,
+    'o esvaziar desceu para junto do "Finalizar Venda"');
+});
+
+test('o computador NAO ganhou o botao de esvaziar', () => {
+  // Ele nao existe la hoje; criar um so' de um lado ja' seria divergencia,
+  // e criar nos dois muda a tela do computador — decisao que nao e minha.
+  const iGuarda = tela.indexOf('{!ehCelular && (');
+  const painel = tela.slice(iGuarda, tela.indexOf('{corpoCarrinho}', iGuarda));
+  assert.doesNotMatch(painel, /Esvaziar|confirmandoEsvaziar/);
+  const esvaziar = tela.match(/Esvaziar carrinho/g) ?? [];
+  assert.equal(esvaziar.length, 1);
+});

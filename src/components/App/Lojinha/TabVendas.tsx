@@ -31,6 +31,10 @@ export function TabVendas({ unidadeId }: TabVendasProps) {
   const [subTab, setSubTab] = useState<SubTab>('pdv');
   // No celular o carrinho vira folha de baixo — ver o comentario no PDV.
   const [carrinhoAberto, setCarrinhoAberto] = useState(false);
+  // Esvaziar o carrinho joga fora trabalho ja' feito, entao pede dois
+  // toques. Nao e' `confirm()` do navegador: no celular ele rouba a tela
+  // inteira e nem sempre diz QUANTOS itens vao embora.
+  const [confirmandoEsvaziar, setConfirmandoEsvaziar] = useState(false);
   const [loading, setLoading] = useState(true);
   
   // PDV State
@@ -416,7 +420,8 @@ export function TabVendas({ unidadeId }: TabVendasProps) {
                       </span>
                       <button
                         onClick={() => removeFromCart(i)}
-                        className="text-rose-400 hover:text-rose-300"
+                        aria-label={`Tirar ${item.produto_nome} do carrinho`}
+                        className="text-rose-400 hover:text-rose-300 max-lg:flex max-lg:min-h-[44px] max-lg:min-w-[44px] max-lg:items-center max-lg:justify-center"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -775,10 +780,37 @@ export function TabVendas({ unidadeId }: TabVendasProps) {
         {ehCelular && (
           <FolhaMobile
             aberto={carrinhoAberto}
-            onFechar={() => setCarrinhoAberto(false)}
+            onFechar={() => { setCarrinhoAberto(false); setConfirmandoEsvaziar(false); }}
             titulo="Carrinho"
             subtitulo={`${carrinho.length} ${carrinho.length === 1 ? 'item' : 'itens'} · R$ ${total.toFixed(2).replace('.', ',')}`}
           >
+            {/* Fica no TOPO, longe do "Finalizar Venda" la' embaixo: acao
+                destrutiva encostada na confirmatoria e' toque errado
+                esperando acontecer. */}
+            <div className="mb-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!confirmandoEsvaziar) {
+                    setConfirmandoEsvaziar(true);
+                    return;
+                  }
+                  setCarrinho([]);
+                  setConfirmandoEsvaziar(false);
+                  setCarrinhoAberto(false);
+                }}
+                className={cn(
+                  'flex min-h-[44px] items-center rounded-lg px-3 text-[12px] font-semibold',
+                  confirmandoEsvaziar
+                    ? 'bg-rose-500 text-slate-950'
+                    : 'text-rose-400 active:bg-rose-500/10',
+                )}
+              >
+                {confirmandoEsvaziar
+                  ? `Tocar de novo para tirar ${carrinho.length} ${carrinho.length === 1 ? 'item' : 'itens'}`
+                  : 'Esvaziar carrinho'}
+              </button>
+            </div>
             {corpoCarrinho}
           </FolhaMobile>
         )}
