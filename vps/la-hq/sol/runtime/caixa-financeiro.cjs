@@ -3374,6 +3374,25 @@ function _fonteCanonicaIndisponivel(c) {
     || /fonte.*indispon|timeout|temporar|indisponivel/.test(motivo);
 }
 
+// "fonte_competencia_futura_indisponivel" (regra de 17/09 na RPC canonica) diz
+// que o mes SEGUINTE nao esta fresco -- e ele so sincroniza 1x por dia (~11h UTC)
+// com validade de 30 min, ou seja, fica "velho" quase o dia todo. A RPC consulta
+// esse mes para pegar baixa ANTECIPADA do mes que vem. Quando a equipe DECLAROU
+// uma competencia anterior ao mes seguinte ("PG parcela 09/26" em setembro), a
+// pergunta nao e sobre o mes seguinte: a RPC explicita por competencia responde
+// com fonte fresca (o mes corrente sincroniza a cada 15 min). Sem isto, toda
+// parcela ainda nao baixada no Emusys travava depois de ~08h47 BRT (caso Daniel
+// Mynssem Mendes/CG, 26/09). Mes declarado = mes seguinte continua travado.
+function _fonteFuturaLateralAoMesDeclarado(c, compEsperadaIso, agora = Date.now()) {
+  if (!c || c.ok !== false || String(c.motivo || '') !== 'fonte_competencia_futura_indisponivel') return false;
+  if (!compEsperadaIso || !/^\d{4}-\d{2}/.test(String(compEsperadaIso))) return false;
+  const brt = new Date(agora - 3 * 3600 * 1000);
+  let a = brt.getUTCFullYear(); let m = brt.getUTCMonth() + 2;
+  if (m > 12) { m = 1; a += 1; }
+  const proxima = `${a}-${String(m).padStart(2, '0')}`;
+  return String(compEsperadaIso).slice(0, 7) < proxima;
+}
+
 function categoriaEhSaida(categoria) {
   return ['seguranca', 'despesa', 'retirada', 'troco'].includes(String(categoria || '').toLowerCase());
 }
@@ -5639,7 +5658,10 @@ _Não lanço nada pela metade._`);
           try {
             let c = await canonicaFn(grp.unidade_id, nome, valor);
             let respondeu = !!(c && (c.ok === true || c.ok === false));
-            if (c && c.ok === false && _fonteCanonicaIndisponivel(c)) {
+            if (_fonteFuturaLateralAoMesDeclarado(c, compEsperada)) {
+              // Resposta valida para ESTA pergunta: segue para a RPC explicita.
+              log({ acao: 'canonica_futura_lateral', chatId, competencia: competenciaPreferida });
+            } else if (c && c.ok === false && _fonteCanonicaIndisponivel(c)) {
               respondeu = false;
               bloqueiaFonteIndisponivel = true;
             }
@@ -5647,7 +5669,10 @@ _Não lanço nada pela metade._`);
               log({ acao: 'canonica_competencia_retry', chatId, competencia: competenciaPreferida });
               c = await canonicaFn(grp.unidade_id, nome, valor);
               respondeu = !!(c && (c.ok === true || c.ok === false));
-              if (c && c.ok === false && _fonteCanonicaIndisponivel(c)) {
+              if (_fonteFuturaLateralAoMesDeclarado(c, compEsperada)) {
+                bloqueiaFonteIndisponivel = false;
+                log({ acao: 'canonica_futura_lateral', chatId, competencia: competenciaPreferida });
+              } else if (c && c.ok === false && _fonteCanonicaIndisponivel(c)) {
                 respondeu = false;
                 bloqueiaFonteIndisponivel = true;
               }
@@ -6872,6 +6897,9 @@ _Não lanço nada pela metade._`);
         if (!alvoP && semAluno.length === 1) alvoP = semAluno[0];
         if (nomeTardio && alvoP) {
           const _alunoAntesDaCorrecao = alvoP.aluno || null;
+          // Fotografia do card ANTES da correcao: se o texto nao se provar nome
+          // de aluno, nada do que ele ditou pode ficar no card.
+          const _cardAntes = { valor: alvoP.valor, competencia: alvoP.competencia };
           // Evidencia explicita do humano no MESMO texto vence o que a pendencia
           // herdou de OCR ruim (31/08: a correcao trazia "R$387,00" e o card
           // manteve os 38.700 do OCR — e a canonica rodou com o valor errado).
@@ -6908,14 +6936,18 @@ _Não lanço nada pela metade._`);
           const querParcela = !alvoP.multiplas && (!categoria || categoria === 'parcela' || categoria === 'mensalidade' || categoria === 'passaporte' || categoria === 'matricula' || categoria === 'outro');
 
           try {
+            const _compTardiaIso = competenciaIso(competencia);
+            const _lateralTardia = (x) => _fonteFuturaLateralAoMesDeclarado(x, _compTardiaIso);
             let c = await canonicaFn(alvoP.unidade_id, nomeTardio, alvoP.valor);
             let respondeu = !!(c && (c.ok === true || c.ok === false));
-            if (c && c.ok === false && _fonteCanonicaIndisponivel(c)) { respondeu = false; bloqueiaFonteIndisponivel = true; }
+            if (_lateralTardia(c)) log({ acao: 'canonica_futura_lateral', chatId, competencia });
+            else if (c && c.ok === false && _fonteCanonicaIndisponivel(c)) { respondeu = false; bloqueiaFonteIndisponivel = true; }
             if (!respondeu) {
               log({ acao: 'canonica_retry_tardia', chatId });
               c = await canonicaFn(alvoP.unidade_id, nomeTardio, alvoP.valor);
               respondeu = !!(c && (c.ok === true || c.ok === false));
-              if (c && c.ok === false && _fonteCanonicaIndisponivel(c)) { respondeu = false; bloqueiaFonteIndisponivel = true; }
+              if (_lateralTardia(c)) { bloqueiaFonteIndisponivel = false; log({ acao: 'canonica_futura_lateral', chatId, competencia }); }
+              else if (c && c.ok === false && _fonteCanonicaIndisponivel(c)) { respondeu = false; bloqueiaFonteIndisponivel = true; }
             }
             canonicaIndisponivel = !respondeu;
             // Nome de correcao e ROTULO por definicao: retorno com OUTRA pessoa =
@@ -6969,6 +7001,21 @@ _Não lanço nada pela metade._`);
             } catch (e) { /* best-effort */ }
           }
 
+          // TEXTO SEM ROTULO QUE NAO CASA COM ALUNO NENHUM NAO E NOME (26/09/2026).
+          // "Os dados estao corretos sol" virou o aluno do card do Daniel (CG), e como
+          // a busca desse "nome" respondia `aluno_nao_encontrado` -- e nao "fonte fora
+          // do ar" --, a correcao ZEROU a trava de fonte e o `pode` gravou
+          // "Parcela 09/2026 - estao corretos sol" sem fatura. A lista de palavras
+          // proibidas (`_TOK_NAO_NOME`) nunca fecharia isso: toda frase nova fura.
+          // A regra estrutural: sem rotulo ("aluno: X"), so e nome o que o banco
+          // reconhece como aluno. Com rotulo, o humano declarou -- vale mesmo sem
+          // cadastro (aluno novo), com baixa confianca, como sempre foi.
+          if (!alunoConfirmado && !_rotuloNaCorrecao) {
+            alvoP.valor = _cardAntes.valor;
+            alvoP.competencia = _cardAntes.competencia;
+            log({ acao: 'nome_tardio_sem_rotulo_nao_confirmado', chatId, texto: String(nomeTardio).slice(0, 60) });
+            return { acao: 'nada' };
+          }
           if (!alunoConfirmado) {
             alvoP.aluno = nomeTardio;
             confiancaBaixa = true;
@@ -8134,6 +8181,7 @@ _Não lanço nada pela metade._`);
 function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
 
 module.exports = {
+  _fonteFuturaLateralAoMesDeclarado,
   selecionarFaturasQuitacao, resolverFaturasQuitacao,
   parseBRMoney, extrairValor, extrairForma, extrairFormaHumana, detectarComprovante, casarPode,
   _saidaExplicitaFromCaption, _nomeHumanoTardio, extrairValorOcr, _vendedorRotulado, _mesmaPessoa,
