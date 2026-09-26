@@ -48,6 +48,29 @@ function ehAgradecimento(texto = '') {
   return /(^|[^a-z])(obrigad[ao]|obg|brigad[ao]|valeu|vlw|agradec)/.test(n);
 }
 
+// Dispensa explícita (26/09/2026, Barra): "Sol não to falando ctg não" foi para o
+// agente, que respondeu "Entendi — fico quieta" e a janela seguiu aberta. Como a
+// frase cita "Sol", ela ainda era lida como CHAMADA. Dispensa fecha a janela e não
+// vai ao modelo. ⚠️ Exige a FORMA da dispensa ("falando com você", "fica quieta",
+// "para de responder"): "Sol, para quando é o fechamento?" continua sendo chamada.
+function dispensaSol(texto = '') {
+  const n = normalizarTexto(texto);
+  return /nao\s+(?:to|tou|estou|esto|ta|tava|estava)?\s*falando\s+(?:com\s+(?:voce|vc|ela|a\s+sol)|contigo|ctg)/.test(n)
+    || /nao\s+(?:e|eh|era)\s+(?:com|pra|para)\s+(?:voce|vc|ela|a\s+sol|contigo|ctg)/.test(n)
+    || /\bfica\s+(?:quieta|calada|na\s+sua)\b/.test(n)
+    || /\bpar[ae]\s+de\s+(?:responder|falar)\b/.test(n)
+    || /\bcala\s+a\s+boca\b/.test(n);
+}
+
+// Reação sem pedido (26/09/2026, Barra): "Ih" dentro da janela virou turno do agente
+// ("Pois é 😕"). Risada, interjeição e emoji solto não pedem nada. ⚠️ Resposta curta
+// a uma pergunta da Sol NÃO é reação: "sim", "ok", "2", "pix" e "não" passam.
+function reacaoSemPedido(texto = '') {
+  const n = normalizarTexto(texto).replace(/[^a-z0-9]/g, '');
+  if (!n) return true; // só emoji/pontuação
+  return /^(?:k{2,}|(?:rs)+r?|(?:ha)+h?|(?:he)+h?|(?:hua)+|(?:ks)+k?|ih+|eita|opa|hu+m+|hm+|af+s?|putz|nossa|uau|a+h+|o+h+|x+|vish|misericordia)$/.test(n);
+}
+
 function falaDirecionadaAHumano(texto, mentionedIds, identidadesProprias) {
   const proprias = new Set(Array.from(identidadesProprias || [], chaveIdentidade).filter(Boolean));
   if ((mentionedIds || []).some((id) => {
@@ -91,6 +114,10 @@ function createGroupEngagementPolicy({ gruposQueRespondem, janelaMs }) {
       const _cortesia = ehAgradecimento(texto) && (_citaSol || _janelaEraDele);
       return { responder: false, motivo: 'turno_encerrado', cortesia: _cortesia };
     }
+    if (dispensaSol(texto)) {
+      fecharJanela(chatId);
+      return { responder: false, motivo: 'dispensada' };
+    }
     if (mencionaSol(texto, mentionedIds, identidadesProprias)) {
       abrirJanela({ chatId, senderId, motivo: 'chamada', agora });
       return { responder: true, motivo: 'chamada' };
@@ -99,10 +126,22 @@ function createGroupEngagementPolicy({ gruposQueRespondem, janelaMs }) {
     if (!rec || rec.until <= agora) { fecharJanela(chatId); return { responder: false, motivo: 'standby' }; }
     if (rec.senderId && senderId && rec.senderId !== String(senderId)) return { responder: false, motivo: 'janela_de_outro_remetente' };
     if (falaDirecionadaAHumano(texto, mentionedIds, identidadesProprias)) return { responder: false, motivo: 'janela_ignorada_fala_humana' };
-    abrirJanela({ chatId, senderId: rec.senderId || senderId, motivo: 'continuacao', agora });
+    if (reacaoSemPedido(texto)) return { responder: false, motivo: 'reacao_sem_pedido' };
+    // ⚠️ A fala humana NÃO renova a janela (26/09/2026). Renovar aqui fazia a Sol
+    // ficar "na conversa" enquanto a pessoa seguisse falando — com os colegas.
+    // Quem renova é a RESPOSTA da Sol (registrarRespostaDaSol): a janela vale para
+    // continuar o assunto que ela acabou de responder, não para sempre.
     return { responder: true, motivo: 'janela_ativa' };
   }
-  return { abrirJanela, fecharJanela, decidir, ativoAte };
+  // Chamado pela ponte depois de enviar uma resposta ao grupo. Só estende janela que
+  // já existe (e mantém o dono): mensagem da Sol sem ninguém tê-la chamado não abre.
+  function registrarRespostaDaSol({ chatId, agora = Date.now() }) {
+    const rec = ativoAte.get(chatId);
+    if (!rec) return null;
+    rec.until = agora + janelaMs;
+    return { ...rec };
+  }
+  return { abrirJanela, fecharJanela, decidir, registrarRespostaDaSol, ativoAte };
 }
 
-module.exports = { createGroupEngagementPolicy, ehAgradecimento, encerraTurnoDaSol, pareceChamarSol };
+module.exports = { createGroupEngagementPolicy, ehAgradecimento, encerraTurnoDaSol, pareceChamarSol, dispensaSol, reacaoSemPedido };

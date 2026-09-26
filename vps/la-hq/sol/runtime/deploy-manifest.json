@@ -4,16 +4,16 @@
     {
       "class": "bridge",
       "mode": "0644",
-      "sha256": "4090ac5c25648126b3b2ddb7a65245e3765681d3697548286f99329e89b13a6b",
-      "size": 83345,
+      "sha256": "0820462ac243d98d5632fe2dff59fa092991e592ac64d1db5022575ebc1c3959",
+      "size": 84200,
       "source": "vps/la-hq/sol/runtime/bridge.js",
       "target": "/home/sol/.hermes/hermes-agent/scripts/whatsapp-bridge/bridge.js"
     },
     {
       "class": "bridge-module",
       "mode": "0644",
-      "sha256": "a720c73c99a0556197affd7b830b5af57f4b3fb9a33d24f18db8abc455fb2bf5",
-      "size": 5882,
+      "sha256": "50c7e8e527b156bbf71541b79e0d5a74463a71fa8b4214a5b265c7947cdacf1c",
+      "size": 8194,
       "source": "vps/la-hq/sol/runtime/group-engagement.cjs",
       "target": "/home/sol/.hermes/hermes-agent/scripts/whatsapp-bridge/group-engagement.cjs"
     },
