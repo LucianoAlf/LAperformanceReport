@@ -13,6 +13,7 @@ const LABEL_POR_TIPO: Record<string, string> = {
   farmer: 'Farmer',
   hunter: 'Hunter',
   admin: 'Admin',
+  coordenador: 'Coordenação',
 };
 
 // O gerente nao tem cadastro em `colaboradores` (so em `usuarios`, perfil admin),
@@ -28,6 +29,9 @@ const GERENTE: ColaboradorOcorrencia = { nome: 'Luciano Alf', cargo: 'Gerente' }
  * alguem lembrar de editar os dois.
  *
  * Fora da lista: professores (sao os avaliados) e os cadastros de teste.
+ * Coordenacao (`tipo = 'coordenador'`) entra: coordena professores e registra
+ * ocorrencia, mas nao e farmer/hunter. Nasce SEM usuario_id/email/whatsapp de
+ * proposito — o Painel Farmer, a Sol e o BI identificam a pessoa por esses campos.
  * Dentro: `situacao = 'candidato'`, que e como entra quem acabou de ser
  * contratado e ainda nao teve a ficha fechada.
  *
@@ -53,7 +57,7 @@ export function useColaboradoresOcorrencia() {
           .from('colaboradores')
           .select('id, nome, tipo, unidades ( codigo )')
           .eq('ativo', true)
-          .in('tipo', ['farmer', 'hunter', 'admin'])
+          .in('tipo', ['farmer', 'hunter', 'admin', 'coordenador'])
           .neq('situacao', 'desligado')
           .not('nome', 'ilike', '%teste%')
           .order('nome');
