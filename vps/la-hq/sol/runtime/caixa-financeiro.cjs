@@ -965,7 +965,7 @@ function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competenci
   if (duplicata) {
     blocos.push(['*ATENÇÃO*',
       `Já tem uma entrada de ${fmtBRL(Number(duplicata.valor))} no caixa de hoje (${duplicata.hora}${duplicata.descricao ? ' — ' + duplicata.descricao : ''}).`,
-      'É outro pagamento?']);
+      'Se for *outro pagamento*, responde citando este card: *pode, é outro pagamento*. Só "pode" não lança.']);
   }
 
   // ---- o que eu preciso pra lançar
@@ -4452,6 +4452,8 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
         forma: intent && intent.forma || extra.forma || null, categoria: intent && intent.categoria || extra.categoria || null,
         origem: origemMessageId || event.messageId, idemKey: `${event.chatId}:${origemMessageId || event.messageId}:multi`,
         ts: agora, motivoMulti: motivo, evidenceEnvelope,
+        // Dono da revisão: só ele completa a divisão sem citar o card (26/09).
+        autorPhone: event.senderPhone || null, autorId: event.senderId || null, msgIds: [],
       };
       const duplicada = pendencia.valor != null && arr.find((p) =>
         p.tipoOperacao === 'manual_review_multi_student'
@@ -4467,8 +4469,8 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       return pendencia;
     };
     if (!intent || !intent.ok) {
-      await colocarEmRevisao(intent && intent.motivo || 'itens_incompletos');
-      await sendFn(event.chatId, '⚠️ Entendi que este comprovante é de mais de um aluno. Não vou escolher um deles nem dividir o total sozinho. Manda cada aluno com seu valor, por exemplo:\n• João — R$ 360\n• Pedro — R$ 360');
+      const _rev = await colocarEmRevisao(intent && intent.motivo || 'itens_incompletos');
+      _rev.msgIds.push(await sendFn(event.chatId, '⚠️ Entendi que este comprovante é de mais de um aluno. Não vou escolher um deles nem dividir o total sozinho. Manda cada aluno com seu valor, por exemplo:\n• João — R$ 360\n• Pedro — R$ 360'));
       log({ acao: 'manual_review_multi_student', chatId: event.chatId, motivo: intent && intent.motivo || 'itens_incompletos' });
       return { acao: 'manual_review_multi_student' };
     }
@@ -4776,10 +4778,14 @@ _Não lanço nada pela metade._`);
       log({ acao: 'lote_midia_consolidado', chatId: event.chatId, midias: lote.eventos.length, textos: lote.textos.length });
       return { event: consolidado };
     }
-    lote.eventos.push(event);
-    lote.ts = agora;
-    log({ acao: 'lote_midia_anexada', chatId: event.chatId, midias: lote.eventos.length });
-    return { skip: true, acao: 'lote_midia_anexada' };
+    // 🔴 UMA MÍDIA = UM COMPROVANTE (26/09/2026, Barra). A Kailane mandou dois PDFs
+    // juntos (R$ 499 e R$ 550) e o lote os fundiu num evento só: o OCR leu apenas o
+    // primeiro arquivo, as duas legendas foram coladas, o modelo listou duas pessoas
+    // e o par virou revisão "vários alunos" — que depois foi lançada como
+    // "Passaporte R$ 550" sem aluno. O lote existe para costurar a LEGENDA que chega
+    // em bolha separada; mídia a mais segue sozinha, com a legenda dela.
+    log({ acao: 'lote_midia_segunda_midia_separada', chatId: event.chatId });
+    return { event };
   }
 
   function anexarTextoAoLote(event, texto, agora) {
@@ -6132,9 +6138,18 @@ _Não lanço nada pela metade._`);
       // handler de categoria singular.
       if (!event.hasMedia && txt && !casarPode(txt).pode) {
         const manuais = arrP.filter((p) => p.tipoOperacao === 'manual_review_multi_student');
+        // 🔴 A REVISÃO NÃO É DONA DO GRUPO (26/09/2026, Barra). Sem citar o card,
+        // QUALQUER texto de QUALQUER pessoa ("Sim", "Botar agora", "Falta mais
+        // algum?") era lido como tentativa de divisão, e a Sol respondeu "Ainda falta
+        // uma divisão…" nove vezes. Sem citação, só completa quem mandou o comprovante
+        // e só se a mensagem trouxer valor — a divisão pedida é "Nome — R$ valor".
+        const _quemFala = String(event.senderPhone || event.senderId || '');
+        const _doDono = (p) => !!_quemFala && (String(p.autorPhone || '') === _quemFala
+          || String(p.autorId || '') === _quemFala || String(p.autorId || '') === String(event.senderId || ''));
         const alvoManual = event.quotedMessageId
-          ? manuais.find((p) => p.previewId === event.quotedMessageId || p.origem === event.quotedMessageId)
-          : (manuais.length === 1 ? manuais[0] : null);
+          ? manuais.find((p) => p.previewId === event.quotedMessageId || p.origem === event.quotedMessageId
+              || (Array.isArray(p.msgIds) && p.msgIds.includes(event.quotedMessageId)))
+          : (manuais.length === 1 && _doDono(manuais[0]) && /\d/.test(txt) ? manuais[0] : null);
         if (alvoManual && !ehConversaSemComando(txt)) {
           let multiRaw = null;
           const textoFonte = `${alvoManual.multiTexto || ''}\n${txt}`.trim();
@@ -6199,8 +6214,10 @@ _Não lanço nada pela metade._`);
             return { acao: 'multi_convertido_para_single', previewId: previewIdU };
           }
           if (!intentMulti.ok) {
-            alvoManual.multiTexto = textoFonte; alvoManual.ts = agora;
-            await sendFn(chatId, 'Ainda falta uma divisão verificável por aluno. Manda os dois assim: *Nome — R$ valor*; não vou usar só o total.');
+            // ⚠️ Não renova `ts`: renovar a cada tentativa fazia a revisão nunca expirar.
+            alvoManual.multiTexto = textoFonte;
+            const _idFalta = await sendFn(chatId, 'Ainda falta uma divisão verificável por aluno. Manda os dois assim: *Nome — R$ valor*; não vou usar só o total.');
+            if (Array.isArray(alvoManual.msgIds)) alvoManual.msgIds.push(_idFalta);
             log({ acao: 'manual_review_multi_student_continua', chatId, motivo: intentMulti.motivo });
             return { acao: 'manual_review_multi_student' };
           }
@@ -7450,14 +7467,17 @@ _Não lanço nada pela metade._`);
         return { acao: 'pode_preview_invalido' };
       }
       if (!alvo) {
-        if (arr.length === 1) alvo = arr[0];
+        // Revisão "vários alunos" não concorre pelo "pode" seco com card lançável.
+        const _lancaveis = arr.filter((p) => p.tipoOperacao !== 'manual_review_multi_student');
+        const _cand = _lancaveis.length ? _lancaveis : arr;
+        if (_cand.length === 1) alvo = _cand[0];
         else {
           // "pode" seco com 2+ cards: resolve por QUEM fala (29/08: o card da
           // Fernanda e o da Daiana; o pode de cada uma e sobre o SEU — ou sobre o
           // ultimo que a Sol mostrou para ela). Toque mais recente ganha. Quem nao
           // tem card proprio recebe a lista numerada em vez de um enigma.
           const _quem = String(event.senderPhone || event.senderId || '');
-          const _minhas = _quem ? arr.filter((p) =>
+          const _minhas = _quem ? _cand.filter((p) =>
             String(p.toquePor || '') === _quem
             || String(p.autorPhone || '') === _quem
             || String(p.autorId || '') === _quem) : [];
@@ -7465,11 +7485,22 @@ _Não lanço nada pela metade._`);
             alvo = _minhas.reduce((a, b) => (((b.toqueTs || b.ts || 0) > (a.toqueTs || a.ts || 0)) ? b : a));
             log({ acao: 'pode_resolvido_por_autor', chatId, valor: alvo.valor || null });
           } else {
-            const _lista = arr.map((p, i) => (i + 1) + ') ' + (p.aluno || p.descricao || cap(p.categoria || 'lançamento')) + (p.valor ? ' — ' + fmtBRL(p.valor) : '') + (p.enviadoPor ? ' (' + p.enviadoPor + ')' : '')).join('\n');
+            const _lista = _cand.map((p, i) => (i + 1) + ') ' + (p.aluno || p.descricao || cap(p.categoria || 'lançamento')) + (p.valor ? ' — ' + fmtBRL(p.valor) : '') + (p.enviadoPor ? ' (' + p.enviadoPor + ')' : '')).join('\n');
             await sendFn(chatId, 'Tem mais de um comprovante aguardando:\n' + _lista + '\nResponde *pode* citando o card certo.');
             return { acao: 'ambiguo' };
           }
         }
+      }
+      // 🔴 REVISÃO "VÁRIOS ALUNOS" NÃO É LANÇÁVEL (26/09/2026, Barra). Ela guarda só
+      // total, forma e categoria — não tem aluno nem divisão. Um "pode" (o do
+      // Luciano, dado ao fechamento) a lançou como "Passaporte R$ 550" sem aluno, em
+      // cima de um pagamento que já estava no caixa. Ela só vira lançamento depois da
+      // divisão, pelo fluxo de lote.
+      if (alvo.tipoOperacao === 'manual_review_multi_student') {
+        await sendFn(chatId, '⚠️ Não lancei: ' + (alvo.valor ? 'o comprovante de ' + fmtBRL(alvo.valor) : 'esse comprovante') +
+          ' está em revisão porque parece ser de mais de um aluno. Quem mandou precisa responder citando o card, com a divisão: *Nome — R$ valor*. Se for de um aluno só, reenvie o comprovante com o nome dele na legenda.');
+        log({ acao: 'pode_bloqueado_revisao_multi', chatId, valor: alvo.valor || null });
+        return { acao: 'pode_bloqueado_revisao_multi' };
       }
       if (alvo.tipoOperacao === 'estornar_movimento' || alvo.tipoOperacao === 'corrigir_movimento') {
         if (dryRun) {
@@ -7659,6 +7690,27 @@ _Não lanço nada pela metade._`);
       }
       if (!valor) { await sendFn(chatId, 'Preciso do valor pra lançar. Manda *pode, R$ X*.'); return { acao: 'sem_valor' }; }
 
+      // 🔴 DUPLICIDADE NÃO SE APROVA COM "pode" SECO (26/09/2026, Barra). O card do
+      // Bento dizia "Já tem uma entrada de R$ 550 hoje (08:56) — É outro pagamento?"
+      // e um "Pode" lançou de novo: o aviso era só texto. A pergunta é conferida
+      // AQUI, na hora do "pode" (o caixa pode ter mudado desde o card), com a mesma
+      // regra do aviso — mesmo valor + mesmo aluno no caixa de hoje (RPC
+      // sol_caixa_ja_lancado_hoje). Confirmar é o protocolo que a Sol ensina:
+      // "pode, é outro pagamento", citando o card.
+      if (!alvo.tipoOperacao && alvo.aluno && !categoriaEhSaida(alvo.categoria)
+          && !/outro\s+pagamento/i.test(String(event.body || ''))) {
+        let _dup = null;
+        try { _dup = await duplicataFn(alvo.unidade_id, valor, alvo.aluno); } catch (_) { _dup = null; }
+        const _it = _dup && _dup.ja_lancado && Array.isArray(_dup.itens) && _dup.itens[0];
+        if (_it) {
+          await sendFn(chatId, `⚠️ Não lancei: já tem ${fmtBRL(Number(_it.valor || valor))} de ${alvo.aluno} no caixa de hoje` +
+            `${_it.hora ? ' (' + _it.hora + (_it.descricao ? ' — ' + _it.descricao : '') + ')' : ''}.\n` +
+            'Se for mesmo *outro pagamento*, responde citando o card: *pode, é outro pagamento*.');
+          log({ acao: 'pode_bloqueado_duplicidade', chatId, valor, hora: _it.hora || null });
+          return { acao: 'pode_bloqueado_duplicidade' };
+        }
+      }
+
       // "pode, mas coloca a categoria como venda": aplica a correcao ANTES do
       // payload e derruba o preview V3 antigo — o validador exige categoria
       // identica entre preview e aprovacao (categoria_divergente_v3), entao o
@@ -7805,7 +7857,11 @@ _Não lanço nada pela metade._`);
         // F6: "antes de lancar veja se tem algum sem lancar" — a Sol e' quem ve.
         const _aindaAbertas = limparVelhos(chatId, agora);
         if (_aindaAbertas.length) {
-          await sendFn(chatId, '📌 Ainda aguardando: ' + _aindaAbertas.map((p) => (p.aluno || p.descricao || cap(p.categoria || 'lançamento')) + (p.valor ? ' — ' + fmtBRL(p.valor) : '')).join(' · ') + '. Responde *pode* citando o card.');
+          // Revisão "vários alunos" aparecia como "Passaporte — R$ 550" e convidava ao
+          // "pode" que a lançou sem aluno (26/09). Ela é listada pelo que falta.
+          await sendFn(chatId, '📌 Ainda aguardando: ' + _aindaAbertas.map((p) => (p.tipoOperacao === 'manual_review_multi_student'
+            ? 'comprovante' + (p.valor ? ' de ' + fmtBRL(p.valor) : '') + ' em revisão (falta a divisão por aluno)'
+            : (p.aluno || p.descricao || cap(p.categoria || 'lançamento')) + (p.valor ? ' — ' + fmtBRL(p.valor) : ''))).join(' · ') + '. Responde citando o card.');
         }
         log({ acao: ehSaida ? 'saida_lancada' : 'lancado', chatId,
               movimentacao_id: r.movimentacao_id, valor: r.valor });
