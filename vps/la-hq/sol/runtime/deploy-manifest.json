@@ -20,8 +20,8 @@
     {
       "class": "caixa-runtime",
       "mode": "0644",
-      "sha256": "dfa83428f92eb3d63f2b487df82e51f92b538ddbf98dbf546d6f78b10ed9728c",
-      "size": 490178,
+      "sha256": "003e5d6399aa7ba3cc759b3afcebd8b5fe22910423b24bad82e226f921407907",
+      "size": 490884,
       "source": "vps/la-hq/sol/runtime/caixa-financeiro.cjs",
       "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs"
     },
@@ -60,8 +60,8 @@
     {
       "class": "caixa-runtime",
       "mode": "0644",
-      "sha256": "e92d44dcbd8d5e4b5dd75280bfa2e41153415035e64bbce2083a710e032a8a36",
-      "size": 34934,
+      "sha256": "b0a6ec5a539d7d919315abfa45b689057d8208f00fea99e2710188a42eb729c6",
+      "size": 40349,
       "source": "vps/la-hq/sol/runtime/caixa-cheques.cjs",
       "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-cheques.cjs"
     },

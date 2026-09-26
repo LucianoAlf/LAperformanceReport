@@ -65,7 +65,7 @@ assert.strictEqual(chq.normalizarCheque({ banco: '237', agencia: '1234', numero:
 assert.strictEqual(chq.normalizarCheque({ banco: '237', agencia: '1234', numero: '000123', cmc7: CMC7, valor: 364,
   valor_extenso: 'trezentos e sessenta e sete reais' }).confiavel, false, 'extenso 367 × numérico 364 tem de virar ❓');
 
-const U = (n) => `00000000-0000-4000-8000-00000000000${n}`;
+const U = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const cand = (id, score, extra = {}) => ({ emusys_fatura_id: id, la_report_fatura_id: U(id), score, status: 'paga',
   valor_original: 367, valor_pago: 367, data_pagamento: '2026-09-20', data_vencimento: '2026-09-20',
   aluno_nome: 'Aluno ' + id, responsavel_nome: 'Resp ' + id, ...extra });
@@ -119,13 +119,14 @@ function montar(cheques) {
       if (nome === 'sol_cheque_documento_hash_v1') return 'a'.repeat(64);
       const n = String(args.p_emitente_nome || '');
       const porNome = { 'EMITENTE UM': 1, 'EMITENTE DOIS': 2, 'EMITENTE PIX': 3, 'EMITENTE DUPLO': 4, 'Fulana Teste': 1 };
-      const id = porNome[n];
+      const grande = n.match(/^LOTE GRANDE (\d+)$/);
+      const id = porNome[n] || (grande ? 100 + Number(grande[1]) : null);
       if (id) return { ok: true, emitente: { resolvido: true }, candidatas: [cand(id, 0.9, { aluno_nome: 'Aluno Teste ' + id })] };
       return { ok: true, emitente: { resolvido: false }, candidatas: [cand(1, 0.3, { responsavel_nome: 'Fulana Teste' })] };
     },
     consultaFn: async (caminho) => {
       const ids = (caminho.match(/in\.\(([^)]*)\)/) || [])[1].split(',');
-      if (caminho.startsWith('emusys_faturas')) return ids.map((id) => FATURAS[id]).filter(Boolean);
+      if (caminho.startsWith('emusys_faturas')) return ids.map((id) => FATURAS[id] || fat({ id }));
       if (caminho.startsWith('vw_caixa_movimentacao_fatura_links')) return ids.filter((id) => NA_CAIXA.has(id)).map((id) => ({ fatura_id: id }));
       return null;
     },
@@ -169,14 +170,24 @@ const raw = (numero, c, emitente, extra = {}) => ({ banco: c.slice(0, 3), agenci
     const r = await h.handle(ev({ messageId: 'LOTE1', body: '', hasMedia: true, mediaType: 'document', mediaUrls: [arq] }));
     assert.strictEqual(r.acao, 'preview_multi_aluno_enviado', JSON.stringify(r));
     assert.strictEqual(fs.existsSync(arq), false, 'o PDF tem de ser apagado depois da leitura');
+    assert.strictEqual(enviadas.length, 1, 'UMA mensagem: a lista organizada É o card');
     const lista = enviadas[0].t;
-    assert.ok(/Li 5 cheques do lote de 20\/09 \(Campo Grande\)/.test(lista), lista);
-    assert.strictEqual((lista.match(/vai para o caixa/g) || []).length, 2, lista);
-    assert.ok(/retirar do malote/.test(lista) && /paga por Pix/.test(lista), 'paga por Pix → retirar do malote');
-    assert.ok(/já está no caixa/.test(lista), 'fatura já no caixa não entra de novo');
-    assert.ok(/não confiei na leitura/.test(lista), 'nº diverge do CMC-7 → ❓');
+    assert.ok(/🧾 \*Lote de cheques — Campo Grande\*/.test(lista), lista);
+    assert.ok(/📅 Depósito de 20\/09 · 5 cheques · R\$ 1\.835,00/.test(lista), lista);
+    assert.ok(/✅ 2 vão para o caixa — R\$ 734,00/.test(lista) && /⚠️ 1 para retirar do malote/.test(lista) && /❓ 2 precisam de você/.test(lista), lista);
+    // seções na ordem, cada cheque no seu bloco
+    const iCaixa = lista.indexOf('✅ *VAI PARA O CAIXA*'); const iMalote = lista.indexOf('⚠️ *RETIRAR DO MALOTE*'); const iVoce = lista.indexOf('❓ *PRECISA DE VOCÊ*');
+    assert.ok(iCaixa > 0 && iMalote > iCaixa && iVoce > iMalote, 'seções na ordem caixa → malote → você');
+    const blocoCaixa = lista.slice(iCaixa, iMalote);
+    assert.ok(/\*Cheque 1\* — R\$ 367,00\n🏦 Bradesco · nº 000123\n✍️ Emitente: Emitente Um\n🎓 Aluno: Aluno Teste 1\n👤 Resp\. financeiro: Resp 1\n📄 Parcela 09\/2026 do curso de Violão\n💳 Paga no Emusys/.test(blocoCaixa), blocoCaixa);
+    assert.ok(/\*Cheque 2\*/.test(blocoCaixa) && !/\*Cheque 3\*/.test(blocoCaixa));
+    assert.ok(/\*Cheque 3\*/.test(lista.slice(iMalote, iVoce)) && /já foi paga por \*Pix\*/.test(lista), 'paga por Pix → retirar do malote');
+    assert.ok(/já está lançada no caixa/.test(lista), 'fatura já no caixa não entra de novo');
+    assert.ok(/Não consegui confirmar a leitura/.test(lista), 'nº diverge do CMC-7 → ❓');
+    assert.ok(/👉 \*Posso lançar R\$ 734,00 \(2 cheques\) no caixa de hoje\?\* Responde \*pode\* citando esta mensagem\./.test(lista), lista);
     assert.ok(!JSON.stringify(enviadas).includes('11144477735'), 'documento em claro nunca sai');
     const pend = h._pendentes.get(CHAT)[0];
+    assert.strictEqual(pend.previewId, 'MSG1', 'o card é a própria mensagem do lote');
     assert.strictEqual(pend.tipoOperacao, 'lancar_recebimento_lote');
     assert.strictEqual(pend.forma, 'cheque');
     assert.strictEqual(pend.valor, 734);
@@ -200,7 +211,8 @@ const raw = (numero, c, emitente, extra = {}) => ({ banco: c.slice(0, 3), agenci
     const r = await h.handle(ev({ messageId: 'LOTE2', body: '', hasMedia: true, mediaType: 'document', mediaUrls: [pdfTemp()] }));
     assert.strictEqual(r.acao, 'preview_cheque_enviado', JSON.stringify(r));
     const listaId = 'MSG1';
-    assert.ok(/de quem é\?/.test(enviadas[0].t) && /Fulana Teste/.test(enviadas[0].t), enviadas[0].t);
+    assert.ok(/Não achei esse emitente no cadastro/.test(enviadas[0].t) && /• Fulana Teste/.test(enviadas[0].t), enviadas[0].t);
+    assert.ok(/❓ Para os demais, responde citando esta mensagem: \*2 é da Fulana\*/.test(enviadas[0].t), enviadas[0].t);
     const pend = h._pendentes.get(CHAT).find((p) => p.forma === 'cheque');
     const rp = await h.handle(ev({ messageId: 'PODE2', body: 'pode', quotedMessageId: pend.previewId }));
     assert.strictEqual(rp.acao, 'lancado', JSON.stringify(rp));
@@ -211,11 +223,34 @@ const raw = (numero, c, emitente, extra = {}) => ({ banco: c.slice(0, 3), agenci
 
     const ri = await h.handle(ev({ messageId: 'ID1', body: '2 é da Fulana Teste', quotedMessageId: listaId }));
     assert.strictEqual(ri.acao, 'preview_cheque_enviado', JSON.stringify(ri));
-    assert.ok(enviadas.some((m) => /Atualizei/.test(m.t) && /vai para o caixa/.test(m.t)));
+    const cardId = enviadas[enviadas.length - 1].t;
+    assert.ok(/Cheque 2 identificado/.test(cardId) && /\*Cheque 2\* — R\$ 367,00/.test(cardId) && /Posso lançar R\$ 367,00 \(1 cheque\)/.test(cardId), cardId);
+    // "pode" de novo no card já lançado não lança outra vez
     const rpl = await h.handle(ev({ messageId: 'PODELISTA', body: 'pode', quotedMessageId: listaId }));
-    assert.strictEqual(rpl.acao, 'cheques_pode_na_lista', '"pode" na LISTA não lança: ' + JSON.stringify(rpl));
+    assert.notStrictEqual(rpl.acao, 'lancado', '"pode" num card já lançado não lança de novo: ' + JSON.stringify(rpl));
+    assert.strictEqual(singulares.length, 1);
     assert.strictEqual(lotes.length, 0);
     console.log('C. 1 cheque → lançamento simples + identificação — OK');
+  }
+
+  // B2. lote REAL de 15 cheques: um card só (sem o teto de 12 do resolver), 15 blocos numerados
+  {
+    const quinze = Array.from({ length: 15 }, (_, k) => {
+      const num = String(500 + k).padStart(6, '0');
+      return raw(num, cmc7('237', '1234', '018', num, '5', String(9000 + k).padStart(10, '0')), `LOTE GRANDE ${k + 1}`);
+    });
+    const { h, enviadas, lotes } = montar(quinze);
+    const r = await h.handle(ev({ messageId: 'LOTE15', body: '', hasMedia: true, mediaType: 'document', mediaUrls: [pdfTemp()] }));
+    assert.strictEqual(r.acao, 'preview_multi_aluno_enviado', JSON.stringify(r));
+    const t = enviadas[0].t;
+    for (let k = 1; k <= 15; k += 1) assert.ok(t.includes(`*Cheque ${k}* — R$ 367,00`), 'falta o bloco do cheque ' + k);
+    assert.ok(/✅ 15 vão para o caixa — R\$ 5\.505,00/.test(t), t.slice(0, 300));
+    assert.ok(t.length < 6000, 'mensagem de 15 cheques cabe no WhatsApp: ' + t.length);
+    const pend = h._pendentes.get(CHAT)[0];
+    assert.strictEqual(pend.itens.length, 15);
+    await h.handle(ev({ messageId: 'PODE15', body: 'pode', quotedMessageId: pend.previewId }));
+    assert.strictEqual(lotes.length, 1); assert.strictEqual(lotes[0].itens.length, 15);
+    console.log('B2. 15 cheques → um card, um lote — OK (' + t.length + ' caracteres)');
   }
 
   // D. sombra
@@ -226,7 +261,7 @@ const raw = (numero, c, emitente, extra = {}) => ({ banco: c.slice(0, 3), agenci
     const r = await h.handle(ev({ messageId: 'LOTE3', body: '', hasMedia: true, mediaType: 'document', mediaUrls: [pdfTemp()] }));
     assert.strictEqual(r.acao, 'cheques_lote_sombra');
     assert.ok(enviadas.every((m) => m.c === DM), 'sombra não fala no grupo');
-    assert.ok(/SOMBRA/.test(enviadas[0].t) && /No grupo eu abriria o card para lançar R\$ 734,00/.test(enviadas[0].t), enviadas[0].t);
+    assert.ok(/SOMBRA/.test(enviadas[0].t) && /No grupo eu perguntaria: \*Posso lançar R\$ 734,00 \(2 cheques\)/.test(enviadas[0].t), enviadas[0].t);
     assert.strictEqual((h._pendentes.get(CHAT) || []).length, 0, 'sombra não abre card');
     assert.strictEqual(lotes.length + singulares.length, 0);
     console.log('D. sombra — OK');

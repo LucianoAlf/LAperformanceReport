@@ -318,48 +318,112 @@ function itemDoCaixa(it) {
 
 const CIRC = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
 const ddmm = (iso) => (iso ? `${String(iso).slice(8, 10)}/${String(iso).slice(5, 7)}` : '');
+const SEP = '━━━━━━━━━━━━━━';
 
-function linhaCheque(it, i) {
-  const ch = it.cheque;
-  const banco = BANCOS[ch.banco] || (ch.banco ? 'banco ' + ch.banco : 'banco ?');
-  const quem = it.escolha.fatura && it.escolha.fatura.aluno_nome;
-  let l = `${CIRC[i] || (i + 1) + ')'} ${ch.valor ? fmtBRL(ch.valor) : 'R$ ?'} · ${banco} nº ${ch.numero} · ${ch.emitente_nome || 'emitente ?'}`;
-  if (quem) l += ` · aluno ${quem}`;
-  if (it.fatura && it.fatura.competencia) l += ` · ${mmYYYY(it.fatura.competencia)}`;
-  const d = it.decisao;
-  if (d === 'lancar') l += ' ✅ vai para o caixa';
-  else if (d === 'retirar') {
-    l += ' ⚠️ *retirar do malote*';
-    l += it.fatura && it.fatura.status === 'cancelada'
-      ? '\n   · essa parcela foi cancelada no Emusys.'
-      : `\n   · essa parcela já foi paga${it.fatura && it.fatura.forma ? ' por ' + it.fatura.forma : ''}${it.fatura && it.fatura.data_pagamento ? ' em ' + ddmm(it.fatura.data_pagamento) : ''}.`;
-  } else if (d === 'ja_no_caixa') l += ' ❓ essa parcela já está no caixa — não lancei de novo';
-  else if (d === 'valor') l += ' ❓ o valor não bate com a parcela — não lancei';
-  else if (d === 'leitura') l += `\n   ❓ não confiei na leitura: ${ch.problemas.join('; ')}. Confere o nº e o valor?`;
-  else {
-    l += ' ❓ de quem é?';
-    if (it.escolha.suspeitos.length) l += `\n   · pode ser da família de: ${it.escolha.suspeitos.map((s) => s.rotulo || s).join('; ')}`;
-    else l += '\n   · não achei o emitente no cadastro.';
-  }
-  return l;
+// Nome impresso no cheque vem em CAIXA ALTA ("MAURICIO CARDOZO VIEIRA"); no card
+// ele aparece como nome de gente. Conectivos ficam minúsculos. Nome que já vem
+// com minúsculas é mantido como está (é o cadastro, não o cheque).
+const CONECTIVOS = new Set(['da', 'das', 'de', 'do', 'dos', 'e']);
+function nomeBonito(nome) {
+  const s = String(nome || '').trim().replace(/\s+/g, ' ');
+  if (!s || s !== s.toUpperCase()) return s;
+  return s.toLowerCase().split(' ')
+    .map((w, i) => (i > 0 && CONECTIVOS.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join(' ');
 }
 
-function montarMensagem({ unidadeNome, loteData, itens, sombra = false }) {
-  const linhas = [];
-  if (sombra) linhas.push('🧪 *SOMBRA* — nada foi postado no grupo e nada foi lançado.');
-  linhas.push(`🧾 Li ${itens.length} cheque${itens.length === 1 ? '' : 's'} do lote de ${ddmm(loteData)} (${unidadeNome}):`);
-  itens.forEach((it, i) => linhas.push(linhaCheque(it, i)));
-  const lanc = itens.filter((it) => it.decisao === 'lancar');
-  const total = lanc.reduce((s, it) => s + Number(it.cheque.valor), 0);
+function valorEsperado(f) {
+  if (!f) return null;
+  const v = f.status === 'paga' && f.valor_pago != null
+    ? Number(f.valor_pago)
+    : Number(f.valor_original || 0) - Number(f.desconto_fixo || 0) - Number(f.desconto_condicional || 0);
+  return v > 0 ? v : null;
+}
+
+// UM cheque = UM bloco, uma informação por linha — o mesmo vocabulário do card de
+// comprovante da Sol (aluno, resp. financeiro, fatura). O número "Cheque N" é a
+// ORDEM de leitura e não muda entre seções: é por ele que a equipe responde
+// "3 é da Fulana".
+function blocoCheque(it, i) {
+  const ch = it.cheque;
+  const esc = it.escolha.fatura;
+  const f = it.fatura;
+  const banco = BANCOS[ch.banco] || (ch.banco ? 'Banco ' + ch.banco : 'Banco ?');
+  const l = [`*Cheque ${i + 1}* — ${ch.valor ? fmtBRL(ch.valor) : 'R$ ?'}`];
+  l.push(`🏦 ${banco} · nº ${ch.numero}${ch.bom_para ? ` · bom para ${ddmm(ch.bom_para)}` : ''}`);
+  l.push(`✍️ Emitente: ${ch.emitente_nome ? nomeBonito(ch.emitente_nome) : 'não consegui ler'}`);
+  if (esc && esc.aluno_nome) l.push(`🎓 Aluno: ${esc.aluno_nome}`);
+  if (esc && esc.responsavel_nome) l.push(`👤 Resp. financeiro: ${esc.responsavel_nome}`);
+  if (f && f.descricao) l.push(`📄 ${f.descricao}`);
+  const d = it.decisao;
+  if (d === 'lancar') {
+    l.push(f && f.status === 'paga'
+      ? `💳 Paga no Emusys${f.data_pagamento ? ' em ' + ddmm(f.data_pagamento) : ''}${f.forma ? ' · ' + f.forma : ''} — ✅ confere`
+      : '💳 Em aberto no Emusys — ✅ valor confere');
+  } else if (d === 'retirar') {
+    l.push(f && f.status === 'cancelada'
+      ? '↩️ Essa parcela foi *cancelada* no Emusys — devolver o cheque ao cliente.'
+      : `↩️ Essa parcela já foi paga${f && f.forma ? ' por *' + f.forma + '*' : ''}${f && f.data_pagamento ? ' em ' + ddmm(f.data_pagamento) : ''} — devolver o cheque ao cliente.`);
+  } else if (d === 'ja_no_caixa') {
+    l.push('🚫 Essa parcela já está lançada no caixa — não lanço de novo.');
+  } else if (d === 'valor') {
+    const esp = valorEsperado(f);
+    l.push(`⚠️ O cheque é de ${fmtBRL(ch.valor)}${esp ? ` e a parcela é de ${fmtBRL(esp)}` : ' e não bate com a parcela'} — confere antes.`);
+  } else if (d === 'leitura') {
+    l.push(`📷 Não consegui confirmar a leitura: ${ch.problemas.join('; ')}.`);
+    l.push('   Confere o número e o valor no cheque.');
+  } else {
+    const sug = it.escolha.suspeitos || [];
+    if (it.escolha.motivo === 'empate') l.push('🔎 Achei mais de uma parcela possível para esse emitente.');
+    else l.push('🔎 Não achei esse emitente no cadastro.');
+    if (sug.length) {
+      l.push('   Pode ser da família de:');
+      for (const s of sug) l.push(`   • ${s.rotulo || s}`);
+    }
+  }
+  return l.join('\n');
+}
+
+const SECOES = [
+  { chave: 'caixa', titulo: '✅ *VAI PARA O CAIXA*', decisoes: ['lancar'] },
+  { chave: 'malote', titulo: '⚠️ *RETIRAR DO MALOTE*', decisoes: ['retirar'] },
+  { chave: 'voce', titulo: '❓ *PRECISA DE VOCÊ*', decisoes: ['sem_parcela', 'valor', 'leitura', 'ja_no_caixa'] },
+];
+
+// A mensagem do lote É o card: com cheque ✅, o "pode" citando ESTA mensagem lança
+// os ✅ no caixa do dia; "3 é da Fulana" citando ESTA mensagem resolve um ❓.
+// Hierarquia: cabeçalho → placar → uma seção por destino → um bloco por cheque.
+function montarMensagem({ unidadeNome, loteData, itens, sombra = false, cabecalho = null, indices = null }) {
+  const total = itens.reduce((s, it) => s + (Number(it.cheque.valor) || 0), 0);
+  // `indices` preserva o número do cheque no lote quando a mensagem mostra só parte dele.
+  const porSecao = SECOES.map((s) => ({ ...s, itens: itens.map((it, i) => ({ it, i: indices ? indices[i] : i })).filter((x) => s.decisoes.includes(x.it.decisao)) }));
+  const lanc = porSecao[0].itens;
+  const totalLanc = lanc.reduce((s, x) => s + Number(x.it.cheque.valor), 0);
+  const partes = [];
+  if (sombra) partes.push('🧪 *SOMBRA* — nada foi postado no grupo e nada foi lançado.');
+  partes.push([
+    cabecalho || `🧾 *Lote de cheques — ${unidadeNome}*`,
+    `📅 Depósito de ${ddmm(loteData)} · ${itens.length} cheque${itens.length === 1 ? '' : 's'} · ${fmtBRL(total)}`,
+  ].join('\n'));
+  const placar = [];
+  if (lanc.length) placar.push(`✅ ${lanc.length} ${lanc.length === 1 ? 'vai' : 'vão'} para o caixa — ${fmtBRL(totalLanc)}`);
+  if (porSecao[1].itens.length) placar.push(`⚠️ ${porSecao[1].itens.length} para retirar do malote`);
+  if (porSecao[2].itens.length) placar.push(`❓ ${porSecao[2].itens.length} precisa${porSecao[2].itens.length === 1 ? '' : 'm'} de você`);
+  if (placar.length) partes.push(placar.join('\n'));
+  for (const s of porSecao) {
+    if (!s.itens.length) continue;
+    partes.push(`${SEP}\n${s.titulo}\n\n${s.itens.map((x) => blocoCheque(x.it, x.i)).join('\n\n')}`);
+  }
+  const fim = [];
   if (lanc.length) {
-    linhas.push(sombra
-      ? `👉 No grupo eu abriria o card para lançar ${fmtBRL(total)} em cheque (${lanc.length}) no caixa de hoje.`
-      : `👉 O card para lançar ${fmtBRL(total)} em cheque no caixa de hoje vem logo abaixo.`);
+    fim.push(sombra
+      ? `👉 No grupo eu perguntaria: *Posso lançar ${fmtBRL(totalLanc)} (${lanc.length} cheque${lanc.length === 1 ? '' : 's'}) no caixa de hoje?*`
+      : `👉 *Posso lançar ${fmtBRL(totalLanc)} (${lanc.length} cheque${lanc.length === 1 ? '' : 's'}) no caixa de hoje?* Responde *pode* citando esta mensagem.`);
   }
-  if (!sombra && itens.some((it) => it.decisao === 'sem_parcela')) {
-    linhas.push('Para um ❓ de quem é, responde citando esta mensagem: *1 é da Fulana*.');
+  if (!sombra && porSecao[2].itens.some((x) => x.it.decisao === 'sem_parcela')) {
+    fim.push(`❓ Para os demais, responde citando esta mensagem: *${porSecao[2].itens.find((x) => x.it.decisao === 'sem_parcela').i + 1} é da Fulana*.`);
   }
-  return linhas.join('\n');
+  if (fim.length) partes.push(`${SEP}\n${fim.join('\n')}`);
+  return partes.join('\n\n');
 }
 
 // ------------------------------------------------------------ E/S
@@ -414,11 +478,12 @@ async function lerImagemVisao(imgPath, modelo) {
   return { ok: true, cheques: j.cheques };
 }
 
-// PDF → PNG por página (200 dpi, até 6 páginas). Imagem passa direto.
+// PDF → PNG por página (200 dpi, até 20 páginas: lote de 10-15 cheques ocupa
+// 4-8 páginas). Imagem passa direto.
 function paginasDoArquivo(arquivo) {
   if (!/\.pdf$/i.test(arquivo)) return { paginas: [arquivo], tmp: null };
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sol-chq-'));
-  cp.spawnSync('/usr/bin/pdftoppm', ['-r', '200', '-png', '-f', '1', '-l', '6', arquivo, path.join(tmp, 'p')], { timeout: 60000 });
+  cp.spawnSync('/usr/bin/pdftoppm', ['-r', '200', '-png', '-f', '1', '-l', '20', arquivo, path.join(tmp, 'p')], { timeout: 60000 });
   const paginas = fs.readdirSync(tmp).filter((f) => f.endsWith('.png')).sort().map((f) => path.join(tmp, f));
   return { paginas, tmp };
 }
@@ -426,14 +491,22 @@ function paginasDoArquivo(arquivo) {
 async function lerLote(arquivo, modelo) {
   const { paginas, tmp } = paginasDoArquivo(arquivo);
   try {
-    const todos = [];
-    for (const p of paginas) {
-      let r = await lerImagemVisao(p, modelo);
-      if (!r.ok) r = await lerImagemVisao(p, modelo); // uma nova tentativa: JSON truncado acontece
-      if (!r.ok) return { ok: false, motivo: r.motivo };
-      todos.push(...r.cheques);
+    // 3 páginas por vez (lote de 15 cheques ≈ 5-8 páginas ≈ 13 s cada); a ORDEM
+    // dos cheques é a das páginas, porque é ela que numera "Cheque N" no card.
+    const porPagina = new Array(paginas.length);
+    let proxima = 0; let falha = null;
+    async function trabalhador() {
+      while (proxima < paginas.length && !falha) {
+        const k = proxima; proxima += 1;
+        let r = await lerImagemVisao(paginas[k], modelo);
+        if (!r.ok) r = await lerImagemVisao(paginas[k], modelo); // uma nova tentativa: JSON truncado acontece
+        if (!r.ok) { falha = r.motivo || 'visao_falhou'; return; }
+        porPagina[k] = r.cheques;
+      }
     }
-    return { ok: true, cheques: todos, paginas: paginas.length };
+    await Promise.all([trabalhador(), trabalhador(), trabalhador()]);
+    if (falha) return { ok: false, motivo: falha };
+    return { ok: true, cheques: porPagina.flat(), paginas: paginas.length };
   } finally {
     if (tmp) { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (_) { /* melhor esforço */ } }
   }
@@ -503,8 +576,10 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
     const lido = await lerLoteFn(arquivo, modelo);
     if (!lido.ok) return { ok: false, motivo: lido.motivo || 'leitura_falhou' };
     if (!lido.cheques.length) return { ok: false, motivo: 'nenhum_cheque_lido' };
-    const itens = [];
-    for (const raw of lido.cheques) {
+    const itens = new Array(lido.cheques.length);
+    let prox = 0;
+    const umCheque = async (idx) => {
+      const raw = lido.cheques[idx];
       const cheque = normalizarCheque(raw);
       let docHash = null;
       if (cheque.documento && cheque.confiavel) {
@@ -519,8 +594,9 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
             p_valor: cheque.valor, p_bom_para: cheque.bom_para, p_emitente_documento_hash: docHash });
         } catch (_) { res = null; }
       }
-      itens.push({ cheque, escolha: escolherFatura(res, cheque, loteData), fatura: null, jaLigada: false, decisao: null });
-    }
+      itens[idx] = { cheque, escolha: escolherFatura(res, cheque, loteData), fatura: null, jaLigada: false, decisao: null };
+    };
+    await Promise.all([0, 1, 2, 3].map(async () => { while (prox < lido.cheques.length) { const k = prox; prox += 1; await umCheque(k); } }));
     const fat = await carregarFaturas(itens);
     if (!fat.ok) return { ok: false, motivo: 'fonte_faturas_indisponivel' };
     decidirTodos(itens);
@@ -558,12 +634,20 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
       log({ acao: 'cheques_lote_sombra', unidade: r.sigla, itens: r.itens.length });
       return { tratou: true, acao: 'cheques_lote_sombra' };
     }
-    const msgId = await sendFn(event.chatId, texto);
+    const lote = { msgIds: [], itens: r.itens, loteData: r.loteData, sigla: r.sigla, unidadeNome: grupo.nome, ts: agoraFn(), origem: event.messageId };
     const arr = (lotes.get(event.chatId) || []).filter((x) => agoraFn() - x.ts < 6 * 3600 * 1000);
-    arr.push({ msgIds: [msgId], itens: r.itens, loteData: r.loteData, sigla: r.sigla, unidadeNome: grupo.nome, ts: agoraFn(), origem: event.messageId });
+    arr.push(lote);
     lotes.set(event.chatId, arr);
     const itensCaixa = r.itens.filter((it) => it.decisao === 'lancar').map(itemDoCaixa);
-    return { tratou: true, acao: 'cheques_lote_lido', itensCaixa };
+    // Sem cheque lançável, a mensagem é só a lista: o módulo publica. Com cheque
+    // lançável, o CAIXA publica esta mesma mensagem como card (preview V3), e
+    // devolve o id por `vincularMensagem` para as respostas "N é da Fulana".
+    if (!itensCaixa.length) {
+      const id = await sendFn(event.chatId, texto);
+      if (id) lote.msgIds.push(id);
+      return { tratou: true, acao: 'cheques_lote_sem_lancavel' };
+    }
+    return { tratou: true, acao: 'cheques_lote_lido', itensCaixa, texto, lote };
   }
 
   // Resposta CITANDO a lista do lote: "1 é da Natalia". O nome volta à MESMA RPC
@@ -574,10 +658,10 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
     const lote = arr.find((x) => (Array.isArray(x.msgIds) && x.msgIds.includes(event.quotedMessageId)) || x.origem === event.quotedMessageId);
     if (!lote) return null;
     const txt = String(event.body || '').trim();
-    if (/^\s*[*_~]*\s*pode\b/i.test(txt)) {
-      await sendFn(event.chatId, 'O *pode* é no card de lançamento (a mensagem "Comprovante recebido"), não na lista dos cheques.');
-      return { tratou: true, acao: 'cheques_pode_na_lista' };
-    }
+    // "pode" citando o lote é aprovação do CARD: segue para o caixa (a mensagem do
+    // lote é o próprio preview). Sem ✅ no lote não há card, e o caixa responde
+    // que não há pendência.
+    if (/^\s*[*_~]*\s*pode\b/i.test(txt)) return null;
     const pend = lote.itens.map((it, i) => ({ it, i })).filter((x) => x.it.decisao === 'sem_parcela' && x.it.cheque.confiavel);
     if (!pend.length) return null;
     let alvo = null; let resto = txt;
@@ -610,19 +694,27 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
     }
     it.decisao = decidirCheque(it, it.fatura, it.jaLigada);
     if (it.decisao === 'lancar' && lote.itens.some((x) => x !== it && x.decisao === 'lancar' && x.fatura && x.fatura.id === it.fatura.id)) it.decisao = 'sem_parcela';
-    const msg = await sendFn(event.chatId, 'Atualizei:\n' + linhaCheque(it, alvo.i));
-    if (msg) lote.msgIds.push(msg);
     log({ acao: 'cheques_identificacao', indice: alvo.i + 1, decisao: it.decisao });
-    return it.decisao === 'lancar'
-      ? { tratou: true, acao: 'cheques_identificacao', itensCaixa: [itemDoCaixa(it)] }
-      : { tratou: true, acao: 'cheques_identificacao' };
+    const textoAtual = montarMensagem({ unidadeNome: lote.unidadeNome, loteData: lote.loteData, itens: [it], indices: [alvo.i],
+      cabecalho: `🧾 *Cheque ${alvo.i + 1} identificado — ${lote.unidadeNome}*` });
+    if (it.decisao === 'lancar') {
+      return { tratou: true, acao: 'cheques_identificacao', itensCaixa: [itemDoCaixa(it)], texto: textoAtual, lote };
+    }
+    const msg = await sendFn(event.chatId, textoAtual);
+    if (msg) lote.msgIds.push(msg);
+    return { tratou: true, acao: 'cheques_identificacao' };
   }
 
-  return { tratarMidia, tratarResposta, processarArquivo };
+  // O caixa publicou a mensagem do lote como card: guarda o id para as respostas.
+  function vincularMensagem(lote, msgId) {
+    if (lote && msgId && Array.isArray(lote.msgIds)) lote.msgIds.push(msgId);
+  }
+
+  return { tratarMidia, tratarResposta, processarArquivo, vincularMensagem };
 }
 
 module.exports = {
   criarCheques, pareceLoteCheques, dataDoLote, dvMod10, lerCmc7, extensoParaNumero,
   normalizarCheque, escolherFatura, decidirCheque, itemDoCaixa, categoriaDaFatura, montarMensagem,
-  nomeOriginal, UNIDADE_SIGLA,
+  blocoCheque, nomeBonito, nomeOriginal, UNIDADE_SIGLA,
 };

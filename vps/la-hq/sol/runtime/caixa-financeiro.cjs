@@ -4447,17 +4447,18 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   // (abrirFluxoMultiAluno com resolvidoPronto — as RPCs de lote exigem 2 itens),
   // 1 cheque = lançamento simples. Forma 'cheque'. O número do cheque vai na
   // descrição: é por ele que o Super Folha liga o depósito do banco.
-  async function abrirCardCheques({ event, grp, itens, agora }) {
+  async function abrirCardCheques({ event, grp, itens, agora, textoPronto = null }) {
     const total = Math.round(itens.reduce((s, x) => s + Number(x.valor), 0) * 100) / 100;
     const cats = [...new Set(itens.map((x) => x.categoria))];
     const categoria = cats.length === 1 ? cats[0] : 'parcela';
     if (itens.length >= 2) {
       return abrirFluxoMultiAluno({ event, grupo: grp, textoFonte: 'lote de cheques', textoHumano: '',
         intent: { ok: true, valor_total: total, forma: 'cheque', categoria, itens }, agora,
-        origemMessageId: event.messageId, resolvidoPronto: { ok: true, itens } });
+        origemMessageId: event.messageId, resolvidoPronto: { ok: true, itens },
+        textoPronto, tetoItens: 60 });
     }
     const it = itens[0];
-    let texto = montarPreview({ unidadeNome: grp.nome, valor: it.valor, forma: 'cheque', categoria: it.categoria,
+    let texto = textoPronto || montarPreview({ unidadeNome: grp.nome, valor: it.valor, forma: 'cheque', categoria: it.categoria,
       aluno: it.aluno_nome, competencia: it.competencia, parcela: null, confiancaBaixa: false,
       responsavelFinanceiro: it.responsavel_financeiro, formaIncerta: false, cartaoModalidade: null, cartaoParcelas: null,
       multiplas: false, alunoViaPagador: null, pagadorNome: null, candidatosAluno: null, canonica: null, duplicata: null,
@@ -4495,7 +4496,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
 
   async function abrirFluxoMultiAluno({ event, grupo, textoFonte, textoHumano, intent, agora,
     origemMessageId, resolvidoPronto = null, agentFirstEnvelope = null,
-    evidenceEnvelope = null, supersedePreviewId = null }) {
+    evidenceEnvelope = null, supersedePreviewId = null, textoPronto = null, tetoItens = null }) {
     const arr = limparVelhos(event.chatId, agora);
     // Janela de reenvio: OCR lento (frequente, ~45s de timeout) leva a equipe a mandar o
     // MESMO comprovante de novo. Sem isto, cada reenvio empilha outra pendencia MANUAL
@@ -4571,7 +4572,10 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     //    hoje: 13 lotes de 2 itens e 1 de 3 — o teto nao aperta a operacao.
     // ⚠️ Isto NAO substitui o conserto de escala; e a rede enquanto ele nao
     //    estiver promovido, e depois dele continua valendo como limite honesto.
-    const _tetoAlunos = Math.max(2, Number(process.env.SOL_CAIXA_MAX_ALUNOS_LOTE || 12));
+    // ⚠️ `tetoItens` só vem do lote de CHEQUES (26/09): ele chega com as faturas já
+    //    resolvidas (resolvidoPronto) e não paga o resolver que este teto protege; o
+    //    validador do "pode" lê o envelope UMA vez. Lote real: 10-15 cheques.
+    const _tetoAlunos = tetoItens || Math.max(2, Number(process.env.SOL_CAIXA_MAX_ALUNOS_LOTE || 12));
     if (itensParaResolver.length > _tetoAlunos) {
       await colocarEmRevisao('acima_do_teto');
       await sendFn(event.chatId,
@@ -4695,7 +4699,7 @@ _Não lanço nada pela metade._`);
       desconto_negociado_explicito: !!item.sem_vinculo_fatura
         && _autorizacaoDesconto.ok && _entradasAutorizadas.has(_chaveItem(item)),
     }));
-    const texto = montarPreviewMultiAluno({ unidadeNome: grupo.nome, valorTotal: intent.valor_total, forma: intent.forma, categoria: intent.categoria, itens });
+    const texto = textoPronto || montarPreviewMultiAluno({ unidadeNome: grupo.nome, valorTotal: intent.valor_total, forma: intent.forma, categoria: intent.categoria, itens });
     let idEnviou = null;
     try { idEnviou = await identidadeFn(event.senderPhone, grupo.unidade_id); } catch (e) { /* melhor esforço */ }
     const pendencia = {
@@ -4924,7 +4928,10 @@ _Não lanço nada pela metade._`);
         if (rc && rc.tratou) {
           // Cheques ✅ entram no CAIXA DA SOL pelo card de sempre (decisão do Alf, 26/09).
           if (Array.isArray(rc.itensCaixa) && rc.itensCaixa.length) {
-            const rCard = await abrirCardCheques({ event, grp, itens: rc.itensCaixa, agora });
+            // A mensagem organizada do lote É o card (preview V3): um "pode"
+            // citando ela lança os ✅; "N é da Fulana" citando ela resolve um ❓.
+            const rCard = await abrirCardCheques({ event, grp, itens: rc.itensCaixa, agora, textoPronto: rc.texto });
+            if (rCard && rCard.previewId && cheques.vincularMensagem) cheques.vincularMensagem(rc.lote, rCard.previewId);
             return { acao: (rCard && rCard.acao) || rc.acao, previewId: rCard && rCard.previewId };
           }
           return { acao: rc.acao };
