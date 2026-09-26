@@ -4,8 +4,8 @@
     {
       "class": "bridge",
       "mode": "0644",
-      "sha256": "a263442eb83585fb6c73892d97e00c1b4f4b81701c93d6a7b2b6d86d9c1a6710",
-      "size": 82641,
+      "sha256": "4090ac5c25648126b3b2ddb7a65245e3765681d3697548286f99329e89b13a6b",
+      "size": 83345,
       "source": "vps/la-hq/sol/runtime/bridge.js",
       "target": "/home/sol/.hermes/hermes-agent/scripts/whatsapp-bridge/bridge.js"
     },
@@ -20,8 +20,8 @@
     {
       "class": "caixa-runtime",
       "mode": "0644",
-      "sha256": "30fe3666a506718ddce16ea7b8607da2bfd8c2ed4059dccbb47461b28fe831e7",
-      "size": 479131,
+      "sha256": "f4769060c7aaece3419cec5f165e1314692ddf0401d6bbc1f7df01c0f15ada31",
+      "size": 479800,
       "source": "vps/la-hq/sol/runtime/caixa-financeiro.cjs",
       "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs"
     },

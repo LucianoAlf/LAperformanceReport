@@ -638,7 +638,15 @@ function _evidenciaShadowLigado(chatId) {
 // sem esta porta, a Sol lê o próprio relatório como comprovante e lança dinheiro
 // que nunca entrou. Ordem importa: tela vence tudo.
 const SINAL_TELA = /(fechamento de caixa|abertura de caixa|saldo inicial|saldo final|movimenta[cç][oõ]es do dia|vendas do dia|gerado pelo la report|la report|gest[aã]o de renova[cç][oõ]es|dados pessoais|hist[oó]rico de aulas|aulas a repor|cr[eé]dito de horas|fideliza|em andamento|status\s+descri[cç][aã]o\s+vencimento|forma de pagamento\s+recebedor|valor devido|comprovante recebido|posso lan[cç]ar|lancei no caixa|conferido por)/i;
-const SINAL_COMPROVANTE = /(comprovante|transa[cç][aã]o conclu[ií]da|transfer[eê]ncia (realizada|conclu)|id da transa|e2e[a-z0-9]|chave pix|pix copia|recibo|pagamento (realizado|efetuado|conclu)|transferir para|dados do (recebedor|destinat)|detalhes do (remetente|destinat)|institui[cç][aã]o|autentica[cç][aã]o|nsu|valor pago|data de pagamento|remetente)/i;
+// RECIBO DE CHECKOUT (26/09/2026, Arthur/Barra): o recibo do link de pagamento
+// ("Sua compra foi aprovada · Data do pagamento · Codigo da transacao · Forma de
+// pagamento: 2x - Mastercard") nao casava NADA daqui: a lista conhecia "data DE
+// pagamento" e "ID da transacao", e o recibo diz "data DO pagamento" e "CODIGO da
+// transacao". Com legenda passava (legenda financeira); reenviado sem legenda, foi
+// recusado em silencio. Entram so as duas variacoes que a lista ja pretendia cobrir.
+// ⚠️ "compra aprovada" fica FORA de proposito: aparece tambem em recibo de compra
+// feita PELA escola (saida) e inverteria a direcao do dinheiro.
+const SINAL_COMPROVANTE = /(comprovante|transa[cç][aã]o conclu[ií]da|transfer[eê]ncia (realizada|conclu)|(?:id|c[oó]digo) da transa|e2e[a-z0-9]|chave pix|pix copia|recibo|pagamento (realizado|efetuado|conclu)|transferir para|dados do (recebedor|destinat)|detalhes do (remetente|destinat)|institui[cç][aã]o|autentica[cç][aã]o|nsu|valor pago|data d[oe] pagamento|remetente)/i;
 const SINAL_DESPESA = /(or[cç]amento|cota[cç][aã]o|proposta comercial|pedido\s*#|totalizadores|vendedor|nota fiscal|danfe|fornecedor|itens:)/i;
 const BODY_SINTETICO = /^\s*(document|image|video|audio|sticker|photo)\s+received\s*$/i;
 

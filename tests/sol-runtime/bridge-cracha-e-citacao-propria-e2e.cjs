@@ -38,7 +38,10 @@ const epAt = src.indexOf('if (_ep) event.body = `[episode_caixa:');
 const badgeAt = src.indexOf('const _cr = crachaDoSolicitante', epAt);
 assert(epAt >= 0 && badgeAt > epAt, 'episódio deve ser injetado antes e independentemente do crachá');
 assert(src.includes("_fh.decidirRoteadorV4(event, _r.acao, { modo: 'preflight_operacional' })"));
-assert(src.includes("_intencaoOperacional === 'abrir_caixa' || _intencaoOperacional === 'fechar_caixa'"));
+// Abrir e fechar seguem ligados ao pré-roteamento; desde 26/09 fechar exige
+// nenhum card pendente e abrir não (impasse da Barra: o card esperava o caixa).
+assert(src.includes("_intencaoOperacional === 'abrir_caixa'"));
+assert(src.includes("(_intencaoOperacional === 'fechar_caixa' && !_cardPendente)"));
 assert(src.includes('_abf.tratarPedidoDiretoAbertura'));
 assert(src.includes('_abf.tratarPedidoDiretoFechamento'));
 assert(src.includes('intencaoEstruturada: _intencaoOperacional'));

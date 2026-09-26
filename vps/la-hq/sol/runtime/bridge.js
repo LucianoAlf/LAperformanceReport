@@ -1324,10 +1324,18 @@ async function caixaAbf() {
               // FECHAMENTO. Ambos criam preview e ainda exigem um "pode" humano
               // atual. Não aprovam, não escrevem e não ampliam o agent-first.
               // Switch separado: permite rollback sem desligar o shadow/D2.
+              // IMPASSE (26/09/2026, Barra): o card do passaporte ficou pendente
+              // porque o caixa estava FECHADO, e "Sol, abre o caixa" era barrado
+              // aqui justamente por haver card pendente -- o card esperava o caixa,
+              // o caixa esperava o card, e a resposta era "nao entendi". Com card
+              // pendente, ABRIR segue permitido: so cria preview, e o "pode" sem
+              // citacao continua indo para o comprovante (GUARDA 2 de
+              // tratarConfirmacao). FECHAR continua exigindo nenhum card pendente:
+              // fechar com recebimento nao lancado perde dinheiro de vista.
+              const _cardPendente = !!(_fh.temPendencia && _fh.temPendencia(chatId));
               if (!_tratouCaixa && _pareceProSol && _r && _r.acao === 'nada'
                   && process.env.SOL_CAIXA_V4_OPERATIONAL_PREFLIGHT === '1'
-                  && _abf && _sendCaixa && _fh.decidirRoteadorV4
-                  && !(_fh.temPendencia && _fh.temPendencia(chatId))) {
+                  && _abf && _sendCaixa && _fh.decidirRoteadorV4) {
                 let _decOperacional = null;
                 try {
                   _v4JaRegistrou = true;
@@ -1336,7 +1344,8 @@ async function caixaAbf() {
                   _caixaLog({ step: 'roteador_v4_operacional_erro', msg: e && e.message });
                 }
                 const _intencaoOperacional = _decOperacional && _decOperacional.intencao;
-                if ((_intencaoOperacional === 'abrir_caixa' || _intencaoOperacional === 'fechar_caixa')
+                if ((_intencaoOperacional === 'abrir_caixa'
+                     || (_intencaoOperacional === 'fechar_caixa' && !_cardPendente))
                     && Number(_decOperacional.confianca || 0) >= 0.9) {
                   const _acaoOperacional = _intencaoOperacional === 'abrir_caixa' ? 'abertura' : 'fechamento';
                   const _tratadorOperacional = _intencaoOperacional === 'abrir_caixa'
