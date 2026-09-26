@@ -1,8 +1,10 @@
 /// <reference lib="deno.ns" />
 
-// Edge Function: sync-professores-emusys v2
+// Edge Function: sync-professores-emusys v3
 // Reconcilia identidades de professor por (unidade_id, emusys_id).
-// Nomes servem apenas como sugestao para revisao humana; nunca criam vinculo.
+// Professor do Emusys sem vinculo vai para `aplicar_vinculo_professor_emusys_v1`, que decide
+// no banco (fonte unica): nome identico a UM professor ativo -> vincula; ninguem com nome
+// identico nem parecido -> cria; qualquer duvida -> nao escreve e vira divergencia para humano.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -87,23 +89,49 @@ interface SyncStats {
   total_emusys: number;
   vinculos_por_id: number;
   reativados_por_id: number;
+  vinculados_automaticamente: number;
+  criados_automaticamente: number;
   desativados_ausentes: number;
   divergencias_abertas: number;
   erros: number;
 }
 
+// 30/08/2026: as 3 unidades falharam com 429 (teto de 120 chamadas/min do Emusys) e a rodada
+// da semana inteira se perdeu. Com o sync diario o custo de uma falha e menor, mas uma nova
+// tentativa espacada resolve o pico de outro sync no mesmo minuto.
+const ESPERAS_429_MS = [15_000, 45_000];
+
+// Lido pela aba Divergencias (campo sugestao.regra): diz a quem decide por que o sync parou.
+const TEXTO_MOTIVO_REVISAO: Record<string, string> = {
+  nome_parecido: 'Ha professor com nome parecido. Se for a mesma pessoa, vincule; se nao, crie um novo.',
+  homonimos: 'Mais de um professor ativo com esse nome exato. Escolha qual e.',
+  mesmo_nome_professor_inativo: 'Existe professor INATIVO com esse nome. Se voltou, reative o cadastro e vincule.',
+  professor_ja_tem_outro_id_na_unidade: 'O professor com esse nome ja tem outro id do Emusys nesta unidade (duas contas no Emusys?).',
+  vinculo_ignorado_por_humano: 'Alguem marcou este vinculo como "ignorar" antes. O sync nao passa por cima.',
+  corrida_id_ja_usado: 'Outra execucao gravou esse id ao mesmo tempo. Recarregue para conferir.',
+  erro_ao_decidir: 'Falha ao decidir o vinculo (ver professores_sync_log).',
+};
+
 async function fetchProfessoresEmusys(token: string): Promise<EmusysProfessor[]> {
-  const response = await fetch(`${EMUSYS_BASE}/professores`, {
-    method: 'GET',
-    headers: { token, 'Content-Type': 'application/json' },
-  });
+  for (let tentativa = 0; ; tentativa++) {
+    const response = await fetch(`${EMUSYS_BASE}/professores`, {
+      method: 'GET',
+      headers: { token, 'Content-Type': 'application/json' },
+    });
 
-  if (!response.ok) {
-    throw new Error(`Emusys retornou ${response.status}: ${await response.text()}`);
+    if (response.status === 429 && tentativa < ESPERAS_429_MS.length) {
+      await response.body?.cancel();
+      await new Promise((resolve) => setTimeout(resolve, ESPERAS_429_MS[tentativa]));
+      continue;
+    }
+
+    if (!response.ok) {
+      throw new Error(`Emusys retornou ${response.status}: ${await response.text()}`);
+    }
+
+    const data = await response.json();
+    return Array.isArray(data?.professores) ? data.professores : [];
   }
-
-  const data = await response.json();
-  return Array.isArray(data?.professores) ? data.professores : [];
 }
 
 async function logEvento(
@@ -192,6 +220,8 @@ async function syncUnidade(
     total_emusys: 0,
     vinculos_por_id: 0,
     reativados_por_id: 0,
+    vinculados_automaticamente: 0,
+    criados_automaticamente: 0,
     desativados_ausentes: 0,
     divergencias_abertas: 0,
     erros: 0,
@@ -257,7 +287,43 @@ async function syncUnidade(
     try {
       const vinculo = vinculosPorEmusysId.get(professorEmusys.id);
       if (!vinculo) {
-        const candidatos = professoresPorNome.get(normalizar(professorEmusys.nome)) || [];
+        const { data: decisao, error: decisaoError } = await supabase.rpc(
+          'aplicar_vinculo_professor_emusys_v1',
+          {
+            p_unidade_id: unidade.id,
+            p_emusys_id: professorEmusys.id,
+            p_nome: professorEmusys.nome,
+            p_payload: professorEmusys,
+          },
+        );
+
+        const acao = decisaoError ? 'erro_rpc' : String(decisao?.acao ?? '');
+        if (acao === 'criar') {
+          stats.criados_automaticamente++;
+          continue;
+        }
+        if (acao === 'vincular_existente_na_unidade' || acao === 'vincular_de_outra_unidade') {
+          stats.vinculados_automaticamente++;
+          continue;
+        }
+        if (acao === 'ja_vinculado') {
+          stats.vinculos_por_id++;
+          continue;
+        }
+
+        if (decisaoError) {
+          await logEvento(supabase, 'erro', {
+            unidadeId: unidade.id,
+            emusysId: professorEmusys.id,
+            nomeEmusys: professorEmusys.nome,
+            detalhes: { erro: decisaoError.message, step: 'aplicar_vinculo_professor_emusys_v1' },
+          });
+          stats.erros++;
+        }
+
+        // Duvida (homonimo, nome parecido, inativo...) ou falha: nada foi escrito, humano decide.
+        const candidatosBanco = Array.isArray(decisao?.candidatos) ? decisao.candidatos : null;
+        const candidatosNome = professoresPorNome.get(normalizar(professorEmusys.nome)) || [];
         await registrarDivergencia(supabase, {
           unidadeId: unidade.id,
           tipo: 'so_no_emusys',
@@ -265,8 +331,10 @@ async function syncUnidade(
           nomeEmusys: professorEmusys.nome,
           valorEmusys: professorEmusys,
           sugestao: {
-            regra: 'nome_apenas_sugestao_requer_validacao_humana',
-            candidatos: candidatos.map((candidato) => ({
+            regra: TEXTO_MOTIVO_REVISAO[decisaoError ? 'erro_ao_decidir' : String(decisao?.motivo ?? '')]
+              ?? 'O sync nao conseguiu decidir sozinho. Vincule a um professor existente ou crie um novo.',
+            motivo: decisaoError ? 'erro_ao_decidir' : decisao?.motivo ?? null,
+            candidatos: candidatosBanco ?? candidatosNome.map((candidato) => ({
               professor_id: candidato.id,
               nome: candidato.nome,
               ativo: candidato.ativo,
@@ -426,20 +494,20 @@ serve(async (req: Request) => {
 
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    console.log('[sync-professores-emusys v2] Iniciando sync canonico das 3 unidades');
+    console.log('[sync-professores-emusys v3] Iniciando sync canonico das 3 unidades');
 
     const resultados: SyncStats[] = [];
     for (const unidade of UNIDADES) {
       const stats = await syncUnidade(supabase, unidade);
       resultados.push(stats);
-      console.log(`[sync-professores-emusys v2] ${unidade.codigo}:`, JSON.stringify(stats));
+      console.log(`[sync-professores-emusys v3] ${unidade.codigo}:`, JSON.stringify(stats));
     }
 
     return new Response(JSON.stringify({ success: true, resultados }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
-    console.error('[sync-professores-emusys v2] Erro:', error);
+    console.error('[sync-professores-emusys v3] Erro:', error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : 'Erro interno' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },

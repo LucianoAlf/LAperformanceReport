@@ -69,7 +69,7 @@ for (const [nome, source] of [
   });
 }
 
-test('sync de professores usa identidade por unidade e nao cria vinculo por nome', () => {
+test('sync de professores usa identidade por unidade e nao decide vinculo por nome na edge (a regra mora no banco)', () => {
   assert.match(syncProfessores, /vinculosPorEmusysId/);
   assert.match(syncProfessores, /professores_emusys_divergencias/);
   assert.match(syncProfessores, /identidade_historica_valida/);
