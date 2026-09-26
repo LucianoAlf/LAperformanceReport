@@ -7,6 +7,10 @@
  */
 const fs = require('fs');
 const https = require('https');
+// Lote de cheques para depósito (26/09/2026). Módulo à parte, de propósito: não
+// lança nada no caixa. Arquivo ausente não pode derrubar o caixa de comprovantes.
+let _chequesLib = null;
+try { _chequesLib = require('./caixa-cheques.cjs'); } catch (_) { _chequesLib = null; }
 const crypto = require('crypto');
 const { execFile } = require('child_process');
 
@@ -3405,7 +3409,7 @@ function categoriaEhSaida(categoria) {
   return ['seguranca', 'despesa', 'retirada', 'troco'].includes(String(categoria || '').toLowerCase());
 }
 
-function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, finalizarPreviewV3Fn = finalizarPreviewV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, resolverEnvelopeFn = resolverEnvelopeCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, identificarAlunoNovoFn = identificarAlunoNovo, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, faturasQuitacaoFn = resolverFaturasQuitacao, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, log = () => {}, governanceFn = () => Promise.resolve({ ok: false, disabled: true }), janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
+function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, finalizarPreviewV3Fn = finalizarPreviewV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, resolverEnvelopeFn = resolverEnvelopeCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, identificarAlunoNovoFn = identificarAlunoNovo, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, faturasQuitacaoFn = resolverFaturasQuitacao, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, chequesFn = undefined, log = () => {}, governanceFn = () => Promise.resolve({ ok: false, disabled: true }), janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
   // SOL_CAIXA_V3_LEDGER_FAKE=1 (suite de testes): fiacao V3 ativa, banco intacto.
   // Sem isto, teste que nao mocka os registradores grava preview/approval REAL
   // no ledger de producao — 62% dos previews de 24-31/08 eram artefato de teste.
@@ -3426,6 +3430,8 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   const textoIrmaoKey = (event) => `${event.chatId}::${event.senderId || event.senderPhone || 'sem_sender'}`;
   const loteJanelaMs = Math.max(0, Number(process.env.SOL_CAIXA_LOTE_MS || 900));
   const v3LedgerMode = String(process.env.SOL_CAIXA_V3_LEDGER_MODE || '').toLowerCase();
+  const cheques = chequesFn !== undefined ? chequesFn
+    : (_chequesLib ? _chequesLib.criarCheques({ carregarEnv, sendFn, log }) : null);
   const v3LedgerAtivo = ['production', 'prod', 'on', '1'].includes(v3LedgerMode);
   const v3LedgerStrict = process.env.SOL_CAIXA_V3_LEDGER_STRICT === '1';
   function governance(event, eventType, details) {
@@ -4851,6 +4857,20 @@ _Não lanço nada pela metade._`);
     const chatId = event.chatId;
     const grp = grupos[chatId];
     if (!grp) return { acao: 'ignorado_fora_grupo' };
+    // LOTE DE CHEQUES (26/09/2026): antes de tudo — agente, lote de mídia e
+    // comprovante. O PDF do lote não é comprovante de recebimento e não pode
+    // virar card de caixa. Com o módulo em 'off' ele devolve null e nada muda.
+    if (cheques) {
+      try {
+        const rc = event.hasMedia
+          ? await cheques.tratarMidia(event, grp)
+          : (event.quotedMessageId ? await cheques.tratarResposta(event, { casarPode, unidadeId: grp.unidade_id,
+            autorizadoPorFn: async () => { try { const i = await identidadeFn(event.senderPhone, grp.unidade_id); return (i && i.nome) || null; } catch (_) { return null; } } }) : null);
+        if (rc && rc.tratou) return { acao: rc.acao };
+      } catch (e) {
+        log({ acao: 'cheques_erro', chatId, erro: String(e && e.message) });
+      }
+    }
     // A foto sai aqui, antes de qualquer coisa consumir pendencia (P2).
     fotografarContextoV4(event, chatId, agora);
     const senderNum = String(event.senderPhone || event.senderId || '').replace(/@.*/, '').replace(/\D/g, '');
