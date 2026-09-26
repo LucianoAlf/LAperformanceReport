@@ -30,6 +30,17 @@
 >
 > Última atualização: 2026-09-14.
 
+### Lote de cheques para depósito (Sol → Super Folha, desde 26/09/2026)
+
+A unidade posta no grupo do financeiro o PDF do lote ("2 CH - 20SETEMBRO2026 - C.GRANDE"). A Sol lê cada cheque, acha a parcela e confere no Super Folha. **Nada vai para o caixa do dia**: a unidade já lança o recebimento no Emusys quando recebe o cheque.
+
+- **Runtime:** `vps/la-hq/sol/runtime/caixa-cheques.cjs` (desvio no início do `handle` do caixa, antes de agente e comprovante) + `cheques-lote-cli.cjs` para rodar fora do grupo. Modo em `caixa-ingestao/cheques.json` (`off` | `sombra` | `grupo`, sem reinício).
+- **Leitura:** visão (`gemini-3.8-flash` pelo OpenCode Zen, API `generateContent`). O PDF é escaneado, então `pdftotext` não serve. A leitura só vale se for **provada por código**: os 3 dígitos verificadores da CMC-7, CMC-7 batendo com banco/agência/número impressos e valor numérico batendo com o extenso. Leitura não provada vira ❓ e **não vai ao Super Folha** (número errado ligaria o depósito errado).
+- **Parcela:** RPC `sol_cheque_resolver_fatura_v1` (emitente → pessoa → fatura). CPF/CNPJ vira HMAC em `sol_cheque_documento_hash_v1` (só `service_role`, não grava) e só o hash segue.
+- **Super Folha:** edge `sol-cheques-super-folha` (verify_jwt=false; aceita só `service_role` via `papel_da_sessao_v1`, recusa documento em claro) repassa `conferir`/`registrar` a `cheques-sol` com o segredo `SUPER_FOLHA_FINANCEIRO_SECRET`, que **não sai do Supabase** (a VPS não o tem).
+- **No grupo:** mensagem cheque a cheque (✅ depositar · ⚠️ retirar do malote · ❓ confirmar). Resposta citando a mensagem ("1 é da Natalia") confere de novo só aquele cheque. "pode" **citando** registra; "pode" seco continua sendo do caixa de comprovantes.
+- **Contrato:** `Docs/handoffs/2026-09-26-sol-cheques-lote-deposito.md` no repositório do Super Folha. Teste: `tests/sol-runtime/cheques-lote-e2e.cjs` (dados inventados).
+
 ## Fechamento mensal (histórico canônico)
 
 Camada que congela o retrato de cada competência para que o passado não mude quando as

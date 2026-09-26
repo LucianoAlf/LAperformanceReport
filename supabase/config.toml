@@ -114,6 +114,12 @@ verify_jwt = false
 # (segredo dedicado validado no proprio codigo, sem JWT).
 verify_jwt = false
 
+[functions.sol-cheques-super-folha]
+# Ponte Sol -> Super Folha (lote de cheques). Autentica service_role pelo PostgREST
+# (papel_da_sessao_v1) no proprio codigo e injeta o segredo do Super Folha, que
+# fica so aqui. verify_jwt=false porque a VPS usa sb_secret_ (nao e JWT).
+verify_jwt = false
+
 [functions.export-caixa-movimentacoes]
 # Exporta o caixa (Sol + equipe) p/ o Super Folha cruzar extrato -> caixa ->
 # fatura via fatura_id/emusys_fatura_id. Mesmo segredo dedicado no codigo.
