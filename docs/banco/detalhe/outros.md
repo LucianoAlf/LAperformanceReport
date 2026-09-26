@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-25 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-26 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — outros
 
-1 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+2 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## cache_dependencias
 
@@ -18,4 +18,12 @@
 
 **Únicos:**
 - `cache_dependencias_pkey`
+
+## tmp_m
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `dep_id` | uuid | sim |  |  |
+| `cands` | bigint | sim |  |  |
+| `via_b` | bigint | sim |  |  |
 

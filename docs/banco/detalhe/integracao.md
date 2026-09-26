@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-25 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-26 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — integracao
 
-65 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+67 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## admin_conversas
 
@@ -1488,6 +1488,43 @@
 
 **Triggers:**
 - `trg_remover_cpf_webhook_debug_log → remover_cpf_claro_jsonb_trigger()`
+
+## webhook_diagnosticos_sanitizados
+
+> Diagnosticos operacionais tipados, sem conteudo pessoal, com retencao maxima de sete dias.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `correlation_id` | uuid | não |  |  |
+| `caixa_id` | integer | sim |  | whatsapp_caixas.id |
+| `event_type` | webhook_diagnostic_event_type | não |  |  |
+| `route` | webhook_diagnostic_route | não |  |  |
+| `result` | webhook_diagnostic_result | não |  |  |
+| `http_status` | smallint | sim |  |  |
+| `error_code` | webhook_diagnostic_error_code | sim |  |  |
+| `duration_ms` | bigint | sim |  |  |
+| `provider_message_id_hash` | character(64) | sim |  |  |
+| `occurred_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `webhook_diagnosticos_sanitizados_pkey`
+
+## whatsapp_caixa_webhook_secrets
+
+> Hash SHA-256 do segredo inbound por caixa. O segredo bruto nunca e persistido no banco.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `caixa_id` | integer | não |  | whatsapp_caixas.id |
+| `secret_hash_sha256` | text | não |  |  |
+| `ativo` | boolean | não | true |  |
+| `versao` | integer | não | 1 |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `rotacionado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `whatsapp_caixa_webhook_secrets_pkey`
 
 ## whatsapp_caixas
 

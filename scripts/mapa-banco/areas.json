@@ -411,6 +411,7 @@
     "paginas_rpc_cache_escopo_v1": "plataforma"
   },
   "tokens": {
-    "kpis": "gestao"
+    "kpis": "gestao",
+    "cheque": "financeiro"
   }
 }
