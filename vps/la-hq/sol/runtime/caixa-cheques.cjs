@@ -10,19 +10,23 @@
 //      concordância CMC-7 × banco/agência/número impressos; valor numérico ×
 //      valor por extenso. Leitura que não se prova vira ❓, nunca palpite;
 //   3. acha a parcela: `sol_cheque_resolver_fatura_v1` (emitente → pessoa → fatura);
-//   4. confere no Super Folha (`conferir`, não grava) pela edge
-//      `sol-cheques-super-folha`, que guarda o segredo — a VPS não o tem;
-//   5. responde cheque a cheque (✅ depositar · ⚠️ retirar do malote · ❓ confirmar).
-//   6. com "pode" citando a mensagem do lote, `registrar`.
+//   4. decide cheque a cheque com a fatura REAL (espelho do Emusys) e os vínculos
+//      do caixa: ✅ vai para o caixa · ⚠️ retirar do malote · ❓ não entra;
+//   5. os ✅ entram no CAIXA DA SOL do dia, pelo card de sempre (forma cheque,
+//      "pode", cofre V3): 2+ cheques = um lote; 1 cheque = lançamento simples.
 //
-// ⚠️ NADA vai para o caixa do dia (decisão do contrato): a unidade já lança o
-//    recebimento no Emusys quando recebe o cheque; lançar aqui duplicaria.
+// 🔴 DECISÃO DO ALF (26/09): o cheque entra no caixa da Sol do LA Report; o Super
+//    Folha já puxa o caixa da Sol (export-caixa-movimentacoes). A Sol NÃO chama o
+//    Super Folha. O número do cheque vai na descrição (complemento_descricao) —
+//    é por ele que o Super Folha liga o depósito e a devolução do banco.
+// ⚠️ Fatura já ligada a lançamento do caixa NÃO entra de novo (a duplicidade da
+//    Barra de 26/09 foi exatamente isso).
 // ⚠️ CPF/CNPJ nunca em claro fora da memória do processo: vira HMAC no banco
 //    (`sol_cheque_documento_hash_v1`) e só o hash segue. Nunca vai para log.
 // ⚠️ O PDF e as imagens renderizadas são apagados depois da leitura.
 // ⚠️ Modos (arquivo cheques.json ao lado deste, ou env): off | sombra | grupo.
-//    sombra = faz tudo até o `conferir` e manda o resultado SÓ para o destino de
-//    sombra (DM), nada no grupo e nada gravado no Super Folha.
+//    sombra = lê, prova e decide, e manda o resultado SÓ para o destino de sombra
+//    (DM): nada no grupo, nenhum card, nada no caixa.
 
 const fs = require('fs');
 const path = require('path');
@@ -167,7 +171,7 @@ function extensoParaNumero(texto) {
 
 // Junta o que o modelo leu com o que o código consegue PROVAR. `confiavel` só é
 // verdade com CMC-7 válido E concordante com o impresso; sem isso o cheque vai
-// como ❓ e fica FORA do Super Folha (número errado ligaria o depósito errado).
+// como ❓ e fica FORA do caixa (número errado ligaria o depósito errado).
 function normalizarCheque(raw) {
   const problemas = [];
   const cmc = lerCmc7(raw && raw.cmc7);
@@ -258,41 +262,103 @@ function escolherFatura(res, cheque, loteData) {
   return { fatura: null, motivo: 'empate', suspeitos: nomes };
 }
 
+// ------------------------------------------------------------ decisão por cheque
+
+// Categoria do caixa a partir da descrição da fatura — a MESMA leitura que o
+// validador do lote faz pelo tipo (parcela exige tipo parcela; passaporte/matrícula
+// exigem taxa). 'outro' não é conferido pelo validador.
+function categoriaDaFatura(desc) {
+  const d = norm(desc);
+  if (/^parcela\b/.test(d)) return 'parcela';
+  if (/taxa de matricula|passaporte/.test(d)) return 'passaporte';
+  return 'outro';
+}
+const mmYYYY = (iso) => (iso && /^\d{4}-\d{2}/.test(iso) ? `${iso.slice(5, 7)}/${iso.slice(0, 4)}` : null);
+
+// O que fazer com cada cheque, com a fatura REAL na mão. Só `lancar` vira card.
+//   lancar       — fatura paga em cheque (a unidade registrou ao receber) ou em
+//                  aberto, com o valor batendo;
+//   retirar      — a parcela foi paga de OUTRA forma (Pix, cartão) ou cancelada:
+//                  o cheque tem de voltar ao cliente, não ao banco;
+//   ja_no_caixa  — a fatura já está ligada a um lançamento do caixa: lançar de
+//                  novo seria a duplicidade da Barra de 26/09;
+//   valor        — o cheque não bate com a parcela;
+//   sem_parcela  — não sei de quem é (ou empate);
+//   leitura      — a leitura não foi provada.
+function decidirCheque(it, fatura, jaLigada) {
+  if (!it.cheque.confiavel) return 'leitura';
+  if (!it.escolha.fatura || !fatura) return 'sem_parcela';
+  if (jaLigada) return 'ja_no_caixa';
+  if (fatura.status === 'cancelada') return 'retirar';
+  if (fatura.status === 'paga' && fatura.forma && !/cheque/i.test(fatura.forma)) return 'retirar';
+  const esperado = fatura.status === 'paga' && fatura.valor_pago != null
+    ? Number(fatura.valor_pago)
+    : Number(fatura.valor_original || 0) - Number(fatura.desconto_fixo || 0) - Number(fatura.desconto_condicional || 0);
+  if (!(esperado > 0) || Math.abs(esperado - Number(it.cheque.valor)) > 0.01) return 'valor';
+  return 'lancar';
+}
+
+// Item no formato que o caixa da Sol já lança (o mesmo que o resolvedor de
+// pagamentos devolve para o lote de Pix). `complemento_descricao` leva o número
+// do cheque até a movimentação: é por ele que o Super Folha liga o depósito.
+function itemDoCaixa(it) {
+  const f = it.fatura; const esc = it.escolha.fatura;
+  return {
+    aluno_nome: esc.aluno_nome, responsavel_financeiro: esc.responsavel_nome || null,
+    valor: Number(it.cheque.valor), categoria: categoriaDaFatura(f.descricao),
+    competencia: mmYYYY(f.competencia), canonical_fatura_id: f.id, descricao: f.descricao || null,
+    fatura: { canonical_fatura_id: f.id, descricao: f.descricao, competencia: f.competencia, status: f.status,
+      data_pagamento: f.data_pagamento, valor_pago: f.valor_pago },
+    sem_vinculo_fatura: false, declarado_pelo_humano: false,
+    complemento_descricao: `cheque ${BANCOS[it.cheque.banco] || 'banco ' + it.cheque.banco} nº ${it.cheque.numero}`,
+  };
+}
+
 // ------------------------------------------------------------ mensagem
 
 const CIRC = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
+const ddmm = (iso) => (iso ? `${String(iso).slice(8, 10)}/${String(iso).slice(5, 7)}` : '');
+
+function linhaCheque(it, i) {
+  const ch = it.cheque;
+  const banco = BANCOS[ch.banco] || (ch.banco ? 'banco ' + ch.banco : 'banco ?');
+  const quem = it.escolha.fatura && it.escolha.fatura.aluno_nome;
+  let l = `${CIRC[i] || (i + 1) + ')'} ${ch.valor ? fmtBRL(ch.valor) : 'R$ ?'} · ${banco} nº ${ch.numero} · ${ch.emitente_nome || 'emitente ?'}`;
+  if (quem) l += ` · aluno ${quem}`;
+  if (it.fatura && it.fatura.competencia) l += ` · ${mmYYYY(it.fatura.competencia)}`;
+  const d = it.decisao;
+  if (d === 'lancar') l += ' ✅ vai para o caixa';
+  else if (d === 'retirar') {
+    l += ' ⚠️ *retirar do malote*';
+    l += it.fatura && it.fatura.status === 'cancelada'
+      ? '\n   · essa parcela foi cancelada no Emusys.'
+      : `\n   · essa parcela já foi paga${it.fatura && it.fatura.forma ? ' por ' + it.fatura.forma : ''}${it.fatura && it.fatura.data_pagamento ? ' em ' + ddmm(it.fatura.data_pagamento) : ''}.`;
+  } else if (d === 'ja_no_caixa') l += ' ❓ essa parcela já está no caixa — não lancei de novo';
+  else if (d === 'valor') l += ' ❓ o valor não bate com a parcela — não lancei';
+  else if (d === 'leitura') l += `\n   ❓ não confiei na leitura: ${ch.problemas.join('; ')}. Confere o nº e o valor?`;
+  else {
+    l += ' ❓ de quem é?';
+    if (it.escolha.suspeitos.length) l += `\n   · pode ser da família de: ${it.escolha.suspeitos.map((s) => s.rotulo || s).join('; ')}`;
+    else l += '\n   · não achei o emitente no cadastro.';
+  }
+  return l;
+}
 
 function montarMensagem({ unidadeNome, loteData, itens, sombra = false }) {
-  const [a, m, d] = String(loteData).split('-');
   const linhas = [];
-  if (sombra) linhas.push('🧪 *SOMBRA* — isto NÃO foi postado no grupo e nada foi gravado.');
-  linhas.push(`🧾 Li ${itens.length} cheque${itens.length === 1 ? '' : 's'} do lote de ${d}/${m} (${unidadeNome}):`);
-  itens.forEach((it, i) => {
-    const ch = it.cheque;
-    const banco = BANCOS[ch.banco] || (ch.banco ? 'banco ' + ch.banco : 'banco ?');
-    const quem = (it.parcela && it.parcela.aluno_nome) || (it.escolha.fatura && it.escolha.fatura.aluno_nome);
-    let l = `${CIRC[i] || (i + 1) + ')'} ${ch.valor ? fmtBRL(ch.valor) : 'R$ ?'} · ${banco} nº ${ch.numero} · ${ch.emitente_nome || 'emitente ?'}`;
-    if (quem) l += ` · aluno ${quem}`;
-    const comp = it.parcela && (it.parcela.competencia || it.parcela.vencimento);
-    if (comp) l += ` · ${String(comp).slice(0, 7)}`;
-    if (!ch.confiavel) {
-      l += `\n   ❓ não confiei na leitura: ${ch.problemas.join('; ')}. Confere o nº e o valor?`;
-    } else if (it.acao === 'depositar') {
-      l += ' ✅ depositar';
-    } else if (it.acao === 'retirar_do_malote') {
-      l += ' ⚠️ *retirar do malote*';
-    } else {
-      l += ' ❓ confirmar';
-    }
-    for (const av of (it.avisos || [])) if (av && av.texto) l += `\n   · ${av.texto}`;
-    if (ch.confiavel && !it.escolha.fatura && it.escolha.suspeitos.length) {
-      l += `\n   · de quem é? Pode ser da família de: ${it.escolha.suspeitos.map((s) => s.rotulo || s).join('; ')}`;
-    } else if (ch.confiavel && !it.escolha.fatura && it.escolha.motivo === 'emitente_desconhecido') {
-      l += '\n   · de quem é? Não achei o emitente no cadastro.';
-    }
-    linhas.push(l);
-  });
-  if (!sombra) linhas.push('👉 Posso registrar o lote? Responde *pode* citando esta mensagem.');
+  if (sombra) linhas.push('🧪 *SOMBRA* — nada foi postado no grupo e nada foi lançado.');
+  linhas.push(`🧾 Li ${itens.length} cheque${itens.length === 1 ? '' : 's'} do lote de ${ddmm(loteData)} (${unidadeNome}):`);
+  itens.forEach((it, i) => linhas.push(linhaCheque(it, i)));
+  const lanc = itens.filter((it) => it.decisao === 'lancar');
+  const total = lanc.reduce((s, it) => s + Number(it.cheque.valor), 0);
+  if (lanc.length) {
+    linhas.push(sombra
+      ? `👉 No grupo eu abriria o card para lançar ${fmtBRL(total)} em cheque (${lanc.length}) no caixa de hoje.`
+      : `👉 O card para lançar ${fmtBRL(total)} em cheque no caixa de hoje vem logo abaixo.`);
+  }
+  if (!sombra && itens.some((it) => it.decisao === 'sem_parcela')) {
+    linhas.push('Para um ❓ de quem é, responde citando esta mensagem: *1 é da Fulana*.');
+  }
   return linhas.join('\n');
 }
 
@@ -373,8 +439,8 @@ async function lerLote(arquivo, modelo) {
   }
 }
 
-function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote, rpcFn = null, superFolhaFn = null, agoraFn = () => Date.now() } = {}) {
-  const lotes = new Map(); // chatId -> [{ msgId, itens, loteData, unidade, ts }]
+function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote, rpcFn = null, consultaFn = null, agoraFn = () => Date.now() } = {}) {
+  const lotes = new Map(); // chatId -> [{ msgIds, itens, loteData, sigla, unidadeNome, ts, origem }]
 
   async function rpc(nome, args) {
     if (rpcFn) return rpcFn(nome, args);
@@ -382,24 +448,54 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
     const r = await postJson(`${url}/rest/v1/rpc/${nome}`, args, { apikey: key, Authorization: `Bearer ${key}` }, 30000);
     return r.status >= 200 && r.status < 300 ? r.body : null;
   }
-  async function superFolha(pedido) {
-    if (superFolhaFn) return superFolhaFn(pedido);
+  // Leitura REST com a service key (a mesma que o caixa usa em toda RPC).
+  async function consulta(caminho) {
+    if (consultaFn) return consultaFn(caminho);
     const { url, key } = carregarEnv();
-    const r = await postJson(`${url}/functions/v1/sol-cheques-super-folha`, pedido, { apikey: key, Authorization: `Bearer ${key}` }, 60000);
-    return r.body || { success: false, error: 'sem_resposta', status: r.status };
+    return new Promise((resolve) => {
+      let u; try { u = new URL(`${url}/rest/v1/${caminho}`); } catch (_) { return resolve(null); }
+      const req = https.request({ hostname: u.hostname, path: u.pathname + u.search, method: 'GET',
+        headers: { apikey: key, Authorization: `Bearer ${key}` } }, (res) => {
+        let t = ''; res.on('data', (c) => { t += c; });
+        res.on('end', () => { try { resolve(res.statusCode < 300 ? JSON.parse(t) : null); } catch (_) { resolve(null); } });
+      });
+      req.on('error', () => resolve(null)); req.setTimeout(20000, () => req.destroy()); req.end();
+    });
   }
 
-  function payloadCheque(it, sigla, loteData, extra = {}) {
-    const ch = it.cheque; const f = it.escolha.fatura;
-    const p = { unidade: sigla, banco: ch.banco, agencia: ch.agencia, conta_final: ch.conta_final, numero: ch.numero,
-      valor: ch.valor, bom_para: ch.bom_para, emitente_nome: ch.emitente_nome, lote_data: loteData, ...extra };
-    if (it.docHash) p.emitente_documento_hash = it.docHash;
-    if (f && f.emusys_fatura_id != null) p.emusys_fatura_id = Number(f.emusys_fatura_id);
-    else if (f && f.la_report_fatura_id) p.la_report_fatura_id = f.la_report_fatura_id;
-    return p;
+  // Fatura real + se já está ligada a algum lançamento do caixa. Falha de leitura
+  // NÃO vira "pode lançar": sem os dados, o lote inteiro é recusado.
+  async function carregarFaturas(itens) {
+    const ids = [...new Set(itens.map((it) => it.escolha.fatura && it.escolha.fatura.la_report_fatura_id).filter(Boolean))];
+    if (!ids.length) return { ok: true };
+    const lista = ids.join(',');
+    const fats = await consulta(`emusys_faturas?select=id,emusys_fatura_id,descricao,status,valor_pago,valor_original,desconto_fixo,desconto_condicional,competencia,data_pagamento,forma:payload->>forma_pagamento_transacao&id=in.(${lista})`);
+    const links = await consulta(`vw_caixa_movimentacao_fatura_links?select=fatura_id&fatura_id=in.(${lista})`);
+    if (!Array.isArray(fats) || !Array.isArray(links)) return { ok: false };
+    const porId = new Map(fats.map((f) => [f.id, f]));
+    const ligadas = new Set(links.map((l) => l.fatura_id));
+    for (const it of itens) {
+      const id = it.escolha.fatura && it.escolha.fatura.la_report_fatura_id;
+      it.fatura = id ? porId.get(id) || null : null;
+      it.jaLigada = !!(id && ligadas.has(id));
+    }
+    return { ok: true };
   }
 
-  // Lê + prova + resolve + confere. Nunca grava. Devolve os itens e o texto.
+  function decidirTodos(itens) {
+    // Parcela casada com um cheque do lote não é suspeita de outro cheque.
+    const casadas = new Set(itens.map((it) => it.escolha.fatura && Number(it.escolha.fatura.emusys_fatura_id)).filter(Boolean));
+    for (const it of itens) {
+      it.escolha.suspeitos = it.escolha.suspeitos.filter((s) => !(s && s.fatura && casadas.has(s.fatura)));
+      it.decisao = decidirCheque(it, it.fatura, it.jaLigada);
+    }
+    // Dois cheques na mesma parcela: nenhum dos dois entra sozinho.
+    const cont = new Map();
+    for (const it of itens) if (it.decisao === 'lancar') cont.set(it.fatura.id, (cont.get(it.fatura.id) || 0) + 1);
+    for (const it of itens) if (it.decisao === 'lancar' && cont.get(it.fatura.id) > 1) it.decisao = 'sem_parcela';
+  }
+
+  // Lê + prova + resolve + decide. Nunca escreve.
   async function processarArquivo({ arquivo, unidadeId, unidadeNome, textoLote, modelo }) {
     const sigla = UNIDADE_SIGLA[unidadeId];
     if (!sigla) return { ok: false, motivo: 'unidade_desconhecida' };
@@ -411,41 +507,29 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
     for (const raw of lido.cheques) {
       const cheque = normalizarCheque(raw);
       let docHash = null;
-      if (cheque.documento) {
+      if (cheque.documento && cheque.confiavel) {
         try { docHash = await rpc('sol_cheque_documento_hash_v1', { p_documento: cheque.documento }); } catch (_) { docHash = null; }
         if (typeof docHash !== 'string' || !/^[0-9a-f]{64}$/.test(docHash)) docHash = null;
       }
       delete cheque.documento; // o documento em claro não sai daqui
       let res = null;
-      try {
-        res = await rpc('sol_cheque_resolver_fatura_v1', { p_unidade_id: unidadeId, p_emitente_nome: cheque.emitente_nome,
-          p_valor: cheque.valor, p_bom_para: cheque.bom_para, p_emitente_documento_hash: docHash });
-      } catch (_) { res = null; }
-      itens.push({ cheque, docHash, escolha: escolherFatura(res, cheque, loteData), acao: null, avisos: [], parcela: null });
+      if (cheque.confiavel) {
+        try {
+          res = await rpc('sol_cheque_resolver_fatura_v1', { p_unidade_id: unidadeId, p_emitente_nome: cheque.emitente_nome,
+            p_valor: cheque.valor, p_bom_para: cheque.bom_para, p_emitente_documento_hash: docHash });
+        } catch (_) { res = null; }
+      }
+      itens.push({ cheque, escolha: escolherFatura(res, cheque, loteData), fatura: null, jaLigada: false, decisao: null });
     }
-    // Parcela já casada com um cheque do lote não é suspeita de outro cheque.
-    const casadas = new Set(itens.map((it) => it.escolha.fatura && Number(it.escolha.fatura.emusys_fatura_id)).filter(Boolean));
-    for (const it of itens) {
-      it.escolha.suspeitos = it.escolha.suspeitos.filter((s) => !(s && s.fatura && casadas.has(s.fatura)));
-    }
-    const confiaveis = itens.filter((it) => it.cheque.confiavel);
-    let conferencia = null;
-    if (confiaveis.length) {
-      conferencia = await superFolha({ acao: 'conferir', cheques: confiaveis.map((it) => payloadCheque(it, sigla, loteData)) });
-      const lista = conferencia && conferencia.success && Array.isArray(conferencia.cheques) ? conferencia.cheques : [];
-      confiaveis.forEach((it, i) => {
-        const c = lista.find((x) => Number(x.indice) === i + 1) || lista[i] || null;
-        it.acao = c ? c.acao : 'confirmar';
-        it.avisos = c && Array.isArray(c.avisos) ? c.avisos : (c ? [] : [{ codigo: 'sf_indisponivel', texto: 'não consegui conferir no Super Folha agora' }]);
-        it.parcela = c ? c.parcela || null : null;
-      });
-    }
-    log({ acao: 'cheques_lote_conferido', unidade: sigla, lidos: itens.length, confiaveis: confiaveis.length,
-      sf_ok: !!(conferencia && conferencia.success), acoes: itens.map((it) => it.acao || 'nao_confiavel') });
-    return { ok: true, itens, loteData, sigla, unidadeNome, conferencia };
+    const fat = await carregarFaturas(itens);
+    if (!fat.ok) return { ok: false, motivo: 'fonte_faturas_indisponivel' };
+    decidirTodos(itens);
+    log({ acao: 'cheques_lote_decidido', unidade: sigla, lidos: itens.length, decisoes: itens.map((it) => it.decisao) });
+    return { ok: true, itens, loteData, sigla, unidadeNome };
   }
 
-  // Hook do caixa: devolve { tratou, acao } ou null (não é lote / módulo desligado).
+  // Hook do caixa. Devolve null (não é lote / desligado) ou
+  // { tratou, acao, itensCaixa? } — com itensCaixa o CAIXA abre o card de sempre.
   async function tratarMidia(event, grupo) {
     if (!event || !event.hasMedia || event._sintetico) return null;
     if (!pareceLoteCheques(event)) return null;
@@ -476,17 +560,25 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
     }
     const msgId = await sendFn(event.chatId, texto);
     const arr = (lotes.get(event.chatId) || []).filter((x) => agoraFn() - x.ts < 6 * 3600 * 1000);
-    arr.push({ msgId, msgIds: [msgId], itens: r.itens, loteData: r.loteData, sigla: r.sigla, unidadeNome: grupo.nome, ts: agoraFn(), origem: event.messageId });
+    arr.push({ msgIds: [msgId], itens: r.itens, loteData: r.loteData, sigla: r.sigla, unidadeNome: grupo.nome, ts: agoraFn(), origem: event.messageId });
     lotes.set(event.chatId, arr);
-    return { tratou: true, acao: 'cheques_lote_conferido' };
+    const itensCaixa = r.itens.filter((it) => it.decisao === 'lancar').map(itemDoCaixa);
+    return { tratou: true, acao: 'cheques_lote_lido', itensCaixa };
   }
 
-  // Resposta ao ❓ citando o lote: "1 é da Natalia" / "é da Natalia Vieira".
-  // O nome respondido volta à MESMA RPC (caminho 'nome'), e só aquele cheque é
-  // conferido de novo. Nome que não resolve de forma única não vira escolha.
-  async function tratarIdentificacao(event, lote, unidadeId) {
+  // Resposta CITANDO a lista do lote: "1 é da Natalia". O nome volta à MESMA RPC
+  // (caminho 'nome'); se agora o cheque vira `lancar`, o caixa abre o card dele.
+  async function tratarResposta(event, { unidadeId } = {}) {
+    if (!event || event.hasMedia || !event.quotedMessageId) return null;
+    const arr = lotes.get(event.chatId) || [];
+    const lote = arr.find((x) => (Array.isArray(x.msgIds) && x.msgIds.includes(event.quotedMessageId)) || x.origem === event.quotedMessageId);
+    if (!lote) return null;
     const txt = String(event.body || '').trim();
-    const pend = lote.itens.map((it, i) => ({ it, i })).filter((x) => x.it.cheque.confiavel && !x.it.escolha.fatura);
+    if (/^\s*[*_~]*\s*pode\b/i.test(txt)) {
+      await sendFn(event.chatId, 'O *pode* é no card de lançamento (a mensagem "Comprovante recebido"), não na lista dos cheques.');
+      return { tratou: true, acao: 'cheques_pode_na_lista' };
+    }
+    const pend = lote.itens.map((it, i) => ({ it, i })).filter((x) => x.it.decisao === 'sem_parcela' && x.it.cheque.confiavel);
     if (!pend.length) return null;
     let alvo = null; let resto = txt;
     const mIdx = txt.match(/^\s*(?:cheque\s*)?(\d{1,2}|[①②③④⑤⑥⑦⑧⑨⑩])\s*[-:–)]?\s*/i);
@@ -497,7 +589,7 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
       if (!alvo) return null;
     } else if (pend.length === 1) alvo = pend[0];
     else return null;
-    const nome = resto.replace(/^(e|é|eh)\s+(d[aoe]s?|de)\s+/i, '').replace(/^(d[aoe]s?)\s+/i, '').replace(/[.!?]+$/, '').trim();
+    const nome = resto.replace(/^(e|é|eh)\s+/i, '').replace(/^(d[aoe]s?)\s+/i, '').replace(/[.!?]+$/, '').trim();
     if (nome.length < 3 || /\d/.test(nome)) return null;
     const it = alvo.it;
     let res = null;
@@ -507,58 +599,30 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
     } catch (_) { res = null; }
     const esc = escolherFatura(res, it.cheque, lote.loteData);
     if (!esc.fatura) {
-      await sendFn(event.chatId, `❓ Não consegui achar uma parcela única de "${nome}" para o cheque ${CIRC[alvo.i] || alvo.i + 1}. Manda o nome completo do aluno.`);
+      await sendFn(event.chatId, `❓ Não achei uma parcela única de "${nome}" para o cheque ${CIRC[alvo.i] || alvo.i + 1}. Manda o nome completo do aluno.`);
       return { tratou: true, acao: 'cheques_identificacao_sem_parcela' };
     }
     it.escolha = esc;
-    const c = await superFolha({ acao: 'conferir', cheques: [payloadCheque(it, lote.sigla, lote.loteData)] });
-    const r0 = c && c.success && Array.isArray(c.cheques) ? c.cheques[0] : null;
-    it.acao = r0 ? r0.acao : 'confirmar';
-    it.avisos = r0 && Array.isArray(r0.avisos) ? r0.avisos : [];
-    it.parcela = r0 ? r0.parcela || null : null;
-    const linha = montarMensagem({ unidadeNome: lote.unidadeNome || '', loteData: lote.loteData, itens: [it] }).split('\n').slice(1, -1).join('\n')
-      .replace(/^①/, CIRC[alvo.i] || String(alvo.i + 1));
-    await sendFn(event.chatId, 'Atualizei:\n' + linha + '\n👉 Quando estiver tudo certo, responde *pode* citando a mensagem do lote.');
-    log({ acao: 'cheques_identificacao', indice: alvo.i + 1, sf_acao: it.acao });
-    return { tratou: true, acao: 'cheques_identificacao' };
+    const fat = await carregarFaturas([it]);
+    if (!fat.ok) {
+      await sendFn(event.chatId, '⚠️ Achei a parcela, mas não consegui conferir a fatura agora. Tenta de novo em instantes.');
+      return { tratou: true, acao: 'cheques_identificacao_fonte' };
+    }
+    it.decisao = decidirCheque(it, it.fatura, it.jaLigada);
+    if (it.decisao === 'lancar' && lote.itens.some((x) => x !== it && x.decisao === 'lancar' && x.fatura && x.fatura.id === it.fatura.id)) it.decisao = 'sem_parcela';
+    const msg = await sendFn(event.chatId, 'Atualizei:\n' + linhaCheque(it, alvo.i));
+    if (msg) lote.msgIds.push(msg);
+    log({ acao: 'cheques_identificacao', indice: alvo.i + 1, decisao: it.decisao });
+    return it.decisao === 'lancar'
+      ? { tratou: true, acao: 'cheques_identificacao', itensCaixa: [itemDoCaixa(it)] }
+      : { tratou: true, acao: 'cheques_identificacao' };
   }
 
-  // Resposta CITANDO a mensagem do lote: "pode" → registrar; senão, pode ser a
-  // identificação de um ❓. Sem citação não é do lote: "pode" seco pertence ao
-  // caixa de comprovantes, e texto solto é conversa.
-  async function tratarResposta(event, { casarPode, autorizadoPorFn, unidadeId } = {}) {
-    if (!event || event.hasMedia || !event.quotedMessageId) return null;
-    const arr = lotes.get(event.chatId) || [];
-    const lote = arr.find((x) => x.msgId === event.quotedMessageId || x.origem === event.quotedMessageId
-      || (Array.isArray(x.msgIds) && x.msgIds.includes(event.quotedMessageId)));
-    if (!lote) return null;
-    const conf = casarPode ? casarPode(event.body, { respondeuPreview: true }) : { pode: /^\s*pode\b/i.test(String(event.body || '')) };
-    if (!conf || !conf.pode) return tratarIdentificacao(event, lote, unidadeId);
-    const registraveis = lote.itens.filter((it) => it.cheque.confiavel);
-    if (!registraveis.length) {
-      await sendFn(event.chatId, '⚠️ Nenhum cheque desse lote teve a leitura confirmada; não registrei nada.');
-      return { tratou: true, acao: 'cheques_nada_registravel' };
-    }
-    const cheques = registraveis.map((it) => payloadCheque(it, lote.sigla, lote.loteData,
-      { situacao: it.acao === 'retirar_do_malote' ? 'retirado' : 'a_depositar' }));
-    const r = await superFolha({ acao: 'registrar', cheques,
-      ator: { tipo: 'sol', ref: String(event.messageId || ''), autorizado_por: (autorizadoPorFn && await autorizadoPorFn()) || 'grupo' } });
-    if (!r || !r.success) {
-      await sendFn(event.chatId, `⚠️ Não consegui registrar o lote no Super Folha (${(r && r.error) || 'sem resposta'}). Nada foi gravado.`);
-      log({ acao: 'cheques_registrar_falhou', erro: r && r.error });
-      return { tratou: true, acao: 'cheques_registrar_falhou' };
-    }
-    lotes.set(event.chatId, arr.filter((x) => x !== lote));
-    const gravados = (r.cheques || []).filter((c) => c.gravado !== false).length;
-    await sendFn(event.chatId, `✅ Registrei ${gravados} cheque${gravados === 1 ? '' : 's'} do lote de ${lote.loteData.slice(8)}/${lote.loteData.slice(5, 7)} no Super Folha${r.ligados_ao_banco ? ` (${r.ligados_ao_banco} já ligado${r.ligados_ao_banco === 1 ? '' : 's'} ao depósito no banco)` : ''}. _Nada foi lançado no caixa._`);
-    log({ acao: 'cheques_registrados', gravados, ligados_ao_banco: r.ligados_ao_banco || 0 });
-    return { tratou: true, acao: 'cheques_registrados' };
-  }
-
-  return { tratarMidia, tratarResposta, processarArquivo, superFolha, payloadCheque };
+  return { tratarMidia, tratarResposta, processarArquivo };
 }
 
 module.exports = {
   criarCheques, pareceLoteCheques, dataDoLote, dvMod10, lerCmc7, extensoParaNumero,
-  normalizarCheque, escolherFatura, montarMensagem, nomeOriginal, UNIDADE_SIGLA,
+  normalizarCheque, escolherFatura, decidirCheque, itemDoCaixa, categoriaDaFatura, montarMensagem,
+  nomeOriginal, UNIDADE_SIGLA,
 };

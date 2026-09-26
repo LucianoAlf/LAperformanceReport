@@ -30,16 +30,17 @@
 >
 > Última atualização: 2026-09-14.
 
-### Lote de cheques para depósito (Sol → Super Folha, desde 26/09/2026)
+### Lote de cheques para depósito → caixa da Sol (desde 26/09/2026)
 
-A unidade posta no grupo do financeiro o PDF do lote ("2 CH - 20SETEMBRO2026 - C.GRANDE"). A Sol lê cada cheque, acha a parcela e confere no Super Folha. **Nada vai para o caixa do dia**: a unidade já lança o recebimento no Emusys quando recebe o cheque.
+A unidade posta no grupo do financeiro o PDF do lote ("2 CH - 20SETEMBRO2026 - C.GRANDE"). A Sol lê cada cheque, acha a parcela e lança o cheque no **caixa da Sol do dia** (forma `cheque`), pelo card e "pode" de sempre. Decisão do Alf (26/09): o Super Folha já puxa o caixa da Sol (`export-caixa-movimentacoes`); a Sol **não** chama o Super Folha.
 
-- **Runtime:** `vps/la-hq/sol/runtime/caixa-cheques.cjs` (desvio no início do `handle` do caixa, antes de agente e comprovante) + `cheques-lote-cli.cjs` para rodar fora do grupo. Modo em `caixa-ingestao/cheques.json` (`off` | `sombra` | `grupo`, sem reinício).
-- **Leitura:** visão (`gemini-3.8-flash` pelo OpenCode Zen, API `generateContent`). O PDF é escaneado, então `pdftotext` não serve. A leitura só vale se for **provada por código**: os 3 dígitos verificadores da CMC-7, CMC-7 batendo com banco/agência/número impressos e valor numérico batendo com o extenso. Leitura não provada vira ❓ e **não vai ao Super Folha** (número errado ligaria o depósito errado).
+- **Runtime:** `vps/la-hq/sol/runtime/caixa-cheques.cjs` (desvio no início do `handle` do caixa, antes de agente e comprovante) + `cheques-lote-cli.cjs` para ler um lote fora do grupo (só leitura e decisão). Modo em `caixa-ingestao/cheques.json` (`off` | `sombra` | `grupo`, sem reinício).
+- **Leitura:** visão (`gemini-3.8-flash` pelo OpenCode Zen, API `generateContent`). O PDF é escaneado, então `pdftotext` não serve. A leitura só vale se for **provada por código**: os 3 dígitos verificadores da CMC-7, CMC-7 batendo com banco/agência/número impressos e valor numérico batendo com o extenso. Leitura não provada vira ❓ e **não entra no caixa**.
 - **Parcela:** RPC `sol_cheque_resolver_fatura_v1` (emitente → pessoa → fatura). CPF/CNPJ vira HMAC em `sol_cheque_documento_hash_v1` (só `service_role`, não grava) e só o hash segue.
-- **Super Folha:** edge `sol-cheques-super-folha` (verify_jwt=false; aceita só `service_role` via `papel_da_sessao_v1`, recusa documento em claro) repassa `conferir`/`registrar` a `cheques-sol` com o segredo `SUPER_FOLHA_FINANCEIRO_SECRET`, que **não sai do Supabase** (a VPS não o tem).
-- **No grupo:** mensagem cheque a cheque (✅ depositar · ⚠️ retirar do malote · ❓ confirmar). Resposta citando a mensagem ("1 é da Natalia") confere de novo só aquele cheque. "pode" **citando** registra; "pode" seco continua sendo do caixa de comprovantes.
-- **Contrato:** `Docs/handoffs/2026-09-26-sol-cheques-lote-deposito.md` no repositório do Super Folha. Teste: `tests/sol-runtime/cheques-lote-e2e.cjs` (dados inventados).
+- **Decisão por cheque, com a fatura real (`emusys_faturas`) e os vínculos do caixa (`vw_caixa_movimentacao_fatura_links`):** ✅ vai para o caixa (paga em cheque, ou em aberto, com o valor batendo) · ⚠️ retirar do malote (paga por outra forma, ou cancelada) · ❓ não entra (fatura já no caixa, valor diverge, emitente desconhecido/empate, leitura não provada). Dois cheques na mesma parcela: nenhum entra.
+- **Lançamento:** 2+ ✅ = um card de lote (`abrirFluxoMultiAluno` com os itens já resolvidos → `sol_caixa_lancar_recebimento_lote_v1`); 1 ✅ = lançamento simples (`sol_caixa_lancar_recebimento`). As RPCs de lote exigem 2 itens, por isso a bifurcação. O número do cheque vai na descrição ("· cheque Santander nº 000212") pelo campo `complemento_descricao`, que a RPC do lote anexa (`20260927000000`).
+- **No grupo:** primeiro a lista cheque a cheque, depois o card. Resposta citando a lista ("1 é da Natalia") resolve um ❓ e abre o card dele; "pode" na lista não lança (é no card).
+- **Contrato original (Super Folha):** `Docs/handoffs/2026-09-26-sol-cheques-lote-deposito.md` no repositório do Super Folha — o trecho de `conferir/registrar` direto foi substituído pela decisão do Alf acima. Teste: `tests/sol-runtime/cheques-lote-e2e.cjs` (dados inventados).
 
 ## Fechamento mensal (histórico canônico)
 
