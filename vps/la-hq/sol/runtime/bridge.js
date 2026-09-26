@@ -409,7 +409,11 @@ function resolverTelefoneDoRemetente(senderId) {
 // Por que aqui e nao no AGENTS.md: sem esse filtro, TODA mensagem dos grupos
 // autorizados viraria uma chamada de LLM so pra decidir "isso e comigo?" --
 // caro, lento e desnecessario.
-const GRUPO_JANELA_ATIVA_MS = parseInt(process.env.WHATSAPP_GROUP_ACTIVE_WINDOW_MS || '480000', 10); // 8 min
+// 26/09/2026: 8 min -> 3 min, contados a partir da ULTIMA RESPOSTA da Sol (ver
+// registrarRespostaDaSol em group-engagement.cjs). Com 8 min renovados a cada fala
+// humana, a Sol ficava "na conversa" enquanto a pessoa conversasse com os colegas
+// (Barra, 17:21-17:24: cinco mensagens seguidas foram ao agente).
+const GRUPO_JANELA_ATIVA_MS = parseInt(process.env.WHATSAPP_GROUP_ACTIVE_WINDOW_MS || '180000', 10); // 3 min
 const GRUPOS_QUE_RESPONDEM = new Set(
   String(process.env.WHATSAPP_GROUP_RESPONSE_CHAT_IDS || '')
     .split(/[\s,]+/)
@@ -432,6 +436,15 @@ function abrirJanelaGrupo(chatId, senderId, motivo = 'unknown') {
 }
 
 function decidirEngajamentoNoGrupo(args) { return groupEngagementPolicy.decidir(args); }
+
+// A janela de continuacao conta a partir da resposta da Sol, nao da fala humana.
+function registrarRespostaDaSolNoGrupo(chatId) {
+  if (!String(chatId || '').endsWith('@g.us')) return;
+  try {
+    const rec = groupEngagementPolicy.registrarRespostaDaSol({ chatId });
+    if (rec) console.log(JSON.stringify({ event: 'group_continuation_window', chatId, senderId: rec.senderId, motivo: 'resposta_da_sol', until: new Date(rec.until).toISOString(), ttlMs: GRUPO_JANELA_ATIVA_MS }));
+  } catch {}
+}
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -1607,6 +1620,8 @@ app.post('/send', async (req, res) => {
         await sleep(CHUNK_DELAY_MS);
       }
     }
+
+    registrarRespostaDaSolNoGrupo(chatId);
 
     if (replyTo && _agentFirstCorrelation) {
       await closeAgentFirstByReplySafely({
