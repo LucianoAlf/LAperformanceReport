@@ -915,6 +915,18 @@ function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competenci
     if (q.inicio && q.fim) {
       b.push(`Meses: *${q.inicio} a ${q.fim}*`);
       if (q.proposto) b.push('_Deduzi pela 1ª parcela — se for outro período, me diz: *de 09/2026 a 08/2027*._');
+      const qf = q.faturas;
+      if (qf && qf.ok) {
+        b.push(`Vou vincular *${qf.n} faturas*${qf.curso ? ' do curso de ' + qf.curso : ''} · soma ${fmtBRL(qf.soma)}`);
+        if (valor && Math.abs(Number(qf.soma) - Number(valor)) >= 0.01) {
+          b.push(`_A soma das faturas difere do comprovante (${fmtBRL(valor)}) — juros ou desconto. Lanço o valor do comprovante._`);
+        }
+      } else if (qf) {
+        const porque = { faturas_ja_vinculadas: 'parte delas já está vinculada a outro lançamento',
+          mais_de_uma_matricula: 'o aluno tem mais de um curso nesse período',
+          periodo_incompleto: 'não há uma fatura por mês nesse período' }[qf.motivo] || 'não consegui confirmar as faturas';
+        b.push(`⚠️ Não vou vincular faturas (${porque}) — lanço *sem vínculo de fatura*.`);
+      }
     } else {
       b.push('❓ Quais meses? Me diz: *de 08/2026 a 07/2027*');
     }
@@ -1921,7 +1933,7 @@ function nomeDoAtor(event) {
 
 // "todas as parcelas", "quitou o ano", "antecipou": e' pagamento de VARIAS parcelas --
 // casar uma parcela unica aqui seria mentira no lancamento.
-const MULTIPLAS = /(todas\s+as\s+parcelas|todas\s+parcelas|quita(?:c|ç)(?:a|ã)o|quitou|quitar|antecipa(?:c|ç)(?:a|ã)o|antecipou|pacote\s+de\s+parcelas|ano\s+todo|semestre\s+todo)/i;
+const MULTIPLAS = /(todas\s+as\s+parcelas|todas\s+parcelas|quita(?:c|ç)(?:a|ã)o|quitou|quitar|antecipa(?:c|ç)(?:a|ã)o|antecipou|pacote\s+de\s+parcelas|ano\s+todo|semestre\s+todo|contrato\s+(?:todo|inteiro)|anuidade)/i;
 function pagamentoMultiplo(texto) { return MULTIPLAS.test(String(texto || '')); }
 
 function extrairDivisaoPagamento(texto, total) {
@@ -2993,6 +3005,127 @@ function periodoQuitacao(canonica, nParcelas) {
   const fim = _somaMeses(mes, ano, nParcelas - 1);
   return { inicio: _mm(mes, ano), fim: _mm(fim.mes, fim.ano), n: nParcelas, proposto: true };
 }
+// ---- quitacao: QUAIS FATURAS (pagamento composto, 25/09/2026) -------------
+// O card de quitacao ja dizia os MESES ("09/2026 a 08/2027"), mas o lancamento
+// saia vinculado a UMA fatura so -- a canonica, a 1a do periodo. Caso real:
+// Lucas Azevedo de Barros/CG pagou o contrato inteiro num cartao de R$ 4.752;
+// o caixa guardaria 1 de 12 faturas e as outras 11 pareceriam em aberto.
+// `sol_caixa_lancar_recebimento` aceita `fatura_ids` (migration 20260925000000)
+// e grava UMA movimentacao com N filhas em `caixa_movimentacao_faturas`.
+//
+// REGRAS (todas medidas contra o pedido do Luciano, nao negociaveis):
+//  - so fatura de MENSALIDADE ("Parcela MM/AAAA"): passaporte e ingresso tem
+//    emusys_student_id mas nao sao parcela (ver CLAUDE.md, emusys_faturas);
+//  - fatura com dono (outra movimentacao, via vw_caixa_movimentacao_fatura_links)
+//    NUNCA e candidata;
+//  - UMA matricula: `emusys_student_id` e pessoa, e quem faz 2 cursos tem 2
+//    faturas por mes. Periodo coberto por 2 matriculas sem desempate = recusa;
+//  - o periodo inteiro ou nada: faltar um mes vira "sem vinculo", nunca vinculo
+//    parcial (vinculo mentiroso suja a carteira; ausencia so deixa de ajudar);
+//  - a soma das faturas pode diferir do valor (juros, desconto): informa, nao trava.
+function _competenciaIsoDoMM(mmYYYY) {
+  const m = String(mmYYYY || '').match(/^(\d{2})\/(\d{4})$/);
+  return m ? `${m[2]}-${m[1]}` : null;
+}
+function selecionarFaturasQuitacao(faturas, ocupadas, { inicio, fim, matriculaPreferida } = {}) {
+  const ini = _competenciaIsoDoMM(inicio);
+  const fi = _competenciaIsoDoMM(fim);
+  if (!ini || !fi || ini > fi) return { ok: false, motivo: 'periodo_invalido' };
+  const meses = [];
+  let [a, m] = ini.split('-').map(Number);
+  while (`${a}-${String(m).padStart(2, '0')}` <= fi && meses.length <= 25) {
+    meses.push(`${a}-${String(m).padStart(2, '0')}`);
+    m += 1; if (m > 12) { m = 1; a += 1; }
+  }
+  if (meses.length < 2 || meses.length > 24) return { ok: false, motivo: 'periodo_fora_da_faixa', meses: meses.length };
+  const livres = new Set();
+  const naFaixa = (Array.isArray(faturas) ? faturas : []).filter((f) => {
+    const comp = String((f && f.competencia) || '').slice(0, 7);
+    return f && f.id && meses.includes(comp)
+      && /^\s*parcela\b/i.test(String(f.descricao || ''))
+      && ['aberta', 'paga'].includes(String(f.status || ''));
+  });
+  const ocupadasNaFaixa = naFaixa.filter((f) => ocupadas && ocupadas.has(f.id)).length;
+  naFaixa.filter((f) => !(ocupadas && ocupadas.has(f.id))).forEach((f) => livres.add(f));
+  // Por matricula: quem cobre TODOS os meses, exatamente uma fatura por mes.
+  const porMatricula = new Map();
+  for (const f of livres) {
+    const k = String(f.emusys_matricula_id == null ? '' : f.emusys_matricula_id);
+    if (!porMatricula.has(k)) porMatricula.set(k, []);
+    porMatricula.get(k).push(f);
+  }
+  const completas = [...porMatricula.entries()].filter(([k, fs]) => {
+    if (!k) return false;
+    const comps = fs.map((f) => String(f.competencia).slice(0, 7));
+    return fs.length === meses.length && meses.every((mm) => comps.filter((c) => c === mm).length === 1);
+  });
+  let escolhida = null;
+  if (matriculaPreferida != null) {
+    escolhida = completas.find(([k]) => k === String(matriculaPreferida)) || null;
+  }
+  if (!escolhida && completas.length === 1) escolhida = completas[0];
+  if (!escolhida) {
+    return { ok: false, n: meses.length, inicio, fim,
+      motivo: completas.length > 1 ? 'mais_de_uma_matricula'
+        : (ocupadasNaFaixa ? 'faturas_ja_vinculadas' : 'periodo_incompleto'),
+      ocupadas: ocupadasNaFaixa };
+  }
+  const fs = escolhida[1].slice().sort((x, y) => String(x.competencia).localeCompare(String(y.competencia)));
+  const liquido = (f) => Number(f.valor_original || 0) - Number(f.desconto_fixo || 0) - Number(f.desconto_condicional || 0);
+  const soma = Math.round(fs.reduce((t, f) => t + liquido(f), 0) * 100) / 100;
+  return { ok: true, ids: fs.map((f) => f.id), n: fs.length, soma, inicio, fim,
+    matricula: escolhida[0], curso: cursoDaFatura(fs[0]) };
+}
+
+function _restGetJson(pathQuery, { url, key } = carregarEnv()) {
+  return new Promise((resolve, reject) => {
+    if (!key) return reject(new Error('missing SUPABASE service key'));
+    const u = new URL(`${url}/rest/v1/${pathQuery}`);
+    const req = https.request({
+      hostname: u.hostname, path: u.pathname + u.search, method: 'GET',
+      headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' },
+    }, (res) => {
+      let data = '';
+      res.on('data', (c) => { data += c; });
+      res.on('end', () => {
+        if (res.statusCode >= 300) return reject(new Error(`GET ${u.pathname} ${res.statusCode}`));
+        try { resolve(data ? JSON.parse(data) : []); } catch (e) { reject(new Error('resposta invalida')); }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(15000, () => req.destroy(new Error('timeout GET')));
+    req.end();
+  });
+}
+
+// Le as faturas da PESSOA daquela matricula na unidade e as que ja tem dono.
+// A unidade sai da propria linha de `alunos`, nunca do chamador: fatura de outra
+// unidade nao pode entrar nem por engano (a RPC revalida, mas manda certo).
+async function resolverFaturasQuitacao(unidadeId, alunoId, quitacao, env = carregarEnv()) {
+  const idNum = Number(alunoId);
+  if (!unidadeId || !Number.isInteger(idNum) || idNum <= 0) return { ok: false, motivo: 'aluno_sem_vinculo' };
+  const alu = await _restGetJson(`alunos?id=eq.${idNum}&select=id,unidade_id,emusys_student_id,emusys_matricula_id`, env);
+  const a = Array.isArray(alu) ? alu[0] : null;
+  if (!a || a.unidade_id !== unidadeId || !/^\d+$/.test(String(a.emusys_student_id || ''))) {
+    return { ok: false, motivo: 'aluno_fora_da_unidade_ou_sem_emusys' };
+  }
+  const faturas = await _restGetJson('emusys_faturas?select=id,competencia,status,descricao,valor_original,'
+    + 'desconto_fixo,desconto_condicional,emusys_matricula_id'
+    + `&unidade_id=eq.${encodeURIComponent(unidadeId)}&emusys_student_id=eq.${a.emusys_student_id}&order=competencia`, env);
+  const ids = (Array.isArray(faturas) ? faturas : []).map((f) => f.id).filter(Boolean);
+  const ocupadas = new Set();
+  for (let i = 0; i < ids.length; i += 60) {
+    const lote = ids.slice(i, i + 60);
+    const links = await _restGetJson(`vw_caixa_movimentacao_fatura_links?select=fatura_id&fatura_id=in.(${lote.join(',')})`, env);
+    (Array.isArray(links) ? links : []).forEach((l) => l && l.fatura_id && ocupadas.add(l.fatura_id));
+  }
+  const r = selecionarFaturasQuitacao(faturas, ocupadas, {
+    inicio: quitacao && quitacao.inicio, fim: quitacao && quitacao.fim,
+    matriculaPreferida: a.emusys_matricula_id,
+  });
+  return { ...r, aluno_id: idNum };
+}
+
 // "de 09/2026 a 08/2027", "setembro a agosto", "ago/26 ate jul/27", "08/26-07/27"
 function extrairPeriodoMeses(texto) {
   const t = _normConf(texto);
@@ -3172,7 +3305,7 @@ async function buscarCompostoFaturasMes(unidadeId, aluno, competencia, valor, en
 //
 // Fica NULL sem constrangimento quando nao da para afirmar: e melhor movimento sem
 // vinculo do que vinculo mentiroso -- ninguem reconcilia por cima de dado errado.
-function derivarVinculo({ canonica, parcela, composto, alunoNovoId } = {}) {
+function derivarVinculo({ canonica, parcela, composto, alunoNovoId, multiplas, quitacao } = {}) {
   const num = (v) => { const n = Number(v); return Number.isInteger(n) && n > 0 ? n : null; };
   const uuid = (v) => (typeof v === 'string'
     && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)) ? v : null;
@@ -3185,6 +3318,20 @@ function derivarVinculo({ canonica, parcela, composto, alunoNovoId } = {}) {
     const unico = (ids[0] !== null && ids.every((x) => x === ids[0])) ? ids[0] : null;
     return { aluno_id: unico, fatura_id: null,
       fonte: unico ? 'composto_mesma_matricula' : 'composto_multiplas_matriculas' };
+  }
+  // 1b) QUITACAO: varias competencias pagas de uma vez (25/09/2026). Com as N
+  //     faturas do periodo resolvidas, vai `fatura_ids` (1 movimentacao, N filhas).
+  //     Sem elas, NENHUMA fatura: a canonica e so a 1a do periodo, e vincular
+  //     so ela diria que as outras seguem em aberto -- vinculo parcial e mentira.
+  if (multiplas) {
+    const q = quitacao && quitacao.faturas;
+    const ids = (q && q.ok && Array.isArray(q.ids)) ? q.ids.map(uuid).filter(Boolean) : [];
+    if (ids.length >= 2 && ids.length === q.ids.length) {
+      return { aluno_id: num(q.aluno_id), fatura_id: null, fatura_ids: ids, fonte: 'quitacao_faturas' };
+    }
+    const a = (canonica && canonica.fatura && num(canonica.fatura.aluno_id))
+      || (parcela && num(parcela.aluno_id)) || null;
+    return { aluno_id: a, fatura_id: null, fonte: 'quitacao_sem_vinculo' };
   }
   // 2) FATURA CANONICA: a fonte mais forte do contrato v4.
   if (canonica && canonica.fatura) {
@@ -3231,7 +3378,7 @@ function categoriaEhSaida(categoria) {
   return ['seguranca', 'despesa', 'retirada', 'troco'].includes(String(categoria || '').toLowerCase());
 }
 
-function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, finalizarPreviewV3Fn = finalizarPreviewV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, resolverEnvelopeFn = resolverEnvelopeCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, identificarAlunoNovoFn = identificarAlunoNovo, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, log = () => {}, governanceFn = () => Promise.resolve({ ok: false, disabled: true }), janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
+function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, finalizarPreviewV3Fn = finalizarPreviewV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, resolverEnvelopeFn = resolverEnvelopeCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, identificarAlunoNovoFn = identificarAlunoNovo, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, faturasQuitacaoFn = resolverFaturasQuitacao, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, log = () => {}, governanceFn = () => Promise.resolve({ ok: false, disabled: true }), janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
   // SOL_CAIXA_V3_LEDGER_FAKE=1 (suite de testes): fiacao V3 ativa, banco intacto.
   // Sem isto, teste que nao mocka os registradores grava preview/approval REAL
   // no ledger de producao — 62% dos previews de 24-31/08 eram artefato de teste.
@@ -5345,7 +5492,12 @@ _Não lanço nada pela metade._`);
       // de multi-ALUNO: um aluno com duas faturas continua sendo um lote.
       const _competenciasDaLegenda = extrairCompetenciasTexto(legendaEfetiva);
       const _alunoDaLegenda = _alunoRotulado(legendaEfetiva);
-      if (_competenciasDaLegenda.length >= 2 && _alunoDaLegenda
+      // ⚠️ INTERVALO nao e LISTA (25/09/2026). "parcelas de 09/2026 a 08/2027" tem
+      // dois MM/AAAA, e este caminho lia os dois como "09/2026 e 08/2027" -- recusava
+      // o card do Lucas (contrato inteiro, 12 meses) como "duas parcelas divergentes".
+      // Periodo declarado e quitacao: vai para `multiplas`, que resolve as N faturas.
+      const _periodoDaLegenda = extrairPeriodoMeses(legendaEfetiva);
+      if (_competenciasDaLegenda.length >= 2 && _alunoDaLegenda && !_periodoDaLegenda
           && Number(valor) > 0 && forma && !categoriaEhSaida(categoria)) {
         const _parcelas = await tratarParcelasCompetenciasExplicitas({
           event, grupo: grp, agora, texto: legendaEfetiva,
@@ -5439,7 +5591,11 @@ _Não lanço nada pela metade._`);
       let alunoNovoId = null;
       // Camada 4: casa com a parcela REAL do aluno (read-only) -- enriquece o preview
       let parcela = null, confiancaBaixa = false;
-      const multiplas = pagamentoMultiplo(bodyLimpo(event.body) + ' ' + ocrText);
+      // Periodo declarado pelo humano ("de 09/2026 a 08/2027") tambem e quitacao,
+      // mesmo sem a palavra -- e o mesmo leitor que o card ja usa para os meses.
+      // So o texto HUMANO: data de recibo no OCR nao declara periodo nenhum.
+      const multiplas = pagamentoMultiplo(bodyLimpo(event.body) + ' ' + ocrText)
+        || !!extrairPeriodoMeses(bodyLimpo(event.body));
       const querParcela = !lojinhaInfo && !multiplas && (!categoria || categoria === 'parcela' || categoria === 'mensalidade' || categoria === 'passaporte' || categoria === 'matricula' || categoria === 'outro');
       const categoriaExplicitaTaxa = categoria === 'passaporte' || categoria === 'matricula' || categoriaLegenda === 'passaporte';
       const podeFallbackLegadoParcela = querParcela && !categoriaExplicitaTaxa;
@@ -5774,6 +5930,21 @@ _Não lanço nada pela metade._`);
           inicio: (informado && informado.inicio) || (proposto && proposto.inicio) || null,
           fim: (informado && informado.fim) || (proposto && proposto.fim) || null,
           proposto: !informado && !!proposto };
+        // Quais FATURAS esse periodo quita (pagamento composto, 25/09/2026).
+        // Falha de leitura nao derruba o card: vira "sem vinculo" e o humano ve.
+        if (quitacao.inicio && quitacao.fim) {
+          const _alunoQ = derivarVinculo({ canonica, parcela, alunoNovoId }).aluno_id;
+          try {
+            quitacao.faturas = _alunoQ
+              ? await faturasQuitacaoFn(grp.unidade_id, _alunoQ, quitacao)
+              : { ok: false, motivo: 'aluno_sem_vinculo' };
+          } catch (e) {
+            quitacao.faturas = { ok: false, motivo: 'erro_leitura' };
+            log({ acao: 'quitacao_faturas_erro', chatId, erro: String(e && e.message) });
+          }
+          log({ acao: 'quitacao_faturas', chatId, ok: !!(quitacao.faturas && quitacao.faturas.ok),
+            n: quitacao.faturas && quitacao.faturas.n, motivo: quitacao.faturas && quitacao.faturas.motivo });
+        }
       }
       const bloqueiaLancamento = !composto && parcela && parcela.multiplas_no_mes && parcela.valor_bate === false;
       const saidaCaixa = categoriaEhSaida(categoria);
@@ -5791,6 +5962,10 @@ _Não lanço nada pela metade._`);
         ? `Lojinha/Venda - ${lojinhaInfo.item || 'Produto'}${aluno ? ' - ' + aluno : ''}`
         : saidaCaixa
         ? (descricaoSaida && descricaoSaida.length >= 3 ? `PG Semana ${cap(categoria)}${descricaoSaida.toLowerCase().includes(String(categoria).toLowerCase()) ? '' : ' - ' + descricaoSaida}` : `PG Semana ${cap(categoria)}`)
+        : (multiplas && quitacao && quitacao.faturas && quitacao.faturas.ok)
+        ? (`Parcelas ${quitacao.faturas.inicio} a ${quitacao.faturas.fim}`
+           + (quitacao.faturas.curso ? ` do curso de ${quitacao.faturas.curso}` : '')
+           + (aluno ? ' - ' + aluno : ''))
         : multiplas
         ? ('Quitacao' + (quitacao && quitacao.n ? ' ' + quitacao.n + 'x' : ' de parcelas')
            + (quitacao && quitacao.inicio ? ` (${quitacao.inicio} a ${quitacao.fim})` : '')
@@ -7497,10 +7672,19 @@ _Não lanço nada pela metade._`);
       // Fatura contestada pela equipe nao volta pela porta dos fundos: vincular
       // a fatura errada suja a carteira do aluno (pior que lancar sem vinculo).
       if (alvo.faturaContestada) { vinculo.fatura_id = null; vinculo.fonte = 'fatura_contestada'; }
+      if (alvo.faturaContestada) vinculo.fatura_ids = null;
       if (vinculo.aluno_id) payload.aluno_id = vinculo.aluno_id;
       if (vinculo.fatura_id) payload.fatura_id = vinculo.fatura_id;
+      // Pagamento composto: 2+ faturas vao em `fatura_ids` e a RPC grava as filhas.
+      // Com 1 so, segue o caminho de sempre (fatura_id) -- nunca array de um.
+      if (Array.isArray(vinculo.fatura_ids) && vinculo.fatura_ids.length >= 2) {
+        payload.fatura_ids = vinculo.fatura_ids;
+      } else if (Array.isArray(vinculo.fatura_ids) && vinculo.fatura_ids.length === 1) {
+        payload.fatura_id = vinculo.fatura_ids[0];
+      }
       log({ acao: 'vinculo_lancamento', chatId, fonte: vinculo.fonte,
-            aluno_id: vinculo.aluno_id || null, tem_fatura: !!vinculo.fatura_id });
+            aluno_id: vinculo.aluno_id || null, tem_fatura: !!vinculo.fatura_id,
+            faturas: Array.isArray(payload.fatura_ids) ? payload.fatura_ids.length : undefined });
       let v3Approval = null;
       try {
         v3Approval = await registrarApprovalPublicoV3({ event, alvo, decision: 'approved' });
@@ -7950,6 +8134,7 @@ _Não lanço nada pela metade._`);
 function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
 
 module.exports = {
+  selecionarFaturasQuitacao, resolverFaturasQuitacao,
   parseBRMoney, extrairValor, extrairForma, extrairFormaHumana, detectarComprovante, casarPode,
   _saidaExplicitaFromCaption, _nomeHumanoTardio, extrairValorOcr, _vendedorRotulado, _mesmaPessoa,
   _alunoRotulado, _limparAlunoRotulado, _semAlunoDeclarado, extrairCategoriaCorrecao,
