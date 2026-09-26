@@ -4440,6 +4440,59 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     return { acao: 'preview_agent_first_singular', previewId: pendencia.previewId };
   }
 
+  // 🔴 CHEQUES DO LOTE DE DEPÓSITO → CAIXA DA SOL (26/09/2026, decisão do Alf).
+  // Os itens chegam RESOLVIDOS pelo módulo de cheques (caixa-cheques.cjs): leitura
+  // provada pela CMC-7, fatura real do espelho, sem duplicidade no caixa. Daqui para
+  // baixo é o card de sempre, sem trilho paralelo: 2+ cheques = lote
+  // (abrirFluxoMultiAluno com resolvidoPronto — as RPCs de lote exigem 2 itens),
+  // 1 cheque = lançamento simples. Forma 'cheque'. O número do cheque vai na
+  // descrição: é por ele que o Super Folha liga o depósito do banco.
+  async function abrirCardCheques({ event, grp, itens, agora }) {
+    const total = Math.round(itens.reduce((s, x) => s + Number(x.valor), 0) * 100) / 100;
+    const cats = [...new Set(itens.map((x) => x.categoria))];
+    const categoria = cats.length === 1 ? cats[0] : 'parcela';
+    if (itens.length >= 2) {
+      return abrirFluxoMultiAluno({ event, grupo: grp, textoFonte: 'lote de cheques', textoHumano: '',
+        intent: { ok: true, valor_total: total, forma: 'cheque', categoria, itens }, agora,
+        origemMessageId: event.messageId, resolvidoPronto: { ok: true, itens } });
+    }
+    const it = itens[0];
+    let texto = montarPreview({ unidadeNome: grp.nome, valor: it.valor, forma: 'cheque', categoria: it.categoria,
+      aluno: it.aluno_nome, competencia: it.competencia, parcela: null, confiancaBaixa: false,
+      responsavelFinanceiro: it.responsavel_financeiro, formaIncerta: false, cartaoModalidade: null, cartaoParcelas: null,
+      multiplas: false, alunoViaPagador: null, pagadorNome: null, candidatosAluno: null, canonica: null, duplicata: null,
+      quitacao: null, faturaIndisponivel: false, composto: null, bloqueiaLancamento: false });
+    if (dryRun) texto += '\n\n_(modo teste — nada será gravado no caixa)_';
+    const previewId = await sendFn(event.chatId, texto);
+    let idEnviou = null;
+    try { idEnviou = await identidadeFn(event.senderPhone, grp.unidade_id); } catch (e) { /* melhor esforço */ }
+    const pend = {
+      previewId, unidade_id: grp.unidade_id, nome: grp.nome, valor: it.valor, forma: 'cheque', categoria: it.categoria,
+      aluno: it.aluno_nome, competencia: it.competencia,
+      descricao: [it.descricao, it.complemento_descricao].filter(Boolean).join(' · ') || null,
+      parcela: null, responsavelFinanceiro: it.responsavel_financeiro || null, cartaoModalidade: null, cartaoParcelas: null,
+      formaIncerta: false, quitacao: null, multiplas: false, composto: null, itemLojinha: null, bloqueiaLancamento: false,
+      faturaIndisponivel: false, bloqueiaFonteIndisponivel: false,
+      canonica: { ok: true, fatura: { canonical_fatura_id: it.canonical_fatura_id } },
+      enviadoPor: nomeParaCarimbo(idEnviou, event), idemKey: `${event.chatId}:${event.messageId}:cheque`,
+      origem: event.messageId, msgIds: [previewId], autorPhone: event.senderPhone || null, autorId: event.senderId || null,
+      toquePor: String(event.senderPhone || event.senderId || ''), toqueTs: agora, ts: agora,
+    };
+    const v3 = await registrarPreviewPublicoV3({ event, grupo: grp, previewId, texto, pendencia: pend,
+      result: { acao: 'preview_cheque', valor: it.valor } });
+    if (v3LedgerAtivo && (!v3 || !v3.preview_id)) {
+      await sendFn(event.chatId, '⚠️ Não deixei esse cheque pendente porque o preview seguro não foi registrado. Não responda *pode*; reenvia o lote em instantes.');
+      log({ acao: 'preview_cheque_sem_v3', chatId: event.chatId });
+      return { acao: 'preview_cheque_sem_v3' };
+    }
+    if (v3 && v3.preview_id) { pend.v3PreviewId = v3.preview_id; pend.v3PreviewHash = v3.preview_hash || null; }
+    const arr = limparVelhos(event.chatId, agora);
+    arr.push(pend);
+    pendentes.set(event.chatId, arr);
+    log({ acao: 'preview_cheque_enviado', chatId: event.chatId, valor: it.valor });
+    return { acao: 'preview_cheque_enviado', previewId };
+  }
+
   async function abrirFluxoMultiAluno({ event, grupo, textoFonte, textoHumano, intent, agora,
     origemMessageId, resolvidoPronto = null, agentFirstEnvelope = null,
     evidenceEnvelope = null, supersedePreviewId = null }) {
@@ -4635,6 +4688,9 @@ _Não lanço nada pela metade._`);
       categoria: item.categoria || intent.categoria, descricao: item.descricao || null,
       canonical_fatura_id: item.canonical_fatura_id || null, responsavel_financeiro: item.responsavel_financeiro || null,
       fatura: item.fatura || null,
+      // Só o lote de CHEQUES traz: "cheque Santander nº 000212" — o validador
+      // devolve a descrição da fatura e a RPC do lote anexa este complemento.
+      complemento_descricao: item.complemento_descricao || null,
       sem_vinculo_fatura: !!item.sem_vinculo_fatura, declarado_pelo_humano: !!item.declarado_pelo_humano,
       desconto_negociado_explicito: !!item.sem_vinculo_fatura
         && _autorizacaoDesconto.ok && _entradasAutorizadas.has(_chaveItem(item)),
@@ -4864,9 +4920,15 @@ _Não lanço nada pela metade._`);
       try {
         const rc = event.hasMedia
           ? await cheques.tratarMidia(event, grp)
-          : (event.quotedMessageId ? await cheques.tratarResposta(event, { casarPode, unidadeId: grp.unidade_id,
-            autorizadoPorFn: async () => { try { const i = await identidadeFn(event.senderPhone, grp.unidade_id); return (i && i.nome) || null; } catch (_) { return null; } } }) : null);
-        if (rc && rc.tratou) return { acao: rc.acao };
+          : (event.quotedMessageId ? await cheques.tratarResposta(event, { unidadeId: grp.unidade_id }) : null);
+        if (rc && rc.tratou) {
+          // Cheques ✅ entram no CAIXA DA SOL pelo card de sempre (decisão do Alf, 26/09).
+          if (Array.isArray(rc.itensCaixa) && rc.itensCaixa.length) {
+            const rCard = await abrirCardCheques({ event, grp, itens: rc.itensCaixa, agora });
+            return { acao: (rCard && rCard.acao) || rc.acao, previewId: rCard && rCard.previewId };
+          }
+          return { acao: rc.acao };
+        }
       } catch (e) {
         log({ acao: 'cheques_erro', chatId, erro: String(e && e.message) });
       }
