@@ -12,7 +12,7 @@
 
 #
 # <sha256>  <arquivo>  <caminho na la-hq>
-003e5d6399aa7ba3cc759b3afcebd8b5fe22910423b24bad82e226f921407907  caixa-financeiro.cjs  /home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs
+a31735f9474082c0dfce4585c6395ce9ec2c89484f40f2b17ba48c34c588fa2a  caixa-financeiro.cjs  /home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs
 c6305a386b188a3c31a74609ac2aec859a137be49998a30d26a88cf7aed568d6  caixa-abertura-fechamento.cjs  /home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-abertura-fechamento.cjs
 50c7e8e527b156bbf71541b79e0d5a74463a71fa8b4214a5b265c7947cdacf1c  group-engagement.cjs  /home/sol/.hermes/hermes-agent/scripts/whatsapp-bridge/group-engagement.cjs
-b0a6ec5a539d7d919315abfa45b689057d8208f00fea99e2710188a42eb729c6  caixa-cheques.cjs  /home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-cheques.cjs
+6a3ae929563b31052e651d3c8ea16b859615c869df6471a79855abfb1b339828  caixa-cheques.cjs  /home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-cheques.cjs
