@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-25 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-27 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — gestao
 
-41 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+45 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## bi_agent_config_lamusic
 
@@ -537,6 +537,98 @@
 
 **Únicos:**
 - `projecao_recaculo_log_pkey`
+
+## relatorio_anual
+
+> Relatório Pedagógico Anual: um por (recital, aluno). Fechada; acesso só por funções guardadas (fn_relatorio_anual_papel).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `evento_id` | bigint | não |  |  |
+| `aluno_id` | integer | não |  |  |
+| `unidade_id` | uuid | não |  |  |
+| `professor_id` | integer | sim |  |  |
+| `professor_origem` | text | sim |  |  |
+| `curso` | text | sim |  |  |
+| `classificacao` | text | sim |  |  |
+| `musica_recital` | text | sim |  |  |
+| `status` | text | não | 'sem_voz'::text |  |
+| `secoes` | jsonb | não | '{}'::jsonb |  |
+| `voz_audio_path` | text | sim |  |  |
+| `voz_transcricao` | text | sim |  |  |
+| `voz_transcrita_em` | timestamp with time zone | sim |  |  |
+| `voz_transcritor` | text | sim |  |  |
+| `modelo` | text | sim |  |  |
+| `versao` | integer | não | 0 |  |
+| `gerado_em` | timestamp with time zone | sim |  |  |
+| `enviado_em` | timestamp with time zone | sim |  |  |
+| `devolvido_em` | timestamp with time zone | sim |  |  |
+| `devolucao_motivo` | text | sim |  |  |
+| `aprovado_em` | timestamp with time zone | sim |  |  |
+| `aprovado_por_usuario_id` | integer | sim |  |  |
+| `aprovado_por_professor_id` | integer | sim |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `relatorio_anual_evento_id_aluno_id_key`
+- `relatorio_anual_pkey`
+
+## relatorio_anual_historico
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `relatorio_id` | bigint | não |  | relatorio_anual.id |
+| `quando` | timestamp with time zone | não | now() |  |
+| `usuario_id` | integer | sim |  |  |
+| `professor_id` | integer | sim |  |  |
+| `ator` | text | não |  |  |
+| `acao` | text | não |  |  |
+| `secao` | text | sim |  |  |
+| `antes` | jsonb | sim |  |  |
+| `depois` | jsonb | sim |  |  |
+| `motivo` | text | sim |  |  |
+
+**Únicos:**
+- `relatorio_anual_historico_pkey`
+
+## relatorio_anual_revisor
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `evento_id` | bigint | não |  |  |
+| `professor_id` | integer | não |  |  |
+| `revisor_usuario_id` | integer | sim |  |  |
+| `revisor_professor_id` | integer | sim |  |  |
+| `definido_por_usuario_id` | integer | sim |  |  |
+| `definido_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `relatorio_anual_revisor_pkey`
+
+**Triggers:**
+- `trg_relatorio_anual_revisor_valida → fn_relatorio_anual_revisor_valida()`
+
+## relatorio_equipe_unidade
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `unidade_id` | uuid | sim |  |  |
+| `grupo` | text | não |  |  |
+| `nome` | text | não |  |  |
+| `funcao` | text | sim |  |  |
+| `usuario_id` | integer | sim |  |  |
+| `professor_id` | integer | sim |  |  |
+| `ordem` | integer | não | 0 |  |
+| `ativo` | boolean | não | true |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `relatorio_equipe_unidade_pkey`
+- `uq_relatorio_equipe_unidade`
 
 ## relatorios_diarios
 

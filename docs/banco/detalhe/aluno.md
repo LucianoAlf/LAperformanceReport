@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-25 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-27 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — aluno
 
-150 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+151 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## aluno_acoes
 
@@ -416,6 +416,29 @@
 
 **Triggers:**
 - `trg_atualiza_projecao_por_reposicao → trg_atualiza_projecao_por_reposicao()`
+
+## aluno_trancamento_periodo
+
+> Períodos de trancamento vistos no Emusys (27/09/2026). emusys_matriculas_estado_atual só guarda o trancamento em vigor; este livro guarda o histórico, para a aula do período trancado não voltar como dívida do professor quando o aluno retorna. Alimentado por trg_aluno_trancamento_periodo.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `unidade_id` | uuid | não |  |  |
+| `emusys_trancamento_id` | integer | não |  |  |
+| `emusys_matricula_id` | integer | sim |  |  |
+| `aluno_id` | integer | sim |  |  |
+| `data_inicial` | date | não |  |  |
+| `data_final` | date | sim |  |  |
+| `matricula_disciplina_ids` | integer[] | não | '{}'::integer[] |  |
+| `cursos_base` | text[] | não | '{}'::text[] |  |
+| `encerrado_antes_em` | date | sim |  |  |
+| `primeiro_visto_em` | timestamp with time zone | não | now() |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `aluno_trancamento_periodo_pkey`
+- `aluno_trancamento_periodo_unidade_id_emusys_trancamento_id_key`
 
 ## aluno_transferencias
 

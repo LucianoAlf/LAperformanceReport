@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-26 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-27 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — integracao
 
-67 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+68 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## admin_conversas
 
@@ -633,6 +633,7 @@
 - `emusys_matriculas_estado_atual_pkey`
 
 **Triggers:**
+- `trg_aluno_trancamento_periodo → fn_aluno_trancamento_periodo_registrar()`
 - `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_remover_cpf_emusys_matriculas_estado_atual → remover_cpf_claro_jsonb_trigger()`
 
@@ -1440,6 +1441,25 @@
 
 **Triggers:**
 - `trg_vcards_unidade_updated_at → set_updated_at()`
+
+## vw_emusys_historico_aula_aluno_v1
+
+> CONTRATO v1 com o LA Teacher: uma linha por (emusys_aula_id, aluno_id) com a versao mais recente observada. Ligacao aluno resolvida na view; se o staging mudar, manter estas colunas ou publicar _v2.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `unidade_id` | uuid | sim |  |  |
+| `aluno_id` | integer | sim |  |  |
+| `emusys_aula_id` | integer | sim |  |  |
+| `data_hora_inicio` | timestamp with time zone | sim |  |  |
+| `disciplina_nome` | text | sim |  |  |
+| `professor_nome` | text | sim |  |  |
+| `emusys_professor_id` | integer | sim |  |  |
+| `turma_nome` | text | sim |  |  |
+| `categoria` | text | sim |  |  |
+| `cancelada` | boolean | sim |  |  |
+| `presenca` | text | sim |  |  |
+| `anotacoes` | text | sim |  |  |
 
 ## vw_fila_audio_sem_roster
 
