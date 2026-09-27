@@ -298,7 +298,7 @@ test('🔴 o CSV comeca com BOM UTF-8 e usa ponto e virgula', () => {
   // planilha parecer quebrada sem nenhum erro aparecer.
   const csv = gerarPlanilhaCsv(dados([bloco('Bloco 1', [ap()])]));
   assert.ok(csv.startsWith('\uFEFF'), 'falta o BOM — o Excel quebraria os acentos');
-  assert.match(csv.split('\r\n')[0], /^\uFEFFBloco;Ordem;Horário;Aluno;/u);
+  assert.match(csv.split('\r\n')[0], /^\uFEFFBloco;Data;Ordem;Horário;Aluno;/u);
 });
 
 test('celula com ponto e virgula nao parte a linha', () => {
@@ -328,7 +328,8 @@ test('duracao padrao sai VAZIA, nunca zero', () => {
   // Zero seria somado como "dura nada" numa planilha; o que existe e "ainda usa o padrao".
   const csv = gerarPlanilhaCsv(dados([bloco('B', [ap({ duracao_segundos: null })])]));
   const linha = csv.trim().split('\r\n')[1].split(';');
-  assert.equal(linha[7], '', 'a coluna de duracao tem de ficar vazia');
+  // Cabecalho: Bloco;Data;Ordem;Horario;Aluno;Curso;Professor;Musica;Artista;DURACAO;...
+  assert.equal(linha[9], '', 'a coluna de duracao tem de ficar vazia');
 });
 
 test('o CSV respeita o recorte por bloco', () => {

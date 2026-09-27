@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
+  ClipboardList,
   Clock,
   LayoutList,
   Music,
@@ -19,6 +20,7 @@ import {
   formatarDuracao,
   levantarPendencias,
   resumirEvento,
+  resumirRelatorios,
   type EntradaDaRevisao,
   type Pendencia,
 } from '@/lib/eventos';
@@ -31,7 +33,14 @@ import {
   nomeDoArquivo,
   type DadosDaImpressao,
 } from '@/lib/eventosImpressao';
-import { useGradeDoEvento, useAlunosDoEvento, type EventoComResumo } from '@/hooks/useEventos';
+import {
+  useGradeDoEvento,
+  useAlunosDoEvento,
+  useRelatoriosDoEvento,
+  RELATORIO_STATUS_LABEL,
+  type EventoComResumo,
+  type RelatorioDoProfessor,
+} from '@/hooks/useEventos';
 
 /**
  * Revisao + resumo — LAPE-39, fase 5.
@@ -56,6 +65,13 @@ export function RevisaoTab({
     loading: carregandoAlunos,
     erro: erroAlunos,
   } = useAlunosDoEvento(evento.id, evento.unidade_id);
+  // O painel do canal professor mora aqui, na revisao — e a aba que a equipe abre quando
+  // pergunta "falta o quê para o recital fechar".
+  const {
+    relatorios,
+    loading: carregandoRelatorios,
+    erro: erroRelatorios,
+  } = useRelatoriosDoEvento(evento.id);
 
   const entrada = useMemo<EntradaDaRevisao>(
     () => ({
@@ -68,6 +84,7 @@ export function RevisaoTab({
         id: b.id,
         nome: b.nome,
         ordem: b.ordem,
+        data: b.data,
         horario_inicial: b.horario_inicial,
         inicio_manual: b.inicio_manual,
         apresentacoes: b.apresentacoes.map((a) => ({
@@ -88,8 +105,16 @@ export function RevisaoTab({
         cursos: a.cursos.map((c) => ({ curso_id: c.curso_id, curso_nome: c.curso_nome })),
         alocacoes: a.alocacoes.map((x) => ({ curso_id: x.curso_id })),
       })),
+      // Relatorio lancado para quem nao esta na grade e pendencia DO EVENTO, nao do
+      // professor — a revisao tem de apontar para poder destravar o canal.
+      relatorios: relatorios.map((r) => ({
+        aluno_nome: r.aluno_nome,
+        curso: r.curso,
+        professor_nome: r.professor_nome,
+        apresentacao_id: r.apresentacao_id,
+      })),
     }),
-    [evento, blocos, alunos],
+    [evento, blocos, alunos, relatorios],
   );
 
   const pendencias = useMemo(() => levantarPendencias(entrada), [entrada]);
@@ -101,6 +126,7 @@ export function RevisaoTab({
       evento: {
         titulo: evento.titulo,
         data_evento: evento.data_evento,
+        data_fim: evento.data_fim,
         local: evento.local,
         unidade_nome: evento.unidade_nome,
         horario_inicio: evento.horario_inicio,
@@ -111,6 +137,7 @@ export function RevisaoTab({
         id: b.id,
         nome: b.nome,
         ordem: b.ordem,
+        data: b.data,
         horario_inicial: b.horario_inicial,
         inicio_manual: b.inicio_manual,
         apresentacoes: b.apresentacoes.map((a) => ({
@@ -121,6 +148,9 @@ export function RevisaoTab({
           curso_nome: a.curso_nome,
           professor_nome: a.professor_nome,
           musica: a.musica,
+          musica_artista: a.musica_artista,
+          musica_link: a.musica_link,
+          playback_path: a.playback_path,
           tem_playback: a.tem_playback,
           observacao_mapa: a.observacao_mapa,
           itens: a.itens.map((i) => ({
@@ -210,6 +240,28 @@ export function RevisaoTab({
           duração medida.
         </p>
       )}
+
+      {/* ── relatórios do LA Teacher ── */}
+      <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-3">
+        <h3 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <ClipboardList className="h-3.5 w-3.5" />
+          Relatórios dos professores
+        </h3>
+        {carregandoRelatorios && relatorios.length === 0 ? (
+          <p className="mt-2 text-[12.5px] text-slate-500">Carregando o canal do professor…</p>
+        ) : erroRelatorios ? (
+          <p className="mt-2 text-[12.5px] text-rose-300">
+            Não consegui ler os relatórios do LA Teacher: {erroRelatorios}
+          </p>
+        ) : relatorios.length === 0 && resumo.apresentacoes === 0 ? (
+          <p className="mt-2 text-[12.5px] text-slate-500">
+            Nenhum relatório lançado ainda — e a grade ainda está vazia. Os professores lançam
+            música e palco no LA Teacher; o que eles escrevem chega aqui na sincronização.
+          </p>
+        ) : (
+          <PainelRelatorios relatorios={relatorios} apresentacoesNaGrade={resumo.apresentacoes} />
+        )}
+      </section>
 
       {/* ── impressão ── */}
       <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-3">
@@ -329,6 +381,87 @@ export function RevisaoTab({
             ))}
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * O funil do canal professor: quantos relatórios o recital espera (= apresentações na
+ * grade), quantos vieram, quantos já têm música lançada e em que pé está a aprovação.
+ * Quem lançou para aluno fora da grade vira pendência mais abaixo, com nome.
+ */
+function PainelRelatorios({
+  relatorios,
+  apresentacoesNaGrade,
+}: {
+  relatorios: RelatorioDoProfessor[];
+  apresentacoesNaGrade: number;
+}) {
+  const r = resumirRelatorios(relatorios, apresentacoesNaGrade);
+
+  // A fila de trabalho: quem ainda nao foi aprovado, com o que falta. Aprovado sai da
+  // lista — o papel dele e parar de ocupar a tela.
+  const pendentes = relatorios
+    .filter((x) => x.relatorio_status !== 'aprovado')
+    .sort((a, b) => (a.aluno_nome ?? '').localeCompare(b.aluno_nome ?? '', 'pt-BR'));
+
+  return (
+    <div className="mt-2 space-y-2.5">
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12.5px]">
+        <span className="text-slate-300">
+          <strong className="tabular-nums text-white">{r.musica_lancada}</strong> de{' '}
+          <strong className="tabular-nums text-white">{r.esperados}</strong> músicas lançadas
+        </span>
+        <span className="text-slate-300">
+          <strong className="tabular-nums text-emerald-300">{r.aprovados}</strong> aprovados
+        </span>
+        <span className="text-slate-300">
+          <strong className="tabular-nums text-sky-300">{r.enviados}</strong> enviados
+        </span>
+        {r.devolvidos > 0 && (
+          <span className="text-slate-300">
+            <strong className="tabular-nums text-amber-300">{r.devolvidos}</strong> devolvidos
+          </span>
+        )}
+        {r.sem_apresentacao > 0 && (
+          <span className="text-slate-300">
+            <strong className="tabular-nums text-rose-300">{r.sem_apresentacao}</strong> fora da grade
+          </span>
+        )}
+      </div>
+
+      {pendentes.length > 0 && (
+        <ul className="max-h-56 space-y-0.5 overflow-y-auto pr-1">
+          {pendentes.map((p) => (
+            <li
+              key={p.relatorio_id}
+              className="flex flex-wrap items-center gap-x-2 text-[12px]"
+            >
+              <span className="min-w-0 truncate text-slate-200">{p.aluno_nome ?? '—'}</span>
+              <span className="text-slate-500">{p.curso}</span>
+              {p.professor_nome && (
+                <span className="text-slate-600">Prof. {p.professor_nome}</span>
+              )}
+              <span
+                className={cn(
+                  'rounded px-1.5 py-px text-[10.5px]',
+                  p.apresentacao_id === null
+                    ? 'bg-rose-500/15 text-rose-300'
+                    : !p.musica_lancada
+                      ? 'bg-slate-700/70 text-slate-400'
+                      : 'bg-sky-500/15 text-sky-300',
+                )}
+              >
+                {p.apresentacao_id === null
+                  ? 'sem apresentação na grade'
+                  : !p.musica_lancada
+                    ? 'sem música lançada'
+                    : (RELATORIO_STATUS_LABEL[p.relatorio_status] ?? p.relatorio_status)}
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

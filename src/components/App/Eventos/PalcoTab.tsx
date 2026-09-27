@@ -29,6 +29,7 @@ export function PalcoTab({ evento }: { evento: EventoComResumo }) {
     () =>
       calcularHorariosDaGrade(
         {
+          data_evento: evento.data_evento,
           horario_inicio: evento.horario_inicio,
           duracao_padrao_segundos: evento.duracao_padrao_segundos,
           intervalo_entre_blocos_segundos: evento.intervalo_entre_blocos_segundos ?? 2700,
@@ -36,6 +37,7 @@ export function PalcoTab({ evento }: { evento: EventoComResumo }) {
         blocos.map((b) => ({
           id: b.id,
           ordem: b.ordem,
+          data: b.data,
           horario_inicial: b.horario_inicial,
           inicio_manual: b.inicio_manual,
           apresentacoes: b.apresentacoes.map((a) => ({

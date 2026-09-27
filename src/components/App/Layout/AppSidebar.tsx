@@ -60,7 +60,7 @@ const prefetchedPages = new Set<string>();
 
 export function AppSidebar() {
   const navigate = useNavigate();
-  const { usuario, isAdmin, signOut } = useAuth();
+  const { usuario, isAdmin, signOut, hasPermission } = useAuth();
 
   // Visibilidade do módulo Campanhas
   const DEV_EMAIL = 'hugo@lamusic.com.br'
@@ -71,7 +71,7 @@ export function AppSidebar() {
   const trafegoPagoVisivel = TRAFEGO_PAGO_EMAILS.includes((usuario?.email ?? '').toLowerCase())
 
   // Eventos (recital): a regra mora em podeVerEventos — nao repetir aqui (LAPE-39)
-  const eventosVisivel = podeVerEventos(usuario?.email)
+  const eventosVisivel = podeVerEventos(hasPermission('eventos.ver'))
   const [campanhasVisivel, setCampanhasVisivel] = useState(false)
   useEffect(() => {
     supabase.from('campanhas_config').select('visibilidade_global').single()

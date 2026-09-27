@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-26 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-27 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — professor
 
-157 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+158 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## anotacoes
 
@@ -1433,7 +1433,7 @@
 | `config_meta_segmento_id` | uuid | sim |  | health_score_professor_v3_config_metas_curso_modalidade.id |
 | `unidade_id` | uuid | não |  | unidades.id |
 | `curso_id` | integer | não |  | cursos.id |
-| `modalidade` | text | não |  | professor_unidade_curso_modalidade.modalidade |
+| `modalidade` | text | não |  | health_score_professor_v3_config_metas_curso_modalidade.modalidade |
 | `pessoas_unicas` | integer | não | 0 |  |
 | `vinculos_ativos` | integer | não | 0 |  |
 | `turmas_elegiveis` | integer | não | 0 |  |
@@ -2004,6 +2004,22 @@
 
 **Únicos:**
 - `professor_360_ocorrencias_log_pkey`
+
+## professor_acesso_app
+
+> Modo do app por professor. Sem linha = login é app completo (piloto). so_relatorios = só Relatórios do recital, fora da cobrança.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `professor_id` | integer | não |  |  |
+| `so_relatorios` | boolean | não | false |  |
+| `relatorios` | boolean | não | false |  |
+| `completo_desde` | date | sim |  |  |
+| `atualizado_por_usuario_id` | integer | sim |  |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `professor_acesso_app_pkey`
 
 ## professor_acesso_codigos
 

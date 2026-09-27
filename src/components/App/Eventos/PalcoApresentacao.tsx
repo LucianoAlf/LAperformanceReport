@@ -108,6 +108,21 @@ export function PalcoApresentacao({
           />
           {apresentacao.tem_playback ? 'usa playback' : 'não usa'}
         </label>
+        {/* Fonte real: o MP3 do LA Teacher ou o link. Sem isto o checkbox dizia "usa" e
+            a producao nao sabia O QUE tocar. */}
+        {apresentacao.playback_path && (
+          <span className="text-[11.5px] text-emerald-300/90">MP3 enviado pelo professor</span>
+        )}
+        {apresentacao.musica_link && (
+          <a
+            href={apresentacao.musica_link}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[11.5px] text-sky-400 underline-offset-2 hover:underline"
+          >
+            {apresentacao.musica_link}
+          </a>
+        )}
       </div>
     </div>
   );
@@ -179,35 +194,49 @@ function LinhaDeItens({
           </span>
         )}
 
-        {itens.map((item) => (
-          <span
-            key={item.id}
-            title={item.observacao ?? undefined}
-            className={cn(
-              'flex items-center gap-1 rounded px-1.5 py-0.5 text-[11.5px]',
-              tipo === 'instrumento'
-                ? 'bg-amber-500/15 text-amber-300'
-                : 'bg-sky-500/15 text-sky-300',
-            )}
-          >
-            {item.quantidade > 1 && <span className="tabular-nums">{item.quantidade}×</span>}
-            {item.nome}
-            <button
-              type="button"
-              aria-label={`Remover ${item.nome}`}
-              onClick={async () => {
-                const { error } = await removerItemDePalco(item.id);
-                if (error) toast.error(`Não consegui remover: ${error.message}`);
-                else onMudou();
-              }}
-              // `text-current/50` não existe no Tailwind (opacidade de cor só em utilitário
-              // com cor nomeada) — seria classe morta e o X ficaria na cor cheia.
-              className="opacity-60 transition hover:text-rose-400 hover:opacity-100"
+        {itens.map((item) => {
+          // Espelho do rider do LA Teacher: o ADM nao edita nem remove — a proxima sync
+          // reescreveria a mudanca e ninguem saberia de onde o item saiu.
+          const doProfessor = item.origem === 'professor';
+          return (
+            <span
+              key={item.id}
+              title={
+                (item.observacao ?? '') +
+                (doProfessor ? (item.observacao ? ' · ' : '') + 'pedido do professor no LA Teacher' : '')
+              }
+              className={cn(
+                'flex items-center gap-1 rounded px-1.5 py-0.5 text-[11.5px]',
+                tipo === 'instrumento'
+                  ? 'bg-amber-500/15 text-amber-300'
+                  : 'bg-sky-500/15 text-sky-300',
+                doProfessor && 'border border-dashed border-slate-600',
+              )}
             >
-              <X className="h-3 w-3" />
-            </button>
-          </span>
-        ))}
+              {item.quantidade > 1 && <span className="tabular-nums">{item.quantidade}×</span>}
+              {item.nome}
+              {doProfessor && (
+                <span className="text-[10px] uppercase tracking-wide opacity-60">prof</span>
+              )}
+              {!doProfessor && (
+                <button
+                  type="button"
+                  aria-label={`Remover ${item.nome}`}
+                  onClick={async () => {
+                    const { error } = await removerItemDePalco(item.id);
+                    if (error) toast.error(`Não consegui remover: ${error.message}`);
+                    else onMudou();
+                  }}
+                  // `text-current/50` não existe no Tailwind (opacidade de cor só em utilitário
+                  // com cor nomeada) — seria classe morta e o X ficaria na cor cheia.
+                  className="opacity-60 transition hover:text-rose-400 hover:opacity-100"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </span>
+          );
+        })}
 
         {adicionando ? (
           <span className="flex items-center gap-1">

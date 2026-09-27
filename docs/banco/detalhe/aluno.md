@@ -1147,6 +1147,7 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 | `intervalo_entre_blocos_segundos` | integer | não | 2700 |  |
+| `data_fim` | date | sim |  |  |
 
 **Únicos:**
 - `evento_pkey`
@@ -1176,6 +1177,14 @@
 | `observacao_mapa` | text | sim |  |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
+| `certificado_status` | text | não | 'pendente'::text |  |
+| `certificado_em` | timestamp with time zone | sim |  |  |
+| `musica_artista` | text | sim |  |  |
+| `musica_link` | text | sim |  |  |
+| `playback_path` | text | sim |  |  |
+| `detalhes_origem` | text | não | 'adm'::text |  |
+| `professor` | jsonb | sim |  |  |
+| `professor_em` | timestamp with time zone | sim |  |  |
 
 **Únicos:**
 - `evento_apresentacao_pessoa_curso_unica`
@@ -1183,6 +1192,7 @@
 
 **Triggers:**
 - `trg_evento_apresentacao_deriva → fn_evento_apresentacao_deriva()`
+- `trg_evento_apresentacao_origem_adm → fn_evento_apresentacao_origem_adm()`
 - `trg_evento_apresentacao_touch → fn_evento_touch()`
 
 ## evento_apresentacao_item
@@ -1198,9 +1208,12 @@
 | `quantidade` | integer | não | 1 |  |
 | `observacao` | text | sim |  |  |
 | `created_at` | timestamp with time zone | não | now() |  |
+| `origem` | text | não | 'adm'::text |  |
+| `codigo` | text | sim |  |  |
 
 **Únicos:**
 - `evento_apresentacao_item_pkey`
+- `uq_evento_item_codigo`
 
 ## evento_bloco
 
@@ -1217,6 +1230,7 @@
 | `observacoes` | text | sim |  |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
+| `data` | date | sim |  |  |
 
 **Únicos:**
 - `evento_bloco_pkey`
@@ -1237,10 +1251,10 @@
 | `aluno_id` | integer | não |  | alunos.id |
 | `status` | text | não | 'indefinido'::text |  |
 | `checkin_em` | timestamp with time zone | sim |  |  |
-| `certificado_status` | text | sim |  |  |
 | `observacoes` | text | sim |  |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
+| `convidados` | integer | não | 0 |  |
 
 **Únicos:**
 - `evento_participacao_pessoa_unica`

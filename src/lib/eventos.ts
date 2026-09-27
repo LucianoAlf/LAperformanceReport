@@ -101,6 +101,14 @@ export interface ApresentacaoParaCalculo {
 export interface BlocoParaCalculo {
   id: number;
   ordem: number;
+  /**
+   * Dia em que o bloco toca ('AAAA-MM-DD'). `null`/ausente = a data do evento.
+   *
+   * ⚠️ Recital de varios dias (Recreio 13–15/11): blocos do MESMO dia continuam
+   * encadeados, mas um dia novo NAO herda o relogio do dia anterior — a grade reabre no
+   * `horario_inicio` do evento, a menos que o bloco tenha `inicio_manual`.
+   */
+  data?: string | null;
   /** 'HH:MM' ou 'HH:MM:SS'. So vale quando `inicio_manual` e true. */
   horario_inicial: string | null;
   inicio_manual: boolean;
@@ -108,6 +116,8 @@ export interface BlocoParaCalculo {
 }
 
 export interface EventoParaCalculo {
+  /** 'AAAA-MM-DD' — o primeiro dia do recital; data de blocos que nao dizem a propria. */
+  data_evento?: string;
   horario_inicio: string;
   duracao_padrao_segundos: number;
   intervalo_entre_blocos_segundos: number;
@@ -125,10 +135,12 @@ export const INTERVALO_ENTRE_APRESENTACOES_PADRAO_SEGUNDOS = 300;
 
 export interface BlocoComHorario {
   blocoId: number;
+  /** Data efetiva do bloco ('AAAA-MM-DD' ou null): a dele, ou a do evento, ou a herdada. */
+  data: string | null;
   inicio: string;
   fim: string;
   duracaoSegundos: number;
-  /** Folga desde o fim do bloco anterior. `null` no primeiro. */
+  /** Folga desde o fim do bloco anterior. `null` no primeiro e ao virar o dia. */
   intervaloAntesSegundos: number | null;
   /**
    * `true` quando o inicio MANUAL cai antes do fim do bloco anterior.
@@ -189,13 +201,21 @@ export function calcularHorariosDaGrade(
     evento.intervalo_entre_apresentacoes_segundos ?? INTERVALO_ENTRE_APRESENTACOES_PADRAO_SEGUNDOS;
 
   const ordenados = [...blocos].sort((a, b) => a.ordem - b.ordem || a.id - b.id);
+  let dataAnterior: string | null = null;
 
   for (const bloco of ordenados) {
     const manual = bloco.inicio_manual ? horaParaSegundos(bloco.horario_inicial) : null;
+    // A data efetiva do bloco: a dele quando declarada; a do bloco anterior enquanto
+    // ninguem disse outro dia; a do evento no primeiro de todos.
+    const data = bloco.data ?? dataAnterior ?? evento.data_evento ?? null;
+    const virouODia = dataAnterior !== null && data !== null && data !== dataAnterior;
     // `inicio_manual` sem hora valida cai no calculado, em vez de virar NaN e contaminar
-    // todos os blocos seguintes.
+    // todos os blocos seguintes. Num dia novo, o calculado e a reabertura da casa — um
+    // bloco de sabado nao comeca "45 min depois de sexta acabar".
     const automatico =
-      fimAnterior === null ? inicioEvento : fimAnterior + evento.intervalo_entre_blocos_segundos;
+      fimAnterior === null || virouODia
+        ? inicioEvento
+        : fimAnterior + evento.intervalo_entre_blocos_segundos;
     const inicio = manual ?? automatico;
 
     let cursor = inicio;
@@ -211,15 +231,20 @@ export function calcularHorariosDaGrade(
 
     resultado.push({
       blocoId: bloco.id,
+      data,
       inicio: segundosParaHora(inicio),
       fim: segundosParaHora(cursor),
       duracaoSegundos: cursor - inicio,
-      intervaloAntesSegundos: fimAnterior === null ? null : inicio - fimAnterior,
-      conflitaComAnterior: fimAnterior !== null && inicio < fimAnterior,
+      intervaloAntesSegundos:
+        fimAnterior === null || virouODia ? null : inicio - fimAnterior,
+      // Conflito de horario so existe DENTRO do mesmo dia: bloco de outro dia comeca
+      // depois por definicao, ainda que o relogio marque um numero menor.
+      conflitaComAnterior: !virouODia && fimAnterior !== null && inicio < fimAnterior,
       apresentacoes,
     });
 
     fimAnterior = cursor;
+    dataAnterior = data;
   }
 
   return resultado;
@@ -291,10 +316,17 @@ export interface ResumoParticipacao {
   apresentacoesAlocadas: number;
   /** Pessoas que confirmaram presenca e ainda nao entraram em bloco nenhum. */
   participamSemAlocacao: number;
+  /** Soma dos convidados informados POR QUEM PARTICIPA — a conta de cadeiras do recital. */
+  convidadosTotal: number;
 }
 
 export function resumirParticipacao(
-  alunos: { status: string; cursos_no_recital: number; cursos_alocados?: number }[],
+  alunos: {
+    status: string;
+    cursos_no_recital: number;
+    cursos_alocados?: number;
+    convidados?: number;
+  }[],
 ): ResumoParticipacao {
   const resumo: ResumoParticipacao = {
     total: alunos.length,
@@ -304,12 +336,14 @@ export function resumirParticipacao(
     apresentacoesPrevistas: 0,
     apresentacoesAlocadas: 0,
     participamSemAlocacao: 0,
+    convidadosTotal: 0,
   };
   for (const a of alunos) {
     const alocados = a.cursos_alocados ?? 0;
     if (a.status === 'participa') {
       resumo.participam += 1;
       resumo.apresentacoesPrevistas += a.cursos_no_recital;
+      resumo.convidadosTotal += a.convidados ?? 0;
       if (alocados === 0 && a.cursos_no_recital > 0) resumo.participamSemAlocacao += 1;
     } else if (a.status === 'nao') {
       resumo.naoParticipam += 1;
@@ -638,6 +672,16 @@ export interface EntradaDaRevisao {
     cursos: { curso_id: number; curso_nome: string | null }[];
     alocacoes: { curso_id: number }[];
   }[];
+  /**
+   * Relatorios que o professor ja lancou no LA Teacher (linhas de `evento_relatorios_v1`).
+   * Opcional porque a revisao funciona sem eles — so o cruzamento novo fica desligado.
+   */
+  relatorios?: {
+    aluno_nome: string | null;
+    curso: string;
+    professor_nome: string | null;
+    apresentacao_id: number | null;
+  }[];
 }
 
 const ordenarNomes = (a: string, b: string) => a.localeCompare(b, 'pt-BR');
@@ -810,7 +854,33 @@ export function levantarPendencias(entrada: EntradaDaRevisao): Pendencia[] {
     });
   }
 
-  // 7. Bloco vazio. Ocupa lugar na ordem e no calculo do intervalo sem nada dentro.
+  // 7. Relatorio lancado no LA Teacher para alguem FORA da grade. O professor fez a parte
+  //    dele; o buraco e daqui — a apresentacao nao foi montada (ou o aluno nao foi marcado
+  //    como participante).
+  const semApresentacao = (entrada.relatorios ?? [])
+    .filter((r) => r.apresentacao_id === null)
+    .map(
+      (r) =>
+        `${r.aluno_nome ?? 'aluno'} — ${r.curso}` +
+        (r.professor_nome ? ` (Prof. ${r.professor_nome})` : ''),
+    )
+    .sort(ordenarNomes);
+  if (semApresentacao.length > 0) {
+    pendencias.push({
+      tipo: 'relatorio_sem_apresentacao',
+      gravidade: 'atencao',
+      titulo:
+        semApresentacao.length === 1
+          ? '1 relatório lançado para aluno fora da grade'
+          : `${semApresentacao.length} relatórios lançados para alunos fora da grade`,
+      detalhe:
+        'O professor já lançou a música no LA Teacher, mas não existe apresentação desse curso para essa pessoa na grade. Montar a apresentação destrava o canal.',
+      itens: semApresentacao,
+      onde: 'grade',
+    });
+  }
+
+  // 8. Bloco vazio. Ocupa lugar na ordem e no calculo do intervalo sem nada dentro.
   const vazios = entrada.blocos.filter((b) => b.apresentacoes.length === 0).map((b) => b.nome);
   if (vazios.length > 0) {
     pendencias.push({
@@ -1206,4 +1276,158 @@ export function resumirEvento(entrada: EntradaDaRevisao): ResumoDoEvento {
     terminoPrevisto: fim,
     semDuracaoPropria: apresentacoes.filter((a) => (a.duracao_segundos ?? 0) <= 0).length,
   };
+}
+
+/* ─────────── canal do professor (LA Teacher → apresentacao) ─────────── */
+
+/**
+ * O minimo do snapshot `professor` (jsonb) que a divergencia precisa — espelho TS da
+ * `vw_relatorio_anual_recital_v1`, sem depender do tipo do hook.
+ */
+export interface SnapshotParaComparar {
+  musica_lancada_em: string | null;
+  musica_titulo: string | null;
+  musica_artista: string | null;
+  musica_duracao_segundos: number | null;
+  musica_link: string | null;
+  musica_playback_path: string | null;
+  musica_ao_vivo: boolean;
+}
+
+export interface ApresentacaoParaDivergencia {
+  musica: string | null;
+  musica_artista: string | null;
+  musica_link: string | null;
+  playback_path: string | null;
+  duracao_segundos: number | null;
+  tem_playback: boolean;
+  /** 'adm' = alguem escreveu aqui depois do professor — e a divergencia que importa. */
+  detalhes_origem: 'adm' | 'professor';
+  professor: SnapshotParaComparar | null;
+}
+
+export interface DivergenciaProfessor {
+  campo: 'musica' | 'musica_artista' | 'musica_link' | 'playback' | 'duracao' | 'ao_vivo';
+  rotulo: string;
+  /** O que o professor lancou, pronto para exibir. `null` = ele nao preencheu. */
+  professor: string | null;
+  /** O que vale na grade hoje. */
+  atual: string | null;
+}
+
+const norm = (v: string | null | undefined) => (v ?? '').trim() || null;
+
+/**
+ * Onde o que esta valendo na grade difere do que o professor lancou no LA Teacher.
+ *
+ * So ha divergencia quando o ADM tomou posse do campo (`detalhes_origem='adm'`): com
+ * origem 'professor' o sync copia e os dois lados ficam iguais por construcao. E so
+ * depois de `musica_lancada_em` — antes disso o professor nem abriu o cartao e comparar
+ * seria acusar diferenca contra o vazio.
+ *
+ * Devolve [] quando nao ha nada a dizer — o caso de 100% das apresentacoes enquanto o
+ * sync e o ADM concordam.
+ */
+export function divergenciasDoProfessor(ap: ApresentacaoParaDivergencia): DivergenciaProfessor[] {
+  const prof = ap.professor;
+  if (!prof?.musica_lancada_em || ap.detalhes_origem !== 'adm') return [];
+
+  const divergencias: DivergenciaProfessor[] = [];
+  const compara = (
+    campo: DivergenciaProfessor['campo'],
+    rotulo: string,
+    atual: string | null,
+    doProfessor: string | null,
+  ) => {
+    if (atual !== doProfessor) {
+      divergencias.push({ campo, rotulo, professor: doProfessor, atual });
+    }
+  };
+
+  compara('musica', 'música', norm(ap.musica), norm(prof.musica_titulo));
+  compara('musica_artista', 'artista', norm(ap.musica_artista), norm(prof.musica_artista));
+  compara('musica_link', 'link da música', norm(ap.musica_link), norm(prof.musica_link));
+  compara('playback', 'arquivo de playback', norm(ap.playback_path), norm(prof.musica_playback_path));
+  compara(
+    'duracao',
+    'duração',
+    ap.duracao_segundos !== null ? formatarDuracao(ap.duracao_segundos) : null,
+    prof.musica_duracao_segundos !== null ? formatarDuracao(prof.musica_duracao_segundos) : null,
+  );
+
+  const profPlayback = !prof.musica_ao_vivo && (prof.musica_link !== null || prof.musica_playback_path !== null);
+  if (ap.tem_playback !== profPlayback) {
+    divergencias.push({
+      campo: 'ao_vivo',
+      rotulo: 'forma de tocar',
+      professor: profPlayback ? 'com playback' : 'ao vivo',
+      atual: ap.tem_playback ? 'com playback' : 'ao vivo',
+    });
+  }
+
+  return divergencias;
+}
+
+/** A linha do painel "relatorios na sala" — espelho de `evento_relatorios_v1`. */
+export interface RelatorioParaResumo {
+  apresentacao_id: number | null;
+  relatorio_status: string;
+  musica_lancada: boolean;
+}
+
+export interface ResumoRelatorios {
+  /** Apresentacoes na grade = quantos relatorios o recital espera receber. */
+  esperados: number;
+  /** Relatorios do LA Teacher que casaram com uma apresentacao da grade. */
+  com_apresentacao: number;
+  /** Casados e com o cartao "Musica e palco" lancado pelo professor. */
+  musica_lancada: number;
+  aprovados: number;
+  enviados: number;
+  devolvidos: number;
+  /** Lancados para aluno x curso que NAO existe na grade — pendencia do nosso lado. */
+  sem_apresentacao: number;
+}
+
+export function resumirRelatorios(
+  relatorios: RelatorioParaResumo[],
+  apresentacoesNaGrade: number,
+): ResumoRelatorios {
+  const casados = relatorios.filter((r) => r.apresentacao_id !== null);
+  return {
+    esperados: apresentacoesNaGrade,
+    com_apresentacao: casados.length,
+    musica_lancada: casados.filter((r) => r.musica_lancada).length,
+    aprovados: relatorios.filter((r) => r.relatorio_status === 'aprovado').length,
+    enviados: relatorios.filter((r) => r.relatorio_status === 'enviado').length,
+    devolvidos: relatorios.filter((r) => r.relatorio_status === 'devolvido').length,
+    sem_apresentacao: relatorios.length - casados.length,
+  };
+}
+
+/* ─────────────────── recital de varios dias ─────────────────── */
+
+/**
+ * Os dias que um bloco pode ocupar: de `data_evento` a `data_fim`, inclusive.
+ * Recital de um dia devolve so a propria data — o seletor nao oferece o que nao existe.
+ *
+ * Ate 12 dias (Campo Grande 01–12/12) a lista e direta; acima disso o select ficaria
+ * impraticavel — mas um recital mais longo que isso muda de natureza, nao de grade.
+ */
+export function diasDoEvento(dataEvento: string, dataFim: string | null | undefined): string[] {
+  const inicio = Date.parse(`${dataEvento}T00:00:00Z`);
+  const fim = dataFim ? Date.parse(`${dataFim}T00:00:00Z`) : inicio;
+  if (!Number.isFinite(inicio) || !Number.isFinite(fim) || fim < inicio) return [dataEvento];
+  const dias: string[] = [];
+  const UM_DIA_MS = 86_400_000;
+  for (let t = inicio; t <= fim && dias.length < 31; t += UM_DIA_MS) {
+    dias.push(new Date(t).toISOString().slice(0, 10));
+  }
+  return dias;
+}
+
+/** 'AAAA-MM-DD' -> '14/11' — o selo ao lado do nome do bloco quando a data nao e a do evento. */
+export function formatarDataCurta(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/u.exec(iso);
+  return m ? `${Number(m[3])}/${Number(m[2])}` : iso;
 }

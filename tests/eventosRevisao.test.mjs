@@ -269,7 +269,7 @@ test('evento sem bloco nao inventa horario', () => {
 
 test('a aba Revisao renderiza a tela, nao um placeholder', () => {
   const pagina = readFileSync('src/components/App/Eventos/EventoDetalhePage.tsx', 'utf8');
-  assert.match(pagina, /tabAtiva === 'revisao' && <RevisaoTab/u);
+  assert.match(pagina, /tabAtiva === 'revisao' &&\s*\(?\s*<RevisaoTab/u);
   // Com as quatro abas prontas, o componente de placeholder nao pode sobreviver "por via
   // das duvidas": foi ele que anunciou a fase 4 como futura depois de ela estar no ar.
   assert.doesNotMatch(pagina, /function AbaFutura/u);

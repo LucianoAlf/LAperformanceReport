@@ -38,7 +38,7 @@ export function MobileLayout() {
   const { unidadeSelecionada, setUnidadeSelecionada, filtroAtivo, canChangeUnidade } =
     useUnidadeFiltro();
   const competencia = useCompetenciaFiltro();
-  const { usuario, isAdmin, unidadesPermitidas } = useAuth();
+  const { usuario, isAdmin, unidadesPermitidas, hasPermission } = useAuth();
   const location = useLocation();
 
   const [periodoLabelOverride, setPeriodoLabelOverride] = useState<string | null>(null);
@@ -72,9 +72,9 @@ export function MobileLayout() {
     isAdmin,
     campanhasVisivel,
     trafegoPagoVisivel: TRAFEGO_PAGO_EMAILS.includes((usuario?.email ?? '').toLowerCase()),
-    // Eventos nao repete a regra aqui: ela mora em podeVerEventos (LAPE-39), que e o
-    // unico ponto a trocar quando o modulo virar RBAC.
-    eventosVisivel: podeVerEventos(usuario?.email),
+    // Eventos nao repete a regra aqui: ela mora em podeVerEventos (LAPE-39) — RBAC desde
+    // 27/09 (`eventos.ver`, concedido na tela de Permissoes).
+    eventosVisivel: podeVerEventos(hasPermission('eventos.ver')),
   };
 
   // "Consolidado" so quando filtroAtivo e' null (rede inteira, escopo de

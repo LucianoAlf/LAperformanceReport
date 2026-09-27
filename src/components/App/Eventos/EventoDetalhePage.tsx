@@ -12,13 +12,20 @@ import {
   Speaker,
   ClipboardCheck,
   UserCheck,
+  Pencil,
 } from 'lucide-react';
 
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { useEvento, EVENTO_STATUS_LABEL, type EventoStatus } from '@/hooks/useEventos';
+import {
+  useEvento,
+  sincronizarRecital,
+  EVENTO_STATUS_LABEL,
+  type EventoStatus,
+} from '@/hooks/useEventos';
+import { ModalEditarEvento } from './ModalEditarEvento';
 import { AlunosTab } from './AlunosTab';
 import { GradeTab } from './GradeTab';
 import { PalcoTab } from './PalcoTab';
@@ -46,7 +53,28 @@ export function EventoDetalhePage() {
   const { eventoId } = useParams<{ eventoId: string }>();
   const navigate = useNavigate();
   const id = Number(eventoId);
-  const { evento, loading, erro } = useEvento(Number.isFinite(id) ? id : null);
+  const { evento, loading, erro, recarregar } = useEvento(Number.isFinite(id) ? id : null);
+  const [editando, setEditando] = useState(false);
+  /** Sobe quando o sync do LA Teacher gravou algo — remonta a aba para ler o novo dado. */
+  const [syncTick, setSyncTick] = useState(0);
+
+  // Canal professor: ao abrir a sala, puxa o que o LA Teacher ja tem. A RPC e idempotente
+  // e barata (uma passada sobre a view); a remontagem so acontece quando algo MUDOU, para
+  // nao derrubar um campo que a pessoa esta digitando no mesmo instante.
+  useEffect(() => {
+    if (!evento?.id) return;
+    let vivo = true;
+    sincronizarRecital(evento.id).then(({ data, error }) => {
+      if (!vivo || error || !data) return;
+      if (data.apresentacoes_atualizadas > 0 || data.itens_professor > 0) {
+        setSyncTick((t) => t + 1);
+      }
+    });
+    return () => {
+      vivo = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [evento?.id]);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const tabUrl = searchParams.get('tab');
@@ -61,7 +89,11 @@ export function EventoDetalhePage() {
   useSetPageTitle({
     titulo: evento?.titulo ?? 'Evento',
     subtitulo: evento
-      ? `${evento.unidade_nome ?? ''} · ${format(parseISO(evento.data_evento), "d 'de' MMMM 'de' yyyy", { locale: ptBR })}`
+      ? `${evento.unidade_nome ?? ''} · ${
+          evento.data_fim && evento.data_fim !== evento.data_evento
+            ? `${format(parseISO(evento.data_evento), 'd')} – ${format(parseISO(evento.data_fim), "d 'de' MMMM 'de' yyyy", { locale: ptBR })}`
+            : format(parseISO(evento.data_evento), "d 'de' MMMM 'de' yyyy", { locale: ptBR })
+        }`
       : 'Carregando…',
     icone: Mic2,
     iconeCor: 'text-white',
@@ -115,7 +147,9 @@ export function EventoDetalhePage() {
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-slate-300">
           <span className="flex items-center gap-1.5">
             <CalendarDays className="h-3.5 w-3.5 text-slate-500" />
-            {format(parseISO(evento.data_evento), "d MMM yyyy", { locale: ptBR })}
+            {evento.data_fim && evento.data_fim !== evento.data_evento
+              ? `${format(parseISO(evento.data_evento), 'd')} – ${format(parseISO(evento.data_fim), 'd MMM yyyy', { locale: ptBR })}`
+              : format(parseISO(evento.data_evento), 'd MMM yyyy', { locale: ptBR })}
             <span className="text-slate-500">·</span>
             {evento.horario_inicio?.slice(0, 5)}
           </span>
@@ -126,18 +160,40 @@ export function EventoDetalhePage() {
             </span>
           )}
           <Badge variant={STATUS_VARIANT[evento.status]}>{EVENTO_STATUS_LABEL[evento.status]}</Badge>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1.5 px-2 text-[12px]"
+            onClick={() => setEditando(true)}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Editar
+          </Button>
         </div>
       </div>
+
+      <ModalEditarEvento
+        aberto={editando}
+        evento={evento}
+        onFechar={() => setEditando(false)}
+        onSalvo={recarregar}
+      />
 
       <AvisoEmDesenvolvimento />
 
       <PageTabs tabs={tabs} activeTab={tabAtiva} onTabChange={alterarTab} />
 
-      {tabAtiva === 'alunos' && <AlunosTab eventoId={evento.id} unidadeId={evento.unidade_id} />}
-      {tabAtiva === 'grade' && <GradeTab evento={evento} />}
-      {tabAtiva === 'palco' && <PalcoTab evento={evento} />}
-      {tabAtiva === 'revisao' && <RevisaoTab evento={evento} onIrPara={alterarTab} />}
-      {tabAtiva === 'checkin' && <CheckinTab evento={evento} />}
+      {/* `key={syncTick}`: remonta a aba quando o sync gravou algo do professor. Sem ela a
+          Grade continuaria mostrando o estado de antes da sincronizacao ate o F5. */}
+      {tabAtiva === 'alunos' && (
+        <AlunosTab key={`alunos-${syncTick}`} eventoId={evento.id} unidadeId={evento.unidade_id} />
+      )}
+      {tabAtiva === 'grade' && <GradeTab key={`grade-${syncTick}`} evento={evento} />}
+      {tabAtiva === 'palco' && <PalcoTab key={`palco-${syncTick}`} evento={evento} />}
+      {tabAtiva === 'revisao' && (
+        <RevisaoTab key={`revisao-${syncTick}`} evento={evento} onIrPara={alterarTab} />
+      )}
+      {tabAtiva === 'checkin' && <CheckinTab key={`checkin-${syncTick}`} evento={evento} />}
     </div>
   );
 }

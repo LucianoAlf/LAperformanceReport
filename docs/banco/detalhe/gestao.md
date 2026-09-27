@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — gestao
 
-45 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+46 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## bi_agent_config_lamusic
 
@@ -570,9 +570,19 @@
 | `aprovado_por_professor_id` | integer | sim |  |  |
 | `criado_em` | timestamp with time zone | não | now() |  |
 | `atualizado_em` | timestamp with time zone | não | now() |  |
+| `curso_chave` | text | sim | COALESCE(fn_curso_base(curso), ''::text) |  |
+| `regua` | jsonb | sim |  |  |
+| `pendencias` | jsonb | sim |  |  |
+| `musica_artista` | text | sim |  |  |
+| `musica_duracao_segundos` | integer | sim |  |  |
+| `musica_link` | text | sim |  |  |
+| `musica_playback_path` | text | sim |  |  |
+| `musica_lancada_em` | timestamp with time zone | sim |  |  |
+| `musica_ao_vivo` | boolean | não | false |  |
+| `rider` | jsonb | sim |  |  |
 
 **Únicos:**
-- `relatorio_anual_evento_id_aluno_id_key`
+- `relatorio_anual_evento_aluno_curso_key`
 - `relatorio_anual_pkey`
 
 ## relatorio_anual_historico
@@ -1076,6 +1086,34 @@
 | `inadimplencia_media` | numeric | sim |  |  |
 | `ticket_medio` | numeric | sim |  |  |
 | `permanencia` | numeric | sim |  |  |
+
+## vw_relatorio_anual_recital_v1
+
+> Contrato v1 LA Teacher -> LA Report (27/09/2026): música, playback, ao vivo, rider e status de cada relatório anual (um por evento×aluno×curso). Casar com evento_apresentacao por evento_id + pessoa do aluno + fn_curso_base(cursos.nome) = curso_chave. rider_itens usa os ids de supabase/functions/_shared/relatorio-anual/palco.ts (repo la-teacher). Fechada: só service_role.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `relatorio_id` | bigint | sim |  |  |
+| `evento_id` | bigint | sim |  |  |
+| `unidade_id` | uuid | sim |  |  |
+| `aluno_id` | integer | sim |  |  |
+| `curso` | text | sim |  |  |
+| `curso_chave` | text | sim |  |  |
+| `professor_id` | integer | sim |  |  |
+| `relatorio_status` | text | sim |  |  |
+| `enviado_em` | timestamp with time zone | sim |  |  |
+| `aprovado_em` | timestamp with time zone | sim |  |  |
+| `musica_titulo` | text | sim |  |  |
+| `musica_artista` | text | sim |  |  |
+| `musica_duracao_segundos` | integer | sim |  |  |
+| `musica_link` | text | sim |  |  |
+| `musica_ao_vivo` | boolean | sim |  |  |
+| `musica_playback_path` | text | sim |  |  |
+| `rider_itens` | text[] | sim |  |  |
+| `rider_outros` | text | sim |  |  |
+| `rider_nada` | boolean | sim |  |  |
+| `musica_lancada_em` | timestamp with time zone | sim |  |  |
+| `atualizado_em` | timestamp with time zone | sim |  |  |
 
 ## vw_sazonalidade
 

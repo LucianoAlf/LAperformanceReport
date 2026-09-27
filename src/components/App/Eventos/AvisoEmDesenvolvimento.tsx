@@ -16,9 +16,10 @@ export function AvisoEmDesenvolvimento() {
       <Hammer className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
       <div className="min-w-0 text-[12.5px] leading-relaxed text-amber-200/90">
         <span className="font-medium text-amber-200">Módulo em desenvolvimento.</span>{' '}
-        Já dá para marcar quem participa, montar os blocos e registrar o palco. Ainda não
-        existem a revisão de pendências, a impressão da programação, o check-in e o
-        certificado. O que você cadastrar aqui fica salvo e não se perde.
+        Participação, convidados, blocos, palco, revisão, impressão, check-in e certificados
+        já funcionam — e a música que o professor lança no LA Teacher chega aqui pela
+        sincronização. Ainda em construção: a organização automática dos playbacks no Drive.
+        O que você cadastrar aqui fica salvo e não se perde.
       </div>
     </div>
   );

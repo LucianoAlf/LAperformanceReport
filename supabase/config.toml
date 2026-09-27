@@ -269,3 +269,11 @@ verify_jwt = false
 # constante com SUPABASE_SERVICE_ROLE_KEY antes de qualquer leitura.
 [functions.presenca-emusys-escritor]
 verify_jwt = false
+
+# Assina URL de playback do bucket privado do LA Teacher. So o front autenticado
+# chama; dentro, o JWT do usuario responde a fn_evento_pode_ver antes do service
+# assinar. TRUE impede que chamada sem JWT chegue ao codigo (e o redeploy pelo
+# MCP ja reseta para true, que aqui e o valor correto — mesma armadilha do
+# orquestrar-historico-professor).
+[functions.recital-midia-url]
+verify_jwt = true

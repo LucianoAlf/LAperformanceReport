@@ -49,11 +49,11 @@ function TrafegoPagoGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-// Eventos (recital): em teste. A regra de quem enxerga mora em `podeVerEventos` —
-// fonte unica compartilhada com a sidebar e o menu mobile (LAPE-39).
+// Eventos (recital): RBAC por `eventos.ver`. A regra de quem enxerga mora em
+// `podeVerEventos` — fonte unica compartilhada com a sidebar e o menu mobile (LAPE-39).
 function EventosGuard({ children }: { children: React.ReactNode }) {
-  const { usuario } = useAuth()
-  if (!podeVerEventos(usuario?.email)) return <Navigate to="/app" replace />
+  const { hasPermission } = useAuth()
+  if (!podeVerEventos(hasPermission('eventos.ver'))) return <Navigate to="/app" replace />
   return <>{children}</>
 }
 

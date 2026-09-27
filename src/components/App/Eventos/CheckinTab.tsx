@@ -17,6 +17,7 @@ import {
 import { abrirDocumento, gerarCertificadosHtml, type DadosDaImpressao } from '@/lib/eventosImpressao';
 import {
   marcarChegada,
+  marcarCertificadosEmitidos,
   useCheckinDoEvento,
   useGradeDoEvento,
   PARTICIPACAO_SELO,
@@ -55,6 +56,7 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
   const entrada = useMemo<EntradaDaChegada>(
     () => ({
       evento: {
+        data_evento: evento.data_evento,
         horario_inicio: evento.horario_inicio,
         duracao_padrao_segundos: evento.duracao_padrao_segundos,
         intervalo_entre_blocos_segundos: evento.intervalo_entre_blocos_segundos ?? 2700,
@@ -63,6 +65,7 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
         id: b.id,
         nome: b.nome,
         ordem: b.ordem,
+        data: b.data,
         horario_inicial: b.horario_inicial,
         inicio_manual: b.inicio_manual,
         apresentacoes: b.apresentacoes.map((a) => ({
@@ -161,12 +164,20 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
     () => selecionarParaCertificado(lista.pessoas, publicoCert),
     [lista.pessoas, publicoCert],
   );
+  // Um papel por apresentacao: quem nao subiu conta 1 (o generico), quem subiu conta os
+  // cursos — o numero do botao e o numero de folhas que saem da impressora.
+  const totalCertificados = useMemo(
+    () =>
+      recebemCertificado.reduce((s, p) => s + Math.max(1, p.apresentacoes.length), 0),
+    [recebemCertificado],
+  );
 
-  const abrirCertificados = () => {
+  const abrirCertificados = async () => {
     const dados: DadosDaImpressao = {
       evento: {
         titulo: evento.titulo,
         data_evento: evento.data_evento,
+        data_fim: evento.data_fim,
         local: evento.local,
         unidade_nome: evento.unidade_nome,
         horario_inicio: evento.horario_inicio,
@@ -182,11 +193,28 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
       dados,
       recebemCertificado.map((p) => ({
         nome: p.nome,
-        apresentacoes: p.apresentacoes.map((a) => ({ cursoNome: a.cursoNome, musica: a.musica })),
+        // Um papel por apresentacao (pessoa x curso): o apresentacaoId viaja para o
+        // certificado_status poder ser gravado depois — sem ele, emitir nao deixava
+        // marca nenhuma e a gráfica receberia o mesmo lote duas vezes.
+        apresentacoes: p.apresentacoes.map((a) => ({
+          apresentacaoId: a.apresentacaoId,
+          cursoNome: a.cursoNome,
+          musica: a.musica,
+        })),
       })),
     );
     if (!abrirDocumento(html)) {
       toast.error('O navegador bloqueou a janela. Permita pop-ups para este site e tente de novo.');
+      return;
+    }
+    // Marca como emitido DEPOIS da janela abrir: marcar antes de o papel existir deixaria
+    // o sistema dizendo "ja saiu" de um certificado que o navegador bloqueou.
+    const ids = recebemCertificado.flatMap((p) =>
+      p.apresentacoes.map((a) => a.apresentacaoId).filter((x): x is number => x !== undefined),
+    );
+    if (ids.length > 0) {
+      const { error } = await marcarCertificadosEmitidos(ids);
+      if (error) toast.error(`Certificados gerados, mas não gravei a marca de emitido: ${error.message}`);
     }
   };
 
@@ -251,8 +279,8 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
                 Certificados
               </h3>
               <p className="mt-0.5 text-[12px] text-slate-500">
-                Um certificado por página, em A4 deitado. Abre numa aba nova, com botão para
-                salvar em PDF.
+                Um certificado por curso, em A4 deitado — quem sobe duas vezes recebe dois.
+                Abre numa aba nova, com botão para salvar em PDF.
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-1">
                 <span className="mr-1 text-[11px] text-slate-500">Emitir para:</span>
@@ -276,9 +304,9 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
               disabled={recebemCertificado.length === 0}
             >
               <Award className="h-3.5 w-3.5" />
-              {recebemCertificado.length === 1
+              {totalCertificados === 1
                 ? '1 certificado'
-                : `${recebemCertificado.length} certificados`}
+                : `${totalCertificados} certificados`}
             </Button>
           </div>
 
@@ -297,8 +325,7 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
               precisa saber que o papel ainda vai mudar. */}
           <p className="mt-2 text-[11px] text-slate-500">
             Modelo genérico, sem carga horária nem número de registro — o texto ainda vai ser
-            definido. Quem faz dois cursos recebe <strong>um</strong> certificado, com os dois
-            no repertório.
+            definido. Quem se apresenta em dois cursos recebe <strong>dois</strong> certificados.
           </p>
         </section>
       )}

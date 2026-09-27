@@ -3,7 +3,7 @@ import { Link, useOutletContext } from 'react-router-dom';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Mic2, Plus, CalendarDays, MapPin, Users, Music } from 'lucide-react';
+import { Mic2, Plus, CalendarDays, MapPin, Users, Music, Pencil } from 'lucide-react';
 
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { PageFilterBar } from '@/components/ui/page-filter-bar';
@@ -17,6 +17,7 @@ import {
   type EventoStatus,
 } from '@/hooks/useEventos';
 import { ModalNovoEvento } from './ModalNovoEvento';
+import { ModalEditarEvento } from './ModalEditarEvento';
 import { AvisoEmDesenvolvimento } from './AvisoEmDesenvolvimento';
 
 const STATUS_VARIANT: Record<EventoStatus, 'default' | 'success' | 'warning' | 'error'> = {
@@ -26,13 +27,30 @@ const STATUS_VARIANT: Record<EventoStatus, 'default' | 'success' | 'warning' | '
   cancelado: 'error',
 };
 
-function CardEvento({ evento }: { evento: EventoComResumo }) {
+function CardEvento({
+  evento,
+  onEditar,
+}: {
+  evento: EventoComResumo;
+  onEditar: () => void;
+}) {
   const data = parseISO(evento.data_evento);
+  const dataFim = evento.data_fim ? parseISO(evento.data_fim) : null;
+  // Recital de varios dias mostra a FAIXA: "13 – 15 nov 2026". Os dias de cada bloco
+  // ficam na Grade; aqui basta saber que o evento ocupa mais de uma data.
+  const rotuloData =
+    dataFim && evento.data_fim !== evento.data_evento
+      ? `${format(data, 'd', { locale: ptBR })} – ${format(dataFim, "d 'de' MMMM 'de' yyyy", { locale: ptBR })}`
+      : format(data, "d 'de' MMMM 'de' yyyy", { locale: ptBR });
+
   return (
-    <Link
-      to={`/app/eventos/${evento.id}`}
-      className="block rounded-xl border border-slate-700 bg-slate-800/50 p-4 text-left transition-colors hover:border-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+    <div
+      className="relative rounded-xl border border-slate-700 bg-slate-800/50 text-left transition-colors hover:border-slate-600 focus-within:ring-2 focus-within:ring-amber-500"
     >
+      <Link
+        to={`/app/eventos/${evento.id}`}
+        className="block p-4 focus-visible:outline-none"
+      >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <h3 className="truncate text-[15px] font-semibold text-white">{evento.titulo}</h3>
@@ -48,7 +66,7 @@ function CardEvento({ evento }: { evento: EventoComResumo }) {
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12.5px] text-slate-300">
         <span className="flex items-center gap-1.5">
           <CalendarDays className="h-3.5 w-3.5 text-slate-500" />
-          {format(data, "d 'de' MMMM 'de' yyyy", { locale: ptBR })}
+          {rotuloData}
           <span className="text-slate-500">·</span>
           {evento.horario_inicio?.slice(0, 5)}
         </span>
@@ -70,7 +88,18 @@ function CardEvento({ evento }: { evento: EventoComResumo }) {
           <strong className="tabular-nums text-white">{evento.apresentacoes}</strong> apresentações
         </span>
       </div>
-    </Link>
+      </Link>
+
+      {/* Fora do Link: botao dentro de <a> e invalido e o clique navegaria junto. */}
+      <button
+        type="button"
+        onClick={onEditar}
+        aria-label={`Editar ${evento.titulo}`}
+        className="absolute bottom-3 right-3 rounded p-1.5 text-slate-500 transition-colors hover:bg-slate-700/60 hover:text-slate-200"
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </button>
+    </div>
   );
 }
 
@@ -88,6 +117,7 @@ export function EventosPage() {
 
   const { eventos, loading, erro, recarregar } = useEventos(unidadeAtual);
   const [modalAberto, setModalAberto] = useState(false);
+  const [editando, setEditando] = useState<EventoComResumo | null>(null);
 
   // Futuros primeiro (é neles que se trabalha); passados abaixo, na ordem inversa.
   const { proximos, passados } = useMemo(() => {
@@ -138,7 +168,7 @@ export function EventosPage() {
                 </h2>
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {proximos.map((e) => (
-                    <CardEvento key={e.id} evento={e} />
+                    <CardEvento key={e.id} evento={e} onEditar={() => setEditando(e)} />
                   ))}
                 </div>
               </section>
@@ -151,7 +181,7 @@ export function EventosPage() {
                 </h2>
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {passados.map((e) => (
-                    <CardEvento key={e.id} evento={e} />
+                    <CardEvento key={e.id} evento={e} onEditar={() => setEditando(e)} />
                   ))}
                 </div>
               </section>
@@ -169,6 +199,12 @@ export function EventosPage() {
           toast.success('Evento criado');
           recarregar();
         }}
+      />
+      <ModalEditarEvento
+        aberto={editando !== null}
+        evento={editando}
+        onFechar={() => setEditando(null)}
+        onSalvo={recarregar}
       />
     </div>
   );

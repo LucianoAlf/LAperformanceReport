@@ -25,6 +25,7 @@ export function ModalNovoEvento({ aberto, unidadeAtual, onFechar, onCriado }: Pr
   const [unidadeId, setUnidadeId] = useState('');
   const [titulo, setTitulo] = useState('');
   const [data, setData] = useState('');
+  const [dataFim, setDataFim] = useState('');
   const [horario, setHorario] = useState('09:00');
   const [local, setLocal] = useState('');
   const [salvando, setSalvando] = useState(false);
@@ -36,6 +37,7 @@ export function ModalNovoEvento({ aberto, unidadeAtual, onFechar, onCriado }: Pr
       setUnidadeId(unidadeAtual ?? '');
       setTitulo('');
       setData('');
+      setDataFim('');
       setHorario('09:00');
       setLocal('');
     }
@@ -54,12 +56,19 @@ export function ModalNovoEvento({ aberto, unidadeAtual, onFechar, onCriado }: Pr
       toast.error('Informe a data do evento');
       return;
     }
+    if (dataFim && dataFim < data) {
+      toast.error('O último dia não pode ser antes do primeiro');
+      return;
+    }
 
     setSalvando(true);
     const { error } = await criarEvento({
       unidade_id: unidadeId,
       titulo: titulo.trim(),
       data_evento: data,
+      // Recital de varios dias (Recreio 13–15/11): o bloco escolhe o dia na Grade; aqui o
+      // evento so precisa saber ate quando vai.
+      data_fim: dataFim || null,
       horario_inicio: horario,
       local: local.trim() || null,
     });
@@ -109,12 +118,22 @@ export function ModalNovoEvento({ aberto, unidadeAtual, onFechar, onCriado }: Pr
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="evento-data">Data</Label>
+              <Label htmlFor="evento-data">Primeiro dia</Label>
               <Input
                 id="evento-data"
                 type="date"
                 value={data}
                 onChange={(e) => setData(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="evento-data-fim">Último dia (opcional)</Label>
+              <Input
+                id="evento-data-fim"
+                type="date"
+                min={data || undefined}
+                value={dataFim}
+                onChange={(e) => setDataFim(e.target.value)}
               />
             </div>
             <div className="space-y-2">

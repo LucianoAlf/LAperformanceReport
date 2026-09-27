@@ -26,6 +26,8 @@ export interface Evento {
   unidade_id: string;
   titulo: string;
   data_evento: string;
+  /** Último dia quando o recital ocupa mais de uma data (Recreio 13–15/11). NULL = um dia. */
+  data_fim: string | null;
   horario_inicio: string;
   local: string | null;
   status: EventoStatus;
@@ -47,9 +49,29 @@ export interface NovoEvento {
   unidade_id: string;
   titulo: string;
   data_evento: string;
+  data_fim?: string | null;
   horario_inicio?: string;
   local?: string | null;
+  duracao_padrao_segundos?: number;
+  intervalo_entre_blocos_segundos?: number;
+  observacoes?: string | null;
 }
+
+/** Campos editáveis de um evento existente — o que a equipe mexe sem recriar nada. */
+export type CamposDoEvento = Partial<
+  Pick<
+    Evento,
+    | 'titulo'
+    | 'data_evento'
+    | 'data_fim'
+    | 'horario_inicio'
+    | 'local'
+    | 'status'
+    | 'duracao_padrao_segundos'
+    | 'intervalo_entre_blocos_segundos'
+    | 'observacoes'
+  >
+>;
 
 /** 'todos' (consolidado) vira ausencia de filtro — a policy ja recorta o que o usuario ve. */
 function aplicarUnidade<T extends { eq: (col: string, val: string) => T }>(
@@ -70,15 +92,20 @@ export function useEventos(unidadeId: string | null | undefined) {
 
     // Os counts vem no mesmo round-trip: participacao e direta, apresentacao passa pelo
     // bloco no schema mas tem evento_id denormalizado (a coluna que a UNIQUE exige).
+    // ⚠️ O count de participacao e filtrado a 'participa': sem isso o cartao conta
+    // indefinidos e "nao participa" como se fossem publico — mentira a partir do
+    // primeiro "nao" marcado. O filtro embutido NAO tira o evento da lista (o embed sem
+    // !inner e left join); so restringe as linhas contadas.
     const query = supabase
       .from('evento')
       .select(
-        'id, unidade_id, titulo, data_evento, horario_inicio, local, status,' +
+        'id, unidade_id, titulo, data_evento, data_fim, horario_inicio, local, status,' +
           ' duracao_padrao_segundos, intervalo_entre_blocos_segundos, observacoes, created_at,' +
           ' unidades(nome),' +
           ' evento_participacao(count),' +
           ' evento_apresentacao(count)',
       )
+      .eq('evento_participacao.status', 'participa')
       .order('data_evento', { ascending: false });
 
     const { data, error } = await aplicarUnidade(query as never, unidadeId);
@@ -133,9 +160,20 @@ export async function criarEvento(dados: NovoEvento) {
     unidade_id: dados.unidade_id,
     titulo: dados.titulo,
     data_evento: dados.data_evento,
+    data_fim: dados.data_fim || null,
     horario_inicio: dados.horario_inicio || '09:00',
     local: dados.local || null,
+    duracao_padrao_segundos: dados.duracao_padrao_segundos ?? undefined,
+    intervalo_entre_blocos_segundos: dados.intervalo_entre_blocos_segundos ?? undefined,
+    observacoes: dados.observacoes || null,
   });
+}
+
+export async function atualizarEvento(id: number, campos: CamposDoEvento) {
+  return supabase
+    .from('evento')
+    .update({ ...campos, updated_at: new Date().toISOString() })
+    .eq('id', id);
 }
 
 export async function excluirEvento(id: number) {
@@ -160,7 +198,7 @@ export function useEvento(eventoId: number | null) {
     const { data, error } = await supabase
       .from('evento')
       .select(
-        'id, unidade_id, titulo, data_evento, horario_inicio, local, status,' +
+        'id, unidade_id, titulo, data_evento, data_fim, horario_inicio, local, status,' +
           ' duracao_padrao_segundos, intervalo_entre_blocos_segundos, observacoes, created_at, unidades(nome)',
       )
       .eq('id', eventoId)
@@ -239,6 +277,8 @@ export interface AlunoElegivel {
   motivo_sem_curso: MotivoSemCurso;
   /** Vem do cruzamento com evento_participacao; default do banco e 'indefinido'. */
   status: ParticipacaoStatus;
+  /** Quantos convidados a pessoa leva. Por PESSOA, como o check-in. 0 = ninguem informou. */
+  convidados: number;
   /**
    * Alocacoes por CURSO, nao por pessoa.
    *
@@ -280,7 +320,7 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
         .order('nome'),
       supabase
         .from('evento_participacao')
-        .select('pessoa_chave, status')
+        .select('pessoa_chave, status, convidados')
         .eq('evento_id', eventoId),
       // O embed do bloco depende da FK `bloco_id -> evento_bloco`, que existe desde a
       // migration de criacao — foi a FK AUSENTE de `evento_id` que derrubou a lista antes.
@@ -300,6 +340,12 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
 
     const porChave = new Map<string, ParticipacaoStatus>(
       (participacoes.data ?? []).map((p) => [p.pessoa_chave as string, p.status as ParticipacaoStatus]),
+    );
+    const convidadosPorChave = new Map<string, number>(
+      (participacoes.data ?? []).map((p) => [
+        p.pessoa_chave as string,
+        (p.convidados as number) ?? 0,
+      ]),
     );
 
     type LinhaApresentacao = {
@@ -331,6 +377,7 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
           ...a,
           cursos: (a.cursos ?? []) as CursoDoAluno[],
           status: porChave.get(a.pessoa_chave) ?? 'indefinido',
+          convidados: convidadosPorChave.get(a.pessoa_chave) ?? 0,
           alocacoes,
           cursos_alocados: alocacoes.length,
         };
@@ -367,6 +414,28 @@ export async function definirParticipacao(
     );
 }
 
+/**
+ * Quantos convidados a PESSOA leva. Mesmo upsert por (evento_id, pessoa_chave) da
+ * participacao — quem ainda nao foi marcado ganha a linha com status 'indefinido', que e
+ * o default do banco e a verdade ("ninguem perguntou").
+ */
+export async function definirConvidados(
+  eventoId: number,
+  alunoIdReferencia: number,
+  convidados: number,
+) {
+  return supabase
+    .from('evento_participacao')
+    .upsert(
+      {
+        evento_id: eventoId,
+        aluno_id: alunoIdReferencia,
+        convidados: Math.max(0, Math.floor(convidados)),
+      },
+      { onConflict: 'evento_id,pessoa_chave' },
+    );
+}
+
 /* ─────────────────────────────── grade ─────────────────────────────── */
 
 /** Instrumento ou equipamento que a apresentacao precisa no palco. */
@@ -377,6 +446,36 @@ export interface ItemDaApresentacao {
   nome: string;
   quantidade: number;
   observacao: string | null;
+  /** 'professor' = espelhado do rider do LA Teacher pelo sync; o ADM nao edita nem remove. */
+  origem: 'adm' | 'professor';
+  /** Codigo estavel do rider do LA Teacher (microfone_voz, bateria...); null quando digitado. */
+  codigo: string | null;
+}
+
+/**
+ * O que o professor lancou no LA Teacher — o snapshot cru da `vw_relatorio_anual_recital_v1`
+ * gravado pelo sync. E com ele que a tela mostra "o que o professor pediu" ao lado do que
+ * esta valendo na grade, sem depender da view na hora de pintar.
+ */
+export interface SnapshotDoProfessor {
+  relatorio_id: number;
+  relatorio_status: string;
+  curso: string;
+  curso_chave: string;
+  professor_id: number | null;
+  musica_titulo: string | null;
+  musica_artista: string | null;
+  musica_duracao_segundos: number | null;
+  musica_link: string | null;
+  musica_ao_vivo: boolean;
+  musica_playback_path: string | null;
+  rider_itens: string[];
+  rider_outros: string | null;
+  rider_nada: boolean;
+  musica_lancada_em: string | null;
+  enviado_em: string | null;
+  aprovado_em: string | null;
+  atualizado_em: string | null;
 }
 
 export interface ApresentacaoDaGrade {
@@ -390,9 +489,21 @@ export interface ApresentacaoDaGrade {
   professor_nome: string | null;
   ordem: number;
   musica: string | null;
+  musica_artista: string | null;
   duracao_segundos: number | null;
   tem_playback: boolean;
+  /** YouTube/Spotify/outro link que o professor (ou o ADM) informou para a música. */
+  musica_link: string | null;
+  /** Objeto no bucket `recital-playback` (do LA Teacher) — tocar exige signed URL. */
+  playback_path: string | null;
+  /** Quem escreveu os campos de detalhe por ultimo. Ver a regra de posse no banco. */
+  detalhes_origem: 'adm' | 'professor';
+  professor: SnapshotDoProfessor | null;
+  professor_em: string | null;
   observacao_mapa: string | null;
+  /** Um certificado por CURSO (decisao do Alf, 27/09): o grao e a apresentacao. */
+  certificado_status: 'pendente' | 'emitido';
+  certificado_em: string | null;
   itens: ItemDaApresentacao[];
 }
 
@@ -401,6 +512,8 @@ export interface BlocoDaGrade {
   evento_id: number;
   nome: string;
   ordem: number;
+  /** Dia em que o bloco toca; null = data_evento (recital de um dia). */
+  data: string | null;
   horario_inicial: string | null;
   inicio_manual: boolean;
   observacoes: string | null;
@@ -424,7 +537,7 @@ export function useGradeDoEvento(eventoId: number | null) {
     const [resBlocos, resApresentacoes] = await Promise.all([
       supabase
         .from('evento_bloco')
-        .select('id, evento_id, nome, ordem, horario_inicial, inicio_manual, observacoes')
+        .select('id, evento_id, nome, ordem, data, horario_inicial, inicio_manual, observacoes')
         .eq('evento_id', eventoId)
         .order('ordem'),
       // O nome do aluno vem de `alunos` pela PROCEDENCIA (`aluno_id`), nao da view de
@@ -433,12 +546,14 @@ export function useGradeDoEvento(eventoId: number | null) {
       supabase
         .from('evento_apresentacao')
         .select(
-          'id, bloco_id, aluno_id, pessoa_chave, curso_id, ordem, musica, duracao_segundos,' +
-            ' tem_playback, observacao_mapa, alunos(nome), cursos(nome), professores(nome),' +
+          'id, bloco_id, aluno_id, pessoa_chave, curso_id, ordem, musica, musica_artista,' +
+            ' duracao_segundos, tem_playback, musica_link, playback_path, detalhes_origem,' +
+            ' professor, professor_em, certificado_status, certificado_em,' +
+            ' observacao_mapa, alunos(nome), cursos(nome), professores(nome),' +
             // Itens embutidos em vez de uma segunda leitura: aqui a FK existe
             // (`apresentacao_id -> evento_apresentacao`), entao o PostgREST resolve o embed —
             // ao contrario da participacao, que cruza com uma VIEW e por isso vai separada.
-            ' evento_apresentacao_item(id, apresentacao_id, tipo, nome, quantidade, observacao)',
+            ' evento_apresentacao_item(id, apresentacao_id, tipo, nome, quantidade, observacao, origem, codigo)',
         )
         .eq('evento_id', eventoId)
         .order('ordem'),
@@ -504,7 +619,7 @@ export async function excluirBloco(blocoId: number) {
 
 export async function atualizarBloco(
   blocoId: number,
-  campos: Partial<Pick<BlocoDaGrade, 'nome' | 'horario_inicial' | 'inicio_manual' | 'observacoes'>>,
+  campos: Partial<Pick<BlocoDaGrade, 'nome' | 'data' | 'horario_inicial' | 'inicio_manual' | 'observacoes'>>,
 ) {
   return supabase.from('evento_bloco').update({ ...campos, updated_at: new Date().toISOString() }).eq('id', blocoId);
 }
@@ -527,7 +642,12 @@ export async function atualizarApresentacao(
   campos: Partial<
     Pick<
       ApresentacaoDaGrade,
-      'musica' | 'duracao_segundos' | 'tem_playback' | 'observacao_mapa'
+      | 'musica'
+      | 'musica_artista'
+      | 'musica_link'
+      | 'duracao_segundos'
+      | 'tem_playback'
+      | 'observacao_mapa'
     >
   >,
 ) {
@@ -738,4 +858,128 @@ export async function definirParticipacaoEmLote(
     alunoIds.map((aluno_id) => ({ evento_id: eventoId, aluno_id, status })),
     { onConflict: 'evento_id,pessoa_chave' },
   );
+}
+
+/* ─────────── canal do professor (LA Teacher → sala de eventos) ─────────── */
+
+export interface ResultadoSyncRecital {
+  evento_id: number;
+  relatorios_lidos: number;
+  casadas: number;
+  nao_casadas: { aluno_id: number; curso: string; relatorio_id: number }[];
+  apresentacoes_atualizadas: number;
+  itens_professor: number;
+  codigos_sem_mapa: string[];
+  sincronizado_em: string;
+}
+
+/**
+ * Puxa o cartao "Musica e palco do recital" do LA Teacher para as apresentacoes do
+ * evento. Idempotente — pode rodar a cada abertura da tela; o custo e uma passada sobre
+ * a view (centenas de linhas), nao um sync de verdade.
+ */
+export async function sincronizarRecital(eventoId: number) {
+  const { data, error } = await supabase.rpc('evento_recital_sincronizar_v1', {
+    p_evento_id: eventoId,
+  });
+  return { data: (data ?? null) as ResultadoSyncRecital | null, error };
+}
+
+/** Uma linha por relatorio do LA Teacher — a base do painel "relatorios na sala". */
+export interface RelatorioDoProfessor {
+  relatorio_id: number;
+  /** null = o professor lancou para alguem que nao esta na grade — pendencia real. */
+  apresentacao_id: number | null;
+  aluno_id: number;
+  aluno_nome: string | null;
+  pessoa_chave: string;
+  curso: string;
+  professor_id: number | null;
+  professor_nome: string | null;
+  relatorio_status: string;
+  musica_lancada: boolean;
+  enviado_em: string | null;
+  aprovado_em: string | null;
+}
+
+export const RELATORIO_STATUS_LABEL: Record<string, string> = {
+  sem_voz: 'sem voz',
+  gerando: 'gerando',
+  pronto_para_revisar: 'pronto para revisar',
+  enviado: 'enviado',
+  devolvido: 'devolvido',
+  aprovado: 'aprovado',
+};
+
+export function useRelatoriosDoEvento(eventoId: number | null) {
+  const [relatorios, setRelatorios] = useState<RelatorioDoProfessor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const recarregar = useCallback(async () => {
+    if (!eventoId) {
+      setRelatorios([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setErro(null);
+    const { data, error } = await supabase.rpc('evento_relatorios_v1', {
+      p_evento_id: eventoId,
+    });
+    if (error) {
+      setErro(error.message);
+      setRelatorios([]);
+    } else {
+      setRelatorios((data ?? []) as RelatorioDoProfessor[]);
+    }
+    setLoading(false);
+  }, [eventoId]);
+
+  useEffect(() => {
+    recarregar();
+  }, [recarregar]);
+
+  return { relatorios, loading, erro, recarregar };
+}
+
+/**
+ * Signed URL do playback — o bucket `recital-playback` e do LA Teacher e a policy dele
+ * nao conhece o ADM; a edge `recital-midia-url` assina com service_role depois de
+ * conferir que o evento e da unidade do chamador.
+ */
+export async function criarUrlDePlayback(playbackPath: string) {
+  const { data, error } = await supabase.functions.invoke('recital-midia-url', {
+    body: { path: playbackPath },
+  });
+  if (error) return { url: null as string | null, error };
+  const url = (data as { url?: string } | null)?.url ?? null;
+  if (!url) return { url: null, error: { message: 'A resposta não trouxe o link do áudio.' } };
+  return { url, error: null };
+}
+
+/**
+ * Marca os certificados EMITIDOS — por APRESENTACAO (pessoa x curso), decisao do Alf de
+ * 27/09: quem faz Teclado e Violao recebe dois.
+ *
+ * 🔴 Mesmo cuidado de `marcarChegada`: update sem retorno pode ser zero linhas filtradas
+ * pela policy e ninguem percebe. `.select('id')` e a checagem fazem a diferenca.
+ */
+export async function marcarCertificadosEmitidos(apresentacaoIds: number[]) {
+  if (apresentacaoIds.length === 0) return { error: null };
+  const { data, error } = await supabase
+    .from('evento_apresentacao')
+    .update({ certificado_status: 'emitido', certificado_em: new Date().toISOString() })
+    .in('id', apresentacaoIds)
+    .select('id');
+  if (error) return { error };
+  const gravados = (data ?? []).length;
+  if (gravados < apresentacaoIds.length) {
+    return {
+      error: {
+        message: `${gravados} de ${apresentacaoIds.length} certificados foram marcados como emitidos.`,
+      },
+    };
+  }
+  return { error: null };
 }

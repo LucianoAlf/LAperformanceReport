@@ -20,25 +20,21 @@ export interface ContextoVisibilidade {
 /**
  * Quem enxerga o modulo Eventos (recital) — LAPE-39.
  *
- * ABERTO A TODO USUARIO AUTENTICADO desde 19/09/2026 (decisao do Hugo), com aviso de
- * "em desenvolvimento" na propria tela. Antes o gate era por e-mail (`hugo@gmail.com`).
+ * RBAC desde 27/09/2026: recebe o resultado de `hasPermission('eventos.ver')` dos tres
+ * consumidores (guard da rota, sidebar do desktop, menu do celular), que e quem conhece o
+ * usuario — a funcao fica pura e testavel, sem depender do contexto de auth.
  *
- * ⚠️ Abrir o MENU nao abre o DADO: as cinco tabelas do modulo tem RLS por unidade, entao
- * cada pessoa continua vendo apenas os eventos da unidade dela e o admin ve tudo — provado
- * contra o banco nos tres perfis. O que esta funcao controla e visibilidade de tela.
+ * ⚠️ Abrir o MENU nao abre o DADO: as tabelas do modulo tem RLS por unidade, entao cada
+ * pessoa continua vendo apenas os eventos da unidade dela e o admin ve tudo — provado
+ * contra o banco nos tres perfis. `eventos.ver`/`eventos.editar` foram concedidas aos
+ * perfis Gerente, Farmer, Sucesso do Aluno (e `ver` ao Visualizador) na migration
+ * 20260927150000; a liberacao agora e um clique na tela de Permissoes, nao um deploy.
  *
- * O destino continua sendo `hasPermission('eventos.ver')`, para a liberacao virar um
- * clique na tela de Permissoes em vez de um deploy; as permissoes `eventos.ver` e
- * `eventos.editar` ja existem desde a migration 20260918120000. A funcao permanece como
- * UM ponto de corte — o guard da rota, a sidebar do desktop e o menu do celular chamam
- * ela em vez de repetir a regra. O Trafego Pago e o contra-exemplo: a lista de e-mails
- * dele esta escrita em 3 arquivos (divida da LAPE-32).
- *
- * O parametro fica na assinatura de proposito: os tres consumidores ja passam o e-mail, e
- * remove-lo agora obrigaria a mexer nos tres de novo quando o RBAC entrar.
+ * A funcao permanece como UM ponto de corte: o Trafego Pago e o contra-exemplo, com a
+ * lista de e-mails dele escrita em 3 arquivos (divida da LAPE-32).
  */
-export function podeVerEventos(_email?: string | null): boolean {
-  return true;
+export function podeVerEventos(temPermissao: boolean): boolean {
+  return temPermissao;
 }
 
 export function itemVisivel(

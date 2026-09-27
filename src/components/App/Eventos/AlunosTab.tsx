@@ -5,6 +5,9 @@ import { Search, Users, Check, HelpCircle, X, Music, AlertTriangle, Guitar, Layo
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { KPICard } from '@/components/ui/KPICard';
 import { cn } from '@/lib/utils';
 import { normalizarBusca } from '@/lib/agenda';
@@ -12,6 +15,7 @@ import { avaliarElegibilidade, resumirParticipacao, resumirAlocacao } from '@/li
 import {
   useAlunosDoEvento,
   definirParticipacao,
+  definirConvidados,
   definirParticipacaoEmLote,
   type AlocacaoDoCurso,
   type AlunoElegivel,
@@ -96,9 +100,11 @@ function SeloBloco({ alocacao }: { alocacao: AlocacaoDoCurso | undefined }) {
 function LinhaAluno({
   aluno,
   onEscolher,
+  onConvidados,
 }: {
   aluno: AlunoElegivel;
   onEscolher: (s: ParticipacaoStatus) => void;
+  onConvidados: (n: number) => void;
 }) {
   const avaliacao = avaliarElegibilidade(aluno);
   const alocacao = resumirAlocacao(aluno.cursos_no_recital, aluno.cursos_alocados);
@@ -180,6 +186,31 @@ function LinhaAluno({
         ) : null}
       </div>
 
+      {/* Convidados: so faz sentido perguntar a quem vai — para os demais o campo seria
+          um input morto em toda linha. */}
+      {aluno.status === 'participa' && (
+        <label
+          className="flex shrink-0 items-center gap-1 text-[11px] text-slate-500"
+          title="Quantos convidados essa pessoa leva"
+        >
+          <Users className="h-3 w-3" />
+          <Input
+            type="number"
+            min={0}
+            // defaultValue + key: grava no BLUR, nao a cada tecla — um PATCH por digito
+            // numa lista de 400 alunos e o mesmo defeito que o campo de musica evita.
+            key={aluno.convidados}
+            defaultValue={aluno.convidados}
+            onBlur={(e) => {
+              const n = Math.max(0, Math.floor(Number(e.target.value) || 0));
+              if (n !== aluno.convidados) onConvidados(n);
+            }}
+            className="h-7 w-14 text-[12px] tabular-nums"
+            aria-label={`Convidados de ${aluno.nome}`}
+          />
+        </label>
+      )}
+
       <SeletorParticipacao
         valor={aluno.status}
         desabilitado={!avaliacao.podeParticipar}
@@ -193,15 +224,45 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
   const { alunos, loading, erro, recarregar } = useAlunosDoEvento(eventoId, unidadeId);
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<FiltroStatus>('todos');
+  const [filtroProfessor, setFiltroProfessor] = useState('todos');
+  const [filtroCurso, setFiltroCurso] = useState('todos');
   const [soSemAlocar, setSoSemAlocar] = useState(false);
   const [gravando, setGravando] = useState<string | null>(null);
 
   const resumo = useMemo(() => resumirParticipacao(alunos), [alunos]);
 
+  // Opcoes dos filtros saem da PROPRIA lista: um professor sem aluno elegivel no recital
+  // nao pode ter aluno para filtrar, entao oferece-lo seria um caminho para o vazio.
+  const { professores, cursos } = useMemo(() => {
+    const profs = new Map<string, string>();
+    const crs = new Map<string, string>();
+    for (const a of alunos) {
+      for (const c of a.cursos) {
+        if (c.curso_nome) crs.set(String(c.curso_id), c.curso_nome);
+        if (c.professor_id !== null && c.professor_nome) {
+          profs.set(String(c.professor_id), c.professor_nome);
+        }
+      }
+    }
+    const porNome = (x: [string, string], y: [string, string]) => x[1].localeCompare(y[1], 'pt-BR');
+    return {
+      professores: [...profs.entries()].sort(porNome),
+      cursos: [...crs.entries()].sort(porNome),
+    };
+  }, [alunos]);
+
   const visiveis = useMemo(() => {
     const termo = normalizarBusca(busca.trim());
     return alunos.filter((a) => {
       if (filtro !== 'todos' && a.status !== filtro) return false;
+      // Professor e curso filtram por CURSO da pessoa: quem faz dois cursos continua na
+      // lista quando um dos dois casa — esconder o outro e trabalho do olho, nao do filtro.
+      if (filtroProfessor !== 'todos' && !a.cursos.some((c) => String(c.professor_id) === filtroProfessor)) {
+        return false;
+      }
+      if (filtroCurso !== 'todos' && !a.cursos.some((c) => String(c.curso_id) === filtroCurso)) {
+        return false;
+      }
       // Eixo SEPARADO do status — participacao e alocacao sao perguntas diferentes, e
       // juntar as duas num radio so faria "Participam" e "Sem alocar" se excluirem.
       // Quem nao tem curso nenhum nao entra: ele nao esta esperando ser alocado.
@@ -214,7 +275,7 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
       );
       return alvo.includes(termo);
     });
-  }, [alunos, busca, filtro, soSemAlocar]);
+  }, [alunos, busca, filtro, filtroProfessor, filtroCurso, soSemAlocar]);
 
   const escolher = async (aluno: AlunoElegivel, status: ParticipacaoStatus) => {
     setGravando(aluno.pessoa_chave);
@@ -223,6 +284,14 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
     // Erro de escrita nunca some em silencio: sem isto o clique parece ter funcionado
     // e a decisao da coordenacao se perde entre um recarregamento e outro.
     if (error) toast.error(`Não consegui gravar ${aluno.nome}: ${error.message}`);
+    else recarregar();
+  };
+
+  // Convidados e por PESSOA, nao por curso: a cadeira do teatro nao sabe em quantas
+  // apresentacoes a familia vai se dividir.
+  const salvarConvidados = async (aluno: AlunoElegivel, n: number) => {
+    const { error } = await definirConvidados(eventoId, aluno.aluno_id_referencia, n);
+    if (error) toast.error(`Não consegui gravar os convidados de ${aluno.nome}: ${error.message}`);
     else recarregar();
   };
 
@@ -255,7 +324,7 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <KPICard size="sm" label="Elegíveis" value={resumo.total} icon={Users} variant="default" />
         <KPICard size="sm" label="Participam" value={resumo.participam} icon={Check} variant="emerald" />
         <KPICard size="sm" label="Indefinidos" value={resumo.indefinidos} icon={HelpCircle} variant="amber" />
@@ -270,6 +339,14 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
               ? `${resumo.apresentacoesAlocadas} já na grade`
               : '1 por curso de quem participa'
           }
+        />
+        <KPICard
+          size="sm"
+          label="Convidados"
+          value={resumo.convidadosTotal}
+          icon={Users}
+          variant="default"
+          subvalue="somando quem participa"
         />
       </div>
 
@@ -301,6 +378,35 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
             </button>
           ))}
         </div>
+
+        {/* Filtros dedicados: a planilha do recital e organizada por professor e por
+            instrumento — sem os dois selects a resposta seria digitar nome por nome. */}
+        {professores.length > 1 && (
+          <Select value={filtroProfessor} onValueChange={setFiltroProfessor}>
+            <SelectTrigger className="h-9 w-[170px] text-[12.5px]">
+              <SelectValue placeholder="Professor" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos os professores</SelectItem>
+              {professores.map(([id, nome]) => (
+                <SelectItem key={id} value={id}>{nome}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {cursos.length > 1 && (
+          <Select value={filtroCurso} onValueChange={setFiltroCurso}>
+            <SelectTrigger className="h-9 w-[150px] text-[12.5px]">
+              <SelectValue placeholder="Curso" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos os cursos</SelectItem>
+              {cursos.map(([id, nome]) => (
+                <SelectItem key={id} value={id}>{nome}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
         {/* So aparece quando ha grade montada: antes disso ele filtraria a lista inteira
             e nao responderia pergunta nenhuma. */}
@@ -338,7 +444,12 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
         ) : (
           <div className={cn('transition-opacity', gravando && 'opacity-60')}>
             {visiveis.map((a) => (
-              <LinhaAluno key={a.pessoa_chave} aluno={a} onEscolher={(s) => escolher(a, s)} />
+              <LinhaAluno
+                key={a.pessoa_chave}
+                aluno={a}
+                onEscolher={(s) => escolher(a, s)}
+                onConvidados={(n) => salvarConvidados(a, n)}
+              />
             ))}
           </div>
         )}

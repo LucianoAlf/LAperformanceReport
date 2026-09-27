@@ -1,19 +1,19 @@
 // Acesso ao modulo Eventos (recital) — LAPE-39.
 //
-// ABERTO a todo usuario autenticado desde 19/09/2026 (decisao do Hugo), com aviso de
-// "em desenvolvimento" na tela. Antes era gate por e-mail.
+// RBAC desde 27/09/2026: `podeVerEventos` recebe `hasPermission('eventos.ver')` dos tres
+// consumidores. Antes: aberto a todo autenticado (19/09), e antes disso gate por e-mail.
 //
-// O que este teste protege NAO e quem ve — e o fato de existir UM UNICO ponto de corte,
-// que continua valendo depois da abertura: o dia em que a regra virar
-// `hasPermission('eventos.ver')`, mexer num lugar so tem de bastar.
+// O que este teste protege NAO e quem ve — e o fato de existir UM UNICO ponto de corte:
+// os tres consumidores passam pela funcao em vez de repetir a regra, e nenhum deles
+// carrega e-mail do modulo.
 //
 // O Trafego Pago e o contra-exemplo vivo: a lista de e-mails dele esta escrita em 3
 // arquivos (router.tsx, AppSidebar.tsx, MobileLayout.tsx), entao liberar aquele modulo
 // exige lembrar dos tres — e esquecer um deixa o item fora do menu com a URL funcionando,
 // ou o inverso. E a divida da LAPE-32.
 //
-// ⚠️ Abrir o MENU nao abre o DADO: o escopo por unidade e da RLS das cinco tabelas, nao
-// desta funcao. Provado contra o banco nos tres perfis em 19/09.
+// ⚠️ Abrir o MENU nao abre o DADO: o escopo por unidade e da RLS das tabelas, nao desta
+// funcao. Provado contra o banco nos tres perfis em 19/09.
 //
 // Roda a funcao REAL (transpilada por esbuild) e confere os consumidores por leitura.
 import assert from 'node:assert/strict';
@@ -36,23 +36,28 @@ const lib = await (async () => {
 
 const { podeVerEventos, itemVisivel } = lib;
 
-test('o modulo esta aberto a todo usuario autenticado', () => {
-  assert.equal(podeVerEventos('hugo@gmail.com'), true);
-  assert.equal(podeVerEventos('lucianoalf.la@gmail.com'), true);
-  assert.equal(podeVerEventos('krissya@lamusic.com.br'), true);
-  assert.equal(podeVerEventos('duda@lamusic.com.br'), true);
+test('a funcao responde ao booleano de permissao que os consumidores passam', () => {
+  // A decisao (hasPermission + admin) mora nos consumidores; aqui dentro e repasse.
+  assert.equal(podeVerEventos(true), true);
+  assert.equal(podeVerEventos(false), false);
 });
 
-test('quem ainda nao resolveu o perfil tambem ve — a tela nao pisca', () => {
-  // `usuario` e null enquanto o fetch do AuthContext nao resolve. Com o gate por e-mail
-  // isso tinha de ser fail-CLOSED (modulo restrito nao pode vazar num instante de
-  // carregamento); aberto, o fail-closed faria o item sumir e reaparecer do menu.
-  //
-  // ⚠️ Isto NAO abre dado nenhum: a rota exige sessao e as cinco tabelas tem RLS por
-  // unidade. Sem sessao nao ha o que ler, entao o pior caso e um item de menu inutil.
-  assert.equal(podeVerEventos(null), true);
-  assert.equal(podeVerEventos(undefined), true);
-  assert.equal(podeVerEventos(''), true);
+test('os consumidores passam a permissao, nao o e-mail', () => {
+  // O RBAC virou real em 27/09/2026: quem chamava `podeVerEventos(usuario?.email)`
+  // liberava para qualquer autenticado. Cada consumidor tem de chamar
+  // `podeVerEventos(hasPermission('eventos.ver'))`.
+  for (const arquivo of [
+    'src/router.tsx',
+    'src/components/App/Layout/AppSidebar.tsx',
+    'src/mobile/MobileLayout.tsx',
+  ]) {
+    const fonte = readFileSync(arquivo, 'utf8');
+    assert.match(
+      fonte,
+      /podeVerEventos\(hasPermission\('eventos\.ver'\)\)/u,
+      `${arquivo} precisa passar hasPermission('eventos.ver') para podeVerEventos`,
+    );
+  }
 });
 
 test('a regra `eventos` do menu responde ao contexto', () => {

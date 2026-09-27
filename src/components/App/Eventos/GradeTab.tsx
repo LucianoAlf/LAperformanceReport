@@ -29,16 +29,25 @@ import {
   Music,
   Settings2,
   MapPin,
+  RefreshCw,
+  Link2,
+  Play,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import {
   calcularHorariosDaGrade,
   INTERVALO_ENTRE_APRESENTACOES_PADRAO_SEGUNDOS,
   chaveDoItem,
   consolidarItensDoPalco,
+  diasDoEvento,
+  divergenciasDoProfessor,
+  formatarDataCurta,
   formatarDuracao,
   resumirPalcoDaApresentacao,
   type BlocoComHorario,
@@ -53,6 +62,8 @@ import {
   atualizarApresentacao,
   reordenarGrade,
   reordenarBlocos as reordenarBlocos_rpc,
+  sincronizarRecital,
+  criarUrlDePlayback,
   type ApresentacaoDaGrade,
   type BlocoDaGrade,
   type EventoComResumo,
@@ -74,20 +85,42 @@ function CartaoApresentacao({
   horario: string | undefined;
   sugestoes: { instrumento: string[]; equipamento: string[] };
   onRemover: () => void;
-  onSalvarCampo: (campos: { musica?: string | null; duracao_segundos?: number | null }) => void;
+  onSalvarCampo: (campos: {
+    musica?: string | null;
+    musica_link?: string | null;
+    duracao_segundos?: number | null;
+  }) => void;
   onMudou: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: apresentacao.id,
   });
   const [musica, setMusica] = useState(apresentacao.musica ?? '');
+  const [musicaLink, setMusicaLink] = useState(apresentacao.musica_link ?? '');
   const [palcoAberto, setPalcoAberto] = useState(false);
+  const [abrindoPlayback, setAbrindoPlayback] = useState(false);
 
   const resumoPalco = resumirPalcoDaApresentacao(
     apresentacao.itens,
     apresentacao.tem_playback,
     Boolean(apresentacao.observacao_mapa),
   );
+
+  // O que o professor lancou difere do que vale aqui? So existe quando o ADM tomou posse
+  // dos campos — senao o sync ja teria igualado os dois lados.
+  const divergencias = divergenciasDoProfessor(apresentacao);
+
+  const abrirPlayback = async () => {
+    if (!apresentacao.playback_path) return;
+    setAbrindoPlayback(true);
+    const { url, error } = await criarUrlDePlayback(apresentacao.playback_path);
+    setAbrindoPlayback(false);
+    if (error || !url) {
+      toast.error(`Não consegui abrir o playback: ${error?.message ?? 'sem link'}`);
+      return;
+    }
+    window.open(url, '_blank', 'noopener');
+  };
 
   return (
     <div
@@ -123,11 +156,40 @@ function CartaoApresentacao({
             <span className="rounded bg-amber-500/15 px-1.5 py-px text-[10.5px] text-amber-300">
               {apresentacao.curso_nome}
             </span>
+            {/* O selo mostra que o professor ja lancou no LA Teacher — a divergencia
+                explica QUANDO o conteudo daqui difere do dele. */}
+            {apresentacao.professor?.musica_lancada_em && (
+              <span
+                className="rounded bg-sky-500/15 px-1.5 py-px text-[10.5px] text-sky-300"
+                title="Relatório do LA Teacher lançado"
+              >
+                prof. lançou
+              </span>
+            )}
+            {apresentacao.certificado_status === 'emitido' && (
+              <span className="rounded bg-emerald-500/15 px-1.5 py-px text-[10.5px] text-emerald-300">
+                cert. emitido
+              </span>
+            )}
           </div>
           {apresentacao.professor_nome && (
             // "Prof." explícito: sem ele o nome fica solto embaixo do nome do aluno e a
             // programação impressa vira dois nomes sem papel declarado.
             <p className="text-[11.5px] text-slate-500">Prof. {apresentacao.professor_nome}</p>
+          )}
+
+          {/* Divergencia professor x grade: cada campo que o ADM sobrescreveu depois do
+              professor lancar. Informa; nunca bloqueia — o ADM pode ter razao. */}
+          {divergencias.length > 0 && (
+            <div className="mt-1.5 rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-[11.5px] text-amber-200/90">
+              <span className="font-medium">Prof. pediu: </span>
+              {divergencias.map((d, i) => (
+                <span key={d.campo}>
+                  {i > 0 && ' · '}
+                  {d.rotulo} “{d.professor ?? '—'}”
+                </span>
+              ))}
+            </div>
           )}
 
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
@@ -181,7 +243,55 @@ function CartaoApresentacao({
               <Settings2 className="h-3.5 w-3.5" />
               {resumoPalco ?? 'palco'}
             </button>
+
+            {/* Fonte do playback: link externo abre direto; arquivo do bucket pede a
+                URL assinada da edge — a policy do recital-playback nao conhece o ADM. */}
+            {apresentacao.musica_link && (
+              <a
+                href={apresentacao.musica_link}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11.5px] text-sky-400 transition-colors hover:bg-sky-500/10"
+                title={apresentacao.musica_link}
+              >
+                <Link2 className="h-3.5 w-3.5" />
+                link
+              </a>
+            )}
+            {apresentacao.playback_path && (
+              <button
+                type="button"
+                onClick={abrirPlayback}
+                disabled={abrindoPlayback}
+                className="flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[11.5px] text-emerald-300 transition-colors hover:bg-emerald-500/25"
+                title={apresentacao.playback_path}
+              >
+                <Play className="h-3.5 w-3.5" />
+                {abrindoPlayback ? 'abrindo…' : 'ouvir playback'}
+              </button>
+            )}
           </div>
+
+          {/* Link da musica: segundo campo curto, so quando ja tem playback/relatorio ou
+              quando ha algo digitado — expor sempre adicionaria um input morto em 270
+              cartoes. */}
+          {(musicaLink || apresentacao.musica_link || apresentacao.tem_playback) && (
+            <div className="mt-1 flex items-center gap-1.5">
+              <Link2 className="h-3 w-3 shrink-0 text-slate-600" />
+              <Input
+                value={musicaLink}
+                onChange={(e) => setMusicaLink(e.target.value)}
+                onBlur={() => {
+                  const valor = musicaLink.trim();
+                  if (valor !== (apresentacao.musica_link ?? '')) {
+                    onSalvarCampo({ musica_link: valor || null });
+                  }
+                }}
+                placeholder="Link da música (YouTube, Spotify…)"
+                className="h-6 flex-1 text-[11.5px]"
+              />
+            </div>
+          )}
 
           {/* A observação fica FORA do painel, sempre à vista, como no protótipo do Arthur.
               Ela é a única parte do palco que se lê em voz alta na montagem — esconder o
@@ -237,6 +347,8 @@ function CartaoBloco({
   eventoId,
   unidadeId,
   sugestoes,
+  dias,
+  dataEvento,
   onMudou,
 }: {
   bloco: BlocoDaGrade;
@@ -244,6 +356,9 @@ function CartaoBloco({
   eventoId: number;
   unidadeId: string;
   sugestoes: { instrumento: string[]; equipamento: string[] };
+  /** Todos os dias do recital — vazio/1 dia = o seletor de data nem aparece. */
+  dias: string[];
+  dataEvento: string;
   onMudou: () => void;
 }) {
   const [adicionando, setAdicionando] = useState(false);
@@ -310,6 +425,34 @@ function CartaoBloco({
           <GripVertical className="h-4 w-4" />
         </button>
         <h3 className="text-[14px] font-semibold text-white">{bloco.nome}</h3>
+
+        {/* Dia do bloco. Em recital de uma data so o selo seria a mesma data repetida —
+            por isso so aparece quando ha mais de um dia para escolher. */}
+        {dias.length > 1 && (
+          <Select
+            value={bloco.data ?? dataEvento}
+            onValueChange={async (v) => {
+              const { error } = await atualizarBloco(bloco.id, { data: v === dataEvento ? null : v });
+              if (error) toast.error(`Não consegui salvar o dia do bloco: ${error.message}`);
+              else onMudou();
+            }}
+          >
+            <SelectTrigger
+              className="h-7 w-[110px] text-[11.5px]"
+              aria-label={`Dia do ${bloco.nome}`}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {dias.map((d) => (
+                <SelectItem key={d} value={d}>
+                  {formatarDataCurta(d)}
+                  {d === dataEvento ? ' (1º dia)' : ''}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
         {horario && (
           <span
@@ -465,6 +608,43 @@ function CartaoBloco({
 export function GradeTab({ evento }: { evento: EventoComResumo }) {
   const { blocos, loading, erro, recarregar } = useGradeDoEvento(evento.id);
   const { alunos, recarregar: recarregarAlunos } = useAlunosDoEvento(evento.id, evento.unidade_id);
+  const [sincronizando, setSincronizando] = useState(false);
+  // Os dias que um bloco pode ocupar — um evento de uma data so devolve lista de 1 e o
+  // seletor nem aparece.
+  const dias = useMemo(
+    () => diasDoEvento(evento.data_evento, evento.data_fim),
+    [evento.data_evento, evento.data_fim],
+  );
+
+  /** Releitura manual do canal professor — o automatico ja roda ao abrir a sala. */
+  const sincronizar = async () => {
+    setSincronizando(true);
+    const { data, error } = await sincronizarRecital(evento.id);
+    setSincronizando(false);
+    if (error) {
+      toast.error(`Não consegui puxar do LA Teacher: ${error.message}`);
+      return;
+    }
+    recarregar();
+    recarregarAlunos();
+    if (!data) return;
+    const partes = [
+      `${data.relatorios_lidos} relatório${data.relatorios_lidos === 1 ? '' : 's'} lido${data.relatorios_lidos === 1 ? '' : 's'}`,
+      `${data.casadas} casada${data.casadas === 1 ? '' : 's'}`,
+      `${data.apresentacoes_atualizadas} atualizada${data.apresentacoes_atualizadas === 1 ? '' : 's'}`,
+    ];
+    if (data.itens_professor > 0) partes.push(`${data.itens_professor} itens de palco`);
+    toast.success('LA Teacher sincronizado', { description: partes.join(' · ') });
+    if (data.nao_casadas.length > 0) {
+      toast.warning(
+        `${data.nao_casadas.length} relatório${data.nao_casadas.length === 1 ? '' : 's'} sem apresentação na grade`,
+        {
+          description:
+            'O professor lançou para alguém que ainda não está em nenhum bloco — a Revisão lista quem.',
+        },
+      );
+    }
+  };
   // O overlay mostra bloco OU apresentação — guardar só o rótulo evita carregar duas
   // formas diferentes de objeto por um estado que só serve para desenhar.
   const [arrastando, setArrastando] = useState<{
@@ -484,6 +664,7 @@ export function GradeTab({ evento }: { evento: EventoComResumo }) {
     () =>
       calcularHorariosDaGrade(
         {
+          data_evento: evento.data_evento,
           horario_inicio: evento.horario_inicio,
           duracao_padrao_segundos: evento.duracao_padrao_segundos,
           intervalo_entre_blocos_segundos: evento.intervalo_entre_blocos_segundos ?? 2700,
@@ -491,6 +672,9 @@ export function GradeTab({ evento }: { evento: EventoComResumo }) {
         blocos.map((b) => ({
           id: b.id,
           ordem: b.ordem,
+          // A data do bloco decide quando o dia vira — sem ela um bloco de domingo
+          // herdaria o relogio de sabado e comecaria "45 min depois" do ultimo.
+          data: b.data,
           horario_inicial: b.horario_inicial,
           inicio_manual: b.inicio_manual,
           apresentacoes: b.apresentacoes.map((a) => ({
@@ -633,22 +817,35 @@ export function GradeTab({ evento }: { evento: EventoComResumo }) {
           {formatarDuracao(evento.intervalo_entre_blocos_segundos ?? 2700)} entre blocos e{' '}
           {formatarDuracao(INTERVALO_ENTRE_APRESENTACOES_PADRAO_SEGUNDOS)} entre apresentações
         </p>
-        <Button
-          size="sm"
-          className="gap-1.5"
-          onClick={async () => {
-            const { error } = await criarBloco(
-              evento.id,
-              `Bloco ${blocos.length + 1}`,
-              blocos.length + 1,
-            );
-            if (error) toast.error(`Não consegui criar o bloco: ${error.message}`);
-            else recarregar();
-          }}
-        >
-          <Plus className="h-4 w-4" />
-          Novo bloco
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            disabled={sincronizando}
+            onClick={sincronizar}
+            title="Puxa música, playback e rider que os professores lançaram no LA Teacher"
+          >
+            <RefreshCw className={cn('h-4 w-4', sincronizando && 'animate-spin')} />
+            {sincronizando ? 'Sincronizando…' : 'Sincronizar LA Teacher'}
+          </Button>
+          <Button
+            size="sm"
+            className="gap-1.5"
+            onClick={async () => {
+              const { error } = await criarBloco(
+                evento.id,
+                `Bloco ${blocos.length + 1}`,
+                blocos.length + 1,
+              );
+              if (error) toast.error(`Não consegui criar o bloco: ${error.message}`);
+              else recarregar();
+            }}
+          >
+            <Plus className="h-4 w-4" />
+            Novo bloco
+          </Button>
+        </div>
       </div>
 
       {loading && blocos.length === 0 ? (
@@ -707,6 +904,8 @@ export function GradeTab({ evento }: { evento: EventoComResumo }) {
                     eventoId={evento.id}
                     unidadeId={evento.unidade_id}
                     sugestoes={sugestoesDeItem}
+                    dias={dias}
+                    dataEvento={evento.data_evento}
                     onMudou={() => {
                       recarregar();
                       recarregarAlunos();

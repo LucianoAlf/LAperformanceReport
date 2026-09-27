@@ -104,6 +104,11 @@ export interface ApresentacaoParaImprimir {
   curso_nome: string | null;
   professor_nome: string | null;
   musica: string | null;
+  musica_artista?: string | null;
+  /** Link externo da musica (YouTube/Spotify) — sai na folha de palco e na planilha. */
+  musica_link?: string | null;
+  /** Objeto no bucket `recital-playback` — sai na folha de palco e na planilha. */
+  playback_path?: string | null;
   tem_playback: boolean;
   observacao_mapa: string | null;
   itens: ItemDePalco[];
@@ -113,6 +118,8 @@ export interface BlocoParaImprimir {
   id: number;
   nome: string;
   ordem: number;
+  /** Dia do bloco quando o recital ocupa mais de uma data; null = data do evento. */
+  data?: string | null;
   horario_inicial: string | null;
   inicio_manual: boolean;
   apresentacoes: ApresentacaoParaImprimir[];
@@ -122,6 +129,8 @@ export interface DadosDaImpressao {
   evento: EventoParaCalculo & {
     titulo: string;
     data_evento: string;
+    /** Ultimo dia do recital quando ele ocupa mais de uma data. */
+    data_fim?: string | null;
     local: string | null;
     unidade_nome: string | null;
   };
@@ -148,6 +157,33 @@ function dataPorExtenso(iso: string): string {
   // negativo o dia volta um. O recital de 21/09 sairia impresso como 20/09 — e ninguem
   // confere a data do papel que ja foi para a grafica.
   return `${Number(m[3])} de ${meses[Number(m[2]) - 1] ?? '?'} de ${m[1]}`;
+}
+
+/** 'AAAA-MM-DD' -> '14/11', a forma curta que aparece ao lado do nome do bloco. */
+function dataCurta(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/u.exec(iso);
+  return m ? `${Number(m[3])}/${Number(m[2])}` : iso;
+}
+
+/**
+ * '2026-11-13' + '2026-11-15' -> '13 a 15 de novembro de 2026'. Sem data_fim, e a data
+ * sozinha como sempre foi. Meses distintos escrevem os dois por extenso.
+ */
+function periodoPorExtenso(inicio: string, fim: string | null | undefined): string {
+  if (!fim || fim === inicio) return dataPorExtenso(inicio);
+  const a = /^(\d{4})-(\d{2})-(\d{2})/u.exec(inicio);
+  const b = /^(\d{4})-(\d{2})-(\d{2})/u.exec(fim);
+  if (!a || !b) return `${dataPorExtenso(inicio)} a ${dataPorExtenso(fim)}`;
+  const meses = [
+    'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+    'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro',
+  ];
+  const mesA = meses[Number(a[2]) - 1] ?? '?';
+  const mesB = meses[Number(b[2]) - 1] ?? '?';
+  if (a[1] === b[1] && a[2] === b[2]) {
+    return `${Number(a[3])} a ${Number(b[3])} de ${mesA} de ${a[1]}`;
+  }
+  return `${Number(a[3])} de ${mesA} a ${Number(b[3])} de ${mesB} de ${b[1]}`;
 }
 
 const ESTILO = `
@@ -248,7 +284,7 @@ function moldura(titulo: string, dados: DadosDaImpressao, corpo: string, rodapeE
   const { evento } = dados;
   const linhaMeta = [
     evento.unidade_nome ? `<strong>${escapeHtml(evento.unidade_nome)}</strong>` : null,
-    dataPorExtenso(evento.data_evento),
+    periodoPorExtenso(evento.data_evento, evento.data_fim),
     evento.horario_inicio ? `às ${escapeHtml(evento.horario_inicio.slice(0, 5))}` : null,
     evento.local ? escapeHtml(evento.local) : null,
   ]
@@ -327,6 +363,7 @@ function soEsteBloco(dados: DadosDaImpressao, blocoId: number): DadosDaImpressao
  * `apenasBlocoId` imprime um bloco so, com o horario REAL dele dentro do recital.
  */
 export function gerarProgramaHtml(dados: DadosDaImpressao, apenasBlocoId?: number): string {
+  const { evento } = dados;
   // O calculo usa SEMPRE a grade inteira; o recorte vem depois.
   const horarios = calcularHorariosDaGrade(dados.evento, dados.blocos);
   const visiveis =
@@ -366,9 +403,13 @@ export function gerarProgramaHtml(dados: DadosDaImpressao, apenasBlocoId?: numbe
         })
         .join('');
 
+      // A data so vai no titulo quando ela DIFERE da do evento: num recital de um dia
+      // repeti-la em todo bloco e ruido, e num de varios dias e o que distingue as sessoes.
+      const dataDoBloco =
+        bloco.data && bloco.data !== evento.data_evento ? `${dataCurta(bloco.data)} — ` : '';
       return `${intervalo}
         <div class="bloco">
-          <h2>${escapeHtml(bloco.nome)}${h ? `<span class="hora">${h.inicio} – ${h.fim}</span>` : ''}</h2>
+          <h2>${dataDoBloco}${escapeHtml(bloco.nome)}${h ? `<span class="hora">${h.inicio} – ${h.fim}</span>` : ''}</h2>
           <table>${linhas}</table>
         </div>`;
     })
@@ -396,6 +437,7 @@ export function gerarProgramaHtml(dados: DadosDaImpressao, apenasBlocoId?: numbe
  * bloco existe e nao pede nada, senao vai procurar a folha que falta.
  */
 export function gerarFolhaDePalcoHtml(dados: DadosDaImpressao, apenasBlocoId?: number): string {
+  const { evento } = dados;
   // Horario calculado sobre a grade INTEIRA; o recorte e so de exibicao (ver `soEsteBloco`).
   const horarios = calcularHorariosDaGrade(dados.evento, dados.blocos);
   const visiveis =
@@ -426,14 +468,21 @@ export function gerarFolhaDePalcoHtml(dados: DadosDaImpressao, apenasBlocoId?: n
       const playback = bloco.apresentacoes.filter((a) => a.tem_playback);
       const mapas = bloco.apresentacoes.filter((a) => (a.observacao_mapa ?? '').trim() !== '');
 
+      const dataDoBloco =
+        bloco.data && bloco.data !== evento.data_evento ? `${dataCurta(bloco.data)} — ` : '';
       return `<div class="bloco">
-        <h2>${escapeHtml(bloco.nome)}${h ? `<span class="hora">${h.inicio} – ${h.fim}</span>` : ''}</h2>
+        <h2>${dataDoBloco}${escapeHtml(bloco.nome)}${h ? `<span class="hora">${h.inicio} – ${h.fim}</span>` : ''}</h2>
         ${chips(itens)}
         ${
           playback.length > 0
             ? `<p class="prof"><strong>Playback:</strong> ${playback
-                .map((a) => escapeHtml(a.aluno_nome))
-                .join(', ')}</p>`
+                .map((a) => {
+                  // O operador de som precisa da FONTE, nao de uma bandeira: com link ele
+                  // abre, com arquivo ele procura na pasta — os dois saem no papel.
+                  const fonte = a.musica_link ?? a.playback_path ?? null;
+                  return escapeHtml(a.aluno_nome) + (fonte ? ` — ${escapeHtml(fonte)}` : '');
+                })
+                .join('<br/>')}</p>`
             : ''
         }
         ${mapas
@@ -505,8 +554,9 @@ export function gerarPlanilhaCsv(dados: DadosDaImpressao, apenasBlocoId?: number
     apenasBlocoId === undefined ? dados.blocos : dados.blocos.filter((b) => b.id === apenasBlocoId);
 
   const cabecalho = [
-    'Bloco', 'Ordem', 'Horário', 'Aluno', 'Curso', 'Professor', 'Música',
-    'Duração (min)', 'Playback', 'Itens de palco', 'Observação de palco',
+    'Bloco', 'Data', 'Ordem', 'Horário', 'Aluno', 'Curso', 'Professor', 'Música', 'Artista',
+    'Duração (min)', 'Playback', 'Link da música', 'Arquivo de playback',
+    'Itens de palco', 'Observação de palco',
   ];
 
   const linhas = visiveis.flatMap((bloco) => {
@@ -519,16 +569,22 @@ export function gerarPlanilhaCsv(dados: DadosDaImpressao, apenasBlocoId?: number
           .join(', ');
         return [
           bloco.nome,
+          // A data do bloco, sempre preenchida: a planilha que vai para a producao nao pode
+          // depender de saber que "vazio = dia do evento".
+          bloco.data ?? dados.evento.data_evento,
           idx + 1,
           h?.apresentacoes.find((x) => x.id === ap.id)?.inicio ?? '',
           ap.aluno_nome,
           ap.curso_nome ?? '',
           ap.professor_nome ?? '',
           ap.musica ?? '',
+          ap.musica_artista ?? '',
           // Vazio, nao zero: zero seria lido como "dura nada" numa soma da planilha, quando
           // o que existe e "ainda usa a duracao padrao do evento".
           ap.duracao_segundos ? Math.round(ap.duracao_segundos / 60) : '',
           ap.tem_playback ? 'sim' : '',
+          ap.musica_link ?? '',
+          ap.playback_path ?? '',
           itens,
           ap.observacao_mapa ?? '',
         ].map(celulaCsv).join(';');
@@ -542,21 +598,22 @@ export function gerarPlanilhaCsv(dados: DadosDaImpressao, apenasBlocoId?: number
 /* ─────────────────────────── certificado ─────────────────────────── */
 
 /**
- * Uma pessoa que recebe certificado.
+ * Uma pessoa que recebe certificado — e as apresentacoes dela.
  *
- * ⚠️ O grao e a PESSOA, nao a apresentacao — o mesmo do check-in, e pelo mesmo motivo: quem
- * faz Violao e Canto e uma pessoa so, e hoje `certificado_status` mora em
- * `evento_participacao`, cuja UNIQUE e `(evento_id, pessoa_chave)`.
- *
- * 🔴 **Isto e uma DECISAO PENDENTE, nao uma conclusao.** Se a escola decidir que quem faz dois
- * cursos recebe dois certificados, o grao muda para `(pessoa, curso)` e a coluna muda de
- * tabela. Ate la, as apresentacoes entram como uma LINHA de repertorio dentro de um unico
- * papel — formato que atende as duas leituras sem escolher nenhuma.
+ * ⚠️ O grao e a APRESENTACAO (pessoa x curso): decisao fechada pelo Alf em 27/09 — "se ele
+ * faz teclado e violao, se apresenta duas vezes" — e o `certificado_status` mora em
+ * `evento_apresentacao`. Quem confirmou presenca mas nao subiu ao palco (sem apresentacao)
+ * recebe um papel so, sem linha de repertorio.
  */
 export interface CertificadoParaGerar {
   nome: string;
-  /** Vazio = certificado sem linha de repertorio (quem confirmou e nao subiu ao palco). */
-  apresentacoes: { cursoNome: string | null; musica: string | null }[];
+  /** Vazio = certificado generico (quem confirmou e nao subiu ao palco). */
+  apresentacoes: {
+    /** Id da apresentacao — quem emite grava `certificado_status='emitido'` por CURSO. */
+    apresentacaoId?: number;
+    cursoNome: string | null;
+    musica: string | null;
+  }[];
 }
 
 const ESTILO_CERTIFICADO = `
@@ -647,27 +704,33 @@ export function gerarCertificadosHtml(
   const validas = pessoas.filter((p) => p.nome.trim() !== '');
 
   const ondeQuando = [
-    dataPorExtenso(evento.data_evento),
+    periodoPorExtenso(evento.data_evento, evento.data_fim),
     evento.local ? escapeHtml(evento.local) : null,
   ]
     .filter(Boolean)
     .join(', ');
 
-  const folhas = validas
-    .map((pessoa) => {
-      const repertorio = pessoa.apresentacoes
-        .map((a) => {
-          const curso = a.cursoNome ? `<span class="curso">${escapeHtml(a.cursoNome)}</span>` : '';
-          const musica = a.musica?.trim()
-            ? `<span class="musica">${escapeHtml(a.musica.trim())}</span>`
-            : '';
-          // Sem curso nem musica nao ha item: uma linha vazia no papel parece erro de
-          // impressao, e a ausencia de repertorio ja e dita pela ausencia do bloco inteiro.
-          if (!curso && !musica) return null;
-          return `<span class="item">${[curso, musica].filter(Boolean).join(' &middot; ')}</span>`;
-        })
-        .filter(Boolean)
-        .join('');
+  // Um certificado por CURSO: a pessoa com duas apresentacoes recebe dois papeis, cada um
+  // nomeando o curso daquela vez que ela subiu. Sem apresentacao, um papel so — quem veio
+  // prestigiar tambem participou.
+  const paginas = validas.flatMap((pessoa) =>
+    pessoa.apresentacoes.length > 0
+      ? pessoa.apresentacoes.map((a) => ({ nome: pessoa.nome, apresentacao: a }))
+      : [{ nome: pessoa.nome, apresentacao: null }],
+  );
+
+  const folhas = paginas
+    .map(({ nome, apresentacao }) => {
+      const curso = apresentacao?.cursoNome
+        ? `<span class="curso">${escapeHtml(apresentacao.cursoNome)}</span>`
+        : '';
+      const musica = apresentacao?.musica?.trim()
+        ? `<span class="musica">${escapeHtml(apresentacao.musica.trim())}</span>`
+        : '';
+      const repertorio =
+        curso || musica
+          ? `<div class="repertorio"><span class="item">${[curso, musica].filter(Boolean).join(' &middot; ')}</span></div>`
+          : '';
 
       return `  <div class="cert">
     <div class="moldura">
@@ -677,11 +740,11 @@ export function gerarCertificadosHtml(
 
       <div class="corpo">
         Certificamos que
-        <strong class="nome">${escapeHtml(pessoa.nome)}</strong>
+        <strong class="nome">${escapeHtml(nome)}</strong>
         participou do <strong>${escapeHtml(evento.titulo)}</strong>${
           ondeQuando ? `, realizado em ${ondeQuando}` : ''
         }.
-        ${repertorio ? `<div class="repertorio">${repertorio}</div>` : ''}
+        ${repertorio}
       </div>
 
       <div class="assinatura">
@@ -695,7 +758,7 @@ export function gerarCertificadosHtml(
     .join('\n');
 
   const corpo =
-    validas.length > 0
+    paginas.length > 0
       ? folhas
       : `  <div class="cert"><div class="moldura">
       <div class="corpo">Nenhuma pessoa selecionada para receber certificado.</div>
@@ -713,8 +776,8 @@ export function gerarCertificadosHtml(
   <div class="acoes">
     <div class="dentro">
       <div class="qual">
-        ${validas.length} ${validas.length === 1 ? 'certificado' : 'certificados'}
-        <span>${escapeHtml(evento.titulo)}</span>
+        ${paginas.length} ${paginas.length === 1 ? 'certificado' : 'certificados'}
+        <span>${escapeHtml(evento.titulo)} — um por curso</span>
       </div>
       <button type="button" class="pdf" onclick="window.print()">Salvar em PDF</button>
       <button type="button" class="imprimir" onclick="window.print()">Imprimir</button>
