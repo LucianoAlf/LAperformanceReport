@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-25 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-27 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — financeiro
@@ -94,6 +94,9 @@
 | `link_pagamento` | text | sim |  |  |
 | `aluno_id` | integer | sim |  | alunos.id |
 | `fatura_id` | uuid | sim |  | emusys_faturas.id |
+| `cheque_numero` | text | sim |  |  |
+| `cheque_banco` | text | sim |  |  |
+| `cheque_bom_para` | date | sim |  |  |
 
 **Únicos:**
 - `caixa_movimentacoes_pkey`

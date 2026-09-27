@@ -106,6 +106,7 @@ serve(async (request) => {
       'tipo', 'forma_pagamento', 'categoria', 'descricao', 'valor',
       'responsavel', 'criado_por', 'aluno_id', 'fatura_id',
       'cartao_modalidade', 'cartao_parcelas',
+      'cheque_numero', 'cheque_banco', 'cheque_bom_para',
       'created_at', 'updated_at',
     ].join(',');
 
@@ -251,6 +252,11 @@ serve(async (request) => {
           }),
           cartao_modalidade: i.cartao_modalidade,
           cartao_parcelas: i.cartao_parcelas,
+          // Cheque estruturado (pedido SF 26/09): o SF prefere estes campos a
+          // parsear "cheque <banco> nº <numero>" da descricao; null fora de cheque.
+          cheque_numero: i.cheque_numero ?? null,
+          cheque_banco: i.cheque_banco ?? null,
+          cheque_bom_para: i.cheque_bom_para ?? null,
           created_at: i.created_at,
           updated_at: i.updated_at,
         };

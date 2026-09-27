@@ -54,6 +54,15 @@ export interface CursoSource {
   nome: string;
 }
 
+export interface MatriculaExportada {
+  unidade_id: string;
+  emusys_matricula_id: number | string;
+  matricula_inicio: string | null;
+  matricula_fim: string | null;
+  matricula_parcelas_total: number | null;
+  matricula_situacao: string | null;
+}
+
 const money = (value: unknown) => {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : 0;
@@ -126,13 +135,18 @@ export async function buildExportRows({
   faturas,
   alunos,
   cursos,
+  matriculas,
 }: {
   faturas: FaturaSource[];
   alunos: AlunoSource[];
   cursos: CursoSource[];
+  matriculas?: MatriculaExportada[];
 }) {
   const courseById = new Map(cursos.map((course) => [course.id, course.nome]));
   const candidatesByKey = new Map<string, AlunoSource[]>();
+  const matriculaByKey = new Map(
+    (matriculas ?? []).map((m) => [`${m.unidade_id}:${String(m.emusys_matricula_id ?? '').trim()}`, m]),
+  );
 
   for (const aluno of alunos) {
     const matricula = String(aluno.emusys_matricula_id ?? '').trim();
@@ -158,6 +172,9 @@ export async function buildExportRows({
     const matchStatus: CadastroMatchStatus = candidates.length === 1
       ? 'unico'
       : candidates.length === 0 ? 'nao_encontrado' : 'duplicado';
+    // Horizonte da matricula (pedido SF 26/09): vem do contrato_atual do
+    // espelho; fora do row_hash porque e' atributo da matricula, nao da fatura.
+    const matriculaInfo = matricula ? matriculaByKey.get(`${fatura.unidade_id}:${matricula}`) : undefined;
     const valorOriginal = money(fatura.valor_original);
     const juros = money(fatura.juros_e_multa);
     const descontoAplicado = money(fatura.desconto_aplicado);
@@ -183,6 +200,10 @@ export async function buildExportRows({
       desconto_condicional: money(fatura.desconto_condicional),
       valor_liquido: Number((valorOriginal + juros - descontoAplicado).toFixed(2)),
       cadastro_match_status: matchStatus,
+      matricula_inicio: matriculaInfo?.matricula_inicio ?? null,
+      matricula_fim: matriculaInfo?.matricula_fim ?? null,
+      matricula_parcelas_total: matriculaInfo?.matricula_parcelas_total ?? null,
+      matricula_situacao: matriculaInfo?.matricula_situacao ?? null,
       aluno_nome: matchStatus === 'unico' ? candidates[0].nome : null,
       curso_nome: matchStatus === 'unico' && candidates[0].curso_id != null
         ? (courseById.get(candidates[0].curso_id) ?? null)

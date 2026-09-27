@@ -281,6 +281,51 @@ test('exportacao canonica rejeita source_missing em vez de transforma-lo em cobr
   );
 });
 
+test('horizonte da matricula sai por fatura e fica fora do row_source_hash', async () => {
+  const matriculas = [
+    {
+      unidade_id: UNIDADE_CG,
+      emusys_matricula_id: '9007199254740995',
+      matricula_inicio: '2026-07-20',
+      matricula_fim: '2027-06-20',
+      matricula_parcelas_total: 12,
+      matricula_situacao: 'ativa',
+    },
+  ];
+  const com = await buildExportRows({ faturas, alunos, cursos, matriculas });
+  const sem = await buildExportRows({ faturas, alunos, cursos });
+
+  assert.equal(com[0].matricula_inicio, '2026-07-20');
+  assert.equal(com[0].matricula_fim, '2027-06-20');
+  assert.equal(com[0].matricula_parcelas_total, 12);
+  assert.equal(com[0].matricula_situacao, 'ativa');
+
+  // Matricula fora do mapa vem com os 4 campos nulos, nao ausentes.
+  assert.equal(com[1].matricula_inicio, null);
+  assert.equal(com[1].matricula_fim, null);
+  assert.equal(com[1].matricula_parcelas_total, null);
+  assert.equal(com[1].matricula_situacao, null);
+
+  // O campo novo e' atributo da matricula: nao pode mover o hash da fatura.
+  assert.deepEqual(com.map((row) => row.row_source_hash), sem.map((row) => row.row_source_hash));
+  // E tambem nao move o manifest_hash (identidade das linhas).
+  const manifestCom = await buildManifest('2026-07-01', com);
+  const manifestSem = await buildManifest('2026-07-01', sem);
+  assert.equal(manifestCom.manifest_hash, manifestSem.manifest_hash);
+});
+
+test('exportador deriva o fim pelo contrato_atual do espelho (primeira fatura + nr_faturas)', () => {
+  assert.match(exportFunctionSource, /emusys_matriculas_estado_atual/);
+  assert.match(exportFunctionSource, /data_primeira_fatura/);
+  assert.match(exportFunctionSource, /nr_faturas/);
+  assert.match(exportFunctionSource, /matricula_inicio/);
+  assert.match(exportFunctionSource, /matricula_fim/);
+  assert.match(exportFunctionSource, /matricula_parcelas_total/);
+  assert.match(exportFunctionSource, /matricula_situacao/);
+  // addMesesISO trava no ultimo dia do mes (31/jan + 1 mes = 28/fev, nao 03/mar).
+  assert.match(exportFunctionSource, /Math\.min\(dia, ultimoDia\)/);
+});
+
 test('manifesto separa linhas vivas das ausentes na origem', async () => {
   const rows = await buildExportRows({ faturas, alunos, cursos });
   const manifest = await buildManifest('2026-07-01', rows);
