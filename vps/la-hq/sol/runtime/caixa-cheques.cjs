@@ -311,6 +311,11 @@ function itemDoCaixa(it) {
       data_pagamento: f.data_pagamento, valor_pago: f.valor_pago },
     sem_vinculo_fatura: false, declarado_pelo_humano: false,
     complemento_descricao: `cheque ${BANCOS[it.cheque.banco] || 'banco ' + it.cheque.banco} nº ${it.cheque.numero}`,
+    // Estruturado para o Super Folha (27/09): as colunas cheque_* da
+    // movimentação substituem o parse da descrição; ela fica só de reserva.
+    cheque_numero: it.cheque.numero || null,
+    cheque_banco: it.cheque.banco || null,
+    cheque_bom_para: it.cheque.bom_para || null,
   };
 }
 

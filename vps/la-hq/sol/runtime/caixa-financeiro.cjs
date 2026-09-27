@@ -4471,6 +4471,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       previewId, unidade_id: grp.unidade_id, nome: grp.nome, valor: it.valor, forma: 'cheque', categoria: it.categoria,
       aluno: it.aluno_nome, competencia: it.competencia,
       descricao: [it.descricao, it.complemento_descricao].filter(Boolean).join(' · ') || null,
+      cheque_numero: it.cheque_numero || null, cheque_banco: it.cheque_banco || null, cheque_bom_para: it.cheque_bom_para || null,
       parcela: null, responsavelFinanceiro: it.responsavel_financeiro || null, cartaoModalidade: null, cartaoParcelas: null,
       formaIncerta: false, quitacao: null, multiplas: false, composto: null, itemLojinha: null, bloqueiaLancamento: false,
       faturaIndisponivel: false, bloqueiaFonteIndisponivel: false,
@@ -4694,7 +4695,11 @@ _Não lanço nada pela metade._`);
       fatura: item.fatura || null,
       // Só o lote de CHEQUES traz: "cheque Santander nº 000212" — o validador
       // devolve a descrição da fatura e a RPC do lote anexa este complemento.
+      // cheque_numero/banco/bom_para viram colunas da movimentação (pedido SF).
       complemento_descricao: item.complemento_descricao || null,
+      cheque_numero: item.cheque_numero || null,
+      cheque_banco: item.cheque_banco || null,
+      cheque_bom_para: item.cheque_bom_para || null,
       sem_vinculo_fatura: !!item.sem_vinculo_fatura, declarado_pelo_humano: !!item.declarado_pelo_humano,
       desconto_negociado_explicito: !!item.sem_vinculo_fatura
         && _autorizacaoDesconto.ok && _entradasAutorizadas.has(_chaveItem(item)),
@@ -7859,6 +7864,8 @@ _Não lanço nada pela metade._`);
         aluno: alvo.aluno || null, descricao: alvo.descricao || null, idempotency_key: alvo.idemKey, ator_numero: senderNum, ator_papel: 'grupo',
         chat_id: chatId, grupo_jid: chatId, origem_message_id: alvo.origem, preview_message_id: alvo.previewId,
         cartao_modalidade: cartaoModalidade, cartao_parcelas: cartaoParcelas,
+        cheque_numero: alvo.cheque_numero || null, cheque_banco: alvo.cheque_banco || null,
+        cheque_bom_para: alvo.cheque_bom_para || null,
         enviado_por: alvo.enviadoPor || null, autorizado_por: autorizadoPor,
         responsavel_financeiro: alvo.responsavelFinanceiro || null,
       };

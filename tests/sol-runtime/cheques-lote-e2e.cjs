@@ -92,6 +92,9 @@ const itemCx = chq.itemDoCaixa({ cheque: bom, escolha: { fatura: cand(1, 0.9) },
 assert.strictEqual(itemCx.competencia, '09/2026');
 assert.strictEqual(itemCx.canonical_fatura_id, U(1));
 assert.strictEqual(itemCx.complemento_descricao, 'cheque Bradesco nº 000123');
+assert.strictEqual(itemCx.cheque_numero, '000123');
+assert.strictEqual(itemCx.cheque_banco, '237');
+assert.strictEqual(itemCx.cheque_bom_para, null, 'sem "bom para" escrito → null');
 console.log('A. regras puras — OK');
 
 // ---------------------------------------------------------------- B–E. handler real
@@ -160,7 +163,7 @@ const raw = (numero, c, emitente, extra = {}) => ({ banco: c.slice(0, 3), agenci
   process.env.SOL_CHEQUES_MODO = 'grupo';
   {
     const { h, enviadas, lotes, singulares } = montar([
-      raw('000123', CMC7, 'EMITENTE UM'),
+      raw('000123', CMC7, 'EMITENTE UM', { bom_para: '2026-10-20' }),
       raw('000456', CMC7_B, 'EMITENTE DOIS'),
       raw('000123', cmc7('001', '0001', '018', '000777', '5', '0000000001'), 'EMITENTE PIX', { numero: '000777' }),
       raw('000888', cmc7('001', '0001', '018', '000888', '5', '0000000002'), 'EMITENTE DUPLO'),
@@ -179,7 +182,7 @@ const raw = (numero, c, emitente, extra = {}) => ({ banco: c.slice(0, 3), agenci
     const iCaixa = lista.indexOf('✅ *VAI PARA O CAIXA*'); const iMalote = lista.indexOf('⚠️ *RETIRAR DO MALOTE*'); const iVoce = lista.indexOf('❓ *PRECISA DE VOCÊ*');
     assert.ok(iCaixa > 0 && iMalote > iCaixa && iVoce > iMalote, 'seções na ordem caixa → malote → você');
     const blocoCaixa = lista.slice(iCaixa, iMalote);
-    assert.ok(/\*Cheque 1\* — R\$ 367,00\n🏦 Bradesco · nº 000123\n✍️ Emitente: Emitente Um\n🎓 Aluno: Aluno Teste 1\n👤 Resp\. financeiro: Resp 1\n📄 Parcela 09\/2026 do curso de Violão\n💳 Paga no Emusys/.test(blocoCaixa), blocoCaixa);
+    assert.ok(/\*Cheque 1\* — R\$ 367,00\n🏦 Bradesco · nº 000123 · bom para 20\/10\n✍️ Emitente: Emitente Um\n🎓 Aluno: Aluno Teste 1\n👤 Resp\. financeiro: Resp 1\n📄 Parcela 09\/2026 do curso de Violão\n💳 Paga no Emusys/.test(blocoCaixa), blocoCaixa);
     assert.ok(/\*Cheque 2\*/.test(blocoCaixa) && !/\*Cheque 3\*/.test(blocoCaixa));
     assert.ok(/\*Cheque 3\*/.test(lista.slice(iMalote, iVoce)) && /já foi paga por \*Pix\*/.test(lista), 'paga por Pix → retirar do malote');
     assert.ok(/já está lançada no caixa/.test(lista), 'fatura já no caixa não entra de novo');
@@ -199,6 +202,11 @@ const raw = (numero, c, emitente, extra = {}) => ({ banco: c.slice(0, 3), agenci
     assert.strictEqual(lotes.length, 1); assert.strictEqual(singulares.length, 0);
     assert.strictEqual(lotes[0].forma, 'cheque');
     assert.deepStrictEqual(lotes[0].itens.map((i) => i.complemento_descricao), ['cheque Bradesco nº 000123', 'cheque Itaú nº 000456']);
+    // Campos estruturados (pedido SF): chegam no item do lote, na ordem do PDF.
+    assert.deepStrictEqual(lotes[0].itens.map((i) => i.cheque_numero), ['000123', '000456']);
+    assert.strictEqual(lotes[0].itens[0].cheque_banco, '237');
+    assert.strictEqual(lotes[0].itens[0].cheque_bom_para, '2026-10-20');
+    assert.strictEqual(lotes[0].itens[1].cheque_bom_para, null);
     console.log('B. 2 cheques → lote no caixa — OK');
   }
 
@@ -220,6 +228,9 @@ const raw = (numero, c, emitente, extra = {}) => ({ banco: c.slice(0, 3), agenci
     assert.strictEqual(singulares[0].forma, 'cheque');
     assert.strictEqual(singulares[0].fatura_id, U(2), 'o cheque vai vinculado à fatura');
     assert.ok(/cheque Itaú nº 000456/.test(singulares[0].descricao), singulares[0].descricao);
+    assert.strictEqual(singulares[0].cheque_numero, '000456');
+    assert.strictEqual(singulares[0].cheque_banco, '341');
+    assert.strictEqual(singulares[0].cheque_bom_para, null);
 
     const ri = await h.handle(ev({ messageId: 'ID1', body: '2 é da Fulana Teste', quotedMessageId: listaId }));
     assert.strictEqual(ri.acao, 'preview_cheque_enviado', JSON.stringify(ri));
