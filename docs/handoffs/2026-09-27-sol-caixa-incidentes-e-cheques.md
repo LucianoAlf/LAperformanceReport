@@ -15,7 +15,7 @@
 | `caixa-financeiro.cjs` | `/home/sol/.hermes/profiles/sol/caixa-ingestao/` | PR #518 (este) |
 | `caixa-cheques.cjs` | idem | PR #518 (este) |
 | `cheques-lote-cli.cjs` | idem | PR #518 (este) |
-| `cheques.json` (config, **não versionado**) | idem | `modo: "sombra"` |
+| `cheques.json` (config, **não versionado**) | idem | `modo: "grupo"` desde 27/09 00:11 UTC (autorizado pelo Alf) |
 
 - Hash de cada arquivo: `vps/la-hq/sol/runtime/deploy-manifest.json` e `RUNTIME_BASELINE.sha256`. **Conferir o hash vivo antes de qualquer deploy** (`sha256sum`), senão um repo atrás da VPS apaga correção em silêncio.
 - **Como publicar sem derrubar o agente:** backup `*.bak-<ts>-antes-prNNN` → `install -o sol -g sol -m 0644` → matar só o processo `bridge.js --port 3000`. O `hermes-gateway-sol` sobe a ponte de novo em 5–8 s. Conferir `curl 127.0.0.1:3000/health` → `"status":"connected"` e o `scriptHash`. ⚠️ O `grep connected` também casa com `disconnected`: procure `"status":"connected"`.
@@ -152,8 +152,8 @@ Hierárquico, uma informação por linha, o mesmo vocabulário do card de compro
 
 ### 3.7 Modos (`caixa-ingestao/cheques.json`, sem reinício)
 - `off`: não intercepta.
-- `sombra` (**atual**): lê, prova e decide, e manda a mensagem **só** para o WhatsApp do Alf (`sombra_jid`). Nada no grupo, nenhum card, nada no caixa.
-- `grupo`: mensagem-card no grupo, "pode" lança.
+- `sombra`: lê, prova e decide, e manda a mensagem **só** para o WhatsApp do Alf (`sombra_jid`). Nada no grupo, nenhum card, nada no caixa.
+- `grupo` (**atual**, desde 27/09): mensagem-card no grupo, "pode" lança.
 - Variáveis de ambiente `SOL_CHEQUES_MODO` / `SOL_CHEQUES_SOMBRA_JID` / `SOL_CHEQUES_VISAO_MODELO` têm precedência sobre o arquivo.
 
 ### 3.8 Validação feita
@@ -179,12 +179,13 @@ Hierárquico, uma informação por linha, o mesmo vocabulário do card de compro
 ## 5. Pendências (ninguém fez ainda)
 
 ### Dados de caixa (decisão humana; nada foi alterado)
-- **Barra, caixa de 26/09 (fechado):** passaporte de R$ 550 lançado 3× para uma fatura só. Proposta: reabrir, estornar a movimentação das 17:36 (sem aluno, `dc6ba05b…`) e a das 08:56 (sem fatura, `555df452…`), manter a das 17:33 (com fatura, `3f4120b7…`), refechar. Cartão certo do dia: R$ 1.499.
+- ✅ **Barra, caixa de 26/09 — RESOLVIDO em 27/09 00:0x UTC** (autorizado pelo Alf). Reaberto pela RPC `reabrir_caixa_diario` (retrato em `caixa_reaberturas_log`), excluídos `dc6ba05b…` (17:36, sem aluno) e `555df452…` (08:56, sem fatura) — as duas exclusões ficaram no `audit_log` —, mantido `3f4120b7…` (com fatura), refechado. Cartão do dia: **R$ 1.499,00**; 4 lançamentos. Confirmação postada no grupo da Barra. ⚠️ **Foi exclusão, não estorno**: o estorno (`sol_caixa_estornar_movimento_v1`) exige aprovação V3 nascida de um "pode" real no WhatsApp, e montar essa aprovação por fora seria fabricar a trilha; pela conversa, a Sol não consegue escolher entre três lançamentos iguais de R$ 550 (a busca devolve "achei mais de um"). A exclusão é o mesmo caminho da tela do caixa (`useCaixaDiario.excluirMovimento`), com o autor e o motivo registrados.
 - **CG:** movimentação `0a2e91a7…` (Pix R$ 397, 26/09) com descrição errada ("… - estão corretos sol") e sem fatura — deveria ser a Parcela 09/2026 do aluno do caso #511.
 - **CG:** um comprovante de R$ 380 (parcela 10/2026, caso #512) nunca foi lançado: reenviar e "pode".
 
 ### Técnicas
-1. Cheques: ligar `modo: "grupo"` depois do primeiro teste real do "pode".
+1. Cheques: o **primeiro "pode" real** num card de cheque ainda não aconteceu. Teste combinado: repostar o PDF de CG com o caixa de 27/09 aberto; esperado 1 ✅ (Santander nº 000212, fatura Emusys 41790, R$ 367) e 1 ❓ (Itaú nº 000064). Depois do "pode", conferir a movimentação (forma `cheque`, fatura ligada, "· cheque Santander nº 000212" na descrição).
+10. Estorno pela conversa não desempata lançamentos iguais (mesmo valor, forma e categoria): a busca devolve "achei mais de um" e não há como escolher pelo horário ou pela lista. Foi o que forçou a correção da Barra pelo caminho da tela.
 2. Cheques: a resposta "N é da Fulana" usa a mesma RPC pelo caminho do nome; não foi exercitada com o grupo real.
 3. Cheques: `npm run mapa:banco` não foi rodado (precisa da senha do `postgres`); as funções novas não estão no mapa.
 4. Recusa de "abrir o caixa" para quem não é do administrativo: a ferramenta devolve só `fora_do_publico`, e o agente disse "o **grupo** não tem permissão" sem conferir que o caixa já estava aberto.
