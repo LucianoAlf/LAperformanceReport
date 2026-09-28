@@ -277,3 +277,8 @@ verify_jwt = false
 # orquestrar-historico-professor).
 [functions.recital-midia-url]
 verify_jwt = true
+
+# Worker de cron (x-sync-token do Vault) ou service_role — quem chama nao tem JWT de
+# usuario; a porta e a validacao interna, igual ao padrao dos syncs.
+[functions.recital-drive-sync]
+verify_jwt = false
