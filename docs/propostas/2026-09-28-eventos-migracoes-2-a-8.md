@@ -1370,3 +1370,26 @@ Drive na lixeira.
   parâmetro — sistema nasce pronto, vocês preenchem na UI da aba Bilheteria).
 - Divisão do caixa: o lançamento/fechamento no Super Folha é da Sol — o LA Report só expõe
   as vendas pagas pendentes e recebe `conciliado`/`divergente` de volta.
+
+## Status de aplicacao — 29/09/2026
+
+- **M2–M8 APLICADAS EM PRODUCAO** (pooler, modo sessao) e registradas em
+  `supabase_migrations.schema_migrations`. Smoke pos-migration em prod: 10/10
+  (`supabase/smoke/2026-09-29-eventos-m2-m8-prod.sql`) — apresentacao normal,
+  `abertura` sem aluno (sem titulo barrado), aluno de fora `ext:`, check-in com
+  validacao de bloco, cota de cortesias, formatura, comunicacao append-only
+  (UPDATE negado para `authenticated`), staff, professores palco/apoio e
+  audit_log capturando todas as escritas. Rollback da M4 pronto em
+  `supabase/rollbacks/20260929102000_eventos_m4_sem_aluno_unidade_ROLLBACK.sql`.
+- **M9 NAO aplicada** — entra junto com a UI da bilheteria.
+- Branch dev `dev-eventos` usado na validacao e **derrubado** apos o smoke em prod.
+
+## Tarefa futura (pos-recital) — baseline reconstruivel
+
+A cadeia de migrations do repo **nao reconstroi o banco do zero**: ~956 arquivos
+"recuperados do historico" assumem tabelas que ja existem (ex.: UPDATE direto em
+`dados_mensais`), entao um branch vazio morre no replay (o `dev-eventos` nasceu
+`MIGRATIONS_FAILED` por isso — so subiu depois do dump do schema de producao).
+Divida registrada: produzir um **baseline** (squash do schema atual como migration
+inicial ou dump versionado) que permita `supabase db reset`/branch novo subir
+do zero. Pos-recital.

@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Funções
 
-1711 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
+1719 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
 chamadas diretas ao PostgREST não são visíveis para o gerador.
 
 ## aluno
@@ -85,11 +85,11 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `evento_apresentacao_juntar_v1(p_alvo_id bigint, p_aluno_id integer, p_curso_id integer)` | ATIVA | INVOKER | front:src/hooks/useEventos.ts |
 | `evento_apresentacao_separar_v1(p_id bigint)` | ATIVA | INVOKER | front:src/hooks/useEventos.ts |
 | `evento_bloco_reordenar_v1(p_evento_id bigint, p_ids bigint[])` | ATIVA | INVOKER | front:src/hooks/useEventos.ts |
-| `evento_buscar_aluno_outra_unidade_v1(p_evento_id bigint, p_termo text)` | ORFA | DEFINER | sem consumidor conhecido |
+| `evento_buscar_aluno_outra_unidade_v1(p_evento_id bigint, p_termo text)` | ATIVA | DEFINER | front:src/hooks/useEventos.ts |
 | `evento_grade_reordenar_v1(p_evento_id bigint, p_itens jsonb)` | ATIVA | INVOKER | front:src/hooks/useEventos.ts |
 | `evento_recital_sincronizar_v1(p_evento_id bigint)` | ATIVA | DEFINER | front:src/hooks/useEventos.ts |
 | `evento_relatorios_v1(p_evento_id bigint)` | ATIVA | DEFINER | front:src/hooks/useEventos.ts, front:src/lib/eventos.ts |
-| `evento_visitantes_v1(p_evento_id bigint)` | ORFA | DEFINER | sem consumidor conhecido |
+| `evento_visitantes_v1(p_evento_id bigint)` | ATIVA | DEFINER | front:src/hooks/useEventos.ts |
 | `falhar_repescagem_evasao_job(p_id uuid, p_worker_id uuid, p_erro text, p_terminal boolean)` | ATIVA | DEFINER | edge:supabase/functions/processar-fila-repescagem-evasao/index.ts |
 | `features_churn_alunos_ativos()` | ATIVA | DEFINER | edge:supabase/functions/calcular-risco-evasao/index.ts |
 | `features_churn_alunos_ativos_v2_sombra()` | ORFA | DEFINER | sem consumidor conhecido |
@@ -125,11 +125,19 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_evento_apresentacao_deriva()` | ATIVA | INVOKER | trigger:evento_apresentacao.trg_evento_apresentacao_deriva |
 | `fn_evento_apresentacao_grupo_coerente()` | ATIVA | INVOKER | trigger:evento_apresentacao.trg_evento_apresentacao_grupo_coerente |
 | `fn_evento_apresentacao_origem_adm()` | ATIVA | INVOKER | trigger:evento_apresentacao.trg_evento_apresentacao_origem_adm |
+| `fn_evento_audit_log()` | ATIVA | DEFINER | trigger:evento_apresentacao_item.trg_audit_evento_apresentacao_item, trigger:evento_apresentacao.trg_audit_evento_apresentacao, trigger:evento_bloco.trg_audit_evento_bloco, trigger:evento_comunicacao.trg_audit_evento_comunicacao, trigger:evento_convidado_checkin.trg_audit_evento_convidado_checkin, trigger:evento_convidado_participacao.trg_audit_evento_convidado_participacao, +4 outros |
+| `fn_evento_comunicacao_deriva()` | ATIVA | INVOKER · 🔓 anon | trigger:evento_comunicacao.trg_evento_comunicacao_deriva |
+| `fn_evento_convidado_checkin_deriva()` | ATIVA | INVOKER · 🔓 anon | trigger:evento_convidado_checkin.trg_evento_convidado_checkin_deriva |
+| `fn_evento_convidado_cortesia()` | ATIVA | INVOKER · 🔓 anon | trigger:evento_convidado_participacao.trg_evento_convidado_cortesia |
+| `fn_evento_convidado_deriva()` | ATIVA | INVOKER · 🔓 anon | trigger:evento_convidado.trg_evento_convidado_deriva |
+| `fn_evento_convidado_participacao_deriva()` | ATIVA | INVOKER · 🔓 anon | trigger:evento_convidado_participacao.trg_evento_convidado_participacao_deriva |
+| `fn_evento_origem_escrita()` | SO-INTERNA | INVOKER | funcao:fn_evento_audit_log, funcao:fn_evento_comunicacao_deriva, funcao:fn_evento_participacao_confirmado_em |
 | `fn_evento_participacao_confirmado_em()` | ATIVA | INVOKER | trigger:evento_participacao.trg_evento_participacao_confirmado_em |
 | `fn_evento_participacao_deriva()` | ATIVA | INVOKER | trigger:evento_participacao.trg_evento_participacao_deriva |
 | `fn_evento_pessoa_chave(p_aluno_id integer, p_evento_id bigint)` | SO-INTERNA | DEFINER | funcao:evento_apresentacao_adicionar_v1, funcao:evento_apresentacao_juntar_v1, funcao:evento_buscar_aluno_outra_unidade_v1, funcao:evento_recital_sincronizar_v1, funcao:evento_relatorios_v1, funcao:fn_evento_apresentacao_deriva, +1 outros |
 | `fn_evento_pode_ver(p_evento_id bigint)` | ATIVA | DEFINER | edge:supabase/functions/recital-midia-url/index.ts, funcao:evento_apresentacao_adicionar_v1, funcao:evento_buscar_aluno_outra_unidade_v1, funcao:evento_recital_sincronizar_v1, funcao:evento_relatorios_v1, funcao:evento_visitantes_v1 |
-| `fn_evento_touch()` | ATIVA | INVOKER | trigger:evento_apresentacao.trg_evento_apresentacao_touch, trigger:evento_bloco.trg_evento_bloco_touch, trigger:evento_participacao.trg_evento_participacao_touch, trigger:evento.trg_evento_touch |
+| `fn_evento_staff_deriva()` | ATIVA | INVOKER · 🔓 anon | trigger:evento_staff.trg_evento_staff_deriva |
+| `fn_evento_touch()` | ATIVA | INVOKER | trigger:evento_apresentacao.trg_evento_apresentacao_touch, trigger:evento_bloco.trg_evento_bloco_touch, trigger:evento_convidado.trg_evento_convidado_touch, trigger:evento_participacao.trg_evento_participacao_touch, trigger:evento_staff.trg_evento_staff_touch, trigger:evento.trg_evento_touch |
 | `fn_exigir_equipe_para_anamnese()` | SO-INTERNA | DEFINER | funcao:buscar_anamnese_pendente, funcao:buscar_anamneses_pendentes, funcao:get_anamnese_aluno, funcao:vincular_anamnese_aluno |
 | `fn_gavetas_so_do_aluno(p_tronco jsonb, p_fatia jsonb)` | SO-INTERNA | INVOKER | funcao:fn_gavetas_da_aula |
 | `fn_jornada_marca_ciclo_sucedido()` | ATIVA | INVOKER | trigger:aluno_jornada_matricula_disciplina.trg_jornada_ciclo_sucedido |

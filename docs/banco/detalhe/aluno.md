@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — aluno
 
-151 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+156 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## aluno_acoes
 
@@ -1148,11 +1148,13 @@
 | `updated_at` | timestamp with time zone | não | now() |  |
 | `intervalo_entre_blocos_segundos` | integer | não | 2700 |  |
 | `data_fim` | date | sim |  |  |
+| `cortesias_por_aluno` | integer | sim |  |  |
 
 **Únicos:**
 - `evento_pkey`
 
 **Triggers:**
+- `trg_audit_evento → fn_evento_audit_log()`
 - `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_evento_touch → fn_evento_touch()`
 
@@ -1166,9 +1168,9 @@
 | `bloco_id` | bigint | não |  | evento_bloco.id |
 | `evento_id` | bigint | não |  | evento.id |
 | `unidade_id` | uuid | não |  | unidades.id |
-| `pessoa_chave` | text | não |  |  |
-| `aluno_id` | integer | não |  | alunos.id |
-| `curso_id` | integer | não |  | cursos.id |
+| `pessoa_chave` | text | sim |  |  |
+| `aluno_id` | integer | sim |  | alunos.id |
+| `curso_id` | integer | sim |  | cursos.id |
 | `professor_id` | integer | sim |  | professores.id |
 | `ordem` | integer | não | 0 |  |
 | `musica` | text | sim |  |  |
@@ -1190,12 +1192,18 @@
 | `drive_sincronizado_em` | timestamp with time zone | sim |  |  |
 | `drive_erro` | text | sim |  |  |
 | `grupo_id` | uuid | sim |  |  |
+| `tipo` | text | não | 'aluno'::text |  |
+| `titulo` | text | sim |  |  |
+| `unidade_origem_id` | uuid | sim |  | unidades.id |
+| `professor_palco_id` | integer | sim |  | professores.id |
+| `professor_apoio_id` | integer | sim |  | professores.id |
 
 **Únicos:**
 - `evento_apresentacao_pessoa_curso_unica`
 - `evento_apresentacao_pkey`
 
 **Triggers:**
+- `trg_audit_evento_apresentacao → fn_evento_audit_log()`
 - `trg_evento_apresentacao_deriva → fn_evento_apresentacao_deriva()`
 - `trg_evento_apresentacao_grupo_coerente → fn_evento_apresentacao_grupo_coerente()`
 - `trg_evento_apresentacao_origem_adm → fn_evento_apresentacao_origem_adm()`
@@ -1221,6 +1229,9 @@
 - `evento_apresentacao_item_pkey`
 - `uq_evento_item_codigo`
 
+**Triggers:**
+- `trg_audit_evento_apresentacao_item → fn_evento_audit_log()`
+
 ## evento_bloco
 
 > Bloco de apresentacoes. Na pratica dura de 1h a 1h30 (ata de 17/09/2026).
@@ -1242,7 +1253,88 @@
 - `evento_bloco_pkey`
 
 **Triggers:**
+- `trg_audit_evento_bloco → fn_evento_audit_log()`
 - `trg_evento_bloco_touch → fn_evento_touch()`
+
+## evento_comunicacao
+
+> Cada envio de convite/comunicado a familia e UMA linha — historico, nunca sobrescrito. Ligado a participacao (pessoa no evento), nao a apresentacao.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `participacao_id` | bigint | não |  | evento_participacao.id |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `canal` | text | não |  |  |
+| `texto` | text | sim |  |  |
+| `enviado_em` | timestamp with time zone | não | now() |  |
+| `enviado_por` | uuid | sim |  |  |
+| `origem` | text | sim |  |  |
+
+**Únicos:**
+- `evento_comunicacao_pkey`
+
+**Triggers:**
+- `trg_audit_evento_comunicacao → fn_evento_audit_log()`
+- `trg_evento_comunicacao_deriva → fn_evento_comunicacao_deriva()`
+
+## evento_convidado
+
+> Convidado NOMINAL do evento — cortesia ou ingresso vendido (tipo_entrada, M9). Pertence ao evento; o vinculo com quem o convidou fica na ponte evento_convidado_participacao — irmaos dividem a mesma linha de convidado.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `evento_id` | bigint | não |  | evento.id |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `nome` | text | não |  |  |
+| `documento` | text | sim |  |  |
+| `observacao` | text | sim |  |  |
+| `tipo_entrada` | text | não | 'cortesia'::text |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `evento_convidado_pkey`
+
+**Triggers:**
+- `trg_audit_evento_convidado → fn_evento_audit_log()`
+- `trg_evento_convidado_deriva → fn_evento_convidado_deriva()`
+- `trg_evento_convidado_touch → fn_evento_touch()`
+
+## evento_convidado_checkin
+
+> Chegada do convidado por bloco/dia — a Barra tem 2 dias, o mesmo convidado entra nos dois.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `convidado_id` | bigint | não |  | evento_convidado.id |
+| `bloco_id` | bigint | não |  | evento_bloco.id |
+| `checkin_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `evento_convidado_checkin_pkey`
+
+**Triggers:**
+- `trg_audit_evento_convidado_checkin → fn_evento_audit_log()`
+- `trg_evento_convidado_checkin_deriva → fn_evento_convidado_checkin_deriva()`
+
+## evento_convidado_participacao
+
+> Quem convidou quem. Dois irmaos apontam para o MESMO convidado — credenciamento conta a pessoa uma vez, e a lista mostra a familia inteira.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `convidado_id` | bigint | não |  | evento_convidado.id |
+| `participacao_id` | bigint | não |  | evento_participacao.id |
+
+**Únicos:**
+- `evento_convidado_participacao_pkey`
+
+**Triggers:**
+- `trg_audit_evento_convidado_participacao → fn_evento_audit_log()`
+- `trg_evento_convidado_cortesia → fn_evento_convidado_cortesia()`
+- `trg_evento_convidado_participacao_deriva → fn_evento_convidado_participacao_deriva()`
 
 ## evento_participacao
 
@@ -1262,15 +1354,45 @@
 | `updated_at` | timestamp with time zone | não | now() |  |
 | `convidados` | integer | não | 0 |  |
 | `confirmado_em` | timestamp with time zone | sim |  |  |
+| `confirmado_origem` | text | sim |  |  |
+| `unidade_origem_id` | uuid | sim |  | unidades.id |
+| `formatura` | boolean | não | false |  |
+| `formatura_tipo` | text | sim |  |  |
 
 **Únicos:**
 - `evento_participacao_pessoa_unica`
 - `evento_participacao_pkey`
 
 **Triggers:**
+- `trg_audit_evento_participacao → fn_evento_audit_log()`
 - `trg_evento_participacao_confirmado_em → fn_evento_participacao_confirmado_em()`
 - `trg_evento_participacao_deriva → fn_evento_participacao_deriva()`
 - `trg_evento_participacao_touch → fn_evento_touch()`
+
+## evento_staff
+
+> Escala de staff do evento. bloco_id null = funcao do evento inteiro (credenciamento, boas-vindas); preenchido = funcao daquele bloco (roadie de palco do bloco 2).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `evento_id` | bigint | não |  | evento.id |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `staff_unidade_id` | uuid | não |  | staff_unidade.id |
+| `funcao` | text | não |  |  |
+| `funcao_outra` | text | sim |  |  |
+| `bloco_id` | bigint | sim |  | evento_bloco.id |
+| `observacao` | text | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `evento_staff_pkey`
+
+**Triggers:**
+- `trg_audit_evento_staff → fn_evento_audit_log()`
+- `trg_evento_staff_deriva → fn_evento_staff_deriva()`
+- `trg_evento_staff_touch → fn_evento_touch()`
 
 ## farmer_checklist_contatos
 
