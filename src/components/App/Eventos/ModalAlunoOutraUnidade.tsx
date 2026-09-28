@@ -54,8 +54,10 @@ export function ModalAlunoOutraUnidade({
       return;
     }
     let cancelado = false;
+    // "Buscando" liga JA na digitacao, nao quando o debounce vence: nos 300 ms de espera a
+    // lista vazia dizia "nenhum aluno" para um nome que ia aparecer em seguida.
+    setBuscando(true);
     const timer = setTimeout(async () => {
-      setBuscando(true);
       const { alunos, error } = await buscarAlunoDeOutraUnidade(eventoId, t);
       if (cancelado) return;
       setBuscando(false);
@@ -124,7 +126,12 @@ export function ModalAlunoOutraUnidade({
             <p className="p-4 text-center text-[13px] text-slate-500">
               Digite pelo menos 3 letras do nome.
             </p>
-          ) : !buscando && resultados.length === 0 ? (
+          ) : buscando && resultados.length === 0 ? (
+            <p className="flex items-center justify-center gap-2 p-4 text-[13px] text-slate-400">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Buscando nas outras unidades…
+            </p>
+          ) : resultados.length === 0 ? (
             <p className="p-4 text-center text-[13px] text-slate-500">
               Nenhum aluno ativo de outra unidade com esse nome.
             </p>
