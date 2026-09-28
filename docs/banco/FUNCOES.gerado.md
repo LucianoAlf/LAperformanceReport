@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Funções
 
-1719 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
+1727 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
 chamadas diretas ao PostgREST não são visíveis para o gerador.
 
 ## aluno
@@ -84,6 +84,10 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `evento_apresentacao_adicionar_v1(p_bloco_id bigint, p_aluno_id integer, p_curso_id integer)` | ATIVA | DEFINER | front:src/hooks/useEventos.ts, funcao:evento_apresentacao_juntar_v1 |
 | `evento_apresentacao_juntar_v1(p_alvo_id bigint, p_aluno_id integer, p_curso_id integer)` | ATIVA | INVOKER | front:src/hooks/useEventos.ts |
 | `evento_apresentacao_separar_v1(p_id bigint)` | ATIVA | INVOKER | front:src/hooks/useEventos.ts |
+| `evento_bilheteria_conciliar_v1(p_venda_id bigint, p_status text, p_ref text, p_obs text)` | ORFA | DEFINER | sem consumidor conhecido |
+| `evento_bilheteria_estornos_v1(p_unidade_id uuid, p_de timestamp with time zone, p_ate timestamp with time zone)` | ORFA | DEFINER | sem consumidor conhecido |
+| `evento_bilheteria_pendentes_v1(p_unidade_id uuid, p_de timestamp with time zone, p_ate timestamp with time zone)` | ORFA | DEFINER | sem consumidor conhecido |
+| `evento_bilheteria_vender_v1(p_evento_id bigint, p_bloco_id bigint, p_comprador_nome text, p_quantidade integer, p_forma_pagamento text, p_canal text, p_comprador_contato text, p_participacao_id bigint, p_pacote_id bigint, p_convidados jsonb, p_marcar_pago boolean, p_pagamento_identificador text, p_observacao text)` | ORFA | DEFINER · 🔓 anon | sem consumidor conhecido |
 | `evento_bloco_reordenar_v1(p_evento_id bigint, p_ids bigint[])` | ATIVA | INVOKER | front:src/hooks/useEventos.ts |
 | `evento_buscar_aluno_outra_unidade_v1(p_evento_id bigint, p_termo text)` | ATIVA | DEFINER | front:src/hooks/useEventos.ts |
 | `evento_grade_reordenar_v1(p_evento_id bigint, p_itens jsonb)` | ATIVA | INVOKER | front:src/hooks/useEventos.ts |
@@ -103,7 +107,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_aluno_com_matricula_viva(p_aluno_id integer)` | SO-INTERNA | DEFINER | funcao:app_historico_turma, funcao:app_minha_agenda_sessao_base_v1, funcao:app_minha_carteira, funcao:app_professor_feedback_mesa, funcao:fn_feedback_cobranca_do_dia |
 | `fn_aluno_entra_base_ativa_v131(p_aluno_id integer, p_unidade_id uuid)` | ATIVA | DEFINER | view:vw_aluno_sucesso_lista, funcao:get_carteira_professores |
 | `fn_aluno_faltou_confirmado(p_aula_id bigint, p_aluno_id integer)` | SO-INTERNA | DEFINER | funcao:fn_confirmar_registro_core, funcao:fn_fabio_det_ficha_descartada |
-| `fn_aluno_na_casa_desde(p_aluno_id integer)` | SO-INTERNA | DEFINER | funcao:app_aluno_ficha, funcao:fabio_prontuario_aluno |
+| `fn_aluno_na_casa_desde(p_aluno_id integer)` | SO-INTERNA | DEFINER | funcao:app_aluno_ficha, funcao:app_minha_carteira, funcao:fabio_prontuario_aluno |
 | `fn_aluno_presenca_veredito(p_aula_id bigint, p_aluno_id integer)` | SO-INTERNA | DEFINER | funcao:fn_aluno_faltou_confirmado, funcao:fn_dever_de_casa_sinal_do_aluno, funcao:fn_fabio_det_ficha_descartada, funcao:fn_fabio_falta_sem_medicao, funcao:fn_gavetas_da_aula, funcao:fn_gravar_fatias_que_a_presenca_liberou |
 | `fn_aluno_trancado_na_aula(p_aula_id integer, p_aluno_id integer)` | ATIVA | DEFINER | view:vw_registro_pendencia, funcao:app_minha_agenda_semana_v1, funcao:app_minha_agenda_sessao_canonica_v2, funcao:fabio_agenda_periodo, funcao:fabio_briefing_matinal, funcao:fn_aula_so_de_trancados |
 | `fn_aluno_trancamento_periodo_registrar()` | ATIVA | DEFINER | trigger:emusys_matriculas_estado_atual.trg_aluno_trancamento_periodo |
@@ -125,19 +129,21 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_evento_apresentacao_deriva()` | ATIVA | INVOKER | trigger:evento_apresentacao.trg_evento_apresentacao_deriva |
 | `fn_evento_apresentacao_grupo_coerente()` | ATIVA | INVOKER | trigger:evento_apresentacao.trg_evento_apresentacao_grupo_coerente |
 | `fn_evento_apresentacao_origem_adm()` | ATIVA | INVOKER | trigger:evento_apresentacao.trg_evento_apresentacao_origem_adm |
-| `fn_evento_audit_log()` | ATIVA | DEFINER | trigger:evento_apresentacao_item.trg_audit_evento_apresentacao_item, trigger:evento_apresentacao.trg_audit_evento_apresentacao, trigger:evento_bloco.trg_audit_evento_bloco, trigger:evento_comunicacao.trg_audit_evento_comunicacao, trigger:evento_convidado_checkin.trg_audit_evento_convidado_checkin, trigger:evento_convidado_participacao.trg_audit_evento_convidado_participacao, +4 outros |
+| `fn_evento_audit_log()` | ATIVA | DEFINER | trigger:evento_apresentacao_item.trg_audit_evento_apresentacao_item, trigger:evento_apresentacao.trg_audit_evento_apresentacao, trigger:evento_bloco.trg_audit_evento_bloco, trigger:evento_comunicacao.trg_audit_evento_comunicacao, trigger:evento_convidado_checkin.trg_audit_evento_convidado_checkin, trigger:evento_convidado_participacao.trg_audit_evento_convidado_participacao, +7 outros |
 | `fn_evento_comunicacao_deriva()` | ATIVA | INVOKER · 🔓 anon | trigger:evento_comunicacao.trg_evento_comunicacao_deriva |
 | `fn_evento_convidado_checkin_deriva()` | ATIVA | INVOKER · 🔓 anon | trigger:evento_convidado_checkin.trg_evento_convidado_checkin_deriva |
 | `fn_evento_convidado_cortesia()` | ATIVA | INVOKER · 🔓 anon | trigger:evento_convidado_participacao.trg_evento_convidado_cortesia |
 | `fn_evento_convidado_deriva()` | ATIVA | INVOKER · 🔓 anon | trigger:evento_convidado.trg_evento_convidado_deriva |
+| `fn_evento_convidado_herda_bloco()` | ATIVA | DEFINER · 🔓 anon | trigger:evento_convidado_participacao.trg_evento_convidado_herda_bloco |
 | `fn_evento_convidado_participacao_deriva()` | ATIVA | INVOKER · 🔓 anon | trigger:evento_convidado_participacao.trg_evento_convidado_participacao_deriva |
+| `fn_evento_ingresso_venda_deriva()` | ATIVA | INVOKER · 🔓 anon | trigger:evento_ingresso_venda.trg_evento_ingresso_venda_deriva |
 | `fn_evento_origem_escrita()` | SO-INTERNA | INVOKER | funcao:fn_evento_audit_log, funcao:fn_evento_comunicacao_deriva, funcao:fn_evento_participacao_confirmado_em |
 | `fn_evento_participacao_confirmado_em()` | ATIVA | INVOKER | trigger:evento_participacao.trg_evento_participacao_confirmado_em |
 | `fn_evento_participacao_deriva()` | ATIVA | INVOKER | trigger:evento_participacao.trg_evento_participacao_deriva |
 | `fn_evento_pessoa_chave(p_aluno_id integer, p_evento_id bigint)` | SO-INTERNA | DEFINER | funcao:evento_apresentacao_adicionar_v1, funcao:evento_apresentacao_juntar_v1, funcao:evento_buscar_aluno_outra_unidade_v1, funcao:evento_recital_sincronizar_v1, funcao:evento_relatorios_v1, funcao:fn_evento_apresentacao_deriva, +1 outros |
 | `fn_evento_pode_ver(p_evento_id bigint)` | ATIVA | DEFINER | edge:supabase/functions/recital-midia-url/index.ts, funcao:evento_apresentacao_adicionar_v1, funcao:evento_buscar_aluno_outra_unidade_v1, funcao:evento_recital_sincronizar_v1, funcao:evento_relatorios_v1, funcao:evento_visitantes_v1 |
 | `fn_evento_staff_deriva()` | ATIVA | INVOKER · 🔓 anon | trigger:evento_staff.trg_evento_staff_deriva |
-| `fn_evento_touch()` | ATIVA | INVOKER | trigger:evento_apresentacao.trg_evento_apresentacao_touch, trigger:evento_bloco.trg_evento_bloco_touch, trigger:evento_convidado.trg_evento_convidado_touch, trigger:evento_participacao.trg_evento_participacao_touch, trigger:evento_staff.trg_evento_staff_touch, trigger:evento.trg_evento_touch |
+| `fn_evento_touch()` | ATIVA | INVOKER | trigger:evento_apresentacao.trg_evento_apresentacao_touch, trigger:evento_bloco.trg_evento_bloco_touch, trigger:evento_convidado.trg_evento_convidado_touch, trigger:evento_ingresso_venda.trg_evento_ingresso_venda_touch, trigger:evento_participacao.trg_evento_participacao_touch, trigger:evento_staff.trg_evento_staff_touch, +1 outros |
 | `fn_exigir_equipe_para_anamnese()` | SO-INTERNA | DEFINER | funcao:buscar_anamnese_pendente, funcao:buscar_anamneses_pendentes, funcao:get_anamnese_aluno, funcao:vincular_anamnese_aluno |
 | `fn_gavetas_so_do_aluno(p_tronco jsonb, p_fatia jsonb)` | SO-INTERNA | INVOKER | funcao:fn_gavetas_da_aula |
 | `fn_jornada_marca_ciclo_sucedido()` | ATIVA | INVOKER | trigger:aluno_jornada_matricula_disciplina.trg_jornada_ciclo_sucedido |
@@ -185,7 +191,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `get_kpis_alunos_admin_operacional(p_unidade_id uuid, p_ano integer, p_mes integer)` | ATIVA | DEFINER | front:src/components/App/Administrativo/AdministrativoPage.tsx, front:src/components/App/Administrativo/ModalRelatorio.tsx, front:src/components/App/Alunos/AlunosPage.tsx, front:src/lib/estadoOperacionalAlunos.ts, edge:supabase/functions/bi-agent-lamusic/tools.ts, edge:supabase/functions/relatorio-admin-whatsapp/index.ts, +8 outros |
 | `get_kpis_alunos_admin_operacional_cache_v1(p_unidade_id uuid, p_ano integer, p_mes integer)` | ORFA | DEFINER | sem consumidor conhecido |
 | `get_kpis_alunos_admin_operacional_impl_v2(p_unidade_id uuid, p_ano integer, p_mes integer)` | SO-INTERNA | DEFINER | funcao:kpis_alunos_admin_operacional_sem_cache_20260924 |
-| `get_kpis_alunos_canonicos(p_unidade_id uuid, p_ano integer, p_mes integer)` | ATIVA | DEFINER | front:src/lib/kpisAlunosVivosCanonicos.ts, funcao:dashboard_aquecer_caches_v1, funcao:get_dados_relatorio_gerencial_legacy_p02r_20260620, funcao:get_dados_retencao_ia, funcao:get_kpis_alunos_canonicos_cache_v1, funcao:gravar_snapshot_fechamento_mensal, +1 outros |
+| `get_kpis_alunos_canonicos(p_unidade_id uuid, p_ano integer, p_mes integer)` | ATIVA | DEFINER | front:src/lib/kpisAlunosVivosCanonicos.ts, funcao:dashboard_aquecer_caches_v1, funcao:get_dados_relatorio_gerencial_legacy_p02r_20260620, funcao:get_dados_retencao_ia, funcao:get_kpis_alunos_canonicos_cache_v1, funcao:gravar_snapshot_fechamento_mensal, +2 outros |
 | `get_kpis_alunos_canonicos_base_p01q(p_unidade_id uuid, p_ano integer, p_mes integer)` | SO-INTERNA | DEFINER | funcao:get_kpis_alunos_canonicos_base_p01t |
 | `get_kpis_alunos_canonicos_base_p01t(p_unidade_id uuid, p_ano integer, p_mes integer)` | SO-INTERNA | DEFINER | funcao:get_kpis_alunos_canonicos_base_v131 |
 | `get_kpis_alunos_canonicos_base_ticket_denominador_v1(p_unidade_id uuid, p_ano integer, p_mes integer)` | SO-INTERNA | DEFINER | funcao:kpis_alunos_sem_cache_20260924 |
@@ -562,6 +568,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 
 | Função | Estado | Segurança | Consumidores |
 |---|---|---|---|
+| `_kpis_mensais_export_sessoes(p_inicio date, p_fim date, p_unidade_id uuid)` | SO-INTERNA | DEFINER | funcao:kpis_mensais_export_v1 |
 | `aplicar_retificacao_relatorio_admin_mensal_renovacoes_v1(p_unidade_id uuid, p_ano integer, p_mes integer, p_payload_hash_esperado text, p_motivo text, p_evidencias jsonb)` | ORFA | DEFINER | sem consumidor conhecido |
 | `aplicar_retificacao_relatorio_comercial_matricula_tardia_v1(p_unidade_id uuid, p_ano integer, p_mes integer, p_payload_hash_esperado text, p_aluno_id bigint, p_emusys_matricula_id text, p_data_matricula date, p_motivo text, p_evidencias jsonb)` | ORFA | DEFINER | sem consumidor conhecido |
 | `aplicar_retificacao_relatorio_comercial_mensal_v1(p_unidade_id uuid, p_ano integer, p_mes integer, p_payload_hash_esperado text, p_motivo text, p_evidencias jsonb)` | ORFA | DEFINER | sem consumidor conhecido |
@@ -674,6 +681,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `get_relatorio_pedagogico_aluno_interno_20260712(p_aluno_id integer, p_data_inicio date, p_data_fim date)` | SO-INTERNA | DEFINER | funcao:get_relatorio_pedagogico_aluno |
 | `get_watchlist_projecao(p_unidade_id uuid, p_dias_futuros integer)` | ATIVA | INVOKER | front:src/components/App/Agenda/CalendarioEscolar.tsx |
 | `kpis_comercial_v2_sem_cache_20260923(p_unidade_id uuid, p_ano integer, p_mes integer, p_periodo text, p_data date)` | SO-INTERNA | DEFINER | funcao:get_kpis_comercial_canonicos_v2 |
+| `kpis_mensais_export_v1(p_unidade_id uuid, p_ano integer, p_mes integer)` | ORFA | DEFINER | sem consumidor conhecido |
 | `kpis_prof_cadastro_sem_cache_20260924(p_ano integer, p_mes integer, p_unidade_id uuid, p_data_inicio date, p_data_fim date)` | SO-INTERNA | DEFINER | funcao:get_kpis_professores_cadastro_canonicos_v1 |
 | `listar_meta_source_ids_pendentes()` | ATIVA | DEFINER | edge:supabase/functions/enriquecer-meta-ads/index.ts |
 | `materializar_projecao_contrato(p_aluno_id integer, p_matricula_disciplina_id bigint)` | SO-INTERNA | DEFINER | funcao:trg_materializar_projecao_jornada |

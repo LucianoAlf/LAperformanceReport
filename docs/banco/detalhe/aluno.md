@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — aluno
 
-156 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+160 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## aluno_acoes
 
@@ -1149,6 +1149,8 @@
 | `intervalo_entre_blocos_segundos` | integer | não | 2700 |  |
 | `data_fim` | date | sim |  |  |
 | `cortesias_por_aluno` | integer | sim |  |  |
+| `provedor_pagamento` | text | sim |  |  |
+| `provedor_conta` | text | sim |  |  |
 
 **Únicos:**
 - `evento_pkey`
@@ -1248,6 +1250,7 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 | `data` | date | sim |  |  |
+| `capacidade` | integer | sim |  |  |
 
 **Únicos:**
 - `evento_bloco_pkey`
@@ -1293,6 +1296,9 @@
 | `tipo_entrada` | text | não | 'cortesia'::text |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
+| `venda_id` | bigint | sim |  | evento_ingresso_venda.id |
+| `meia_entrada` | boolean | não | false |  |
+| `bloco_id` | bigint | sim |  | evento_bloco.id |
 
 **Únicos:**
 - `evento_convidado_pkey`
@@ -1334,7 +1340,87 @@
 **Triggers:**
 - `trg_audit_evento_convidado_participacao → fn_evento_audit_log()`
 - `trg_evento_convidado_cortesia → fn_evento_convidado_cortesia()`
+- `trg_evento_convidado_herda_bloco → fn_evento_convidado_herda_bloco()`
 - `trg_evento_convidado_participacao_deriva → fn_evento_convidado_participacao_deriva()`
+
+## evento_ingresso_pacote
+
+> Pacotes de desconto por evento: a partir de N ingressos, X% off (ex.: 10+ -> 20%).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `evento_id` | bigint | não |  | evento.id |
+| `quantidade_minima` | integer | não |  |  |
+| `desconto_pct` | numeric(5,2) | não |  |  |
+
+**Únicos:**
+- `evento_ingresso_pacote_evento_id_quantidade_minima_key`
+- `evento_ingresso_pacote_pkey`
+
+**Triggers:**
+- `trg_audit_evento_ingresso_pacote → fn_evento_audit_log()`
+
+## evento_ingresso_preco
+
+> Preco do ingresso por evento. Decisao do Alf (28/09): todos pagam meia — ex.: unitario R$100, meia R$50 cobrada de todos. Os dois campos ficam para o papel/relatorio mostrar os dois valores.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `evento_id` | bigint | não |  | evento.id |
+| `preco_unitario` | numeric(10,2) | não |  |  |
+| `preco_meia` | numeric(10,2) | sim |  |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `evento_ingresso_preco_pkey`
+
+**Triggers:**
+- `trg_audit_evento_ingresso_preco → fn_evento_audit_log()`
+
+## evento_ingresso_venda
+
+> Toda venda de ingresso, registrada pela equipe (link enviado a mao, maquininha, Pix, dinheiro). A Sol concilia cada venda paga com o que caiu no banco e lanca no caixa diario do Super Folha — o LA Report so expoe a lista e recebe o veredito.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `evento_id` | bigint | não |  | evento.id |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `bloco_id` | bigint | não |  | evento_bloco.id |
+| `participacao_id` | bigint | sim |  | evento_participacao.id |
+| `pacote_id` | bigint | sim |  | evento_ingresso_pacote.id |
+| `comprador_nome` | text | não |  |  |
+| `comprador_contato` | text | sim |  |  |
+| `quantidade` | integer | não |  |  |
+| `meia_entrada` | integer | não | 0 |  |
+| `valor_unitario` | numeric(10,2) | não |  |  |
+| `valor_meia` | numeric(10,2) | sim |  |  |
+| `desconto_pct` | numeric(5,2) | não | 0 |  |
+| `valor_bruto` | numeric(10,2) | sim | ((((quantidade - meia_entrada))::numeric * valor_unitario) + ((meia_entrada)::numeric * COALESCE(valor_meia, (0)::numeric))) |  |
+| `valor_final` | numeric(10,2) | não |  |  |
+| `forma_pagamento` | text | não |  |  |
+| `canal` | text | não |  |  |
+| `provedor` | text | sim |  |  |
+| `status` | text | não | 'pendente'::text |  |
+| `pago_em` | timestamp with time zone | sim |  |  |
+| `pagamento_identificador` | text | sim |  |  |
+| `conciliacao_status` | text | não | 'pendente'::text |  |
+| `conciliado_em` | timestamp with time zone | sim |  |  |
+| `conciliacao_ref` | text | sim |  |  |
+| `conciliacao_obs` | text | sim |  |  |
+| `observacao` | text | sim |  |  |
+| `registrado_por` | uuid | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `evento_ingresso_venda_pkey`
+
+**Triggers:**
+- `trg_audit_evento_ingresso_venda → fn_evento_audit_log()`
+- `trg_evento_ingresso_venda_deriva → fn_evento_ingresso_venda_deriva()`
+- `trg_evento_ingresso_venda_touch → fn_evento_touch()`
 
 ## evento_participacao
 
@@ -2162,7 +2248,7 @@
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
 | `id` | uuid | não | gen_random_uuid() |  |
-| `pesquisa_id` | uuid | sim |  | pesquisa_evasao.id |
+| `pesquisa_id` | uuid | sim |  | pesquisa_evasao_analises.pesquisa_id |
 | `caixa_id` | integer | não |  | whatsapp_caixas.id |
 | `direcao` | text | não |  |  |
 | `provider_message_id` | text | sim |  |  |
@@ -3203,6 +3289,20 @@
 | `cursos` | jsonb | sim |  |  |
 | `faz_banda` | boolean | sim |  |  |
 | `motivo_sem_curso` | text | sim |  |  |
+
+## vw_evento_bloco_lotacao
+
+> Lugares por bloco. Convidado sem bloco_id (ainda nao credenciado) nao conta em bloco nenhum. livres NULL = sem teto. Cancelado/reembolsado libera o lugar na hora.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `bloco_id` | bigint | sim |  |  |
+| `evento_id` | bigint | sim |  |  |
+| `capacidade` | integer | sim |  |  |
+| `cortesias` | bigint | sim |  |  |
+| `vendidos_pagos` | bigint | sim |  |  |
+| `pendentes` | bigint | sim |  |  |
+| `livres` | bigint | sim |  |  |
 
 ## vw_evolucao_alunos
 

@@ -1431,7 +1431,7 @@
 | `id` | uuid | não | gen_random_uuid() |  |
 | `snapshot_metrica_id` | uuid | não |  | health_score_professor_v3_snapshot_metricas.id |
 | `config_meta_segmento_id` | uuid | sim |  | health_score_professor_v3_config_metas_curso_modalidade.id |
-| `unidade_id` | uuid | não |  | health_score_professor_v3_config_metas_curso_modalidade.unidade_id |
+| `unidade_id` | uuid | não |  | unidades.id |
 | `curso_id` | integer | não |  | cursos.id |
 | `modalidade` | text | não |  | professor_unidade_curso_modalidade.modalidade |
 | `pessoas_unicas` | integer | não | 0 |  |
