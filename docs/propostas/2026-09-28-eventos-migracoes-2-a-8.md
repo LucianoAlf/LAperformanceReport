@@ -1,7 +1,52 @@
-# Proposta de migrações 2–9 — módulo Eventos (v3.1, revisada — aguardando aprovação do Alf)
+# Proposta de migrações 2–9 — módulo Eventos (v3.2, revisada — aguardando aprovação do Alf)
 
 **Status: NADA aplicado. SQL completo para revisão.** Depois do ok, cada bloco vira um arquivo
 `supabase/migrations/20260929xxxxxx_<nome>.sql` na ordem abaixo.
+
+## Validação no development branch (2026-09-28)
+
+Branch `dev-eventos` (ref `tzkuolavxrnkxseskvxf`): schema real de produção despejado via
+`pg_dump --schema-only` + as 8 migrations `supabase/migrations/20260929*_eventos_m*.sql`
+aplicadas limpas, em ordem. Smoke `supabase/smoke/2026-09-28-eventos-m2-m9.sql` — tudo verde:
+
+- apresentação comum (chave `emusys:`), `tipo='abertura'` com/sem título (CHECK morde),
+  aluno de fora (`ext:<unidade>|emusys:` + `unidade_origem_id` marcada);
+- convidado cortesia herda o bloco da 1ª apresentação do aluno; check-in valida o bloco;
+  check-in em bloco de outro evento bloqueado;
+- cota de cortesias (`cortesias_por_aluno=2`): a 3ª falha com "chegou a cota de 2";
+- formatura sem tipo bloqueada; `evento_comunicacao` recusa UPDATE por grant+RLS;
+- staff com bloco de outro evento bloqueado; `professor_palco=apoio` bloqueado;
+- venda via RPC com `for update` no bloco: 2 ingressos → pacote automático 10% →
+  R$180; convidados vendidos nominais criados com `bloco_id`; venda acima da lotação
+  recusada ("0 livres, 1 pedidos"); `status='pago'` sem `pagamento_identificador`
+  bloqueado pelo CHECK; conciliar → `conciliado`/`SF-LANC-42`; **reembolso depois de
+  conciliado permitido**; `estornos_v1` lista a venda; `'estornado'` grava `SF-EST-07`;
+- `audit_log` recebeu INSERT/UPDATE/DELETE de todas as tabelas `evento_*` com origem.
+
+Bugs que o smoke pegou e a migration já traz corrigidos: `evento_ingresso_venda` ganhou
+`bloco_id NOT NULL` (FK + mesmo-evento na deriva) e `pacote_id`; a RPC de venda não insere
+a coluna gerada `valor_bruto`; `tipo_entrada` nasce na M3 (o trigger de cota o lê).
+
+Armadilhas do branch, documentadas pra quem repetir: pooler em modo **transação**
+(6543) devolve `search_path` vazio e quebra `is_admin()` sem qualificação — usar a porta
+**5432** (sessão); `unaccent` mora em `public` em prod, no branch a extensão foi movida
+para lá; fixtures em `alunos` exigem `disable trigger user` (triggers comerciais de prod
+pedem seed de `leads`/`crm_pipeline_etapas` que o branch não tem — só para o insert,
+FKs continuam valendo).
+
+## O que mudou da v3.1 para a v3.2 (revisão do irmão — M9 aprovada com 2 ajustes)
+
+- 🟡 **Venda concorrente furando lotação**: a view só *calcula* — nada impedia duas vendedoras
+  vendendo o último lugar juntas. Agora a venda entra por RPC `evento_bilheteria_vender_v1`,
+  que dá `SELECT ... FOR UPDATE` no bloco, recalcula os livres e recusa se não couber.
+- 🟡 **Convidado sem bloco não ocupa lugar**: `bloco_id` vira obrigatório para
+  `tipo_entrada='vendido'` (CHECK) e a cortesia **herda o bloco da primeira apresentação do
+  aluno** quando vier vazio (trigger na ponte — convidado sem bloco continua possível só até
+  o aluno entrar na grade).
+- Processo: M2–M8 aprovadas; aplicar antes num **development branch** do Supabase, rodar os
+  testes + smoke (apresentação comum, `tipo='abertura'`, chave `ext:`, check-in), e só então
+  promover para produção na ordem M2 → M8. O projeto tem branching habilitado (medido 28/09:
+  `supabase branches list` responde, hoje só `main`).
 
 ## O que mudou da v3 para a v3.1 (revisão do irmão)
 
@@ -258,6 +303,10 @@ create table public.evento_convidado (
   nome        text   not null,
   documento   text,
   observacao  text,
+  -- tipo_entrada ja nasce aqui porque o trigger de cota o conta; a M9 so adiciona
+  -- venda_id/meia/bloco e o CHECK de coerencia
+  tipo_entrada text  not null default 'cortesia'
+    check (tipo_entrada in ('cortesia', 'vendido')),
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
@@ -737,7 +786,12 @@ create table public.evento_ingresso_venda (
   id                bigint generated always as identity primary key,
   evento_id         bigint not null references public.evento(id) on delete cascade,
   unidade_id        uuid   not null references public.unidades(id),
+  -- a venda e de lugares de UM bloco — a RPC de venda trava essa linha para
+  -- conferir a lotacao antes de gravar
+  bloco_id          bigint not null references public.evento_bloco(id) on delete restrict,
   participacao_id   bigint references public.evento_participacao(id) on delete set null,
+  -- pacote que gerou o desconto (null = sem pacote / desconto manual)
+  pacote_id         bigint references public.evento_ingresso_pacote(id) on delete set null,
   comprador_nome    text   not null,
   comprador_contato text,
   quantidade        integer not null check (quantidade > 0),
@@ -817,6 +871,13 @@ begin
     raise exception 'evento_ingresso_venda: participacao nao e deste evento'
       using errcode = 'P0001';
   end if;
+  -- o bloco vendido tem que ser deste evento
+  if (select b.evento_id from public.evento_bloco b where b.id = new.bloco_id)
+     is distinct from new.evento_id
+  then
+    raise exception 'evento_ingresso_venda: bloco nao e deste evento'
+      using errcode = 'P0001';
+  end if;
   new.registrado_por := coalesce(new.registrado_por, auth.uid());
   new.provedor       := coalesce(new.provedor,
                          (select e.provedor_pagamento from public.evento e
@@ -825,7 +886,7 @@ begin
 end;
 $$;
 create trigger trg_evento_ingresso_venda_deriva
-  before insert or update of evento_id, participacao_id on public.evento_ingresso_venda
+  before insert or update of evento_id, participacao_id, bloco_id on public.evento_ingresso_venda
   for each row execute function public.fn_evento_ingresso_venda_deriva();
 create trigger trg_evento_ingresso_venda_touch
   before update on public.evento_ingresso_venda
@@ -872,9 +933,38 @@ alter table public.evento_convidado
   -- bloco que a pessoa vai assistir (NULL = ainda sem credenciamento definido)
   add column if not exists bloco_id bigint references public.evento_bloco(id) on delete set null,
   add constraint evento_convidado_entrada_coerente check (
-    (tipo_entrada = 'vendido'  and venda_id is not null)
+    (tipo_entrada = 'vendido'  and venda_id is not null and bloco_id is not null)
     or (tipo_entrada = 'cortesia' and venda_id is null)
   );
+
+-- cortesia sem bloco herda o bloco da PRIMEIRA apresentacao do aluno no evento
+-- (irmao vinculado depois nao puxa o convidado pro bloco dele: o primeiro vinculo ganha)
+create or replace function public.fn_evento_convidado_herda_bloco()
+returns trigger language plpgsql
+security definer set search_path = public, pg_temp
+as $$
+begin
+  update public.evento_convidado c
+     set bloco_id = (
+       select ap.bloco_id
+         from public.evento_participacao p
+         join public.evento_apresentacao ap
+           on ap.evento_id = p.evento_id and ap.pessoa_chave = p.pessoa_chave
+        where p.id = new.participacao_id
+          and ap.bloco_id is not null
+        order by ap.ordem
+        limit 1
+     )
+   where c.id = new.convidado_id
+     and c.bloco_id is null
+     and c.tipo_entrada = 'cortesia';
+  return new;
+end;
+$$;
+
+create trigger trg_evento_convidado_herda_bloco
+  after insert on public.evento_convidado_participacao
+  for each row execute function public.fn_evento_convidado_herda_bloco();
 
 -- deriva v2 do convidado: unidade do evento + bloco e venda do MESMO evento quando ligados
 create or replace function public.fn_evento_convidado_deriva()
@@ -945,6 +1035,166 @@ select b.id as bloco_id,
 comment on view public.vw_evento_bloco_lotacao is
   'Lugares por bloco. Convidado sem bloco_id (ainda nao credenciado) nao conta em bloco '
   'nenhum. livres NULL = sem teto. Cancelado/reembolsado libera o lugar na hora.';
+```
+
+### Venda com trava de capacidade — RPC (a UI chama esta, nao INSERT direto)
+
+Duas vendedoras vendendo o ultimo lugar ao mesmo tempo so se resolvem com lock: a RPC
+trava a linha do bloco (`for update`), recalcula os livres e recusa se nao couber.
+Venda direta por `insert` na tabela segue aberta pela RLS (a equipe pode precisar ajustar
+na mao), mas a UI so usa a RPC — capacidade estourada vira excecao, nao gente sem cadeira.
+
+```sql
+create or replace function public.evento_bilheteria_vender_v1(
+  p_evento_id        bigint,
+  p_bloco_id         bigint,
+  p_comprador_nome   text,
+  p_quantidade       integer,
+  p_forma_pagamento  text,
+  p_canal            text,
+  p_comprador_contato text default null,
+  p_participacao_id  bigint default null,
+  p_meia_entrada     integer default 0,
+  p_pacote_id        bigint default null,
+  p_convidados       jsonb default '[]'::jsonb,   -- [{nome, documento?, meia_entrada?}]
+  p_marcar_pago      boolean default false,
+  p_pagamento_identificador text default null,
+  p_observacao       text default null
+)
+returns bigint  -- venda_id
+language plpgsql
+security definer set search_path = public, pg_temp
+as $$
+declare
+  v_unidade    uuid;
+  v_capacidade integer;
+  v_livres     integer;
+  v_preco      public.evento_ingresso_preco%rowtype;
+  v_desconto   numeric(5,2) := 0;
+  v_bruto      numeric(10,2);
+  v_final      numeric(10,2);
+  v_venda_id   bigint;
+  v_conv       jsonb;
+  v_meias      integer;
+begin
+  -- evento e bloco do mesmo evento
+  select e.unidade_id into v_unidade from public.evento e where e.id = p_evento_id;
+  if v_unidade is null then
+    raise exception 'evento % nao existe', p_evento_id using errcode = 'P0001';
+  end if;
+  select b.capacidade into v_capacidade
+    from public.evento_bloco b
+   where b.id = p_bloco_id and b.evento_id = p_evento_id
+   for update of b;                       -- trava o bloco ate o fim da transacao
+  if not found then
+    raise exception 'bloco % nao e do evento %', p_bloco_id, p_evento_id using errcode = 'P0001';
+  end if;
+
+  -- lugares livres, mesma regra da view (cortesia + pendente/pago ocupam)
+  if v_capacidade is not null then
+    select v_capacidade
+           - count(*) filter (where c.tipo_entrada = 'cortesia')
+           - count(*) filter (where v.status in ('pago', 'pendente'))
+      into v_livres
+      from public.evento_convidado c
+      left join public.evento_ingresso_venda v on v.id = c.venda_id
+     where c.bloco_id = p_bloco_id;
+    if coalesce(v_livres, v_capacidade) < p_quantidade then
+      raise exception 'Bloco lotado: % lugares livres, % pedidos.',
+        coalesce(v_livres, v_capacidade), p_quantidade using errcode = 'P0001';
+    end if;
+  end if;
+
+  -- convidados nominais: a lista tem que bater com a quantidade
+  if jsonb_array_length(p_convidados) <> p_quantidade then
+    raise exception 'Informe os % nomes dos convidados.', p_quantidade using errcode = 'P0001';
+  end if;
+  -- e as meias marcadas nos convidados tem que bater com o total informado
+  select count(*) into v_meias
+    from jsonb_array_elements(p_convidados) c
+   where coalesce((c->>'meia_entrada')::boolean, false);
+  if v_meias <> p_meia_entrada then
+    raise exception 'Meia-entrada divergente: % marcadas nos convidados, % informadas.',
+      v_meias, p_meia_entrada using errcode = 'P0001';
+  end if;
+
+  -- preco do evento + pacote
+  select * into v_preco from public.evento_ingresso_preco p where p.evento_id = p_evento_id;
+  if not found then
+    raise exception 'Evento % sem tabela de preco cadastrada.', p_evento_id using errcode = 'P0001';
+  end if;
+  if p_pacote_id is not null then
+    select p.desconto_pct into v_desconto
+      from public.evento_ingresso_pacote p
+     where p.id = p_pacote_id and p.evento_id = p_evento_id
+       and p.quantidade_minima <= p_quantidade;
+    if not found then
+      raise exception 'Pacote % nao vale para este evento/quantidade.', p_pacote_id
+        using errcode = 'P0001';
+    end if;
+  else
+    -- melhor pacote automatico: maior desconto que a quantidade habilita
+    select max(p.desconto_pct) into v_desconto
+      from public.evento_ingresso_pacote p
+     where p.evento_id = p_evento_id and p.quantidade_minima <= p_quantidade;
+    v_desconto := coalesce(v_desconto, 0);
+  end if;
+
+  -- meias so se houver preco de meia cadastrado
+  if p_meia_entrada > 0 and v_preco.preco_meia is null then
+    raise exception 'Este evento nao tem preco de meia cadastrado.' using errcode = 'P0001';
+  end if;
+  if p_meia_entrada > p_quantidade then
+    raise exception 'Meias (%s) nao podem passar da quantidade (%s).',
+      p_meia_entrada, p_quantidade using errcode = 'P0001';
+  end if;
+
+  v_bruto := (p_quantidade - p_meia_entrada) * v_preco.preco_unitario
+           + p_meia_entrada * coalesce(v_preco.preco_meia, 0);
+  v_final := round(v_bruto * (1 - v_desconto / 100), 2);
+
+  insert into public.evento_ingresso_venda (
+    evento_id, bloco_id, participacao_id, comprador_nome, comprador_contato,
+    quantidade, meia_entrada, pacote_id,
+    valor_unitario, valor_meia, desconto_pct, valor_final,
+    forma_pagamento, canal, status,
+    pagamento_identificador, pago_em, observacao
+  ) values (
+    p_evento_id, p_bloco_id, p_participacao_id, p_comprador_nome, p_comprador_contato,
+    p_quantidade, p_meia_entrada, p_pacote_id,
+    v_preco.preco_unitario, v_preco.preco_meia, v_desconto, v_final,
+    p_forma_pagamento, p_canal,
+    case when p_marcar_pago then 'pago' else 'pendente' end,
+    case when p_marcar_pago then p_pagamento_identificador end,
+    case when p_marcar_pago then now() end,
+    p_observacao
+  ) returning id into v_venda_id;
+
+  -- um convidado nominal por ingresso
+  for v_conv in select * from jsonb_array_elements(p_convidados)
+  loop
+    insert into public.evento_convidado (
+      evento_id, nome, documento, tipo_entrada, venda_id, bloco_id, meia_entrada
+    ) values (
+      p_evento_id,
+      v_conv->>'nome',
+      v_conv->>'documento',
+      'vendido',
+      v_venda_id,
+      p_bloco_id,
+      coalesce((v_conv->>'meia_entrada')::boolean, false)
+    );
+  end loop;
+
+  return v_venda_id;
+end;
+$$;
+
+-- a UI (equipe logada) chama; a regra de "quem pode vender" fica na RLS da venda +
+-- no is_admin/get_user_unidade_ids, e o audit_log registra quem vendeu
+grant execute on function public.evento_bilheteria_vender_v1(
+  bigint, bigint, text, integer, text, text, text, bigint, integer, bigint, jsonb, boolean, text, text
+) to authenticated;
 ```
 
 ### Ponte com a Sol — RPCs (a edge que a autentica entra depois, fora do SQL)
