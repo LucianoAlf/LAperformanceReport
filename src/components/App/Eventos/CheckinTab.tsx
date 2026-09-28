@@ -6,8 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import {
+  idadeHoje,
   montarListaDeChegada,
   ordenarPessoasDaPorta,
+  rotuloIdade,
   selecionarParaCertificado,
   type EntradaDaChegada,
   type LinhaDaChegada,
@@ -77,6 +79,7 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
           aluno_nome: a.aluno_nome,
           curso_nome: a.curso_nome,
           musica: a.musica,
+          grupo_id: a.grupo_id,
         })),
       })),
       participacoes: participacoes.map((p) => ({
@@ -94,6 +97,21 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
   );
 
   const lista = useMemo(() => montarListaDeChegada(entrada), [entrada]);
+
+  // Idade por PESSOA, como o check-in: a grade traz a de quem sobe ao palco, e a participacao
+  // cobre quem confirmou e nao entrou em bloco nenhum.
+  const idadePorPessoa = useMemo(() => {
+    const nascimento = new Map<string, string | null>();
+    for (const b of blocos) {
+      for (const a of b.apresentacoes) {
+        if (!nascimento.get(a.pessoa_chave)) nascimento.set(a.pessoa_chave, a.aluno_data_nascimento);
+      }
+    }
+    for (const p of participacoes) {
+      if (!nascimento.get(p.pessoa_chave)) nascimento.set(p.pessoa_chave, p.data_nascimento);
+    }
+    return new Map([...nascimento].map(([chave, data]) => [chave, rotuloIdade(idadeHoje(data))]));
+  }, [blocos, participacoes]);
 
   const termo = busca.trim().toLowerCase();
   const casa = (texto: string) =>
@@ -363,6 +381,7 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
                   <LinhaPessoa
                     key={p.pessoaChave}
                     pessoa={p}
+                    idade={idadePorPessoa.get(p.pessoaChave) ?? ''}
                     salvando={salvando.has(p.pessoaChave)}
                     onAlternar={() => alternar(p.pessoaChave, p.alunoId, p.chegouEm === null)}
                   />
@@ -401,6 +420,7 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
                       <LinhaOrdem
                         key={l.apresentacaoId}
                         linha={l}
+                        idade={idadePorPessoa.get(l.pessoaChave) ?? ''}
                         salvando={salvando.has(l.pessoaChave)}
                         onAlternar={() => alternar(l.pessoaChave, l.alunoId, l.chegouEm === null)}
                       />
@@ -484,10 +504,13 @@ function SeloChegada({ chegouEm }: { chegouEm: string | null }) {
 
 function LinhaPessoa({
   pessoa,
+  idade,
   salvando,
   onAlternar,
 }: {
   pessoa: PessoaNaChegada;
+  /** '12 anos' ou '' — ajuda a porta a achar a criança certa entre dois nomes parecidos. */
+  idade: string;
   salvando: boolean;
   onAlternar: () => void;
 }) {
@@ -502,7 +525,10 @@ function LinhaPessoa({
       )}
     >
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[13px] font-medium text-white">{pessoa.nome}</p>
+        <p className="truncate text-[13px] font-medium text-white">
+          {pessoa.nome}
+          {idade && <span className="font-normal text-slate-500"> · {idade}</span>}
+        </p>
         <p className="flex flex-wrap items-center gap-x-2 text-[11.5px] text-slate-400">
           {pessoa.apresentacoes.length === 0 ? (
             // Confirmou e não entrou na grade: vem ao evento, não sobe ao palco. Dizer isso
@@ -543,10 +569,12 @@ function LinhaPessoa({
 
 function LinhaOrdem({
   linha,
+  idade,
   salvando,
   onAlternar,
 }: {
   linha: LinhaDaChegada;
+  idade: string;
   salvando: boolean;
   onAlternar: () => void;
 }) {
@@ -567,6 +595,7 @@ function LinhaOrdem({
       <div className="min-w-0 flex-1">
         <p className="truncate text-[13px] text-white">
           {linha.alunoNome}
+          {idade && <span className="text-slate-500"> · {idade}</span>}
           {linha.cursoNome && <span className="text-slate-400"> · {linha.cursoNome}</span>}
         </p>
         {/* O bloco não se repete aqui: ele é o cabeçalho da seção logo acima. */}

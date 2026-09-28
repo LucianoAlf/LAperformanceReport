@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import {
   calcularHorariosDaGrade,
   consolidarItensDoPalco,
+  palcoDosNumeros,
   type ApresentacaoParaPalco,
   type ItemConsolidado,
 } from '@/lib/eventos';
@@ -44,16 +45,17 @@ export function PalcoTab({ evento }: { evento: EventoComResumo }) {
             id: a.id,
             ordem: a.ordem,
             duracao_segundos: a.duracao_segundos,
+            grupo_id: a.grupo_id,
           })),
         })),
       ),
     [evento, blocos],
   );
 
+  // Uma entrada por NUMERO: quem toca junto soma o que pede, ao contrario de quem se reveza.
+  // Mesma funcao da grade e da folha impressa — as tres telas contam o mesmo palco.
   const paraPalco = (bs: typeof blocos): ApresentacaoParaPalco[] =>
-    bs.flatMap((b) =>
-      b.apresentacoes.map((a) => ({ cursoNome: a.curso_nome, itens: a.itens })),
-    );
+    bs.flatMap((b) => palcoDosNumeros(b.apresentacoes));
 
   /**
    * O que o evento inteiro precisa.

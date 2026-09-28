@@ -20,8 +20,11 @@
  */
 
 import {
+  agruparEmNumeros,
   calcularHorariosDaGrade,
   consolidarItensDoPalco,
+  palcoDosNumeros,
+  rotuloIdade,
   type ApresentacaoParaPalco,
   type EventoParaCalculo,
   type ItemDePalco,
@@ -112,6 +115,10 @@ export interface ApresentacaoParaImprimir {
   tem_playback: boolean;
   observacao_mapa: string | null;
   itens: ItemDePalco[];
+  /** Mesmo `grupo_id` = sobem juntos no mesmo numero: uma linha so na programacao. */
+  grupo_id?: string | null;
+  /** Idade de hoje (a mesma da aba Alunos). `null`/ausente = sem data de nascimento. */
+  idade?: number | null;
 }
 
 export interface BlocoParaImprimir {
@@ -386,18 +393,28 @@ export function gerarProgramaHtml(dados: DadosDaImpressao, apenasBlocoId?: numbe
           ? `<div class="intervalo">intervalo</div>`
           : '';
 
-      const linhas = [...bloco.apresentacoes]
-        .sort((a, b) => a.ordem - b.ordem || a.id - b.id)
-        .map((ap, idx) => {
-          const hora = h?.apresentacoes.find((x) => x.id === ap.id)?.inicio ?? '';
+      // Uma linha por NUMERO: quem toca junto aparece junto, com um horario e uma musica.
+      const linhas = agruparEmNumeros(bloco.apresentacoes)
+        .map((numero, idx) => {
+          const hora = h?.apresentacoes.find((x) => x.id === numero[0].id)?.inicio ?? '';
+          const musica = numero.find((ap) => (ap.musica ?? '').trim() !== '')?.musica ?? null;
+          // Professor sem repetir: dois alunos da mesma turma nao imprimem o nome duas vezes.
+          const professores = [...new Set(numero.map((ap) => ap.professor_nome).filter(Boolean))];
+          const integrantes = numero
+            .map((ap) => {
+              const idade = rotuloIdade(ap.idade);
+              return `<div><span class="aluno">${escapeHtml(ap.aluno_nome)}</span>${
+                idade ? ` <span class="prof">${escapeHtml(idade)}</span>` : ''
+              }${ap.curso_nome ? ` &middot; <span class="curso">${escapeHtml(ap.curso_nome)}</span>` : ''}</div>`;
+            })
+            .join('');
           return `<tr>
             <td class="n">${idx + 1}</td>
             <td class="hora">${escapeHtml(hora)}</td>
             <td>
-              <div><span class="aluno">${escapeHtml(ap.aluno_nome)}</span>
-                ${ap.curso_nome ? ` &middot; <span class="curso">${escapeHtml(ap.curso_nome)}</span>` : ''}</div>
-              ${ap.musica ? `<div class="musica">${escapeHtml(ap.musica)}</div>` : ''}
-              ${ap.professor_nome ? `<div class="prof">Prof. ${escapeHtml(ap.professor_nome)}</div>` : ''}
+              ${integrantes}
+              ${musica ? `<div class="musica">${escapeHtml(musica)}</div>` : ''}
+              ${professores.length > 0 ? `<div class="prof">Prof. ${professores.map((p) => escapeHtml(p)).join(', ')}</div>` : ''}
             </td>
           </tr>`;
         })
@@ -443,8 +460,9 @@ export function gerarFolhaDePalcoHtml(dados: DadosDaImpressao, apenasBlocoId?: n
   const visiveis =
     apenasBlocoId === undefined ? dados.blocos : soEsteBloco(dados, apenasBlocoId).blocos;
 
+  // Um numero e uma entrada: quem toca junto soma o que pede, ao contrario de quem se reveza.
   const paraPalco = (bs: BlocoParaImprimir[]): ApresentacaoParaPalco[] =>
-    bs.flatMap((b) => b.apresentacoes.map((a) => ({ cursoNome: a.curso_nome, itens: a.itens })));
+    bs.flatMap((b) => palcoDosNumeros(b.apresentacoes));
 
   const chips = (itens: ReturnType<typeof consolidarItensDoPalco>) =>
     itens.length === 0
@@ -557,13 +575,20 @@ export function gerarPlanilhaCsv(dados: DadosDaImpressao, apenasBlocoId?: number
     'Bloco', 'Data', 'Ordem', 'Horário', 'Aluno', 'Curso', 'Professor', 'Música', 'Artista',
     'Duração (min)', 'Playback', 'Link da música', 'Arquivo de playback',
     'Itens de palco', 'Observação de palco',
+    // No FIM de proposito: quem ja montou planilha em cima das colunas antigas nao ve nada
+    // mudar de lugar.
+    'Idade', 'Sobe junto com',
   ];
 
   const linhas = visiveis.flatMap((bloco) => {
     const h = horarios.find((x) => x.blocoId === bloco.id);
-    return [...bloco.apresentacoes]
-      .sort((a, b) => a.ordem - b.ordem || a.id - b.id)
-      .map((ap, idx) => {
+    // A ordem e a do NUMERO: quem sobe junto divide a mesma posicao, como na programacao.
+    return agruparEmNumeros(bloco.apresentacoes).flatMap((numero, idx) =>
+      numero.map((ap) => {
+        const juntos = numero
+          .filter((outro) => outro.id !== ap.id)
+          .map((outro) => outro.aluno_nome)
+          .join(', ');
         const itens = ap.itens
           .map((i) => (i.quantidade > 1 ? `${i.quantidade}x ${i.nome}` : i.nome))
           .join(', ');
@@ -587,8 +612,11 @@ export function gerarPlanilhaCsv(dados: DadosDaImpressao, apenasBlocoId?: number
           ap.playback_path ?? '',
           itens,
           ap.observacao_mapa ?? '',
+          ap.idade ?? '',
+          juntos,
         ].map(celulaCsv).join(';');
-      });
+      }),
+    );
   });
 
   // \r\n é o fim de linha que o Excel espera.

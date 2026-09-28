@@ -9,6 +9,7 @@ import { normalizarBusca } from '@/lib/agenda';
 import {
   useAlunosDoEvento,
   adicionarApresentacao,
+  juntarApresentacao,
   PARTICIPACAO_SELO,
   type AlunoElegivel,
 } from '@/hooks/useEventos';
@@ -21,6 +22,10 @@ interface Opcao {
   curso_nome: string | null;
   professor_nome: string | null;
   jaNaGrade: boolean;
+  /** Bloco onde ela ja esta, quando `jaNaGrade` — e o que a confirmacao de "mover" nomeia. */
+  blocoAtual: string | null;
+  /** Ja faz parte do numero em que se esta adicionando (so no modo juntar). */
+  noNumero: boolean;
 }
 
 /**
@@ -45,6 +50,7 @@ export function SeletorApresentacao({
   blocoId,
   onFechar,
   onAdicionado,
+  juntarCom,
 }: {
   eventoId: number;
   /** Vem do EVENTO, nunca do filtro do topo — que pode estar em "Consolidado". */
@@ -52,6 +58,14 @@ export function SeletorApresentacao({
   blocoId: number;
   onFechar: () => void;
   onAdicionado: () => void;
+  /**
+   * Modo "+ Adicionar aluno" DENTRO de uma apresentacao: o escolhido entra no mesmo numero.
+   *
+   * Nesse modo quem ja esta na grade continua escolhivel — a apresentacao dele e movida para
+   * ca, porque cada curso da pessoa tem uma apresentacao so. `noNumero` sao as chaves
+   * `pessoa_chave|curso_id` de quem ja esta neste numero, que nao podem entrar de novo.
+   */
+  juntarCom?: { alvoId: number; noNumero: Set<string> };
 }) {
   const [busca, setBusca] = useState('');
   const [gravando, setGravando] = useState<string | null>(null);
@@ -68,7 +82,8 @@ export function SeletorApresentacao({
       if (aluno.status === 'nao') continue;
 
       for (const curso of aluno.cursos) {
-        const jaNaGrade = aluno.alocacoes.some((a) => a.curso_id === curso.curso_id);
+        const alocacao = aluno.alocacoes.find((a) => a.curso_id === curso.curso_id);
+        const jaNaGrade = alocacao !== undefined;
         if (termo) {
           const alvo = normalizarBusca(
             `${aluno.nome} ${curso.curso_nome ?? ''} ${curso.professor_nome ?? ''}`,
@@ -82,12 +97,14 @@ export function SeletorApresentacao({
           curso_nome: curso.curso_nome,
           professor_nome: curso.professor_nome,
           jaNaGrade,
+          blocoAtual: alocacao?.bloco_nome ?? null,
+          noNumero: juntarCom?.noNumero.has(`${aluno.pessoa_chave}|${curso.curso_id}`) ?? false,
         });
       }
     }
 
     return lista;
-  }, [alunos, busca]);
+  }, [alunos, busca, juntarCom]);
 
   /**
    * Agrupa por pessoa preservando a ordem de trabalho: quem tem curso fora da grade vem
@@ -120,8 +137,23 @@ export function SeletorApresentacao({
   }, [opcoes]);
 
   const adicionar = async (o: Opcao) => {
+    // Mover e decisao, nao efeito colateral: a apresentacao sai de onde esta e leva a musica e
+    // o palco dela. Quem clicou tem de saber de onde ela sai.
+    if (
+      juntarCom &&
+      o.jaNaGrade &&
+      !window.confirm(
+        `${o.aluno.nome} já tem a apresentação de ${o.curso_nome ?? 'curso'}` +
+          (o.blocoAtual ? ` no ${o.blocoAtual}` : '') +
+          '. Trazer para este número? Ela sai de onde está.',
+      )
+    ) {
+      return;
+    }
     setGravando(o.chave);
-    const { error } = await adicionarApresentacao(blocoId, o.aluno.aluno_id_referencia, o.curso_id);
+    const { error } = juntarCom
+      ? await juntarApresentacao(juntarCom.alvoId, o.aluno.aluno_id_referencia, o.curso_id)
+      : await adicionarApresentacao(blocoId, o.aluno.aluno_id_referencia, o.curso_id);
     setGravando(null);
     if (error) {
       // A RPC devolve a frase pronta ("Fulano já tem uma apresentação de Canto neste
@@ -214,33 +246,48 @@ export function SeletorApresentacao({
                   Violão e Canto — o caso da Maria Fernanda, que o formato anterior
                   espalhava pela lista. */}
               <div className="mt-1 flex flex-wrap gap-1">
-                {p.opcoes.map((o) => (
-                  <button
-                    key={o.chave}
-                    type="button"
-                    disabled={o.jaNaGrade || gravando === o.chave}
-                    onClick={() => adicionar(o)}
-                    title={
-                      o.jaNaGrade
-                        ? `${o.curso_nome} já está na grade`
-                        : `Adicionar ${o.curso_nome}${o.professor_nome ? ` · Prof. ${o.professor_nome}` : ''}`
-                    }
-                    className={cn(
-                      'flex items-center gap-1 rounded px-1.5 py-0.5 text-[11.5px] transition-colors',
-                      o.jaNaGrade
-                        ? 'cursor-not-allowed bg-slate-800/60 text-slate-500'
-                        : 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/30',
-                    )}
-                  >
-                    {o.jaNaGrade ? (
-                      <Music className="h-3 w-3 shrink-0" />
-                    ) : (
-                      <Plus className="h-3 w-3 shrink-0" />
-                    )}
-                    {o.curso_nome}
-                    {o.jaNaGrade && <span className="text-[10px]">na grade</span>}
-                  </button>
-                ))}
+                {p.opcoes.map((o) => {
+                  // No modo juntar, quem ja esta na grade pode vir para ca (move); so quem
+                  // ja esta NESTE numero fica travado.
+                  const travado = juntarCom ? o.noNumero : o.jaNaGrade;
+                  return (
+                    <button
+                      key={o.chave}
+                      type="button"
+                      disabled={travado || gravando === o.chave}
+                      onClick={() => adicionar(o)}
+                      title={
+                        o.noNumero
+                          ? `${o.curso_nome} já está neste número`
+                          : o.jaNaGrade && juntarCom
+                            ? `Trazer ${o.curso_nome} para este número${o.blocoAtual ? ` (hoje no ${o.blocoAtual})` : ''}`
+                            : o.jaNaGrade
+                              ? `${o.curso_nome} já está na grade`
+                              : `Adicionar ${o.curso_nome}${o.professor_nome ? ` · Prof. ${o.professor_nome}` : ''}`
+                      }
+                      className={cn(
+                        'flex items-center gap-1 rounded px-1.5 py-0.5 text-[11.5px] transition-colors',
+                        travado
+                          ? 'cursor-not-allowed bg-slate-800/60 text-slate-500'
+                          : o.jaNaGrade
+                            ? 'bg-sky-500/15 text-sky-300 hover:bg-sky-500/30'
+                            : 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/30',
+                      )}
+                    >
+                      {o.jaNaGrade ? (
+                        <Music className="h-3 w-3 shrink-0" />
+                      ) : (
+                        <Plus className="h-3 w-3 shrink-0" />
+                      )}
+                      {o.curso_nome}
+                      {o.noNumero ? (
+                        <span className="text-[10px]">neste número</span>
+                      ) : o.jaNaGrade ? (
+                        <span className="text-[10px]">{juntarCom ? `trazer do ${o.blocoAtual ?? 'bloco'}` : 'na grade'}</span>
+                      ) : null}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           ))

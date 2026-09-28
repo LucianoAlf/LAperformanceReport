@@ -448,3 +448,57 @@ test('o titulo do evento e a unidade saem do dado, nao de texto fixo', () => {
   assert.match(html, /Recital de Primavera/u);
   assert.match(html, /Barra/u);
 });
+
+/* ───────────────────────── numero (quem sobe junto) ───────────────────────── */
+
+test('quem sobe junto sai numa linha so da programacao, com um horario', () => {
+  const html = gerarProgramaHtml(
+    dados([
+      bloco('Bloco 1', [
+        ap({ aluno_nome: 'Ana Souza', curso_nome: 'Violão', grupo_id: 'duo', idade: 12 }),
+        ap({ aluno_nome: 'Pedro Lima', curso_nome: 'Canto', grupo_id: 'duo', professor_nome: 'Gabriel' }),
+        ap({ aluno_nome: 'Bia Rocha', curso_nome: 'Piano' }),
+      ]),
+    ]),
+  );
+  const linhas = html.match(/<tr>/gu) ?? [];
+  assert.equal(linhas.length, 2, 'duo + Bia = 2 linhas');
+  // A Bia comeca depois do duo + 5 min de troca: 09:00 + 5 + 5 = 09:10.
+  assert.match(html, /09:10/u);
+  assert.match(html, /Ana Souza<\/span> <span class="prof">12 anos<\/span>/u);
+  // Os dois professores, sem repetir, na mesma linha.
+  assert.match(html, /Prof\. Lohana Araújo, Gabriel/u);
+});
+
+test('na planilha, quem sobe junto divide a ordem e diz com quem toca', () => {
+  const csv = gerarPlanilhaCsv(
+    dados([
+      bloco('Bloco 1', [
+        ap({ aluno_nome: 'Ana', grupo_id: 'duo', idade: 12 }),
+        ap({ aluno_nome: 'Pedro', grupo_id: 'duo' }),
+        ap({ aluno_nome: 'Bia' }),
+      ]),
+    ]),
+  );
+  const [cab, ana, pedro, bia] = csv.trim().split('\r\n').map((l) => l.split(';'));
+  assert.deepEqual(cab.slice(-2), ['Idade', 'Sobe junto com']);
+  assert.equal(ana[2], '1');
+  assert.equal(pedro[2], '1');
+  assert.equal(bia[2], '2');
+  assert.equal(ana[3], pedro[3], 'mesmo horario');
+  assert.equal(ana.at(-2), '12');
+  assert.equal(ana.at(-1), 'Pedro');
+  assert.equal(bia.at(-1), '');
+});
+
+test('a folha de palco soma quem toca junto: dois violoes no mesmo numero', () => {
+  const html = gerarFolhaDePalcoHtml(
+    dados([
+      bloco('Bloco 1', [
+        ap({ curso_nome: 'Violão', grupo_id: 'duo' }),
+        ap({ curso_nome: 'Violão', grupo_id: 'duo' }),
+      ]),
+    ]),
+  );
+  assert.match(html, /2&times; Violão/u);
+});

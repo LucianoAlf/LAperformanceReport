@@ -32,6 +32,8 @@ import {
   RefreshCw,
   Link2,
   Play,
+  Unlink,
+  UserPlus,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -41,6 +43,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import {
+  agruparEmNumeros,
   calcularHorariosDaGrade,
   INTERVALO_ENTRE_APRESENTACOES_PADRAO_SEGUNDOS,
   chaveDoItem,
@@ -49,7 +52,11 @@ import {
   divergenciasDoProfessor,
   formatarDataCurta,
   formatarDuracao,
-  resumirPalcoDaApresentacao,
+  horaParaSegundos,
+  idadeHoje,
+  palcoDosNumeros,
+  rotuloIdade,
+  segundosParaHora,
   type BlocoComHorario,
 } from '@/lib/eventos';
 import {
@@ -59,7 +66,8 @@ import {
   excluirBloco,
   atualizarBloco,
   removerApresentacao,
-  atualizarApresentacao,
+  atualizarApresentacoes,
+  separarApresentacao,
   reordenarGrade,
   reordenarBlocos as reordenarBlocos_rpc,
   sincronizarRecital,
@@ -71,93 +79,61 @@ import {
 import { SeletorApresentacao } from './SeletorApresentacao';
 import { PalcoApresentacao } from './PalcoApresentacao';
 
-/* ─────────────────────────── apresentação ─────────────────────────── */
+/* ─────────────────────────── número ─────────────────────────── */
 
-function CartaoApresentacao({
+/**
+ * Linha entre um número e o seguinte: a troca de palco que o horário já conta.
+ *
+ * Sem ela, a grade mostra 09:00 numa apresentação de 3 min e 09:08 na próxima, e quem lê não
+ * sabe de onde saíram os 5 minutos (pedido do Hugo, 28/09). Não é item arrastável — fica fora
+ * do `SortableContext`, só entre os cartões.
+ */
+function TrocaDePalco({ termina, segundos }: { termina: string | null; segundos: number }) {
+  return (
+    <div className="flex items-center gap-2 px-2 text-[10.5px] text-slate-500">
+      <span className="h-px flex-1 bg-slate-700/60" />
+      <Clock className="h-3 w-3 shrink-0 text-slate-600" />
+      <span className="tabular-nums">
+        {termina ? `termina ${termina} · ` : ''}
+        {formatarDuracao(segundos)} de troca de palco
+      </span>
+      <span className="h-px flex-1 bg-slate-700/60" />
+    </div>
+  );
+}
+
+/** Nome, idade, curso, professor e selos de UM integrante do número. */
+function LinhaIntegrante({
   apresentacao,
-  horario,
-  sugestoes,
+  emGrupo,
+  onSeparar,
   onRemover,
-  onSalvarCampo,
-  onMudou,
 }: {
   apresentacao: ApresentacaoDaGrade;
-  horario: string | undefined;
-  sugestoes: { instrumento: string[]; equipamento: string[] };
+  emGrupo: boolean;
+  onSeparar: () => void;
   onRemover: () => void;
-  onSalvarCampo: (campos: {
-    musica?: string | null;
-    musica_link?: string | null;
-    duracao_segundos?: number | null;
-  }) => void;
-  onMudou: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: apresentacao.id,
-  });
-  const [musica, setMusica] = useState(apresentacao.musica ?? '');
-  const [musicaLink, setMusicaLink] = useState(apresentacao.musica_link ?? '');
-  const [palcoAberto, setPalcoAberto] = useState(false);
-  const [abrindoPlayback, setAbrindoPlayback] = useState(false);
-
-  const resumoPalco = resumirPalcoDaApresentacao(
-    apresentacao.itens,
-    apresentacao.tem_playback,
-    Boolean(apresentacao.observacao_mapa),
-  );
-
-  // O que o professor lancou difere do que vale aqui? So existe quando o ADM tomou posse
-  // dos campos — senao o sync ja teria igualado os dois lados.
+  const idade = rotuloIdade(idadeHoje(apresentacao.aluno_data_nascimento));
+  // O que o professor lançou difere do que vale aqui? Só existe quando o ADM tomou posse dos
+  // campos — senão o sync já teria igualado os dois lados.
   const divergencias = divergenciasDoProfessor(apresentacao);
 
-  const abrirPlayback = async () => {
-    if (!apresentacao.playback_path) return;
-    setAbrindoPlayback(true);
-    const { url, error } = await criarUrlDePlayback(apresentacao.playback_path);
-    setAbrindoPlayback(false);
-    if (error || !url) {
-      toast.error(`Não consegui abrir o playback: ${error?.message ?? 'sem link'}`);
-      return;
-    }
-    window.open(url, '_blank', 'noopener');
-  };
-
   return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn(
-        'rounded-lg border border-slate-700/60 bg-slate-900/50 p-2.5',
-        isDragging && 'opacity-40',
-      )}
-    >
+    <div className={cn(emGrupo && 'rounded border border-slate-700/50 bg-slate-950/30 px-2 py-1.5')}>
       <div className="flex items-start gap-2">
-        {/* O handle é SÓ a alça: com o listener no cartão inteiro, clicar no campo de
-            música iniciaria um arrasto e o input nunca receberia foco. */}
-        <button
-          type="button"
-          {...attributes}
-          {...listeners}
-          aria-label={`Mover ${apresentacao.aluno_nome}`}
-          className="mt-0.5 cursor-grab touch-none text-slate-600 hover:text-slate-400 active:cursor-grabbing"
-        >
-          <GripVertical className="h-4 w-4" />
-        </button>
-
-        <span className="mt-px rounded bg-slate-800 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-slate-300">
-          {horario ?? '--:--'}
-        </span>
-
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2">
             <span className="truncate text-[13px] font-medium text-white">
               {apresentacao.aluno_nome}
             </span>
+            {/* Mesmo formato da aba Alunos e do seletor — idade de hoje, não do recital. */}
+            {idade && <span className="text-[11.5px] text-slate-500">{idade}</span>}
             <span className="rounded bg-amber-500/15 px-1.5 py-px text-[10.5px] text-amber-300">
               {apresentacao.curso_nome}
             </span>
-            {/* O selo mostra que o professor ja lancou no LA Teacher — a divergencia
-                explica QUANDO o conteudo daqui difere do dele. */}
+            {/* O selo mostra que o professor já lançou no LA Teacher — a divergência explica
+                QUANDO o conteúdo daqui difere do dele. */}
             {apresentacao.professor?.musica_lancada_em && (
               <span
                 className="rounded bg-sky-500/15 px-1.5 py-px text-[10.5px] text-sky-300"
@@ -177,30 +153,216 @@ function CartaoApresentacao({
             // programação impressa vira dois nomes sem papel declarado.
             <p className="text-[11.5px] text-slate-500">Prof. {apresentacao.professor_nome}</p>
           )}
+        </div>
 
-          {/* Divergencia professor x grade: cada campo que o ADM sobrescreveu depois do
-              professor lancar. Informa; nunca bloqueia — o ADM pode ter razao. */}
-          {divergencias.length > 0 && (
-            <div className="mt-1.5 rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-[11.5px] text-amber-200/90">
-              <span className="font-medium">Prof. pediu: </span>
-              {divergencias.map((d, i) => (
-                <span key={d.campo}>
-                  {i > 0 && ' · '}
-                  {d.rotulo} “{d.professor ?? '—'}”
-                </span>
-              ))}
+        {emGrupo && (
+          <button
+            type="button"
+            onClick={onSeparar}
+            title="Tirar deste número — passa a tocar sozinho, logo depois dele"
+            className="mt-0.5 flex items-center gap-1 rounded px-1 text-[11px] text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-300"
+          >
+            <Unlink className="h-3.5 w-3.5" />
+            separar
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onRemover}
+          aria-label={`Remover ${apresentacao.aluno_nome} da grade`}
+          title="Remover da grade"
+          className="mt-0.5 text-slate-600 transition-colors hover:text-rose-400"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Divergência professor x grade: cada campo que o ADM sobrescreveu depois do professor
+          lançar. Informa; nunca bloqueia — o ADM pode ter razão. */}
+      {divergencias.length > 0 && (
+        <div className="mt-1.5 rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-[11.5px] text-amber-200/90">
+          <span className="font-medium">Prof. pediu: </span>
+          {divergencias.map((d, i) => (
+            <span key={d.campo}>
+              {i > 0 && ' · '}
+              {d.rotulo} “{d.professor ?? '—'}”
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Um NÚMERO do recital: o que sobe ao palco de uma vez.
+ *
+ * Quase sempre é uma apresentação sozinha. Quando alunos tocam juntos (a Ana no Violão
+ * acompanhando o Pedro no Canto), o número tem vários integrantes — cada um continua sendo a
+ * apresentação dele (certificado por curso, canal do LA Teacher), mas a grade mostra um cartão,
+ * um horário, uma música.
+ *
+ * ⚠️ Música, link e duração são DO NÚMERO e gravam em todos os integrantes: gravar só no
+ * primeiro deixaria a planilha e o certificado dos outros com a música vazia. Palco e mapa
+ * continuam por integrante — é o que cada um pede para tocar.
+ */
+function CartaoNumero({
+  numero,
+  horario,
+  sugestoes,
+  eventoId,
+  unidadeId,
+  blocoId,
+  onMudou,
+}: {
+  numero: ApresentacaoDaGrade[];
+  horario: { inicio: string; duracaoSegundos: number } | undefined;
+  sugestoes: { instrumento: string[]; equipamento: string[] };
+  eventoId: number;
+  unidadeId: string;
+  blocoId: number;
+  onMudou: () => void;
+}) {
+  const principal = numero[0];
+  const ids = numero.map((a) => a.id);
+  const emGrupo = numero.length > 1;
+
+  // A alça move o NÚMERO inteiro: o id arrastável é o do primeiro integrante.
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: principal.id,
+  });
+  const [musica, setMusica] = useState(principal.musica ?? '');
+  const [musicaLink, setMusicaLink] = useState(principal.musica_link ?? '');
+  const [palcoAberto, setPalcoAberto] = useState(false);
+  const [adicionando, setAdicionando] = useState(false);
+  const [abrindoPlayback, setAbrindoPlayback] = useState<number | null>(null);
+
+  const salvarNoNumero = async (campos: Parameters<typeof atualizarApresentacoes>[1]) => {
+    const { error } = await atualizarApresentacoes(ids, campos);
+    if (error) toast.error(`Não consegui salvar: ${error.message}`);
+    else onMudou();
+  };
+
+  // O que o número inteiro leva ao palco, somado entre os integrantes — eles tocam ao mesmo
+  // tempo. Mesma fonte da aba Palco e da folha impressa (`palcoDosNumeros`).
+  const palco = useMemo(() => consolidarItensDoPalco(palcoDosNumeros(numero)), [numero]);
+
+  // O sync do LA Teacher grava por integrante; se os professores lançaram músicas diferentes
+  // para o mesmo número, a tela diz — a equipe decide qual vale digitando no campo.
+  const musicasDistintas = [
+    ...new Set(numero.map((a) => (a.musica ?? '').trim()).filter((m) => m !== '')),
+  ];
+  const musicaDivergente = emGrupo && musicasDistintas.length > 1;
+
+  const inicioSeg = horaParaSegundos(horario?.inicio);
+  const termina =
+    horario && inicioSeg !== null ? segundosParaHora(inicioSeg + horario.duracaoSegundos) : null;
+
+  const noNumero = useMemo(
+    () => new Set(numero.map((a) => `${a.pessoa_chave}|${a.curso_id}`)),
+    [numero],
+  );
+
+  const abrirPlayback = async (ap: ApresentacaoDaGrade) => {
+    if (!ap.playback_path) return;
+    setAbrindoPlayback(ap.id);
+    const { url, error } = await criarUrlDePlayback(ap.playback_path);
+    setAbrindoPlayback(null);
+    if (error || !url) {
+      toast.error(`Não consegui abrir o playback: ${error?.message ?? 'sem link'}`);
+      return;
+    }
+    window.open(url, '_blank', 'noopener');
+  };
+
+  const remover = async (ap: ApresentacaoDaGrade) => {
+    const { error } = await removerApresentacao(ap.id);
+    if (error) toast.error(`Não consegui remover: ${error.message}`);
+    else onMudou();
+  };
+
+  const separar = async (ap: ApresentacaoDaGrade) => {
+    const { error } = await separarApresentacao(ap.id);
+    if (error) toast.error(error.message, { description: error.hint ?? undefined });
+    else onMudou();
+  };
+
+  const comPlayback = numero.filter((a) => a.playback_path);
+  const links = [...new Set(numero.map((a) => a.musica_link).filter(Boolean))] as string[];
+  const observacoes = numero.filter((a) => (a.observacao_mapa ?? '').trim() !== '');
+  const duracaoMin = horario ? Math.round(horario.duracaoSegundos / 60) : null;
+  const duracaoPropria = numero.some((a) => a.duracao_segundos !== null);
+  const primeiroNome = (ap: ApresentacaoDaGrade) => ap.aluno_nome.split(' ')[0];
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        'rounded-lg border bg-slate-900/50 p-2.5',
+        emGrupo ? 'border-violet-500/40' : 'border-slate-700/60',
+        isDragging && 'opacity-40',
+      )}
+    >
+      <div className="flex items-start gap-2">
+        {/* O handle é SÓ a alça: com o listener no cartão inteiro, clicar no campo de música
+            iniciaria um arrasto e o input nunca receberia foco. */}
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          aria-label={`Mover ${numero.map((a) => a.aluno_nome).join(' e ')}`}
+          className="mt-0.5 cursor-grab touch-none text-slate-600 hover:text-slate-400 active:cursor-grabbing"
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+
+        {/* Início e fim do número: é o que responde "quanto tempo isto ocupa" sem conta. */}
+        <span
+          className="mt-px shrink-0 rounded bg-slate-800 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-slate-300"
+          title={duracaoMin !== null ? `${duracaoMin} min` : undefined}
+        >
+          {horario ? `${horario.inicio}–${termina}` : '--:--'}
+        </span>
+
+        <div className="min-w-0 flex-1 space-y-1.5">
+          {emGrupo && (
+            <p className="text-[10.5px] font-medium uppercase tracking-wide text-violet-300/80">
+              sobem juntos · {numero.length} alunos
+            </p>
+          )}
+
+          {numero.map((ap) => (
+            <LinhaIntegrante
+              key={ap.id}
+              apresentacao={ap}
+              emGrupo={emGrupo}
+              onSeparar={() => separar(ap)}
+              onRemover={() => remover(ap)}
+            />
+          ))}
+
+          {musicaDivergente && (
+            <div className="rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-[11.5px] text-amber-200/90">
+              <span className="font-medium">Músicas diferentes no número: </span>
+              {numero
+                .filter((a) => (a.musica ?? '').trim() !== '')
+                .map((a) => `${primeiroNome(a)} “${a.musica}”`)
+                .join(' · ')}
+              <span className="text-amber-200/70"> — digite a que vale e ela grava para todos.</span>
             </div>
           )}
 
-          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Input
               value={musica}
               onChange={(e) => setMusica(e.target.value)}
-              // Salva ao sair do campo, não a cada tecla: um PATCH por caractere numa
-              // grade de 270 apresentações é o tipo de coisa que derruba a tela.
+              // Salva ao sair do campo, não a cada tecla: um PATCH por caractere numa grade de
+              // 270 apresentações é o tipo de coisa que derruba a tela.
               onBlur={() => {
                 const valor = musica.trim();
-                if (valor !== (apresentacao.musica ?? '')) onSalvarCampo({ musica: valor || null });
+                const mudou = numero.some((a) => (a.musica ?? '') !== valor);
+                if (mudou) salvarNoNumero({ musica: valor || null });
               }}
               placeholder="Música (ex: Asa Branca)"
               className="h-7 flex-1 text-[12.5px]"
@@ -210,14 +372,14 @@ function CartaoApresentacao({
               <Input
                 type="number"
                 min={1}
-                defaultValue={
-                  apresentacao.duracao_segundos ? Math.round(apresentacao.duracao_segundos / 60) : ''
-                }
+                defaultValue={duracaoPropria && duracaoMin !== null ? duracaoMin : ''}
                 onBlur={(e) => {
                   const min = Number(e.target.value);
-                  // Campo vazio volta para a duração padrão do evento (null), em vez de
-                  // gravar zero e sumir com a apresentação do cálculo.
-                  onSalvarCampo({ duracao_segundos: min > 0 ? min * 60 : null });
+                  const valor = min > 0 ? min * 60 : null;
+                  const mudou = numero.some((a) => a.duracao_segundos !== valor);
+                  // Campo vazio volta para a duração padrão do evento (null), em vez de gravar
+                  // zero e sumir com a apresentação do cálculo.
+                  if (mudou) salvarNoNumero({ duracao_segundos: valor });
                 }}
                 placeholder="5"
                 className="h-7 w-14 text-[12.5px]"
@@ -226,66 +388,52 @@ function CartaoApresentacao({
               <span className="text-[11px] text-slate-600">min</span>
             </div>
 
-            {/* O palco fica fechado por padrão: quase toda apresentação não tem item
-                nenhum, e abrir 270 painéis transformaria a grade num formulário. O resumo
-                ao lado é o que diz se vale abrir. */}
-            <button
-              type="button"
-              onClick={() => setPalcoAberto((v) => !v)}
-              aria-expanded={palcoAberto}
-              className={cn(
-                'flex items-center gap-1 rounded px-1.5 py-0.5 text-[11.5px] transition-colors',
-                resumoPalco
-                  ? 'bg-violet-500/15 text-violet-300 hover:bg-violet-500/25'
-                  : 'text-slate-500 hover:text-slate-300',
-              )}
-            >
-              <Settings2 className="h-3.5 w-3.5" />
-              {resumoPalco ?? 'palco'}
-            </button>
-
-            {/* Fonte do playback: link externo abre direto; arquivo do bucket pede a
-                URL assinada da edge — a policy do recital-playback nao conhece o ADM. */}
-            {apresentacao.musica_link && (
+            {/* Fonte do playback: link externo abre direto; arquivo do bucket pede a URL
+                assinada da edge — a policy do recital-playback não conhece o ADM. */}
+            {links.map((link) => (
               <a
-                href={apresentacao.musica_link}
+                key={link}
+                href={link}
                 target="_blank"
                 rel="noreferrer"
                 className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11.5px] text-sky-400 transition-colors hover:bg-sky-500/10"
-                title={apresentacao.musica_link}
+                title={link}
               >
                 <Link2 className="h-3.5 w-3.5" />
                 link
               </a>
-            )}
-            {apresentacao.playback_path && (
+            ))}
+            {comPlayback.map((ap) => (
               <button
+                key={ap.id}
                 type="button"
-                onClick={abrirPlayback}
-                disabled={abrindoPlayback}
+                onClick={() => abrirPlayback(ap)}
+                disabled={abrindoPlayback === ap.id}
                 className="flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[11.5px] text-emerald-300 transition-colors hover:bg-emerald-500/25"
-                title={apresentacao.playback_path}
+                title={ap.playback_path ?? undefined}
               >
                 <Play className="h-3.5 w-3.5" />
-                {abrindoPlayback ? 'abrindo…' : 'ouvir playback'}
+                {abrindoPlayback === ap.id
+                  ? 'abrindo…'
+                  : emGrupo
+                    ? `playback (${primeiroNome(ap)})`
+                    : 'ouvir playback'}
               </button>
-            )}
+            ))}
           </div>
 
-          {/* Link da musica: segundo campo curto, so quando ja tem playback/relatorio ou
-              quando ha algo digitado — expor sempre adicionaria um input morto em 270
-              cartoes. */}
-          {(musicaLink || apresentacao.musica_link || apresentacao.tem_playback) && (
-            <div className="mt-1 flex items-center gap-1.5">
+          {/* Link da música: segundo campo curto, só quando já tem playback/relatório ou algo
+              digitado — expor sempre adicionaria um input morto em 270 cartões. */}
+          {(musicaLink || links.length > 0 || numero.some((a) => a.tem_playback)) && (
+            <div className="flex items-center gap-1.5">
               <Link2 className="h-3 w-3 shrink-0 text-slate-600" />
               <Input
                 value={musicaLink}
                 onChange={(e) => setMusicaLink(e.target.value)}
                 onBlur={() => {
                   const valor = musicaLink.trim();
-                  if (valor !== (apresentacao.musica_link ?? '')) {
-                    onSalvarCampo({ musica_link: valor || null });
-                  }
+                  const mudou = numero.some((a) => (a.musica_link ?? '') !== valor);
+                  if (mudou) salvarNoNumero({ musica_link: valor || null });
                 }}
                 placeholder="Link da música (YouTube, Spotify…)"
                 className="h-6 flex-1 text-[11.5px]"
@@ -293,47 +441,105 @@ function CartaoApresentacao({
             </div>
           )}
 
-          {/* A observação fica FORA do painel, sempre à vista, como no protótipo do Arthur.
-              Ela é a única parte do palco que se lê em voz alta na montagem — esconder o
-              texto atrás de um clique faz quem confere a grade não saber que ele existe.
-              O resumo ao lado diz "mapa", mas dizer que há um mapa não é mostrar o mapa. */}
-          {palcoAberto ? null : apresentacao.observacao_mapa ? (
+          {/* Instrumentos NO cartão, e não no rodapé do bloco (pedido do Hugo, 28/09): quem
+              monta o palco precisa saber o que ESTE número pede na hora em que ele entra. O
+              tracejado vem do curso do aluno; o cheio, alguém escolheu. */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {palco.map((item) => (
+              <span
+                key={`${item.tipo}-${item.nome}`}
+                title={item.doCurso ? 'veio do curso, ninguém digitou' : undefined}
+                className={cn(
+                  'rounded px-1.5 py-0.5 text-[11.5px]',
+                  item.tipo === 'instrumento'
+                    ? 'bg-amber-500/10 text-amber-300/90'
+                    : 'bg-sky-500/10 text-sky-300/90',
+                  // Cor nomeada, não `border-current/30` — opacidade sobre `currentColor` não
+                  // gera classe no Tailwind e a borda sairia sem estilo nenhum.
+                  item.doCurso && 'border border-dashed border-slate-600',
+                )}
+              >
+                {item.quantidade}× {item.nome}
+              </span>
+            ))}
             <button
               type="button"
-              onClick={() => setPalcoAberto(true)}
-              className="mt-1.5 flex w-full gap-1.5 rounded px-1.5 py-1 text-left text-[11.5px] text-slate-400 transition-colors hover:bg-slate-800/60"
+              onClick={() => setPalcoAberto((v) => !v)}
+              aria-expanded={palcoAberto}
+              className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11.5px] text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-300"
             >
-              <MapPin className="mt-px h-3.5 w-3.5 shrink-0 text-slate-500" />
-              <span className="min-w-0 flex-1">{apresentacao.observacao_mapa}</span>
+              <Settings2 className="h-3.5 w-3.5" />
+              {palcoAberto ? 'fechar palco' : palco.length > 0 ? 'editar palco' : 'palco'}
             </button>
+          </div>
+
+          {/* A observação fica FORA do painel, sempre à vista, como no protótipo do Arthur. É a
+              única parte do palco que se lê em voz alta na montagem — escondê-la atrás de um
+              clique faz quem confere a grade não saber que ela existe. */}
+          {!palcoAberto &&
+            (observacoes.length > 0 ? (
+              observacoes.map((ap) => (
+                <button
+                  key={ap.id}
+                  type="button"
+                  onClick={() => setPalcoAberto(true)}
+                  className="flex w-full gap-1.5 rounded px-1.5 py-1 text-left text-[11.5px] text-slate-400 transition-colors hover:bg-slate-800/60"
+                >
+                  <MapPin className="mt-px h-3.5 w-3.5 shrink-0 text-slate-500" />
+                  <span className="min-w-0 flex-1">
+                    {emGrupo && <span className="text-slate-500">{primeiroNome(ap)}: </span>}
+                    {ap.observacao_mapa}
+                  </span>
+                </button>
+              ))
+            ) : (
+              <button
+                type="button"
+                onClick={() => setPalcoAberto(true)}
+                className="flex items-center gap-1.5 px-1.5 text-[11.5px] text-slate-600 transition-colors hover:text-slate-400"
+              >
+                <MapPin className="h-3.5 w-3.5" />
+                adicionar observação / mapa de palco
+              </button>
+            ))}
+
+          {/* O palco é de cada integrante — é o que cada um pede para tocar. */}
+          {palcoAberto &&
+            numero.map((ap) => (
+              <div key={ap.id}>
+                {emGrupo && (
+                  <p className="mt-1 text-[11px] font-medium text-slate-400">
+                    Palco de {ap.aluno_nome} · {ap.curso_nome}
+                  </p>
+                )}
+                <PalcoApresentacao apresentacao={ap} sugestoes={sugestoes} onMudou={onMudou} />
+              </div>
+            ))}
+
+          {adicionando ? (
+            <SeletorApresentacao
+              eventoId={eventoId}
+              unidadeId={unidadeId}
+              blocoId={blocoId}
+              juntarCom={{ alvoId: principal.id, noNumero }}
+              onFechar={() => setAdicionando(false)}
+              onAdicionado={() => {
+                setAdicionando(false);
+                onMudou();
+              }}
+            />
           ) : (
             <button
               type="button"
-              onClick={() => setPalcoAberto(true)}
-              className="mt-1 flex items-center gap-1.5 px-1.5 text-[11.5px] text-slate-600 transition-colors hover:text-slate-400"
+              onClick={() => setAdicionando(true)}
+              className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11.5px] text-violet-300/80 transition-colors hover:bg-violet-500/10 hover:text-violet-200"
+              title="Colocar outro aluno para tocar junto neste número"
             >
-              <MapPin className="h-3.5 w-3.5" />
-              adicionar observação / mapa de palco
+              <UserPlus className="h-3.5 w-3.5" />
+              adicionar aluno a este número
             </button>
           )}
-
-          {palcoAberto && (
-            <PalcoApresentacao
-              apresentacao={apresentacao}
-              sugestoes={sugestoes}
-              onMudou={onMudou}
-            />
-          )}
         </div>
-
-        <button
-          type="button"
-          onClick={onRemover}
-          aria-label={`Remover ${apresentacao.aluno_nome} da grade`}
-          className="mt-0.5 text-slate-600 transition-colors hover:text-rose-400"
-        >
-          <X className="h-4 w-4" />
-        </button>
       </div>
     </div>
   );
@@ -362,17 +568,9 @@ function CartaoBloco({
   onMudou: () => void;
 }) {
   const [adicionando, setAdicionando] = useState(false);
-  // O palco do bloco é o que alguém leva para a montagem — por isso consolidado aqui, e
-  // não só item a item dentro de cada apresentação.
-  const palcoDoBloco = useMemo(
-    () =>
-      consolidarItensDoPalco(
-        // O curso vai junto: numa escola de música o instrumento É o curso, então ele entra
-        // sozinho na lista de montagem e ninguém redigita o que a grade já sabe.
-        bloco.apresentacoes.map((a) => ({ cursoNome: a.curso_nome, itens: a.itens })),
-      ),
-    [bloco.apresentacoes],
-  );
+  // O que sobe ao palco de uma vez. A consolidação do palco do bloco inteiro continua na aba
+  // Palco e na folha impressa; aqui cada número mostra o dele (pedido do Hugo, 28/09).
+  const numeros = useMemo(() => agruparEmNumeros(bloco.apresentacoes), [bloco.apresentacoes]);
   // `useSortable` faz as DUAS coisas: o bloco é item arrastável (trocar de ordem com os
   // outros) e alvo de soltura (receber apresentação, inclusive vazio). Antes eu usava
   // `useDroppable` e o bloco só recebia — não dava para reordenar os blocos entre si.
@@ -468,8 +666,9 @@ function CartaoBloco({
         )}
 
         <span className="text-[12px] text-slate-400">
-          {bloco.apresentacoes.length}{' '}
-          {bloco.apresentacoes.length === 1 ? 'apresentação' : 'apresentações'}
+          {numeros.length} {numeros.length === 1 ? 'número' : 'números'}
+          {numeros.length !== bloco.apresentacoes.length &&
+            ` (${bloco.apresentacoes.length} apresentações)`}
           {horario && horario.duracaoSegundos > 0 && ` · ${formatarDuracao(horario.duracaoSegundos)}`}
         </span>
 
@@ -535,70 +734,49 @@ function CartaoBloco({
           </Button>
         )}
 
+        {/* O item arrastável é o NÚMERO, identificado pelo id do primeiro integrante: quem sobe
+            junto se move junto. */}
         <SortableContext
-          items={bloco.apresentacoes.map((a) => a.id)}
+          items={numeros.map((n) => n[0].id)}
           strategy={verticalListSortingStrategy}
         >
-          {bloco.apresentacoes.length === 0 ? (
+          {numeros.length === 0 ? (
             <p className="py-4 text-center text-[12.5px] text-slate-500">
               Nenhuma apresentação neste bloco ainda.
             </p>
           ) : (
-            bloco.apresentacoes.map((ap) => (
-              <CartaoApresentacao
-                key={ap.id}
-                apresentacao={ap}
-                horario={horario?.apresentacoes.find((h) => h.id === ap.id)?.inicio}
-                sugestoes={sugestoes}
-                onMudou={onMudou}
-                onRemover={async () => {
-                  const { error } = await removerApresentacao(ap.id);
-                  if (error) toast.error(`Não consegui remover: ${error.message}`);
-                  else onMudou();
-                }}
-                onSalvarCampo={async (campos) => {
-                  const { error } = await atualizarApresentacao(ap.id, campos);
-                  if (error) toast.error(`Não consegui salvar: ${error.message}`);
-                  else onMudou();
-                }}
-              />
-            ))
+            numeros.map((numero, i) => {
+              const h = horario?.apresentacoes.find((x) => x.id === numero[0].id);
+              const ini = horaParaSegundos(h?.inicio);
+              // Chave pelos ids dos integrantes: entrar ou sair alguém do número remonta o
+              // cartão, e os campos voltam a ler o que o banco gravou.
+              const chave = numero.map((a) => a.id).join('-');
+              return (
+                <div key={chave} className="space-y-2">
+                  <CartaoNumero
+                    numero={numero}
+                    horario={h}
+                    sugestoes={sugestoes}
+                    eventoId={eventoId}
+                    unidadeId={unidadeId}
+                    blocoId={bloco.id}
+                    onMudou={onMudou}
+                  />
+                  {/* Troca de palco entre este número e o seguinte — não depois do último, onde
+                      o bloco já termina e quem manda é o intervalo entre blocos. */}
+                  {i < numeros.length - 1 && (
+                    <TrocaDePalco
+                      termina={h && ini !== null ? segundosParaHora(ini + h.duracaoSegundos) : null}
+                      segundos={INTERVALO_ENTRE_APRESENTACOES_PADRAO_SEGUNDOS}
+                    />
+                  )}
+                </div>
+              );
+            })
           )}
         </SortableContext>
       </div>
 
-      {palcoDoBloco.length > 0 && (
-        <footer className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-slate-700/60 px-3 py-2">
-          <span className="text-[10.5px] uppercase tracking-wide text-slate-500">
-            palco do bloco
-          </span>
-          {palcoDoBloco.map((item) => (
-            <span
-              key={`${item.tipo}-${item.nome}`}
-              // O nº de apresentações vai no title, não na etiqueta: é o que distingue
-              // "reveza entre 6" de "6 no palco ao mesmo tempo", e só interessa a quem
-              // está conferindo a conta.
-              title={
-                `aparece em ${item.apresentacoes} apresentaç${item.apresentacoes > 1 ? 'ões' : 'ão'}` +
-                (item.doCurso ? ' · veio do curso, ninguém digitou' : '')
-              }
-              className={cn(
-                'rounded px-1.5 py-0.5 text-[11.5px]',
-                item.tipo === 'instrumento'
-                  ? 'bg-amber-500/10 text-amber-300/90'
-                  : 'bg-sky-500/10 text-sky-300/90',
-                // Derivado do curso fica tracejado: some sozinho se a apresentação sair do
-                // bloco, enquanto o digitado é decisão de alguém e só sai se alguém apagar.
-                // Cor nomeada, não `border-current/30` — opacidade sobre `currentColor` não
-                // gera classe no Tailwind e a borda sairia sem estilo nenhum.
-                item.doCurso && 'border border-dashed border-slate-600',
-              )}
-            >
-              {item.quantidade}× {item.nome}
-            </span>
-          ))}
-        </footer>
-      )}
     </section>
   );
 }
@@ -681,6 +859,7 @@ export function GradeTab({ evento }: { evento: EventoComResumo }) {
             id: a.id,
             ordem: a.ordem,
             duracao_segundos: a.duracao_segundos,
+            grupo_id: a.grupo_id,
           })),
         })),
       ),
@@ -761,30 +940,36 @@ export function GradeTab({ evento }: { evento: EventoComResumo }) {
     const origem = blocoDoItem(Number(active.id));
     if (!origem) return;
 
-    // O alvo pode ser outra apresentação OU o corpo de um bloco vazio.
+    // O alvo pode ser outro número OU o corpo de um bloco vazio.
     const alvoId = idDeBloco(over.id);
     const alvoBloco =
       alvoId !== null ? blocos.find((b) => b.id === alvoId) : blocoDoItem(Number(over.id));
     if (!alvoBloco) return;
 
-    const movido = origem.apresentacoes.find((a) => a.id === Number(active.id))!;
-    const restantes = origem.apresentacoes.filter((a) => a.id !== movido.id);
+    // O que se arrasta é o NÚMERO: quem sobe junto vai junto, senão a trava do banco recusa
+    // o número partido em dois blocos. A conta é por número e só no fim vira apresentação.
+    const numerosOrigem = agruparEmNumeros(origem.apresentacoes);
+    const movido = numerosOrigem.find((n) => n.some((a) => a.id === Number(active.id)));
+    if (!movido) return;
+    const restantes = numerosOrigem.filter((n) => n !== movido);
     const destino =
-      alvoBloco.id === origem.id ? restantes : alvoBloco.apresentacoes.filter((a) => a.id !== movido.id);
+      alvoBloco.id === origem.id ? restantes : agruparEmNumeros(alvoBloco.apresentacoes);
 
-    // Soltar no corpo do bloco (id com prefixo) põe no fim; soltar sobre uma apresentação
-    // põe na posição dela.
+    // Soltar no corpo do bloco (id com prefixo) põe no fim; soltar sobre um número põe na
+    // posição dele.
     const posicao =
-      alvoId !== null ? destino.length : destino.findIndex((a) => a.id === Number(over.id));
+      alvoId !== null
+        ? destino.length
+        : destino.findIndex((n) => n.some((a) => a.id === Number(over.id)));
     destino.splice(posicao < 0 ? destino.length : posicao, 0, movido);
 
     // Reenumera os DOIS blocos: mover para fora deixa buracos na origem, e a ordem com
     // buraco funciona até alguém inserir no meio.
     const itens = [
-      ...destino.map((a, i) => ({ id: a.id, bloco_id: alvoBloco.id, ordem: i + 1 })),
+      ...destino.flat().map((a, i) => ({ id: a.id, bloco_id: alvoBloco.id, ordem: i + 1 })),
       ...(alvoBloco.id === origem.id
         ? []
-        : restantes.map((a, i) => ({ id: a.id, bloco_id: origem.id, ordem: i + 1 }))),
+        : restantes.flat().map((a, i) => ({ id: a.id, bloco_id: origem.id, ordem: i + 1 }))),
     ];
 
     const { error } = await reordenarGrade(evento.id, itens);
@@ -869,11 +1054,20 @@ export function GradeTab({ evento }: { evento: EventoComResumo }) {
               setArrastando({ tipo: 'bloco', rotulo: blocos.find((b) => b.id === blocoId)?.nome ?? 'Bloco' });
               return;
             }
-            const ap = blocoDoItem(Number(e.active.id))?.apresentacoes.find(
-              (a) => a.id === Number(e.active.id),
-            );
+            const bloco = blocoDoItem(Number(e.active.id));
+            const numero = bloco
+              ? agruparEmNumeros(bloco.apresentacoes).find((n) =>
+                  n.some((a) => a.id === Number(e.active.id)),
+                )
+              : undefined;
             setArrastando(
-              ap ? { tipo: 'apresentacao', rotulo: ap.aluno_nome, detalhe: ap.curso_nome } : null,
+              numero
+                ? {
+                    tipo: 'apresentacao',
+                    rotulo: numero.map((a) => a.aluno_nome).join(' + '),
+                    detalhe: numero.map((a) => a.curso_nome).filter(Boolean).join(' + '),
+                  }
+                : null,
             );
           }}
           onDragEnd={aoSoltar}
