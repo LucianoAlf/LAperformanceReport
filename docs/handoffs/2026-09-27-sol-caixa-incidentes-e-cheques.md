@@ -202,3 +202,21 @@ Hierárquico, uma informação por linha, o mesmo vocabulário do card de compro
 - Integração financeira e cheques: `docs/sistema/financeiro.md` → "Lote de cheques para depósito → caixa da Sol".
 - Contrato original com o Super Folha (parcialmente substituído, ver §4): repositório do Super Folha, `Docs/handoffs/2026-09-26-sol-cheques-lote-deposito.md`.
 - Testes: `tests/sol-runtime/cheques-lote-e2e.cjs`, `barra-26set-duplicidade-e-revisao-zumbi-e2e.cjs`, `grupo-fala-so-quando-chamada-e2e.cjs`, `abrir-com-card-pendente-e-recibo-checkout-e2e.cjs`, `fonte-futura-lateral-e-nome-sem-rotulo-e2e.cjs`.
+
+---
+
+## 7. Recreio 28/09 — a V4 chamava as ferramentas, e as ferramentas mentiam
+
+Caso: Pix de R$ 402,50, legenda "Parcela do mês de Setembro da aluna … - R$402,50". A Sol recusou duas vezes ("o valor total que li não confere"), depois disse "lançamento efetivado, recibo publicado" — **nada foi gravado** no caixa do Recreio em 28/09. O agente **chamava** as ferramentas; o defeito estava em três lugares entre ele e o banco.
+
+1. **Valor do JSON lido como dinheiro brasileiro.** O roteador devolve `402.5` (número). O código fazia `parseBRMoney(String(402.5))` → "402.5" com ponto de **milhar** → **4025**; a guarda procurava 4025 na legenda e recusava o valor certo. Pega todo valor com centavo terminado em zero. O antigo "R$ 2.034,90 virou 20.349", que a guarda atribuía ao modelo, era este defeito. Hoje `valorDoModelo()` (número é número; texto BR segue no leitor BR); 5 pontos trocados.
+2. **Competência "Setembro" chegava crua ao Core**, que compara `MM/AAAA` → `nenhuma_fatura_aberta`. `normalizarCompetenciaV4()` usa a mesma regra do legado; o irreconhecível segue como veio (o Core recusa, nunca vira outro mês).
+3. **A ferramenta respondia `{ok:true, ja_publicado_no_grupo:true}` para QUALQUER desfecho** — inclusive `null` (o caixa não fez nada) e `pode_sem_pendencia`. O agente acreditou. Hoje o MCP mede o desfecho da própria chamada (o que foi enviado ao grupo e o que o runtime registrou para aquele chat) e devolve `estado` ∈ `executado` · `card_publicado` · `mensagem_publicada` · `nada_aconteceu`, com `motivo_humano`. `ok` só é verdade nos dois primeiros. O contrato de leitura vai na descrição de toda ferramenta que executa no caixa.
+
+Testes: `v4-valor-e-competencia-do-modelo-e2e.cjs` e `sol-portas-resposta-honesta-e2e.cjs` (ambos reprovam o código anterior). Suíte 75/0.
+
+**Shadow V4 deste incidente:** não há ponto de dado — no Recreio a V4 é o caminho ao vivo (canário), e o roteador em sombra só roda no caminho legado. O log do dia mostra 6× `agent_first_valor_total_recusado`, que é a raiz 1.
+
+### Ainda aberto (próximos PRs)
+- **Dois caixas em memória.** O processo do MCP instancia o próprio handler do caixa, separado do da ponte do WhatsApp. Hoje isso é contido pela reidratação das pendências a partir do ledger V3 a cada chamada, mas continua sendo duas cópias de estado. O desenho definitivo é a ferramenta executar **dentro** da ponte (endpoint local), com um executor só.
+- **Total recusado não deixa rascunho.** Depois da recusa, "o total foi R$ 402,50" não retoma o lançamento — a pessoa precisa reenviar o comprovante.
