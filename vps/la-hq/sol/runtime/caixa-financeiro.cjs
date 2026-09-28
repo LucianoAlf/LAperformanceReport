@@ -281,17 +281,20 @@ function extrairItensNomeValor(texto) {
   return { itens, totalDeclarado };
 }
 
-const PRODUTO_LOJINHA_RE = /\b(lojinha|loja|cordas?|palhetas?|baquetas?|capotraste|afinador(?:es)?|cabos?|correia|encordoamento|livro|apostila|camisetas?|camisas?)\b/i;
+const PRODUTO_LOJINHA_RE = /\b(lojinha|loja|cordas?|palhetas?|baquetas?|capotraste|afinador(?:es)?|cabos?|correia|encordoamento|livro|apostila|camisetas?|camisas?|cadernos?|bolsas?)\b/i;
 function detectarLojinhaProduto(texto) {
   const t = String(texto || '');
   if (/passaporte|taxa\s+de\s+matr[íi]cula/i.test(t)) return null;
   if (!PRODUTO_LOJINHA_RE.test(t)) return null;
   let item = null;
-  const mCorda = t.match(/\bcorda(?:s)?(?:\s+de\s+([a-zA-ZÀ-ÿ]+))?/i);
-  if (mCorda) item = 'Corda' + (mCorda[1] ? ' de ' + tituloNome(mCorda[1]) : '');
-  if (!item) {
-    const mItem = t.match(/\b(palheta|baqueta|capotraste|afinador|cabo|correia|encordoamento|livro|apostila|camiseta|camisa)(?:\s+de\s+([a-zA-ZÀ-ÿ]+))?/i);
+  // Item específico antes de "corda": "caderno de cordas" é caderno, não corda.
+  {
+    const mItem = t.match(/\b(palheta|baqueta|capotraste|afinador|cabo|correia|encordoamento|livro|apostila|camiseta|camisa|caderno|bolsa)(?:\s+de\s+([a-zA-ZÀ-ÿ]+))?/i);
     if (mItem) item = tituloNome(mItem[1] + (mItem[2] ? ' de ' + mItem[2] : ''));
+  }
+  if (!item) {
+    const mCorda = t.match(/\bcorda(?:s)?(?:\s+de\s+([a-zA-ZÀ-ÿ]+))?/i);
+    if (mCorda) item = 'Corda' + (mCorda[1] ? ' de ' + tituloNome(mCorda[1]) : '');
   }
   if (!item && !/\b(lojinha|loja)\b/i.test(t)) return null;
   return { categoria: 'lojinha', item: item || 'Produto de lojinha' };
@@ -2579,7 +2582,11 @@ function _v4Http(prompt, timeout) {
       // o ling-3.0-flash terminavam com finish_reason=length e `content` VAZIO —
       // reprovados por um teto que era nosso, nao deles. O deepseek-v4-flash
       // sozinho gasta 1.800-2.100 tokens de raciocinio neste prompt.
-      max_tokens: 2000, temperature: 0,
+      // ⚠️ 4000 desde 28/09: medido no minimax-m3, "venda capotraste … Venda
+      //    Kailane" gastou os 2000 inteiros raciocinando (finish_reason=length,
+      //    content vazio) em 1 de 3 chamadas; com 4000, 3 de 3 terminaram (1.063
+      //    a 1.561 tokens). Caso comum não fica mais lento: o modelo para sozinho.
+      max_tokens: 4000, temperature: 0,
       // ⚠️ `response_format: json_object` foi RETIRADO: nao acelera de forma
       // confiavel e, nos modelos que raciocinam, produz conteudo vazio. O prompt
       // ja pede "SOMENTE JSON" e o _parseVisionJson acha o ultimo bloco {...}
@@ -2622,7 +2629,12 @@ function _numerosDoTexto(texto) {
   for (const m of t.matchAll(/(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:,\d{1,2})?)/gi)) {
     // ⚠️ inteiro pequeno sem "R$" nao conta: "3x", "12/09" e numero de sala
     //    fariam qualquer valor "bater" e a guarda viraria enfeite.
-    if (!/r\$/i.test(m[0]) && !/,\d{1,2}$/.test(m[1])) continue;
+    // "60 reais" e "Valor: 60" também são valor escrito (Barra, venda de corda
+    // de 19/08: "Valor:60 reais" era recusado como "não confere").
+    const _depois = t.slice(m.index + m[0].length, m.index + m[0].length + 8);
+    const _antes = t.slice(Math.max(0, m.index - 8), m.index);
+    const _rotulado = /^\s*reais?\b/i.test(_depois) || /valor\s*:?\s*$/i.test(_antes);
+    if (!/r\$/i.test(m[0]) && !/,\d{1,2}$/.test(m[1]) && !_rotulado) continue;
     const n = Number(String(m[1]).replace(/\./g, '').replace(',', '.'));
     if (Number.isFinite(n) && n > 0) achados.push(n);
   }
@@ -2817,6 +2829,12 @@ function rotearMensagemV4(texto, contexto, { timeout = 30000, documento = null }
       + 'A evidencia do documento serve para valor, forma, modalidade e parcelas. Nome lido no documento e pagador, nunca aluno confirmado. '
       + 'Se a mensagem humana declarar forma ou valor, ela vence a leitura do documento; conflito humano deve ficar nulo para pedir esclarecimento. '
       + 'Um aluno com dois cursos e UM item; dois irmaos sao DOIS itens. Varios meses do mesmo aluno vao em competencias[]. '
+      // 28/09: "venda capotraste para o aluno Enzo R$40 pix Venda Kailane" virava
+      // DOIS itens (Enzo e Kailane) sem total — a Kailane e a funcionaria que
+      // vendeu. Medido: 3 de 4 chamadas liam assim.
+      + 'VENDA DE PRODUTO (corda, palheta, baqueta, capotraste, caderno, livro, camiseta...) e categoria "lojinha". '
+      + '"Venda Fulano", "Venda: Fulano", "vendido por Fulano" ou "vendedor Fulano" nomeia QUEM VENDEU (a equipe), NUNCA um aluno: nao vira item. '
+      + 'Com um so valor na mensagem, esse valor e o valor_total. '
       + 'REGRAS: "conversa" = papo de equipe/elogio/despedida; "nada" = assunto alheio ao caixa. '
       + '"aprovar" quando autorizam lancar o que ja esta num card do contexto — inclusive so com "pode", "pode sim", "ok", "isso", "manda", respondendo a pergunta da Sol. Exige card no contexto: sem card, "pode" sozinho e "conversa". '
       + '"lancamento_por_texto" quando a mensagem DITA um pagamento novo, sem comprovante e sem card aberto: traz aluno e/ou valor e/ou competencia ("PG parcela 09/26 Aluno: Fulano LA CG - R$377,00"). Nao confundir com "aprovar" — aqui nao ha card para aprovar, ha um lancamento sendo criado. '
@@ -3908,7 +3926,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       valor: envelope.valor_total, forma: envelope.forma || null, categoria: null,
       origem, ts: agora, agentFirstEnvelope: envelope, missingFields: camposFaltantesV4(envelope),
       rascunhoAutorHash: identidadeRascunhoV4(event), msgIds: [],
-      v3Operacao: 'agent_first_draft',
+      v3Operacao: 'agent_first_draft', textoOriginal: bodyLimpo(event.body).slice(0, 500),
     };
     let v3 = null;
     try {
@@ -3924,7 +3942,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     if (!v3 || !v3.ok || !v3.preview_id) return null;
     const draft = { envelope, origem, ts: agora, v3PreviewId: v3.preview_id,
       v3PreviewHash: previewHash, autorHash: identidadeRascunhoV4(event), msgIds: [],
-      grupo, event: { ...event, body: '' } };
+      textoOriginal: pending.textoOriginal, grupo, event: { ...event, body: '' } };
     rascunhosV4.set(event.chatId, draft);
     log({ acao: 'agent_first_draft_persistido', chatId: event.chatId, preview_ledger_id: v3.preview_id });
     return draft;
@@ -4039,10 +4057,15 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     // Sem essa propriedade, o canario antigo continua funcionando sem mudanca.
     const evidenceMedia = event && event.caixaMediaEvidence ? event.caixaMediaEvidence : null;
     let dec = event && event.caixaToolDecision ? event.caixaToolDecision : null;
-    if (!dec) {
+    // 🔴 25 s + UMA nova tentativa (28/09/2026). Com a V4 na frente, roteador
+    //    vazio vira SILÊNCIO para texto de venda (o legado não trata entrada por
+    //    texto). Medido em produção: p50 3,4 s, p90 8,2 s, máx 12,7 s, e 1 em 16
+    //    chamadas falha no provedor mesmo com 40 s — com o teto antigo de 12 s,
+    //    "venda capotraste … R$40 pix" ficou muda em 3 de 4 tentativas.
+    for (let tentativa = 1; !dec && tentativa <= 2; tentativa++) {
       try {
         dec = await rotearV4Fn(texto, contexto, {
-          timeout: 12000,
+          timeout: 25000,
           documento: evidenceMedia ? {
             valor: evidenceMedia.valor, forma: evidenceMedia.forma,
             cartao_modalidade: evidenceMedia.cartaoModalidade,
@@ -4052,6 +4075,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
           } : null,
         });
       } catch (e) { dec = null; }
+      if (!dec && tentativa === 1) log({ acao: 'agent_first_roteador_vazio_nova_tentativa', chatId: event.chatId, ms: Date.now() - t0 });
     }
     dec = aplicarEvidenciaMidiaV4(dec, evidenceMedia, texto);
     if (!dec) { log({ acao: 'agent_first_sem_decisao', chatId: event.chatId, ms: Date.now() - t0 }); return null; }
@@ -4126,7 +4150,8 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
             envelope: { ...semTotal.envelope, valor_total: null } })
           : null;
         const perguntaId = await sendFn(event.chatId,
-          'Recebi o comprovante, mas o valor total que li não confere com o que está escrito na mensagem. '
+          (event.hasMedia ? 'Recebi o comprovante, mas o valor total que li não confere com o que está escrito na mensagem. '
+            : 'Não consegui confirmar o valor na sua mensagem. ')
           + 'Não vou lançar por conta própria. Me manda o total exato'
           + (salvo ? ' (ex.: R$ 402,50) — guardei o restante, não precisa reenviar o comprovante.' : ', por favor.'));
         if (salvo) await vincularPerguntaRascunhoV4(salvo, perguntaId);
@@ -4136,6 +4161,14 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       }
       log({ acao: 'agent_first_sem_envelope', chatId: event.chatId, motivo: env.motivo,
             intencao: dec.intencao, confianca: dec.confianca });
+      // O modelo reconheceu um LANÇAMENTO mas não fechou valor/identidade: se o
+      // legado também não tratar, a pessoa precisa saber (nunca silêncio).
+      if (String(dec.intencao || '').startsWith('lancamento') && ['sem_valor_total', 'sem_identidade'].includes(env.motivo)) {
+        const _i0 = Array.isArray(dec.itens) && dec.itens[0];
+        event._agentFirstNaoResolveu = { motivo: 'lancamento_ambiguo',
+          valor: valorDoModelo(dec.valor_total != null ? dec.valor_total : dec.valor),
+          aluno: dec.aluno_nome || (_i0 && _i0.aluno) || null };
+      }
       return null;
     }
 
@@ -4177,11 +4210,22 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
         log({ acao: 'agent_first_draft_nao_persistido', chatId: event.chatId });
         return { acao: 'agent_first_draft_nao_persistido' };
       }
-      const perguntaId = await sendFn(event.chatId, 'Entendi o aluno, o valor e a fatura. Falta só a forma de pagamento: *pix*, *dinheiro*, *cartão*, *cheque* ou *transferência*. Guardei o restante; não precisa repetir.');
+      const perguntaId = await sendFn(event.chatId, 'Entendi o aluno e o valor. Falta só a forma de pagamento: *pix*, *dinheiro*, *cartão*, *cheque* ou *transferência*. Guardei o restante; não precisa repetir.');
       await vincularPerguntaRascunhoV4(salvo, perguntaId);
       return { acao: 'agent_first_aguardando_forma' };
     }
 
+    // 🔴 VENDA DE LOJINHA NÃO TEM FATURA (28/09/2026). A V4 mandava toda venda
+    //    ao Core, que procura fatura no Emusys e responde "nenhuma fatura" — a
+    //    Sol parou de lançar venda por texto e pela ferramenta. O caminho de
+    //    FOTO continua no legado (provado em 17 de 19 vendas de set/2026); aqui
+    //    ficam texto e ferramenta.
+    // O produto pode estar só na 1ª mensagem ("Venda de corda … R$ 60") quando
+    // esta é o complemento ("pix"): o rascunho guarda o texto original.
+    const textoProduto = ((draftVivo && draft && draft.textoOriginal) ? draft.textoOriginal + ' ' : '') + texto;
+    // ⚠️ A fatura vem PRIMEIRO: Campo Grande emite fatura de lojinha no Emusys
+    //    ("1 palheta caveira", tipo lojinha_produto) e o card deve ligar nela.
+    //    Só sem fatura (ou com a cópia atualizando) a venda vira card sem vínculo.
     let res = null;
     try { res = await resolverEnvelopeFn({ unidade_id: grupo.unidade_id, envelope: env.envelope }); }
     catch (e) { log({ acao: 'agent_first_erro_resolver', chatId: event.chatId, erro: String(e && e.message) }); return null; }
@@ -4256,6 +4300,15 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
         + 'Me diz o nome completo de quem pagou.');
       log({ acao: 'agent_first_pergunta', chatId: event.chatId, motivo: 'nome_ambiguo', candidatos: c.length });
       return { acao: 'agent_first_pergunta', motivo: 'nome_ambiguo' };
+    }
+    if (!event.hasMedia && ['nenhuma_fatura_aberta', 'fonte_indisponivel'].includes(res.motivo)
+        && (ehVendaDeLojinhaV4(env.envelope, textoProduto, 'declarada')
+          || ehVendaDeLojinhaV4(env.envelope, textoProduto, 'resgate'))) {
+      log({ acao: 'agent_first_lojinha_resgatada', chatId: event.chatId, motivo: res.motivo });
+      return abrirFluxoAgentFirstLojinha({ event, grupo, envelope: env.envelope, texto: textoProduto, agora,
+        origemMessageId: (draftVivo && draft.origem) || event.messageId,
+        cartaoModalidade: (formaComplementada && formaComplementada.cartaoModalidade) || null,
+        cartaoParcelas: (formaComplementada && formaComplementada.cartaoParcelas) || null });
     }
     if (!res.ok || !Array.isArray(res.itens) || res.itens.length === 0) {
       log({ acao: 'agent_first_nao_resolveu', chatId: event.chatId, motivo: res.motivo || 'sem_itens' });
@@ -4473,6 +4526,81 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     pendencia.v3PreviewId = publicado.preview_id;
     pendencia.v3PreviewHash = previewHash;
     return { ok: true, previewId, pendencia };
+  }
+
+  // É venda de lojinha? 'declarada': o modelo classificou como lojinha (ou venda
+  // com produto escrito). 'resgate': o Core não achou fatura e o texto fala de
+  // produto. Nunca com parcela/passaporte declarados, nem com 2+ alunos.
+  function ehVendaDeLojinhaV4(envelope, texto, modo) {
+    const itens = Array.isArray(envelope && envelope.itens) ? envelope.itens : [];
+    if (itens.length > 1) return false;
+    const cats = itens.length ? (Array.isArray(itens[0].categorias) ? itens[0].categorias : []) : [];
+    if (cats.some((c) => ['parcela', 'passaporte', 'matricula', 'mensalidade'].includes(String(c).toLowerCase()))) return false;
+    const produto = !!detectarLojinhaProduto(texto);
+    if (modo === 'declarada') return cats.includes('lojinha') || (cats.includes('venda') && produto);
+    return produto && (cats.length === 0 || cats.some((c) => ['lojinha', 'venda', 'outro'].includes(String(c).toLowerCase())));
+  }
+
+  // Card de lojinha pela V4: mesma pendência e mesmo cofre V3 do card singular,
+  // SEM fatura (venda não tem). O "pode" continua obrigatório.
+  async function abrirFluxoAgentFirstLojinha({ event, grupo, envelope, texto, agora, origemMessageId,
+    cartaoModalidade = null, cartaoParcelas = null }) {
+    const valor = Number(envelope.valor_total);
+    const forma = envelope.forma;
+    const produto = detectarLojinhaProduto(texto);
+    const itemLojinha = (produto && produto.item) || 'Produto de lojinha';
+    let aluno = (Array.isArray(envelope.itens) && envelope.itens[0] && envelope.itens[0].aluno) || null;
+    let responsavelFinanceiro = null;
+    // Quem vendeu não é o comprador — mesma regra do caminho de foto: rótulo de
+    // vendedor ("Venda: Kailane") OU o "aluno" ser quem mandou a mensagem, sem
+    // "aluno: X" escrito (a Kailane registrando a própria venda virou
+    // "Corda - Kailane" em 31/08).
+    let idEnviou = null;
+    try { idEnviou = await identidadeFn(event.senderPhone, grupo.unidade_id); } catch (e) { /* melhor esforço */ }
+    {
+      const vendedor = _vendedorRotulado(texto);
+      const remetente = idEnviou && idEnviou.identificado ? idEnviou.nome : null;
+      const declarado = _alunoRotulado(texto);
+      const ehDeclarado = !!(aluno && declarado && _mesmaPessoa(declarado, aluno));
+      if (aluno && ((vendedor && _mesmaPessoa(aluno, vendedor)) || (!ehDeclarado && remetente && _mesmaPessoa(aluno, remetente)))) {
+        log({ acao: "aluno_descartado_nao_e_aluno", chatId: event.chatId, trilho: "agent_first_lojinha" });
+        aluno = null;
+      }
+    }
+    if (aluno) {
+      try {
+        const rr = await responsavelFn(grupo.unidade_id, aluno);
+        if (rr && rr.aluno_nome && _mesmaPessoa(rr.aluno_nome, aluno)) {
+          aluno = rr.aluno_nome;
+          if (rr.responsavel_nome && !mesmaPessoa(rr.responsavel_nome, aluno)) responsavelFinanceiro = rr.responsavel_nome;
+        }
+      } catch (e) { /* melhor esforço: o nome declarado segue */ }
+    }
+    const descricao = `Lojinha/Venda - ${itemLojinha}${aluno ? ' - ' + aluno : ''}`;
+    const textoCard = montarPreview({ unidadeNome: grupo.nome, valor, forma, categoria: 'lojinha', aluno,
+      responsavelFinanceiro, cartaoModalidade, cartaoParcelas, formaIncerta: false, multiplas: false,
+      itemLojinha });
+    const origem = origemMessageId || event.messageId;
+    const pendencia = {
+      previewId: null, unidade_id: grupo.unidade_id, nome: grupo.nome,
+      valor, forma, categoria: 'lojinha', aluno, competencia: null, descricao,
+      responsavelFinanceiro, cartaoModalidade, cartaoParcelas, formaIncerta: false, canonica: null,
+      itemLojinha, origem, idemKey: `${event.chatId}:${origem}:agent-first-lojinha`,
+      enviadoPor: nomeParaCarimbo(idEnviou, event), ts: agora, agentFirstEnvelope: envelope,
+    };
+    const seguro = await prepararEPublicarPreviewV4({
+      event, grupo, texto: textoCard, pendencia,
+      result: { acao: 'preview_agent_first_lojinha', valor, categoria: 'lojinha' },
+      previewStatus: 'public_preview_sent',
+    });
+    if (!seguro.ok) return { acao: seguro.motivo };
+    const arr = limparVelhos(event.chatId, agora);
+    arr.push(pendencia);
+    pendentes.set(event.chatId, arr);
+    envelopesV4.set(event.chatId, { envelope, ts: agora, previewId: pendencia.previewId });
+    if (rascunhosV4.get(event.chatId)) await finalizarRascunhoV4(event.chatId, 'superseded', 'preview_completo_criado');
+    log({ acao: 'preview_agent_first_lojinha', chatId: event.chatId, valor, item: itemLojinha, com_aluno: !!aluno });
+    return { acao: 'preview_agent_first_lojinha', previewId: pendencia.previewId };
   }
 
   async function abrirFluxoAgentFirstSingular({ event, grupo, intent, agora, origemMessageId,
@@ -5051,12 +5179,15 @@ _Não lanço nada pela metade._`);
       const valor = Number(nao.valor) > 0 ? ` de *${fmtBRL(Number(nao.valor))}*` : '';
       const porque = nao.motivo === 'nenhuma_fatura_aberta'
         ? 'não achei no Emusys uma fatura desse aluno, nesse mês, que feche com esse valor'
+        : nao.motivo === 'lancamento_ambiguo'
+          ? 'não consegui separar com segurança quem comprou e o valor. Me manda numa linha, por exemplo: *Venda de capotraste — aluno Fulano — R$ 40,00 — pix*'
         : nao.motivo === 'fonte_indisponivel'
           ? 'a cópia das faturas do Emusys está atualizando agora e eu não confirmo fatura com fonte velha — manda de novo em alguns minutos'
           : 'não consegui ligar esse pagamento a uma fatura oficial';
       try {
-        await sendFn(event.chatId, `Entendi um pagamento${valor}${quem}, mas ${porque}. `
-          + 'Nada foi lançado. Confere o nome completo e o mês (ex.: parcela 09/2026) — ou, se não for mensalidade, me diz o que é.');
+        await sendFn(event.chatId, `Entendi um pagamento${valor}${quem}, mas ${porque}. Nada foi lançado.`
+          + (nao.motivo === 'nenhuma_fatura_aberta'
+            ? ' Confere o nome completo e o mês (ex.: parcela 09/2026) — ou, se não for mensalidade, me diz o que é.' : ''));
         log({ acao: 'agent_first_nao_resolveu_avisado', chatId: event.chatId, motivo: nao.motivo });
       } catch (e) {
         log({ acao: 'agent_first_nao_resolveu_aviso_erro', chatId: event.chatId, erro: String(e && e.message) });
@@ -8178,6 +8309,7 @@ _Não lanço nada pela metade._`);
             envelope: a.pending.agentFirstEnvelope, origem: a.pending.origem, ts,
             autorHash: a.pending.rascunhoAutorHash || null,
             msgIds: Array.isArray(a.pending.msgIds) ? a.pending.msgIds : [],
+            textoOriginal: a.pending.textoOriginal || '',
             v3PreviewId: a.id, v3PreviewHash: a.preview_hash, grupo: grupos[chatId],
             event: { messageId: a.pending.origem, chatId, senderId: 'rehydrated', body: '', ts: a.criado_em },
           });

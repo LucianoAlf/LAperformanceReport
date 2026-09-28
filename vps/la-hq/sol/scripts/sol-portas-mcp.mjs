@@ -136,7 +136,9 @@ const PORTAS = [
       p_cartao_parcelas: { type: 'number', description: 'Número de parcelas (1 a 24). Só quando a pessoa declarou.' },
       p_pagador: { type: 'string', description: 'Nome do pagador, se foi informado.' },
       p_itens: { type: 'array', description: 'Alunos/cursos citados. Não invente item.', items: { type: 'object', properties: {
-        aluno: { type: 'string' }, categorias: { type: 'array', items: { type: 'string' } },
+        aluno: { type: 'string' },
+        categorias: { type: 'array', items: { type: 'string' },
+          description: 'parcela | passaporte | lojinha. Venda de produto (corda, palheta, baqueta, capotraste, caderno, livro, camiseta…) é SEMPRE "lojinha": não tem fatura no Emusys e não leva competência.' },
         competencias: { type: 'array', items: { type: 'string' } },
       } } },
     } },

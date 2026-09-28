@@ -65,3 +65,22 @@ test('quando sai card, não há aviso extra', async () => {
   assert.equal(envios.length, 1);
   assert.doesNotMatch(envios[0], /Nada foi lançado/);
 });
+
+test('lançamento reconhecido mas sem total/identidade: avisa com o formato que funciona', async () => {
+  delete require.cache[runtimePath];
+  process.env.SOL_CAIXA_V4_CANARIO = CHAT;
+  const { criarHandlerFinanceiro } = require(process.env.SOL_CAIXA_CJS || runtimePath);
+  const envios = [];
+  const h = criarHandlerFinanceiro({
+    grupos: { [CHAT]: { unidade_id: 'u1', nome: 'Campo Grande' } },
+    sendFn: async (c, t) => { envios.push(t); return 'M' + envios.length; },
+    rotearV4Fn: async () => ({ intencao: 'lancamento_multi_aluno', valor_total: null,
+      itens: [{ aluno: 'Enzo', categorias: ['venda'] }, { aluno: 'Kailane', categorias: ['venda'] }] }),
+    interpretarFn: async () => null, casarFn: async () => null, canonicaFn: async () => null,
+    listarPreviewsAbertosFn: async () => [], log: () => {},
+  });
+  const r = await h.handle(ev('amb', 'venda capotraste para o aluno enzo R$40,00 pix Venda Kailane'));
+  assert.equal(r.acao, 'agent_first_nao_resolveu_avisado');
+  assert.match(envios[0], /Me manda numa linha/);
+  assert.doesNotMatch(envios[0], /Confere o nome completo/);
+});
