@@ -3483,6 +3483,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   // (ver o bloco no topo de handle()).
   const legendasEsperando = new Map(); // key -> { texto, ts, reclamada }
   const midiasEmVoo = new Map();       // key -> { ts }
+  const midiaRecente = new Map();      // key -> ts da última mídia do autor (com ou sem legenda)
   const loteJanelaMs = Math.max(0, Number(process.env.SOL_CAIXA_LOTE_MS || 900));
   const v3LedgerMode = String(process.env.SOL_CAIXA_V3_LEDGER_MODE || '').toLowerCase();
   const cheques = chequesFn !== undefined ? chequesFn
@@ -5190,6 +5191,7 @@ _Não lanço nada pela metade._`);
     //    Só vale para texto com cara de legenda (valor ou aluno rotulado), sem
     //    citação e que não seja "pode"/"não"; mídia que já tem legenda própria
     //    não adota outra.
+    if (event.hasMedia) midiaRecente.set(textoIrmaoKey(event), agora);
     if (loteJanelaMs && !/^tool-/.test(String(event.messageId || ''))) {
       const _k = textoIrmaoKey(event);
       if (event.hasMedia) {
@@ -5236,7 +5238,17 @@ _Não lanço nada pela metade._`);
     }
     const nao = event && event._agentFirstNaoResolveu;
     const ehFerramenta = /^tool-/.test(String((event && event.messageId) || ''));
-    if (nao && !ehFerramenta && (_enviosPorChat.get(event.chatId) || 0) === _antes) {
+    // 🔴 O AVISO NÃO FALA POR CIMA DO COMPROVANTE (CG 28/09 17:16 e 18:28, Julia).
+    //    Texto e PDF do mesmo autor chegam como duas mensagens; o texto sozinho
+    //    não fechava fatura e o aviso dizia "não consegui ligar", enquanto o PDF,
+    //    com o texto costurado como legenda, montava o card CERTO segundos depois.
+    //    Duas respostas contraditórias. Com mídia do mesmo autor a menos de 60 s
+    //    (antes ou depois), quem responde é o card da mídia; o aviso só registra.
+    const _midiaPerto = !event.hasMedia && Math.abs(agora - (midiaRecente.get(textoIrmaoKey(event)) || -1e15)) <= 60000;
+    if (nao && _midiaPerto) {
+      log({ acao: 'agent_first_nao_resolveu_aviso_suprimido_midia', chatId: event.chatId, motivo: nao.motivo });
+    }
+    if (nao && !_midiaPerto && !ehFerramenta && (_enviosPorChat.get(event.chatId) || 0) === _antes) {
       const quem = nao.aluno ? ` de *${nao.aluno}*` : '';
       const valor = Number(nao.valor) > 0 ? ` de *${fmtBRL(Number(nao.valor))}*` : '';
       const porque = nao.motivo === 'nenhuma_fatura_aberta'
