@@ -18,9 +18,11 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
   formatarDuracao,
+  idadeHoje,
   levantarPendencias,
   resumirEvento,
   resumirRelatorios,
+  rotuloIdade,
   type EntradaDaRevisao,
   type Pendencia,
 } from '@/lib/eventos';
@@ -95,6 +97,7 @@ export function RevisaoTab({
           aluno_nome: a.aluno_nome,
           curso_nome: a.curso_nome,
           musica: a.musica,
+          grupo_id: a.grupo_id,
         })),
       })),
       alunos: alunos.map((a) => ({
@@ -118,6 +121,15 @@ export function RevisaoTab({
   );
 
   const pendencias = useMemo(() => levantarPendencias(entrada), [entrada]);
+  // A idade da lista de relatorios sai da GRADE (quem ja tem apresentacao): o relatorio do
+  // professor nao carrega a data de nascimento.
+  const nascimentoPorApresentacao = useMemo(
+    () =>
+      new Map(
+        blocos.flatMap((b) => b.apresentacoes.map((a) => [a.id, a.aluno_data_nascimento] as const)),
+      ),
+    [blocos],
+  );
   const resumo = useMemo(() => resumirEvento(entrada), [entrada]);
   const impedimentos = pendencias.filter((p) => p.gravidade === 'impede');
 
@@ -153,6 +165,8 @@ export function RevisaoTab({
           playback_path: a.playback_path,
           tem_playback: a.tem_playback,
           observacao_mapa: a.observacao_mapa,
+          grupo_id: a.grupo_id,
+          idade: idadeHoje(a.aluno_data_nascimento),
           itens: a.itens.map((i) => ({
             tipo: i.tipo,
             nome: i.nome,
@@ -259,7 +273,11 @@ export function RevisaoTab({
             música e palco no LA Teacher; o que eles escrevem chega aqui na sincronização.
           </p>
         ) : (
-          <PainelRelatorios relatorios={relatorios} apresentacoesNaGrade={resumo.apresentacoes} />
+          <PainelRelatorios
+            relatorios={relatorios}
+            apresentacoesNaGrade={resumo.apresentacoes}
+            nascimentoPorApresentacao={nascimentoPorApresentacao}
+          />
         )}
       </section>
 
@@ -394,9 +412,12 @@ export function RevisaoTab({
 function PainelRelatorios({
   relatorios,
   apresentacoesNaGrade,
+  nascimentoPorApresentacao,
 }: {
   relatorios: RelatorioDoProfessor[];
   apresentacoesNaGrade: number;
+  /** Data de nascimento por apresentacao da grade — de onde sai a idade da lista. */
+  nascimentoPorApresentacao: Map<number, string | null>;
 }) {
   const r = resumirRelatorios(relatorios, apresentacoesNaGrade);
 
@@ -439,6 +460,12 @@ function PainelRelatorios({
               className="flex flex-wrap items-center gap-x-2 text-[12px]"
             >
               <span className="min-w-0 truncate text-slate-200">{p.aluno_nome ?? '—'}</span>
+              {p.apresentacao_id !== null &&
+                rotuloIdade(idadeHoje(nascimentoPorApresentacao.get(p.apresentacao_id))) && (
+                  <span className="text-slate-500">
+                    {rotuloIdade(idadeHoje(nascimentoPorApresentacao.get(p.apresentacao_id)))}
+                  </span>
+                )}
               <span className="text-slate-500">{p.curso}</span>
               {p.professor_nome && (
                 <span className="text-slate-600">Prof. {p.professor_nome}</span>

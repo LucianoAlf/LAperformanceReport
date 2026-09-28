@@ -106,8 +106,9 @@ apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **L
 - **RPCs:** `evento_apresentacao_adicionar_v1` (resolve a matrícula do curso e traduz a UNIQUE
   numa frase legível), `evento_grade_reordenar_v1` e `evento_bloco_reordenar_v1` (lote numa
   transação; abortam se não alcançarem TODOS os itens pedidos — sem isso uma linha escondida pela
-  policy deixaria a grade metade movida com resposta de sucesso). O resto é PostgREST direto: as 5
-  tabelas têm policy escopada por unidade.
+  policy deixaria a grade metade movida com resposta de sucesso). `evento_apresentacao_juntar_v1` e
+  `evento_apresentacao_separar_v1` montam e desfazem o **número** (ver abaixo). O resto é PostgREST
+  direto: as 5 tabelas têm policy escopada por unidade.
 - **Edge functions:** nenhuma. **Nenhum cron.**
 - 🔴 **O módulo é ISOLADO — medido em 19/09/2026, não deduzido.** Zero views e zero funções fora
   dele leem `evento_participacao`/`_apresentacao`/`_bloco`; as 6 triggers das tabelas `evento*` são
@@ -122,7 +123,8 @@ apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **L
   **nunca escrita à mão**, e `aluno_id` é PROCEDÊNCIA (mesmo padrão da anamnese). Banda **não entra
   na grade** (decisão do Arthur); `banda_evento` é outra coisa e fica intocado. Migrations:
   `20260918120000_modulo_eventos_recital.sql` (base) + `20260918140000`, `20260918170000`,
-  `20260918173000`, `20260919020000`, `20260919030000`, `20260919050000`.
+  `20260918173000`, `20260919020000`, `20260919030000`, `20260919050000`, `20260928164338`
+  (número).
 - **Horário é CALCULADO, nunca persistido** (`calcularHorariosDaGrade`): `inicio(N+1) = fim(N) +
   intervalo`, com o intervalo configurável por evento (2700s = os 45 min do protótipo). Dentro do
   bloco, 5 min de troca entre uma apresentação e a seguinte (`INTERVALO_ENTRE_APRESENTACOES_PADRAO_SEGUNDOS`,
@@ -130,7 +132,37 @@ apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **L
   não existe coluna em `evento`.
   `evento_bloco.horario_inicial` guarda só o que o humano DIGITOU (`inicio_manual`). ⚠️ Persistir o
   derivado daria duas verdades, e qualquer caminho de escrita que esquecesse de recalcular deixaria
-  a programação impressa mentindo.
+  a programação impressa mentindo. Desde 28/09 a Grade **desenha** a troca entre um cartão e o
+  seguinte (`TrocaDePalco`: "termina 09:03 · 5 min de troca de palco") e cada cartão mostra início e
+  fim — antes os 5 min só apareciam como um salto no horário do cartão de baixo.
+- **Número — alunos que sobem JUNTOS (28/09/2026, protótipo novo do Arthur).** A Ana no Violão
+  acompanhando o Pedro no Canto é **um** número: um horário, uma música, um slot, os dois listados.
+  🔴 **A apresentação CONTINUA sendo o par (pessoa, curso)** e a UNIQUE não muda — é nela que moram o
+  certificado por curso e o casamento com o LA Teacher (`evento_recital_sincronizar_v1`), e fazer da
+  apresentação um grupo de pessoas quebraria os dois. O número é só uma etiqueta comum,
+  **`evento_apresentacao.grupo_id`** (uuid **sem FK**: com FK, apagar o primeiro integrante desfaria o
+  grupo inteiro). Quem forma os números a partir da grade é **`agruparEmNumeros`** (vizinhos na ordem
+  com o mesmo `grupo_id`), e **todo consumidor passa por ele**: horário (`calcularHorariosDaGrade`,
+  o slot dura o maior integrante), palco (`palcoDosNumeros` — quem toca junto **soma**, quem se reveza
+  não: dois violões no mesmo número = 2, em sequência = 1), check-in (a posição da coxia conta
+  números) e impressão (uma linha por número; na planilha, mesma ordem + coluna "Sobe junto com").
+  Na tela: **"adicionar aluno a este número"** abre o seletor em modo juntar — quem ainda não tem
+  apresentação daquele curso é criado; quem já tem em outro lugar é **movido** (com confirmação),
+  nunca duplicado. "Separar" devolve o aluno à grade, logo depois do número. ⚠️ Música, link e
+  duração são **do número** e gravam em **todos** os integrantes (`atualizarApresentacoes`, que
+  confere quantas linhas alcançou); palco e mapa seguem **por integrante**. Se o LA Teacher trouxer
+  músicas diferentes para o mesmo número, o cartão avisa e a equipe decide digitando. ⚠️ Trava
+  `trg_evento_apresentacao_grupo_coerente` (**deferida**, conferida no commit): o número inteiro fica
+  num bloco só — arrastar move o número, e o front manda todos os integrantes juntos. ⚠️ Número que
+  sobra com 1 integrante (alguém foi removido) é tratado como apresentação sozinha, não é erro.
+- **Idade do aluno** (28/09): ao lado do nome no cartão da Grade, no Check-in (porta e coxia), na
+  lista de relatórios da Revisão e na programação/planilha impressas. Regra única em
+  `idadeEmAnos`/`idadeHoje` (`src/lib/eventos.ts`): idade de **hoje** em BRT, a mesma da aba Alunos
+  (que lê `idade_anos` da view) — medir no dia do recital daria duas idades para a mesma criança. Lê
+  `alunos.data_nascimento` pela procedência (`aluno_id`).
+- **Instrumentos no cartão** (28/09): o rider de cada número aparece no próprio cartão da Grade
+  (tracejado = veio do curso). O rodapé "palco do bloco" saiu; o consolidado do bloco e do recital
+  continua na aba Palco e na folha de palco.
 - **Impressão** (aba Revisão): programação (público), folha de palco (produção) e planilha CSV —
   cada uma com recorte opcional por bloco. ⚠️ **O recorte por bloco é de EXIBIÇÃO, aplicado DEPOIS
   do cálculo**: filtrar antes faria o bloco 3 começar às 09:00, e a folha diria a hora errada para
@@ -169,11 +201,11 @@ apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **L
   na tabela desde a migration base). ⚠️ É o oposto do Tráfego Pago, que tem a resposta escrita em 3
   lugares (LAPE-32).
 - **Testes:** `eventosAcesso`, `eventosElegibilidade`, `eventosHorario`, `eventosPalco`,
-  `eventosRevisao`, `eventosImpressao`, `eventosCheckin`.
+  `eventosRevisao`, `eventosImpressao`, `eventosCheckin`, `eventosNumero`.
 - ⚠️ **Buracos de UI conhecidos** (o schema suporta, a tela não faz): editar evento
   (título/data/local/duração/intervalo), **excluir evento** (`excluirEvento` existe no hook e
   nenhuma tela o chama), mudar status (rascunho → publicado → realizado) e renomear bloco.
-- ⚠️ **Do protótipo, ainda em aberto:** convidados especiais e participações em conjunto — o grão é
-  `(pessoa, curso)` da base, e convidado não tem matrícula.
+- ⚠️ **Do protótipo, ainda em aberto:** convidados especiais — o grão é `(pessoa, curso)` da base, e
+  convidado não tem matrícula. (Participações em conjunto viraram o **número**, 28/09.)
 - 🔴 **Nenhuma tela do módulo foi exercitada no navegador** até 19/09/2026. Só os documentos de
   impressão foram validados visualmente (Playwright, incluindo `emulateMedia({media:'print'})`).

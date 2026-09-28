@@ -486,8 +486,15 @@ export interface ApresentacaoDaGrade {
   curso_id: number;
   curso_nome: string | null;
   aluno_nome: string;
+  /** 'AAAA-MM-DD' do cadastro, pela procedencia (`aluno_id`). A idade se calcula na tela. */
+  aluno_data_nascimento: string | null;
   professor_nome: string | null;
   ordem: number;
+  /**
+   * Mesmo valor = sobem juntas no mesmo numero (um horario, uma musica). `null` = sozinha.
+   * Escrito so por `juntarApresentacao`/`separarApresentacao`.
+   */
+  grupo_id: string | null;
   musica: string | null;
   musica_artista: string | null;
   duracao_segundos: number | null;
@@ -546,10 +553,10 @@ export function useGradeDoEvento(eventoId: number | null) {
       supabase
         .from('evento_apresentacao')
         .select(
-          'id, bloco_id, aluno_id, pessoa_chave, curso_id, ordem, musica, musica_artista,' +
+          'id, bloco_id, aluno_id, pessoa_chave, curso_id, ordem, grupo_id, musica, musica_artista,' +
             ' duracao_segundos, tem_playback, musica_link, playback_path, detalhes_origem,' +
             ' professor, professor_em, certificado_status, certificado_em,' +
-            ' observacao_mapa, alunos(nome), cursos(nome), professores(nome),' +
+            ' observacao_mapa, alunos(nome, data_nascimento), cursos(nome), professores(nome),' +
             // Itens embutidos em vez de uma segunda leitura: aqui a FK existe
             // (`apresentacao_id -> evento_apresentacao`), entao o PostgREST resolve o embed —
             // ao contrario da participacao, que cruza com uma VIEW e por isso vai separada.
@@ -569,9 +576,9 @@ export function useGradeDoEvento(eventoId: number | null) {
 
     type LinhaAp = Omit<
       ApresentacaoDaGrade,
-      'curso_nome' | 'aluno_nome' | 'professor_nome' | 'itens'
+      'curso_nome' | 'aluno_nome' | 'aluno_data_nascimento' | 'professor_nome' | 'itens'
     > & {
-      alunos: { nome: string } | null;
+      alunos: { nome: string; data_nascimento: string | null } | null;
       cursos: { nome: string } | null;
       professores: { nome: string } | null;
       evento_apresentacao_item: ItemDaApresentacao[] | null;
@@ -583,6 +590,7 @@ export function useGradeDoEvento(eventoId: number | null) {
       lista.push({
         ...linha,
         aluno_nome: linha.alunos?.nome ?? '(aluno removido)',
+        aluno_data_nascimento: linha.alunos?.data_nascimento ?? null,
         curso_nome: linha.cursos?.nome ?? null,
         professor_nome: linha.professores?.nome ?? null,
         // Ordem explicita por id: o embed do PostgREST nao promete ordem nenhuma, e sem
@@ -635,6 +643,55 @@ export async function adicionarApresentacao(blocoId: number, alunoId: number, cu
 
 export async function removerApresentacao(id: number) {
   return supabase.from('evento_apresentacao').delete().eq('id', id);
+}
+
+/**
+ * "+ Adicionar aluno" dentro de uma apresentacao: poe (aluno, curso) no MESMO numero dela.
+ *
+ * Se a pessoa ainda nao tem apresentacao desse curso, a RPC cria; se ja tem em outro lugar da
+ * grade, a RPC MOVE a que existe — nunca duplica, porque e uma apresentacao por curso. A
+ * mensagem de erro ja vem pronta do banco.
+ */
+export async function juntarApresentacao(alvoId: number, alunoId: number, cursoId: number) {
+  return supabase.rpc('evento_apresentacao_juntar_v1', {
+    p_alvo_id: alvoId,
+    p_aluno_id: alunoId,
+    p_curso_id: cursoId,
+  });
+}
+
+/** Tira a apresentacao do numero: ela passa a tocar sozinha, logo depois dele. */
+export async function separarApresentacao(id: number) {
+  return supabase.rpc('evento_apresentacao_separar_v1', { p_id: id });
+}
+
+/**
+ * Grava os mesmos campos em VARIAS apresentacoes — o numero inteiro.
+ *
+ * Musica, duracao e observacao sao do numero: gravar so na primeira deixaria o certificado e a
+ * planilha dos outros integrantes com a musica vazia, porque eles leem a linha de cada um.
+ *
+ * ⚠️ Confere quantas linhas alcancou: a RLS desta tabela FILTRA em vez de recusar, e sem a
+ * conferencia um numero salvo pela metade pareceria salvo por inteiro.
+ */
+export async function atualizarApresentacoes(
+  ids: number[],
+  campos: Parameters<typeof atualizarApresentacao>[1],
+) {
+  const { data, error } = await supabase
+    .from('evento_apresentacao')
+    .update({ ...campos, updated_at: new Date().toISOString() })
+    .in('id', ids)
+    .select('id');
+  if (error) return { error };
+  if ((data ?? []).length !== ids.length) {
+    return {
+      error: {
+        message: `Salvei ${(data ?? []).length} de ${ids.length} apresentações do número — confira a permissão.`,
+      },
+    };
+  }
+  return { error: null };
 }
 
 export async function atualizarApresentacao(
@@ -731,6 +788,8 @@ export interface ParticipacaoComChegada {
   nome: string;
   status: ParticipacaoStatus;
   checkin_em: string | null;
+  /** 'AAAA-MM-DD' do cadastro — a porta mostra a idade ao lado do nome. */
+  data_nascimento: string | null;
 }
 
 /**
@@ -757,14 +816,16 @@ export function useCheckinDoEvento(eventoId: number | null) {
 
     const { data, error } = await supabase
       .from('evento_participacao')
-      .select('pessoa_chave, aluno_id, status, checkin_em, alunos(nome)')
+      .select('pessoa_chave, aluno_id, status, checkin_em, alunos(nome, data_nascimento)')
       .eq('evento_id', eventoId);
 
     if (error) {
       setErro(error.message);
       setParticipacoes([]);
     } else {
-      type Linha = Omit<ParticipacaoComChegada, 'nome'> & { alunos: { nome: string } | null };
+      type Linha = Omit<ParticipacaoComChegada, 'nome' | 'data_nascimento'> & {
+        alunos: { nome: string; data_nascimento: string | null } | null;
+      };
       setParticipacoes(
         ((data ?? []) as unknown as Linha[]).map((p) => ({
           pessoa_chave: p.pessoa_chave,
@@ -772,6 +833,7 @@ export function useCheckinDoEvento(eventoId: number | null) {
           status: p.status,
           checkin_em: p.checkin_em,
           nome: p.alunos?.nome ?? '(aluno removido)',
+          data_nascimento: p.alunos?.data_nascimento ?? null,
         })),
       );
     }

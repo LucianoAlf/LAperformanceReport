@@ -227,6 +227,13 @@ Check-in (o dia). Detalhe completo em [`docs/sistema/aluno.md`](docs/sistema/alu
 - **Check-in é da PESSOA, nunca da apresentação** (`checkin_em` em `evento_participacao`): quem faz 2
   cursos sobe 2 vezes e chega 1. A contagem por bloco **não** é um pedaço do total — quem toca em 2
   blocos conta nos 2.
+- **Número = alunos que sobem JUNTOS (28/09/2026).** `evento_apresentacao.grupo_id` (uuid sem FK)
+  junta apresentações num horário/música/slot só; a apresentação **continua** sendo (pessoa, curso) —
+  certificado e canal do LA Teacher não mudam. Escrita só por `evento_apresentacao_juntar_v1` (cria
+  ou MOVE, nunca duplica) e `evento_apresentacao_separar_v1`; trava deferida mantém o número num bloco.
+  ⚠️ **Todo consumidor forma os números por `agruparEmNumeros`/`palcoDosNumeros`** (horário, palco,
+  check-in, impressão) — quem toca junto SOMA palco, quem se reveza não. Idade do aluno: regra única
+  `idadeHoje` (hoje em BRT, igual à aba Alunos). Detalhe em `docs/sistema/aluno.md`.
 - 🔴 **`certificado_status` existe e NÃO é escrita.** Quantos certificados recebe quem faz 2 cursos é
   decisão em aberto; se for "um por curso", a coluna muda de tabela. O certificado de hoje é modelo
   **genérico e provisório** (sem carga horária, número de registro ou nome de diretor — seria dado

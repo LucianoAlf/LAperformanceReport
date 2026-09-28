@@ -96,6 +96,11 @@ export interface ApresentacaoParaCalculo {
   ordem: number;
   /** `null` = usa a duracao padrao do evento. */
   duracao_segundos: number | null;
+  /**
+   * Apresentacoes com o mesmo `grupo_id` sobem JUNTAS, no mesmo numero: um horario so.
+   * `null`/ausente = a apresentacao toca sozinha. Ver `agruparEmNumeros`.
+   */
+  grupo_id?: string | null;
 }
 
 export interface BlocoParaCalculo {
@@ -183,6 +188,32 @@ export function formatarDuracao(segundos: number): string {
 }
 
 /**
+ * As apresentacoes de um bloco, na ordem, reunidas em NUMEROS — o que sobe ao palco de uma vez.
+ *
+ * A apresentacao continua sendo o par (pessoa, curso), porque e nela que moram o certificado
+ * por curso e o que o professor lanca no LA Teacher. O numero so junta quem toca junto
+ * (a Ana no Violao acompanhando o Pedro no Canto): um horario, uma musica, um slot.
+ *
+ * ⚠️ Junta apenas VIZINHOS com o mesmo `grupo_id`. A RPC que junta coloca o novo integrante
+ * logo depois do ultimo do numero, entao isso e a regra normal; se a ordem um dia ficar
+ * intercalada, o numero se parte em dois slots em vez de puxar alguem de outra posicao —
+ * errar mostrando dois horarios e mais honesto que reordenar a grade por conta propria.
+ */
+export function agruparEmNumeros<T extends { id: number; ordem: number; grupo_id?: string | null }>(
+  apresentacoes: T[],
+): T[][] {
+  const ordenadas = [...apresentacoes].sort((a, b) => a.ordem - b.ordem || a.id - b.id);
+  const numeros: T[][] = [];
+  for (const ap of ordenadas) {
+    const atual = numeros[numeros.length - 1];
+    const grupo = ap.grupo_id ?? null;
+    if (atual && grupo !== null && (atual[0].grupo_id ?? null) === grupo) atual.push(ap);
+    else numeros.push([ap]);
+  }
+  return numeros;
+}
+
+/**
  * Horario de cada bloco e de cada apresentacao.
  *
  * Regra lida no prototipo do Arthur (18/09, com o navegador): Bloco 1 as 09:00 com uma
@@ -219,15 +250,23 @@ export function calcularHorariosDaGrade(
     const inicio = manual ?? automatico;
 
     let cursor = inicio;
-    const apresentacoes = [...bloco.apresentacoes]
-      .sort((a, b) => a.ordem - b.ordem || a.id - b.id)
-      .map((ap, i) => {
-        if (i > 0) cursor += intervaloApresentacoes;
-        const duracao = ap.duracao_segundos ?? evento.duracao_padrao_segundos;
-        const linha = { id: ap.id, inicio: segundosParaHora(cursor), duracaoSegundos: duracao };
-        cursor += duracao;
-        return linha;
-      });
+    // O slot e do NUMERO: quem toca junto comeca no mesmo minuto, e a troca de palco so
+    // existe entre um numero e o seguinte. O numero dura o maior dos integrantes — a musica
+    // e uma so, e o cartao grava a mesma duracao em todos; o maximo so decide se alguem
+    // divergir (o sync do LA Teacher pode trazer outra duracao para um dos alunos).
+    const apresentacoes = agruparEmNumeros(bloco.apresentacoes).flatMap((numero, i) => {
+      if (i > 0) cursor += intervaloApresentacoes;
+      const duracao = Math.max(
+        ...numero.map((ap) => ap.duracao_segundos ?? evento.duracao_padrao_segundos),
+      );
+      const linhas = numero.map((ap) => ({
+        id: ap.id,
+        inicio: segundosParaHora(cursor),
+        duracaoSegundos: duracao,
+      }));
+      cursor += duracao;
+      return linhas;
+    });
 
     resultado.push({
       blocoId: bloco.id,
@@ -469,6 +508,44 @@ export interface ItemConsolidado {
 export interface ApresentacaoParaPalco {
   cursoNome: string | null;
   itens: ItemDePalco[];
+  /**
+   * Quem sobe JUNTO neste numero, cada um com o seu curso e o seu pedido.
+   *
+   * Ausente = a entrada e uma apresentacao sozinha, descrita por `cursoNome`/`itens`.
+   * Presente = a entrada e um NUMERO, e esses campos de cima sao ignorados.
+   *
+   * ⚠️ Os integrantes tocam AO MESMO TEMPO, o contrario das apresentacoes do bloco, que se
+   * revezam. Por isso eles entram numa unica entrada: dois alunos de Violao no mesmo numero
+   * precisam de 2 violoes no palco, e duas apresentacoes de Violao seguidas, de 1.
+   */
+  integrantes?: { cursoNome: string | null; itens: ItemDePalco[] }[];
+}
+
+/**
+ * As entradas de palco de um conjunto de apresentacoes, uma por NUMERO.
+ *
+ * E o que todo consumidor deve usar para montar a entrada de `consolidarItensDoPalco` — a grade,
+ * a aba Palco e a folha impressa. Montar cada um a sua maneira faria o mesmo numero pedir dois
+ * violoes numa tela e um na outra.
+ */
+export function palcoDosNumeros(
+  apresentacoes: {
+    id: number;
+    ordem: number;
+    grupo_id?: string | null;
+    curso_nome: string | null;
+    itens: ItemDePalco[];
+  }[],
+): ApresentacaoParaPalco[] {
+  return agruparEmNumeros(apresentacoes).map((numero) =>
+    numero.length === 1
+      ? { cursoNome: numero[0].curso_nome, itens: numero[0].itens }
+      : {
+          cursoNome: numero[0].curso_nome,
+          itens: [],
+          integrantes: numero.map((ap) => ({ cursoNome: ap.curso_nome, itens: ap.itens })),
+        },
+  );
 }
 
 /**
@@ -501,26 +578,33 @@ export function consolidarItensDoPalco(
   const porChave = new Map<string, Acumulado>();
 
   for (const apresentacao of porApresentacao) {
-    const derivado = instrumentoDoCurso(apresentacao.cursoNome);
-    const chaveDerivada = derivado ? `instrumento|${chaveDoItem(derivado)}` : null;
+    // Um numero com varios integrantes vira UMA entrada: o que cada um pede e somado, porque
+    // eles tocam ao mesmo tempo. Sem integrantes, a entrada e a propria apresentacao.
+    const partes = apresentacao.integrantes?.length
+      ? apresentacao.integrantes
+      : [{ cursoNome: apresentacao.cursoNome, itens: apresentacao.itens }];
 
-    // ⚠️ O derivado so entra se NINGUEM digitou o mesmo objeto nesta apresentacao. Injetar
-    // sempre somaria: o aluno de Violao que escreveu "Violão" a mao pediu UM violao, e a
-    // conta devolveria dois. Quando os dois existem, vence o digitado — ele pode trazer
-    // quantidade (dueto) e observacao que o curso nao tem como saber.
-    // O que a pessoa escreveu, por chave. Serve para duas coisas — decidir se o derivado
-    // entra, e marcar a origem. ⚠️ A origem NAO pode ser inferida comparando a chave com a
-    // derivada: quem digita "Violão" numa apresentacao de Violao cai na mesma chave, e o
-    // item apareceria como automatico apesar de alguem ter escolhido.
-    const chavesDigitadas = new Set(
-      apresentacao.itens.map((i) => `${i.tipo}|${chaveDoItem(i.nome)}`),
-    );
-    const jaDigitou = chaveDerivada !== null && chavesDigitadas.has(chaveDerivada);
+    // O que alguem escreveu, por chave, em QUALQUER integrante. Serve para marcar a origem.
+    // ⚠️ A origem NAO pode ser inferida comparando a chave com a derivada: quem digita
+    // "Violão" numa apresentacao de Violao cai na mesma chave, e o item apareceria como
+    // automatico apesar de alguem ter escolhido.
+    const chavesDigitadas = new Set<string>();
+    const itens: ItemDePalco[] = [];
+    for (const parte of partes) {
+      const digitadasDaParte = new Set(parte.itens.map((i) => `${i.tipo}|${chaveDoItem(i.nome)}`));
+      for (const chave of digitadasDaParte) chavesDigitadas.add(chave);
 
-    const itens: ItemDePalco[] =
-      derivado && !jaDigitou
-        ? [{ tipo: 'instrumento', nome: derivado, quantidade: 1 }, ...apresentacao.itens]
-        : apresentacao.itens;
+      // ⚠️ O derivado so entra se ESTE integrante nao digitou o mesmo objeto. Injetar sempre
+      // somaria: o aluno de Violao que escreveu "Violão" a mao pediu UM violao, e a conta
+      // devolveria dois. Quando os dois existem, vence o digitado — ele pode trazer
+      // quantidade (dueto) e observacao que o curso nao tem como saber. A decisao e por
+      // integrante: se a Ana digitou "Violão", o violao do Joao, no mesmo numero, continua.
+      const derivado = instrumentoDoCurso(parte.cursoNome);
+      if (derivado && !digitadasDaParte.has(`instrumento|${chaveDoItem(derivado)}`)) {
+        itens.push({ tipo: 'instrumento', nome: derivado, quantidade: 1 });
+      }
+      itens.push(...parte.itens);
+    }
 
     // Uma apresentacao que pede o mesmo item em duas linhas conta como UMA apresentacao,
     // com a soma das duas linhas — senao "2 estantes" viraria pico 1 por ser digitado duas
@@ -662,6 +746,7 @@ export interface EntradaDaRevisao {
       aluno_nome: string;
       curso_nome: string | null;
       musica: string | null;
+      grupo_id?: string | null;
     }[];
   })[];
   alunos: {
@@ -923,6 +1008,8 @@ export interface ApresentacaoParaChegada {
   aluno_nome: string;
   curso_nome: string | null;
   musica: string | null;
+  /** Mesmo `grupo_id` = sobem juntos no mesmo numero (mesma posicao e mesmo horario). */
+  grupo_id?: string | null;
 }
 
 export interface ParticipacaoParaChegada {
@@ -1058,9 +1145,13 @@ export function montarListaDeChegada(entrada: EntradaDaChegada): ListaDeChegada 
 
   let posicao = 0;
   for (const bloco of blocosOrdenados) {
-    const apresentacoes = [...bloco.apresentacoes].sort((a, b) => a.ordem - b.ordem || a.id - b.id);
-    for (const ap of apresentacoes) {
+    // A posicao conta NUMEROS, nao apresentacoes: quem sobe junto e anunciado junto, e dar
+    // dois numeros ao mesmo momento do palco faria a coxia chamar a Ana e o Pedro em sequencia.
+    const apresentacoes = agruparEmNumeros(bloco.apresentacoes).flatMap((numero) => {
       posicao += 1;
+      return numero.map((ap) => ({ ap, posicaoDoNumero: posicao }));
+    });
+    for (const { ap, posicaoDoNumero } of apresentacoes) {
       const participacao = porChave.get(ap.pessoa_chave);
       const horario = horarioPorApresentacao.get(ap.id) ?? '';
 
@@ -1074,7 +1165,7 @@ export function montarListaDeChegada(entrada: EntradaDaChegada): ListaDeChegada 
         blocoId: bloco.id,
         blocoNome: bloco.nome,
         horario,
-        posicao,
+        posicao: posicaoDoNumero,
         chegouEm: participacao?.checkin_em ?? null,
         // Sem linha de participacao o estado e 'indefinido', o mesmo default do banco —
         // inventar 'participa' aqui faria a tela afirmar uma decisao que ninguem tomou.
@@ -1430,4 +1521,52 @@ export function diasDoEvento(dataEvento: string, dataFim: string | null | undefi
 export function formatarDataCurta(iso: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/u.exec(iso);
   return m ? `${Number(m[3])}/${Number(m[2])}` : iso;
+}
+
+/* ─────────────────────────────── idade ─────────────────────────────── */
+
+/**
+ * Idade completa, em anos, numa data de referencia ('AAAA-MM-DD'). `null` sem nascimento.
+ *
+ * ⚠️ Conta a partir do TEXTO da data, sem `new Date(iso)`: 'AAAA-MM-DD' e lida como UTC e, num
+ * fuso negativo, o dia volta um — quem faz aniversario hoje ficaria um ano mais novo ate a
+ * noite. E a mesma armadilha que a impressao evita em `dataPorExtenso`.
+ *
+ * A referencia vem de fora (ver `idadeHoje`) para a regra poder ser testada sem relogio.
+ */
+export function idadeEmAnos(
+  dataNascimento: string | null | undefined,
+  referencia: string,
+): number | null {
+  const n = /^(\d{4})-(\d{2})-(\d{2})/u.exec(dataNascimento ?? '');
+  const r = /^(\d{4})-(\d{2})-(\d{2})/u.exec(referencia);
+  if (!n || !r) return null;
+  const [anoN, mesN, diaN] = [Number(n[1]), Number(n[2]), Number(n[3])];
+  const [anoR, mesR, diaR] = [Number(r[1]), Number(r[2]), Number(r[3])];
+  const jaFezAniversario = mesR > mesN || (mesR === mesN && diaR >= diaN);
+  const idade = anoR - anoN - (jaFezAniversario ? 0 : 1);
+  // Data de nascimento no futuro ou absurda e erro de cadastro: nao vira "-3 anos" na tela.
+  return idade >= 0 && idade < 130 ? idade : null;
+}
+
+/** 'AAAA-MM-DD' de hoje no fuso do negocio (BRT). */
+export function hojeNoBrasil(agora: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(agora);
+}
+
+/**
+ * Idade de HOJE — a mesma regra da aba Alunos, que le `idade_anos` da view (calculada no dia).
+ *
+ * ⚠️ Hoje, e nao no dia do recital, de proposito: medir na data do evento faria a mesma
+ * pessoa aparecer com 12 anos na aba Alunos e 13 na Grade, e duas idades para uma crianca e
+ * o tipo de diferenca que faz a equipe desconfiar de todas as outras colunas.
+ */
+export function idadeHoje(dataNascimento: string | null | undefined): number | null {
+  return idadeEmAnos(dataNascimento, hojeNoBrasil());
+}
+
+/** '12 anos' / '1 ano' / '' — texto curto, pronto para ficar ao lado do nome. */
+export function rotuloIdade(idade: number | null | undefined): string {
+  if (idade === null || idade === undefined) return '';
+  return `${idade} ${idade === 1 ? 'ano' : 'anos'}`;
 }
