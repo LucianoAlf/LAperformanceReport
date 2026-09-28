@@ -1,7 +1,18 @@
-# Proposta de migrações 2–9 — módulo Eventos (v2, revisada — aguardando aprovação do Alf)
+# Proposta de migrações 2–9 — módulo Eventos (v3, revisada — aguardando aprovação do Alf)
 
 **Status: NADA aplicado. SQL completo para revisão.** Depois do ok, cada bloco vira um arquivo
 `supabase/migrations/20260929xxxxxx_<nome>.sql` na ordem abaixo.
+
+## O que mudou da v2 para a v3 (revisão do irmão + decisões do Alf)
+
+- 🔴 **M2: `registro_id_text` pela PK da tabela** — `new.id` direto quebraria todo insert nas
+  três tabelas sem coluna `id` (ponte convidado×aluno, check-in por bloco, preço por evento).
+  Agora: `->>'id'` quando existe, senão a PK composta concatenada.
+- 🔄 **M9 enxugada — SEM gateway** (decisão do Alf): saem cron de expiração, QR dinâmico,
+  webhook e `provedor_ref`. Status manual `pendente→pago→cancelado/reembolsado`. Entram os
+  campos que a Sol precisa pra conciliar no caixa do Super Folha: `pagamento_identificador`
+  (obrigatório ao marcar pago, exceto dinheiro), `pago_em` e `conciliacao_*`, mais as RPCs
+  `pendentes_v1`/`conciliar_v1` (origem `sol` no audit). Meia-entrada decidida: todos pagam meia.
 
 ## O que mudou da v1 para a v2 (revisão do irmão + decisões do Alf)
 
@@ -65,7 +76,7 @@ begin
   end;
 
   -- GUC so existe dentro de RPC (set_config com is_local=true): aceita o vocabulario inteiro
-  if v_guc in ('la_teacher', 'familia', 'planilha', 'sistema', 'la_report') then
+  if v_guc in ('la_teacher', 'familia', 'planilha', 'sistema', 'la_report', 'sol') then
     return v_guc;
   end if;
   -- header e forjavel: so quem poderia ser outro sistema. 'familia' daqui seria confirmacao
@@ -125,7 +136,22 @@ begin
     return new;
   end if;
 
-  v_reg_id := case when tg_op = 'DELETE' then old.id::text else new.id::text end;
+  -- registro_id: 'id' quando a tabela tem; nas de PK composta (ponte convidado×aluno,
+  -- check-in por bloco, preco por evento) a PK inteira vira o identificador — new.id
+  -- direto quebraria todo insert nelas.
+  declare v_row jsonb;
+  begin
+    v_row := case when tg_op = 'DELETE' then v_old else v_new end;
+    if v_row ? 'id' then
+      v_reg_id := v_row ->> 'id';
+    else
+      select string_agg(v_row ->> a.attname, '|' order by a.attnum)
+        into v_reg_id
+        from pg_index i
+        join pg_attribute a on a.attrelid = i.indrelid and a.attnum = any(i.indkey)
+       where i.indrelid = tg_relid and i.indisprimary;
+    end if;
+  end;
 
   begin
     insert into public.audit_log
@@ -650,14 +676,18 @@ comment on column public.evento_apresentacao.professor_apoio_id is
 
 ---
 
-## M9 — Bilheteria (nova — decisão do Alf, 28/09)
+## M9 — Bilheteria (nova — decisão do Alf, 28/09; v3 SEM gateway)
 
 **Regras aprovadas na conversa**: cortesias por aluno por evento (M3); acima dela, ingresso
 **vendido nominal** — os dois terminam na mesma lista da porta (`evento_convidado`), com
 `tipo_entrada` visível no check-in. Lotação por bloco; venda bloqueia ao lotar. Preço unitário
-+ pacotes de desconto + espaço pra meia-entrada. Três canais (`online`/`balcao`/`porta`) na
-**mesma** tabela; provedor por evento (Recreio/CG → Rede; Barra → PagBank "Nummy"). Reserva
-expira (~15 min) se o link não for pago.
++ pacotes de desconto + meia-entrada (decisão do Alf: **todos pagam meia** — ex.: ingresso
+R$100, cobrado R$50 de cada). Três canais (`online`/`balcao`/`porta`) na **mesma** tabela.
+
+**SEM integração com gateway** — decisão do Alf. A equipe cobra com o que já tem (link da
+conta, maquininha, Pix da unidade) e **registra** a venda no LA Report; o dinheiro cai no
+banco e a **Sol** concilia lançando no caixa diário do Super Folha. Nada muda de status
+sozinho: sem cron, sem webhook, sem QR dinâmico, sem `provedor_ref` de gateway.
 
 ```sql
 -- lotacao por bloco (NULL = sem teto — espaco aberto)
@@ -665,13 +695,13 @@ alter table public.evento_bloco
   add column if not exists capacidade integer
   check (capacidade is null or capacidade > 0);
 
--- provedor por evento (o evento e de UMA unidade; a conta e texto livre: 'Nummy' na Barra)
+-- qual maquininha/conta recebe — so etiqueta para a Sol casar no extrato, sem integracao
 alter table public.evento
   add column if not exists provedor_pagamento text
     check (provedor_pagamento in ('rede', 'pagbank')),
   add column if not exists provedor_conta text;
 
--- tabela de preco: unitario + meia (vago ate a equipe/juridico confirmar a lei) + pacotes
+-- tabela de preco: unitario + meia + pacotes (tudo parametro da equipe)
 create table public.evento_ingresso_preco (
   evento_id      bigint primary key references public.evento(id) on delete cascade,
   preco_unitario numeric(10,2) not null check (preco_unitario >= 0),
@@ -679,8 +709,9 @@ create table public.evento_ingresso_preco (
   updated_at     timestamptz not null default now()
 );
 comment on table public.evento_ingresso_preco is
-  'Preco do ingresso por evento. preco_meia NULL = sem meia configurada (confirmar com '
-  'juridico se evento cultural pago exige meia para estudante/idoso/PcD).';
+  'Preco do ingresso por evento. Decisao do Alf (28/09): todos pagam meia — ex.: unitario '
+  'R$100, meia R$50 cobrada de todos. Os dois campos ficam para o papel/relatorio mostrar '
+  'os dois valores.';
 
 create table public.evento_ingresso_pacote (
   id                bigint generated always as identity primary key,
@@ -692,7 +723,7 @@ create table public.evento_ingresso_pacote (
 comment on table public.evento_ingresso_pacote is
   'Pacotes de desconto por evento: a partir de N ingressos, X% off (ex.: 10+ -> 20%).';
 
--- a venda: TODOS os canais na mesma tabela
+-- a venda: TODOS os canais na mesma tabela, registrados pela equipe
 create table public.evento_ingresso_venda (
   id                bigint generated always as identity primary key,
   evento_id         bigint not null references public.evento(id) on delete cascade,
@@ -712,25 +743,44 @@ create table public.evento_ingresso_venda (
   -- valor_final gravado (nao gerado): a equipe pode ajustar centavos na hora sem mentir o pct
   valor_final       numeric(10,2) not null check (valor_final >= 0),
   forma_pagamento   text not null
-    check (forma_pagamento in ('pix', 'cartao_credito', 'cartao_debito', 'dinheiro',
-                               'link_pagamento', 'outro')),
+    check (forma_pagamento in ('pix', 'cartao_credito', 'cartao_debito', 'dinheiro', 'outro')),
+  -- canal = onde a venda aconteceu: link mandado pela equipe, balcao, ou a porta no dia
   canal             text not null check (canal in ('online', 'balcao', 'porta')),
+  -- qual maquininha/conta recebeu — para a Sol casar com o extrato certo
   provedor          text check (provedor in ('rede', 'pagbank')),
-  -- reservado = lugar segurado aguardando pagamento (link/QR) OU pendencia manual da equipe;
-  -- pago/cancelado/reembolsado sao finais. Reserva com expiracao libera o lugar sozinha.
-  status            text not null default 'reservado'
-    check (status in ('reservado', 'pago', 'cancelado', 'reembolsado')),
-  reserva_expira_em timestamptz,  -- NULL = pendencia manual, nao expira sozinha
-  provedor_ref      text,         -- id do pedido/link/QR no gateway
+  -- SEM status automatico: pendente -> pago -> cancelado/reembolsado, tudo pela equipe
+  status            text not null default 'pendente'
+    check (status in ('pendente', 'pago', 'cancelado', 'reembolsado')),
+  -- quando o dinheiro de fato caiu — e o que a Sol casa com o extrato
+  pago_em                  timestamptz,
+  -- NSU / codigo de autorizacao do cartao, ou ID do comprovante Pix.
+  -- Sem ele a Sol so chuta pelo valor: obrigatorio ao marcar pago, exceto dinheiro.
+  pagamento_identificador  text,
+  -- ponte com o caixa diario do Super Folha (a Sol escreve via RPC abaixo)
+  conciliacao_status       text not null default 'pendente'
+    check (conciliacao_status in ('pendente', 'conciliado', 'divergente')),
+  conciliado_em            timestamptz,
+  conciliacao_ref          text,   -- id do lancamento no caixa do Super Folha
+  conciliacao_obs          text,   -- motivo da divergencia, quando houver
   observacao        text,
   registrado_por    uuid,
   created_at        timestamptz not null default now(),
-  updated_at        timestamptz not null default now()
+  updated_at        timestamptz not null default now(),
+  -- pago sempre com identificador + horario real — so o dinheiro dispensa o identificador
+  constraint evento_ingresso_venda_pago_identificado check (
+    status <> 'pago'
+    or (forma_pagamento = 'dinheiro' and pago_em is not null)
+    or (pagamento_identificador is not null and pago_em is not null)
+  ),
+  -- conciliacao so faz sentido depois de pago
+  constraint evento_ingresso_venda_conciliacao_coerente check (
+    conciliacao_status = 'pendente' or status = 'pago'
+  )
 );
 comment on table public.evento_ingresso_venda is
-  'Toda venda de ingresso — online (webhook confirma), balcao e porta (equipe registra; '
-  'Pix por QR dinamico do gateway, cartao na maquininha com conciliacao depois). '
-  'Participacao vinculada e opcional: venda avulsa de publico existe.';
+  'Toda venda de ingresso, registrada pela equipe (link enviado a mao, maquininha, Pix, '
+  'dinheiro). A Sol concilia cada venda paga com o que caiu no banco e lanca no caixa '
+  'diario do Super Folha — o LA Report so expoe a lista e recebe o veredito.';
 
 create or replace function public.fn_evento_ingresso_venda_deriva()
 returns trigger language plpgsql
@@ -777,7 +827,7 @@ alter table public.evento_ingresso_venda enable row level security;
 create policy evento_ingresso_venda_escopada on public.evento_ingresso_venda
   for all using (is_admin() or unidade_id in (select get_user_unidade_ids()))
   with check (is_admin() or unidade_id in (select get_user_unidade_ids()));
--- preco/pacote: leitura por unidade do evento
+-- preco/pacote: leitura e escrita por unidade do evento
 alter table public.evento_ingresso_preco enable row level security;
 alter table public.evento_ingresso_pacote enable row level security;
 create policy evento_ingresso_preco_escopada on public.evento_ingresso_preco
@@ -809,7 +859,7 @@ alter table public.evento_convidado
     or (tipo_entrada = 'cortesia' and venda_id is null)
   );
 
--- deriva v2 do convidado: unidade do evento + bloco do MESMO evento quando preenchido
+-- deriva v2 do convidado: unidade do evento + bloco e venda do MESMO evento quando ligados
 create or replace function public.fn_evento_convidado_deriva()
 returns trigger language plpgsql
 set search_path = 'public', 'pg_temp'
@@ -825,7 +875,6 @@ begin
   then
     raise exception 'evento_convidado: bloco nao e deste evento' using errcode = 'P0001';
   end if;
-  -- a venda ligada tambem e deste evento
   if new.venda_id is not null and
      (select v.evento_id from public.evento_ingresso_venda v where v.id = new.venda_id)
        is distinct from new.evento_id
@@ -861,84 +910,123 @@ begin
 end;
 $$;
 
--- lotacao por bloco: cortesias + vendas vivas (pagas ou reservadas nao expiradas)
+-- lotacao por bloco: cortesias + vendas vivas (pendente segura lugar; cancelado libera)
 create or replace view public.vw_evento_bloco_lotacao as
 select b.id as bloco_id,
        b.evento_id,
        b.capacidade,
-       count(*) filter (where c.tipo_entrada = 'cortesia')                    as cortesias,
-       count(*) filter (where v.status = 'pago')                              as vendidos_pagos,
-       count(*) filter (where v.status = 'reservado'
-                          and (v.reserva_expira_em is null
-                               or v.reserva_expira_em > now()))               as reservas_ativas,
+       count(*) filter (where c.tipo_entrada = 'cortesia')                       as cortesias,
+       count(*) filter (where v.status = 'pago')                                 as vendidos_pagos,
+       count(*) filter (where v.status = 'pendente')                             as pendentes,
        b.capacidade
          - count(*) filter (where c.tipo_entrada = 'cortesia')
-         - count(*) filter (where v.status = 'pago'
-                             or (v.status = 'reservado'
-                                 and (v.reserva_expira_em is null
-                                      or v.reserva_expira_em > now())))       as livres
+         - count(*) filter (where v.status in ('pago', 'pendente'))              as livres
   from public.evento_bloco b
   left join public.evento_convidado c on c.bloco_id = b.id
   left join public.evento_ingresso_venda v on v.id = c.venda_id
  group by b.id, b.evento_id, b.capacidade;
 comment on view public.vw_evento_bloco_lotacao is
   'Lugares por bloco. Convidado sem bloco_id (ainda nao credenciado) nao conta em bloco '
-  'nenhum — a reserva segura pelo convidado nominal criado na venda. livres NULL = sem teto.';
-
--- reserva nao paga expira sozinha (cron a cada 5 min; o audit da M2 registra a baixa)
-select cron.schedule(
-  'bilheteria-expira-reservas',
-  '*/5 * * * *',
-  $$update public.evento_ingresso_venda
-       set status = 'cancelado', updated_at = now()
-     where status = 'reservado'
-       and reserva_expira_em is not null
-       and reserva_expira_em < now()$$);
+  'nenhum. livres NULL = sem teto. Cancelado/reembolsado libera o lugar na hora.';
 ```
 
-### Fluxo de venda (desenho)
+### Ponte com a Sol — RPCs (a edge que a autentica entra depois, fora do SQL)
 
-| Canal | Como paga | Confirmação |
+```sql
+-- o que a Sol le: vendas PAGAS ainda nao conciliadas, por unidade/periodo
+create or replace function public.evento_bilheteria_pendentes_v1(
+  p_unidade_id uuid default null,
+  p_de         timestamptz default null,
+  p_ate        timestamptz default null
+)
+returns table (
+  venda_id bigint, evento_id bigint, unidade_id uuid,
+  comprador_nome text, quantidade integer, valor_final numeric,
+  forma_pagamento text, canal text, provedor text,
+  pagamento_identificador text, pago_em timestamptz
+)
+language sql stable security definer
+set search_path = 'public', 'pg_temp'
+as $$
+  select v.id, v.evento_id, v.unidade_id, v.comprador_nome, v.quantidade, v.valor_final,
+         v.forma_pagamento, v.canal, v.provedor, v.pagamento_identificador, v.pago_em
+    from public.evento_ingresso_venda v
+   where v.status = 'pago'
+     and v.conciliacao_status = 'pendente'
+     and (p_unidade_id is null or v.unidade_id = p_unidade_id)
+     and (p_de  is null or v.pago_em >= p_de)
+     and (p_ate is null or v.pago_em <  p_ate)
+   order by v.pago_em;
+$$;
+
+-- o veredito da Sol: conciliado (com o id do lancamento no Super Folha) ou divergente
+create or replace function public.evento_bilheteria_conciliar_v1(
+  p_venda_id bigint,
+  p_status   text,           -- 'conciliado' | 'divergente'
+  p_ref      text default null,
+  p_obs      text default null
+)
+returns void language plpgsql security definer
+set search_path = 'public', 'pg_temp'
+as $$
+begin
+  if p_status not in ('conciliado', 'divergente') then
+    raise exception 'status de conciliacao invalido: %', p_status using errcode = 'P0001';
+  end if;
+  perform set_config('app.origem_escrita', 'sol', true);  -- audit registra origem sol
+  update public.evento_ingresso_venda
+     set conciliacao_status = p_status,
+         conciliado_em      = now(),
+         conciliacao_ref    = p_ref,
+         conciliacao_obs    = p_obs,
+         updated_at         = now()
+   where id = p_venda_id and status = 'pago';
+  if not found then
+    raise exception 'venda % nao existe ou nao esta paga', p_venda_id using errcode = 'P0001';
+  end if;
+end;
+$$;
+
+-- so a edge da Sol (service_role) chama — nem usuario logado escreve conciliacao
+revoke all on function public.evento_bilheteria_pendentes_v1(uuid, timestamptz, timestamptz)
+  from public, anon, authenticated;
+grant execute on function public.evento_bilheteria_pendentes_v1(uuid, timestamptz, timestamptz)
+  to service_role;
+revoke all on function public.evento_bilheteria_conciliar_v1(bigint, text, text, text)
+  from public, anon, authenticated;
+grant execute on function public.evento_bilheteria_conciliar_v1(bigint, text, text, text)
+  to service_role;
+```
+
+**Fora do SQL (a implementar depois):** edge `bilheteria-conciliacao` (verify_jwt=false +
+token no Vault, mesmo padrão da `recital-drive-sync`): `GET` chama `pendentes_v1`, `POST`
+chama `conciliar_v1`. Usuário de unidade continua vendo suas vendas pela policy normal; só
+a **escrita** da conciliação é exclusiva da Sol.
+
+### Fluxo de venda (desenho — tudo manual)
+
+| Canal | Como a família paga | Como entra no sistema |
 |---|---|---|
-| `online` | link do gateway (Pix+cartão) enviado no WhatsApp/botão do evento | webhook → `pago` + convidados nominais gerados |
-| `balcao` | Pix por **QR dinâmico** do gateway na tela; cartão na maquininha | Pix: webhook/automático. Cartão: equipe marca `pago`, API de vendas concilia depois |
-| `porta` | igual ao balcão | igual + check-in do convidado na mesma tela |
+| `online` | link de pagamento da conta da unidade, enviado no WhatsApp | equipe registra a venda; `pago` quando o dinheiro cair |
+| `balcao` | Pix da unidade ou maquininha (Rede/PagBank) | equipe registra com `pago_em` + identificador |
+| `porta` | igual ao balcão | mesma tela já faz o check-in do convidado |
 
-- Os ingressos nominais (`evento_convidado` `tipo_entrada='vendido'` + `venda_id`) são criados
-  **junto da venda** — a reserva segura o lugar desde o link. `cancelado`/`reembolsado` libera.
-- Check-in do vendido exige `venda.status='pago'` — já no trigger da M3.
-- **Nada de chave Pix fixa** — QR sempre dinâmico pelo gateway, ou confirmação vira extrato na mão.
-
-### Provedores — verificado na documentação (28/09)
-
-- **Nenhuma integração de gateway existe neste repo/banco** (busca 28/09: `financeiro_emusys_*`,
-  `loja_vendas`, `historico_pagamentos` são outra coisa). A API Rede "Gestão de Vendas" do
-  projeto Super Folha é **consulta** (conciliação) — vendas/recebíveis, não emissão de link.
-- **PagBank (Barra) — caminho completo confirmado**: Orders API cria pedido com `qr_codes`
-  (Pix dinâmico, uso único, `expiration_date` no pedido — a expiração da reserva sai de graça),
-  `notification_urls` por pedido (webhook por transação), checkout para link, cartão e Pix.
-  Requisito operacional: **chave Pix ativa na conta "Nummy"**.
-- **Rede / e.Rede (Recreio, CG) — Pix e cartão por API confirmados** no manual vigente
-  (23/03/2026): `POST /v2/transactions` com `kind=pix` devolve QR (imagem base64 + EMV
-  copia-e-cola + validade); cartão idem, com postback/callback. **Atenção ao webhook do Pix**:
-  o registro da URL de notificação é feito pelo **call center da Rede** (CNPJ + PV), não por
-  endpoint — agendar cedo. Ressalva da documentação do SDK: Pix via e.Rede pode exigir
-  **conta Itaú** atrelada ao PV — confirmar com a Rede se o PV de cada unidade está habilitado;
-  se não estiver, o Recreio cai no fallback (link gerado no portal + registro manual).
-- **Prioridade pelo calendário**: Rede primeiro (Recreio 13/11), PagBank depois (Barra 28/11).
-  Nos dois casos o desenho da venda não muda — `provedor` + `provedor_ref` guardam qual gateway
-  e qual pedido confirmou o pagamento.
+- Convidados nominais (`tipo_entrada='vendido'` + `venda_id`) nascem **junto da venda** —
+  `pendente` já segura o lugar no bloco; `cancelado`/`reembolsado` libera na hora.
+- Check-in do vendido exige `venda.status='pago'` — no trigger acima.
+- A Sol casa cada `pago` com o extrato pela tupla (unidade, `pago_em`, `valor_final`,
+  `provedor`, `pagamento_identificador`) — por isso o identificador é obrigatório.
+- Divergência (`divergente`) vira pendência visível na aba Bilheteria — ninguém lança no escuro.
 
 ### Telas mínimas (desenho, ainda sem código)
 
 1. **Aba Bilheteria** no detalhe do evento: KPIs (cortesias usadas/cota, vendidos, faturamento
-   bruto/líquido, `livres` por bloco), botão Nova venda (comprador, aluno vinculado opcional,
-   qtd/meia, canal, forma → gera link/QR se o provedor estiver configurado), lista de vendas
-   com status e ações (marcar pago, cancelar, reembolsar).
-2. **Check-in**: `tipo_entrada` e selo de meia na lista da porta; modo porta = venda + check-in
-   na mesma tela.
-3. Config do evento (ModalEditar): cortesias por aluno, capacidade por bloco, tabela de preço,
-   provedor.
+   bruto/líquido, `livres` por bloco), Nova venda (comprador, aluno opcional, qtd/meia, canal,
+   forma, identificador, `pago_em`), lista com status + conciliação e ações (marcar pago,
+   cancelar, reembolsar).
+2. **Config da bilheteria** no evento: cota de cortesias, capacidade por bloco, preço
+   unitário/meia, pacotes, conta que recebe — tudo editável pela equipe.
+3. **Check-in**: `tipo_entrada` e selo de meia na lista da porta.
 
 ---
 
@@ -953,15 +1041,15 @@ select cron.schedule(
 | 6 | `evento_comunicacao` histórico | 1 tabela, só SELECT/INSERT | baixo |
 | 7 | `evento_staff` | 1 tabela | baixo |
 | 8 | `professor_palco_id`/`professor_apoio_id` | 2 colunas + CHECK | baixo |
-| 9 | bilheteria: capacidade, preço, pacote, venda, tipo_entrada | 3 tabelas + colunas + view + cron | médio — frente nova; provedor depende de doc/verificação de API |
+| 9 | bilheteria: capacidade, preço, pacote, venda, tipo_entrada, ponte Sol | 3 tabelas + colunas + view + 2 RPCs | médio — frente nova, mas **sem integração**: conciliação é da Sol no Super Folha |
 
 **Decisões já respondidas** (não precisam de nova palavra): cota de cortesias é **por aluno**
-com venda acima dela; `enviado_por` nullable; `_teste` do Drive na lixeira.
+com venda acima dela; `enviado_por` nullable; **sem gateway** — venda registrada pela equipe e
+conciliada pela Sol no caixa diário; meia-entrada para todos (decisão do Alf); `_teste` do
+Drive na lixeira.
 
 **O que ainda falta de pessoa (não trava aprovação do SQL):**
 - Valores de cortesia por evento, preço, pacotes e capacidade dos espaços → **equipe** (tudo é
-  parâmetro — sistema nasce pronto, vocês preenchem).
-- Meia-entrada é obrigação legal para evento cultural pago? → **confirmar com William/jurídico**
-  antes de publicar preço (`preco_meia`/`meia_entrada` já guardam o lugar).
-- Habilitações nas contas (não é doc, é conta): **Pix ativo na PagBank "Nummy"** e **Pix/Itaú
-  no PV da Rede** de Recreio e CG + registro do webhook de Pix pelo call center → **equipe/financeiro**.
+  parâmetro — sistema nasce pronto, vocês preenchem na UI da aba Bilheteria).
+- Divisão do caixa: o lançamento/fechamento no Super Folha é da Sol — o LA Report só expõe
+  as vendas pagas pendentes e recebe `conciliado`/`divergente` de volta.
