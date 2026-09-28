@@ -37,16 +37,25 @@ fs.writeFileSync(abf, `module.exports={postarAbertura:async()=>({ok:true}),
 
 const CHAT = 'canario-teste@g.us';
 const CRACHA = 'SOL1.5521999999999.' + 'a'.repeat(32);
+const { criarPonteFalsa } = require('./_ponte-falsa.cjs');
+const ponte = criarPonteFalsa({ runtime, abf, grupos: {
+  [CHAT]: { unidade_id: '00000000-0000-0000-0000-000000000001', nome: 'Teste' },
+} });
 const server = http.createServer((req, res) => {
+  let corpo = '';
+  req.on('data', (d) => { corpo += d; });
+  req.on('end', () => rotear(req, res, corpo));
+});
+function rotear(req, res, corpo) {
+  if (req.url === '/caixa/tool') return ponte(req, res, corpo);
   res.setHeader('content-type', 'application/json');
   if (req.url === '/rest/v1/rpc/sol_porta_caixa_contexto_v1') {
     return res.end(JSON.stringify({ ok: true, quem: 'Teste', nivel: 'lider',
       unidade_id: '00000000-0000-0000-0000-000000000001', unidade_nome: 'Teste',
       _ator_numero: '5521999999999' }));
   }
-  if (req.url === '/send') return res.end(JSON.stringify({ success: true, messageId: 'MSG-1' }));
   res.statusCode = 404; res.end('{}');
-});
+}
 
 (async () => {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -55,7 +64,6 @@ const server = http.createServer((req, res) => {
     env: { ...process.env,
       LA_REPORT_SUPABASE_URL: `http://127.0.0.1:${port}`, LA_REPORT_SERVICE_ROLE_KEY: 'teste',
       SOL_WHATSAPP_BRIDGE_URL: `http://127.0.0.1:${port}`,
-      SOL_CAIXA_RUNTIME: runtime, SOL_CAIXA_ABF_RUNTIME: abf,
       SOL_CAIXA_GOVERNANCA_RUNTIME: path.join(tmp, 'nao-existe.cjs'),
       SOL_CAIXA_TOOLS_CANARIO: CHAT,
     }, stdio: ['pipe', 'pipe', 'pipe'],

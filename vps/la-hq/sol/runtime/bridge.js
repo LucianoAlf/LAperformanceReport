@@ -844,21 +844,68 @@ async function classificadorV3Shadow() {
   }
   return _classificadorV3Shadow;
 }
+// Executor das ferramentas de caixa (28/09/2026): o MCP não tem mais caixa
+// próprio; ele valida o crachá e chama POST /caixa/tool, que roda aqui, com o
+// MESMO handler que atende as mensagens do grupo. Um estado só.
+let _caixaToolMod = null;
+async function caixaToolMod() {
+  if (_caixaToolMod) return _caixaToolMod;
+  try {
+    _caixaToolMod = (await import('file:///home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-tool-executor.cjs')).default;
+  } catch (e) {
+    _caixaLog({ step: 'caixa_tool_load_erro', msg: e.message });
+    _caixaToolMod = null;
+  }
+  return _caixaToolMod;
+}
+let _caixaToolExec = null;
+async function caixaToolExecutor() {
+  if (_caixaToolExec) return _caixaToolExec;
+  const mod = await caixaToolMod();
+  if (!mod) return null;
+  _caixaToolExec = mod.criarExecutorCaixaTool({
+    obterHandler: financeHandler,
+    obterAbf: caixaAbf,
+    obterGovernanca: caixaGovernanca,
+    grupos: financeGroupMap,
+    enviar: async function (cid, txt) {
+      const s2 = await sendWithTimeout(cid, { text: txt });
+      const id = s2 && s2.key && s2.key.id;
+      if (id) recentlySentIds.add(id);
+      return id;
+    },
+    fecharEpisodio: async function (episodio, chatId, detalhes) {
+      if (_agentFirstCorrelation && episodio && episodio.episode_id) {
+        const r = await _agentFirstCorrelation.closeByEpisode({ episodeId: episodio.episode_id, chatId, details: detalhes });
+        if (r && r.ok) return r;
+      }
+      const gov = await caixaGovernanca();
+      return gov ? gov.record(episodio, 'episode_closed', detalhes) : null;
+    },
+    log: _caixaLog,
+  });
+  return _caixaToolExec;
+}
+
 async function financeHandler() {
   if (!SOL_CAIXA_LIVE) return null;
   if (_caixaHandler) return _caixaHandler;
   try {
+    await caixaToolMod();
     const mod = (await import('file:///home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs')).default;
     const grupos = financeGroupMap();
     _caixaHandler = mod.criarHandlerFinanceiro({
       grupos: grupos,
       sendFn: async function (chatId, text) {
+        // Conta para a ferramenta em curso NESTE contexto (se houver); a
+        // mensagem de outra pessoa processada em paralelo não entra na conta.
+        if (_caixaToolMod) _caixaToolMod.registrarEnvio(text);
         const sent = await sendWithTimeout(chatId, { text: text });
         const id = sent && sent.key && sent.key.id;
         if (id) recentlySentIds.add(id);
         return id;
       },
-      log: function (o) { _caixaLog(o); },
+      log: function (o) { if (_caixaToolMod) _caixaToolMod.registrarEvento(o); _caixaLog(o); },
       governanceFn: function (event, eventType, details) {
         const episodio = event && event.caixaGovernancaEpisode;
         if (!_caixaGovernanca || !episodio) return Promise.resolve({ ok: false, sem_episodio: true });
@@ -1263,8 +1310,21 @@ async function caixaAbf() {
             const _complementoDeterministico = !!(_fhPrio
               && _fhPrio.deveTratarComplementoDeterministico
               && _fhPrio.deveTratarComplementoDeterministico(event));
-            const _textoVaiParaAgentTools = SOL_CAIXA_TOOLS_GROUPS.has(chatId)
-              && !event.hasMedia && !_confirmacaoDeterministica && !_complementoDeterministico;
+            // 🔴 SÓ VAI AO AGENTE O TEXTO QUE CHAMA A SOL (28/09/2026). Com as
+            //    ferramentas ligadas nas 3 unidades, "PG pix parcela 09/2026 aluno
+            //    Fulano R$ 456,00" — ditado sem "Sol", várias vezes por dia em CG —
+            //    seria descartado pela regra de grupo, que só responde a quem chama.
+            //    Texto que não chama segue pelo caminho automático (que já tem a V4
+            //    dentro: o roteador lê e monta o card, ou cai no parser antigo),
+            //    exatamente como CG e Barra funcionam hoje. `prever` não mexe na
+            //    janela: a decisão de verdade continua mais abaixo.
+            const _chamouASol = SOL_CAIXA_TOOLS_GROUPS.has(chatId) && !event.hasMedia
+              && groupEngagementPolicy.prever({ chatId, texto: body, mentionedIds, senderId,
+                identidadesProprias: new Set([(sock.user?.id || ''), (sock.user?.lid || '')]
+                  .map(v => String(v).replace(/:.*@/, '@').replace(/@.*/, '')).filter(Boolean)),
+              }).responder;
+            const _textoVaiParaAgentTools = _chamouASol
+              && !_confirmacaoDeterministica && !_complementoDeterministico;
             if (_textoVaiParaAgentTools) {
               // O canário só vira rota agent_first DEPOIS da política de grupo.
               // Antes, mensagens em standby eram marcadas como handoff e ficavam
@@ -1670,6 +1730,22 @@ app.post('/governance/agent-first/close', async (req, res) => {
   }
   return res.json(result);
 });
+// Ferramentas de caixa do agente. Só localhost: o MCP já validou o crachá na
+// RPC de contexto; aqui confere-se de novo que o grupo é financeiro e que a
+// unidade do crachá é a do grupo.
+app.post('/caixa/tool', async (req, res) => {
+  const origem = String((req.socket && req.socket.remoteAddress) || '');
+  if (!/^(::ffff:)?127\.0\.0\.1$|^::1$/.test(origem)) return res.status(403).json({ ok: false, motivo: 'origem_nao_local' });
+  if (!SOL_CAIXA_LIVE) return res.status(503).json({ ok: false, estado: 'nada_aconteceu', motivo: 'caixa_desligado' });
+  if (!sock || connectionState !== 'connected') {
+    return res.status(503).json({ ok: false, estado: 'nada_aconteceu', motivo: 'whatsapp_desconectado' });
+  }
+  const exec = await caixaToolExecutor();
+  if (!exec) return res.status(503).json({ ok: false, estado: 'nada_aconteceu', motivo: 'executor_indisponivel' });
+  const out = await exec.executar(req.body || {});
+  return res.json(out);
+});
+
 registerReportSingleMessageRoute({
   app,
   getSocket: () => sock,

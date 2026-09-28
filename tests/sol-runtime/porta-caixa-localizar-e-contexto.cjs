@@ -19,8 +19,12 @@ assert(portas.includes("name: 'caixa_do_dia', fn: 'sol_porta_caixa_do_dia_assina
 assert(portas.includes("auth: 'caixa_assinado'"));
 assert(portas.includes('nunca use SQL genérico'));
 assert(portas.includes("chat.endsWith('@g.us')"));
-assert(portas.includes('caixaToolDecision'));
-assert(portas.includes('caixaToolCommand: cmd, caixaToolTarget: alvo'));
+// Desde 28/09 a decisão estruturada é montada pelo executor DENTRO da ponte; o
+// MCP só valida o crachá e encaminha para /caixa/tool.
+const executor = fs.readFileSync(path.join(root, 'vps/la-hq/sol/runtime/caixa-tool-executor.cjs'), 'utf8');
+assert(portas.includes('/caixa/tool'));
+assert(executor.includes('caixaToolDecision'));
+assert(executor.includes('caixaToolCommand: cmd, caixaToolTarget: alvo'));
 
 const runtime = fs.readFileSync(path.join(root, 'vps/la-hq/sol/runtime/caixa-financeiro.cjs'), 'utf8');
 assert(runtime.includes('event.caixaToolDecision ? event.caixaToolDecision'));
