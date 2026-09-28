@@ -120,7 +120,7 @@ serve(async (req: Request) => {
   let query = service
     .from('evento_apresentacao')
     .select('id, playback_path, aluno_id, evento:evento_id(titulo), unidade:unidade_id(nome), curso:curso_id(nome), professor:professor_id(nome), aluno:aluno_id(nome), drive_playback_path')
-    .not('playback_path', 'is', null)
+    .or('playback_path.not.is.null,drive_playback_path.not.is.null')
     .order('id');
   if (typeof corpo.evento_id === 'number') query = query.eq('evento_id', corpo.evento_id);
   if (typeof corpo.unidade_id === 'string') query = query.eq('unidade_id', corpo.unidade_id);
@@ -132,7 +132,18 @@ serve(async (req: Request) => {
     .filter((l) => l.playback_path && l.playback_path !== l.drive_playback_path)
     .slice(0, limite);
 
-  const resultado = { ok: true, varridos: linhas?.length ?? 0, processados: 0, enviados: 0, erros: [] as Record<string, unknown>[] };
+  // Professor voltou para "Ao vivo": playback_path zera, mas o arquivo JA esta no
+  // Drive — a ponte nao apaga, entao o orfao fica. Marcar na linha e o minimo honesto:
+  // sem isso a divergencia so apareceria olhando a pasta.
+  const removidos = (linhas ?? [])
+    .filter((l) => !l.playback_path && l.drive_playback_path);
+  for (const l of removidos) {
+    await service.from('evento_apresentacao')
+      .update({ drive_erro: 'playback_removido_no_lateacher: arquivo antigo ficou no Drive' })
+      .eq('id', l.id);
+  }
+
+  const resultado = { ok: true, varridos: linhas?.length ?? 0, processados: 0, enviados: 0, orfaos: removidos.length, erros: [] as Record<string, unknown>[] };
 
   for (const linha of pendentes) {
     resultado.processados += 1;
