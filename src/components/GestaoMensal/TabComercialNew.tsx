@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Phone, Calendar, UserPlus, Percent, DollarSign, TrendingUp, Archive, XCircle, Music, Clock, Users, Baby, GraduationCap, AlertTriangle, Info, Lock, Unlock, Headphones, MessageSquare, Timer, CheckCircle2, Building2, Inbox } from 'lucide-react';
+import { Phone, Calendar, UserPlus, Percent, DollarSign, TrendingUp, Archive, XCircle, Music, Clock, Users, Baby, GraduationCap, AlertTriangle, Info, Unlock, Headphones, MessageSquare, Timer, CheckCircle2, Building2, Inbox } from 'lucide-react';
 import { KPICard } from '@/components/ui/KPICard';
 import { SeloCompetencia } from '@/components/ui/SeloCompetencia';
 import { FunnelChart } from '@/components/ui/FunnelChart';
@@ -856,12 +856,15 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
                 <h4 className="text-cyan-100 font-semibold">Origem dos numeros de experimentais</h4>
                 <p className="text-cyan-100/80 text-sm">
                   Eventos, realizadas e faltas usam o endpoint Emusys v2. A taxa Exp para Mat usa o
-                  denominador canonico da conciliacao quando a competencia esta sem pendencias.
+                  denominador canonico da conciliacao; pendencias de conciliacao ficam em aviso e
+                  nao bloqueiam mais a taxa (decisao Alf set/2026).
                   {experimentaisDiagnostico.taxaExpMatLiberada
-                    ? ' A taxa Exp → Mat está liberada para esta competência.'
+                    ? experimentaisDiagnostico.pendenciasTaxaExpMat > 0
+                      ? ` A taxa Exp → Mat está liberada, com ${experimentaisDiagnostico.pendenciasTaxaExpMat} pendência(s) de conciliação em aberto.`
+                      : ' A taxa Exp → Mat está liberada para esta competência.'
                     : taxaExpMatSemBase
                       ? ' Esta competencia ainda esta sem base de experimentais confirmadas.'
-                      : ' A taxa Exp → Mat segue bloqueada para esta competência.'}
+                      : ' A taxa Exp → Mat ainda não tem base calculada — há pendências de conciliação.'}
                 </p>
               </div>
             </div>
@@ -902,7 +905,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               </div>
               <div>
                 <dt className="text-slate-400">
-                  {experimentaisDiagnostico.taxaExpMatLiberada ? 'Taxa oficial' : taxaExpMatSemBase ? 'Sem base' : 'Faixa em teste'}
+                  {experimentaisDiagnostico.taxaExpMatLiberada ? 'Taxa oficial' : taxaExpMatSemBase ? 'Sem base' : 'Pendente'}
                 </dt>
                 <dd className={cn(
                   'text-xl font-bold',
@@ -919,10 +922,10 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
                   experimentaisDiagnostico.taxaExpMatLiberada ? 'text-emerald-200/80' : taxaExpMatSemBase ? 'text-slate-400' : 'text-amber-200/80'
                 )}>
                   {experimentaisDiagnostico.taxaExpMatLiberada
-                    ? `${experimentaisDiagnostico.conversoesExpMatCanonicas}/${experimentaisDiagnostico.denominadorTaxaExpMat}`
+                    ? `${experimentaisDiagnostico.conversoesExpMatCanonicas}/${experimentaisDiagnostico.denominadorTaxaExpMat}${experimentaisDiagnostico.pendenciasTaxaExpMat > 0 ? ` · ${experimentaisDiagnostico.pendenciasTaxaExpMat} pendência(s)` : ''}`
                     : taxaExpMatSemBase
                       ? '0 pendencias'
-                      : 'Não é KPI oficial'}
+                      : 'Aguardando conciliação'}
                 </p>
               </div>
             </dl>
@@ -970,7 +973,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
                 ) : taxaExpMatSemBase ? (
                   <Info className="w-4 h-4 text-cyan-300" />
                 ) : (
-                  <Lock className="w-4 h-4 text-amber-300" />
+                  <AlertTriangle className="w-4 h-4 text-amber-300" />
                 )}
               </div>
               <div>
@@ -982,14 +985,14 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
                     ? formatTaxaDiagnostica(experimentaisDiagnostico.taxaExpMatCanonica)
                     : taxaExpMatSemBase
                       ? 'Sem base'
-                      : 'Bloqueada'}
+                      : 'Pendente'}
                 </div>
                 <p className="text-xs text-slate-400 mt-1">
                   {experimentaisDiagnostico.taxaExpMatLiberada
-                    ? `${experimentaisDiagnostico.conversoesExpMatCanonicas}/${experimentaisDiagnostico.denominadorTaxaExpMat} conversões confirmadas.`
+                    ? `${experimentaisDiagnostico.conversoesExpMatCanonicas}/${experimentaisDiagnostico.denominadorTaxaExpMat} conversões confirmadas.${experimentaisDiagnostico.pendenciasTaxaExpMat > 0 ? ` ${experimentaisDiagnostico.pendenciasTaxaExpMat} pendência(s) de conciliação em aberto.` : ''}`
                     : taxaExpMatSemBase
                       ? '0 pendencia(s); aguardando experimentais confirmadas.'
-                      : 'Aguarda vínculo aluno → presença e decisões humanas antes de virar KPI oficial.'}
+                      : `${experimentaisDiagnostico.pendenciasTaxaExpMat} pendência(s) de conciliação — ver aba Conciliação do Comercial.`}
                 </p>
               </div>
             </div>

@@ -541,9 +541,9 @@ export function useDashboardDados(): DashboardDados {
             leads_mes: resumoComercialV2.leadsEntrantes,
             experimentais_realizadas: diagnosticoExperimentaisV2.realizadasPresencaConfirmada,
             experimentais_status_operacional: diagnosticoExperimentaisV2.realizadasStatusOperacional,
-            taxa_conversao: diagnosticoExperimentaisV2.taxaExpMatLiberada
-              ? diagnosticoExperimentaisV2.taxaExpMatCanonica || 0
-              : 0,
+            // Pendência de conciliação não bloqueia mais a taxa (decisão Alf
+            // set/2026): exibe a canônica sempre que a RPC a calculou.
+            taxa_conversao: diagnosticoExperimentaisV2.taxaExpMatCanonica ?? 0,
             taxa_exp_mat_liberada: diagnosticoExperimentaisV2.taxaExpMatLiberada,
             denominador_exp_mat: diagnosticoExperimentaisV2.denominadorTaxaExpMat,
             conversoes_exp_mat: diagnosticoExperimentaisV2.conversoesExpMatCanonicas,

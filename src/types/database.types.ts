@@ -24446,6 +24446,10 @@ export type Database = {
       lead_experimentais: {
         Row: {
           aluno_id: number | null
+          chamada_em: string | null
+          chamada_origem: string | null
+          chamada_por: number | null
+          chamada_status: string | null
           contexto_ia: Json | null
           contexto_ia_em: string | null
           created_at: string | null
@@ -24467,6 +24471,10 @@ export type Database = {
         }
         Insert: {
           aluno_id?: number | null
+          chamada_em?: string | null
+          chamada_origem?: string | null
+          chamada_por?: number | null
+          chamada_status?: string | null
           contexto_ia?: Json | null
           contexto_ia_em?: string | null
           created_at?: string | null
@@ -24488,6 +24496,10 @@ export type Database = {
         }
         Update: {
           aluno_id?: number | null
+          chamada_em?: string | null
+          chamada_origem?: string | null
+          chamada_por?: number | null
+          chamada_status?: string | null
           contexto_ia?: Json | null
           contexto_ia_em?: string | null
           created_at?: string | null

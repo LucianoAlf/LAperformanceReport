@@ -711,6 +711,10 @@
 | `contexto_ia` | jsonb | sim |  |  |
 | `contexto_ia_em` | timestamp with time zone | sim |  |  |
 | `emusys_agendamento_id` | bigint | sim |  |  |
+| `chamada_em` | timestamp with time zone | sim |  |  |
+| `chamada_por` | integer | sim |  |  |
+| `chamada_status` | text | sim |  |  |
+| `chamada_origem` | text | sim |  |  |
 
 **Únicos:**
 - `lead_experimentais_pkey`
