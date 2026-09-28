@@ -213,7 +213,9 @@ serve(async (req: Request) => {
           .select('id, bloco_id, ordem, tipo, titulo, pessoa_chave, aluno_id, professor_id,' +
             ' musica, musica_artista, musica_link, duracao_segundos, tem_playback,' +
             ' playback_path, observacao_mapa, unidade_origem_id,' +
-            ' alunos(nome), cursos(nome), professores(nome), unidade_origem:unidades!unidade_origem_id(nome)')
+            ' alunos(nome), cursos(nome),' +
+            ' professor:professores!evento_apresentacao_professor_id_fkey(nome),' +
+            ' unidade_origem:unidades!unidade_origem_id(nome)')
           .eq('evento_id', dest.evento_id)
           .order('ordem'),
         service.from('evento_participacao')
@@ -275,7 +277,7 @@ serve(async (req: Request) => {
           const part = partPorChave.get(a.pessoa_chave);
           const rel = relPorApresentacao.get(a.id);
           return [
-            a.ordem ?? '', a.alunos?.nome ?? '', a.cursos?.nome ?? '', a.professores?.nome ?? '',
+            a.ordem ?? '', a.alunos?.nome ?? '', a.cursos?.nome ?? '', a.professor?.nome ?? '',
             a.unidade_origem?.nome ?? '—', a.musica ?? '', a.musica_artista ?? '',
             dur(a.duracao_segundos), playbackRotulo(a), a.musica_link ?? '',
             a.observacao_mapa ?? '', part?.convidados ?? 0,
@@ -452,17 +454,16 @@ serve(async (req: Request) => {
       resumo.corridas += 1;
       resumo.planilhas += planilhasEscritas;
       resumo.professores_ok += professoresOk;
+    } catch (e) {
+      falha('corrida', (e as Error).message);
+    } finally {
+      // corrida grava SEMPRE — inclusive nos `continue` de falha, senao o erro
+      // so existe na resposta ao chamador e o cron perde o rastro
       await service.from('evento_sheets_corrida').insert({
         evento_id: dest.evento_id, unidade_id: dest.unidade_id, origem,
         duracao_ms: Date.now() - inicio, planilhas_escritas: planilhasEscritas,
         professores_ok: professoresOk, divergencias_lidas: divergencias,
         erros: errosCorrida,
-      });
-    } catch (e) {
-      falha('corrida', (e as Error).message);
-      await service.from('evento_sheets_corrida').insert({
-        evento_id: dest.evento_id, unidade_id: dest.unidade_id, origem,
-        duracao_ms: Date.now() - inicio, erros: errosCorrida,
       });
     }
   }
