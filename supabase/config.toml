@@ -119,6 +119,11 @@ verify_jwt = false
 # fatura via fatura_id/emusys_fatura_id. Mesmo segredo dedicado no codigo.
 verify_jwt = false
 
+[functions.export-kpis-mensais]
+# Indicadores canonicos por unidade/mes p/ o Super Folha (CAC/CRC/LTV).
+# Segredo dedicado SUPER_FOLHA_KPIS_SECRET (fallback: contas-receber), validado no codigo.
+verify_jwt = false
+
 [functions.resolver-emusys-cpf-hash]
 # Integracao servidor-servidor com o Super Folha. O codigo valida o segredo
 # compartilhado antes de aceitar o HMAC; nenhum CPF em claro passa por aqui.

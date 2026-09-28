@@ -87,7 +87,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `evento_bilheteria_conciliar_v1(p_venda_id bigint, p_status text, p_ref text, p_obs text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `evento_bilheteria_estornos_v1(p_unidade_id uuid, p_de timestamp with time zone, p_ate timestamp with time zone)` | ORFA | DEFINER | sem consumidor conhecido |
 | `evento_bilheteria_pendentes_v1(p_unidade_id uuid, p_de timestamp with time zone, p_ate timestamp with time zone)` | ORFA | DEFINER | sem consumidor conhecido |
-| `evento_bilheteria_vender_v1(p_evento_id bigint, p_bloco_id bigint, p_comprador_nome text, p_quantidade integer, p_forma_pagamento text, p_canal text, p_comprador_contato text, p_participacao_id bigint, p_pacote_id bigint, p_convidados jsonb, p_marcar_pago boolean, p_pagamento_identificador text, p_observacao text)` | ORFA | DEFINER · 🔓 anon | sem consumidor conhecido |
+| `evento_bilheteria_vender_v1(p_evento_id bigint, p_bloco_id bigint, p_comprador_nome text, p_quantidade integer, p_forma_pagamento text, p_canal text, p_comprador_contato text, p_participacao_id bigint, p_pacote_id bigint, p_convidados jsonb, p_marcar_pago boolean, p_pagamento_identificador text, p_observacao text)` | ATIVA | DEFINER | front:src/lib/eventos.ts |
 | `evento_bloco_reordenar_v1(p_evento_id bigint, p_ids bigint[])` | ATIVA | INVOKER | front:src/hooks/useEventos.ts |
 | `evento_buscar_aluno_outra_unidade_v1(p_evento_id bigint, p_termo text)` | ATIVA | DEFINER | front:src/hooks/useEventos.ts |
 | `evento_grade_reordenar_v1(p_evento_id bigint, p_itens jsonb)` | ATIVA | INVOKER | front:src/hooks/useEventos.ts |
@@ -681,7 +681,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `get_relatorio_pedagogico_aluno_interno_20260712(p_aluno_id integer, p_data_inicio date, p_data_fim date)` | SO-INTERNA | DEFINER | funcao:get_relatorio_pedagogico_aluno |
 | `get_watchlist_projecao(p_unidade_id uuid, p_dias_futuros integer)` | ATIVA | INVOKER | front:src/components/App/Agenda/CalendarioEscolar.tsx |
 | `kpis_comercial_v2_sem_cache_20260923(p_unidade_id uuid, p_ano integer, p_mes integer, p_periodo text, p_data date)` | SO-INTERNA | DEFINER | funcao:get_kpis_comercial_canonicos_v2 |
-| `kpis_mensais_export_v1(p_unidade_id uuid, p_ano integer, p_mes integer)` | ORFA | DEFINER | sem consumidor conhecido |
+| `kpis_mensais_export_v1(p_unidade_id uuid, p_ano integer, p_mes integer)` | ATIVA | DEFINER | edge:supabase/functions/export-kpis-mensais/index.ts |
 | `kpis_prof_cadastro_sem_cache_20260924(p_ano integer, p_mes integer, p_unidade_id uuid, p_data_inicio date, p_data_fim date)` | SO-INTERNA | DEFINER | funcao:get_kpis_professores_cadastro_canonicos_v1 |
 | `listar_meta_source_ids_pendentes()` | ATIVA | DEFINER | edge:supabase/functions/enriquecer-meta-ads/index.ts |
 | `materializar_projecao_contrato(p_aluno_id integer, p_matricula_disciplina_id bigint)` | SO-INTERNA | DEFINER | funcao:trg_materializar_projecao_jornada |
@@ -976,11 +976,11 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `get_saude_syncs_emusys()` | ATIVA | DEFINER | front:src/hooks/useSaudeCrons.ts |
 | `get_unidade_usuario()` | SO-INTERNA | DEFINER | funcao:fn_realtime_aberto_ao_professor |
 | `get_user_unidade_id()` | ATIVA | DEFINER | front:src/components/App/Agenda/Chamada/ChamadaDrawer.tsx |
-| `get_user_unidade_ids()` | ATIVA | DEFINER | view:vw_absenteismo_aluno_canonica_v2, view:vw_alunos_sem_fatura_mes, view:vw_contratos_vencendo, view:vw_matriculas_ativas_sem_aluno_local, view:vw_radar_aluno_sinais_canonica_v2, view:vw_renovacao_ciclos, +28 outros |
+| `get_user_unidade_ids()` | ATIVA | DEFINER | view:vw_absenteismo_aluno_canonica_v2, view:vw_alunos_sem_fatura_mes, view:vw_contratos_vencendo, view:vw_matriculas_ativas_sem_aluno_local, view:vw_radar_aluno_sinais_canonica_v2, view:vw_renovacao_ciclos, +29 outros |
 | `get_vault_secret(secret_name text)` | ATIVA | DEFINER | edge:supabase/functions/ficha-criar-pessoa/index.ts, edge:supabase/functions/ficha-export/index.ts |
 | `hash_jsonb_canonico(p_payload jsonb)` | SO-INTERNA | INVOKER | funcao:aplicar_retificacao_relatorio_admin_mensal_renovacoes_v1, funcao:aplicar_retificacao_relatorio_comercial_matricula_tardia_v1, funcao:aplicar_retificacao_relatorio_comercial_mensal_v1, funcao:aplicar_retificacao_relatorio_gerencial_financeiro_v1, funcao:aplicar_retificacao_relatorio_gerencial_retencao_v1, funcao:capturar_relatorio_coordenacao_canonico_v2, +17 outros |
 | `introspect_schema_lamusic(table_names text[])` | ATIVA | DEFINER | edge:supabase/functions/bi-agent-lamusic/index.ts, edge:supabase/functions/bi-agent-lamusic/tools.ts |
-| `is_admin()` | ATIVA | DEFINER | front:src/components/App/Agenda/Chamada/ChamadaDrawer.tsx, view:vw_absenteismo_aluno_canonica_v2, view:vw_alunos_sem_fatura_mes, view:vw_contratos_vencendo, view:vw_disponibilidade_professores, view:vw_matriculas_ativas_sem_aluno_local, +37 outros |
+| `is_admin()` | ATIVA | DEFINER | front:src/components/App/Agenda/Chamada/ChamadaDrawer.tsx, view:vw_absenteismo_aluno_canonica_v2, view:vw_alunos_sem_fatura_mes, view:vw_contratos_vencendo, view:vw_disponibilidade_professores, view:vw_matriculas_ativas_sem_aluno_local, +38 outros |
 | `is_admin_usuario()` | SO-INTERNA | DEFINER | funcao:get_financeiro_espelho_status |
 | `la_os_banco_atual()` | ORFA | DEFINER | sem consumidor conhecido |
 | `la_os_banco_coletar_consumo()` | ORFA | DEFINER | sem consumidor conhecido |
