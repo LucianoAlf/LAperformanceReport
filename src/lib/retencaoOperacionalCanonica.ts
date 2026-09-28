@@ -113,16 +113,18 @@ function rangeMesSeguinte(ano: number, mes: number): { inicio: string; fim: stri
   };
 }
 
+// Pessoa = nome + unidade (mesma pessoa_key do banco). aluno_id é MATRÍCULA: usá-lo
+// primeiro contava 2 evasões para quem sai de 2 cursos no mesmo mês (LAPE-47).
 function chavePessoaMovimentacao(mov: MovimentacaoRetencaoRow): string | null {
+  const nome = String(mov.aluno_nome || '').trim().toLowerCase();
+  const unidadeId = String(mov.unidade_id || '').trim();
+  if (nome && unidadeId) return `nome:${nome}|${unidadeId}`;
+
   if (mov.aluno_id !== null && mov.aluno_id !== undefined) {
     const alunoId = String(mov.aluno_id).trim();
     if (alunoId) return `id:${alunoId}`;
   }
-
-  const nome = String(mov.aluno_nome || '').trim().toLowerCase();
-  const unidadeId = String(mov.unidade_id || '').trim();
-  if (!nome || !unidadeId) return null;
-  return `nome:${nome}|${unidadeId}`;
+  return null;
 }
 
 function parseDateOnly(value: string | null | undefined): Date | null {
@@ -395,7 +397,8 @@ export function calcularRetencaoOperacionalCanonica({
 
     const evasoesInterrompidas = evasoesMap.size;
     const naoRenovacoes = naoRenovacoesMap.size;
-    const totalEvasoes = evasoesInterrompidas + naoRenovacoes;
+    // Quem cancela um curso e não renova o outro no mesmo mês é 1 saída, não 2.
+    const totalEvasoes = new Set([...evasoesMap.keys(), ...naoRenovacoesMap.keys()]).size;
     const transferencias = transferenciasMap.size;
     const basePagantes = alunosPagantesPorUnidade.get(unidadeId) || 0;
     const mrrPerdido = [...evasoesMap.values(), ...naoRenovacoesMap.values()]

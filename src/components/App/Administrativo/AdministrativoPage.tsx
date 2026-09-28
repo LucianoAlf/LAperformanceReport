@@ -1472,7 +1472,7 @@ export function AdministrativoPage() {
         ano={ano} 
         mes={mes}
         churnRate={resumo?.alunos_pagantes
-          ? ((((resumo?.evasoes_interrompido || 0) + (resumo?.evasoes_nao_renovou || 0)) / resumo.alunos_pagantes) * 100)
+          ? (((resumo?.evasoes_total || 0) / resumo.alunos_pagantes) * 100)
           : 0}
         taxaRenovacao={(() => {
           const totalVenc = (resumo?.renovacoes_realizadas || 0) + (resumo?.nao_renovacoes || 0) + (resumo?.renovacoes_pendentes || 0);
@@ -1480,7 +1480,7 @@ export function AdministrativoPage() {
         })()}
         totalRenovacoes={resumo?.renovacoes_realizadas || 0}
         totalVencimentos={(resumo?.renovacoes_realizadas || 0) + (resumo?.nao_renovacoes || 0) + (resumo?.renovacoes_pendentes || 0)}
-        totalEvasoes={(resumo?.evasoes_interrompido || 0) + (resumo?.evasoes_nao_renovou || 0)}
+        totalEvasoes={resumo?.evasoes_total || 0}
         alunosAtivos={resumo?.alunos_ativos || 0}
       />
 
@@ -1723,10 +1723,10 @@ export function AdministrativoPage() {
               <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
                 <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Churn Rate</p>
                 <p className="text-3xl font-bold text-rose-400">
-                  {resumo?.alunos_pagantes ? ((((resumo?.evasoes_interrompido || 0) + (resumo?.evasoes_nao_renovou || 0)) / resumo.alunos_pagantes) * 100).toFixed(1) : '0.0'}%
+                  {resumo?.alunos_pagantes ? (((resumo?.evasoes_total || 0) / resumo.alunos_pagantes) * 100).toFixed(1) : '0.0'}%
                 </p>
                 <p className="text-xs text-slate-500 mt-1">
-                  {(resumo?.evasoes_interrompido || 0) + (resumo?.evasoes_nao_renovou || 0)} evasões / {resumo?.alunos_pagantes || 0} base
+                  {resumo?.evasoes_total || 0} evasões / {resumo?.alunos_pagantes || 0} base
                 </p>
               </div>
               
