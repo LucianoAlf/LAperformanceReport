@@ -585,6 +585,8 @@ churn = evasões / alunos_pagantes × 100
 
 Confirmado no banco. Transferência interna não entra no numerador.
 
+- **Os dois lados contam PESSOA, não matrícula** (Arthur, 28/09/2026). Quem faz 2 cursos e sai dos dois no mesmo mês é **1 evasão**. Chave = `lower(btrim(nome)) || '|' || unidade_id`, a mesma `pessoa_key` do denominador.
+  - ⚠️ Até 28/09/2026 o cálculo **vivo** (mês aberto, `get_kpis_alunos_canonicos_base_p01q` → CTE `evasoes_live`) deduplicava por `aluno_id` — que é **matrícula** — e contava essa pessoa 2×. Caso que confirmou: Júlia Silva Vilardo/Barra, set/2026 (13 → 12 evasões). O fechamento mensal (`recalcular_dados_mensais_unguarded`) já contava por nome e não mudou. Migration `20260928234500`.
 - Faixas de risco por professor: **crítico ≥ 15% · alto ≥ 10% · médio ≥ 5% · normal < 5%**.
 - 🚫 `evasoes / total_alunos_ativos` — legado.
 - 🚫 `evasoes / (alunos_inicio + novas_matriculas)` — legado.

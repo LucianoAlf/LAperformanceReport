@@ -299,13 +299,19 @@ export function calcularKPIsAlunosVivosCanonicos(
         .filter(Boolean) as string[]
     );
 
+    // Dedup por PESSOA (nome + unidade), igual ao denominador alunosPagantes acima —
+    // não por aluno_id (matrícula). Quem tem 2 cursos e sai dos dois no mesmo mês
+    // conta 1 evasão, não 2. Fallback por linha (mov.id) só quando não há nome nenhum.
     const evasoesKeys = new Set(
       movimentacoes
         .filter(mov => String(mov.unidade_id || '') === unidadeId)
         .filter(mov => mov.data && mov.data >= inicioMes && mov.data <= dataCorte)
         .filter(mov => mov.tipo === 'evasao' || mov.tipo === 'nao_renovacao')
         .filter(mov => !isAtividadeExtraAcademica(mov))
-        .map(mov => mov.aluno_id ? String(mov.aluno_id) : String(mov.aluno_nome || '').trim().toLowerCase())
+        .map(mov => {
+          const nome = String(mov.aluno_nome || '').trim().toLowerCase();
+          return nome ? `${nome}|${unidadeId}` : `row:${mov.id}`;
+        })
         .filter(Boolean)
     );
 
