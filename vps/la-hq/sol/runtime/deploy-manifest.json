@@ -4,8 +4,8 @@
     {
       "class": "bridge",
       "mode": "0644",
-      "sha256": "58f50f414536d86928227d431b17685035f174f06df8b273868c622d4e1c5522",
-      "size": 88107,
+      "sha256": "aea38ae497e54672483caaaa38e541381c24e697e7c74f9085bf62e7f705fa02",
+      "size": 89058,
       "source": "vps/la-hq/sol/runtime/bridge.js",
       "target": "/home/sol/.hermes/hermes-agent/scripts/whatsapp-bridge/bridge.js"
     },
