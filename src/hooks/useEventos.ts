@@ -288,6 +288,79 @@ export interface AlunoElegivel {
   alocacoes: AlocacaoDoCurso[];
   /** Atalho de `alocacoes.length`, para a contagem nao ter de percorrer o array. */
   cursos_alocados: number;
+  /**
+   * Preenchido so para aluno de OUTRA unidade que se apresenta neste evento (nome da unidade
+   * de origem). `null`/ausente = aluno da casa.
+   */
+  unidade_origem_nome?: string | null;
+}
+
+/** Aluno de outra unidade encontrado pela busca do evento. */
+export interface AlunoDeOutraUnidade {
+  aluno_id_referencia: number;
+  nome: string;
+  unidade_id: string;
+  unidade_nome: string;
+  idade_anos: number | null;
+  cursos: CursoDoAluno[];
+  ja_no_evento: boolean;
+}
+
+interface VisitantesDoEvento {
+  pessoas: (Omit<AlunoElegivel, 'status' | 'convidados' | 'alocacoes' | 'cursos_alocados'> & {
+    unidade_origem_nome: string;
+  })[];
+  /** aluno_id -> nome de toda matricula de outra unidade que o evento referencia. */
+  nomes: Record<string, { nome: string; data_nascimento: string | null; unidade_nome: string }>;
+}
+
+/**
+ * Alunos de OUTRA unidade registrados no evento.
+ *
+ * Vem de RPC porque a RLS de `alunos` esconde a matricula de outra unidade: a view de
+ * elegiveis nao os devolve, e o embed `alunos(nome)` da grade e do check-in vem nulo.
+ */
+async function lerVisitantes(eventoId: number) {
+  const { data, error } = await supabase.rpc('evento_visitantes_v1', { p_evento_id: eventoId });
+  const vazio: VisitantesDoEvento = { pessoas: [], nomes: {} };
+  return { visitantes: (data as VisitantesDoEvento | null) ?? vazio, error };
+}
+
+/** Busca por nome (3 letras no minimo) entre os alunos ativos das OUTRAS unidades. */
+export async function buscarAlunoDeOutraUnidade(eventoId: number, termo: string) {
+  const { data, error } = await supabase.rpc('evento_buscar_aluno_outra_unidade_v1', {
+    p_evento_id: eventoId,
+    p_termo: termo,
+  });
+  return { alunos: ((data ?? []) as AlunoDeOutraUnidade[]), error };
+}
+
+/**
+ * Tira do evento um aluno de outra unidade: as apresentacoes dele e a participacao.
+ *
+ * As duas escritas conferem o retorno — a RLS FILTRA em vez de recusar, e zero linhas
+ * apagadas sem erro e justamente o caso que pintaria "removido" sobre um banco intacto.
+ */
+export async function removerAlunoDeOutraUnidade(eventoId: number, pessoaChave: string) {
+  const apresentacoes = await supabase
+    .from('evento_apresentacao')
+    .delete()
+    .eq('evento_id', eventoId)
+    .eq('pessoa_chave', pessoaChave)
+    .select('id');
+  if (apresentacoes.error) return { error: apresentacoes.error };
+
+  const participacao = await supabase
+    .from('evento_participacao')
+    .delete()
+    .eq('evento_id', eventoId)
+    .eq('pessoa_chave', pessoaChave)
+    .select('id');
+  if (participacao.error) return { error: participacao.error };
+  if ((participacao.data ?? []).length === 0) {
+    return { error: { message: 'Nada foi removido. Confira se o evento é da sua unidade.' } };
+  }
+  return { error: null };
 }
 
 /**
@@ -312,7 +385,7 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
     setLoading(true);
     setErro(null);
 
-    const [elegiveis, participacoes, apresentacoes] = await Promise.all([
+    const [elegiveis, participacoes, apresentacoes, visitantes] = await Promise.all([
       supabase
         .from('vw_evento_aluno_elegivel_v1')
         .select('*')
@@ -328,9 +401,10 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
         .from('evento_apresentacao')
         .select('pessoa_chave, curso_id, bloco_id, evento_bloco(nome, ordem, horario_inicial)')
         .eq('evento_id', eventoId),
+      lerVisitantes(eventoId),
     ]);
 
-    const falha = elegiveis.error ?? participacoes.error ?? apresentacoes.error;
+    const falha = elegiveis.error ?? participacoes.error ?? apresentacoes.error ?? visitantes.error;
     if (falha) {
       setErro(falha.message);
       setAlunos([]);
@@ -367,11 +441,17 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
       alocacoesPorChave.set(linha.pessoa_chave, lista);
     }
 
-    setAlunos(
-      ((elegiveis.data ?? []) as unknown as Omit<
+    // Visitantes depois dos da casa: a lista e da unidade, e quem vem de fora e excecao.
+    const base = [
+      ...((elegiveis.data ?? []) as unknown as Omit<
         AlunoElegivel,
         'status' | 'alocacoes' | 'cursos_alocados'
-      >[]).map((a) => {
+      >[]),
+      ...visitantes.visitantes.pessoas,
+    ];
+
+    setAlunos(
+      base.map((a) => {
         const alocacoes = alocacoesPorChave.get(a.pessoa_chave) ?? [];
         return {
           ...a,
@@ -541,7 +621,7 @@ export function useGradeDoEvento(eventoId: number | null) {
     setLoading(true);
     setErro(null);
 
-    const [resBlocos, resApresentacoes] = await Promise.all([
+    const [resBlocos, resApresentacoes, resVisitantes] = await Promise.all([
       supabase
         .from('evento_bloco')
         .select('id, evento_id, nome, ordem, data, horario_inicial, inicio_manual, observacoes')
@@ -564,9 +644,12 @@ export function useGradeDoEvento(eventoId: number | null) {
         )
         .eq('evento_id', eventoId)
         .order('ordem'),
+      lerVisitantes(eventoId),
     ]);
 
-    const falha = resBlocos.error ?? resApresentacoes.error;
+    const falha = resBlocos.error ?? resApresentacoes.error ?? resVisitantes.error;
+    // Aluno de outra unidade: a RLS esconde o embed `alunos(...)`, o nome vem da RPC.
+    const nomeDeFora = resVisitantes.visitantes.nomes;
     if (falha) {
       setErro(falha.message);
       setBlocos([]);
@@ -589,8 +672,10 @@ export function useGradeDoEvento(eventoId: number | null) {
       const lista = porBloco.get(linha.bloco_id) ?? [];
       lista.push({
         ...linha,
-        aluno_nome: linha.alunos?.nome ?? '(aluno removido)',
-        aluno_data_nascimento: linha.alunos?.data_nascimento ?? null,
+        aluno_nome:
+          linha.alunos?.nome ?? nomeDeFora[String(linha.aluno_id)]?.nome ?? '(aluno removido)',
+        aluno_data_nascimento:
+          linha.alunos?.data_nascimento ?? nomeDeFora[String(linha.aluno_id)]?.data_nascimento ?? null,
         curso_nome: linha.cursos?.nome ?? null,
         professor_nome: linha.professores?.nome ?? null,
         // Ordem explicita por id: o embed do PostgREST nao promete ordem nenhuma, e sem
@@ -814,10 +899,16 @@ export function useCheckinDoEvento(eventoId: number | null) {
     setLoading(true);
     setErro(null);
 
-    const { data, error } = await supabase
-      .from('evento_participacao')
-      .select('pessoa_chave, aluno_id, status, checkin_em, alunos(nome, data_nascimento)')
-      .eq('evento_id', eventoId);
+    const [{ data, error: erroParticipacao }, { visitantes, error: erroVisitantes }] = await Promise.all([
+      supabase
+        .from('evento_participacao')
+        .select('pessoa_chave, aluno_id, status, checkin_em, alunos(nome, data_nascimento)')
+        .eq('evento_id', eventoId),
+      lerVisitantes(eventoId),
+    ]);
+    const error = erroParticipacao ?? erroVisitantes;
+    // Aluno de outra unidade: a RLS esconde o embed `alunos(...)`, o nome vem da RPC.
+    const nomeDeFora = visitantes.nomes;
 
     if (error) {
       setErro(error.message);
@@ -832,8 +923,9 @@ export function useCheckinDoEvento(eventoId: number | null) {
           aluno_id: p.aluno_id,
           status: p.status,
           checkin_em: p.checkin_em,
-          nome: p.alunos?.nome ?? '(aluno removido)',
-          data_nascimento: p.alunos?.data_nascimento ?? null,
+          nome: p.alunos?.nome ?? nomeDeFora[String(p.aluno_id)]?.nome ?? '(aluno removido)',
+          data_nascimento:
+            p.alunos?.data_nascimento ?? nomeDeFora[String(p.aluno_id)]?.data_nascimento ?? null,
         })),
       );
     }

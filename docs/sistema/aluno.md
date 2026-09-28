@@ -169,6 +169,14 @@ apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **L
   quem monta o palco. ⚠️ **CSV e não `.xlsx`**: o protótipo embute o SheetJS inteiro (498 KB), e
   trazer a lib somaria ~800 KB ao bundle do app inteiro por um botão que roda algumas vezes por
   semestre. ⚠️ Os documentos **abrem para VER** — nenhum dispara `window.print()` sozinho.
+- **Aluno de outra unidade** (28/09, pedido do Arthur): botão "Aluno de outra unidade" na aba Alunos
+  (`ModalAlunoOutraUnidade`), busca por `evento_buscar_aluno_outra_unidade_v1` e grava participação
+  `participa`; a lista mostra o selo da unidade de origem e a lixeira (`removerAlunoDeOutraUnidade`,
+  apaga apresentações + participação conferindo o retorno). Identidade no evento =
+  `fn_evento_pessoa_chave` (`ext:<unidade>|<chave>` para visitante — o id do Emusys colide entre
+  unidades). Nome e dados do visitante chegam por `evento_visitantes_v1`, porque a RLS de `alunos`
+  os esconde; `evento_apresentacao_adicionar_v1` é SECURITY DEFINER com guarda de escopo e só aceita
+  visitante já registrado. Migration `20260928220000`.
 - **Limite de 22:00** (`LIMITE_TERMINO_SEGUNDOS`): regra fundamental do protótipo
   (`MAX_FINISH_MINUTES`). Entra como pendência de **atenção**, nunca impedimento — o protótipo diz
   "recomendado", e quem decide esticar o recital é a coordenação. Terminar **exatamente** às 22:00

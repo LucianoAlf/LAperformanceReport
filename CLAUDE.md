@@ -227,6 +227,17 @@ Check-in (o dia). Detalhe completo em [`docs/sistema/aluno.md`](docs/sistema/alu
 - **Check-in é da PESSOA, nunca da apresentação** (`checkin_em` em `evento_participacao`): quem faz 2
   cursos sobe 2 vezes e chega 1. A contagem por bloco **não** é um pedaço do total — quem toca em 2
   blocos conta nos 2.
+- **Aluno de OUTRA unidade pode se apresentar (28/09/2026, pedido do Arthur).** Botão "Aluno de
+  outra unidade" na aba Alunos (`ModalAlunoOutraUnidade`) → `evento_buscar_aluno_outra_unidade_v1`
+  (3+ letras, só ativo com curso de recital, só nome/unidade/cursos) → participação `participa`. Na
+  tela vira selo "de Recreio" + lixeira (tira participação **e** apresentações). 🔴 **A chave da pessoa
+  no evento é `fn_evento_pessoa_chave(aluno, evento)`**: da casa = `pessoa_chave` de sempre; de fora =
+  `ext:<unidade>|<chave>`, porque o id do Emusys colide entre unidades (51 ativos). Os dois gatilhos,
+  `juntar`, `sincronizar` e `relatorios` usam ela — **não voltar a `fn_pessoa_chave_aluno` nesses
+  lugares**. ⚠️ A RLS de `alunos` esconde o visitante: nome na grade/check-in vem de
+  `evento_visitantes_v1` (`nomes` por aluno_id); `evento_apresentacao_adicionar_v1` virou **SECURITY
+  DEFINER** com guarda (`fn_evento_pode_ver` + visitante já registrado). ⚠️ O cartão do LA Teacher do
+  visitante pode apontar para o evento da unidade de origem e não casar aqui — ADM preenche à mão.
 - **Número = alunos que sobem JUNTOS (28/09/2026).** `evento_apresentacao.grupo_id` (uuid sem FK)
   junta apresentações num horário/música/slot só; a apresentação **continua** sendo (pessoa, curso) —
   certificado e canal do LA Teacher não mudam. Escrita só por `evento_apresentacao_juntar_v1` (cria

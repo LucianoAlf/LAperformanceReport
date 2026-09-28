@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-27 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-28 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — aluno
@@ -1185,6 +1185,11 @@
 | `detalhes_origem` | text | não | 'adm'::text |  |
 | `professor` | jsonb | sim |  |  |
 | `professor_em` | timestamp with time zone | sim |  |  |
+| `drive_playback_path` | text | sim |  |  |
+| `drive_file_id` | text | sim |  |  |
+| `drive_sincronizado_em` | timestamp with time zone | sim |  |  |
+| `drive_erro` | text | sim |  |  |
+| `grupo_id` | uuid | sim |  |  |
 
 **Únicos:**
 - `evento_apresentacao_pessoa_curso_unica`
@@ -1192,6 +1197,7 @@
 
 **Triggers:**
 - `trg_evento_apresentacao_deriva → fn_evento_apresentacao_deriva()`
+- `trg_evento_apresentacao_grupo_coerente → fn_evento_apresentacao_grupo_coerente()`
 - `trg_evento_apresentacao_origem_adm → fn_evento_apresentacao_origem_adm()`
 - `trg_evento_apresentacao_touch → fn_evento_touch()`
 
@@ -1255,12 +1261,14 @@
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
 | `convidados` | integer | não | 0 |  |
+| `confirmado_em` | timestamp with time zone | sim |  |  |
 
 **Únicos:**
 - `evento_participacao_pessoa_unica`
 - `evento_participacao_pkey`
 
 **Triggers:**
+- `trg_evento_participacao_confirmado_em → fn_evento_participacao_confirmado_em()`
 - `trg_evento_participacao_deriva → fn_evento_participacao_deriva()`
 - `trg_evento_participacao_touch → fn_evento_touch()`
 

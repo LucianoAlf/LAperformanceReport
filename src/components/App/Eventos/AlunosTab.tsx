@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Search, Users, Check, HelpCircle, X, Music, AlertTriangle, Guitar, LayoutList } from 'lucide-react';
+import { Search, Users, Check, HelpCircle, X, Music, AlertTriangle, Guitar, LayoutList, UserPlus, Trash2 } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -17,10 +17,12 @@ import {
   definirParticipacao,
   definirConvidados,
   definirParticipacaoEmLote,
+  removerAlunoDeOutraUnidade,
   type AlocacaoDoCurso,
   type AlunoElegivel,
   type ParticipacaoStatus,
 } from '@/hooks/useEventos';
+import { ModalAlunoOutraUnidade } from './ModalAlunoOutraUnidade';
 
 type FiltroStatus = 'todos' | ParticipacaoStatus;
 
@@ -101,10 +103,13 @@ function LinhaAluno({
   aluno,
   onEscolher,
   onConvidados,
+  onRemover,
 }: {
   aluno: AlunoElegivel;
   onEscolher: (s: ParticipacaoStatus) => void;
   onConvidados: (n: number) => void;
+  /** So para aluno de outra unidade: tira do evento (participacao + apresentacoes). */
+  onRemover?: () => void;
 }) {
   const avaliacao = avaliarElegibilidade(aluno);
   const alocacao = resumirAlocacao(aluno.cursos_no_recital, aluno.cursos_alocados);
@@ -123,6 +128,14 @@ function LinhaAluno({
           <span className="truncate text-[13.5px] font-medium text-white">{aluno.nome}</span>
           {aluno.idade_anos != null && (
             <span className="text-[11.5px] text-slate-500">{aluno.idade_anos} anos</span>
+          )}
+          {aluno.unidade_origem_nome && (
+            <span
+              className="rounded bg-sky-500/15 px-1.5 py-px text-[10.5px] font-medium text-sky-300"
+              title="Aluno de outra unidade que se apresenta neste evento"
+            >
+              de {aluno.unidade_origem_nome}
+            </span>
           )}
           {aluno.faz_banda && (
             <Badge variant="outline" className="gap-1 text-[10px]">
@@ -216,6 +229,18 @@ function LinhaAluno({
         desabilitado={!avaliacao.podeParticipar}
         onEscolher={onEscolher}
       />
+
+      {onRemover && (
+        <button
+          type="button"
+          onClick={onRemover}
+          title="Tirar do evento (aluno de outra unidade)"
+          aria-label={`Tirar ${aluno.nome} do evento`}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-rose-500/15 hover:text-rose-300"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      )}
     </div>
   );
 }
@@ -228,6 +253,7 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
   const [filtroCurso, setFiltroCurso] = useState('todos');
   const [soSemAlocar, setSoSemAlocar] = useState(false);
   const [gravando, setGravando] = useState<string | null>(null);
+  const [modalOutraUnidade, setModalOutraUnidade] = useState(false);
 
   const resumo = useMemo(() => resumirParticipacao(alunos), [alunos]);
 
@@ -293,6 +319,22 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
     const { error } = await definirConvidados(eventoId, aluno.aluno_id_referencia, n);
     if (error) toast.error(`Não consegui gravar os convidados de ${aluno.nome}: ${error.message}`);
     else recarregar();
+  };
+
+  // Visitante sai por inteiro (apresentacoes + participacao): marcar "nao participa"
+  // deixaria na lista da unidade alguem que nem estuda nela.
+  const removerVisitante = async (aluno: AlunoElegivel) => {
+    if (!window.confirm(`Tirar ${aluno.nome} (${aluno.unidade_origem_nome}) deste evento? As apresentações dele na grade também saem.`)) {
+      return;
+    }
+    setGravando(aluno.pessoa_chave);
+    const { error } = await removerAlunoDeOutraUnidade(eventoId, aluno.pessoa_chave);
+    setGravando(null);
+    if (error) toast.error(`Não consegui tirar ${aluno.nome}: ${error.message}`);
+    else {
+      toast.success(`${aluno.nome} saiu do evento`);
+      recarregar();
+    }
   };
 
   // Lote respeita o que esta FILTRADO na tela, nao a base inteira: marcar 400 pessoas
@@ -430,7 +472,24 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
         >
           Marcar os {visiveis.length} visíveis
         </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          onClick={() => setModalOutraUnidade(true)}
+        >
+          <UserPlus className="h-3.5 w-3.5" />
+          Aluno de outra unidade
+        </Button>
       </div>
+
+      <ModalAlunoOutraUnidade
+        eventoId={eventoId}
+        aberto={modalOutraUnidade}
+        onFechar={() => setModalOutraUnidade(false)}
+        onAdicionado={recarregar}
+      />
 
       <div className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800/40">
         {loading && alunos.length === 0 ? (
@@ -449,6 +508,7 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
                 aluno={a}
                 onEscolher={(s) => escolher(a, s)}
                 onConvidados={(n) => salvarConvidados(a, n)}
+                onRemover={a.unidade_origem_nome ? () => removerVisitante(a) : undefined}
               />
             ))}
           </div>

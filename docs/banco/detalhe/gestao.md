@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-27 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-28 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — gestao
 
-46 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+48 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## bi_agent_config_lamusic
 
@@ -584,6 +584,37 @@
 **Únicos:**
 - `relatorio_anual_evento_aluno_curso_key`
 - `relatorio_anual_pkey`
+
+## relatorio_anual_aviso
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `chave` | text | não |  |  |
+| `professor_id` | integer | não |  |  |
+| `tipo` | text | não |  |  |
+| `lote` | text | sim |  |  |
+| `avisado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `relatorio_anual_aviso_pkey`
+
+## relatorio_anual_chegada
+
+> Quando cada aluno (por curso) entrou/saiu da lista de relatórios de um recital aberto. Anotada de 10 em 10 min por fn_relatorio_anual_anotar_chegadas. linha_de_base = já estava lá quando a anotação começou (28/09/2026): não é "acabou de confirmar" nem aviso.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `evento_id` | bigint | não |  | evento.id |
+| `aluno_id` | integer | não |  |  |
+| `curso_chave` | text | não |  |  |
+| `curso` | text | sim |  |  |
+| `professor_id` | integer | sim |  |  |
+| `chegou_em` | timestamp with time zone | não | now() |  |
+| `linha_de_base` | boolean | não | false |  |
+| `saiu_em` | timestamp with time zone | sim |  |  |
+
+**Únicos:**
+- `relatorio_anual_chegada_pkey`
 
 ## relatorio_anual_historico
 
