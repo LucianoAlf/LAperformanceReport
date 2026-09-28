@@ -1,7 +1,16 @@
-# Proposta de migrações 2–9 — módulo Eventos (v3, revisada — aguardando aprovação do Alf)
+# Proposta de migrações 2–9 — módulo Eventos (v3.1, revisada — aguardando aprovação do Alf)
 
 **Status: NADA aplicado. SQL completo para revisão.** Depois do ok, cada bloco vira um arquivo
 `supabase/migrations/20260929xxxxxx_<nome>.sql` na ordem abaixo.
+
+## O que mudou da v3 para a v3.1 (revisão do irmão)
+
+- 🔴 **M9: CHECK de conciliação travava o estorno** — `conciliado` só admitia `status='pago'`,
+  então reembolsar uma venda já conciliada era recusado. Agora `conciliado`/`divergente`
+  convivem com `pago`/`reembolsado`/`cancelado`, e nasceu o estado **`estornado`** + a RPC
+  `estornos_v1` (feed de "reembolsada depois de conciliada") para a Sol lançar o estorno
+  no caixa e devolver o veredito. `conciliar_v1` valida a ordem (estorno só depois de
+  conciliada) e preserva `conciliacao_ref`/`obs` quando não reenviados.
 
 ## O que mudou da v2 para a v3 (revisão do irmão + decisões do Alf)
 
@@ -757,8 +766,10 @@ create table public.evento_ingresso_venda (
   -- Sem ele a Sol so chuta pelo valor: obrigatorio ao marcar pago, exceto dinheiro.
   pagamento_identificador  text,
   -- ponte com o caixa diario do Super Folha (a Sol escreve via RPC abaixo)
+  -- 'estornado' = a venda foi reembolsada/cancelada DEPOIS de conciliada, e a Sol
+  -- ja lancou o estorno no caixa.
   conciliacao_status       text not null default 'pendente'
-    check (conciliacao_status in ('pendente', 'conciliado', 'divergente')),
+    check (conciliacao_status in ('pendente', 'conciliado', 'divergente', 'estornado')),
   conciliado_em            timestamptz,
   conciliacao_ref          text,   -- id do lancamento no caixa do Super Folha
   conciliacao_obs          text,   -- motivo da divergencia, quando houver
@@ -772,9 +783,15 @@ create table public.evento_ingresso_venda (
     or (forma_pagamento = 'dinheiro' and pago_em is not null)
     or (pagamento_identificador is not null and pago_em is not null)
   ),
-  -- conciliacao so faz sentido depois de pago
+  -- conciliacao so faz sentido em quem ja foi pago. 'reembolsado'/'cancelado' precisam
+  -- conviver com conciliacao ja feita — senao a equipe fica sem registrar o estorno
+  -- (bug apontado na v3). 'estornado' so vale depois que a venda terminou assim.
   constraint evento_ingresso_venda_conciliacao_coerente check (
-    conciliacao_status = 'pendente' or status = 'pago'
+       conciliacao_status = 'pendente'
+    or (conciliacao_status in ('conciliado', 'divergente')
+        and status in ('pago', 'reembolsado', 'cancelado'))
+    or (conciliacao_status = 'estornado'
+        and status in ('reembolsado', 'cancelado'))
   )
 );
 comment on table public.evento_ingresso_venda is
@@ -959,32 +976,77 @@ as $$
    order by v.pago_em;
 $$;
 
--- o veredito da Sol: conciliado (com o id do lancamento no Super Folha) ou divergente
+-- o veredito da Sol: 'conciliado' (com o id do lancamento no Super Folha), 'divergente',
+-- ou 'estornado' depois que a venda foi reembolsada/cancelada
 create or replace function public.evento_bilheteria_conciliar_v1(
   p_venda_id bigint,
-  p_status   text,           -- 'conciliado' | 'divergente'
+  p_status   text,           -- 'conciliado' | 'divergente' | 'estornado'
   p_ref      text default null,
   p_obs      text default null
 )
 returns void language plpgsql security definer
 set search_path = 'public', 'pg_temp'
 as $$
+declare
+  v_status  text;
+  v_conc    text;
 begin
-  if p_status not in ('conciliado', 'divergente') then
+  if p_status not in ('conciliado', 'divergente', 'estornado') then
     raise exception 'status de conciliacao invalido: %', p_status using errcode = 'P0001';
+  end if;
+  select status, conciliacao_status into v_status, v_conc
+    from public.evento_ingresso_venda where id = p_venda_id;
+  if v_status is null then
+    raise exception 'venda % nao existe', p_venda_id using errcode = 'P0001';
+  end if;
+  -- estorno so existe depois da baixa financeira: a venda tem que ter terminado
+  -- reembolsada/cancelada E ja ter sido conciliada antes
+  if p_status = 'estornado' and
+     not (v_status in ('reembolsado', 'cancelado') and v_conc = 'conciliado') then
+    raise exception 'venda % so pode ser estornada depois de conciliada e reembolsada/cancelada',
+      p_venda_id using errcode = 'P0001';
+  end if;
+  if p_status <> 'estornado' and v_status <> 'pago' then
+    raise exception 'venda % nao esta paga', p_venda_id using errcode = 'P0001';
   end if;
   perform set_config('app.origem_escrita', 'sol', true);  -- audit registra origem sol
   update public.evento_ingresso_venda
      set conciliacao_status = p_status,
          conciliado_em      = now(),
-         conciliacao_ref    = p_ref,
-         conciliacao_obs    = p_obs,
+         conciliacao_ref    = coalesce(p_ref, conciliacao_ref),
+         conciliacao_obs    = coalesce(p_obs, conciliacao_obs),
          updated_at         = now()
-   where id = p_venda_id and status = 'pago';
-  if not found then
-    raise exception 'venda % nao existe ou nao esta paga', p_venda_id using errcode = 'P0001';
-  end if;
+   where id = p_venda_id;
 end;
+$$;
+
+-- o feed de estorno: vendas que foram reembolsadas/canceladas DEPOIS de conciliadas.
+-- A Sol le, lanca o estorno no caixa e devolve conciliar_v1(p_status='estornado').
+create or replace function public.evento_bilheteria_estornos_v1(
+  p_unidade_id uuid default null,
+  p_de         timestamptz default null,
+  p_ate        timestamptz default null
+)
+returns table (
+  venda_id bigint, evento_id bigint, unidade_id uuid,
+  comprador_nome text, quantidade integer, valor_final numeric,
+  forma_pagamento text, canal text, provedor text,
+  pagamento_identificador text, pago_em timestamptz,
+  conciliacao_ref text, status text, updated_at timestamptz
+)
+language sql stable security definer
+set search_path = 'public', 'pg_temp'
+as $$
+  select v.id, v.evento_id, v.unidade_id, v.comprador_nome, v.quantidade, v.valor_final,
+         v.forma_pagamento, v.canal, v.provedor, v.pagamento_identificador, v.pago_em,
+         v.conciliacao_ref, v.status, v.updated_at
+    from public.evento_ingresso_venda v
+   where v.conciliacao_status = 'conciliado'
+     and v.status in ('reembolsado', 'cancelado')
+     and (p_unidade_id is null or v.unidade_id = p_unidade_id)
+     and (p_de  is null or v.updated_at >= p_de)
+     and (p_ate is null or v.updated_at <  p_ate)
+   order by v.updated_at;
 $$;
 
 -- so a edge da Sol (service_role) chama — nem usuario logado escreve conciliacao
@@ -996,12 +1058,17 @@ revoke all on function public.evento_bilheteria_conciliar_v1(bigint, text, text,
   from public, anon, authenticated;
 grant execute on function public.evento_bilheteria_conciliar_v1(bigint, text, text, text)
   to service_role;
+revoke all on function public.evento_bilheteria_estornos_v1(uuid, timestamptz, timestamptz)
+  from public, anon, authenticated;
+grant execute on function public.evento_bilheteria_estornos_v1(uuid, timestamptz, timestamptz)
+  to service_role;
 ```
 
 **Fora do SQL (a implementar depois):** edge `bilheteria-conciliacao` (verify_jwt=false +
-token no Vault, mesmo padrão da `recital-drive-sync`): `GET` chama `pendentes_v1`, `POST`
-chama `conciliar_v1`. Usuário de unidade continua vendo suas vendas pela policy normal; só
-a **escrita** da conciliação é exclusiva da Sol.
+token no Vault, mesmo padrão da `recital-drive-sync`): `GET` chama `pendentes_v1` ou
+`estornos_v1`, `POST` chama `conciliar_v1` (inclusive `'estornado'`). Usuário de unidade
+continua vendo suas vendas pela policy normal; só a **escrita** da conciliação é exclusiva
+da Sol.
 
 ### Fluxo de venda (desenho — tudo manual)
 
