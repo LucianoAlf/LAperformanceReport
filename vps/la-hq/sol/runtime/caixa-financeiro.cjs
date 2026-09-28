@@ -3479,6 +3479,10 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   const textosRecentes = new Map(); // chatId+senderId -> {texto, ts}: legenda/nome que veio em bolha IRMA (comprovante + nome em mensagens separadas)
   const lotesMidia = new Map();  // chatId+senderId -> lote curto: 2 PDFs + texto humano viram UM preview
   const textoIrmaoKey = (event) => `${event.chatId}::${event.senderId || event.senderPhone || 'sem_sender'}`;
+  // Pareamento MÍDIA SEM LEGENDA + TEXTO DO MESMO AUTOR chegando juntos, em qualquer ordem
+  // (ver o bloco no topo de handle()).
+  const legendasEsperando = new Map(); // key -> { texto, ts, reclamada }
+  const midiasEmVoo = new Map();       // key -> { ts }
   const loteJanelaMs = Math.max(0, Number(process.env.SOL_CAIXA_LOTE_MS || 900));
   const v3LedgerMode = String(process.env.SOL_CAIXA_V3_LEDGER_MODE || '').toLowerCase();
   const cheques = chequesFn !== undefined ? chequesFn
@@ -5170,8 +5174,66 @@ _Não lanço nada pela metade._`);
     // Chamadas internas repassam `{...event}`: só o topo decide o aviso.
     if (!event || event.__handleTopo) return _handleInterno(event, agora);
     event.__handleTopo = true;
+
+    // 🔴 LEGENDA E COMPROVANTE CHEGAM COMO DUAS MENSAGENS, E A ORDEM É ACASO
+    //    (CG 28/09 17:16, Mayra). Ela encaminhou o PDF e escreveu embaixo "PG pix
+    //    parcela 10/2026 aluna Julia Silva de Freitas - LA CG R$457,73"; a ponte
+    //    entregou o TEXTO 33 ms ANTES do PDF. O lote de mídia só costurava texto
+    //    que chega DEPOIS (e só abre depois da leitura do comprovante, ~3 s), então
+    //    o texto foi tratado sozinho ("Entendi um pagamento… não achei fatura") e o
+    //    PDF virou outro card, sem aluno — duas respostas contraditórias para um
+    //    pagamento só. Aqui os dois se encontram no topo, antes de qualquer caminho:
+    //    • texto primeiro: espera a janela do lote; se chegar mídia SEM legenda do
+    //      mesmo autor, o texto vira a legenda dela e não é tratado sozinho;
+    //    • mídia primeiro: nada muda — o lote e a bolha irmã já costuram, e é
+    //      assim que chega a divisão multi-aluno (desviar ali quebrou 4 testes).
+    //    Só vale para texto com cara de legenda (valor ou aluno rotulado), sem
+    //    citação e que não seja "pode"/"não"; mídia que já tem legenda própria
+    //    não adota outra.
+    if (loteJanelaMs && !/^tool-/.test(String(event.messageId || ''))) {
+      const _k = textoIrmaoKey(event);
+      if (event.hasMedia) {
+        if (!bodyLimpo(event.body)) {
+          const esp = legendasEsperando.get(_k);
+          if (esp && !esp.reclamada && Math.abs(agora - esp.ts) <= 5000) {
+            esp.reclamada = true;
+            legendasEsperando.delete(_k);
+            event.body = esp.texto;
+            log({ acao: 'legenda_anterior_adotada_pela_midia', chatId: event.chatId });
+          }
+          midiasEmVoo.set(_k, { ts: agora });
+        }
+      } else {
+        const _t = bodyLimpo(event.body);
+        const _pareceLegenda = _t && _t.length <= 300 && !event.quotedMessageId
+          && !casarPode(_t).pode && !casarNao(_t)
+          && (extrairValor(_t) || _alunoRotulado(_t));
+        if (_pareceLegenda) {
+          // Mídia já em voo ou lote aberto: é legenda que chegou DEPOIS, e o
+          // caminho de sempre (lote/bolha irmã) já trata — não esperar nem desviar.
+          const voo = midiasEmVoo.get(_k);
+          const _midiaAntes = (voo && agora - voo.ts <= 5000) || lotesMidia.get(_k);
+          if (!_midiaAntes) {
+            const reg = { texto: _t, ts: agora, reclamada: false };
+            legendasEsperando.set(_k, reg);
+            await sleep(loteJanelaMs);
+            if (legendasEsperando.get(_k) === reg) legendasEsperando.delete(_k);
+            if (reg.reclamada) return { acao: 'legenda_anexada_a_midia' };
+          }
+        }
+      }
+    }
     const _antes = _enviosPorChat.get(event.chatId) || 0;
-    const r = await _handleInterno(event, agora);
+    let r;
+    try {
+      r = await _handleInterno(event, agora);
+    } finally {
+      if (event.hasMedia) {
+        const _kv = textoIrmaoKey(event);
+        const _v = midiasEmVoo.get(_kv);
+        if (_v && _v.ts === agora) midiasEmVoo.delete(_kv);
+      }
+    }
     const nao = event && event._agentFirstNaoResolveu;
     const ehFerramenta = /^tool-/.test(String((event && event.messageId) || ''));
     if (nao && !ehFerramenta && (_enviosPorChat.get(event.chatId) || 0) === _antes) {
