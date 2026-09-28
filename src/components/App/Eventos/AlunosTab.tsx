@@ -5,6 +5,7 @@ import { Search, Users, Check, HelpCircle, X, Music, AlertTriangle, Guitar, Layo
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -254,6 +255,9 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
   const [soSemAlocar, setSoSemAlocar] = useState(false);
   const [gravando, setGravando] = useState<string | null>(null);
   const [modalOutraUnidade, setModalOutraUnidade] = useState(false);
+  // Alvos congelados no clique: o modal promete N pessoas e a confirmacao grava
+  // exatamente essas N — recomputar no confirmar poderia mudar a conta por baixo da frase.
+  const [lotePendente, setLotePendente] = useState<AlunoElegivel[] | null>(null);
 
   const resumo = useMemo(() => resumirParticipacao(alunos), [alunos]);
 
@@ -339,9 +343,11 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
 
   // Lote respeita o que esta FILTRADO na tela, nao a base inteira: marcar 400 pessoas
   // quando a coordenacao olhava para 12 e o tipo de surpresa que nao se desfaz num clique.
-  const marcarLote = async (status: ParticipacaoStatus) => {
-    const alvos = visiveis.filter((a) => avaliarElegibilidade(a).podeParticipar || status !== 'participa');
-    if (alvos.length === 0) return;
+  // Por isso o clique abre confirmacao em vez de gravar — e a gravacao devolve um Desfazer.
+  const marcarLote = async (status: ParticipacaoStatus, alvos: AlunoElegivel[]) => {
+    // Foto do estado anterior de cada alvo: o Desfazer devolve cada um ao status que
+    // tinha, nao a um generico — quem ja era 'nao' nao pode voltar como 'indefinido'.
+    const antes = new Map(alvos.map((a) => [a.aluno_id_referencia, a.status] as const));
     setGravando('__lote__');
     const { error } = await definirParticipacaoEmLote(
       eventoId,
@@ -349,9 +355,39 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
       status,
     );
     setGravando(null);
-    if (error) toast.error(`Não consegui gravar o lote: ${error.message}`);
-    else {
-      toast.success(`${alvos.length} ${alvos.length === 1 ? 'aluno atualizado' : 'alunos atualizados'}`);
+    if (error) {
+      toast.error(`Não consegui gravar o lote: ${error.message}`);
+      return;
+    }
+    recarregar();
+    toast.success(`${alvos.length} ${alvos.length === 1 ? 'aluno atualizado' : 'alunos atualizados'}`, {
+      // 15s: a janela do Desfazer e o tempo do toast. Depois disso a reversao continua
+      // possivel pelo log de auditoria, nao por este botao.
+      duration: 15000,
+      action: { label: 'Desfazer', onClick: () => desfazerLote(antes) },
+    });
+  };
+
+  const desfazerLote = async (antes: Map<number, ParticipacaoStatus>) => {
+    // Um upsert por status anterior (tres no maximo), em vez de um por aluno — 400
+    // restauracoes individuais travariam a aba por minutos.
+    const grupos = new Map<ParticipacaoStatus, number[]>();
+    for (const [alunoId, status] of antes) {
+      const g = grupos.get(status) ?? [];
+      g.push(alunoId);
+      grupos.set(status, g);
+    }
+    setGravando('__lote__');
+    let falha: string | null = null;
+    for (const [status, ids] of grupos) {
+      const { error } = await definirParticipacaoEmLote(eventoId, ids, status);
+      if (error) falha = error.message;
+    }
+    setGravando(null);
+    if (falha) {
+      toast.error(`Não consegui desfazer tudo: ${falha}. Confira a lista antes de seguir.`);
+    } else {
+      toast.success('Marcação em lote desfeita.');
       recarregar();
     }
   };
@@ -468,7 +504,10 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
           variant="outline"
           size="sm"
           disabled={gravando === '__lote__' || visiveis.length === 0}
-          onClick={() => marcarLote('participa')}
+          onClick={() => {
+            const alvos = visiveis.filter((a) => avaliarElegibilidade(a).podeParticipar);
+            if (alvos.length > 0) setLotePendente(alvos);
+          }}
         >
           Marcar os {visiveis.length} visíveis
         </Button>
@@ -514,6 +553,21 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
           </div>
         )}
       </div>
+
+      <ModalConfirmacao
+        aberto={lotePendente !== null}
+        onClose={() => setLotePendente(null)}
+        onConfirmar={() => {
+          const alvos = lotePendente;
+          setLotePendente(null);
+          if (alvos) void marcarLote('participa', alvos);
+        }}
+        titulo="Marcar participação em lote"
+        mensagem={`Marcar ${lotePendente?.length ?? 0} ${(lotePendente?.length ?? 0) === 1 ? 'aluno' : 'alunos'} como participando do recital? Depois de gravar, o aviso na tela oferece Desfazer por alguns segundos.`}
+        tipo="warning"
+        textoConfirmar="Marcar todos"
+        carregando={gravando === '__lote__'}
+      />
     </div>
   );
 }
