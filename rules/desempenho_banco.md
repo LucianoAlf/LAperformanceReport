@@ -6,6 +6,11 @@
 
 ## A máquina é pequena — e isso é o orçamento
 
+> **Desde 26/09/2026 09h17 BRT o compute é Small** (1,9 GB de RAM, **90 conexões**,
+> `shared_buffers` 512 MB, `work_mem` 5 MB), e o banco caiu de 22 GB para **9 GB** depois do
+> expurgo + `VACUUM FULL` do `sync_run_items` (13 GB → 592 MB). Continua *burstable* e com cota
+> de IO: as regras abaixo valem igual. O texto seguinte descreve o Micro, onde tudo começou.
+
 `t4g.micro`: **1 GB de RAM**, 2 vCPU *burstable*, cota de IO pequena, **60 conexões**,
 `work_mem` 3,4 MB, paralelismo ~1. Banco com ~22 GB. Consequência: quase nada cabe em
 memória, então **toda varredura vira leitura de disco**, e o disco tem cota.
