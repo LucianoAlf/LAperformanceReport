@@ -18,6 +18,14 @@
       "target": "/home/sol/.hermes/hermes-agent/scripts/whatsapp-bridge/group-engagement.cjs"
     },
     {
+      "class": "bridge-module",
+      "mode": "0644",
+      "sha256": "0837d98281bb718411e8f995979f4147de478bb1b69f94a9946588fe61478cd3",
+      "size": 3834,
+      "source": "vps/la-hq/sol/runtime/group-membro-novo.cjs",
+      "target": "/home/sol/.hermes/hermes-agent/scripts/whatsapp-bridge/group-membro-novo.cjs"
+    },
+    {
       "class": "caixa-runtime",
       "mode": "0644",
       "sha256": "6d4b230988861bd12bd79a87d224b7b34927564d5af26a3260bd0bae4b6b3f41",
