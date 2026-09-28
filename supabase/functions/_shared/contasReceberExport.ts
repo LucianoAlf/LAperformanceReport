@@ -248,6 +248,33 @@ export async function buildExportRows({
     rows.push(row);
   }
 
+  // Chave da cobranca agrupada (pedido SF 27/09): quando um unico pagamento
+  // Asaas (boleto/Pix) cobre varias faturas da mesma familia, o Emusys repete
+  // em cada fatura o valor_liquido_recebido DA COBRANCA INTEIRA. Sem uma chave,
+  // o consumidor nao sabe quais faturas dividem a mesma taxa. A API nao expoe
+  // id de cobranca, entao derivamos: mesma (unidade, data_pagamento, forma,
+  // liquido) = mesma cobranca. Deterministica e sem competencia na chave: um
+  // pagamento que cobre parcelas de meses diferentes produz o mesmo id nos
+  // exports de cada competencia. Colisao honesta possivel: duas familias que
+  // paguem o mesmo liquido no mesmo dia e meio viram um lote so — o consumidor
+  // valida por soma(valor_pago) ~= liquido + taxa unica.
+  const lotes = new Map<string, { chave: string; faturas: number }>();
+  for (const row of rows) {
+    if (row.status_origem !== 'paga' || row.valor_liquido_recebido == null) continue;
+    const chave = `${row.la_report_unidade_id}|${row.data_recebimento}|${row.forma_pagamento_transacao}|${row.valor_liquido_recebido}`;
+    const lote = lotes.get(chave) ?? { chave, faturas: 0 };
+    lote.faturas += 1;
+    lotes.set(chave, lote);
+  }
+  for (const row of rows) {
+    const chave = `${row.la_report_unidade_id}|${row.data_recebimento}|${row.forma_pagamento_transacao}|${row.valor_liquido_recebido}`;
+    const lote = row.status_origem === 'paga' && row.valor_liquido_recebido != null
+      ? lotes.get(chave)
+      : undefined;
+    row.cobranca_lote_id = lote ? `cobranca:${(await sha256(lote.chave)).slice(0, 24)}` : null;
+    row.cobranca_lote_faturas = lote?.faturas ?? null;
+  }
+
   rows.sort((left, right) => (
     String(left.la_report_unidade_id).localeCompare(String(right.la_report_unidade_id))
     || compareIdentifiers(left.emusys_fatura_id, right.emusys_fatura_id)

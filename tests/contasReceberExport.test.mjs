@@ -429,6 +429,46 @@ test('manifesto separa linhas vivas das ausentes na origem', async () => {
   );
 });
 
+test('cobranca_lote junta faturas pagas pela mesma cobranca Asaas', async () => {
+  const base = {
+    ...faturas[0],
+    data_pagamento: '2026-01-08',
+    payload: { forma_pagamento_transacao: 'Boleto', valor_liquido_recebido: 679.3 },
+  };
+  const lote = [
+    { ...base, id: 'lote-1', emusys_fatura_id: '39561', valor_pago: 382 },
+    { ...base, id: 'lote-2', emusys_fatura_id: '42078', valor_pago: 300 },
+    { ...base, id: 'fora', emusys_fatura_id: '99999', payload: { forma_pagamento_transacao: 'Boleto', valor_liquido_recebido: 356.08 } },
+    { ...faturas[1] },
+  ];
+  const rows = await buildExportRows({ faturas: lote, alunos, cursos });
+
+  const irmaos = rows.filter((row) => ['39561', '42078'].includes(row.emusys_fatura_id));
+  assert.equal(irmaos.length, 2);
+  assert.match(irmaos[0].cobranca_lote_id, /^cobranca:[0-9a-f]{24}$/);
+  assert.equal(irmaos[0].cobranca_lote_id, irmaos[1].cobranca_lote_id);
+  assert.equal(irmaos[0].cobranca_lote_faturas, 2);
+  assert.equal(irmaos[1].cobranca_lote_faturas, 2);
+
+  // Cobranca avulsa: lote proprio de 1 fatura; aberta nao recebe chave.
+  const avulsa = rows.find((row) => row.emusys_fatura_id === '99999');
+  assert.notEqual(avulsa.cobranca_lote_id, irmaos[0].cobranca_lote_id);
+  assert.equal(avulsa.cobranca_lote_faturas, 1);
+  assert.equal(rows[3].cobranca_lote_id, null);
+  assert.equal(rows[3].cobranca_lote_faturas, null);
+
+  // Mesma chave em outra unidade gera lote diferente.
+  const outraUnidade = await buildExportRows({
+    faturas: [{ ...base, id: 'lote-rec', unidade_id: UNIDADE_REC, unidade_codigo: 'REC', emusys_fatura_id: '1' }],
+    alunos, cursos,
+  });
+  assert.notEqual(outraUnidade[0].cobranca_lote_id, irmaos[0].cobranca_lote_id);
+
+  // Campo derivado: nao entra no row_source_hash nem no manifest_hash.
+  const sem = await buildExportRows({ faturas: lote.map((f) => ({ ...f })), alunos, cursos });
+  assert.deepEqual(rows.map((r) => r.row_source_hash), sem.map((r) => r.row_source_hash));
+});
+
 test('manifest_hash cobre so a identidade das linhas, entao campos novos nao o movem', async () => {
   const rows = await buildExportRows({ faturas, alunos, cursos });
   const manifest = await buildManifest('2026-07-01', rows);
