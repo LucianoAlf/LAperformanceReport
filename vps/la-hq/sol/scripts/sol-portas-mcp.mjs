@@ -250,10 +250,29 @@ const PORTAS = [
     schema: { ...U, p_data: { type: 'string', description: 'YYYY-MM-DD. Vazio = hoje.' } } },
 ];
 
+// Contrato da resposta das ferramentas que executam no caixa. Vai em TODAS elas,
+// num lugar só: foi a falta dele que deixou o agente anunciar lançamento que não
+// existia (28/09/2026).
+const CONTRATO_RESPOSTA = ' 🔴 LEIA A RESPOSTA ANTES DE FALAR: o campo `estado` diz o que ACONTECEU. '
+  + '`executado` = gravado no caixa (só então diga "lancei"/"estornei"/"fechei"); '
+  + '`card_publicado` = saiu o card, nada gravado, aguarde o "pode"; '
+  + '`mensagem_publicada` = saiu pergunta/recusa (texto em `mensagens_publicadas`), nada gravado; '
+  + '`nada_aconteceu` = nada saiu e nada foi gravado — diga isso com o `motivo_humano` e peça o que falta. '
+  + 'Nunca afirme lançamento, recibo ou card que a resposta não confirma.';
+
 // ── protocolo MCP ───────────────────────────────────────────────────────────
 const j = (o) => ({ content: [{ type: 'text', text: JSON.stringify(o) }] });
 
 const gruposCaixa = {};
+// 🔴 RESPOSTA HONESTA (28/09/2026, Recreio). A ferramenta respondia
+//    `{ok:true, ja_publicado_no_grupo:true}` para QUALQUER desfecho — inclusive
+//    `resultado:null` (o caixa não fez nada) e `pode_sem_pendencia` (não havia
+//    card para aprovar). O agente acreditou e disse à ADM "lançamento efetivado,
+//    recibo publicado" sem nenhuma linha no caixa. O desfecho agora é MEDIDO:
+//    o que o runtime enviou ao grupo e o que ele registrou, por chat, nesta
+//    chamada. `ok` só é verdade quando um card saiu ou o dinheiro foi gravado.
+const capturas = new Map(); // chatId -> { envios: [texto], eventos: [{acao, motivo}] }
+function capturaDe(chatId) { return capturas.get(chatId) || null; }
 let handlerCaixa = null;
 let abfCaixa = null;
 let governancaCaixa = null;
@@ -300,6 +319,8 @@ async function contextoCaixa(args, capability = 'agent_first') {
 }
 
 async function enviarPeloBridge(chatId, texto) {
+  const cap = capturaDe(chatId);
+  if (cap) cap.envios.push(String(texto || ''));
   const r = await fetch(`${BRIDGE_URL}/send`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Host: 'localhost' },
     body: JSON.stringify({ chatId, message: texto }),
@@ -344,6 +365,8 @@ function carregarRuntimeCaixa() {
     grupos: gruposCaixa,
     sendFn: enviarPeloBridge,
     log: (evento) => {
+      const cap = evento && evento.chatId ? capturaDe(evento.chatId) : null;
+      if (cap && evento.acao) cap.eventos.push({ acao: evento.acao, motivo: evento.motivo || null });
       const limpo = { ...(evento || {}) };
       delete limpo.chatId; delete limpo.senderId; delete limpo.senderPhone;
       process.stderr.write(JSON.stringify({ origem: 'sol_caixa_tool', ...limpo }) + '\n');
@@ -364,6 +387,50 @@ function textoContemValor(texto, valor) {
     return Number.isFinite(n) && Math.round(n * 100) === alvo;
   });
 }
+const ACOES_QUE_GRAVAM = new Set(['lancado', 'lote_multi_lancado', 'saida_lancada', 'movimento_estornado',
+  'movimento_corrigido', 'aberto', 'fechado', 'caixa_reaberto']);
+const MOTIVO_HUMANO = {
+  pode_sem_pendencia: 'não havia nenhum card aguardando aprovação neste grupo',
+  nenhuma_fatura_aberta: 'não achei no Emusys uma fatura desse aluno e competência que feche com esse valor',
+  agent_first_nao_resolveu: 'não consegui ligar o pagamento a uma fatura oficial',
+  valor_total_nao_aparece_no_texto_original: 'o total não aparece no texto da pessoa',
+  texto_e_total_declarado_obrigatorios: 'faltou o texto original ou o total',
+  aprovacao_explicita_obrigatoria: 'a mensagem não é uma aprovação explícita ("pode")',
+  ja_aberto: 'o caixa de hoje já está aberto',
+  ja_existe: 'o caixa de hoje já existe',
+  sem_dados: 'não consegui ler os dados de abertura do caixa',
+};
+
+// Estados, do mais forte ao mais fraco. Só os dois primeiros são sucesso.
+//   executado          — o banco gravou (lançamento, estorno, correção, abrir/fechar)
+//   card_publicado     — saiu um card no grupo; NADA gravado ainda, espera "pode"
+//   mensagem_publicada — saiu outra mensagem (pergunta/recusa); NADA gravado
+//   nada_aconteceu     — nada foi enviado nem gravado
+function classificarDesfecho({ resultado, envios = [], eventos = [] }) {
+  const acao = (resultado && resultado.acao) || null;
+  const acoes = [acao, ...eventos.map((e) => e.acao)].filter(Boolean);
+  const gravou = acoes.some((a) => ACOES_QUE_GRAVAM.has(a));
+  const cardPreview = acoes.some((a) => /preview/.test(a) && !/sem_v3|bloque|erro|recus|invalid|descart/.test(a));
+  const publicouCard = !gravou && ((envios.length > 0 && cardPreview) || !!(resultado && resultado.previewId));
+  const estado = gravou ? 'executado' : (publicouCard ? 'card_publicado'
+    : (envios.length > 0 ? 'mensagem_publicada' : 'nada_aconteceu'));
+  const ultimoMotivo = [...eventos].reverse().find((e) => e.motivo) || null;
+  const motivo = estado === 'executado' || estado === 'card_publicado' ? null
+    : ((ultimoMotivo && ultimoMotivo.motivo) || acao || (resultado && resultado.skip) || 'sem_desfecho');
+  const orientacao = {
+    executado: 'GRAVADO no caixa. O recibo já saiu no grupo pela ferramenta: não repita.',
+    card_publicado: 'Card publicado no grupo. NADA foi gravado ainda: aguarde o "pode" humano citando o card. Não diga que lançou.',
+    mensagem_publicada: 'A ferramenta publicou a mensagem abaixo no grupo (pergunta ou recusa). NADA foi gravado e NENHUM card aprovável saiu. Não diga que lançou nem que preparou card; não repita a mensagem.',
+    nada_aconteceu: 'NADA foi enviado e NADA foi gravado. Diga isso à pessoa com o motivo, sem afirmar sucesso, e peça o que falta.',
+  }[estado];
+  return {
+    ok: estado === 'executado' || estado === 'card_publicado',
+    estado, acao, gravou_no_caixa: gravou, publicou_no_grupo: envios.length > 0 || publicouCard,
+    mensagens_publicadas: envios.map((t) => t.slice(0, 600)),
+    motivo, motivo_humano: motivo ? (MOTIVO_HUMANO[motivo] || null) : null, orientacao,
+  };
+}
+
 function idMensagem(ctx, action, args) {
   return 'tool-' + crypto.createHash('sha256').update([
     ctx._chat, action, JSON.stringify(args || {}), Math.floor(Date.now() / 30000),
@@ -375,6 +442,9 @@ async function executarRuntimeCaixa(p, args) {
   if (!ctx.ok) return j(ctx);
   carregarRuntimeCaixa();
   gruposCaixa[ctx._chat] = { unidade_id: ctx.unidade_id, nome: ctx.unidade_nome || 'unidade' };
+  const captura = { envios: [], eventos: [] };
+  capturas.set(ctx._chat, captura);
+  try {
   await handlerCaixa.reidratarPendencias();
   const syntheticMessageId = idMensagem(ctx, p.action, args);
   let episodio = governancaCaixa && governancaCaixa.adoptEpisode(ctx._episode_id, {
@@ -399,6 +469,8 @@ async function executarRuntimeCaixa(p, args) {
   const governanceFn = (event, eventType, details) => (governancaCaixa && event && event.caixaGovernancaEpisode)
     ? governancaCaixa.record(event.caixaGovernancaEpisode, eventType, details || {})
     : Promise.resolve({ ok: false, sem_episodio: true });
+  // Abertura/fechamento devolvem `true` em quase tudo; o desfecho real está no log.
+  const logAbf = (e) => { if (e && e.acao) captura.eventos.push({ acao: e.acao, motivo: e.motivo || null }); };
   let resultado;
   if (p.action === 'preparar_lancamento') {
     const texto = String(args.p_texto_original || '').trim();
@@ -430,18 +502,18 @@ async function executarRuntimeCaixa(p, args) {
   } else if (p.action === 'preparar_abertura') {
     resultado = await abfCaixa.postarAbertura(
       { chat_id: ctx._chat, unidade_id: ctx.unidade_id, nome: ctx.unidade_nome },
-      { sendFn: enviarPeloBridge, event: base, governanceFn });
+      { sendFn: enviarPeloBridge, event: base, governanceFn, log: logAbf });
   } else if (p.action === 'preparar_fechamento') {
     resultado = await abfCaixa.tratarPedidoDiretoFechamento(
       { ...base, body: 'Sol, vamos fechar o caixa agora' },
-      { grupo: gruposCaixa[ctx._chat], sendFn: enviarPeloBridge, governanceFn });
+      { grupo: gruposCaixa[ctx._chat], sendFn: enviarPeloBridge, governanceFn, log: logAbf });
   } else if (p.action === 'aprovar_preview') {
     const texto = String(args.p_aprovacao || '').trim();
     if (!/^(pode(?:\s+sim)?|confirmo|autorizo|pode\s+(?:lançar|corrigir|estornar|abrir|fechar))\b/i.test(texto)) {
       return j({ ok: false, motivo: 'aprovacao_explicita_obrigatoria' });
     }
     const ev = { ...base, body: texto };
-    const abf = await abfCaixa.tratarConfirmacao(ev, { sendFn: enviarPeloBridge, governanceFn,
+    const abf = await abfCaixa.tratarConfirmacao(ev, { sendFn: enviarPeloBridge, governanceFn, log: logAbf,
       temComprovantePendente: (cid) => handlerCaixa.temPendencia(cid) });
     resultado = abf ? { acao: 'abertura_fechamento_tratado' } : await handlerCaixa.handle(ev);
   } else if (p.action === 'descartar_preview') {
@@ -475,12 +547,16 @@ async function executarRuntimeCaixa(p, args) {
       caixaToolCommand: cmd, caixaToolTarget: alvo,
     });
   }
+  const desfecho = classificarDesfecho({ resultado, envios: captura.envios, eventos: captura.eventos });
   if (episodio && governancaCaixa) await fecharEpisodioAgentFirst(episodio, ctx._chat, {
-    terminal_state: (resultado && resultado.acao) || 'tool_completed',
-    action: (resultado && resultado.acao) || p.action,
-    outcome: (resultado && /^erro|recus|bloquead/.test(String(resultado.acao || ''))) ? 'refused' : 'ok',
+    terminal_state: desfecho.acao || desfecho.estado,
+    action: desfecho.acao || p.action,
+    outcome: desfecho.ok ? 'ok' : 'refused',
   });
-  return j({ ok: true, ja_publicado_no_grupo: true, resultado });
+  return j(desfecho);
+  } finally {
+    capturas.delete(ctx._chat);
+  }
 }
 
 async function despachar(name, args) {
@@ -554,7 +630,7 @@ process.stdin.on('data', async (chunk) => {
                   serverInfo: { name: 'sol-portas', version: '1.0.0' } });
     } else if (req.method === 'tools/list') {
       responder({ tools: PORTAS.map((p) => ({
-        name: p.name, description: p.description,
+        name: p.name, description: p.auth === 'caixa_runtime' ? p.description + CONTRATO_RESPOSTA : p.description,
         inputSchema: { type: 'object', properties: p.schema || {} } })) });
     } else if (req.method === 'tools/call') {
       responder(await despachar(req.params?.name, req.params?.arguments));

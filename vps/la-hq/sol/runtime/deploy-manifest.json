@@ -20,8 +20,8 @@
     {
       "class": "caixa-runtime",
       "mode": "0644",
-      "sha256": "a31735f9474082c0dfce4585c6395ce9ec2c89484f40f2b17ba48c34c588fa2a",
-      "size": 491394,
+      "sha256": "cf8226173ba417552e867a32ad51a7a46be49e48b515d605e299d3db43d6363b",
+      "size": 493067,
       "source": "vps/la-hq/sol/runtime/caixa-financeiro.cjs",
       "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs"
     },
@@ -52,8 +52,8 @@
     {
       "class": "mcp-runtime",
       "mode": "0644",
-      "sha256": "8b1995e86c8419147607c6003bb2fda5e84f93bea1a2739206beb1f646860e64",
-      "size": 40981,
+      "sha256": "0b81f3ef8048b05a178b901e7f090af94b3e44449163bc9d17a18e1d16ee0ac8",
+      "size": 46232,
       "source": "vps/la-hq/sol/scripts/sol-portas-mcp.mjs",
       "target": "/home/sol/.openclaw/workspace/scripts/sol-portas-mcp.mjs"
     },

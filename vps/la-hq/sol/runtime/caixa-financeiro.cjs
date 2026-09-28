@@ -42,6 +42,25 @@ function parseBRMoney(s) {
   return isFinite(v) && v > 0 ? v : null;
 }
 
+// 🔴 NÚMERO QUE VEM DE MODELO NÃO É TEXTO BRASILEIRO (28/09/2026, Recreio).
+// O roteador devolve JSON: `"valor_total": 402.5`. `parseBRMoney(String(402.5))`
+// lê "402.5" com o ponto como MILHAR e devolve 4025 — e a guarda de valor recusava
+// o comprovante certo ("o valor total que li não confere"). Todo valor cujo
+// centavo termina em zero cai nisso (402,50 → 402.5 no JSON). O caso que o
+// cabeçalho da guarda atribuía ao modelo ("R$ 2.034,90 virou 20.349") era ESTE
+// defeito: "2034.9" → 20349. Número de JSON é número; texto "402.50" é decimal;
+// só o resto ("1.500", "402,50", "R$ 1.397,00") passa pelo leitor brasileiro.
+function valorDoModelo(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'number') return Number.isFinite(v) && v > 0 ? Math.round(v * 100) / 100 : null;
+  const s = String(v).trim();
+  if (/^\d+(?:\.\d{1,2})?$/.test(s)) {
+    const n = Number(s);
+    return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
+  }
+  return parseBRMoney(s);
+}
+
 // Rótulos que marcam O valor do comprovante (vence "R$ 0,00" de taxa/desconto).
 const VALOR_ROTULADO = /(valor\s*(da\s*conta|do\s*pix|pago|total|da\s*transa[çc][ãa]o|recebido)?\s*[:\-]?\s*)r\$\s*([\d.]+(?:,\d{1,2})?)/gi;
 
@@ -2680,9 +2699,23 @@ function montarEnvelopeV4(dec) {
       //    tem de falar a mesma lingua; onde nao falam, quem traduz e o codigo.
       categorias: (Array.isArray(i.categorias) ? i.categorias : [])
         .map((c) => (String(c).toLowerCase() === 'matricula' ? 'passaporte' : String(c).toLowerCase())),
-      competencias: Array.isArray(i.competencias) ? i.competencias : [],
+      // 🔴 O Core compara competência como "MM/YYYY" (to_char(comp, 'MM/YYYY')).
+      //    O agente mandou "Setembro" em 28/09 e a parcela paga não foi achada
+      //    ("nenhuma_fatura_aberta"). Normaliza pela MESMA regra do legado; o que
+      //    não for reconhecível segue como veio (o Core recusa, e a recusa volta
+      //    ao agente — nunca vira outra competência por chute).
+      competencias: (Array.isArray(i.competencias) ? i.competencias : [])
+        .map(normalizarCompetenciaV4).filter(Boolean),
     })),
   } };
+}
+
+function normalizarCompetenciaV4(c) {
+  const bruto = String(c == null ? '' : c).trim();
+  if (!bruto) return null;
+  const iso = bruto.match(/^(\d{4})-(0[1-9]|1[0-2])(?:-\d{2})?$/);
+  if (iso) return `${iso[2]}/${iso[1]}`;
+  return extrairCompetenciaTexto(bruto) || bruto;
 }
 
 // CORRECAO NO SEGUNDO TURNO — muda o ENVELOPE, nunca remonta a frase.
@@ -2814,8 +2847,8 @@ function rotearMensagemV4(texto, contexto, { timeout = 30000, documento = null }
       // isso o modelo copiava R$ 400 do documento e a própria guarda anulava o
       // número por ele não aparecer na legenda humana.
       const textoDocumento = documento ? JSON.stringify(documento) : '';
-      const _v  = o.valor != null ? parseBRMoney(String(o.valor)) : null;
-      const _vt = o.valor_total != null ? parseBRMoney(String(o.valor_total)) : null;
+      const _v  = valorDoModelo(o.valor);
+      const _vt = valorDoModelo(o.valor_total);
       const gv  = _guardar(_v, texto, textoDocumento);
       const gvt = _guardar(_vt, texto, textoDocumento);
       // itens[]: uma entrada por ALUNO. Listas sempre listas — `null` aqui
@@ -2826,7 +2859,7 @@ function rotearMensagemV4(texto, contexto, { timeout = 30000, documento = null }
         if (!aluno) return null;
         const lista = (x) => (Array.isArray(x) ? x : (x == null ? [] : [x]))
           .map((y) => String(y || '').trim()).filter(Boolean);
-        const gi = _guardar(it.valor != null ? parseBRMoney(String(it.valor)) : null,
+        const gi = _guardar(valorDoModelo(it.valor),
           texto, textoDocumento);
         return {
           aluno,
@@ -2871,7 +2904,7 @@ function rotearMensagemV4(texto, contexto, { timeout = 30000, documento = null }
         if (err) return resolve(null);
         const o = _parseVisionJson(stdout);
         if (!o || typeof o !== 'object') return resolve(null);
-        const _v = o.valor != null ? parseBRMoney(String(o.valor)) : null;
+        const _v = valorDoModelo(o.valor);
         // 🔴 O valor so passa se estiver NO TEXTO. Ver a guarda acima: sem
         //    isto, 1 em cada 24 lancamentos sai com valor errado, dois por
         //    fator de 10. Anula o valor, NAO a decisao — a intencao pode estar
@@ -2935,7 +2968,7 @@ function classificarCorrecaoPendencia(texto, contexto, { timeout = 35000 } = {})
           intencao,
           aluno_nome: (o.aluno_nome && String(o.aluno_nome).trim()) || null,
           categoria: (o.categoria && String(o.categoria).toLowerCase().trim()) || null,
-          valor: o.valor != null ? parseBRMoney(String(o.valor)) : null,
+          valor: valorDoModelo(o.valor),
           forma: (o.forma && String(o.forma).toLowerCase().trim()) || null,
           // normaliza aqui: o modelo devolve "09/2026", "9/26", "setembro"...
           competencia: extrairCompetenciaTexto(String(o.competencia || '')) || null,
@@ -8343,7 +8376,7 @@ function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slic
 module.exports = {
   _fonteFuturaLateralAoMesDeclarado,
   selecionarFaturasQuitacao, resolverFaturasQuitacao,
-  parseBRMoney, extrairValor, extrairForma, extrairFormaHumana, detectarComprovante, casarPode,
+  parseBRMoney, valorDoModelo, normalizarCompetenciaV4, montarEnvelopeV4, extrairValor, extrairForma, extrairFormaHumana, detectarComprovante, casarPode,
   _saidaExplicitaFromCaption, _nomeHumanoTardio, extrairValorOcr, _vendedorRotulado, _mesmaPessoa,
   _alunoRotulado, _limparAlunoRotulado, _semAlunoDeclarado, extrairCategoriaCorrecao,
   _ehDitadoDeCaixa, classificarCorrecaoPendencia, listarPreviewsAbertosV3, _contestaFatura, rotearMensagemV4,
