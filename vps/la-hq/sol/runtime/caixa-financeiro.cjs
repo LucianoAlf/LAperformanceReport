@@ -3850,11 +3850,53 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       // corrigir_forma. Nesse caso ainda aceitamos SOMENTE a forma explicita.
       if (dec.intencao !== 'corrigir_forma') return corrigido;
     }
-    const forma = formaExplicitaV4(texto, dec);
-    if (!forma.forma) return { ok: false, motivo: 'rascunho_ainda_sem_forma' };
     const envelope = JSON.parse(JSON.stringify(base));
-    envelope.forma = forma.forma;
-    return { ok: true, envelope, ...forma };
+    const faltavam = camposFaltantesV4(envelope);
+    let forma = {};
+    if (faltavam.includes('valor_total')) {
+      const v = totalDaRespostaV4(texto, dec);
+      if (v) envelope.valor_total = v;
+    }
+    if (faltavam.includes('forma')) {
+      forma = formaExplicitaV4(texto, dec);
+      if (forma.forma) envelope.forma = forma.forma;
+    }
+    const faltam = camposFaltantesV4(envelope);
+    if (faltam.length === faltavam.length) {
+      return { ok: false, motivo: 'rascunho_ainda_sem_' + faltam[0], faltam, envelope };
+    }
+    // Completou parte: o chamador decide se ainda pergunta o resto.
+    return { ok: true, envelope, faltam, ...forma };
+  }
+
+  // O que o rascunho ainda precisa para virar card. Total e forma são os dois
+  // únicos campos que o humano completa depois — identidade vem do comprovante.
+  function camposFaltantesV4(envelope) {
+    const f = [];
+    if (!(Number(envelope && envelope.valor_total) > 0)) f.push('valor_total');
+    if (!(envelope && envelope.forma)) f.push('forma');
+    return f;
+  }
+
+  // 🔴 O TOTAL DA RESPOSTA SAI DO TEXTO DA PESSOA, nunca do modelo sozinho.
+  //    Um único valor monetário escrito ("402,50", "R$ 402,50") vale; dois
+  //    valores diferentes é ambíguo e a Sol pergunta de novo. O valor do modelo
+  //    só entra se também estiver escrito (a mesma guarda do primeiro turno).
+  function totalDaRespostaV4(texto, dec) {
+    const achados = [...new Set(_numerosDoTexto(texto).map((n) => Math.round(n * 100)))];
+    if (achados.length === 1) return achados[0] / 100;
+    if (achados.length > 1) return null;
+    const doModelo = valorDoModelo(dec && (dec.valor_total != null ? dec.valor_total : dec.valor));
+    return doModelo && valorConfereComTexto(doModelo, texto).ok ? doModelo : null;
+  }
+
+  function perguntaFaltantesV4(faltam) {
+    const f = Array.isArray(faltam) ? faltam : [];
+    if (f.includes('valor_total') && f.includes('forma')) {
+      return 'Ainda preciso do *total exato* e da *forma* (pix, dinheiro, cartão, cheque ou transferência).';
+    }
+    if (f.includes('valor_total')) return 'Ainda preciso do *total exato* do pagamento (ex.: R$ 402,50).';
+    return 'Ainda preciso da forma: *pix*, *dinheiro*, *cartão*, *cheque* ou *transferência*.';
   }
 
   async function registrarRascunhoV4({ event, grupo, envelope, agora }) {
@@ -3864,15 +3906,15 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     const pending = {
       tipoOperacao: 'agent_first_draft', unidade_id: grupo.unidade_id, nome: grupo.nome,
       valor: envelope.valor_total, forma: envelope.forma || null, categoria: null,
-      origem, ts: agora, agentFirstEnvelope: envelope, missingFields: ['forma'],
+      origem, ts: agora, agentFirstEnvelope: envelope, missingFields: camposFaltantesV4(envelope),
       rascunhoAutorHash: identidadeRascunhoV4(event), msgIds: [],
       v3Operacao: 'agent_first_draft',
     };
     let v3 = null;
     try {
       v3 = await registrarPreviewPublicoV3({
-        event, grupo, previewId: null, texto: 'rascunho agent-first aguardando forma', pendencia: pending,
-        result: { acao: 'agent_first_draft', missing_fields: ['forma'] },
+        event, grupo, previewId: null, texto: 'rascunho agent-first aguardando ' + camposFaltantesV4(envelope).join('+'), pendencia: pending,
+        result: { acao: 'agent_first_draft', missing_fields: camposFaltantesV4(envelope) },
         previewStatus: 'draft_missing_fields', previewHashFixo: previewHash,
         publicPreviewSent: false, eventStatus: 'draft_missing_fields', mode: 'v4_agent_first_draft',
       });
@@ -3894,15 +3936,15 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     try {
       await registrarPreviewPublicoV3({
         event: draft.event, grupo: draft.grupo, previewId: perguntaId,
-        texto: 'rascunho agent-first aguardando forma', pendencia: {
+        texto: 'rascunho agent-first aguardando ' + camposFaltantesV4(draft.envelope).join('+'), pendencia: {
           tipoOperacao: 'agent_first_draft', unidade_id: draft.grupo.unidade_id,
           nome: draft.grupo.nome, valor: draft.envelope.valor_total,
           forma: draft.envelope.forma || null, categoria: null,
           origem: draft.origem, ts: draft.ts, agentFirstEnvelope: draft.envelope,
-          missingFields: ['forma'], rascunhoAutorHash: draft.autorHash,
+          missingFields: camposFaltantesV4(draft.envelope), rascunhoAutorHash: draft.autorHash,
           msgIds: draft.msgIds, v3Operacao: 'agent_first_draft',
         },
-        result: { acao: 'agent_first_draft_pergunta_vinculada', missing_fields: ['forma'] },
+        result: { acao: 'agent_first_draft_pergunta_vinculada', missing_fields: camposFaltantesV4(draft.envelope) },
         previewStatus: 'draft_missing_fields', previewHashFixo: draft.v3PreviewHash,
         publicPreviewSent: false, eventStatus: 'draft_missing_fields', mode: 'v4_agent_first_draft',
       });
@@ -3963,6 +4005,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     }
     if (draft && !eventoPodeCompletarRascunhoV4(event, draft)) {
       const pareceComplemento = !!formaExplicitaV4(texto, event && event.caixaToolDecision).forma
+        || (camposFaltantesV4(draft.envelope).includes('valor_total') && !!totalDaRespostaV4(texto, null))
         || casarNao(texto) || casarPode(texto, { respondeuPreview: false }).pode;
       if (pareceComplemento) {
         log({ acao: 'agent_first_draft_ignorado_outro_remetente', chatId: event.chatId,
@@ -3977,10 +4020,13 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       await sendFn(event.chatId, 'Tudo bem — descartei esse rascunho. Nada foi lançado.');
       return { acao: 'agent_first_draft_descartado' };
     }
-    const formaDireta = draft ? formaExplicitaV4(texto, event && event.caixaToolDecision) : null;
-    if (draft && casarPode(texto, { respondeuPreview: false }).pode && !(formaDireta && formaDireta.forma)) {
-      await sendFn(event.chatId, 'Ainda falta a forma de pagamento. Me diz: *pix*, *dinheiro*, *cartão*, *cheque* ou *transferência*. Só depois eu preparo o card que aceita *pode*.');
-      return { acao: 'agent_first_draft_ainda_sem_forma' };
+    if (draft && casarPode(texto, { respondeuPreview: false }).pode) {
+      const previa = mesclarRascunhoV4(draft.envelope, event && event.caixaToolDecision, texto);
+      const faltam = previa.ok ? (previa.faltam || []) : (previa.faltam || camposFaltantesV4(draft.envelope));
+      if (faltam.length) {
+        await sendFn(event.chatId, perguntaFaltantesV4(faltam) + ' Só depois eu preparo o card que aceita *pode*.');
+        return { acao: faltam.includes('valor_total') ? 'agent_first_draft_ainda_sem_total' : 'agent_first_draft_ainda_sem_forma' };
+      }
     }
     const contexto = arr.slice(0, 3).map((p, i) => ({
       card: i + 1, valor: p.valor || null, forma: p.forma || null,
@@ -4032,12 +4078,22 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     if (draftVivo) {
       env = mesclarRascunhoV4(draft.envelope, dec, texto);
       formaComplementada = formaExplicitaV4(texto, dec);
-      if (!env.ok) {
-        await sendFn(event.chatId, 'Guardei o restante, mas ainda preciso da forma: *pix*, *dinheiro*, *cartão*, *cheque* ou *transferência*.');
-        log({ acao: 'agent_first_draft_ainda_incompleto', chatId: event.chatId, motivo: env.motivo });
-        return { acao: 'agent_first_draft_ainda_sem_forma' };
+      if (env.ok) env.faltam = camposFaltantesV4(env.envelope);
+      if (!env.ok || env.faltam.length) {
+        if (env.ok) {
+          // Completou uma parte: o rascunho guarda o que chegou, e a pergunta
+          // passa a ser só pelo que falta (nunca pede de novo o que foi dito).
+          draft.envelope = env.envelope;
+          draft.ts = agora;
+        }
+        const faltam = env.faltam || camposFaltantesV4(draft.envelope);
+        const perguntaId = await sendFn(event.chatId, 'Guardei o restante. ' + perguntaFaltantesV4(faltam));
+        await vincularPerguntaRascunhoV4(draft, perguntaId);
+        log({ acao: 'agent_first_draft_ainda_incompleto', chatId: event.chatId, motivo: env.motivo || 'parcial', faltam });
+        return { acao: faltam.includes('valor_total') ? 'agent_first_draft_ainda_sem_total' : 'agent_first_draft_ainda_sem_forma' };
       }
-      log({ acao: 'agent_first_draft_completado', chatId: event.chatId, forma: env.envelope.forma });
+      log({ acao: 'agent_first_draft_completado', chatId: event.chatId, forma: env.envelope.forma,
+        valor_total: env.envelope.valor_total });
     } else if (vivo && String(dec.intencao || '').startsWith('corrigir_')) {
       const corr = aplicarCorrecaoEnvelope(guardado.envelope, dec);
       if (!corr.ok) {
@@ -4058,11 +4114,24 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       //    errado. O F11 nao pegava porque so olhava se o Core foi chamado.
       //    Quando o modelo inventou o total, ninguem responde: pergunta-se.
       if (env.motivo === 'valor_total_recusado') {
-        await sendFn(event.chatId,
+        // 🔴 RECUSAR NÃO PODE SER BECO SEM SAÍDA (Recreio 28/09). A Sol pedia "me
+        //    manda o total" e não guardava nada: a resposta "o total foi R$ 402,50"
+        //    chegava sem aluno, sem fatura e sem o comprovante, e ninguém lançava.
+        //    Agora o resto do que foi lido vira RASCUNHO sem total; a resposta do
+        //    mesmo autor (ou citando a pergunta) completa só o total — escrito por
+        //    ela, nunca escolhido pelo modelo.
+        const semTotal = montarEnvelopeV4({ ...dec, valor_total_recusado: null, valor_total: 1, valor: null });
+        const salvo = semTotal.ok
+          ? await registrarRascunhoV4({ event, grupo, agora,
+            envelope: { ...semTotal.envelope, valor_total: null } })
+          : null;
+        const perguntaId = await sendFn(event.chatId,
           'Recebi o comprovante, mas o valor total que li não confere com o que está escrito na mensagem. '
-          + 'Não vou lançar por conta própria. Me manda o total exato, por favor.');
+          + 'Não vou lançar por conta própria. Me manda o total exato'
+          + (salvo ? ' (ex.: R$ 402,50) — guardei o restante, não precisa reenviar o comprovante.' : ', por favor.'));
+        if (salvo) await vincularPerguntaRascunhoV4(salvo, perguntaId);
         log({ acao: 'agent_first_valor_total_recusado', chatId: event.chatId,
-              recusado: env.recusado && env.recusado.motivo });
+              recusado: env.recusado && env.recusado.motivo, rascunho: !!salvo });
         return { acao: 'agent_first_valor_total_recusado' };
       }
       log({ acao: 'agent_first_sem_envelope', chatId: event.chatId, motivo: env.motivo,
@@ -4190,6 +4259,11 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     }
     if (!res.ok || !Array.isArray(res.itens) || res.itens.length === 0) {
       log({ acao: 'agent_first_nao_resolveu', chatId: event.chatId, motivo: res.motivo || 'sem_itens' });
+      // Marca para o aviso de fim de turno: se ninguém mais tratar, a pessoa
+      // precisa saber que a Sol entendeu e por que não lançou.
+      const _it = Array.isArray(env.envelope.itens) && env.envelope.itens[0];
+      event._agentFirstNaoResolveu = { motivo: res.motivo || 'sem_itens',
+        valor: env.envelope.valor_total, aluno: (_it && _it.aluno) || env.envelope.pagador || null };
       return null;
     }
 
@@ -4951,7 +5025,48 @@ _Não lanço nada pela metade._`);
     return vivos;
   }
 
+  // 🔴 PAGAMENTO ENTENDIDO NÃO PODE TERMINAR EM SILÊNCIO (28/09/2026). Quando o
+  //    roteador reconhece um pagamento e o Core não acha a fatura, o agent-first
+  //    devolve null para o parser antigo tentar; se ele também não trata, a
+  //    pessoa ditou e nada aconteceu — sem card, sem pergunta, sem motivo. Aqui,
+  //    no fim do turno, se NADA foi enviado ao grupo, a Sol diz o que entendeu e
+  //    por que não lançou. Não vale para o caminho das ferramentas: lá o agente
+  //    recebe o motivo na resposta da tool e fala ele mesmo.
+  const _enviosPorChat = new Map();
+  const _sendOriginal = sendFn;
+  sendFn = async (chatId, texto, ...resto) => {
+    _enviosPorChat.set(chatId, (_enviosPorChat.get(chatId) || 0) + 1);
+    return _sendOriginal(chatId, texto, ...resto);
+  };
   async function handle(event, agora = Date.now()) {
+    // Chamadas internas repassam `{...event}`: só o topo decide o aviso.
+    if (!event || event.__handleTopo) return _handleInterno(event, agora);
+    event.__handleTopo = true;
+    const _antes = _enviosPorChat.get(event.chatId) || 0;
+    const r = await _handleInterno(event, agora);
+    const nao = event && event._agentFirstNaoResolveu;
+    const ehFerramenta = /^tool-/.test(String((event && event.messageId) || ''));
+    if (nao && !ehFerramenta && (_enviosPorChat.get(event.chatId) || 0) === _antes) {
+      const quem = nao.aluno ? ` de *${nao.aluno}*` : '';
+      const valor = Number(nao.valor) > 0 ? ` de *${fmtBRL(Number(nao.valor))}*` : '';
+      const porque = nao.motivo === 'nenhuma_fatura_aberta'
+        ? 'não achei no Emusys uma fatura desse aluno, nesse mês, que feche com esse valor'
+        : nao.motivo === 'fonte_indisponivel'
+          ? 'a cópia das faturas do Emusys está atualizando agora e eu não confirmo fatura com fonte velha — manda de novo em alguns minutos'
+          : 'não consegui ligar esse pagamento a uma fatura oficial';
+      try {
+        await sendFn(event.chatId, `Entendi um pagamento${valor}${quem}, mas ${porque}. `
+          + 'Nada foi lançado. Confere o nome completo e o mês (ex.: parcela 09/2026) — ou, se não for mensalidade, me diz o que é.');
+        log({ acao: 'agent_first_nao_resolveu_avisado', chatId: event.chatId, motivo: nao.motivo });
+      } catch (e) {
+        log({ acao: 'agent_first_nao_resolveu_aviso_erro', chatId: event.chatId, erro: String(e && e.message) });
+      }
+      return { acao: 'agent_first_nao_resolveu_avisado', motivo: nao.motivo };
+    }
+    return r;
+  }
+
+  async function _handleInterno(event, agora = Date.now()) {
     const chatId = event.chatId;
     const grp = grupos[chatId];
     if (!grp) return { acao: 'ignorado_fora_grupo' };
@@ -8359,6 +8474,7 @@ _Não lanço nada pela metade._`);
     if (!eventoPodeCompletarRascunhoV4(event, draft)) return false;
     const texto = bodyLimpo(event.body);
     return !!formaExplicitaV4(texto, event.caixaToolDecision).forma
+      || (camposFaltantesV4(draft.envelope).includes('valor_total') && !!totalDaRespostaV4(texto, null))
       || casarNao(texto) || casarPode(texto, { respondeuPreview: false }).pode;
   }
 

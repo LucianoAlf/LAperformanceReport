@@ -43,6 +43,12 @@ module.exports={
   tratarConfirmacao:async()=>false
 };`);
 
+const { criarPonteFalsa } = require('./_ponte-falsa.cjs');
+const ponte = criarPonteFalsa({ runtime, abf, grupos: {
+  [CHAT_CANARIO]: { unidade_id: 'unidade-recreio', nome: 'Recreio' },
+  [CHAT_BARRA]: { unidade_id: 'unidade-barra', nome: 'Barra' },
+} });
+
 function respostaMcp(linha) {
   const rpc = JSON.parse(linha);
   return JSON.parse(rpc.result.content[0].text);
@@ -52,6 +58,7 @@ const server = http.createServer((req, res) => {
   let body = '';
   req.on('data', (d) => { body += d; });
   req.on('end', () => {
+    if (req.url === '/caixa/tool') return ponte(req, res, body);
     res.setHeader('content-type', 'application/json');
     if (req.url === '/rest/v1/rpc/sol_porta_caixa_contexto_v1') {
       const args = JSON.parse(body || '{}');
@@ -87,7 +94,7 @@ const server = http.createServer((req, res) => {
       env: { ...process.env,
         LA_REPORT_SUPABASE_URL: `http://127.0.0.1:${port}`,
         LA_REPORT_SERVICE_ROLE_KEY: 'teste',
-        SOL_CAIXA_RUNTIME: runtime, SOL_CAIXA_ABF_RUNTIME: abf,
+        SOL_WHATSAPP_BRIDGE_URL: `http://127.0.0.1:${port}`,
         SOL_CAIXA_GOVERNANCA_RUNTIME: path.join(root, 'vps/la-hq/sol/runtime/caixa-governanca-shadow.cjs'),
         SOL_CAIXA_GOVERNANCA_SHADOW: '0',
         SOL_CAIXA_SCOPE_ENV_FILE: scopeEnv,

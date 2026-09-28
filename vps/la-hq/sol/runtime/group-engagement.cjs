@@ -85,14 +85,18 @@ function falaDirecionadaAHumano(texto, mentionedIds, identidadesProprias) {
 function createGroupEngagementPolicy({ gruposQueRespondem, janelaMs }) {
   const grupos = gruposQueRespondem instanceof Set ? gruposQueRespondem : new Set(gruposQueRespondem || []);
   const ativoAte = new Map();
-  function abrirJanela({ chatId, senderId = '', motivo = 'unknown', agora = Date.now() }) {
+  function _abrirJanela({ chatId, senderId = '', motivo = 'unknown', agora = Date.now() }) {
     if (!chatId) return null;
     const rec = { until: agora + janelaMs, senderId: String(senderId || '') };
     ativoAte.set(chatId, rec);
     return { ...rec, motivo };
   }
-  function fecharJanela(chatId) { ativoAte.delete(chatId); }
-  function decidir({ chatId, texto, mentionedIds, identidadesProprias, senderId = '', agora = Date.now() }) {
+  function _fecharJanela(chatId) { ativoAte.delete(chatId); }
+  // `simular`: responde o que a política decidiria SEM abrir nem fechar janela.
+  // A ponte pergunta isso antes de escolher o caminho do caixa (28/09/2026).
+  function decidir({ chatId, texto, mentionedIds, identidadesProprias, senderId = '', agora = Date.now() }, { simular = false } = {}) {
+    const abrirJanela = simular ? () => null : _abrirJanela;
+    const fecharJanela = simular ? () => {} : _fecharJanela;
     if (!grupos.has(chatId)) { fecharJanela(chatId); return { responder: false, motivo: 'grupo_so_registra' }; }
     if (encerraTurnoDaSol(texto)) {
       fecharJanela(chatId);
@@ -141,7 +145,8 @@ function createGroupEngagementPolicy({ gruposQueRespondem, janelaMs }) {
     rec.until = agora + janelaMs;
     return { ...rec };
   }
-  return { abrirJanela, fecharJanela, decidir, registrarRespostaDaSol, ativoAte };
+  const prever = (entrada) => decidir(entrada, { simular: true });
+  return { abrirJanela: _abrirJanela, fecharJanela: _fecharJanela, decidir, prever, registrarRespostaDaSol, ativoAte };
 }
 
 module.exports = { createGroupEngagementPolicy, ehAgradecimento, encerraTurnoDaSol, pareceChamarSol, dispensaSol, reacaoSemPedido };

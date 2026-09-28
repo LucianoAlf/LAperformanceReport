@@ -83,10 +83,6 @@ const KEY = process.env.LA_REPORT_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVI
 //    o processo MCP recebe env estatico e e UM so para todas as conversas, entao
 //    fixar o numero aqui faria toda conversa se passar pela mesma pessoa.
 const TEL_ENSAIO = process.env.SOL_SOLICITANTE_TELEFONE || '';
-const CAIXA_RUNTIME = process.env.SOL_CAIXA_RUNTIME
-  || '/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs';
-const CAIXA_ABF_RUNTIME = process.env.SOL_CAIXA_ABF_RUNTIME
-  || '/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-abertura-fechamento.cjs';
 const CAIXA_GOVERNANCA_RUNTIME = process.env.SOL_CAIXA_GOVERNANCA_RUNTIME
   || '/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-governanca-shadow.cjs';
 const BRIDGE_URL = (process.env.SOL_WHATSAPP_BRIDGE_URL || 'http://127.0.0.1:3000').replace(/\/$/, '');
@@ -258,23 +254,16 @@ const CONTRATO_RESPOSTA = ' 🔴 LEIA A RESPOSTA ANTES DE FALAR: o campo `estado
   + '`card_publicado` = saiu o card, nada gravado, aguarde o "pode"; '
   + '`mensagem_publicada` = saiu pergunta/recusa (texto em `mensagens_publicadas`), nada gravado; '
   + '`nada_aconteceu` = nada saiu e nada foi gravado — diga isso com o `motivo_humano` e peça o que falta. '
+  + '`desconhecido` = a ferramenta não obteve resposta — não afirme nada, peça para conferirem o grupo. '
   + 'Nunca afirme lançamento, recibo ou card que a resposta não confirma.';
 
 // ── protocolo MCP ───────────────────────────────────────────────────────────
 const j = (o) => ({ content: [{ type: 'text', text: JSON.stringify(o) }] });
 
-const gruposCaixa = {};
-// 🔴 RESPOSTA HONESTA (28/09/2026, Recreio). A ferramenta respondia
-//    `{ok:true, ja_publicado_no_grupo:true}` para QUALQUER desfecho — inclusive
-//    `resultado:null` (o caixa não fez nada) e `pode_sem_pendencia` (não havia
-//    card para aprovar). O agente acreditou e disse à ADM "lançamento efetivado,
-//    recibo publicado" sem nenhuma linha no caixa. O desfecho agora é MEDIDO:
-//    o que o runtime enviou ao grupo e o que ele registrou, por chat, nesta
-//    chamada. `ok` só é verdade quando um card saiu ou o dinheiro foi gravado.
-const capturas = new Map(); // chatId -> { envios: [texto], eventos: [{acao, motivo}] }
-function capturaDe(chatId) { return capturas.get(chatId) || null; }
-let handlerCaixa = null;
-let abfCaixa = null;
+// 🔴 O MCP NÃO TEM MAIS CAIXA PRÓPRIO (28/09/2026). Até aqui este processo
+//    instanciava o handler do caixa: dois processos, dois estados em memória.
+//    Hoje ele valida o crachá e pede à ponte (/caixa/tool) que execute, com o
+//    handler único dela. Ver runtime/caixa-tool-executor.cjs.
 let governancaCaixa = null;
 
 function chatNoCanario(chat) {
@@ -318,18 +307,6 @@ async function contextoCaixa(args, capability = 'agent_first') {
   return { ...(ctx || {}), _chat: chat, _cracha: cracha, _episode_id: String((args && args.p_episode_id) || '').trim() };
 }
 
-async function enviarPeloBridge(chatId, texto) {
-  const cap = capturaDe(chatId);
-  if (cap) cap.envios.push(String(texto || ''));
-  const r = await fetch(`${BRIDGE_URL}/send`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Host: 'localhost' },
-    body: JSON.stringify({ chatId, message: texto }),
-  });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok || !data.success) throw new Error(`bridge_send_${r.status}`);
-  return data.messageId || (data.messageIds || []).at(-1) || null;
-}
-
 async function fecharEpisodioAgentFirst(episodio, chatId, detalhes) {
   if (!episodio || !episodio.episode_id || !governancaCaixa) return { ok: false, sem_episodio: true };
   try {
@@ -356,206 +333,31 @@ function carregarGovernancaCaixa() {
   return governancaCaixa;
 }
 
-function carregarRuntimeCaixa() {
-  if (handlerCaixa && abfCaixa) return;
-  const fin = require(CAIXA_RUNTIME);
-  abfCaixa = require(CAIXA_ABF_RUNTIME);
-  carregarGovernancaCaixa();
-  handlerCaixa = fin.criarHandlerFinanceiro({
-    grupos: gruposCaixa,
-    sendFn: enviarPeloBridge,
-    log: (evento) => {
-      const cap = evento && evento.chatId ? capturaDe(evento.chatId) : null;
-      if (cap && evento.acao) cap.eventos.push({ acao: evento.acao, motivo: evento.motivo || null });
-      const limpo = { ...(evento || {}) };
-      delete limpo.chatId; delete limpo.senderId; delete limpo.senderPhone;
-      process.stderr.write(JSON.stringify({ origem: 'sol_caixa_tool', ...limpo }) + '\n');
-    },
-    governanceFn: (event, eventType, details) => {
-      if (!governancaCaixa || !event || !event.caixaGovernancaEpisode) return Promise.resolve({ ok: false, sem_episodio: true });
-      return governancaCaixa.record(event.caixaGovernancaEpisode, eventType, details);
-    },
-  });
-}
-
-function textoContemValor(texto, valor) {
-  const alvo = Math.round(Number(valor) * 100);
-  if (!Number.isFinite(alvo) || alvo <= 0) return false;
-  const encontrados = String(texto || '').match(/\d{1,3}(?:\.\d{3})*(?:,\d{1,2})|\d+(?:[.,]\d{1,2})?/g) || [];
-  return encontrados.some((bruto) => {
-    const n = Number(bruto.includes(',') ? bruto.replace(/\./g, '').replace(',', '.') : bruto);
-    return Number.isFinite(n) && Math.round(n * 100) === alvo;
-  });
-}
-const ACOES_QUE_GRAVAM = new Set(['lancado', 'lote_multi_lancado', 'saida_lancada', 'movimento_estornado',
-  'movimento_corrigido', 'aberto', 'fechado', 'caixa_reaberto']);
-const MOTIVO_HUMANO = {
-  pode_sem_pendencia: 'não havia nenhum card aguardando aprovação neste grupo',
-  nenhuma_fatura_aberta: 'não achei no Emusys uma fatura desse aluno e competência que feche com esse valor',
-  agent_first_nao_resolveu: 'não consegui ligar o pagamento a uma fatura oficial',
-  valor_total_nao_aparece_no_texto_original: 'o total não aparece no texto da pessoa',
-  texto_e_total_declarado_obrigatorios: 'faltou o texto original ou o total',
-  aprovacao_explicita_obrigatoria: 'a mensagem não é uma aprovação explícita ("pode")',
-  ja_aberto: 'o caixa de hoje já está aberto',
-  ja_existe: 'o caixa de hoje já existe',
-  sem_dados: 'não consegui ler os dados de abertura do caixa',
-};
-
-// Estados, do mais forte ao mais fraco. Só os dois primeiros são sucesso.
-//   executado          — o banco gravou (lançamento, estorno, correção, abrir/fechar)
-//   card_publicado     — saiu um card no grupo; NADA gravado ainda, espera "pode"
-//   mensagem_publicada — saiu outra mensagem (pergunta/recusa); NADA gravado
-//   nada_aconteceu     — nada foi enviado nem gravado
-function classificarDesfecho({ resultado, envios = [], eventos = [] }) {
-  const acao = (resultado && resultado.acao) || null;
-  const acoes = [acao, ...eventos.map((e) => e.acao)].filter(Boolean);
-  const gravou = acoes.some((a) => ACOES_QUE_GRAVAM.has(a));
-  const cardPreview = acoes.some((a) => /preview/.test(a) && !/sem_v3|bloque|erro|recus|invalid|descart/.test(a));
-  const publicouCard = !gravou && ((envios.length > 0 && cardPreview) || !!(resultado && resultado.previewId));
-  const estado = gravou ? 'executado' : (publicouCard ? 'card_publicado'
-    : (envios.length > 0 ? 'mensagem_publicada' : 'nada_aconteceu'));
-  const ultimoMotivo = [...eventos].reverse().find((e) => e.motivo) || null;
-  const motivo = estado === 'executado' || estado === 'card_publicado' ? null
-    : ((ultimoMotivo && ultimoMotivo.motivo) || acao || (resultado && resultado.skip) || 'sem_desfecho');
-  const orientacao = {
-    executado: 'GRAVADO no caixa. O recibo já saiu no grupo pela ferramenta: não repita.',
-    card_publicado: 'Card publicado no grupo. NADA foi gravado ainda: aguarde o "pode" humano citando o card. Não diga que lançou.',
-    mensagem_publicada: 'A ferramenta publicou a mensagem abaixo no grupo (pergunta ou recusa). NADA foi gravado e NENHUM card aprovável saiu. Não diga que lançou nem que preparou card; não repita a mensagem.',
-    nada_aconteceu: 'NADA foi enviado e NADA foi gravado. Diga isso à pessoa com o motivo, sem afirmar sucesso, e peça o que falta.',
-  }[estado];
-  return {
-    ok: estado === 'executado' || estado === 'card_publicado',
-    estado, acao, gravou_no_caixa: gravou, publicou_no_grupo: envios.length > 0 || publicouCard,
-    mensagens_publicadas: envios.map((t) => t.slice(0, 600)),
-    motivo, motivo_humano: motivo ? (MOTIVO_HUMANO[motivo] || null) : null, orientacao,
-  };
-}
-
-function idMensagem(ctx, action, args) {
-  return 'tool-' + crypto.createHash('sha256').update([
-    ctx._chat, action, JSON.stringify(args || {}), Math.floor(Date.now() / 30000),
-  ].join('|')).digest('hex').slice(0, 24);
-}
-
 async function executarRuntimeCaixa(p, args) {
   const ctx = await contextoCaixa(args, p.capability || 'agent_first');
   if (!ctx.ok) return j(ctx);
-  carregarRuntimeCaixa();
-  gruposCaixa[ctx._chat] = { unidade_id: ctx.unidade_id, nome: ctx.unidade_nome || 'unidade' };
-  const captura = { envios: [], eventos: [] };
-  capturas.set(ctx._chat, captura);
+  const limpos = {};
+  for (const [k, v] of Object.entries(args || {})) {
+    if (k !== 'p_cracha' && k !== 'p_chat_id') limpos[k] = v;
+  }
   try {
-  await handlerCaixa.reidratarPendencias();
-  const syntheticMessageId = idMensagem(ctx, p.action, args);
-  let episodio = governancaCaixa && governancaCaixa.adoptEpisode(ctx._episode_id, {
-    unitName: ctx.unidade_nome, source: 'whatsapp_group', messageKind: 'text',
-  });
-  if (!episodio && governancaCaixa) {
-    episodio = governancaCaixa.beginEpisode({ chatId: ctx._chat, messageId: syntheticMessageId,
-      unitName: ctx.unidade_nome, hasMedia: false, source: 'agent_tool_uncorrelated' });
-    if (episodio) void governancaCaixa.record(episodio, 'correlation_gap', {
-      correlation_status: 'missing_episode_header', engine: 'agent_tools', outcome: 'inconclusive',
+    const r = await fetch(`${BRIDGE_URL}/caixa/tool`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Host: 'localhost' },
+      body: JSON.stringify({
+        tool: { name: p.name, action: p.action },
+        ctx: { ok: true, _chat: ctx._chat, _ator_numero: ctx._ator_numero, quem: ctx.quem || null,
+          unidade_id: ctx.unidade_id || null, unidade_nome: ctx.unidade_nome || null, _episode_id: ctx._episode_id || '' },
+        args: limpos,
+      }),
+      signal: AbortSignal.timeout(110000),
     });
-  }
-  if (episodio && governancaCaixa) void governancaCaixa.record(episodio, 'tool_selected', {
-    tool_name: p.name, action: p.action, engine: 'agent_tools', tool_call_ref: syntheticMessageId,
-  });
-  const base = {
-    chatId: ctx._chat, senderPhone: ctx._ator_numero, senderId: ctx._ator_numero + '@s.whatsapp.net',
-    senderName: ctx.quem || 'Equipe', hasMedia: false, mediaUrls: [],
-    messageId: syntheticMessageId, quotedMessageId: args.p_preview_message_id || null,
-    caixaGovernancaEpisode: episodio,
-  };
-  const governanceFn = (event, eventType, details) => (governancaCaixa && event && event.caixaGovernancaEpisode)
-    ? governancaCaixa.record(event.caixaGovernancaEpisode, eventType, details || {})
-    : Promise.resolve({ ok: false, sem_episodio: true });
-  // Abertura/fechamento devolvem `true` em quase tudo; o desfecho real está no log.
-  const logAbf = (e) => { if (e && e.acao) captura.eventos.push({ acao: e.acao, motivo: e.motivo || null }); };
-  let resultado;
-  if (p.action === 'preparar_lancamento') {
-    const texto = String(args.p_texto_original || '').trim();
-    const valor = Number(args.p_valor_total);
-    if (!texto || !(valor > 0)) return j({ ok: false, motivo: 'texto_e_total_declarado_obrigatorios' });
-    if (!textoContemValor(texto, valor)) return j({ ok: false, motivo: 'valor_total_nao_aparece_no_texto_original' });
-    resultado = await handlerCaixa.tratarAgentFirst({ ...base, body: texto, caixaToolDecision: {
-      intencao: Array.isArray(args.p_itens) && args.p_itens.length > 1
-        ? 'lancamento_multi_aluno' : 'lancamento_por_texto',
-      valor_total: valor, forma: args.p_forma || null, pagador: args.p_pagador || null,
-      cartao_modalidade: args.p_cartao_modalidade || null,
-      cartao_parcelas: Number(args.p_cartao_parcelas) || null,
-      itens: Array.isArray(args.p_itens) ? args.p_itens : [],
-    } }, gruposCaixa[ctx._chat], Date.now());
-  } else if (p.action === 'preparar_saida') {
-    const valor = Number(args.p_valor);
-    const categoria = String(args.p_categoria || '').trim().toLowerCase();
-    const forma = String(args.p_forma || '').trim().toLowerCase();
-    const descricao = String(args.p_descricao || '').trim();
-    const textoOriginal = String(args.p_texto_original || '').trim();
-    if (!(valor > 0) || !['seguranca', 'despesa', 'retirada', 'troco'].includes(categoria)
-        || !forma || !descricao || !textoOriginal) {
-      return j({ ok: false, motivo: 'saida_incompleta' });
-    }
-    // A escolha foi da ferramenta. A frase abaixo e apenas o adaptador canonico
-    // do schema para o runtime legado que continua montando o mesmo preview V3.
-    const body = `saída ${categoria} R$ ${valor.toFixed(2).replace('.', ',')} ${forma} ${descricao}`;
-    resultado = await handlerCaixa.handle({ ...base, body });
-  } else if (p.action === 'preparar_abertura') {
-    resultado = await abfCaixa.postarAbertura(
-      { chat_id: ctx._chat, unidade_id: ctx.unidade_id, nome: ctx.unidade_nome },
-      { sendFn: enviarPeloBridge, event: base, governanceFn, log: logAbf });
-  } else if (p.action === 'preparar_fechamento') {
-    resultado = await abfCaixa.tratarPedidoDiretoFechamento(
-      { ...base, body: 'Sol, vamos fechar o caixa agora' },
-      { grupo: gruposCaixa[ctx._chat], sendFn: enviarPeloBridge, governanceFn, log: logAbf });
-  } else if (p.action === 'aprovar_preview') {
-    const texto = String(args.p_aprovacao || '').trim();
-    if (!/^(pode(?:\s+sim)?|confirmo|autorizo|pode\s+(?:lançar|corrigir|estornar|abrir|fechar))\b/i.test(texto)) {
-      return j({ ok: false, motivo: 'aprovacao_explicita_obrigatoria' });
-    }
-    const ev = { ...base, body: texto };
-    const abf = await abfCaixa.tratarConfirmacao(ev, { sendFn: enviarPeloBridge, governanceFn, log: logAbf,
-      temComprovantePendente: (cid) => handlerCaixa.temPendencia(cid) });
-    resultado = abf ? { acao: 'abertura_fechamento_tratado' } : await handlerCaixa.handle(ev);
-  } else if (p.action === 'descartar_preview') {
-    const texto = String(args.p_recusa || '').trim();
-    if (!/^(não|nao|cancela|cancelar|descarta|descartar)\b/i.test(texto)) return j({ ok: false, motivo: 'recusa_explicita_obrigatoria' });
-    resultado = await handlerCaixa.handle({ ...base, body: texto });
-  } else {
-    const alvo = {
-      movimentacao_id: String(args.p_movimentacao_id || '').trim(),
-      unidade_id: ctx.unidade_id,
-      valor: Number(args.p_valor_atual),
-      forma_pagamento: String(args.p_forma_atual || ''),
-      categoria: String(args.p_categoria_atual || ''),
-    };
-    if (!alvo.movimentacao_id || !(alvo.valor > 0)) return j({ ok: false, motivo: 'alvo_exato_obrigatorio' });
-    let cmd;
-    if (p.action === 'preparar_estorno') {
-      const motivo = String(args.p_motivo || '').trim();
-      if (!motivo) return j({ ok: false, motivo: 'motivo_obrigatorio' });
-      cmd = { tipo: 'estornar', motivo, correcoes: {} };
-    } else {
-      const correcoes = {};
-      if (args.p_novo_valor != null) correcoes.valor = Number(args.p_novo_valor);
-      if (args.p_nova_forma) correcoes.forma_pagamento = String(args.p_nova_forma);
-      if (args.p_nova_categoria) correcoes.categoria = String(args.p_nova_categoria);
-      if (!Object.keys(correcoes).length) return j({ ok: false, motivo: 'correcao_vazia' });
-      cmd = { tipo: 'corrigir', motivo: String(args.p_motivo || 'correção solicitada no grupo'), correcoes };
-    }
-    resultado = await handlerCaixa.handle({ ...base,
-      body: cmd.tipo === 'estornar' ? 'estornar lançamento' : 'corrigir lançamento',
-      caixaToolCommand: cmd, caixaToolTarget: alvo,
-    });
-  }
-  const desfecho = classificarDesfecho({ resultado, envios: captura.envios, eventos: captura.eventos });
-  if (episodio && governancaCaixa) await fecharEpisodioAgentFirst(episodio, ctx._chat, {
-    terminal_state: desfecho.acao || desfecho.estado,
-    action: desfecho.acao || p.action,
-    outcome: desfecho.ok ? 'ok' : 'refused',
-  });
-  return j(desfecho);
-  } finally {
-    capturas.delete(ctx._chat);
+    const data = await r.json().catch(() => null);
+    if (!r.ok || !data || typeof data.estado !== 'string') throw new Error(`ponte_${r.status}`);
+    return j(data);
+  } catch (e) {
+    // Sem resposta da ponte não se sabe se algo saiu: a ferramenta NÃO afirma nada.
+    return j({ ok: false, estado: 'desconhecido', motivo: 'ponte_sem_resposta', erro: String(e && e.message).slice(0, 120),
+      orientacao: 'Não sei se algo foi publicado. NÃO diga que lançou nem que preparou card: peça à pessoa que confira o grupo.' });
   }
 }
 

@@ -164,7 +164,13 @@ const junta = (a) => a.join(' || ');
   ]) {
     const T = novo({ rotearV4Fn: rot, resolverEnvelopeFn: res });
     const r = await T.h.handle({ chatId: CHAT, senderPhone: ADM, messageId: 'FS-' + nome, body: TEXTO_LIS });
-    checar(!(r && String(r.acao).startsWith('agent_first')),
+    // 28/09/2026: com o Core recusando, o legado AINDA tem a vez; só se ele
+    // também ficar calado a Sol avisa que entendeu e por que não lançou
+    // (pagamento ditado não pode terminar em silêncio). Aqui o legado é mudo
+    // por construção dos mocks, então o aviso é o esperado para nao_resolveu.
+    const avisoPosLegado = nome === 'nao_resolveu' && r && r.acao === 'agent_first_nao_resolveu_avisado'
+      && T.enviadas.length === 1 && /Nada foi lançado/.test(T.enviadas[0]);
+    checar(avisoPosLegado || !(r && String(r.acao).startsWith('agent_first')),
       'F3/' + nome + ': agent-first respondeu quando deveria ceder ao legado');
   }
 

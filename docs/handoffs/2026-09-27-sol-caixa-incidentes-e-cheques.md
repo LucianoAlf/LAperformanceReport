@@ -220,3 +220,22 @@ Testes: `v4-valor-e-competencia-do-modelo-e2e.cjs` e `sol-portas-resposta-honest
 ### Ainda aberto (próximos PRs)
 - **Dois caixas em memória.** O processo do MCP instancia o próprio handler do caixa, separado do da ponte do WhatsApp. Hoje isso é contido pela reidratação das pendências a partir do ledger V3 a cada chamada, mas continua sendo duas cópias de estado. O desenho definitivo é a ferramenta executar **dentro** da ponte (endpoint local), com um executor só.
 - **Total recusado não deixa rascunho.** Depois da recusa, "o total foi R$ 402,50" não retoma o lançamento — a pessoa precisa reenviar o comprovante.
+
+---
+
+## 8. 28/09 — Sol fora da sombra nas 3 unidades
+
+Decisão do Luciano: sair da sombra e corrigir o que aparecer em produção. O que foi feito, na ordem:
+
+1. **Um caixa só em memória.** A ferramenta de caixa do agente passou a executar **dentro da ponte do WhatsApp** (`POST /caixa/tool`, módulo `runtime/caixa-tool-executor.cjs`). O MCP `sol-portas-mcp.mjs` só valida o crachá e encaminha; não carrega mais o handler. A resposta da ferramenta é medida por `AsyncLocalStorage`: só conta o que ESTA chamada enviou/registrou (uma mensagem de outra pessoa processada ao mesmo tempo não vira "card publicado").
+2. **Total recusado vira rascunho.** O comprovante fica guardado sem o total; a resposta do mesmo autor (ou citando a pergunta) com UM valor escrito completa e sai o card. Dois valores diferentes na resposta = pergunta de novo.
+3. **Pagamento entendido não fica mudo.** Se a Sol reconhece um pagamento, não acha a fatura e ninguém mais trata, ela diz o que entendeu, por que não lançou e o que falta. No caminho das ferramentas quem fala é o agente (recebe o motivo).
+4. **Banco (`20260928180000`):** `sol_caixa_resolver_envelope_v1` (a) alcança o mês declarado até +2 meses (parcela adiantada — a Iolanda/CG de outubro nunca casava) e (b) responde `fonte_indisponivel` quando a fonte está `stale` e o universo vem vazio, em vez de afirmar `nenhuma_fatura_aberta`.
+5. **Roteamento nas 3 unidades:** texto que **chama a Sol** vai ao agente com ferramentas; texto que **não chama** ("PG pix parcela 09/2026 aluno Fulano R$ 456,00", rotina de CG) segue o caminho automático, que tem a V4 dentro. Sem isso, ligar as ferramentas em CG faria a regra de grupo descartar os ditados. `group-engagement.prever()` responde sem mexer na janela.
+6. **Canário = as 3 unidades** (`30-…v4-canario.conf` e `31-…tools-canario.conf`).
+7. **Perfil da Sol:** `agent.disabled_toolsets: [clarify]` — a ferramenta de pergunta com opções do framework saía com rodapé em inglês ("Reply with the number…"). Sem ela, o agente pergunta em texto.
+8. **`.env` linha 18** (`SOL_CAIXA_FINANCE_GROUPS`) entre aspas: o `|` sem aspas quebrava quem faz `source` do arquivo (21 mil linhas de erro desde 13/09).
+
+**Bateria real (28/09, modelo e banco reais, envio e gravação desligados):** CG ditado → card ✅; CG sem forma → pergunta forma ✅; Barra passaporte 2x → card crédito 2x ✅; Recreio Sophia → card ✅ (6/6); Iolanda outubro → card ✅ depois do fix do banco; conversa comum nas 3 → silêncio ✅; venda de lojinha → aviso "não achei fatura, me diz o que é" (antes: silêncio).
+
+**Em aberto, conhecido:** venda de lojinha/produto por texto não tem fatura e não vira card — hoje a Sol avisa; lançar venda avulsa por texto é frente própria.
