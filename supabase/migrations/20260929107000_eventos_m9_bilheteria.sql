@@ -295,9 +295,8 @@ create or replace function public.evento_bilheteria_vender_v1(
   p_canal            text,
   p_comprador_contato text default null,
   p_participacao_id  bigint default null,
-  p_meia_entrada     integer default 0,
   p_pacote_id        bigint default null,
-  p_convidados       jsonb default '[]'::jsonb,   -- [{nome, documento?, meia_entrada?}]
+  p_convidados       jsonb default '[]'::jsonb,   -- [{nome, documento?}] — nome vazio vira "Convidado N de <comprador>"
   p_marcar_pago      boolean default false,
   p_pagamento_identificador text default null,
   p_observacao       text default null
@@ -315,13 +314,20 @@ declare
   v_bruto      numeric(10,2);
   v_final      numeric(10,2);
   v_venda_id   bigint;
-  v_conv       jsonb;
+  v_conv       record;
   v_meias      integer;
 begin
   -- evento e bloco do mesmo evento
   select e.unidade_id into v_unidade from public.evento e where e.id = p_evento_id;
   if v_unidade is null then
     raise exception 'evento % nao existe', p_evento_id using errcode = 'P0001';
+  end if;
+
+  -- SECURITY DEFINER ignora a RLS da venda — o escopo da unidade e conferido
+  -- aqui dentro, na mesma regra das policies (is_admin / get_user_unidade_ids).
+  -- anon cai neste raise: auth.uid() nulo devolve lista vazia.
+  if not (public.is_admin() or v_unidade in (select public.get_user_unidade_ids())) then
+    raise exception 'Sem acesso a este evento.' using errcode = 'P0001';
   end if;
   select b.capacidade into v_capacidade
     from public.evento_bloco b
@@ -346,17 +352,10 @@ begin
     end if;
   end if;
 
-  -- convidados nominais: a lista tem que bater com a quantidade
+  -- convidados nominais: a lista tem que bater com a quantidade (nome pode vir
+  -- vazio — vira "Convidado N de <comprador>", editavel ate o dia)
   if jsonb_array_length(p_convidados) <> p_quantidade then
     raise exception 'Informe os % nomes dos convidados.', p_quantidade using errcode = 'P0001';
-  end if;
-  -- e as meias marcadas nos convidados tem que bater com o total informado
-  select count(*) into v_meias
-    from jsonb_array_elements(p_convidados) c
-   where coalesce((c->>'meia_entrada')::boolean, false);
-  if v_meias <> p_meia_entrada then
-    raise exception 'Meia-entrada divergente: % marcadas nos convidados, % informadas.',
-      v_meias, p_meia_entrada using errcode = 'P0001';
   end if;
 
   -- preco do evento + pacote
@@ -381,17 +380,13 @@ begin
     v_desconto := coalesce(v_desconto, 0);
   end if;
 
-  -- meias so se houver preco de meia cadastrado
-  if p_meia_entrada > 0 and v_preco.preco_meia is null then
-    raise exception 'Este evento nao tem preco de meia cadastrado.' using errcode = 'P0001';
-  end if;
-  if p_meia_entrada > p_quantidade then
-    raise exception 'Meias (%s) nao podem passar da quantidade (%s).',
-      p_meia_entrada, p_quantidade using errcode = 'P0001';
-  end if;
+  -- decisao do Alf: TODOS pagam o preco cobrado (preco_meia) quando ele esta
+  -- cadastrado; o unitario fica so de referencia. Sem meia cadastrada, todos
+  -- pagam a inteira.
+  v_meias := case when v_preco.preco_meia is not null then p_quantidade else 0 end;
 
-  v_bruto := (p_quantidade - p_meia_entrada) * v_preco.preco_unitario
-           + p_meia_entrada * coalesce(v_preco.preco_meia, 0);
+  v_bruto := (p_quantidade - v_meias) * v_preco.preco_unitario
+           + v_meias * coalesce(v_preco.preco_meia, 0);
   v_final := round(v_bruto * (1 - v_desconto / 100), 2);
 
   insert into public.evento_ingresso_venda (
@@ -402,7 +397,7 @@ begin
     pagamento_identificador, pago_em, observacao
   ) values (
     p_evento_id, p_bloco_id, p_participacao_id, p_comprador_nome, p_comprador_contato,
-    p_quantidade, p_meia_entrada, p_pacote_id,
+    p_quantidade, v_meias, p_pacote_id,
     v_preco.preco_unitario, v_preco.preco_meia, v_desconto, v_final,
     p_forma_pagamento, p_canal,
     case when p_marcar_pago then 'pago' else 'pendente' end,
@@ -411,19 +406,22 @@ begin
     p_observacao
   ) returning id into v_venda_id;
 
-  -- um convidado nominal por ingresso
-  for v_conv in select * from jsonb_array_elements(p_convidados)
+  -- um convidado nominal por ingresso; nome vazio vira placeholder editavel
+  for v_conv in
+    select row_number() over () as i, value
+      from jsonb_array_elements(p_convidados)
   loop
     insert into public.evento_convidado (
       evento_id, nome, documento, tipo_entrada, venda_id, bloco_id, meia_entrada
     ) values (
       p_evento_id,
-      v_conv->>'nome',
-      v_conv->>'documento',
+      coalesce(nullif(btrim(v_conv.value->>'nome'), ''),
+               'Convidado ' || v_conv.i || ' de ' || p_comprador_nome),
+      v_conv.value->>'documento',
       'vendido',
       v_venda_id,
       p_bloco_id,
-      coalesce((v_conv->>'meia_entrada')::boolean, false)
+      v_meias = p_quantidade
     );
   end loop;
 
@@ -431,10 +429,14 @@ begin
 end;
 $$;
 
--- a UI (equipe logada) chama; a regra de "quem pode vender" fica na RLS da venda +
--- no is_admin/get_user_unidade_ids, e o audit_log registra quem vendeu
+-- a UI (equipe logada) chama; o escopo da unidade e conferido dentro da RPC
+-- (SECURITY DEFINER ignora RLS). Revogar anon/public: sem o revoke o default
+-- de privileges do Supabase deixaria a funcao executavel sem login.
+revoke all on function public.evento_bilheteria_vender_v1(
+  bigint, bigint, text, integer, text, text, text, bigint, bigint, jsonb, boolean, text, text
+) from public, anon;
 grant execute on function public.evento_bilheteria_vender_v1(
-  bigint, bigint, text, integer, text, text, text, bigint, integer, bigint, jsonb, boolean, text, text
+  bigint, bigint, text, integer, text, text, text, bigint, bigint, jsonb, boolean, text, text
 ) to authenticated;
 
 -- o que a Sol le: vendas PAGAS ainda nao conciliadas, por unidade/periodo

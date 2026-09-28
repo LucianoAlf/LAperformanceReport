@@ -10,6 +10,7 @@ import {
   Users,
   LayoutList,
   Speaker,
+  Ticket,
   ClipboardCheck,
   UserCheck,
   Pencil,
@@ -31,8 +32,9 @@ import { GradeTab } from './GradeTab';
 import { PalcoTab } from './PalcoTab';
 import { RevisaoTab } from './RevisaoTab';
 import { CheckinTab } from './CheckinTab';
+import { BilheteriaTab } from './BilheteriaTab';
 
-type TabAtiva = 'alunos' | 'grade' | 'palco' | 'revisao' | 'checkin';
+type TabAtiva = 'alunos' | 'grade' | 'palco' | 'bilheteria' | 'revisao' | 'checkin';
 
 const STATUS_VARIANT: Record<EventoStatus, 'default' | 'success' | 'warning' | 'error'> = {
   rascunho: 'warning',
@@ -41,7 +43,7 @@ const STATUS_VARIANT: Record<EventoStatus, 'default' | 'success' | 'warning' | '
   cancelado: 'error',
 };
 
-const TABS_VALIDAS: TabAtiva[] = ['alunos', 'grade', 'palco', 'revisao', 'checkin'];
+const TABS_VALIDAS: TabAtiva[] = ['alunos', 'grade', 'palco', 'bilheteria', 'revisao', 'checkin'];
 
 // O `AbaFutura` (placeholder "Fase N — em breve") foi removido: as quatro abas passaram a
 // ter tela de verdade. Ele nao fica "por via das duvidas" porque placeholder esquecido e o
@@ -111,6 +113,8 @@ export function EventoDetalhePage() {
     { id: 'alunos', label: 'Alunos', shortLabel: 'Alunos', icon: Users },
     { id: 'grade', label: 'Grade', shortLabel: 'Grade', icon: LayoutList },
     { id: 'palco', label: 'Palco', shortLabel: 'Palco', icon: Speaker },
+    // Bilheteria antes da Revisao: a revisao confere o recital inteiro, inclusive vendas
+    { id: 'bilheteria', label: 'Bilheteria', shortLabel: 'Bilheteria', icon: Ticket },
     { id: 'revisao', label: 'Revisão', shortLabel: 'Revisão', icon: ClipboardCheck },
     // Ultima aba de proposito: a ordem das abas e a ordem do trabalho, e o check-in so
     // acontece no dia — depois de participacao, grade, palco e revisao estarem prontos.
@@ -187,6 +191,7 @@ export function EventoDetalhePage() {
       )}
       {tabAtiva === 'grade' && <GradeTab key={`grade-${syncTick}`} evento={evento} />}
       {tabAtiva === 'palco' && <PalcoTab key={`palco-${syncTick}`} evento={evento} />}
+      {tabAtiva === 'bilheteria' && <BilheteriaTab key={`bilheteria-${syncTick}`} evento={evento} />}
       {tabAtiva === 'revisao' && (
         <RevisaoTab key={`revisao-${syncTick}`} evento={evento} onIrPara={alterarTab} />
       )}
