@@ -74,6 +74,30 @@ const ev = (id, extra) => ({ chatId: CHAT, senderId: '5521911112222@s.whatsapp.n
     checar(logs.some((l) => l.acao === 'legenda_anterior_adotada_pela_midia'), `${ordem}: sem log do pareamento`);
   }
 
+  // Mídia PRIMEIRO (CG 28/09 18:28): o PDF chegou 0,3 s antes do texto. O texto
+  // sozinho não fechava fatura e o aviso "não consegui ligar" saiu por cima do card
+  // certo que a mídia montou. O aviso não pode falar quando há mídia do mesmo autor.
+  {
+    // o PDF demora (OCR + visão ~40 s em produção): o turno do texto acaba antes
+    const { h, enviadas, logs } = novo({ ocrFn: async () => { await sleep(3000); return { text: OCR, status: 'ok' }; } });
+    const t0 = Date.now();
+    await Promise.all([
+      h.handle(ev('DOC9', { body: '', hasMedia: true, mediaType: 'document', mediaUrls: ['/tmp/w.pdf'] }), t0),
+      (async () => { await sleep(290); return h.handle(ev('TXT9', { body: LEGENDA, hasMedia: false }), t0 + 290); })(),
+    ]);
+    checar(!enviadas.some((t) => /Entendi um pagamento/.test(t)), 'midia_antes: o aviso não pode sair por cima do card da mídia');
+    checar(enviadas.some((t) => /Julia Silva de Freitas/.test(t)), 'midia_antes: a aluna tem de aparecer no card');
+    checar(logs.some((l) => l.acao === 'agent_first_nao_resolveu_aviso_suprimido_midia' || l.acao === 'lote_texto_anexado'
+      || l.acao === 'legenda_irma_anexada'), 'midia_antes: sem registro de que o texto ficou com a mídia');
+  }
+
+  // Controle: texto SEM mídia nenhuma continua recebendo o aviso (nunca silêncio)
+  {
+    const { h, enviadas } = novo();
+    await h.handle(ev('TXT8', { body: LEGENDA, hasMedia: false }), Date.now());
+    checar(enviadas.some((t) => /Entendi um pagamento/.test(t)), 'texto sozinho sem fatura ainda precisa do aviso');
+  }
+
   // Controle: mídia COM legenda própria não adota o texto de outra
   {
     const { h, enviadas } = novo();
