@@ -100,25 +100,6 @@ test('nenhum consumidor carrega e-mail do modulo Eventos', () => {
   }
 });
 
-test('o aviso de "em desenvolvimento" e fonte unica e esta nas DUAS telas', () => {
-  // O modulo foi aberto com as fases 5 a 7 por fazer. Quem entra precisa saber disso
-  // antes de montar um recital inteiro e descobrir que ainda nao da para imprimir.
-  const aviso = readFileSync('src/components/App/Eventos/AvisoEmDesenvolvimento.tsx', 'utf8');
-  assert.match(aviso, /em desenvolvimento/iu);
-
-  for (const tela of [
-    'src/components/App/Eventos/EventosPage.tsx',
-    'src/components/App/Eventos/EventoDetalhePage.tsx',
-  ]) {
-    const texto = readFileSync(tela, 'utf8');
-    assert.match(
-      texto,
-      /<AvisoEmDesenvolvimento\s*\/>/u,
-      `${tela} precisa exibir o aviso enquanto o modulo estiver em construcao`,
-    );
-  }
-});
-
 test('TODA rota de eventos passa pelo guard, inclusive a de detalhe', () => {
   // Rota filha nao herda guard de irma: `eventos/:eventoId` precisa do seu proprio.
   // Sem isto, a URL direta do detalhe seria a porta dos fundos de um modulo em teste —

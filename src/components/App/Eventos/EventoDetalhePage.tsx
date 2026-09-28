@@ -31,7 +31,6 @@ import { GradeTab } from './GradeTab';
 import { PalcoTab } from './PalcoTab';
 import { RevisaoTab } from './RevisaoTab';
 import { CheckinTab } from './CheckinTab';
-import { AvisoEmDesenvolvimento } from './AvisoEmDesenvolvimento';
 
 type TabAtiva = 'alunos' | 'grade' | 'palco' | 'revisao' | 'checkin';
 
@@ -178,8 +177,6 @@ export function EventoDetalhePage() {
         onFechar={() => setEditando(false)}
         onSalvo={recarregar}
       />
-
-      <AvisoEmDesenvolvimento />
 
       <PageTabs tabs={tabs} activeTab={tabAtiva} onTabChange={alterarTab} />
 

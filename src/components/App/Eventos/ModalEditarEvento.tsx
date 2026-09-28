@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { Trash2 } from 'lucide-react';
 
@@ -12,6 +13,8 @@ import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { DatePicker } from '@/components/ui/date-picker';
+import { TimePicker24h } from '@/components/ui/time-picker-24h';
 import {
   atualizarEvento,
   excluirEvento,
@@ -19,6 +22,13 @@ import {
   type EventoComResumo,
   type EventoStatus,
 } from '@/hooks/useEventos';
+
+// ISO 'YYYY-MM-DD' → Date LOCAL — `new Date(iso)` interpreta UTC e devolve o dia
+// anterior no Brasil (mesma armadilha do modulo de impressao).
+function isoParaDate(iso: string): Date | undefined {
+  const [a, m, d] = iso.split('-').map(Number);
+  return a && m && d ? new Date(a, m - 1, d) : undefined;
+}
 
 interface Props {
   aberto: boolean;
@@ -146,22 +156,20 @@ export function ModalEditarEvento({ aberto, evento, onFechar, onSalvo }: Props) 
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="edit-data">Primeiro dia</Label>
-              <Input
-                id="edit-data"
-                type="date"
-                value={data}
-                onChange={(e) => setData(e.target.value)}
+              <Label>Primeiro dia</Label>
+              <DatePicker
+                date={isoParaDate(data)}
+                onDateChange={(d) => setData(d ? format(d, 'yyyy-MM-dd') : '')}
+                placeholder="Primeiro dia"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-data-fim">Último dia (opcional)</Label>
-              <Input
-                id="edit-data-fim"
-                type="date"
-                min={data || undefined}
-                value={dataFim}
-                onChange={(e) => setDataFim(e.target.value)}
+              <Label>Último dia (opcional)</Label>
+              <DatePicker
+                date={isoParaDate(dataFim)}
+                onDateChange={(d) => setDataFim(d ? format(d, 'yyyy-MM-dd') : '')}
+                minDate={isoParaDate(data)}
+                placeholder="Um dia só"
               />
               <p className="text-[11.5px] text-slate-500">
                 Preencha só quando o recital ocupa mais de uma data. O dia de cada bloco se
@@ -172,13 +180,8 @@ export function ModalEditarEvento({ aberto, evento, onFechar, onSalvo }: Props) 
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="edit-horario">Abertura da casa</Label>
-              <Input
-                id="edit-horario"
-                type="time"
-                value={horario}
-                onChange={(e) => setHorario(e.target.value)}
-              />
+              <Label>Abertura da casa</Label>
+              <TimePicker24h value={horario} onChange={setHorario} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-local">Local</Label>

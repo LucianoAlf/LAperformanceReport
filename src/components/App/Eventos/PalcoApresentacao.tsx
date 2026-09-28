@@ -3,7 +3,9 @@ import { toast } from 'sonner';
 import { Plus, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { chaveDoItem, instrumentoDoCurso } from '@/lib/eventos';
 import {
@@ -73,7 +75,7 @@ export function PalcoApresentacao({
 
       <div className="flex flex-wrap items-start gap-x-2 gap-y-1">
         <Rotulo>Observação / Mapa</Rotulo>
-        <textarea
+        <Textarea
           value={observacao}
           onChange={(e) => setObservacao(e.target.value)}
           onBlur={async () => {
@@ -87,24 +89,23 @@ export function PalcoApresentacao({
           }}
           rows={2}
           placeholder="ex: cadeira à esquerda, microfone na altura do violão"
-          className="min-w-[200px] flex-1 resize-y rounded-md border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-[12.5px] text-slate-200 placeholder:text-slate-600 focus:border-violet-500 focus:outline-none"
+          className="min-w-[200px] flex-1 resize-y min-h-0 text-[12.5px]"
         />
       </div>
 
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <Rotulo>Playback</Rotulo>
         <label className="flex cursor-pointer items-center gap-2 text-[12.5px] text-slate-300">
-          <input
-            type="checkbox"
+          <Checkbox
             checked={apresentacao.tem_playback}
-            onChange={async (e) => {
+            onCheckedChange={async (marcado) => {
               const { error } = await atualizarApresentacao(apresentacao.id, {
-                tem_playback: e.target.checked,
+                tem_playback: marcado === true,
               });
               if (error) toast.error(`Não consegui salvar: ${error.message}`);
               else onMudou();
             }}
-            className="h-3.5 w-3.5 accent-violet-500"
+            className="h-3.5 w-3.5"
           />
           {apresentacao.tem_playback ? 'usa playback' : 'não usa'}
         </label>

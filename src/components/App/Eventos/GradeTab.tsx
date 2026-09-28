@@ -38,6 +38,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { TimePicker24h } from '@/components/ui/time-picker-24h';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -680,15 +681,11 @@ function CartaoBloco({
         )}
 
         <div className="ml-auto flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-[11.5px] text-slate-400">
+          <span className="flex items-center gap-1.5 text-[11.5px] text-slate-400">
             Início manual
-            <Input
-              type="time"
-              defaultValue={bloco.horario_inicial?.slice(0, 5) ?? ''}
-              onBlur={async (e) => {
-                const valor = e.target.value;
-                // Apagar o campo devolve o bloco ao encadeamento automático — é o jeito de
-                // desfazer um horário digitado sem precisar de um segundo controle.
+            <TimePicker24h
+              value={bloco.horario_inicial?.slice(0, 5) ?? ''}
+              onChange={async (valor) => {
                 const { error } = await atualizarBloco(bloco.id, {
                   horario_inicial: valor || null,
                   inicio_manual: Boolean(valor),
@@ -696,9 +693,30 @@ function CartaoBloco({
                 if (error) toast.error(`Não consegui salvar o horário: ${error.message}`);
                 else onMudou();
               }}
-              className="h-7 w-[104px] text-[12px]"
+              placeholder="automático"
+              className="h-7 w-[112px] text-[12px]"
             />
-          </label>
+            {/* Voltar ao encadeamento automático = tirar o horario manual. Sem este
+                botao, quem digitou uma hora nunca mais voltava atras. */}
+            {bloco.horario_inicial && (
+              <button
+                type="button"
+                aria-label="Voltar ao horário automático"
+                title="Voltar ao horário automático"
+                onClick={async () => {
+                  const { error } = await atualizarBloco(bloco.id, {
+                    horario_inicial: null,
+                    inicio_manual: false,
+                  });
+                  if (error) toast.error(`Não consegui limpar o horário: ${error.message}`);
+                  else onMudou();
+                }}
+                className="text-slate-600 transition-colors hover:text-slate-300"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </span>
           <button
             type="button"
             onClick={remover}
