@@ -132,7 +132,7 @@ e `logs/agent.log` (chamadas de ferramenta do agente).
 1. **Quando a Sol pergunta algo e a pessoa responde sem citar**, só quem chamou a Sol continua a
    conversa; os outros precisam começar com "Sol,". É de propósito (evita a Sol se meter em
    conversa entre colegas), e o texto enviado à equipe orienta isso.
-2. **Estorno pela conversa não desempata lançamentos iguais** (mesmo valor/forma/categoria).
+2. ~~**Estorno pela conversa não desempata lançamentos iguais**~~ — tratado em `fix/sol-estorno-ambiguo-lista-candidatos`: a Sol lista hora, quem lançou e id curto e só aceita a escolha (número/id) de quem pediu ou de quem cita a lista; o estorno segue exigindo "pode".
 3. **Card de quitação** sugere "de X a Y", e nenhum caminho trata essa resposta.
 4. **Cheques:** o primeiro "pode" real num card de cheque ainda não aconteceu.
 5. **CG:** movimentação `0a2e91a7…` (Pix R$ 397 de 26/09) com descrição errada e sem fatura; R$ 380 da
