@@ -725,6 +725,11 @@ function typingStop(chatId) {
   try { const p = sock && sock.sendPresenceUpdate('paused', chatId); if (p && p.catch) p.catch(() => {}); } catch (e) {}
 }
 let connectionState = 'disconnected';
+// 🔴 O código do caixa mora DENTRO de startSocket() (escopo da conexão), e as
+//    rotas HTTP ficam no módulo. A rota /caixa/tool alcança o executor por este
+//    gancho, que startSocket() preenche a cada (re)conexão. Sem ele a rota lia
+//    variável fora de escopo e o ReferenceError derrubava a ponte (28/09/2026).
+let _caixaToolRota = null;
 
 async function startSocket() {
   const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
@@ -886,6 +891,7 @@ async function caixaToolExecutor() {
   });
   return _caixaToolExec;
 }
+_caixaToolRota = { executor: caixaToolExecutor, live: SOL_CAIXA_LIVE };
 
 async function financeHandler() {
   if (!SOL_CAIXA_LIVE) return null;
@@ -1736,14 +1742,24 @@ app.post('/governance/agent-first/close', async (req, res) => {
 app.post('/caixa/tool', async (req, res) => {
   const origem = String((req.socket && req.socket.remoteAddress) || '');
   if (!/^(::ffff:)?127\.0\.0\.1$|^::1$/.test(origem)) return res.status(403).json({ ok: false, motivo: 'origem_nao_local' });
-  if (!SOL_CAIXA_LIVE) return res.status(503).json({ ok: false, estado: 'nada_aconteceu', motivo: 'caixa_desligado' });
-  if (!sock || connectionState !== 'connected') {
-    return res.status(503).json({ ok: false, estado: 'nada_aconteceu', motivo: 'whatsapp_desconectado' });
+  // ⚠️ Rota async sem try/catch derruba o processo inteiro num erro — e o
+  //    processo é o WhatsApp da Sol. Todo erro vira resposta, nunca queda.
+  try {
+    if (!_caixaToolRota || !_caixaToolRota.live) {
+      return res.status(503).json({ ok: false, estado: 'nada_aconteceu', motivo: 'caixa_desligado' });
+    }
+    if (!sock || connectionState !== 'connected') {
+      return res.status(503).json({ ok: false, estado: 'nada_aconteceu', motivo: 'whatsapp_desconectado' });
+    }
+    const exec = await _caixaToolRota.executor();
+    if (!exec) return res.status(503).json({ ok: false, estado: 'nada_aconteceu', motivo: 'executor_indisponivel' });
+    const out = await exec.executar(req.body || {});
+    return res.json(out);
+  } catch (e) {
+    try { console.error('caixa_tool_rota_erro', e && e.stack); } catch (_) {}
+    return res.status(500).json({ ok: false, estado: 'desconhecido', motivo: 'erro_na_ponte',
+      orientacao: 'Não sei se algo foi publicado. Não afirme nada; peça para conferirem o grupo.' });
   }
-  const exec = await caixaToolExecutor();
-  if (!exec) return res.status(503).json({ ok: false, estado: 'nada_aconteceu', motivo: 'executor_indisponivel' });
-  const out = await exec.executar(req.body || {});
-  return res.json(out);
 });
 
 registerReportSingleMessageRoute({
