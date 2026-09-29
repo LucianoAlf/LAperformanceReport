@@ -1564,7 +1564,7 @@
       "id": "B-134",
       "incidente": "SOL-134",
       "tipo": "adiantamento_excedente",
-      "status": "falha_conhecida",
+      "status": "passa",
       "titulo": "Excedente declarado vira item 'adiantamento parcela 11/2026' sem vínculo",
       "entrada": "Legenda com passaporte R$ 550 + parcelas 10/2026 R$ 500 + R$ 500 + 'adiantamento parcela 11/2026 R$ 100', total R$ 1.650.",
       "defeito": "Não existe caminho para valor sem fatura (regra decidida pelo Alf em 29/09, não implementada).",
@@ -1606,7 +1606,74 @@
                 }
               }
             }
-          ]
+          ],
+          "resolver_envelope": {
+            "ok": true,
+            "itens": [
+              {
+                "ordem": 1,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "responsavel_financeiro": null,
+                "valor": 550,
+                "categoria": "passaporte",
+                "competencia": "10/2026",
+                "canonical_fatura_id": "0a000000-0000-4000-8000-000000000131",
+                "descricao": "Passaporte - curso de Piano",
+                "sem_vinculo_fatura": false,
+                "declarado_pelo_humano": false,
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000131",
+                  "tipo_fatura": "passaporte_taxa_matricula",
+                  "descricao": "Passaporte - curso de Piano",
+                  "competencia": "2026-10-01",
+                  "status": "aberta"
+                }
+              },
+              {
+                "ordem": 2,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "responsavel_financeiro": null,
+                "valor": 500,
+                "categoria": "parcela",
+                "competencia": "10/2026",
+                "canonical_fatura_id": "0a000000-0000-4000-8000-000000000132",
+                "descricao": "Parcela 10/2026 do curso de Bateria",
+                "sem_vinculo_fatura": false,
+                "declarado_pelo_humano": false,
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000132",
+                  "tipo_fatura": "parcela",
+                  "descricao": "Parcela 10/2026 do curso de Bateria",
+                  "competencia": "2026-10-01",
+                  "status": "aberta"
+                }
+              },
+              {
+                "ordem": 3,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "responsavel_financeiro": null,
+                "valor": 500,
+                "categoria": "parcela",
+                "competencia": "10/2026",
+                "canonical_fatura_id": "0a000000-0000-4000-8000-000000000133",
+                "descricao": "Parcela 10/2026 do curso de Piano",
+                "sem_vinculo_fatura": false,
+                "declarado_pelo_humano": false,
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000133",
+                  "tipo_fatura": "parcela",
+                  "descricao": "Parcela 10/2026 do curso de Piano",
+                  "competencia": "2026-10-01",
+                  "status": "aberta"
+                }
+              }
+            ],
+            "soma_itens": 1550,
+            "valor_total": 1550,
+            "alunos": 1,
+            "via": "itens"
+          },
+          "duplicata": "nunca"
         }
       },
       "passos": [
@@ -1615,6 +1682,382 @@
             "midia": "document",
             "body": "Aluna Fulana Beltrana de Souza\nPassaporte R$ 550,00\nParcela 10/2026 Bateria R$ 500,00\nParcela 10/2026 Piano R$ 500,00\nAdiantamento parcela 11/2026 R$ 100,00\nTotal R$ 1.650,00 pix"
           }
+        },
+        {
+          "t_s": 30,
+          "evento": {
+            "body": "pode",
+            "cita": "envio:1"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "Adiantamento parcela 11/2026 — R\\$ 100,00 \\(sem fatura\\)",
+          "porque": "o excedente aparece como item próprio"
+        },
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "responde\\W+\\*?pode",
+          "porque": "card que fecha pede pode"
+        },
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "mais de um aluno",
+          "nega": true
+        },
+        {
+          "check": "lancamentos",
+          "min": 4,
+          "max": 4,
+          "porque": "3 faturas + adiantamento, no lote"
+        },
+        {
+          "check": "lancamento",
+          "indice": 3,
+          "campo": "adiantamento",
+          "igual": true,
+          "porque": "adiantamento rastreável no item"
+        },
+        {
+          "check": "lancamento",
+          "indice": 3,
+          "campo": "sem_vinculo_fatura",
+          "igual": true
+        },
+        {
+          "check": "lancamento",
+          "indice": 3,
+          "campo": "declarado_pelo_humano",
+          "igual": true
+        },
+        {
+          "check": "lancamento",
+          "indice": 3,
+          "campo": "competencia",
+          "igual": "11/2026"
+        },
+        {
+          "check": "lancamento",
+          "indice": 3,
+          "campo": "canonical_fatura_id",
+          "igual": "null"
+        },
+        {
+          "check": "fatura_sem_duplo"
+        }
+      ],
+      "consertado": "29/09/2026 (fix/sol-v3-fila-29set): adiantamento declarado (valor + mês) vira item sem fatura do lote; o restante fecha no centavo com o resolvedor de combinação única."
+    },
+    {
+      "id": "B-134b",
+      "incidente": "SOL-134",
+      "tipo": "adiantamento_excedente",
+      "status": "passa",
+      "titulo": "Adiantamento declarado em prosa ('vai sobrar R$100 que será adiantamento para a parcela de novembro')",
+      "entrada": "Texto real do Recreio 29/09 (nomes trocados): passaporte + parcelas de outubro de bateria e piano, total R$ 1.650, 'vai sobrar R$100 que será adiantamento para a parcela de novembro'.",
+      "defeito": "Sem caminho para excedente declarado.",
+      "contexto": {
+        "unidade": "Recreio",
+        "fakes": {
+          "ocr": {
+            "text": "Pix R$ 1.650,00",
+            "status": "ok",
+            "file_bytes": 77001
+          },
+          "visao": null,
+          "interpretar": {
+            "categoria": "parcela",
+            "aluno": "Fulana Beltrana de Souza",
+            "forma": "pix"
+          },
+          "canonica": [
+            {
+              "se_nome": "fulana",
+              "resposta": {
+                "ok": true,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "motivo_escolha": "ultima_da_janela",
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000002",
+                  "aluno_id": 101,
+                  "tipo_fatura": "parcela",
+                  "descricao": "Parcela 10/2026 do curso de Bateria",
+                  "competencia": "2026-10-01",
+                  "numero_parcela": 10,
+                  "total_parcelas_contrato": 12,
+                  "status": "aberta",
+                  "data_vencimento": "2026-10-10",
+                  "vencida": false,
+                  "dias_atraso": 0,
+                  "valor_da_parcela": 500,
+                  "valor_hoje": 500
+                }
+              }
+            }
+          ],
+          "resolver_envelope": {
+            "ok": true,
+            "itens": [
+              {
+                "ordem": 1,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "responsavel_financeiro": null,
+                "valor": 550,
+                "categoria": "passaporte",
+                "competencia": "10/2026",
+                "canonical_fatura_id": "0a000000-0000-4000-8000-000000000131",
+                "descricao": "Passaporte - curso de Piano",
+                "sem_vinculo_fatura": false,
+                "declarado_pelo_humano": false,
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000131",
+                  "tipo_fatura": "passaporte_taxa_matricula",
+                  "descricao": "Passaporte - curso de Piano",
+                  "competencia": "2026-10-01",
+                  "status": "aberta"
+                }
+              },
+              {
+                "ordem": 2,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "responsavel_financeiro": null,
+                "valor": 500,
+                "categoria": "parcela",
+                "competencia": "10/2026",
+                "canonical_fatura_id": "0a000000-0000-4000-8000-000000000132",
+                "descricao": "Parcela 10/2026 do curso de Bateria",
+                "sem_vinculo_fatura": false,
+                "declarado_pelo_humano": false,
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000132",
+                  "tipo_fatura": "parcela",
+                  "descricao": "Parcela 10/2026 do curso de Bateria",
+                  "competencia": "2026-10-01",
+                  "status": "aberta"
+                }
+              },
+              {
+                "ordem": 3,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "responsavel_financeiro": null,
+                "valor": 500,
+                "categoria": "parcela",
+                "competencia": "10/2026",
+                "canonical_fatura_id": "0a000000-0000-4000-8000-000000000133",
+                "descricao": "Parcela 10/2026 do curso de Piano",
+                "sem_vinculo_fatura": false,
+                "declarado_pelo_humano": false,
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000133",
+                  "tipo_fatura": "parcela",
+                  "descricao": "Parcela 10/2026 do curso de Piano",
+                  "competencia": "2026-10-01",
+                  "status": "aberta"
+                }
+              }
+            ],
+            "soma_itens": 1550,
+            "valor_total": 1550,
+            "alunos": 1,
+            "via": "itens"
+          },
+          "duplicata": "nunca"
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "document",
+            "body": "PG pix aluna Fulana Beltrana de Souza passaporte + parcelas de outubro de bateria e piano, total R$1.650,00. Vai sobrar R$100 que será adiantamento para a parcela de novembro"
+          }
+        },
+        {
+          "t_s": 30,
+          "evento": {
+            "body": "pode",
+            "cita": "envio:1"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "Adiantamento parcela 11/2026 — R\\$ 100,00 \\(sem fatura\\)",
+          "porque": "o excedente aparece como item próprio"
+        },
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "responde\\W+\\*?pode",
+          "porque": "card que fecha pede pode"
+        },
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "mais de um aluno",
+          "nega": true
+        },
+        {
+          "check": "lancamentos",
+          "min": 4,
+          "max": 4,
+          "porque": "3 faturas + adiantamento, no lote"
+        },
+        {
+          "check": "lancamento",
+          "indice": 3,
+          "campo": "adiantamento",
+          "igual": true,
+          "porque": "adiantamento rastreável no item"
+        },
+        {
+          "check": "lancamento",
+          "indice": 3,
+          "campo": "competencia",
+          "igual": "11/2026"
+        },
+        {
+          "check": "fatura_sem_duplo"
+        }
+      ],
+      "consertado": "29/09/2026 (fix/sol-v3-fila-29set): adiantamento declarado (valor + mês) vira item sem fatura do lote; o restante fecha no centavo com o resolvedor de combinação única."
+    },
+    {
+      "id": "B-134c",
+      "incidente": "SOL-134",
+      "tipo": "adiantamento_excedente",
+      "status": "passa",
+      "titulo": "Sem declaração explícita, sobra não vira adiantamento e o comprovante maior segue bloqueado",
+      "entrada": "Comprovante de R$ 600 com legenda 'PG pix parcela 10/2026 aluna Fulana' e fatura de R$ 500; nada fala em adiantamento.",
+      "defeito": "(guarda) a Sol não pode inventar adiantamento para a sobra.",
+      "contexto": {
+        "unidade": "Recreio",
+        "fakes": {
+          "ocr": {
+            "text": "Comprovante Pix R$ 600,00",
+            "status": "ok",
+            "file_bytes": 77101
+          },
+          "visao": null,
+          "interpretar": {
+            "categoria": "parcela",
+            "aluno": "Fulana Beltrana de Souza",
+            "competencia": "10/2026",
+            "forma": "pix"
+          },
+          "canonica": [
+            {
+              "se_nome": "fulana",
+              "resposta": {
+                "ok": true,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "motivo_escolha": "ultima_da_janela",
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000002",
+                  "aluno_id": 101,
+                  "tipo_fatura": "parcela",
+                  "descricao": "Parcela 10/2026 do curso de Bateria",
+                  "competencia": "2026-10-01",
+                  "numero_parcela": 10,
+                  "total_parcelas_contrato": 12,
+                  "status": "aberta",
+                  "data_vencimento": "2026-10-10",
+                  "vencida": false,
+                  "dias_atraso": 0,
+                  "valor_da_parcela": 500,
+                  "valor_hoje": 500
+                }
+              }
+            }
+          ],
+          "resolver_envelope": {
+            "ok": true,
+            "itens": [
+              {
+                "ordem": 1,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "responsavel_financeiro": null,
+                "valor": 550,
+                "categoria": "passaporte",
+                "competencia": "10/2026",
+                "canonical_fatura_id": "0a000000-0000-4000-8000-000000000131",
+                "descricao": "Passaporte - curso de Piano",
+                "sem_vinculo_fatura": false,
+                "declarado_pelo_humano": false,
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000131",
+                  "tipo_fatura": "passaporte_taxa_matricula",
+                  "descricao": "Passaporte - curso de Piano",
+                  "competencia": "2026-10-01",
+                  "status": "aberta"
+                }
+              },
+              {
+                "ordem": 2,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "responsavel_financeiro": null,
+                "valor": 500,
+                "categoria": "parcela",
+                "competencia": "10/2026",
+                "canonical_fatura_id": "0a000000-0000-4000-8000-000000000132",
+                "descricao": "Parcela 10/2026 do curso de Bateria",
+                "sem_vinculo_fatura": false,
+                "declarado_pelo_humano": false,
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000132",
+                  "tipo_fatura": "parcela",
+                  "descricao": "Parcela 10/2026 do curso de Bateria",
+                  "competencia": "2026-10-01",
+                  "status": "aberta"
+                }
+              },
+              {
+                "ordem": 3,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "responsavel_financeiro": null,
+                "valor": 500,
+                "categoria": "parcela",
+                "competencia": "10/2026",
+                "canonical_fatura_id": "0a000000-0000-4000-8000-000000000133",
+                "descricao": "Parcela 10/2026 do curso de Piano",
+                "sem_vinculo_fatura": false,
+                "declarado_pelo_humano": false,
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000133",
+                  "tipo_fatura": "parcela",
+                  "descricao": "Parcela 10/2026 do curso de Piano",
+                  "competencia": "2026-10-01",
+                  "status": "aberta"
+                }
+              }
+            ],
+            "soma_itens": 1550,
+            "valor_total": 1550,
+            "alunos": 1,
+            "via": "itens"
+          },
+          "duplicata": "nunca"
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "document",
+            "body": "PG pix parcela 10/2026 aluna Fulana Beltrana de Souza R$600,00"
+          }
+        },
+        {
+          "t_s": 30,
+          "evento": {
+            "body": "pode",
+            "cita": "envio:1"
+          }
         }
       ],
       "esperado": [
@@ -1622,15 +2065,119 @@
           "check": "envio",
           "passo": 0,
           "regex": "adiantamento",
-          "porque": "o excedente aparece como item próprio"
+          "nega": true,
+          "porque": "não inventa adiantamento"
         },
         {
           "check": "envio",
           "passo": 0,
-          "regex": "mais de um aluno",
-          "nega": true
+          "regex": "responde\\W+\\*?pode",
+          "nega": true,
+          "porque": "comprovante maior que a fatura não pede pode"
+        },
+        {
+          "check": "nenhum_lancamento_valor",
+          "valor": 600
+        },
+        {
+          "check": "lancamentos",
+          "max": 0
         }
-      ]
+      ],
+      "consertado": "29/09/2026 (fix/sol-v3-fila-29set): adiantamento declarado (valor + mês) vira item sem fatura do lote; o restante fecha no centavo com o resolvedor de combinação única."
+    },
+    {
+      "id": "B-134d",
+      "incidente": "SOL-134",
+      "tipo": "adiantamento_excedente",
+      "status": "passa",
+      "titulo": "Adiantamento declarado mas faturas não fecham o restante: explica e não pede pode",
+      "entrada": "Mesmo texto do B-134; o resolvedor não acha combinação que feche R$ 1.550.",
+      "defeito": "(guarda) declaração de adiantamento não pode abrir card com faturas que não fecham.",
+      "contexto": {
+        "unidade": "Recreio",
+        "fakes": {
+          "ocr": {
+            "text": "Pix R$ 1.650,00",
+            "status": "ok",
+            "file_bytes": 77001
+          },
+          "visao": null,
+          "interpretar": {
+            "categoria": "parcela",
+            "aluno": "Fulana Beltrana de Souza",
+            "forma": "pix"
+          },
+          "canonica": [
+            {
+              "se_nome": "fulana",
+              "resposta": {
+                "ok": true,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "motivo_escolha": "ultima_da_janela",
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000002",
+                  "aluno_id": 101,
+                  "tipo_fatura": "parcela",
+                  "descricao": "Parcela 10/2026 do curso de Bateria",
+                  "competencia": "2026-10-01",
+                  "numero_parcela": 10,
+                  "total_parcelas_contrato": 12,
+                  "status": "aberta",
+                  "data_vencimento": "2026-10-10",
+                  "vencida": false,
+                  "dias_atraso": 0,
+                  "valor_da_parcela": 500,
+                  "valor_hoje": 500
+                }
+              }
+            }
+          ],
+          "resolver_envelope": {
+            "ok": false,
+            "motivo": "nenhuma_combinacao_fecha",
+            "valor_total": 1550
+          },
+          "duplicata": "nunca"
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "document",
+            "body": "Aluna Fulana Beltrana de Souza\nPassaporte R$ 550,00\nParcela 10/2026 Bateria R$ 500,00\nParcela 10/2026 Piano R$ 500,00\nAdiantamento parcela 11/2026 R$ 100,00\nTotal R$ 1.650,00 pix"
+          }
+        },
+        {
+          "t_s": 30,
+          "evento": {
+            "body": "pode",
+            "cita": "envio:1"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "n[ãa]o criei um card aprov[áa]vel"
+        },
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "responde\\W+\\*?pode",
+          "nega": true
+        },
+        {
+          "check": "lancamentos",
+          "max": 0
+        },
+        {
+          "check": "cards_aprovaveis",
+          "max": 0
+        }
+      ],
+      "consertado": "29/09/2026 (fix/sol-v3-fila-29set): adiantamento declarado (valor + mês) vira item sem fatura do lote; o restante fecha no centavo com o resolvedor de combinação única."
     },
     {
       "id": "B-104b",

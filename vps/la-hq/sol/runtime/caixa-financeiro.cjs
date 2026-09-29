@@ -1045,14 +1045,21 @@ function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competenci
 
 function montarPreviewMultiAluno({ unidadeNome, valorTotal, forma, categoria, itens }) {
   const lista = Array.isArray(itens) ? itens : [];
-  const semVinculo = lista.filter((i) => i && i.sem_vinculo_fatura === true);
-  const vinculadas = lista.length - semVinculo.length;
+  // Adiantamento declarado (SOL-134, 29/09/2026) é item sem fatura por definição,
+  // não exceção de desconto: tem linha e aviso próprios.
+  const adiantamentos = lista.filter((i) => i && i.adiantamento === true);
+  const semVinculo = lista.filter((i) => i && i.sem_vinculo_fatura === true && i.adiantamento !== true);
+  const vinculadas = lista.length - semVinculo.length - adiantamentos.length;
   const formaTxt = forma === 'cartao' ? 'cartão' : (forma || '❓ forma não identificada');
   const nomes = [...new Set(lista.map((i) => String(i.aluno_nome || '').trim()).filter(Boolean))];
   const mesmoAlunoVariasFaturas = lista.length >= 2 && nomes.length === 1;
   const categorias = [...new Set(lista.map((i) => String(i.categoria || '').toLowerCase().trim()).filter(Boolean))];
   const mesmoAlunoCategoriasMistas = mesmoAlunoVariasFaturas && categorias.length >= 2;
   const linhas = lista.map((item) => {
+    if (item.adiantamento === true) {
+      return `• Adiantamento parcela ${item.competencia} — ${fmtBRL(item.valor)} (sem fatura)`
+        + (mesmoAlunoVariasFaturas ? '' : ` · ${item.aluno_nome}`);
+    }
     const rotulo = mesmoAlunoVariasFaturas
       ? (mesmoAlunoCategoriasMistas
         ? (item.descricao || `${cap(item.categoria || 'Fatura')}${item.competencia ? ' ' + item.competencia : ''}`)
@@ -1063,7 +1070,8 @@ function montarPreviewMultiAluno({ unidadeNome, valorTotal, forma, categoria, it
   const responsaveis = [...new Set(lista.map((i) => String(i.responsavel_financeiro || '').trim()).filter(Boolean))];
   const linhaResponsavel = responsaveis.length === 1 ? `\n• Resp. financeiro: ${responsaveis[0]}`
     : (responsaveis.length > 1 ? `\n• Resp. financeiros: ${responsaveis.join(' · ')}` : '');
-  const descricoes = [...new Set(lista.map((i) => String(i.descricao || '').trim()).filter(Boolean))];
+  const descricoes = [...new Set(lista.filter((i) => i.adiantamento !== true)
+    .map((i) => String(i.descricao || '').trim()).filter(Boolean))];
   const cursos = descricoes.map((d) => d.match(/^taxa(?:s)? de matr[íi]cula do curso de (.+)$/i)).filter(Boolean).map((m) => m[1]);
   const faturaTexto = cursos.length === descricoes.length && cursos.length > 0
     ? `Taxas de Matrícula dos cursos de ${cursos.join(' e ')}`
@@ -1073,7 +1081,9 @@ function montarPreviewMultiAluno({ unidadeNome, valorTotal, forma, categoria, it
   const formasPagas = [...new Set(faturasPagas.map((f) => String((f.forma_pagamento && f.forma_pagamento.nome) || '').trim()).filter(Boolean))];
   const dataBR = datasPagas.length === 1 && /^\d{4}-\d{2}-\d{2}$/.test(datasPagas[0])
     ? datasPagas[0].slice(8, 10) + '/' + datasPagas[0].slice(5, 7) : null;
-  const linhaStatus = semVinculo.length > 0
+  const linhaStatus = adiantamentos.length > 0
+    ? `• ${vinculadas} fatura(s) validada(s) no Emusys + adiantamento declarado pela equipe (${adiantamentos.map((a) => `${fmtBRL(a.valor)} para ${a.competencia}`).join(', ')}), sem fatura — fica registrado para vincular quando a fatura nascer`
+    : semVinculo.length > 0
     ? `• ${vinculadas} de ${lista.length} item(ns) com fatura validada no Emusys`
     : (faturasPagas.length === lista.length && dataBR
       ? `• Já pago no Emusys em ${dataBR}${formasPagas.length === 1 ? ` no ${formasPagas[0]}` : ''} — falta lançar no caixa`
@@ -3335,6 +3345,59 @@ function extrairCompetenciasTexto(texto) {
   return achadas;
 }
 
+// 🔴 ADIANTAMENTO DECLARADO (SOL-134, decisão do Alf em 29/09/2026). Recreio 29/09:
+//    aluna com 2 cursos pagou R$ 1.650 = passaporte R$ 550 + parcelas 10/2026 de
+//    Bateria e Piano (R$ 500 cada) + R$ 100, e a equipe escreveu "vai sobrar R$100
+//    que será adiantamento para a parcela de novembro". O excedente vira o item
+//    "adiantamento parcela <competência>", declarado pela equipe, SEM fatura.
+// ⚠️ Só vale a declaração EXPLÍCITA: um trecho (linha ou frase) com a palavra
+//    adiantamento/adiantar, UM valor em R$ e o mês. Sem isso, nada — o código nunca
+//    deduz adiantamento de sobra (o comprovante maior que a fatura segue bloqueado).
+//    Mês sem ano é o próximo mês com esse nome a partir de hoje; mês passado não é
+//    adiantamento. Dois trechos declarando adiantamento = ambíguo = nada.
+function extrairAdiantamentoDeclarado(texto, hoje = new Date()) {
+  const bruto = String(texto || '');
+  if (!/adiant/i.test(bruto)) return null;
+  const trechos = bruto.split(/\n|;|\.(?=\s)|\s[·•]\s/).map((s) => s.trim()).filter(Boolean);
+  const mesHoje = hoje.getFullYear() * 12 + hoje.getMonth() + 1;
+  const achados = [];
+  for (const trecho of trechos) {
+    const tNorm = _normConf(trecho);
+    const posAdiant = tNorm.search(/\badiant(?:amento|ar|ado|ada|ei|ou|a)?\b/);
+    if (posAdiant < 0) continue;
+    const valores = trecho.match(/r\$\s*\d{1,3}(?:\.\d{3})*(?:,\d{2})?|r\$\s*\d+(?:,\d{2})?/gi) || [];
+    if (valores.length !== 1) { achados.push(null); continue; }
+    const valor = parseBRMoney(valores[0]);
+    // O mês do adiantamento é o que vem DEPOIS da palavra ("… adiantamento para a
+    // parcela de novembro"); só sem nenhum depois vale o de antes. "parcelas de
+    // outubro" no começo da frase é o que foi pago, não o adiantado.
+    const t = _normConf(trecho.replace(valores[0], ' '));
+    const pos = t.search(/\badiant/);
+    const candidatos = [];
+    for (const m of t.matchAll(/\b(0?[1-9]|1[0-2])\s*[\/.-]\s*(20\d{2}|\d{2})\b/g)) {
+      candidatos.push({ i: m.index, mes: Number(m[1]), ano: Number(m[2].length === 2 ? '20' + m[2] : m[2]) });
+    }
+    for (const m of t.matchAll(/\b(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b(?:\s*(?:de|\/|-)?\s*(20\d{2}))?/g)) {
+      const mes = _MES_NOME[m[1]];
+      let ano = m[2] ? Number(m[2]) : null;
+      if (!ano) {
+        // Sem ano: o próximo mês com esse nome, e só se estiver perto (até 3 meses).
+        ano = hoje.getFullYear();
+        if (ano * 12 + mes < mesHoje) ano += 1;
+        if (ano * 12 + mes - mesHoje > 3) ano = null;
+      }
+      if (ano) candidatos.push({ i: m.index, mes, ano });
+    }
+    const depois = candidatos.filter((c) => c.i > pos).sort((a, b) => a.i - b.i);
+    const antes = candidatos.filter((c) => c.i < pos).sort((a, b) => b.i - a.i);
+    const escolhido = depois[0] || (antes.length === 1 ? antes[0] : null);
+    if (!(valor > 0) || !escolhido || escolhido.ano * 12 + escolhido.mes < mesHoje) { achados.push(null); continue; }
+    achados.push({ valor, competencia: _mm(escolhido.mes, escolhido.ano), trecho });
+  }
+  if (achados.length !== 1 || !achados[0]) return null;
+  return achados[0];
+}
+
 // Correcao de competencia e um comando de CAMPO, nao uma correcao de aluno.
 // Exige linguagem corretiva; uma legenda nova como "PG parcela 09/2026" nao
 // pode sequestrar um card aberto, e "pode" continua sendo o unico gesto de
@@ -4576,6 +4639,95 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       motivo: res && res.motivo || 'fonte_indisponivel' };
   }
 
+  // 🔴 ADIANTAMENTO DECLARADO (SOL-134, decisão do Alf em 29/09/2026; caso Recreio
+  //    29/09, R$ 1.650 = passaporte 550 + parcelas 10/2026 de Bateria e Piano + R$ 100
+  //    "que será adiantamento para a parcela de novembro"). O código decide:
+  //    • o adiantamento é o que a equipe ESCREVEU (valor + mês), nunca a sobra;
+  //    • o restante (comprovante − adiantamento) tem de fechar NO CENTAVO com faturas
+  //      oficiais do aluno — o mesmo resolvedor de combinação única do Core;
+  //    • só então sai o card multi-item (faturas + "Adiantamento parcela MM/AAAA —
+  //      R$ X (sem fatura)") pelo lote de sempre (sol_caixa_lancar_recebimento_lote_v1),
+  //      e ele pede "pode". Não fechou: explica e não cria card aprovável.
+  function _competenciasDoTexto(texto, excluir, hoje = new Date()) {
+    const lista = extrairCompetenciasTexto(texto);
+    const t = _normConf(texto);
+    const mesHoje = hoje.getFullYear() * 12 + hoje.getMonth() + 1;
+    for (const m of t.matchAll(/\b(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b(?:\s*(?:de|\/|-)?\s*(20\d{2}))?/g)) {
+      const mes = _MES_NOME[m[1]];
+      let ano = m[2] ? Number(m[2]) : hoje.getFullYear();
+      // sem ano: o mês com esse nome mais perto de hoje (parcela paga pode estar atrasada)
+      if (!m[2]) {
+        if (ano * 12 + mes - mesHoje > 6) ano -= 1;
+        else if (mesHoje - (ano * 12 + mes) > 6) ano += 1;
+      }
+      const c = _mm(mes, ano);
+      if (!lista.includes(c)) lista.push(c);
+    }
+    return lista.filter((c) => c !== excluir);
+  }
+
+  async function tratarPagamentoComAdiantamento({ event, grupo, agora, textoHumano, textoFonte,
+    adiantamento, aluno, valor, forma, evidenceEnvelope }) {
+    const total = Number(valor);
+    const base = Math.round((total - Number(adiantamento.valor)) * 100) / 100;
+    const nome = String(aluno || '').trim();
+    if (!(base > 0) || !nomePlausivel(nome)) return null;
+    const falar = async (porque, motivo) => {
+      await sendFn(event.chatId,
+        `Entendi o adiantamento de *${fmtBRL(adiantamento.valor)}* para a parcela *${adiantamento.competencia}*`
+        + ` (${nome ? '*' + nome + '*, ' : ''}comprovante de *${fmtBRL(total)}*). ${porque}\n\n`
+        + '⚠️ Não criei um card aprovável.');
+      log({ acao: 'adiantamento_sem_fechamento', chatId: event.chatId, motivo,
+            valor_total: total, adiantamento: adiantamento.valor, competencia: adiantamento.competencia });
+      return { acao: 'adiantamento_sem_fechamento', motivo };
+    };
+    if (!forma) return falar('Falta a forma de pagamento (pix, dinheiro, cartão…).', 'forma_ausente');
+    const tn = _normConf(textoHumano.replace(adiantamento.trecho, ' '));
+    const categorias = [];
+    if (/\bpassaporte/.test(tn)) categorias.push('passaporte');
+    if (/\bmatr[ií]cula/.test(tn)) categorias.push('matricula');
+    if (/\b(parcela|mensalidade)/.test(tn) || !categorias.length) categorias.push('parcela');
+    const competencias = _competenciasDoTexto(textoHumano, adiantamento.competencia);
+    const envelope = { pagador: null, valor_total: base, forma,
+      itens: [{ aluno: nome, categorias, competencias }] };
+    let res = null;
+    try { res = await resolverEnvelopeFn({ unidade_id: grupo.unidade_id, envelope }); }
+    catch (e) { log({ acao: 'adiantamento_resolver_erro', chatId: event.chatId, erro: String(e && e.message) }); }
+    const itensFat = res && res.ok && Array.isArray(res.itens) ? res.itens : [];
+    const soma = itensFat.reduce((s, i) => s + Number(i && i.valor || 0), 0);
+    const mesmaPessoa = itensFat.length > 0 && itensFat.every((i) => i && nomePlausivel(i.aluno_nome)
+      && _mesmaPessoa(i.aluno_nome, nome));
+    const comFatura = itensFat.every((i) => i && i.canonical_fatura_id && i.sem_vinculo_fatura !== true);
+    if (!itensFat.length || Math.abs(soma - base) > 0.01 || !mesmaPessoa || !comFatura) {
+      const porque = res && res.motivo === 'combinacao_ambigua'
+        ? `Achei mais de uma combinação de faturas que fecha os *${fmtBRL(base)}* restantes — me diz quais são.`
+        : `Não achei faturas oficiais${nome ? ' de ' + nome : ''} que fechem exatamente os *${fmtBRL(base)}* restantes. Confere o nome, os meses e os valores.`;
+      return falar(porque, (res && res.motivo) || (!mesmaPessoa ? 'outra_pessoa' : 'soma_nao_fecha'));
+    }
+    const cat = categoriaDosItensV4(itensFat);
+    if (!cat.ok) return falar('A categoria de uma das faturas não veio completa da fonte oficial.', cat.motivo);
+    const titular = itensFat[0];
+    const itemAdiant = {
+      ordem: itensFat.length + 1, aluno_nome: titular.aluno_nome,
+      responsavel_financeiro: titular.responsavel_financeiro || null,
+      valor: Number(adiantamento.valor), categoria: 'parcela', competencia: adiantamento.competencia,
+      canonical_fatura_id: null, fatura: null,
+      descricao: `Adiantamento parcela ${adiantamento.competencia} · declarado pela equipe, sem vínculo de fatura`,
+      sem_vinculo_fatura: true, declarado_pelo_humano: true, adiantamento: true,
+    };
+    const itens = [...itensFat, itemAdiant];
+    log({ acao: 'adiantamento_declarado_resolvido', chatId: event.chatId, faturas: itensFat.length,
+          base, adiantamento: adiantamento.valor, competencia: adiantamento.competencia });
+    return abrirFluxoMultiAluno({
+      event, grupo, textoFonte: textoFonte || textoHumano, textoHumano, agora,
+      origemMessageId: event.messageId,
+      resolvidoPronto: { ...res, itens, valor_total: total, soma_itens: total },
+      agentFirstEnvelope: envelope, evidenceEnvelope, adiantamento,
+      intent: { ok: true, valor_total: total, forma, categoria: cat.categoria,
+        itens: itens.map((i) => ({ aluno_nome: i.aluno_nome, valor: Number(i.valor), categoria: i.categoria })) },
+    });
+  }
+
   async function prepararEPublicarPreviewV4({ event, grupo, texto, pendencia, result, previewStatus }) {
     if (!v3LedgerAtivo) return { ok: false, motivo: 'v3_indisponivel' };
     const origem = pendencia.origem || event.messageId;
@@ -4853,7 +5005,8 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
 
   async function abrirFluxoMultiAluno({ event, grupo, textoFonte, textoHumano, intent, agora,
     origemMessageId, resolvidoPronto = null, agentFirstEnvelope = null,
-    evidenceEnvelope = null, supersedePreviewId = null, textoPronto = null, tetoItens = null }) {
+    evidenceEnvelope = null, supersedePreviewId = null, textoPronto = null, tetoItens = null,
+    adiantamento = null }) {
     const arr = limparVelhos(event.chatId, agora);
     // Janela de reenvio: OCR lento (frequente, ~45s de timeout) leva a equipe a mandar o
     // MESMO comprovante de novo. Sem isto, cada reenvio empilha outra pendencia MANUAL
@@ -5016,7 +5169,22 @@ _Não lanço nada pela metade._`);
     // Defesa em profundidade: mesmo que a RPC antiga ou um mock devolva
     // `ok:true` com item sem fatura, o runtime não cria card aprovável sem a
     // evidência humana explícita. Isso cobre as três unidades no mesmo Core.
-    const _semVinculo = resolvido.itens.filter((item) => item && item.sem_vinculo_fatura === true);
+    // ADIANTAMENTO DECLARADO (SOL-134, 29/09/2026): o único item sem fatura que
+    // dispensa o protocolo de desconto é o adiantamento que a EQUIPE escreveu
+    // (valor e competência iguais ao declarado). Qualquer outro segue a regra.
+    const _ehAdiantamentoDeclarado = (item) => !!(adiantamento && item && item.adiantamento === true
+      && item.sem_vinculo_fatura === true && item.declarado_pelo_humano === true && !item.canonical_fatura_id
+      && Math.abs(Number(item.valor) - Number(adiantamento.valor)) < 0.01
+      && item.competencia === adiantamento.competencia);
+    const _adiantamentos = resolvido.itens.filter((item) => item && item.adiantamento === true);
+    if (_adiantamentos.length > 1 || _adiantamentos.some((item) => !_ehAdiantamentoDeclarado(item))) {
+      await colocarEmRevisao('adiantamento_incoerente');
+      await sendFn(event.chatId, '⚠️ Não consegui montar o adiantamento com segurança. Não criei card aprovável.');
+      log({ acao: 'adiantamento_incoerente', chatId: event.chatId, itens: _adiantamentos.length });
+      return { acao: 'manual_review_multi_student' };
+    }
+    const _semVinculo = resolvido.itens.filter((item) => item && item.sem_vinculo_fatura === true
+      && !_ehAdiantamentoDeclarado(item));
     // A RPC pode devolver o nome canônico completo, diferente do rótulo curto
     // digitado. A identidade estável dentro do lote é ordem + valor.
     const _chaveItem = (item, indice = null) => {
@@ -5057,8 +5225,9 @@ _Não lanço nada pela metade._`);
       cheque_banco: item.cheque_banco || null,
       cheque_bom_para: item.cheque_bom_para || null,
       sem_vinculo_fatura: !!item.sem_vinculo_fatura, declarado_pelo_humano: !!item.declarado_pelo_humano,
-      desconto_negociado_explicito: !!item.sem_vinculo_fatura
+      desconto_negociado_explicito: !!item.sem_vinculo_fatura && !_ehAdiantamentoDeclarado(item)
         && _autorizacaoDesconto.ok && _entradasAutorizadas.has(_chaveItem(item)),
+      ...(_ehAdiantamentoDeclarado(item) ? { adiantamento: true } : {}),
     }));
     const texto = textoPronto || montarPreviewMultiAluno({ unidadeNome: grupo.nome, valorTotal: intent.valor_total, forma: intent.forma, categoria: intent.categoria, itens });
     let idEnviou = null;
@@ -6261,6 +6430,38 @@ _Não lanço nada pela metade._`);
       // o card do Lucas (contrato inteiro, 12 meses) como "duas parcelas divergentes".
       // Periodo declarado e quitacao: vai para `multiplas`, que resolve as N faturas.
       const _periodoDaLegenda = extrairPeriodoMeses(legendaEfetiva);
+      // SOL-134 (29/09/2026): excedente declarado como adiantamento. Antes das
+      // competências explícitas: o mês do adiantamento não é parcela a quitar.
+      {
+        const _adiant = extrairAdiantamentoDeclarado(legendaEfetiva);
+        if (_adiant && !categoriaEhSaida(categoria)) {
+          // O total do pagamento: o "total" escrito pela equipe; sem ele, o valor
+          // lido do comprovante. A 1ª cifra da legenda (que vence o OCR no card
+          // singular) aqui é um dos ITENS, não o pagamento.
+          const _mTot = _normConf(legendaEfetiva).match(/\btotal\b[^0-9]{0,15}?(?:r\$\s*)?(\d{1,3}(?:\.\d{3})*(?:,\d{2})?|\d+(?:,\d{2})?)/);
+          const _totDecl = _mTot ? parseBRMoney('R$ ' + _mTot[1]) : null;
+          const _totOcr = extrairValorOcr(ocrText) || (visao && Number(visao.valor)) || null;
+          const _alunoNoTexto = (n) => !!(n && nomePlausivel(n)
+            && _normConf(legendaEfetiva).includes(_normConf(n)));
+          // Aluno: o rótulo humano ou o nome que o modelo tirou do texto — desde
+          // que esteja escrito na legenda. Nunca o pagador, nunca um palpite.
+          const _alunoAd = _alunoDaLegenda || (_alunoNoTexto(aluno) ? aluno : null);
+          if (_totDecl && _totOcr && Math.abs(_totDecl - _totOcr) > 0.01) {
+            await sendFn(chatId, `Entendi o adiantamento de *${fmtBRL(_adiant.valor)}* para a parcela *${_adiant.competencia}*, `
+              + `mas o total escrito (*${fmtBRL(_totDecl)}*) difere do comprovante (*${fmtBRL(_totOcr)}*). Confere o valor.\n\n⚠️ Não criei um card aprovável.`);
+            log({ acao: 'adiantamento_sem_fechamento', chatId, motivo: 'total_diverge_comprovante',
+                  total_escrito: _totDecl, comprovante: _totOcr });
+            return { acao: 'adiantamento_sem_fechamento', motivo: 'total_diverge_comprovante' };
+          }
+          const _totalAd = _totDecl || _totOcr || Number(valor);
+          if (_totalAd > _adiant.valor) {
+            const _rAd = await tratarPagamentoComAdiantamento({ event, grupo: grp, agora,
+              textoHumano: legendaEfetiva, textoFonte: textoClassificacao, adiantamento: _adiant,
+              aluno: _alunoAd, valor: _totalAd, forma, evidenceEnvelope });
+            if (_rAd) return _rAd;
+          }
+        }
+      }
       if (_competenciasDaLegenda.length >= 2 && _alunoDaLegenda && !_periodoDaLegenda
           && Number(valor) > 0 && forma && !categoriaEhSaida(categoria)) {
         const _parcelas = await tratarParcelasCompetenciasExplicitas({
@@ -9082,7 +9283,7 @@ function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slic
 module.exports = {
   _fonteFuturaLateralAoMesDeclarado,
   selecionarFaturasQuitacao, resolverFaturasQuitacao,
-  parseBRMoney, valorDoModelo, normalizarCompetenciaV4, montarEnvelopeV4, extrairValor, extrairForma, extrairFormaHumana, detectarComprovante, casarPode,
+  parseBRMoney, extrairAdiantamentoDeclarado, valorDoModelo, normalizarCompetenciaV4, montarEnvelopeV4, extrairValor, extrairForma, extrairFormaHumana, detectarComprovante, casarPode,
   _saidaExplicitaFromCaption, categoriaSaidaDoTexto, excedeFaturaUnica, deveBloquearLancamento, _valorLojinhaTexto, _compradorDeclaradoLojinha, _nomeHumanoTardio, extrairValorOcr, _vendedorRotulado, _mesmaPessoa,
   _alunoRotulado, _limparAlunoRotulado, _semAlunoDeclarado, extrairCategoriaCorrecao,
   _ehDitadoDeCaixa, classificarCorrecaoPendencia, listarPreviewsAbertosV3, _contestaFatura, rotearMensagemV4,
