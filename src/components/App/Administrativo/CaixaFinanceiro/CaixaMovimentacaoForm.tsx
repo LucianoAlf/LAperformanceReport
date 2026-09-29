@@ -31,7 +31,9 @@ import {
 } from '@/lib/caixaCategorias';
 import { cn } from '@/lib/utils';
 import { exigeIdentidade } from '@/lib/caixaIdentidade';
+import type { AvisoFaturas } from '@/lib/atualizarFaturasAluno';
 import {
+  atualizarFaturasDoAlunoNoEmusys,
   buscarFaturasDoAluno,
   filtrarFaturasPorBusca,
   resolverFaturaId,
@@ -109,6 +111,11 @@ export function CaixaMovimentacaoForm({
   const [faturasEscolhidas, setFaturasEscolhidas] = useState<FaturaParaCaixa[]>([]);
   const [irmaos, setIrmaos] = useState<FaturaParaCaixa[] | null>(null);
   const [carregandoIrmaos, setCarregandoIrmaos] = useState(false);
+  const [erroIrmaos, setErroIrmaos] = useState<string | null>(null);
+  // Botao "buscar no Emusys agora" (LAPE-56): fatura criada hoje em competencia +2
+  // so chegaria ao espelho no dia seguinte.
+  const [atualizandoEmusys, setAtualizandoEmusys] = useState(false);
+  const [avisoEmusys, setAvisoEmusys] = useState<AvisoFaturas | null>(null);
   // Salvar sem fatura so' com confirmacao consciente: sem isso o lancamento vira
   // pendencia de conciliacao no extrato/DRE — que e' o buraco que estamos fechando.
   const [semFaturaConfirmada, setSemFaturaConfirmada] = useState(false);
@@ -171,6 +178,8 @@ export function CaixaMovimentacaoForm({
     setResponsavel(initialValues?.responsavel || '');
     setFaturasEscolhidas([]);
     setIrmaos(null);
+    setErroIrmaos(null);
+    setAvisoEmusys(null);
     setSemFaturaConfirmada(false);
     setErro(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -180,13 +189,31 @@ export function CaixaMovimentacaoForm({
     const referencia = faturasEscolhidas[faturasEscolhidas.length - 1];
     if (!referencia?.emusysStudentId || !unidadeId) return;
     setCarregandoIrmaos(true);
+    setErroIrmaos(null);
     try {
       const lista = await buscarFaturasDoAluno(unidadeId, referencia.emusysStudentId, referencia.alunoNome);
       setIrmaos(lista);
-    } catch {
-      setIrmaos([]);
+    } catch (e) {
+      // Antes era catch mudo com lista vazia: a tela dizia "nenhuma outra fatura"
+      // quando na verdade a leitura tinha falhado.
+      setIrmaos(null);
+      setErroIrmaos(`Nao consegui carregar as parcelas do aluno: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setCarregandoIrmaos(false);
+    }
+  }
+
+  async function handleAtualizarNoEmusys() {
+    const referencia = faturasEscolhidas[faturasEscolhidas.length - 1];
+    if (!referencia?.emusysStudentId || !unidadeId) return;
+    setAtualizandoEmusys(true);
+    setAvisoEmusys(null);
+    try {
+      const aviso = await atualizarFaturasDoAlunoNoEmusys(unidadeId, referencia.emusysStudentId, referencia.alunoNome);
+      setAvisoEmusys(aviso);
+      if (aviso.tom !== 'erro') await handleListarIrmaos();
+    } finally {
+      setAtualizandoEmusys(false);
     }
   }
 
@@ -519,11 +546,44 @@ export function CaixaMovimentacaoForm({
             </button>
           )}
 
+          {faturasEscolhidas.length > 0 && faturasEscolhidas[faturasEscolhidas.length - 1]?.emusysStudentId && (
+            <button
+              type="button"
+              disabled={disabled || atualizandoEmusys || carregandoIrmaos}
+              onClick={() => void handleAtualizarNoEmusys()}
+              className="mt-1 block text-[11px] font-medium text-sky-300 underline-offset-2 hover:underline disabled:opacity-50"
+            >
+              {atualizandoEmusys
+                ? 'Consultando o Emusys...'
+                : 'Nao achou a parcela? Buscar as faturas deste aluno no Emusys agora'}
+            </button>
+          )}
+
+          {avisoEmusys && (
+            <p
+              role="status"
+              className={cn(
+                'mt-2 rounded-lg border px-3 py-2 text-[11px]',
+                avisoEmusys.tom === 'sucesso' && 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200',
+                avisoEmusys.tom === 'info' && 'border-sky-500/25 bg-sky-500/10 text-sky-200',
+                avisoEmusys.tom === 'erro' && 'border-rose-500/30 bg-rose-500/10 text-rose-200',
+              )}
+            >
+              {avisoEmusys.mensagem}
+            </p>
+          )}
+
+          {erroIrmaos && (
+            <p role="alert" className="mt-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-200">
+              {erroIrmaos}
+            </p>
+          )}
+
           {irmaos !== null && (
             <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/60 p-2">
               {irmaos.length === 0 && (
                 <li className="px-2 py-1 text-[11px] text-slate-500">
-                  Nenhuma outra fatura deste aluno no espelho — se o contrato foi pago adiantado, as parcelas futuras aparecem aqui depois do proximo sync do Emusys.
+                  Nenhuma outra fatura deste aluno no Report. Se a parcela foi criada hoje no Emusys, use "Buscar as faturas deste aluno no Emusys agora".
                 </li>
               )}
               {irmaos.map((f) => {

@@ -196,7 +196,7 @@ export function mapFatura(
   };
 }
 
-const retryAfterMs = (header: string | null, now: number) => {
+export const retryAfterMs = (header: string | null, now: number) => {
   if (!header) return 2000;
   const seconds = Number(header);
   if (Number.isFinite(seconds) && seconds >= 0) return Math.max(1000, Math.ceil(seconds * 1000));

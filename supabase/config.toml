@@ -293,3 +293,8 @@ verify_jwt = false
 # e resolvido em usuarios.perfil/unidade antes de qualquer chamada ao Drive).
 [functions.recital-sheets-sync]
 verify_jwt = false
+
+[functions.atualizar-faturas-aluno]
+# Botao "Atualizar faturas deste aluno" do caixa (LAPE-56). O navegador manda o JWT do
+# usuario; a funcao ainda exige perfil admin/unidade e acesso a unidade pedida.
+verify_jwt = true
