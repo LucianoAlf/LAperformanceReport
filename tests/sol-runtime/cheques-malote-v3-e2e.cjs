@@ -251,5 +251,43 @@ const tres = [chequeLido(1), chequeLido(2), chequeLido(3)];
     console.log('D2. não descarta, cancela pergunta, sim/ok pode aprovam só o ✅, nada vira nome — OK');
   }
 
+  // ------------------------------------------------------------ D3
+  {
+    // Paridade com calcular_valores_fatura_financeiro_v1 (valores conferidos por
+    // SELECT em 29/09/2026: original 447, sem desconto fixo, hoje 29/09).
+    for (const [cond, venc, esperado] of [[407, '2026-09-20', 457.28], [257, '2026-08-20', 461.90], [140, '2026-06-05', 473.22],
+      [130, '2026-06-20', 470.99], [130, '2026-07-20', 466.52], [127, '2026-08-05', 464.14], [127, '2026-08-31', 460.26]]) {
+      const r = chq.valorDoBanco({ status: 'aberta', valor_original: '447.00', desconto_fixo: '0.00', desconto_condicional: String(cond), data_vencimento: venc }, '2026-09-29');
+      assert.strictEqual(r.valor, esperado, `vencida ${venc} cond ${cond}`);
+      assert.strictEqual(r.vencida, true);
+    }
+    assert.strictEqual(chq.valorDoBanco({ status: 'aberta', valor_original: 447, desconto_condicional: 80, data_vencimento: '2026-10-10' }, '2026-09-29').valor, 367, 'em dia: com desconto');
+    assert.strictEqual(chq.valorDoBanco({ status: 'aberta', valor_original: 447, desconto_fixo: 20, desconto_condicional: 80, data_vencimento: '2026-09-29' }, '2026-09-29').valor, 347, 'vence hoje: ainda em dia');
+    assert.strictEqual(chq.valorDoBanco({ status: 'paga', valor_pago: '350.00', valor_original: 447, desconto_condicional: 80 }, '2026-09-29').valor, 350, 'paga: valor pago');
+
+    // Cheque do valor COM desconto numa parcela aberta e VENCIDA → ❓ com a diferença, sem card.
+    const VENC = U(31);
+    const t = montar({ leituras: [chequeLido(31, { valor: 367 })],
+      banco: { faturas: { [VENC]: F.faturaPadrao(VENC, { status: 'aberta', forma: null, valor_pago: null, valor_original: '447.00',
+        desconto_condicional: '80.00', data_vencimento: '2026-09-20', data_pagamento: null }) } } });
+    const r = await t.h.handle(midia('L1', arquivoTemp('D3')));
+    assert.strictEqual(r.acao, 'cheques_lote_sem_lancavel', JSON.stringify(r));
+    const txt = t.enviadas[0].t;
+    // 447 × 1,02 + 447 × 0,01 × 9/30 = 455,94 + 1,34 = 457,28
+    assert.ok(/Parcela \*vencida\* em 20\/09: hoje ela vale R\$ 457,28 no Emusys \(R\$ 447,00 sem o desconto de pontualidade \+ R\$ 10,28 de multa\/juros\)/.test(txt), txt);
+    assert.ok(/O cheque é de R\$ 367,00 — diferença de R\$ 90,28 a menos no cheque \(é o valor com desconto, de antes do vencimento\)/.test(txt), txt);
+    assert.ok(!/✅ .* vai para o caixa/.test(txt), 'não diz ✅');
+    assert.strictEqual(t.pendCheque().length, 0, 'sem card aprovável');
+    // Cheque do valor de HOJE → ✅ e o card diz que é o valor com multa.
+    const t2 = montar({ leituras: [chequeLido(31, { valor: 457.28 }), chequeLido(32)],
+      banco: { faturas: { [VENC]: F.faturaPadrao(VENC, { status: 'aberta', forma: null, valor_pago: null, valor_original: '447.00',
+        desconto_condicional: '80.00', data_vencimento: '2026-09-20', data_pagamento: null }) } } });
+    const r2 = await t2.h.handle(midia('L1', arquivoTemp('D3b')));
+    assert.strictEqual(r2.acao, 'preview_multi_aluno_enviado', JSON.stringify(r2));
+    assert.ok(/vencida em 20\/09 — valor de hoje R\$ 457,28 \(com multa\/juros\) — ✅ confere/.test(t2.enviadas[0].t), t2.enviadas[0].t);
+    assert.deepStrictEqual(t2.pendCheque()[0].itens.map((i) => i.valor), [457.28, 367]);
+    console.log('D3. parcela vencida: card usa o valor de hoje do banco e mostra a diferença — OK');
+  }
+
   console.log('\nRESULTADO: OK');
 })().catch((e) => { console.error('FALHOU:', e && e.stack || e); process.exit(1); });

@@ -280,6 +280,37 @@ function categoriaDaFatura(desc) {
 }
 const mmYYYY = (iso) => (iso && /^\d{4}-\d{2}/.test(iso) ? `${iso.slice(5, 7)}/${iso.slice(0, 4)}` : null);
 
+// 🔴 A MESMA RÉGUA DO "pode" (auditoria D3, 29/09). O validador do lote
+//    (`sol_caixa_validar_multi_aluno_snapshot_v1`) aceita o item só se o valor for
+//    `valor_pago` (paga) ou `valor_hoje` (aberta), e `valor_hoje` vem de
+//    `calcular_valores_fatura_financeiro_v1` (migration 20260817081504):
+//      • aberta, vencimento < hoje: (original − desconto fixo) + 2% de multa
+//        + 1% ao mês de mora pró-rata (cada parcela arredondada a 2 casas) —
+//        o desconto CONDICIONAL se perde;
+//      • aberta em dia: original − fixo − condicional;
+//      • paga: valor_pago (sem ele, o valor com desconto — o coalesce do validador).
+//    O card usava sempre "com desconto": dizia ✅ e o "pode" recusava o lote
+//    INTEIRO (snapshot_valor_fatura_mudou). Card que o "pode" não grava não sai.
+//    ⚠️ Paridade com o SQL conferida por SELECT (ver descrição do PR); se a função
+//       do banco mudar, esta muda junto.
+const r2 = (x) => Math.sign(x) * Math.round(Math.abs(x) * 100 + 1e-9) / 100;
+function valorDoBanco(f, hoje = hojeBRT()) {
+  if (!f) return null;
+  const orig = Number(f.valor_original || 0); const fixo = Number(f.desconto_fixo || 0); const cond = Number(f.desconto_condicional || 0);
+  const comDesconto = r2(Math.max(orig - fixo - cond, 0));
+  const semCondicional = r2(Math.max(orig - fixo, 0));
+  const st = String(f.status || '').trim().toLowerCase();
+  let v; let vencida = false; let multa = 0; let mora = 0;
+  if (st === 'paga') v = f.valor_pago != null && f.valor_pago !== '' ? Number(f.valor_pago) : comDesconto;
+  else if (st === 'aberta' && f.data_vencimento && String(f.data_vencimento).slice(0, 10) < hoje) {
+    const diasAtraso = Math.max(Math.round((Date.parse(hoje) - Date.parse(String(f.data_vencimento).slice(0, 10))) / 86400000), 0);
+    multa = r2(semCondicional * 0.02);
+    mora = r2(semCondicional * 0.01 * diasAtraso / 30);
+    v = r2(semCondicional + multa + mora); vencida = true;
+  } else v = comDesconto;
+  return { valor: v > 0 ? v : null, vencida, comDesconto, semCondicional, multa, mora };
+}
+
 // O que fazer com cada cheque, com a fatura REAL na mão. Só `lancar` vira card.
 //   lancar       — fatura paga em cheque (a unidade registrou ao receber) ou em
 //                  aberto, com o valor batendo;
@@ -291,17 +322,16 @@ const mmYYYY = (iso) => (iso && /^\d{4}-\d{2}/.test(iso) ? `${iso.slice(5, 7)}/$
 //   sem_parcela  — não sei de quem é (ou empate);
 //   leitura      — a leitura não foi provada.
 //   ja_no_caixa  — também quando o CHEQUE (banco + número) já está no caixa.
-function decidirCheque(it, fatura, jaLigada) {
+function decidirCheque(it, fatura, jaLigada, hoje = hojeBRT()) {
   if (!it.cheque.confiavel) return 'leitura';
   if (it.chequeNoCaixa) return 'ja_no_caixa';
   if (!it.escolha.fatura || !fatura) return 'sem_parcela';
   if (jaLigada) return 'ja_no_caixa';
   if (fatura.status === 'cancelada') return 'retirar';
   if (fatura.status === 'paga' && fatura.forma && !/cheque/i.test(fatura.forma)) return 'retirar';
-  const esperado = fatura.status === 'paga' && fatura.valor_pago != null
-    ? Number(fatura.valor_pago)
-    : Number(fatura.valor_original || 0) - Number(fatura.desconto_fixo || 0) - Number(fatura.desconto_condicional || 0);
-  if (!(esperado > 0) || Math.abs(esperado - Number(it.cheque.valor)) > 0.01) return 'valor';
+  const vb = valorDoBanco(fatura, hoje);
+  it.valorBanco = vb;
+  if (!vb || !(vb.valor > 0) || Math.abs(vb.valor - Number(it.cheque.valor)) > 0.01) return 'valor';
   return 'lancar';
 }
 
@@ -343,12 +373,10 @@ function nomeBonito(nome) {
     .map((w, i) => (i > 0 && CONECTIVOS.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join(' ');
 }
 
-function valorEsperado(f) {
-  if (!f) return null;
-  const v = f.status === 'paga' && f.valor_pago != null
-    ? Number(f.valor_pago)
-    : Number(f.valor_original || 0) - Number(f.desconto_fixo || 0) - Number(f.desconto_condicional || 0);
-  return v > 0 ? v : null;
+// O valor que o "pode" vai exigir (a régua do banco, valorDoBanco).
+function valorEsperado(f, it = null) {
+  const vb = (it && it.valorBanco) || valorDoBanco(f);
+  return vb && vb.valor > 0 ? vb.valor : null;
 }
 
 // UM cheque = UM bloco, uma informação por linha — o mesmo vocabulário do card de
@@ -368,9 +396,12 @@ function blocoCheque(it, i) {
   if (f && f.descricao) l.push(`📄 ${f.descricao}`);
   const d = it.decisao;
   if (d === 'lancar') {
+    const vb = it.valorBanco || valorDoBanco(f);
     l.push(f && f.status === 'paga'
       ? `💳 Paga no Emusys${f.data_pagamento ? ' em ' + ddmm(f.data_pagamento) : ''}${f.forma ? ' · ' + f.forma : ''} — ✅ confere`
-      : '💳 Em aberto no Emusys — ✅ valor confere');
+      : vb && vb.vencida
+        ? `💳 Em aberto no Emusys, vencida em ${ddmm(f.data_vencimento)} — valor de hoje ${fmtBRL(vb.valor)} (com multa/juros) — ✅ confere`
+        : '💳 Em aberto no Emusys — ✅ valor confere');
   } else if (d === 'retirar') {
     l.push(f && f.status === 'cancelada'
       ? '↩️ Essa parcela foi *cancelada* no Emusys — devolver o cheque ao cliente.'
@@ -384,8 +415,17 @@ function blocoCheque(it, i) {
   } else if (d === 'repetido') {
     l.push('🔁 Esse cheque apareceu duas vezes neste arquivo — conto só uma.');
   } else if (d === 'valor') {
-    const esp = valorEsperado(f);
-    l.push(`⚠️ O cheque é de ${fmtBRL(ch.valor)}${esp ? ` e a parcela é de ${fmtBRL(esp)}` : ' e não bate com a parcela'} — confere antes.`);
+    const vb = it.valorBanco || valorDoBanco(f);
+    const esp = valorEsperado(f, it);
+    const dif = esp && ch.valor ? r2(Number(ch.valor) - esp) : null;
+    const difTxt = dif ? ` — diferença de ${fmtBRL(Math.abs(dif))} ${dif < 0 ? 'a menos' : 'a mais'} no cheque` : '';
+    if (vb && vb.vencida) {
+      l.push(`⚠️ Parcela *vencida* em ${ddmm(f.data_vencimento)}: hoje ela vale ${fmtBRL(esp)} no Emusys`
+        + ` (${fmtBRL(vb.semCondicional)} sem o desconto de pontualidade + ${fmtBRL(r2(vb.multa + vb.mora))} de multa/juros).`);
+      l.push(`   O cheque é de ${fmtBRL(ch.valor)}${difTxt}${Math.abs(Number(ch.valor) - vb.comDesconto) < 0.01 ? ' (é o valor com desconto, de antes do vencimento)' : ''}. Não entra no caixa sem conferir.`);
+    } else {
+      l.push(`⚠️ O cheque é de ${fmtBRL(ch.valor)}${esp ? ` e a parcela é de ${fmtBRL(esp)}${difTxt}` : ' e não bate com a parcela'} — confere antes.`);
+    }
   } else if (d === 'leitura') {
     l.push(`📷 Não consegui confirmar a leitura: ${ch.problemas.join('; ')}.`);
     l.push('   Confere o número e o valor no cheque.');
@@ -585,7 +625,7 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
     const ids = [...new Set(itens.map((it) => it.escolha.fatura && it.escolha.fatura.la_report_fatura_id).filter(Boolean))];
     if (!ids.length) return { ok: true };
     const lista = ids.join(',');
-    const fats = await consulta(`emusys_faturas?select=id,emusys_fatura_id,descricao,status,valor_pago,valor_original,desconto_fixo,desconto_condicional,competencia,data_pagamento,forma:payload->>forma_pagamento_transacao&id=in.(${lista})`);
+    const fats = await consulta(`emusys_faturas?select=id,emusys_fatura_id,descricao,status,valor_pago,valor_original,desconto_fixo,desconto_condicional,competencia,data_pagamento,data_vencimento,forma:payload->>forma_pagamento_transacao&id=in.(${lista})`);
     const links = await consulta(`vw_caixa_movimentacao_fatura_links?select=fatura_id&fatura_id=in.(${lista})`);
     if (!Array.isArray(fats) || !Array.isArray(links)) return { ok: false };
     const porId = new Map(fats.map((f) => [f.id, f]));
@@ -884,7 +924,7 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
       await sendFn(event.chatId, '⚠️ Achei a parcela, mas não consegui conferir a fatura agora. Tenta de novo em instantes.');
       return { tratou: true, acao: 'cheques_identificacao_fonte' };
     }
-    it.decisao = decidirCheque(it, it.fatura, it.jaLigada);
+    it.decisao = decidirCheque(it, it.fatura, it.jaLigada, hojeBRT(agoraFn()));
     if (it.decisao === 'lancar' && lote.itens.some((x) => x !== it && x.decisao === 'lancar' && x.fatura && x.fatura.id === it.fatura.id)) it.decisao = 'sem_parcela';
     log({ acao: 'cheques_identificacao', indice: alvo.i + 1, decisao: it.decisao });
     const textoAtual = montarMensagem({ unidadeNome: lote.unidadeNome, loteData: lote.loteData, itens: [it], indices: [alvo.i],
@@ -943,6 +983,6 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
 
 module.exports = {
   criarCheques, pareceLoteCheques, dataDoLote, dvMod10, lerCmc7, extensoParaNumero,
-  normalizarCheque, escolherFatura, decidirCheque, itemDoCaixa, categoriaDaFatura, montarMensagem,
+  normalizarCheque, escolherFatura, decidirCheque, valorDoBanco, itemDoCaixa, categoriaDaFatura, montarMensagem,
   blocoCheque, nomeBonito, nomeOriginal, chaveCheque, UNIDADE_SIGLA,
 };
