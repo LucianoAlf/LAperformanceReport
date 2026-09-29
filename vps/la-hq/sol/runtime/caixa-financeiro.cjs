@@ -1791,6 +1791,36 @@ function casarParcelaCanonica(unidadeId, aluno, valor, { url, key } = carregarEn
 //  - "parcela N de M" so quando os dois existem;
 //  - valor da parcela = valor_com_desconto; vencida = valor_hoje (com multa/mora);
 //  - nunca apresentar valor_sem_desconto_condicional como "o valor da parcela".
+// Base comparável da fatura canônica: a MESMA regra de `linhasDaFatura`
+// (paga → valor pago; vencida em aberto → valor de hoje; senão valor da parcela).
+function baseDaFaturaCanonica(can) {
+  const f = can && can.fatura;
+  if (!f) return null;
+  const n = (v) => (v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v))) ? Number(v) : null;
+  const vp = n(f.valor_da_parcela), vh = n(f.valor_hoje), vPago = n(f.valor_pago);
+  if (f.status === 'paga' && vPago !== null) return vPago;
+  if (f.status !== 'paga' && f.vencida && vh !== null) return vh;
+  return vp;
+}
+
+// 🔴 29/09/2026 (Recreio, 12:54): comprovante de R$ 900 casado com UMA parcela de
+//    R$ 500 saiu com "difere — confere" e "Responde pode"; o "pode" gravava R$ 900
+//    na fatura de R$ 500. Comprovante MAIOR que a única fatura casada significa
+//    outros itens ou excedente: o card explica e pergunta, nunca pede aprovação.
+//    Menor que a fatura (parcial/negociação) continua como antes.
+function excedeFaturaUnica({ canonica, valor, composto, quitacao, multiplas } = {}) {
+  if (composto || multiplas || quitacao) return false;
+  const base = baseDaFaturaCanonica(canonica);
+  const v = Number(valor);
+  if (base === null || !(v > 0)) return false;
+  return v - base > 0.01;
+}
+
+function deveBloquearLancamento({ composto, parcela, canonica, valor, quitacao, multiplas } = {}) {
+  if (!composto && parcela && parcela.multiplas_no_mes && parcela.valor_bate === false) return true;
+  return excedeFaturaUnica({ canonica, valor, composto, quitacao, multiplas });
+}
+
 function linhasDaFatura(can, valorComprovante) {
   const f = can && can.fatura;
   if (!f) return [];
@@ -6432,7 +6462,7 @@ _Não lanço nada pela metade._`);
             n: quitacao.faturas && quitacao.faturas.n, motivo: quitacao.faturas && quitacao.faturas.motivo });
         }
       }
-      const bloqueiaLancamento = !composto && parcela && parcela.multiplas_no_mes && parcela.valor_bate === false;
+      const bloqueiaLancamento = deveBloquearLancamento({ composto, parcela, canonica, valor, quitacao, multiplas });
       const saidaCaixa = categoriaEhSaida(categoria);
       const descricaoSaida = saidaCaixa
         ? (bodyLimpo(legendaEfetiva)
@@ -7101,7 +7131,7 @@ _Não lanço nada pela metade._`);
             if (alvoVD.parcela && alvoVD.parcela.valor_da_parcela != null) {
               alvoVD.parcela.valor_bate = Math.abs(Number(alvoVD.parcela.valor_da_parcela) - _valorDitado) < 0.01;
             }
-            alvoVD.bloqueiaLancamento = !alvoVD.composto && alvoVD.parcela && alvoVD.parcela.multiplas_no_mes && alvoVD.parcela.valor_bate === false;
+            alvoVD.bloqueiaLancamento = deveBloquearLancamento({ composto: alvoVD.composto, parcela: alvoVD.parcela, canonica: alvoVD.canonica, valor: alvoVD.valor, quitacao: alvoVD.quitacao, multiplas: alvoVD.multiplas });
             alvoVD.ts = agora;
             let textoVD = 'Corrigi o valor:\n\n' + montarPreview({
               unidadeNome: alvoVD.nome, valor: alvoVD.valor, forma: alvoVD.forma,
@@ -7530,7 +7560,7 @@ _Não lanço nada pela metade._`);
           alvoP.parcela = _trocouAluno ? (parcela === alvoP.parcela ? null : parcela) : parcela;
           alvoP.composto = _trocouAluno ? (composto || null) : (composto || alvoP.composto || null);
           alvoP.canonica = _trocouAluno ? (canonica || null) : (canonica || alvoP.canonica || null);
-          alvoP.bloqueiaLancamento = !alvoP.composto && parcela && parcela.multiplas_no_mes && parcela.valor_bate === false;
+          alvoP.bloqueiaLancamento = deveBloquearLancamento({ composto: alvoP.composto, parcela, canonica: alvoP.canonica, valor: alvoP.valor, quitacao: alvoP.quitacao, multiplas: alvoP.multiplas });
           alvoP.faturaIndisponivel = canonicaIndisponivel;
           alvoP.bloqueiaFonteIndisponivel = bloqueiaFonteIndisponivel;
           alvoP.responsavelFinanceiro = responsavelFinanceiro;
@@ -7745,7 +7775,7 @@ _Não lanço nada pela metade._`);
           alvoP.composto = null;
           alvoP.divisao = null;
           alvoP.competencia = competencia;
-          alvoP.bloqueiaLancamento = !alvoP.composto && parcela && parcela.multiplas_no_mes && parcela.valor_bate === false;
+          alvoP.bloqueiaLancamento = deveBloquearLancamento({ composto: alvoP.composto, parcela, canonica: alvoP.canonica, valor: alvoP.valor, quitacao: alvoP.quitacao, multiplas: alvoP.multiplas });
           alvoP.confirmacaoManualFonte = !!(confirmacaoManual && faturaIndisponivel);
           alvoP.bloqueiaFonteIndisponivel = faturaIndisponivel && !alvoP.confirmacaoManualFonte;
           alvoP.faturaIndisponivel = faturaIndisponivel && !alvoP.confirmacaoManualFonte;
@@ -8699,7 +8729,7 @@ module.exports = {
   _fonteFuturaLateralAoMesDeclarado,
   selecionarFaturasQuitacao, resolverFaturasQuitacao,
   parseBRMoney, valorDoModelo, normalizarCompetenciaV4, montarEnvelopeV4, extrairValor, extrairForma, extrairFormaHumana, detectarComprovante, casarPode,
-  _saidaExplicitaFromCaption, _nomeHumanoTardio, extrairValorOcr, _vendedorRotulado, _mesmaPessoa,
+  _saidaExplicitaFromCaption, excedeFaturaUnica, deveBloquearLancamento, _nomeHumanoTardio, extrairValorOcr, _vendedorRotulado, _mesmaPessoa,
   _alunoRotulado, _limparAlunoRotulado, _semAlunoDeclarado, extrairCategoriaCorrecao,
   _ehDitadoDeCaixa, classificarCorrecaoPendencia, listarPreviewsAbertosV3, _contestaFatura, rotearMensagemV4,
   montarEnvelopeV4, aplicarCorrecaoEnvelope, _v4CanarioLigado, resolverEnvelopeCaixaV1, valorConfereComTexto,
