@@ -30,6 +30,16 @@
 >
 > Última atualização: 2026-09-14.
 
+### Buscar as faturas de um aluno no Emusys na hora (caixa, desde 29/09/2026, LAPE-56)
+
+No lançamento manual do caixa, depois de escolher uma fatura do aluno, o botão **"Não achou a parcela? Buscar as faturas deste aluno no Emusys agora"** traz todas as faturas daquela pessoa direto do Emusys e grava no espelho.
+
+- **Por que existe:** meses a partir do +2 só são sincronizados uma vez por dia. Uma fatura criada hoje (matrícula nova, crédito, adiantamento) não aparecia para o caixa até o dia seguinte. Parcela não se lança sem fatura, porque sem fatura o dinheiro contaria como receita nova e depois de novo pelo sync.
+- **O que ele NÃO faz:** não abre rodada do sync e não mexe no que os relatórios canônicos leem (eles leem as rodadas). A fatura trazida aparece no caixa na hora e nos relatórios na próxima rodada daquele mês.
+- **Retorno para a tela:** quantas faturas novas vieram, "nada novo", Emusys limitando (`429`), Emusys sem resposta, aluno sem id do Emusys, sem permissão ou falha ao gravar. Toda falha diz que nada foi alterado.
+- **Rastro:** `automacao_log`, `evento = 'faturas_aluno_sob_demanda'`.
+- **Limitação:** a tela identifica o aluno pela fatura escolhida. Aluno sem nenhuma fatura no Report ainda não tem o botão.
+
 ### Lote de cheques para depósito → caixa da Sol (desde 26/09/2026)
 
 A unidade posta no grupo do financeiro o PDF do lote ("2 CH - 20SETEMBRO2026 - C.GRANDE"). A Sol lê cada cheque, acha a parcela e lança o cheque no **caixa da Sol do dia** (forma `cheque`), pelo card e "pode" de sempre. Decisão do Alf (26/09): o Super Folha já puxa o caixa da Sol (`export-caixa-movimentacoes`); a Sol **não** chama o Super Folha.

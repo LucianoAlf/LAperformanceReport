@@ -18,6 +18,11 @@ import {
   carregarFaturasAlunosFinanceiras,
   type FaturaFinanceiraItem,
 } from '@/lib/faturasAlunosFinanceiras';
+import {
+  avisoDaAtualizacao,
+  type AvisoFaturas,
+  type RespostaAtualizarFaturas,
+} from '@/lib/atualizarFaturasAluno';
 
 export interface FaturaParaCaixa {
   /** Chave composta "<unidade>:<emusys_fatura_id>" — identifica na lista, NAO e a FK. */
@@ -166,4 +171,34 @@ export function useFaturasParaCaixa(unidadeId?: string | null) {
     () => ({ faturas, carregando, erro, recarregar: carregar }),
     [carregando, carregar, erro, faturas],
   );
+}
+
+/**
+ * Busca no Emusys, na hora, todas as faturas deste aluno e grava no espelho
+ * (edge `atualizar-faturas-aluno`, LAPE-56). Existe porque a competencia +2 em
+ * diante so' e' sincronizada 1x/dia: fatura criada hoje (matricula nova,
+ * credito, adiantamento) nao aparecia para o caixa ate o dia seguinte.
+ * Nunca lanca: todo desfecho volta como aviso para a tela.
+ */
+export async function atualizarFaturasDoAlunoNoEmusys(
+  unidadeId: string,
+  emusysStudentId: string,
+  alunoNome: string,
+): Promise<AvisoFaturas> {
+  try {
+    const { data, error } = await supabase.functions.invoke('atualizar-faturas-aluno', {
+      method: 'POST',
+      body: { unidade_id: unidadeId, emusys_student_id: emusysStudentId, aluno_nome: alunoNome },
+    });
+    if (!error) return avisoDaAtualizacao(200, data as RespostaAtualizarFaturas);
+
+    const contexto = (error as { context?: unknown }).context;
+    if (contexto instanceof Response) {
+      const corpo = await contexto.clone().json().catch(() => null) as RespostaAtualizarFaturas | null;
+      return avisoDaAtualizacao(contexto.status, corpo);
+    }
+    return avisoDaAtualizacao(null, null, error.message);
+  } catch (erro) {
+    return avisoDaAtualizacao(null, null, erro instanceof Error ? erro.message : String(erro));
+  }
 }
