@@ -1,7 +1,7 @@
-import { useEffect } from 'react';
 import { Check } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { FolhaMobile } from './FolhaMobile';
 import type { OpcaoUnidade } from './unidadeLabel';
 
 interface Props {
@@ -35,66 +35,40 @@ export function FolhaUnidades({
   onEscolher,
   erro = null,
 }: Props) {
-  useEffect(() => {
-    if (!aberto) return undefined;
-    const aoTeclar = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onFechar();
-    };
-    window.addEventListener('keydown', aoTeclar);
-    return () => window.removeEventListener('keydown', aoTeclar);
-  }, [aberto, onFechar]);
-
-  if (!aberto) return null;
-
+  // Casca e movimento vem da `FolhaMobile` (veu, Esc, area segura, subida de
+  // 180ms). Aqui fica so a lista — que e' o que esta folha tem de proprio.
   return (
-    <>
-      <button
-        type="button"
-        aria-label="Fechar unidades"
-        onClick={onFechar}
-        className="fixed inset-0 z-50 bg-slate-950/70"
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Unidade"
-        className="fixed inset-x-0 bottom-0 z-50 max-h-[84%] overflow-y-auto rounded-t-2xl border-t border-slate-800 bg-slate-900 px-3 pt-2"
-        style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
-      >
-        <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-slate-700" aria-hidden="true" />
-        <h2 className="mb-3 px-1 font-grotesk text-sm font-bold text-slate-50">Unidade</h2>
+    <FolhaMobile aberto={aberto} onFechar={onFechar} titulo="Unidade" rotuloFechar="Fechar unidades">
+      {erro !== null && (
+        <p className="mb-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-[12.5px] text-rose-200">
+          Não consegui carregar as unidades: {erro}
+        </p>
+      )}
 
-        {erro !== null && (
-          <p className="mb-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-[12.5px] text-rose-200">
-            Não consegui carregar as unidades: {erro}
-          </p>
-        )}
-
-        <div className="flex flex-col gap-1">
-          {opcoes.map((opcao) => {
-            const ativa = opcao.id === selecionada;
-            return (
-              <button
-                key={opcao.id ?? 'consolidado'}
-                type="button"
-                aria-current={ativa ? 'true' : undefined}
-                onClick={() => {
-                  onEscolher(opcao.id);
-                  onFechar();
-                }}
-                className={cn(
-                  'flex min-h-[44px] items-center justify-between gap-2 rounded-lg px-3 text-left text-sm',
-                  ativa ? 'bg-slate-800 font-bold text-cyan-400' : 'font-semibold text-slate-300',
-                )}
-              >
-                <span className="min-w-0 truncate">{opcao.nome}</span>
-                {ativa && <Check className="h-4 w-4 flex-none" aria-hidden="true" />}
-              </button>
-            );
-          })}
-        </div>
+      <div className="flex flex-col gap-1">
+        {opcoes.map((opcao) => {
+          const ativa = opcao.id === selecionada;
+          return (
+            <button
+              key={opcao.id ?? 'consolidado'}
+              type="button"
+              aria-current={ativa ? 'true' : undefined}
+              onClick={() => {
+                onEscolher(opcao.id);
+                onFechar();
+              }}
+              className={cn(
+                'flex min-h-[44px] items-center justify-between gap-2 rounded-lg px-3 text-left text-sm',
+                ativa ? 'bg-slate-800 font-bold text-cyan-400' : 'font-semibold text-slate-300',
+              )}
+            >
+              <span className="min-w-0 truncate">{opcao.nome}</span>
+              {ativa && <Check className="h-4 w-4 flex-none" aria-hidden="true" />}
+            </button>
+          );
+        })}
       </div>
-    </>
+    </FolhaMobile>
   );
 }
 

@@ -1,5 +1,7 @@
+import type { ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { CLASSE_PAINEL, CLASSE_VEU, dataEntrou, useFolhaAnimada } from '@/mobile/useFolhaAnimada';
 import type { AlunoAgenda, AulaAgenda, PresencaEnvelopeAgenda } from '@/hooks/useAgendaDia';
 import { aulaJaOcorreu, formatarDataCalculo, riscoDesatualizado } from '@/lib/agenda';
 import {
@@ -7,6 +9,50 @@ import {
   adaptarPresencaProfessorCanonica,
   rotuloPresencaFonte,
 } from '@/lib/presencaCanonica';
+
+/**
+ * A casca de folha do detalhe da aula.
+ *
+ * Componente proprio, e nao um `if` dentro do `AgendaDrawer`, por uma razao
+ * so: as regras dos hooks exigem chamar `useFolhaAnimada` no topo, e ali ele
+ * rodaria tambem no ramo do PAINEL — que e' o do desktop. Um estado e um
+ * `requestAnimationFrame` a mais por abertura de painel seriam invisiveis,
+ * mas seriam mudanca no desktop, e a frente inteira se apoia em nao ter
+ * nenhuma.
+ *
+ * ⚠️ So a ENTRADA e animada: quem monta esta folha e' a `AgendaPage`, com
+ * `{selecionada && ...}`, entao ao fechar o pai desmonta e nao ha o que
+ * animar. Segurar o desmonte exigiria estado de saida na pagina — desproporcional
+ * para 180ms de um gesto que ja terminou na cabeca de quem tocou em fechar.
+ */
+function FolhaDetalheAula({ onFechar, children }: { onFechar: () => void; children: ReactNode }) {
+  const { entrou } = useFolhaAnimada(true);
+  return (
+    <>
+      <button
+        type="button"
+        aria-label="Fechar detalhe da aula"
+        onClick={onFechar}
+        {...dataEntrou(entrou)}
+        className={`fixed inset-0 z-50 bg-slate-950/70 ${CLASSE_VEU}`}
+      />
+      {/* Aqui a rolagem interna E necessaria — ao contrario do painel, a
+          folha nao herda a altura de uma grade irma: ela tem um teto e o
+          conteudo de uma turma cheia passa dele. */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Detalhe da aula"
+        {...dataEntrou(entrou)}
+        className={`fixed inset-x-0 bottom-0 z-50 flex max-h-[88%] flex-col gap-3.5 overflow-y-auto rounded-t-2xl border-t border-slate-800 bg-slate-900 px-4 pt-2 ${CLASSE_PAINEL}`}
+        style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
+      >
+        <div className="mx-auto h-1 w-9 flex-none rounded-full bg-slate-700" aria-hidden="true" />
+        {children}
+      </div>
+    </>
+  );
+}
 
 function corRisco(v: number): string {
   if (v >= 60) return 'text-rose-400';
@@ -382,29 +428,7 @@ export function AgendaDrawer({
   );
 
   if (variante === 'folha') {
-    return (
-      <>
-        <button
-          type="button"
-          aria-label="Fechar detalhe da aula"
-          onClick={onFechar}
-          className="fixed inset-0 z-50 bg-slate-950/70"
-        />
-        {/* Aqui a rolagem interna E necessaria — ao contrario do painel, a
-            folha nao herda a altura de uma grade irma: ela tem um teto e o
-            conteudo de uma turma cheia passa dele. */}
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Detalhe da aula"
-          className="fixed inset-x-0 bottom-0 z-50 flex max-h-[88%] flex-col gap-3.5 overflow-y-auto rounded-t-2xl border-t border-slate-800 bg-slate-900 px-4 pt-2"
-          style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
-        >
-          <div className="mx-auto h-1 w-9 flex-none rounded-full bg-slate-700" aria-hidden="true" />
-          {conteudo}
-        </div>
-      </>
-    );
+    return <FolhaDetalheAula onFechar={onFechar}>{conteudo}</FolhaDetalheAula>;
   }
 
   return (

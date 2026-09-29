@@ -1,8 +1,8 @@
-import { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 
 import { MENU_ADMIN, MENU_HISTORICO, MENU_OPERACIONAL, MENU_PRINCIPAL, type ItemMenu } from '@/lib/menuItems';
 import { filtrarVisiveis, type ContextoVisibilidade } from '@/lib/menuVisibilidade';
+import { FolhaMobile } from './FolhaMobile';
 
 interface Props {
   aberto: boolean;
@@ -44,15 +44,6 @@ function Grupo({ titulo, itens, onFechar }: { titulo: string; itens: ItemMenu[];
 }
 
 export function MobileMaisSheet({ aberto, onFechar, contexto }: Props) {
-  useEffect(() => {
-    if (!aberto) return;
-    const aoTeclar = (e: KeyboardEvent) => { if (e.key === 'Escape') onFechar(); };
-    window.addEventListener('keydown', aoTeclar);
-    return () => window.removeEventListener('keydown', aoTeclar);
-  }, [aberto, onFechar]);
-
-  if (!aberto) return null;
-
   const principal = filtrarVisiveis(MENU_PRINCIPAL, contexto);
   const operacional = filtrarVisiveis(MENU_OPERACIONAL, contexto);
   const admin = filtrarVisiveis(MENU_ADMIN, contexto);
@@ -61,31 +52,23 @@ export function MobileMaisSheet({ aberto, onFechar, contexto }: Props) {
   // do gate de admin, visivel a todo mundo.
   const historico = filtrarVisiveis(MENU_HISTORICO, contexto);
 
+  // A casca (veu, painel, alca, Esc, area segura) e o movimento vem da
+  // `FolhaMobile`. Ate 29/09/2026 estavam copiados aqui, e era por isso que o
+  // menu ficaria de fora da subida de 180ms — justamente a folha que mais se
+  // abre. O que e' desta folha e' o grid de modulos abaixo.
   return (
-    <>
-      <button
-        type="button"
-        aria-label="Fechar menu"
-        onClick={onFechar}
-        className="fixed inset-0 z-40 bg-slate-950/70"
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Todos os módulos"
-        className="fixed inset-x-0 bottom-0 z-50 max-h-[84%] overflow-y-auto rounded-t-2xl border-t border-slate-800 bg-slate-900 px-3 pt-2"
-        style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
-      >
-        <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-slate-700" aria-hidden="true" />
-        <h2 className="font-grotesk text-sm font-bold text-slate-50">Todos os módulos</h2>
-        <p className="text-[10.5px] text-slate-500">O que você abre direto fica na barra de baixo</p>
-
-        <Grupo titulo="Principal" itens={principal} onFechar={onFechar} />
-        <Grupo titulo="Operacional" itens={operacional} onFechar={onFechar} />
-        <Grupo titulo="Administração" itens={admin} onFechar={onFechar} />
-        <Grupo titulo="Histórico" itens={historico} onFechar={onFechar} />
-      </div>
-    </>
+    <FolhaMobile
+      aberto={aberto}
+      onFechar={onFechar}
+      titulo="Todos os módulos"
+      subtitulo="O que você abre direto fica na barra de baixo"
+      rotuloFechar="Fechar menu"
+    >
+      <Grupo titulo="Principal" itens={principal} onFechar={onFechar} />
+      <Grupo titulo="Operacional" itens={operacional} onFechar={onFechar} />
+      <Grupo titulo="Administração" itens={admin} onFechar={onFechar} />
+      <Grupo titulo="Histórico" itens={historico} onFechar={onFechar} />
+    </FolhaMobile>
   );
 }
 
