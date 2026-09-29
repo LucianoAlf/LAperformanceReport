@@ -1729,6 +1729,120 @@
           "max": 0
         }
       ]
+    },
+    {
+      "id": "B-143",
+      "incidente": "SOL-143",
+      "tipo": "correcao/vinculo",
+      "status": "passa",
+      "titulo": "Autor corrige competência mesmo citando uma mensagem humana, sem liberar conversa de terceiros",
+      "entrada": "Card único do remetente A; remetente B escreve 'Vou ver aqui'; A responde essa mensagem humana com 'A parcela é 10/2026'.",
+      "defeito": "A Sol dizia falsamente que o card não estava ativo, embora houvesse um único card ativo do próprio autor.",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "interpretar": {
+            "categoria": "parcela",
+            "aluno": "Fulana Beltrana de Souza",
+            "competencia": "06/2026",
+            "forma": "dinheiro"
+          },
+          "canonica": [
+            {
+              "se_nome": "fulana",
+              "resposta": {
+                "ok": false,
+                "motivo": "nenhuma_fatura_na_competencia"
+              }
+            }
+          ],
+          "casar": [
+            {
+              "se_nome": "fulana",
+              "resposta": {
+                "ok": true,
+                "ambiguo": false,
+                "parcela": {
+                  "valor": 450,
+                  "status": "aberta",
+                  "aluno_id": 3,
+                  "atrasada": false,
+                  "descricao": "Parcela 10/2026 do curso de Guitarra",
+                  "fatura_id": "0a000000-0000-4000-8000-000000000010",
+                  "ja_quitada": false,
+                  "valor_bate": true,
+                  "vencimento": "20/10",
+                  "competencia": "10/2026",
+                  "dias_atraso": 0,
+                  "valor_tabela": 450,
+                  "multiplas_no_mes": false
+                },
+                "aluno_id": 3,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "confianca_nome": 1,
+                "parcelas_abertas": 4
+              }
+            }
+          ]
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "id": "COMPROVANTE",
+            "midia": "image",
+            "body": "PG parcela 06/26\nAluno: Fulana Beltrana de Souza\nLA CG - R$450,00 (dinheiro)",
+            "remetente": "A"
+          }
+        },
+        {
+          "t_s": 20,
+          "evento": {
+            "id": "CONVERSA",
+            "body": "Vou ver aqui",
+            "remetente": "B"
+          }
+        },
+        {
+          "t_s": 30,
+          "evento": {
+            "body": "A parcela é 10/2026",
+            "remetente": "B",
+            "cita": "msg:CONVERSA"
+          }
+        },
+        {
+          "t_s": 40,
+          "evento": {
+            "body": "A parcela é 10/2026",
+            "remetente": "A",
+            "cita": "msg:CONVERSA"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "acao",
+          "passo": 2,
+          "regex": "correcao_competencia_sem_alvo",
+          "porque": "outra pessoa não pode corrigir citando conversa"
+        },
+        {
+          "check": "acao",
+          "passo": 3,
+          "regex": "preview_competencia_corrigida"
+        },
+        {
+          "check": "envio",
+          "passo": 3,
+          "regex": "card não está mais ativo",
+          "nega": true
+        },
+        {
+          "check": "lancamentos",
+          "max": 0
+        }
+      ]
     }
   ]
 }

@@ -7358,11 +7358,28 @@ _Não lanço nada pela metade._`);
         if (_competenciaCorrigida) {
           const _citaComp = (x, id) => x.previewId === id || x.origem === id
             || (Array.isArray(x.msgIds) && x.msgIds.includes(id));
+          const elegiveisCompTodos = _arrPTodos.filter((x) => !categoriaEhSaida(x.categoria)
+            && x.tipoOperacao !== 'manual_review_multi_student'
+            && x.tipoOperacao !== 'lancar_recebimento_lote');
           const elegiveisComp = arrP.filter((x) => !categoriaEhSaida(x.categoria)
             && x.tipoOperacao !== 'manual_review_multi_student'
             && x.tipoOperacao !== 'lancar_recebimento_lote');
           let alvoComp = null;
-          if (event.quotedMessageId) alvoComp = elegiveisComp.find((x) => _citaComp(x, event.quotedMessageId)) || null;
+          if (event.quotedMessageId) {
+            alvoComp = elegiveisCompTodos.find((x) => _citaComp(x, event.quotedMessageId)) || null;
+            // 🔴 29/09/2026 (CG 17:43): o autor respondeu uma mensagem humana
+            // ("Vou ver aqui"), não o card, com a correção explícita "A parcela
+            // é 10/2026". Havia um único card ativo dele, mas a Sol mentiu que o
+            // card não estava mais ativo. A citação errada não deve sequestrar uma
+            // correção explícita do próprio autor; conversa de outra pessoa e
+            // pergunta continuam sem poder tocar no card.
+            if (!alvoComp && elegiveisCompTodos.length === 1
+                && _ehAutor(elegiveisCompTodos[0]) && !_pergunta) {
+              alvoComp = elegiveisCompTodos[0];
+              log({ acao: 'correcao_competencia_autor_citou_conversa', chatId,
+                    quotedMessageId: event.quotedMessageId });
+            }
+          }
           if (!event.quotedMessageId && elegiveisComp.length === 1) alvoComp = elegiveisComp[0];
           if (!alvoComp) {
             const motivo = event.quotedMessageId ? 'card_citado_nao_encontrado' : 'mais_de_um_card';
