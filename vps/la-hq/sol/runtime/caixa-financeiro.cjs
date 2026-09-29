@@ -3593,6 +3593,11 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   const v3LedgerMode = String(process.env.SOL_CAIXA_V3_LEDGER_MODE || '').toLowerCase();
   const cheques = chequesFn !== undefined ? chequesFn
     : (_chequesLib ? _chequesLib.criarCheques({ carregarEnv, sendFn, log }) : null);
+  // Cheques (29/09): o módulo pergunta ao caixa se o card de um lote ainda aceita "pode".
+  if (cheques && typeof cheques.ligarCaixa === 'function') {
+    cheques.ligarCaixa({ cardAberto: (chatId, id) => (pendentes.get(chatId) || []).some((p) =>
+      (p.previewId === id || (Array.isArray(p.msgIds) && p.msgIds.includes(id))) && Date.now() - p.ts < janelaMs) });
+  }
   const v3LedgerAtivo = ['production', 'prod', 'on', '1'].includes(v3LedgerMode);
   const v3LedgerStrict = process.env.SOL_CAIXA_V3_LEDGER_STRICT === '1';
   function governance(event, eventType, details) {
@@ -8235,6 +8240,11 @@ _Não lanço nada pela metade._`);
         }
         await sendFn(chatId, `⚠️ Não consegui corrigir: ${rOp && rOp.motivo ? rOp.motivo : 'erro desconhecido'}.`);
         return { acao: 'movimento_correcao_recusada', motivo: rOp && rOp.motivo };
+      }
+      // CHEQUES (29/09): número + banco já no caixa barra o "pode" (lote ou simples).
+      if (cheques && cheques.barrarNoPode && alvo.forma === 'cheque') {
+        const _bChq = await cheques.barrarNoPode(alvo, chatId);
+        if (_bChq) return _bChq;
       }
       if (alvo.tipoOperacao === 'lancar_recebimento_lote') {
         if (alvo.bloqueiaLancamento) {

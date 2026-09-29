@@ -33,6 +33,7 @@ const path = require('path');
 const https = require('https');
 const cp = require('child_process');
 const os = require('os');
+const crypto = require('crypto');
 
 const UNIDADE_SIGLA = {
   '2ec861f6-023f-4d7b-9927-3960ad8c2a92': 'cg',
@@ -213,6 +214,10 @@ function normalizarCheque(raw) {
 // ------------------------------------------------------------ escolha da parcela
 
 const dias = (a, b) => Math.abs((Date.parse(a) - Date.parse(b)) / 86400000);
+// Identidade do cheque: banco + número (a CMC-7 prova os dois).
+const chaveCheque = (c) => `${String(c && c.banco || '').padStart(3, '0')}|${String(c && c.numero || '')}`;
+const hojeBRT = (agora = Date.now()) => new Date(agora - 3 * 3600 * 1000).toISOString().slice(0, 10);
+const hhmm = (ms) => new Date(ms - 3 * 3600 * 1000).toISOString().slice(11, 16);
 
 // Suspeitos para o grupo responder "de quem é?". SÓ ordena a sugestão — nunca
 // decide: quem tem sobrenome em comum com o emitente vem primeiro (no teste real,
@@ -285,8 +290,10 @@ const mmYYYY = (iso) => (iso && /^\d{4}-\d{2}/.test(iso) ? `${iso.slice(5, 7)}/$
 //   valor        — o cheque não bate com a parcela;
 //   sem_parcela  — não sei de quem é (ou empate);
 //   leitura      — a leitura não foi provada.
+//   ja_no_caixa  — também quando o CHEQUE (banco + número) já está no caixa.
 function decidirCheque(it, fatura, jaLigada) {
   if (!it.cheque.confiavel) return 'leitura';
+  if (it.chequeNoCaixa) return 'ja_no_caixa';
   if (!it.escolha.fatura || !fatura) return 'sem_parcela';
   if (jaLigada) return 'ja_no_caixa';
   if (fatura.status === 'cancelada') return 'retirar';
@@ -369,7 +376,13 @@ function blocoCheque(it, i) {
       ? '↩️ Essa parcela foi *cancelada* no Emusys — devolver o cheque ao cliente.'
       : `↩️ Essa parcela já foi paga${f && f.forma ? ' por *' + f.forma + '*' : ''}${f && f.data_pagamento ? ' em ' + ddmm(f.data_pagamento) : ''} — devolver o cheque ao cliente.`);
   } else if (d === 'ja_no_caixa') {
-    l.push('🚫 Essa parcela já está lançada no caixa — não lanço de novo.');
+    l.push(it.chequeNoCaixa
+      ? `🚫 Esse cheque já está no caixa${it.chequeNoCaixa.data ? ' (lançado em ' + ddmm(it.chequeNoCaixa.data) + ')' : ''} — não lanço de novo.`
+      : '🚫 Essa parcela já está lançada no caixa — não lanço de novo.');
+  } else if (d === 'ja_em_card') {
+    l.push(`🔁 Esse cheque já está no card aberto${it.cardAberto && it.cardAberto.ts ? ' das ' + hhmm(it.cardAberto.ts) : ''} — responde *pode* naquele card; aqui ele não entra.`);
+  } else if (d === 'repetido') {
+    l.push('🔁 Esse cheque apareceu duas vezes neste arquivo — conto só uma.');
   } else if (d === 'valor') {
     const esp = valorEsperado(f);
     l.push(`⚠️ O cheque é de ${fmtBRL(ch.valor)}${esp ? ` e a parcela é de ${fmtBRL(esp)}` : ' e não bate com a parcela'} — confere antes.`);
@@ -391,7 +404,7 @@ function blocoCheque(it, i) {
 const SECOES = [
   { chave: 'caixa', titulo: '✅ *VAI PARA O CAIXA*', decisoes: ['lancar'] },
   { chave: 'malote', titulo: '⚠️ *RETIRAR DO MALOTE*', decisoes: ['retirar'] },
-  { chave: 'voce', titulo: '❓ *PRECISA DE VOCÊ*', decisoes: ['sem_parcela', 'valor', 'leitura', 'ja_no_caixa'] },
+  { chave: 'voce', titulo: '❓ *PRECISA DE VOCÊ*', decisoes: ['sem_parcela', 'valor', 'leitura', 'ja_no_caixa', 'ja_em_card', 'repetido'] },
 ];
 
 // A mensagem do lote É o card: com cheque ✅, o "pode" citando ESTA mensagem lança
@@ -517,8 +530,20 @@ async function lerLote(arquivo, modelo) {
   }
 }
 
+const JANELA_CARD_MS = 30 * 60 * 1000;   // a mesma janela do card no caixa
+const LEITURA_MAX_MS = 10 * 60 * 1000;   // leitura de lote que passou disso travou
+const AGUARDA_CARD_MS = 2 * 60 * 1000;   // entre "li" e o caixa publicar o card
+
+function sha256Arquivo(arquivo) {
+  try { return crypto.createHash('sha256').update(fs.readFileSync(arquivo)).digest('hex'); } catch (_) { return null; }
+}
+
 function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote, rpcFn = null, consultaFn = null, agoraFn = () => Date.now() } = {}) {
-  const lotes = new Map(); // chatId -> [{ msgIds, itens, loteData, sigla, unidadeNome, ts, origem }]
+  // chatId -> [{ msgIds, itens, loteData, sigla, unidadeNome, ts, origem, hash,
+  //              estado: 'lendo'|'lido', pendenteCard: {chaves, ts}, cards: [{id, chaves, ts}] }]
+  const lotes = new Map();
+  // Ganchos do caixa (ligarCaixa): quem sabe se um card ainda aceita "pode".
+  const caixa = { cardAberto: null };
 
   async function rpc(nome, args) {
     if (rpcFn) return rpcFn(nome, args);
@@ -560,21 +585,95 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
     return { ok: true };
   }
 
-  function decidirTodos(itens) {
+  // 🔴 O MESMO CHEQUE NÃO ENTRA DUAS VEZES (29/09/2026, auditoria D1). Número +
+  //    banco já gravados no caixa desta unidade (e não estornados) = o cheque já
+  //    entrou. Falha de leitura NÃO vira "pode lançar": devolve ok:false.
+  //    ⚠️ O estorno da Sol cria a movimentação inversa com descrição
+  //    "ESTORNO de <id> …" e sem as colunas cheque_*; é por ela que o original
+  //    estornado deixa de contar.
+  async function chequesNoCaixa(unidadeId, cheques) {
+    const alvo = cheques.filter((c) => c && c.numero && c.banco);
+    if (!alvo.length) return { ok: true, achados: [] };
+    if (!unidadeId) return { ok: false };
+    const nums = [...new Set(alvo.map((c) => String(c.numero)))];
+    const movs = await consulta(`caixa_movimentacoes?select=id,cheque_numero,cheque_banco,data_movimento,valor&unidade_id=eq.${unidadeId}&tipo=eq.entrada&cheque_numero=in.(${nums.join(',')})`);
+    if (!Array.isArray(movs)) return { ok: false };
+    const chave = (b, n) => `${String(b || '').padStart(3, '0')}|${String(n || '')}`;
+    const pedidos = new Set(alvo.map((c) => chave(c.banco, c.numero)));
+    let achados = movs.filter((m) => pedidos.has(chave(m.cheque_banco, m.cheque_numero)));
+    if (achados.length) {
+      const ou = achados.map((m) => `descricao.like.${encodeURIComponent(`ESTORNO de ${m.id}*`)}`).join(',');
+      const est = await consulta(`caixa_movimentacoes?select=descricao&unidade_id=eq.${unidadeId}&categoria=eq.estorno&or=(${ou})`);
+      if (!Array.isArray(est)) return { ok: false };
+      const estornados = new Set(est.map((e) => (String(e.descricao || '').match(/^ESTORNO de ([0-9a-f-]{8,})/i) || [])[1]).filter(Boolean));
+      achados = achados.filter((m) => !estornados.has(String(m.id)));
+    }
+    return { ok: true, achados: achados.map((m) => ({ numero: m.cheque_numero, banco: String(m.cheque_banco || '').padStart(3, '0'), data: m.data_movimento || null, valor: m.valor })) };
+  }
+
+  async function marcarNoCaixa(itens, unidadeId) {
+    const prov = itens.filter((it) => it.cheque.confiavel);
+    const r = await chequesNoCaixa(unidadeId, prov.map((it) => it.cheque));
+    if (!r.ok) return { ok: false };
+    for (const it of prov) {
+      const a = r.achados.find((x) => x.banco === String(it.cheque.banco).padStart(3, '0') && x.numero === it.cheque.numero);
+      if (a) it.chequeNoCaixa = { data: a.data };
+    }
+    return { ok: true };
+  }
+
+  function decidirTodos(itens, abertos = []) {
+    const hoje = hojeBRT(agoraFn());
     // Parcela casada com um cheque do lote não é suspeita de outro cheque.
     const casadas = new Set(itens.map((it) => it.escolha.fatura && Number(it.escolha.fatura.emusys_fatura_id)).filter(Boolean));
     for (const it of itens) {
       it.escolha.suspeitos = it.escolha.suspeitos.filter((s) => !(s && s.fatura && casadas.has(s.fatura)));
-      it.decisao = decidirCheque(it, it.fatura, it.jaLigada);
+      it.decisao = decidirCheque(it, it.fatura, it.jaLigada, hoje);
+    }
+    // O mesmo cheque (banco + número) duas vezes no lote (página repetida no
+    // scan): só o primeiro conta — antes da regra da parcela, senão os dois caíam.
+    const vistos = new Set();
+    for (const it of itens) {
+      if (!it.cheque.confiavel) continue;
+      const k = chaveCheque(it.cheque);
+      if (vistos.has(k)) it.decisao = 'repetido';
+      vistos.add(k);
     }
     // Dois cheques na mesma parcela: nenhum dos dois entra sozinho.
     const cont = new Map();
     for (const it of itens) if (it.decisao === 'lancar') cont.set(it.fatura.id, (cont.get(it.fatura.id) || 0) + 1);
     for (const it of itens) if (it.decisao === 'lancar' && cont.get(it.fatura.id) > 1) it.decisao = 'sem_parcela';
+    // Cheque que já está num card ABERTO (outro envio do mesmo malote) não vai para
+    // um segundo card: dois "pode" lançariam o mesmo cheque duas vezes.
+    for (const it of itens) {
+      if (it.decisao !== 'lancar') continue;
+      const dono = abertos.find((a) => a.chaves.has(chaveCheque(it.cheque)));
+      if (dono) { it.decisao = 'ja_em_card'; it.cardAberto = { ts: dono.ts }; }
+    }
+  }
+
+  // ---- lotes abertos (D1) -------------------------------------------------
+  // Um lote está "aberto" enquanto é lido ou enquanto o card dele pode receber
+  // "pode". Quem sabe do card é o caixa (`ligarCaixa`); sem ele (CLI, teste
+  // isolado), vale a janela do card (30 min).
+  function cardAberto(chatId, card) {
+    if (caixa.cardAberto) return !!caixa.cardAberto(chatId, card.id);
+    return agoraFn() - card.ts < JANELA_CARD_MS;
+  }
+  function abertosDoChat(chatId, exceto = null) {
+    const agora = agoraFn();
+    const out = [];
+    for (const l of lotes.get(chatId) || []) {
+      if (l === exceto || l.descartado) continue;
+      if (l.estado === 'lendo' && agora - l.ts < LEITURA_MAX_MS) out.push({ lote: l, ts: l.ts, chaves: new Set(), lendo: true });
+      if (l.pendenteCard && agora - l.pendenteCard.ts < AGUARDA_CARD_MS) out.push({ lote: l, ts: l.pendenteCard.ts, chaves: l.pendenteCard.chaves });
+      for (const c of l.cards || []) if (cardAberto(chatId, c)) out.push({ lote: l, ts: c.ts, chaves: c.chaves, cardId: c.id });
+    }
+    return out;
   }
 
   // Lê + prova + resolve + decide. Nunca escreve.
-  async function processarArquivo({ arquivo, unidadeId, unidadeNome, textoLote, modelo }) {
+  async function processarArquivo({ arquivo, unidadeId, unidadeNome, textoLote, modelo, abertos = [] }) {
     const sigla = UNIDADE_SIGLA[unidadeId];
     if (!sigla) return { ok: false, motivo: 'unidade_desconhecida' };
     const loteData = dataDoLote(textoLote, agoraFn());
@@ -604,7 +703,11 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
     await Promise.all([0, 1, 2, 3].map(async () => { while (prox < lido.cheques.length) { const k = prox; prox += 1; await umCheque(k); } }));
     const fat = await carregarFaturas(itens);
     if (!fat.ok) return { ok: false, motivo: 'fonte_faturas_indisponivel' };
-    decidirTodos(itens);
+    const noCx = await marcarNoCaixa(itens, unidadeId);
+    if (!noCx.ok) return { ok: false, motivo: 'fonte_caixa_indisponivel' };
+    // Os abertos são lidos DEPOIS da leitura (20–90 s): outro envio pode ter
+    // aberto card enquanto este lia.
+    decidirTodos(itens, typeof abertos === 'function' ? abertos() : abertos);
     log({ acao: 'cheques_lote_decidido', unidade: sigla, lidos: itens.length, decisoes: itens.map((it) => it.decisao) });
     return { ok: true, itens, loteData, sigla, unidadeNome };
   }
@@ -619,14 +722,42 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
     const arquivo = Array.isArray(event.mediaUrls) ? event.mediaUrls[0] : null;
     if (!arquivo || !fs.existsSync(arquivo)) return null;
     const textoLote = `${event.body || ''} ${nomeOriginal(arquivo)}`;
+    const sombra = cfg.modo === 'sombra';
+    // 🔴 MESMO MALOTE DE NOVO (auditoria D1, 29/09). A leitura leva 20–90 s e a
+    //    equipe reposta; outra pessoa posta o mesmo PDF. Cada envio abria um card
+    //    com os mesmos ✅ e dois "pode" lançavam tudo em dobro. Agora:
+    //    • mesmo ARQUIVO (sha256) com lote aberto → nem lê de novo, aponta o card;
+    //    • mesmo CHEQUE (banco + número) num card aberto → ❓ neste envio;
+    //    • cheque já gravado no caixa → ❓ (e o "pode" também confere: barrarNoPode).
+    const hash = sha256Arquivo(arquivo);
+    if (!sombra && hash) {
+      const igual = abertosDoChat(event.chatId).find((a) => a.lote.hash === hash);
+      if (igual) {
+        try { fs.unlinkSync(arquivo); } catch (_) { /* a ponte também limpa */ }
+        await sendFn(event.chatId, igual.lendo
+          ? '🧾 Esse malote já está sendo lido — o card sai em instantes. Não abri outro.'
+          : `🧾 Esse malote já está no card aberto das ${hhmm(igual.ts)}. Não abri outro card: responde *pode* citando aquele.`);
+        log({ acao: 'cheques_lote_repetido', chatId: event.chatId, lendo: !!igual.lendo });
+        return { tratou: true, acao: 'cheques_lote_repetido' };
+      }
+    }
+    const lote = { msgIds: [], itens: [], loteData: null, sigla: null, unidadeNome: grupo.nome, ts: agoraFn(),
+      origem: event.messageId, hash, estado: 'lendo', cards: [], pendenteCard: null };
+    if (!sombra) {
+      const arr0 = (lotes.get(event.chatId) || []).filter((x) => agoraFn() - x.ts < 6 * 3600 * 1000);
+      arr0.push(lote);
+      lotes.set(event.chatId, arr0);
+    }
     let r;
     try {
-      r = await processarArquivo({ arquivo, unidadeId: grupo.unidade_id, unidadeNome: grupo.nome, textoLote, modelo: cfg.modelo });
+      r = await processarArquivo({ arquivo, unidadeId: grupo.unidade_id, unidadeNome: grupo.nome, textoLote, modelo: cfg.modelo,
+        abertos: () => abertosDoChat(event.chatId, lote) });
     } finally {
+      lote.estado = 'lido';
       try { fs.unlinkSync(arquivo); } catch (_) { /* a ponte também limpa */ }
     }
-    const sombra = cfg.modo === 'sombra';
     if (!r.ok) {
+      lote.descartado = true;
       const txt = `🧾 Recebi um lote de cheques, mas não consegui ler (${r.motivo}). Confere na mão, por favor.`;
       if (sombra) { if (cfg.sombraJid) await sendFn(cfg.sombraJid, '🧪 *SOMBRA* — ' + grupo.nome + '\n' + txt); }
       else await sendFn(event.chatId, txt);
@@ -639,11 +770,20 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
       log({ acao: 'cheques_lote_sombra', unidade: r.sigla, itens: r.itens.length });
       return { tratou: true, acao: 'cheques_lote_sombra' };
     }
-    const lote = { msgIds: [], itens: r.itens, loteData: r.loteData, sigla: r.sigla, unidadeNome: grupo.nome, ts: agoraFn(), origem: event.messageId };
-    const arr = (lotes.get(event.chatId) || []).filter((x) => agoraFn() - x.ts < 6 * 3600 * 1000);
-    arr.push(lote);
-    lotes.set(event.chatId, arr);
-    const itensCaixa = r.itens.filter((it) => it.decisao === 'lancar').map(itemDoCaixa);
+    Object.assign(lote, { itens: r.itens, loteData: r.loteData, sigla: r.sigla });
+    const lancaveis = r.itens.filter((it) => it.decisao === 'lancar');
+    const itensCaixa = lancaveis.map(itemDoCaixa);
+    // Tudo o que é confiável já está num card aberto: é o mesmo malote (outro
+    // arquivo, mesmos cheques). Não repete a lista inteira nem abre card.
+    const confiaveis = r.itens.filter((it) => it.cheque.confiavel);
+    if (confiaveis.length && confiaveis.every((it) => it.decisao === 'ja_em_card')) {
+      lote.descartado = true;
+      const ts = confiaveis[0].cardAberto && confiaveis[0].cardAberto.ts;
+      await sendFn(event.chatId, `🧾 Esses ${confiaveis.length} cheque${confiaveis.length === 1 ? '' : 's'} já estão no card aberto${ts ? ' das ' + hhmm(ts) : ''}. Não abri outro card: responde *pode* citando aquele.`);
+      log({ acao: 'cheques_lote_repetido', chatId: event.chatId, por: 'cheques', itens: confiaveis.length });
+      return { tratou: true, acao: 'cheques_lote_repetido' };
+    }
+    if (lancaveis.length) lote.pendenteCard = { chaves: new Set(lancaveis.map((it) => chaveCheque(it.cheque))), ts: agoraFn() };
     // Sem cheque lançável, a mensagem é só a lista: o módulo publica. Com cheque
     // lançável, o CAIXA publica esta mesma mensagem como card (preview V3), e
     // devolve o id por `vincularMensagem` para as respostas "N é da Fulana".
@@ -703,6 +843,7 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
     const textoAtual = montarMensagem({ unidadeNome: lote.unidadeNome, loteData: lote.loteData, itens: [it], indices: [alvo.i],
       cabecalho: `🧾 *Cheque ${alvo.i + 1} identificado — ${lote.unidadeNome}*` });
     if (it.decisao === 'lancar') {
+      lote.pendenteCard = { chaves: new Set([chaveCheque(it.cheque)]), ts: agoraFn() };
       return { tratou: true, acao: 'cheques_identificacao', itensCaixa: [itemDoCaixa(it)], texto: textoAtual, lote };
     }
     const msg = await sendFn(event.chatId, textoAtual);
@@ -711,15 +852,50 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
   }
 
   // O caixa publicou a mensagem do lote como card: guarda o id para as respostas.
+  // A partir daqui os cheques do card contam como "em card aberto" enquanto o caixa
+  // disser que o card vive (D1).
   function vincularMensagem(lote, msgId) {
     if (lote && msgId && Array.isArray(lote.msgIds)) lote.msgIds.push(msgId);
+    if (lote && msgId && lote.pendenteCard) {
+      (lote.cards = lote.cards || []).push({ id: msgId, chaves: lote.pendenteCard.chaves, ts: agoraFn() });
+      lote.pendenteCard = null;
+    }
   }
 
-  return { tratarMidia, tratarResposta, processarArquivo, vincularMensagem };
+  // 🔴 "pode" em card de cheque: número + banco já no caixa barra o lançamento
+  //    (lote ou simples), com mensagem clara. É a segunda barreira do D1: vale
+  //    mesmo que dois cards do mesmo cheque tenham escapado da primeira. A trava
+  //    definitiva é no banco (supabase/migration-drafts/…trava_cheque…, gate humano).
+  //    Devolve null (segue o "pode") ou { acao } (já respondeu, não lança).
+  async function barrarNoPode(alvo, chatId) {
+    if (!alvo || String(alvo.forma || '').toLowerCase() !== 'cheque') return null;
+    const itens = Array.isArray(alvo.itens) && alvo.itens.length ? alvo.itens : [alvo];
+    const ch = itens.filter((i) => i && i.cheque_numero && i.cheque_banco).map((i) => ({ numero: String(i.cheque_numero), banco: String(i.cheque_banco) }));
+    if (!ch.length) return null;
+    let r = null;
+    try { r = await chequesNoCaixa(alvo.unidade_id, ch); } catch (_) { r = null; }
+    if (!r || !r.ok) {
+      await sendFn(chatId, '⚠️ Não lancei: não consegui conferir agora se esses cheques já estão no caixa. Nada foi lançado; responde *pode* de novo em instantes.');
+      log({ acao: 'pode_cheque_conferencia_indisponivel', chatId });
+      return { acao: 'pode_cheque_conferencia_indisponivel' };
+    }
+    if (!r.achados.length) return null;
+    const lista = r.achados.map((a) => `• ${BANCOS[a.banco] || 'Banco ' + a.banco} nº ${a.numero}${a.data ? ' — lançado em ' + ddmm(a.data) : ''}`).join('\n');
+    await sendFn(chatId, `⚠️ Não lancei: ${r.achados.length === 1 ? 'este cheque já está' : 'estes cheques já estão'} no caixa:\n${lista}\n`
+      + '_Nada deste card foi lançado — o mesmo cheque não entra duas vezes._ Se algum foi estornado e precisa entrar de novo, reenvia o malote sem os que já entraram.');
+    log({ acao: 'pode_bloqueado_cheque_duplicado', chatId, cheques: r.achados.length });
+    return { acao: 'pode_bloqueado_cheque_duplicado' };
+  }
+
+  function ligarCaixa({ cardAberto } = {}) {
+    if (typeof cardAberto === 'function') caixa.cardAberto = cardAberto;
+  }
+
+  return { tratarMidia, tratarResposta, processarArquivo, vincularMensagem, barrarNoPode, ligarCaixa };
 }
 
 module.exports = {
   criarCheques, pareceLoteCheques, dataDoLote, dvMod10, lerCmc7, extensoParaNumero,
   normalizarCheque, escolherFatura, decidirCheque, itemDoCaixa, categoriaDaFatura, montarMensagem,
-  blocoCheque, nomeBonito, nomeOriginal, UNIDADE_SIGLA,
+  blocoCheque, nomeBonito, nomeOriginal, chaveCheque, UNIDADE_SIGLA,
 };
