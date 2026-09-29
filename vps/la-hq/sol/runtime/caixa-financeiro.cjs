@@ -5273,10 +5273,32 @@ _Não lanço nada pela metade._`);
   //    recebe o motivo na resposta da tool e fala ele mesmo.
   const _enviosPorChat = new Map();
   const _sendOriginal = sendFn;
+  // Ids das mensagens que a PRÓPRIA Sol mandou (6 h, só memória): permitem saber se
+  // uma resposta citada está falando COM ela ou entre colegas (29/09/2026).
+  const _idsDaSol = new Map(); // messageId -> ts
   sendFn = async (chatId, texto, ...resto) => {
     _enviosPorChat.set(chatId, (_enviosPorChat.get(chatId) || 0) + 1);
-    return _sendOriginal(chatId, texto, ...resto);
+    const id = await _sendOriginal(chatId, texto, ...resto);
+    if (id) {
+      const agoraId = Date.now();
+      _idsDaSol.set(String(id), agoraId);
+      if (_idsDaSol.size > 2000) {
+        for (const [k, t] of _idsDaSol) { if (agoraId - t > 6 * 60 * 60 * 1000) _idsDaSol.delete(k); }
+      }
+    }
+    return id;
   };
+  // 🔴 29/09/2026 (Recreio 16:11, Rose → Vitória): conversa ENTRE colegas ("Não muda o
+  //    valor da parcela", citando a Vitória) virou "Consigo corrigir/estornar, mas preciso
+  //    saber qual lançamento" — a Sol falou no meio da conversa. Mexer em lançamento já
+  //    gravado (ou responder sobre isso) só quando falam COM ela: chamaram pelo nome
+  //    ("Sol, …") ou citaram uma mensagem dela.
+  function _falouComSol(event) {
+    if (event && (event.caixaToolCommand || event.caixaToolTarget || event._sintetico)) return true;
+    if (/^\s*@?sol\b/i.test(String(event && event.body || ''))) return true;
+    const q = event && event.quotedMessageId;
+    return !!(q && _idsDaSol.has(String(q)));
+  }
   async function handle(event, agora = Date.now()) {
     // Chamadas internas repassam `{...event}`: só o topo decide o aviso.
     if (!event || event.__handleTopo) return _handleInterno(event, agora);
@@ -5673,6 +5695,10 @@ _Não lanço nada pela metade._`);
         pendentesAtivos.some((p) => p.previewId === event.quotedMessageId) ||
         (!event.quotedBody && pendentesAtivos.length === 1)
       );
+      if (cmdMov && !corrigePreviewAtivo && !_falouComSol(event)) {
+        log({ acao: 'comando_movimento_ignorado_conversa', chatId, tipo: cmdMov.tipo, citou: !!event.quotedMessageId });
+        cmdMov = null;
+      }
       if (cmdMov && !corrigePreviewAtivo) {
         // A tool `caixa_localizar_lancamento` devolve o ID exato. Quando a LLM
         // passa esse alvo, nao reabrimos busca por texto/valor e nunca escolhemos
@@ -7227,7 +7253,11 @@ _Não lanço nada pela metade._`);
           const _citaVD = (x, id) => x.previewId === id || x.origem === id || (Array.isArray(x.msgIds) && x.msgIds.includes(id));
           let alvoVD = null;
           if (event.quotedMessageId) alvoVD = arrP.find((x) => _citaVD(x, event.quotedMessageId)) || null;
-          if (!alvoVD && arrP.length === 1) alvoVD = arrP[0];
+          // 🔴 29/09/2026 (Recreio 16:10): explicação de 1.032 caracteres para a colega
+          //    ("…cada R$ 500,00…") trocou o valor do card de R$ 1.850 para R$ 500. Sem citar
+          //    o card, só vale ditado curto — prosa longa é conversa, não comando.
+          if (!alvoVD && arrP.length === 1 && (bodyLimpo(txt).length <= 220 || _falouComSol(event))) alvoVD = arrP[0];
+          if (!alvoVD && arrP.length === 1) log({ acao: 'valor_ditado_ignorado_prosa', chatId, len: bodyLimpo(txt).length });
           if (alvoVD && !categoriaEhSaida(alvoVD.categoria) && Math.abs((alvoVD.valor || 0) - _valorDitado) >= 0.01) {
             log({ acao: 'preview_valor_corrigido', chatId, de: alvoVD.valor || null, para: _valorDitado });
             alvoVD.valor = _valorDitado;
