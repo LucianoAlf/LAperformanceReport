@@ -861,3 +861,11 @@ comportamento**, nenhum deles de gramática.
 
 ⚠️ Regressões travadas no teste: forma solta **sem** pendência aberta continua
 não abrindo nada; `pode`/`não` não são capturados pelo caminho novo.
+
+## fallback-obsoleto-fica-mudo-e2e.cjs
+
+Caso SOL-145/CG (29/09): `Lode` iniciou o classificador com card aberto; durante
+os 34 segundos da classificação, um `pode` concorrente lançou e encerrou o card.
+A guarda antiga respondeu `Não entendi` depois, em cima da conversa humana. O
+teste exige que o fallback compare a mesma geração de pendências ao voltar e
+fique mudo se o card foi lançado, descartado ou remontado — sem regex de frases.

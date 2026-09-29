@@ -8573,6 +8573,20 @@ _Não lanço nada pela metade._`);
     return limparVelhos(chatId, agora).length > 0;
   }
 
+  // Token estrutural do conjunto de cards ativos. O fallback de linguagem e
+  // assíncrono: enquanto ele classifica uma frase, outro evento pode aprovar,
+  // descartar ou remontar o card. Comparar apenas `temPendencia()` depois não
+  // basta, porque um segundo card do grupo pode continuar aberto. O token
+  // garante que a resposta ainda pertence exatamente ao mesmo estado que a
+  // iniciou (CG 29/09: "Lode" começou antes do "pode" e respondeu 34s depois,
+  // já em cima da conversa humana).
+  function tokenEstadoPendencias(chatId, agora = Date.now()) {
+    return limparVelhos(chatId, agora)
+      .map((p) => [p.previewId || '', p.origem || '', Number(p.ts) || 0, p.tipoOperacao || ''].join(':'))
+      .sort()
+      .join('|');
+  }
+
   // A guarda de "nao vaza pro LLM" (bridge) precisa saber se a mensagem CITA um card
   // pendente, para so falar quando a mensagem plausivelmente e' pra Sol -- sem isto ela
   // interceptava QUALQUER mensagem nao reconhecida no grupo, inclusive assunto entre
@@ -8716,6 +8730,7 @@ _Não lanço nada pela metade._`);
       if (!grp) return null;
       const arrP = limparVelhos(chatId, Date.now());
       if (!arrP.length) return null;
+      const tokenInicial = tokenEstadoPendencias(chatId);
       const contexto = arrP.slice(0, 3).map((p, i) => ({
         card: i + 1, valor: p.valor || null, forma: p.forma || null,
         categoria: p.categoria || null, aluno: p.aluno || null,
@@ -8723,6 +8738,14 @@ _Não lanço nada pela metade._`);
       }));
       let cls = null;
       try { cls = await classificarCorrecaoFn(event.body, contexto); } catch (e) { cls = null; }
+      // O classificador pode levar dezenas de segundos. Se qualquer card foi
+      // consumido, descartado ou remontado nesse intervalo, a conclusão ficou
+      // obsoleta e não pode falar nem executar uma correção sintética.
+      const tokenAtual = tokenEstadoPendencias(chatId);
+      if (!tokenAtual || tokenAtual !== tokenInicial) {
+        log({ acao: 'fallback_llm_estado_obsoleto', chatId });
+        return { tratou: true, acao: 'fallback_llm_obsoleto' };
+      }
       if (!cls || !cls.intencao || cls.intencao === 'nada') {
         log({ acao: 'fallback_llm_sem_intencao', chatId });
         return null;
@@ -8917,7 +8940,7 @@ _Não lanço nada pela metade._`);
   // ⚠️ ehConversaSemComando no retorno conserta bug LATENTE: o bridge chama
   // _fh.ehConversaSemComando(body) desde 25/08, mas o handler nunca a expos —
   // o guard de "elogio nao leva nao-entendi" estava morto por undefined.
-  return { handle, temPendencia, citaAlgumaPendencia, citaCardPendenteDaSol, ehConversaSemComando,
+  return { handle, temPendencia, tokenEstadoPendencias, citaAlgumaPendencia, citaCardPendenteDaSol, ehConversaSemComando,
     reidratarPendencias, tratarNaoEntendida, observarRoteadorV4, decidirRoteadorV4, tratarAgentFirst,
     deveTratarConfirmacaoDeterministica, deveTratarComplementoDeterministico, resumoCardsAbertosParaAgente,
     _pendentes: pendentes, _envelopesV4: envelopesV4, _rascunhosV4: rascunhosV4 };
