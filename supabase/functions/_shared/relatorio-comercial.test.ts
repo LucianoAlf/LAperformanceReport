@@ -477,6 +477,10 @@ function dadosBarra(): RelatorioComercialDados {
       experimentaisRealizadas: 32,
       presencasVinculadas: 32,
       faltas: 5,
+      visitas: 11,
+      visitasSemHoraMarcada: 11,
+      visitasAgendadas: 0,
+      visitasConfirmadas: 0,
       matriculas: 16,
     },
     metas: {
@@ -615,6 +619,7 @@ const textoOuroBarra = [
   "• Experimentais realizadas: *32* / meta 24",
   "• Presença + vínculo confirmados: *32*",
   "• Faltas: *5*",
+  "• Visitas: *11* (11 sem hora marcada)",
   "• Matrículas: *16* / meta 15",
   "• Ticket médio das parcelas: *R$ 426,19* / meta R$ 444,00",
   "• Ticket médio dos passaportes: *R$ 446,38*",
@@ -803,4 +808,27 @@ Deno.test("formatarRelatorioComercialDiario mostra fallback explicito para lista
   assertStringIncludes(texto, "Nenhum curso registrado hoje");
   assertStringIncludes(texto, "Nenhum gap operacional identificado");
   assertStringIncludes(texto, "Nenhuma matrícula comercial no período");
+});
+
+Deno.test("mes ate agora: visitas mostram composicao igual ao card do dashboard", () => {
+  const comAgendadas = dadosBarra();
+  comAgendadas.mes.visitas = 7;
+  comAgendadas.mes.visitasSemHoraMarcada = 7;
+  comAgendadas.mes.visitasAgendadas = 30;
+  comAgendadas.mes.visitasConfirmadas = 0;
+  const texto = formatarRelatorioComercialDiario(comAgendadas);
+  assertEquals(
+    texto.split("\n").filter((l) => l.startsWith("• Visitas:")),
+    ["• Visitas: *0*", "• Visitas: *7* (7 sem hora marcada · 0 de 30 agendadas confirmadas)"],
+  );
+
+  const vazio = dadosBarra();
+  vazio.mes.visitas = 0;
+  vazio.mes.visitasSemHoraMarcada = 0;
+  vazio.mes.visitasAgendadas = 0;
+  vazio.mes.visitasConfirmadas = 0;
+  const linhas = formatarRelatorioComercialDiario(vazio).split("\n");
+  const inicioMes = linhas.indexOf("📈 *MÊS ATÉ AGORA*");
+  const fimMes = linhas.indexOf("📊 *FUNIL DO MÊS*");
+  assertEquals(linhas.slice(inicioMes, fimMes).includes("• Visitas: *0*"), true);
 });

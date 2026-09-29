@@ -203,6 +203,11 @@ export interface RelatorioComercialDados {
     experimentaisRealizadas: number;
     presencasVinculadas: number;
     faltas: number;
+    /** Comparecimento (regra LAPE-44): sem hora marcada + agendadas confirmadas. */
+    visitas: number;
+    visitasSemHoraMarcada: number;
+    visitasAgendadas: number;
+    visitasConfirmadas: number;
     matriculas: number;
   };
   metas: {
@@ -801,6 +806,22 @@ function formatarDetalhes(
   });
 }
 
+// Mesma composição do card "Visitas" do dashboard (`textoComposicaoVisitas` em
+// src/lib/visitasComercial.ts) — a edge não importa `@/`, então a regra é espelhada
+// aqui; mudou lá, muda aqui. Card e relatório não podem descrever o número de jeitos
+// diferentes.
+function linhaVisitasDoMes(mes: RelatorioComercialDados["mes"]): string {
+  const semHora = contagem(mes.visitasSemHoraMarcada);
+  const agendadas = contagem(mes.visitasAgendadas);
+  const partes: string[] = [];
+  if (semHora > 0) partes.push(`${semHora} sem hora marcada`);
+  if (agendadas > 0) {
+    partes.push(`${contagem(mes.visitasConfirmadas)} de ${agendadas} agendadas confirmadas`);
+  }
+  const composicao = partes.length > 0 ? ` (${partes.join(" · ")})` : "";
+  return `• Visitas: *${contagem(mes.visitas)}*${composicao}`;
+}
+
 export function formatarRelatorioComercialDiario(
   dados: RelatorioComercialDados,
 ): string {
@@ -877,6 +898,7 @@ export function formatarRelatorioComercialDiario(
       contagem(dados.mes.presencasVinculadas)
     }*`,
     `• Faltas: *${contagem(dados.mes.faltas)}*`,
+    linhaVisitasDoMes(dados.mes),
     `• Matrículas: *${contagem(dados.mes.matriculas)}* / meta ${
       contagem(dados.metas.matriculas)
     }`,
