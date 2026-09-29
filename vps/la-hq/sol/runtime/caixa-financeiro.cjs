@@ -3504,6 +3504,24 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   }
   // grupos: { [chatId]: { unidade_id, nome } }
   const pendentes = new Map();   // chatId -> [ {previewId, unidade_id, nome, valor, forma, categoria, aluno, idemKey, origem, ts} ]
+  // 🔴 29/09/2026 (CG, Mayra 12:27): "pode" citando um card que já tinha vencido caía em
+  //    `pode_sem_pendencia` e a Sol ficava MUDA — a equipe achou que tinha lançado. Guardo,
+  //    só em memória e por 3 h, os ids dos cards que venceram para responder "venceu".
+  const vencidosRecentes = new Map(); // chatId -> [ { ids:Set, expiradoEm } ]
+  const VENCIDO_GUARDA_MS = 3 * 60 * 60 * 1000;
+  function _registrarVencido(chatId, p, agora) {
+    const ids = new Set([p.previewId, p.origem, ...(Array.isArray(p.msgIds) ? p.msgIds : [])].filter(Boolean));
+    const lista = (vencidosRecentes.get(chatId) || []).filter((v) => agora - v.expiradoEm < VENCIDO_GUARDA_MS);
+    lista.push({ ids, expiradoEm: agora });
+    vencidosRecentes.set(chatId, lista.slice(-20));
+  }
+  function _cardVencidoDoPode(chatId, quotedId, agora) {
+    const lista = (vencidosRecentes.get(chatId) || []).filter((v) => agora - v.expiradoEm < VENCIDO_GUARDA_MS);
+    vencidosRecentes.set(chatId, lista);
+    if (quotedId) return lista.find((v) => v.ids.has(quotedId)) || null;
+    // Sem citação: só responde se um card venceu há pouco (2 h) neste grupo.
+    return lista.filter((v) => agora - v.expiradoEm < 2 * 60 * 60 * 1000).pop() || null;
+  }
   const lancadosRecentes = new Map(); // chatId -> [ {confirmMessageId, movimentacao_id, unidade_id, nome, valor, forma, ts} ]
   const vistos = new Set();      // idemKeys ja processados (anti-redelivery)
   const textosRecentes = new Map(); // chatId+senderId -> {texto, ts}: legenda/nome que veio em bolha IRMA (comprovante + nome em mensagens separadas)
@@ -5176,6 +5194,7 @@ _Não lanço nada pela metade._`);
     const expirados = arr.filter((p) => agora - p.ts >= janelaMs);
     pendentes.set(chatId, vivos);
     for (const p of expirados) {
+      _registrarVencido(chatId, p, agora);
       limparEnvelopeDaPendencia(chatId, p, 'expirou');
       // A aprovacao vence no mesmo limite do card. A RPC tambem confere a idade,
       // portanto esta escrita e trilha/auditoria — nao a unica barreira.
@@ -7930,7 +7949,17 @@ _Não lanço nada pela metade._`);
     const conf = casarPode(event.body, { respondeuPreview });
       if (conf.pode) {
       const arr = arrPend;
-      if (arr.length === 0) return { acao: 'pode_sem_pendencia' };
+      if (arr.length === 0) {
+        const _venc = _cardVencidoDoPode(chatId, event.quotedMessageId, agora);
+        if (_venc) {
+          const _min = Math.round(janelaMs / 60000);
+          await sendFn(chatId, `⏰ Esse card *venceu* (o card fica aberto por ${_min} min) e *nada foi lançado*. `
+            + 'Reenvia o comprovante com a legenda que eu monto um card novo.');
+          log({ acao: 'pode_card_vencido', chatId, citou: !!event.quotedMessageId });
+          return { acao: 'pode_card_vencido' };
+        }
+        return { acao: 'pode_sem_pendencia' };
+      }
       let alvo = null;
       if (event.quotedMessageId) alvo = arr.find((p) => _citaPend(p, event.quotedMessageId)) || null;
       // Citar um card velho/estranho NAO pode cair na unica pendencia atual.
@@ -8137,7 +8166,7 @@ _Não lanço nada pela metade._`);
           snapshot_soma_divergente: 'a soma das faturas não confere com o total',
           fonte_indisponivel: 'a fonte oficial de faturas está indisponível',
         }[motivoLote] || 'a validação final não reproduziu o preview';
-        await sendFn(chatId, `⚠️ Não lancei o lote: ${motivoHumano}. Nada foi lançado parcialmente. O preview original foi preservado; não precisa reenviar o comprovante.`);
+        await sendFn(chatId, `⚠️ Não lancei o lote: ${motivoHumano}. Nada foi lançado parcialmente. O card continua aberto por até ${Math.round(janelaMs / 60000)} min desde que foi enviado; depois disso, reenvia o comprovante.`);
         log({ acao: 'lote_multi_recusado', chatId, motivo: motivoLote });
         return { acao: 'lote_multi_recusado', motivo: motivoLote };
       }

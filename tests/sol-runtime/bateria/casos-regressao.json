@@ -904,7 +904,7 @@
       "id": "B-132",
       "incidente": "SOL-132",
       "tipo": "expiracao_card",
-      "status": "falha_conhecida",
+      "status": "passa",
       "titulo": "'pode' 32 min depois do card: avisa que venceu e pede reenvio",
       "entrada": "Card completo às 12:27; 'pode' às 12:59.",
       "defeito": "pode_sem_pendencia sai em silêncio; a equipe acha que lançou.",
