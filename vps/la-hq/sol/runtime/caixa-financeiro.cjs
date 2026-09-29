@@ -3873,6 +3873,81 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   // categoria ou vinculo seguro. Tambem e persistido no ledger para sobreviver
   // a restart sem depender da memoria do processo.
   const rascunhosV4 = new Map();
+  // 🔴 ESTORNO/CORREÇÃO AMBÍGUO (§8.2, 28/09/2026): com mais de um lançamento
+  //    igual a Sol NUNCA escolhe. Lista os candidatos (hora, quem lançou, id
+  //    curto) e guarda a lista; só quem pediu — ou quem citar a lista — escolhe,
+  //    pelo NÚMERO ou pelo ID. A escolha só define o alvo: o card de
+  //    estorno/correção e o "pode" continuam obrigatórios.
+  const escolhasMovimento = new Map();
+
+  function horaBRT(iso) {
+    const d = new Date(iso);
+    if (!iso || Number.isNaN(d.getTime())) return '--:--';
+    return d.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+  }
+
+  // 🔴 29/09/2026 (revisão do PR #528): `criado_por` de lançamento feito pela Sol é
+  //    "sol-agente:grupo:<telefone>" (conferido em caixa_movimentacoes) — o PR o
+  //    mostraria no grupo, com o número da pessoa. Quem lançou vem de `responsavel`
+  //    ("Mayra · via Sol", "Mayra (aut.) · … (env.) · via Sol"); `criado_por` só
+  //    quando é nome de gente (lançamento manual no sistema). Nunca telefone.
+  function quemLancouMovimento(x) {
+    const limpar = (s) => String(s || '').replace(/\s+/g, ' ').replace(/\s*·\s*via Sol\s*$/i, '').trim();
+    const ehTecnico = (s) => /sol-agente|backfill|:\S*\d{6,}|\d{8,}/i.test(String(s || ''));
+    const resp = limpar(x && x.responsavel);
+    if (resp && !ehTecnico(resp)) return resp.slice(0, 50);
+    const criado = limpar(x && x.criado_por);
+    if (criado && !ehTecnico(criado)) return criado.slice(0, 50);
+    return /sol-agente/i.test(String(x && x.criado_por || '')) ? 'Sol' : 'sem registro de quem lançou';
+  }
+
+  function horaMovimento(x) {
+    return x && x.created_at ? horaBRT(x.created_at) : (x && /^\d{1,2}:\d{2}$/.test(String(x.hora || '')) ? String(x.hora) : '--:--');
+  }
+
+  function linhaCandidatoMovimento(x, i) {
+    const id = String(x.movimentacao_id || '').slice(0, 8);
+    const oque = String(x.descricao || '').replace(/\s+/g, ' ').slice(0, 60);
+    return `*${i + 1}.* ${fmtBRL(x.valor)} · ${x.categoria || 'sem categoria'} · ${x.forma_pagamento || 'sem forma'} · ${horaMovimento(x)}\n`
+      + `    lançado por ${quemLancouMovimento(x)} · id \`${id}\`${oque ? '\n    ' + oque : ''}`;
+  }
+
+  async function pedirEscolhaMovimento({ event, chatId, cmdMov, items, agora }) {
+    const lista = items.slice(0, 5);
+    const verbo = cmdMov.tipo === 'estornar' ? 'estornar' : 'corrigir';
+    const texto = `Achei *${items.length}* lançamentos que batem com o pedido. Não vou escolher sozinha qual ${verbo}.\n\n`
+      + lista.map(linhaCandidatoMovimento).join('\n\n')
+      + (items.length > lista.length ? `\n\n_(mostrando os ${lista.length} mais recentes)_` : '')
+      + '\n\n👉 Responde com o *número* (ex.: *2*) ou o *id* do lançamento certo.';
+    const msgId = await sendFn(chatId, texto);
+    escolhasMovimento.set(chatId, { cmdMov, items: lista, ts: agora, msgIds: [msgId].filter(Boolean),
+      autor: String(event.senderPhone || event.senderId || '') });
+    log({ acao: 'movimento_alvo_ambiguo', chatId, count: items.length, listados: lista.length });
+    return { acao: 'movimento_alvo_ambiguo', previewId: msgId };
+  }
+
+  // A resposta à lista: número 1..N sozinho (com "o"/"número"/"nº" opcional) ou
+  // o id curto de um dos candidatos. Protocolo que a própria Sol ensinou.
+  function escolhaDaResposta(event, agora) {
+    const esc = escolhasMovimento.get(event && event.chatId);
+    if (!esc || event.hasMedia) return null;
+    if (agora - esc.ts >= janelaMs) { escolhasMovimento.delete(event.chatId); return null; }
+    const autor = String(event.senderPhone || event.senderId || '');
+    const citou = event.quotedMessageId && esc.msgIds.includes(String(event.quotedMessageId));
+    if (!citou && (!autor || autor !== esc.autor)) return null;
+    const t = bodyLimpo(event.body).toLowerCase().replace(/^sol\b\s*[,;:-]?\s*/, '').trim();
+    const mNum = t.match(/^(?:o|a|n[uú]mero|n[ºo°]\.?)?\s*(\d{1,2})\s*[.!]?$/);
+    if (mNum) {
+      const i = Number(mNum[1]) - 1;
+      return { esc, item: esc.items[i] || null, foraDaLista: !esc.items[i] };
+    }
+    const porId = esc.items.filter((x) => {
+      const id = String(x.movimentacao_id || '').toLowerCase();
+      return id && t.split(/[^0-9a-f-]+/).some((tok) => tok.length >= 6 && id.startsWith(tok));
+    });
+    if (porId.length === 1) return { esc, item: porId[0], foraDaLista: false };
+    return null;
+  }
 
   function identidadeRascunhoV4(event) {
     const bruto = String((event && (event.senderPhone || event.senderId)) || '')
@@ -5938,6 +6013,23 @@ _Não lanço nada pela metade._`);
       }
     }
 
+    // 0.55) resposta à lista de lançamentos ambíguos: vira alvo EXATO e reentra
+    //       no 0.6 — que monta o card e segue exigindo "pode".
+    {
+      const escolha = escolhaDaResposta(event, agora);
+      if (escolha) {
+        if (escolha.foraDaLista) {
+          await sendFn(chatId, `Esse número não está na lista. Responde de *1* a *${escolha.esc.items.length}*, ou com o id.`);
+          return { acao: 'movimento_escolha_fora_da_lista' };
+        }
+        escolhasMovimento.delete(chatId);
+        log({ acao: 'movimento_escolhido_pelo_humano', chatId, id: String(escolha.item.movimentacao_id || '').slice(0, 8) });
+        return handle({ ...event, _sintetico: true, quotedMessageId: null, quotedBody: null,
+          body: escolha.esc.cmdMov.tipo === 'estornar' ? 'estornar lançamento' : 'corrigir lançamento',
+          caixaToolCommand: escolha.esc.cmdMov, caixaToolTarget: escolha.item, _escolhaMovimento: true }, agora);
+      }
+    }
+
     // 0.6) correção/estorno de lançamento já gravado.
     // "Excluir" no caixa vira estorno auditado; alteração de valor/categoria/
     // descrição passa pela RPC de correção controlada. O alvo precisa vir de
@@ -5991,11 +6083,7 @@ _Não lanço nada pela metade._`);
           }
           const items = rBusca && Array.isArray(rBusca.items) ? rBusca.items : [];
           if (items.length === 1) alvo = items[0];
-          else if (items.length > 1) {
-            await sendFn(chatId, 'Achei mais de um lançamento parecido. Responde citando a minha mensagem exata do lançamento ou informa o valor/aluno.');
-            log({ acao: 'movimento_alvo_ambiguo', chatId, count: items.length });
-            return { acao: 'movimento_alvo_ambiguo' };
-          }
+          else if (items.length > 1) return pedirEscolhaMovimento({ event, chatId, cmdMov, items, agora });
         }
         if (!alvo) {
           const valorBusca = cmdMov.correcoes && cmdMov.correcoes.valor ? cmdMov.correcoes.valor : extrairValor(event.body, { allowBare: true });
@@ -6017,12 +6105,7 @@ _Não lanço nada pela metade._`);
           }
           const items = rBusca && Array.isArray(rBusca.items) ? rBusca.items : [];
           if (items.length === 1) alvo = items[0];
-          else if (items.length > 1) {
-            const linhas = items.slice(0, 5).map((x, i) => `${i + 1}. ${fmtBRL(x.valor)} · ${x.categoria || 'sem categoria'} · ${x.forma_pagamento || 'sem forma'} · ${x.responsavel || x.descricao || ''}`.trim()).join('\n');
-            await sendFn(chatId, `Achei mais de um lançamento. Me diz qual é, ou responde citando a mensagem correta:\n${linhas}`);
-            log({ acao: 'movimento_alvo_ambiguo', chatId, count: items.length });
-            return { acao: 'movimento_alvo_ambiguo' };
-          }
+          else if (items.length > 1) return pedirEscolhaMovimento({ event, chatId, cmdMov, items, agora });
         }
         const movimentacaoId = alvo && (alvo.movimentacao_id || alvo.movimentacaoId);
         if (!movimentacaoId) {
@@ -6061,6 +6144,11 @@ _Não lanço nada pela metade._`);
           let textoPreview = cmdMov.tipo === 'estornar'
             ? `Vou estornar este lançamento no caixa da ${grp.nome}: ${fmtBRL(valorPreview)} · ${categoriaPreview} · ${formaPreview}.\nNão vou apagar o original; vou criar um movimento inverso auditado.\n\n👉 Posso estornar agora? Responde *pode*.`
             : `Vou corrigir este lançamento no caixa da ${grp.nome}: ${fmtBRL(valorPreview)} · ${categoriaPreview} · ${formaPreview}.\n\n👉 Posso corrigir agora? Responde *pode*.`;
+          // Escolhido numa lista de iguais (SOL-114, 29/09/2026): o card diz QUAL é —
+          // hora, quem lançou e id — para o "pode" ser sobre o lançamento certo.
+          if (event._escolhaMovimento) {
+            textoPreview = textoPreview.replace('\n', `\nÉ o lançamento das ${horaMovimento(alvo)} · lançado por ${quemLancouMovimento(alvo)} · id \`${String(movimentacaoId).slice(0, 8)}\`.\n`);
+          }
           const previewId = await sendFn(chatId, textoPreview);
           const pendenciaOperacao = {
             previewId,
@@ -9256,6 +9344,7 @@ _Não lanço nada pela metade._`);
 
   function deveTratarComplementoDeterministico(event, agora = Date.now()) {
     if (!event || event.hasMedia) return false;
+    if (escolhaDaResposta(event, agora)) return true;
     let draft = rascunhosV4.get(event.chatId) || null;
     if (!draft) return completaCardClassicoIncompleto(event, agora) || corrigeAlunoCardClassico(event, agora);
     if (agora - draft.ts >= janelaMs) {
@@ -9275,7 +9364,7 @@ _Não lanço nada pela metade._`);
   return { handle, temPendencia, tokenEstadoPendencias, citaAlgumaPendencia, citaCardPendenteDaSol, ehConversaSemComando,
     reidratarPendencias, tratarNaoEntendida, observarRoteadorV4, decidirRoteadorV4, tratarAgentFirst,
     deveTratarConfirmacaoDeterministica, deveTratarComplementoDeterministico, resumoCardsAbertosParaAgente,
-    _pendentes: pendentes, _envelopesV4: envelopesV4, _rascunhosV4: rascunhosV4 };
+    _pendentes: pendentes, _envelopesV4: envelopesV4, _rascunhosV4: rascunhosV4, _escolhasMovimento: escolhasMovimento };
 }
 
 function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }

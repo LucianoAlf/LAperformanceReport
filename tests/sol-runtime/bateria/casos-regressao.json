@@ -818,7 +818,7 @@
       "id": "B-114",
       "incidente": "SOL-114",
       "tipo": "estorno",
-      "status": "falha_conhecida",
+      "status": "passa",
       "titulo": "Estorno com 3 lançamentos iguais: lista hora/quem/id e estorna só o escolhido",
       "entrada": "'Sol, estorna o de R$ 550' com 3 passaportes de R$ 550 no dia; resposta '2' citando a lista; 'pode'.",
       "defeito": "A lista não traz hora/quem lançou/id e a escolha por número não é tratada (PR #528 não publicado).",
@@ -826,33 +826,38 @@
         "unidade": "Barra",
         "fakes": {
           "buscar_movimentos": {
+            "ok": true,
+            "count": 3,
             "items": [
               {
                 "movimentacao_id": "MOV-550-1",
                 "valor": 550,
                 "categoria": "passaporte",
                 "forma_pagamento": "pix",
-                "responsavel": "Aluno A",
-                "hora": "08:56",
-                "lancado_por": "Equipe A"
+                "descricao": "Passaporte - Aluno A",
+                "responsavel": "Equipe A · via Sol",
+                "criado_por": "sol-agente:grupo:5521900000001",
+                "created_at": "2026-09-29T11:56:00Z"
               },
               {
                 "movimentacao_id": "MOV-550-2",
                 "valor": 550,
                 "categoria": "passaporte",
                 "forma_pagamento": "pix",
-                "responsavel": "Aluno A",
-                "hora": "09:12",
-                "lancado_por": "Equipe B"
+                "descricao": "Passaporte - Aluno A",
+                "responsavel": "Equipe B · via Sol",
+                "criado_por": "sol-agente:grupo:5521900000002",
+                "created_at": "2026-09-29T12:12:00Z"
               },
               {
                 "movimentacao_id": "MOV-550-3",
                 "valor": 550,
                 "categoria": "passaporte",
                 "forma_pagamento": "pix",
-                "responsavel": "Aluno A",
-                "hora": "09:40",
-                "lancado_por": "Equipe A"
+                "descricao": "Passaporte - Aluno A",
+                "responsavel": "Equipe A · via Sol",
+                "criado_por": "sol-agente:grupo:5521900000001",
+                "created_at": "2026-09-29T12:40:00Z"
               }
             ]
           }
@@ -884,13 +889,32 @@
           "check": "envio",
           "passo": 0,
           "regex": "09:12",
-          "porque": "lista traz a hora"
+          "porque": "lista traz a hora (BRT)"
         },
         {
           "check": "envio",
           "passo": 0,
-          "regex": "Equipe B|lan[çc]ou",
+          "regex": "lan[çc]ado por Equipe B",
           "porque": "lista traz quem lançou"
+        },
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "55219000",
+          "nega": true,
+          "porque": "nunca o telefone de criado_por"
+        },
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "MOV-550-",
+          "porque": "id curto"
+        },
+        {
+          "check": "envio",
+          "passo": 1,
+          "regex": "09:12",
+          "porque": "o card de estorno diz qual foi escolhido"
         },
         {
           "check": "estornos",
@@ -898,7 +922,8 @@
           "max": 1,
           "movimentacao_id": "MOV-550-2"
         }
-      ]
+      ],
+      "consertado": "29/09/2026 (fix/sol-v3-fila-29set): reaproveita o PR #528 (lista hora/quem/id, escolha por número ou id, só quem pediu ou quem cita); quem lançou vem de `responsavel`, nunca do telefone de `criado_por`."
     },
     {
       "id": "B-132",
