@@ -2609,6 +2609,983 @@
           "max": 0
         }
       ]
+    },
+    {
+      "id": "B-CHQ-01",
+      "incidente": "AUD-CHQ-D1",
+      "tipo": "cheque/malote",
+      "status": "passa",
+      "titulo": "Mesmo PDF do malote postado 2x com o card aberto: um card, dois \"pode\" = um lote",
+      "entrada": "PDF de 2 cheques; o MESMO arquivo de novo; \"pode\" duas vezes citando o card.",
+      "defeito": "D1 (auditoria 29/09): cada envio abria card e dois \"pode\" lançavam em dobro.",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "cheques": {
+            "leituras": {
+              "padrao": [
+                {
+                  "k": 1
+                },
+                {
+                  "k": 2
+                }
+              ]
+            },
+            "arquivo": {
+              "M2": "M1"
+            }
+          }
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "document",
+            "body": "cheques para depósito do malote"
+          }
+        },
+        {
+          "evento": {
+            "midia": "document",
+            "body": "cheques para depósito do malote"
+          },
+          "t_s": 5
+        },
+        {
+          "evento": {
+            "body": "pode",
+            "cita": "envio:1"
+          },
+          "t_s": 30
+        },
+        {
+          "evento": {
+            "body": "pode",
+            "cita": "envio:1"
+          },
+          "t_s": 40
+        }
+      ],
+      "esperado": [
+        {
+          "check": "acao",
+          "passo": 1,
+          "regex": "cheques_lote_repetido",
+          "porque": "mesmo arquivo não abre 2º card"
+        },
+        {
+          "check": "contagem_envios",
+          "passo": "todos",
+          "regex": "Posso lan[çc]ar",
+          "max": 1
+        },
+        {
+          "check": "lancamentos",
+          "min": 2,
+          "max": 2,
+          "porque": "um lote de 2 cheques, uma vez"
+        },
+        {
+          "check": "fatura_sem_duplo"
+        },
+        {
+          "check": "cards_aprovaveis",
+          "max": 0
+        }
+      ]
+    },
+    {
+      "id": "B-CHQ-02",
+      "incidente": "AUD-CHQ-D1",
+      "tipo": "cheque/malote",
+      "status": "passa",
+      "titulo": "Re-scan do malote (outro arquivo, mesmos cheques) não abre 2º card",
+      "entrada": "Dois PDFs diferentes com os mesmos 2 cheques; \"pode\" no primeiro card.",
+      "defeito": "D1: a impressão digital do arquivo não pega re-scan; o conjunto banco+número pega.",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "cheques": {
+            "leituras": {
+              "padrao": [
+                {
+                  "k": 1
+                },
+                {
+                  "k": 2
+                }
+              ]
+            }
+          }
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "document",
+            "body": "cheques para depósito do malote"
+          }
+        },
+        {
+          "evento": {
+            "midia": "document",
+            "body": "cheques para depósito do malote"
+          },
+          "t_s": 5
+        },
+        {
+          "evento": {
+            "body": "pode",
+            "cita": "envio:1"
+          },
+          "t_s": 30
+        }
+      ],
+      "esperado": [
+        {
+          "check": "acao",
+          "passo": 1,
+          "regex": "cheques_lote_repetido"
+        },
+        {
+          "check": "envio",
+          "passo": 1,
+          "regex": "Esses 2 cheques já estão no card aberto"
+        },
+        {
+          "check": "lancamentos",
+          "min": 2,
+          "max": 2
+        },
+        {
+          "check": "fatura_sem_duplo"
+        }
+      ]
+    },
+    {
+      "id": "B-CHQ-03",
+      "incidente": "AUD-CHQ-D1",
+      "tipo": "cheque/malote",
+      "status": "passa",
+      "titulo": "Malote repostado depois do \"pode\": cheques já no caixa, sem card",
+      "entrada": "PDF → \"pode\" → o mesmo PDF de novo.",
+      "defeito": "D1: depois do lançamento, só o vínculo de fatura segurava; agora número+banco no caixa também.",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "cheques": {
+            "leituras": {
+              "padrao": [
+                {
+                  "k": 1
+                },
+                {
+                  "k": 2
+                }
+              ]
+            },
+            "arquivo": {
+              "M3": "M1"
+            }
+          }
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "document",
+            "body": "cheques para depósito do malote"
+          }
+        },
+        {
+          "evento": {
+            "body": "pode",
+            "cita": "envio:1"
+          },
+          "t_s": 30
+        },
+        {
+          "evento": {
+            "midia": "document",
+            "body": "cheques para depósito do malote"
+          },
+          "t_s": 60
+        }
+      ],
+      "esperado": [
+        {
+          "check": "acao",
+          "passo": 2,
+          "regex": "cheques_lote_sem_lancavel"
+        },
+        {
+          "check": "envio",
+          "passo": 2,
+          "regex": "Esse cheque já está no caixa"
+        },
+        {
+          "check": "lancamentos",
+          "min": 2,
+          "max": 2
+        },
+        {
+          "check": "cards_aprovaveis",
+          "max": 0
+        }
+      ]
+    },
+    {
+      "id": "B-CHQ-04",
+      "incidente": "AUD-CHQ-D2",
+      "tipo": "cheque/malote",
+      "status": "passa",
+      "titulo": "\"não\" citando card de cheque com 1 ❓ descarta; não vira nome de aluno",
+      "entrada": "1 ✅ + 1 ❓ (emitente desconhecido); \"não\" citando o card; depois \"pode\".",
+      "defeito": "D2: \"não\" virava nome (\"Não achei uma parcela única de \\\"não\\\"\") e o card seguia aprovável.",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "cheques": {
+            "leituras": {
+              "padrao": [
+                {
+                  "k": 1
+                },
+                {
+                  "k": 2,
+                  "emitente": "DESCONHECIDO DA SILVA"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "document",
+            "body": "cheques para depósito do malote"
+          }
+        },
+        {
+          "evento": {
+            "body": "não",
+            "cita": "envio:1"
+          },
+          "t_s": 20
+        },
+        {
+          "evento": {
+            "body": "pode",
+            "cita": "envio:1"
+          },
+          "t_s": 30
+        }
+      ],
+      "esperado": [
+        {
+          "check": "envio",
+          "passo": "todos",
+          "regex": "parcela única",
+          "nega": true
+        },
+        {
+          "check": "lancamentos",
+          "max": 0,
+          "porque": "descartado não lança"
+        },
+        {
+          "check": "cards_aprovaveis",
+          "max": 0
+        }
+      ]
+    },
+    {
+      "id": "B-CHQ-05",
+      "incidente": "AUD-CHQ-D2",
+      "tipo": "cheque/malote",
+      "status": "passa",
+      "titulo": "\"ok, pode\" citando card de cheque com 1 ❓ aprova só o ✅",
+      "entrada": "1 ✅ + 1 ❓; \"ok, pode\" citando o card.",
+      "defeito": "D2: \"ok, pode\" virava nome e a equipe achava que tinha aprovado.",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "cheques": {
+            "leituras": {
+              "padrao": [
+                {
+                  "k": 1
+                },
+                {
+                  "k": 2,
+                  "emitente": "DESCONHECIDO DA SILVA"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "document",
+            "body": "cheques para depósito do malote"
+          }
+        },
+        {
+          "evento": {
+            "body": "ok, pode",
+            "cita": "envio:1"
+          },
+          "t_s": 20
+        }
+      ],
+      "esperado": [
+        {
+          "check": "acao",
+          "passo": 1,
+          "regex": "^lancado$"
+        },
+        {
+          "check": "lancamentos",
+          "min": 1,
+          "max": 1
+        },
+        {
+          "check": "lancamento",
+          "campo": "cheque_numero",
+          "igual": "100001"
+        },
+        {
+          "check": "lancamento",
+          "campo": "forma",
+          "igual": "cheque"
+        }
+      ]
+    },
+    {
+      "id": "B-CHQ-06",
+      "incidente": "AUD-CHQ-D2",
+      "tipo": "cheque/malote",
+      "status": "passa",
+      "titulo": "\"cancela\" citando card de cheque pergunta; não vira nome nem estorno",
+      "entrada": "1 ✅ + 1 ❓; \"cancela\" citando o card.",
+      "defeito": "D2: \"cancela\" virava nome; o caixa lia como estorno sem alvo.",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "cheques": {
+            "leituras": {
+              "padrao": [
+                {
+                  "k": 1
+                },
+                {
+                  "k": 2,
+                  "emitente": "DESCONHECIDO DA SILVA"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "document",
+            "body": "cheques para depósito do malote"
+          }
+        },
+        {
+          "evento": {
+            "body": "cancela",
+            "cita": "envio:1"
+          },
+          "t_s": 20
+        }
+      ],
+      "esperado": [
+        {
+          "check": "acao",
+          "passo": 1,
+          "regex": "cheques_cancelar_pergunta"
+        },
+        {
+          "check": "envio",
+          "passo": 1,
+          "regex": "Quer descartar esse card"
+        },
+        {
+          "check": "lancamentos",
+          "max": 0
+        }
+      ]
+    },
+    {
+      "id": "B-CHQ-07",
+      "incidente": "AUD-CHQ-D3",
+      "tipo": "cheque/malote",
+      "status": "passa",
+      "titulo": "Cheque do valor com desconto em parcela vencida: ❓ com o valor de hoje, sem card",
+      "entrada": "Parcela aberta vencida (447 − 80 de pontualidade); cheque de 367.",
+      "defeito": "D3: card dizia ✅ e o \"pode\" recusava o lote inteiro (snapshot_valor_fatura_mudou).",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "cheques": {
+            "leituras": {
+              "padrao": [
+                {
+                  "k": 31,
+                  "valor": 367
+                }
+              ]
+            },
+            "faturas": {
+              "31": {
+                "status": "aberta",
+                "forma": null,
+                "valor_pago": null,
+                "valor_original": "447.00",
+                "desconto_condicional": "80.00",
+                "data_vencimento": "2026-01-10",
+                "data_pagamento": null
+              }
+            }
+          }
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "document",
+            "body": "cheques para depósito do malote"
+          }
+        },
+        {
+          "evento": {
+            "body": "pode",
+            "cita": "envio:1"
+          },
+          "t_s": 20
+        }
+      ],
+      "esperado": [
+        {
+          "check": "acao",
+          "passo": 0,
+          "regex": "cheques_lote_sem_lancavel"
+        },
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "Parcela \\*vencida\\* em 10/01: hoje ela vale"
+        },
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "diferença de R\\$"
+        },
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "Posso lan[çc]ar",
+          "nega": true
+        },
+        {
+          "check": "lancamentos",
+          "max": 0
+        }
+      ]
+    },
+    {
+      "id": "B-CHQ-08",
+      "incidente": "AUD-CHQ-D4",
+      "tipo": "cheque/malote",
+      "status": "passa",
+      "titulo": "Fatura paga sem forma registrada não é \"paga em cheque\": pede confirmação",
+      "entrada": "Fatura paga com forma vazia; depois \"1 foi cheque\" citando a lista e \"pode\".",
+      "defeito": "D4: forma nula caía em ✅ (o cheque que devia voltar ao cliente entrava no caixa).",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "cheques": {
+            "leituras": {
+              "padrao": [
+                {
+                  "k": 41
+                }
+              ]
+            },
+            "faturas": {
+              "41": {
+                "forma": null
+              }
+            }
+          }
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "document",
+            "body": "cheques para depósito do malote"
+          }
+        },
+        {
+          "evento": {
+            "body": "1 foi cheque",
+            "cita": "envio:1"
+          },
+          "t_s": 20
+        },
+        {
+          "evento": {
+            "body": "pode",
+            "cita": "ultimo_envio"
+          },
+          "t_s": 30
+        }
+      ],
+      "esperado": [
+        {
+          "check": "acao",
+          "passo": 0,
+          "regex": "cheques_lote_sem_lancavel",
+          "porque": "sem forma não afirma cheque"
+        },
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "sem forma de pagamento registrada"
+        },
+        {
+          "check": "acao",
+          "passo": 1,
+          "regex": "preview_cheque_enviado"
+        },
+        {
+          "check": "lancamentos",
+          "min": 1,
+          "max": 1
+        },
+        {
+          "check": "lancamento",
+          "campo": "forma",
+          "igual": "cheque"
+        }
+      ]
+    },
+    {
+      "id": "B-CHQ-09",
+      "incidente": "AUD-CHQ-D6",
+      "tipo": "cheque/malote",
+      "status": "passa",
+      "titulo": "Foto avulsa de cheque sem legenda entra no fluxo de cheques (caso Recreio 21/09)",
+      "entrada": "Foto sem legenda cujo OCR tem a linha CMC-7 e \"pague por este cheque\"; depois \"pode\".",
+      "defeito": "D6: sem \"depósito/malote\" na legenda a foto ia para comprovante e era recusada.",
+      "contexto": {
+        "unidade": "Recreio",
+        "fakes": {
+          "ocr": {
+            "padrao": {
+              "text": "",
+              "status": "texto_vazio"
+            },
+            "por_mensagem": {
+              "M1": {
+                "text": "BANCO BRADESCO\nPague por este cheque a quantia de\n23712346 0181000015 250000000013",
+                "status": "ok"
+              }
+            }
+          },
+          "cheques": {
+            "leituras": {
+              "padrao": [
+                {
+                  "k": 1
+                }
+              ]
+            }
+          }
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "image",
+            "body": ""
+          }
+        },
+        {
+          "evento": {
+            "body": "pode",
+            "cita": "envio:1"
+          },
+          "t_s": 20
+        }
+      ],
+      "esperado": [
+        {
+          "check": "acao",
+          "passo": 0,
+          "regex": "preview_cheque_enviado"
+        },
+        {
+          "check": "lancamentos",
+          "min": 1,
+          "max": 1
+        },
+        {
+          "check": "lancamento",
+          "campo": "cheque_numero",
+          "igual": "100001"
+        },
+        {
+          "check": "lancamento",
+          "campo": "forma",
+          "igual": "cheque"
+        }
+      ]
+    },
+    {
+      "id": "B-CHQ-10",
+      "incidente": "AUD-CHQ-D6",
+      "tipo": "cheque/malote",
+      "status": "passa",
+      "titulo": "Álbum de 3 fotos com legenda só na 1ª vira UM lote e UM card",
+      "entrada": "3 fotos em sequência (legenda \"3 cheques para depósito\" só na 1ª); \"pode\".",
+      "defeito": "D6: só a 1ª foto virava lote; as outras iam ao OCR de comprovante.",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "cheques": {
+            "leituras": {
+              "por_mensagem": {
+                "M1": [
+                  {
+                    "k": 1
+                  }
+                ],
+                "M2": [
+                  {
+                    "k": 2
+                  }
+                ],
+                "M3": [
+                  {
+                    "k": 3
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "image",
+            "body": "3 cheques para depósito"
+          }
+        },
+        {
+          "evento": {
+            "midia": "image",
+            "body": ""
+          },
+          "simultaneo_ms": 10
+        },
+        {
+          "evento": {
+            "midia": "image",
+            "body": ""
+          },
+          "simultaneo_ms": 10
+        },
+        {
+          "evento": {
+            "body": "pode",
+            "cita": "envio:1"
+          },
+          "t_s": 20
+        }
+      ],
+      "esperado": [
+        {
+          "check": "acao",
+          "passo": 0,
+          "regex": "preview_multi_aluno_enviado"
+        },
+        {
+          "check": "acao",
+          "passo": 1,
+          "regex": "cheques_album_agrupado"
+        },
+        {
+          "check": "acao",
+          "passo": 2,
+          "regex": "cheques_album_agrupado"
+        },
+        {
+          "check": "contagem_envios",
+          "passo": "todos",
+          "regex": "Posso lan[çc]ar",
+          "max": 1
+        },
+        {
+          "check": "lancamentos",
+          "min": 3,
+          "max": 3
+        },
+        {
+          "check": "fatura_sem_duplo"
+        }
+      ]
+    },
+    {
+      "id": "B-CHQ-11",
+      "incidente": "AUD-CHQ-D6",
+      "tipo": "cheque/malote",
+      "status": "passa",
+      "titulo": "Foto com cara fraca de cheque: pergunta; \"comprovante\" devolve ao caminho de sempre, sem card",
+      "entrada": "Foto sem legenda cujo OCR só diz \"cheque\"; resposta \"comprovante\" citando a pergunta.",
+      "defeito": "D6: na dúvida, perguntar — nunca lançar sem card.",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "ocr": {
+            "padrao": {
+              "text": "recebido em cheque",
+              "status": "ok"
+            }
+          },
+          "cheques": {
+            "leituras": {
+              "padrao": [
+                {
+                  "k": 1
+                }
+              ]
+            }
+          }
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "image",
+            "body": ""
+          }
+        },
+        {
+          "evento": {
+            "body": "comprovante",
+            "cita": "envio:1"
+          },
+          "t_s": 10
+        }
+      ],
+      "esperado": [
+        {
+          "check": "acao",
+          "passo": 0,
+          "regex": "cheques_foto_duvida"
+        },
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "parece de \\*cheque\\*"
+        },
+        {
+          "check": "acao",
+          "passo": 1,
+          "regex": "^(cheques_|preview_cheque)",
+          "nega": true
+        },
+        {
+          "check": "lancamentos",
+          "max": 0
+        },
+        {
+          "check": "cards_aprovaveis",
+          "max": 0
+        }
+      ]
+    },
+    {
+      "id": "B-CHQ-12",
+      "incidente": "AUD-CHQ-MALOTE15",
+      "tipo": "cheque/malote",
+      "status": "passa",
+      "titulo": "Malote de 15 cheques: lê todos, 3 seções (✅/⚠️/❓) e um \"pode\" lança o lote atômico",
+      "entrada": "PDF com 15 cheques: 11 batem, 2 pagos por Pix/cartão, 1 emitente desconhecido, 1 parcela vencida.",
+      "defeito": "Decisão do dono (29/09): a Sol lê o malote inteiro, associa aluno e parcela e lança com o \"pode\".",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "cheques": {
+            "leituras": {
+              "padrao": [
+                {
+                  "k": 1
+                },
+                {
+                  "k": 2
+                },
+                {
+                  "k": 3
+                },
+                {
+                  "k": 4
+                },
+                {
+                  "k": 5
+                },
+                {
+                  "k": 6
+                },
+                {
+                  "k": 7
+                },
+                {
+                  "k": 8
+                },
+                {
+                  "k": 9
+                },
+                {
+                  "k": 10
+                },
+                {
+                  "k": 11
+                },
+                {
+                  "k": 12
+                },
+                {
+                  "k": 13
+                },
+                {
+                  "k": 14,
+                  "emitente": "DESCONHECIDO DA SILVA"
+                },
+                {
+                  "k": 15,
+                  "valor": 367
+                }
+              ]
+            },
+            "faturas": {
+              "12": {
+                "forma": "Pix"
+              },
+              "13": {
+                "forma": "Cartão de crédito"
+              },
+              "15": {
+                "status": "aberta",
+                "forma": null,
+                "valor_pago": null,
+                "valor_original": "447.00",
+                "desconto_condicional": "80.00",
+                "data_vencimento": "2026-01-10",
+                "data_pagamento": null
+              }
+            }
+          }
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "document",
+            "body": "cheques para depósito do malote"
+          }
+        },
+        {
+          "evento": {
+            "body": "pode",
+            "cita": "envio:1"
+          },
+          "t_s": 30
+        }
+      ],
+      "esperado": [
+        {
+          "check": "acao",
+          "passo": 0,
+          "regex": "preview_multi_aluno_enviado"
+        },
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "15 cheques"
+        },
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "✅ 11 vão para o caixa — R\\$ 4\\.037,00"
+        },
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "⚠️ 2 para retirar do malote"
+        },
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "❓ 2 precisam de você"
+        },
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "VAI PARA O CAIXA[\\s\\S]*RETIRAR DO MALOTE[\\s\\S]*PRECISA DE VOCÊ"
+        },
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "\\*Cheque 15\\*"
+        },
+        {
+          "check": "acao",
+          "passo": 1,
+          "regex": "lote_multi_lancado"
+        },
+        {
+          "check": "lancamentos",
+          "min": 11,
+          "max": 11,
+          "porque": "só os ✅, numa operação"
+        },
+        {
+          "check": "fatura_sem_duplo"
+        },
+        {
+          "check": "lancamento",
+          "indice": 0,
+          "campo": "cheque_numero",
+          "igual": "100001"
+        },
+        {
+          "check": "lancamento",
+          "indice": 10,
+          "campo": "cheque_numero",
+          "igual": "100011"
+        },
+        {
+          "check": "lancamento",
+          "indice": 10,
+          "campo": "forma",
+          "igual": "cheque"
+        },
+        {
+          "check": "cards_aprovaveis",
+          "max": 0
+        }
+      ]
     }
   ]
 }
