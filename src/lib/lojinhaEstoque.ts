@@ -131,3 +131,42 @@ export function tituloDaUnidade(unidadeId: string | null | undefined, nomeUnidad
   if (unidadeId === 'todos') return 'Consolidado';
   return nomeUnidade?.trim() || 'Unidade';
 }
+
+/**
+ * Quantos alertas a tela exibe um a um. É o `slice(0, 5)` do computador:
+ * acima disso a lista vira parede, e o botão "Alertar todos" já leva o resto.
+ */
+export const ALERTAS_VISIVEIS = 5;
+
+/**
+ * O rótulo de cada tipo de movimentação — os MESMOS textos do selo da tabela
+ * do computador. Tipo desconhecido vira "Ajuste", como lá.
+ */
+export function rotuloTipoMovimentacao(tipo: string | null | undefined): string {
+  if (tipo === 'entrada') return 'Entrada';
+  if (tipo === 'venda') return 'Venda';
+  if (tipo === 'estorno') return 'Estorno';
+  return 'Ajuste';
+}
+
+/** `12/09, 14:30` — o mesmo formato das colunas de data do computador. */
+export function formatarDataMov(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/**
+ * O que a linha do produto mostra de cada variação: `P 11`, `GG 0`.
+ *
+ * ⚠️ Produto sem variação vira `4 un` — um `— 4` seria o nome da coluna do
+ * computador vazando para dentro da pílula.
+ */
+export function rotuloPilula(v: Pick<VariacaoEstoque, 'variacao_nome' | 'quantidade'>): string {
+  const nome = v.variacao_nome?.trim();
+  return nome ? `${nome} ${v.quantidade}` : `${v.quantidade} un`;
+}

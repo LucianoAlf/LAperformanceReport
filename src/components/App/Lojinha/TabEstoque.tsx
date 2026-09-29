@@ -13,12 +13,15 @@ import { cn } from '@/lib/utils';
 import type { LojaEstoque, LojaMovimentacaoEstoque, AlertaEstoque } from '@/types/lojinha';
 import { ModalEntradaLote } from './ModalEntradaLote';
 import { agruparEstoque, filtrarEstoquePorBusca, tituloDaUnidade } from '@/lib/lojinhaEstoque';
+import { useShellMobile } from '@/hooks/useShellMobile';
+import { EstoqueMobile } from '@/mobile/telas/lojinha/EstoqueMobile';
 
 interface TabEstoqueProps {
   unidadeId: string;
 }
 
 export function TabEstoque({ unidadeId }: TabEstoqueProps) {
+  const ehCelular = useShellMobile() === 'mobile';
   const [loading, setLoading] = useState(true);
   const [alertas, setAlertas] = useState<AlertaEstoque[]>([]);
   const [estoque, setEstoque] = useState<any[]>([]);
@@ -187,6 +190,25 @@ export function TabEstoque({ unidadeId }: TabEstoqueProps) {
 
   return (
     <div className="space-y-6">
+      {/* 🔴 A bifurcacao fica DENTRO do return e o modal fica FORA dela, no
+          mesmo container: e' o mesmo `ModalEntradaLote` do computador, e o
+          celular o alcanca pelo mesmo `setModalEntradaLote`. Bifurcar antes
+          dele deixaria o botao "Entrada em lote" mudo no telefone.
+
+          ⚠️ O conteudo do computador segue byte a byte no `else`. */}
+      {ehCelular ? (
+        <EstoqueMobile
+          carregando={loading}
+          alertas={alertas}
+          grupos={estoqueAgrupado}
+          movimentacoes={movimentacoes}
+          tituloUnidade={tituloDaUnidade(unidadeId, nomeUnidade)}
+          onAlertar={handleEnviarAlerta}
+          onAlertarTodos={handleEnviarTodosAlertas}
+          onEntradaLote={() => setModalEntradaLote(true)}
+        />
+      ) : (
+        <>
       {/* Alertas */}
       {alertas.length > 0 && (
         <div className="space-y-3">
@@ -416,6 +438,9 @@ export function TabEstoque({ unidadeId }: TabEstoqueProps) {
           </table>
         </div>
       </div>
+
+        </>
+      )}
 
       {/* Modal Entrada Lote */}
       <ModalEntradaLote

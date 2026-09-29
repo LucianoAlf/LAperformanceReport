@@ -127,3 +127,100 @@ test('o nome da unidade vem do banco e a falha não é muda', () => {
 test('busca sem resultado diz que não achou — senão parece quebrada', () => {
   assert.match(tab, /Nenhum produto ou variação com/u);
 });
+
+// ---------------------------------------------------------------------------
+// A tela do celular
+// ---------------------------------------------------------------------------
+
+const { rotuloPilula, rotuloTipoMovimentacao, ALERTAS_VISIVEIS } = lib;
+const cel = le('src/mobile/telas/lojinha/EstoqueMobile.tsx');
+const semComentarios = (src) =>
+  src.replace(/\/\*[\s\S]*?\*\//gu, '').replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/gu, '').replace(/(^|[^:])\/\/.*$/gmu, '$1');
+
+test('🔴 a ordem é a do computador: repor primeiro, lista inteira depois', () => {
+  const c = semComentarios(cel);
+  const repor = c.indexOf('Precisa repor');
+  const lista = c.indexOf('Estoque — {tituloUnidade}');
+  const movs = c.indexOf('Ver movimentações recentes');
+  assert.ok(repor > 0 && lista > 0 && movs > 0, 'um dos três blocos sumiu');
+  assert.ok(repor < lista && lista < movs, 'a ordem dos blocos mudou');
+});
+
+test('🔴 a lista vem INTEIRA — nenhum recorte escondendo produto', () => {
+  // Quem abriu a aba para conferir um produto que não está acabando não pode
+  // ter de desligar um filtro para achá-lo. O único corte é a busca digitada.
+  const c = semComentarios(cel);
+  assert.match(c, /filtrarEstoquePorBusca\(grupos, busca\)/u);
+  assert.doesNotMatch(c, /useState<[^>]*>\(['"]repor|soRepor|apenasBaixo|filtroNivel/u);
+});
+
+test('🔴 as movimentações ficam atrás de um toque, na casca comum', () => {
+  const c = semComentarios(cel);
+  assert.match(c, /const \[verMovimentacoes, setVerMovimentacoes\] = useState\(false\)/u, 'tem de nascer fechado');
+  assert.match(c, /<FolhaMobile[\s\S]*?aberto=\{verMovimentacoes\}/u);
+});
+
+test('nada da tabela do computador sumiu: o que sai da linha mora na ficha', () => {
+  // Colunas do computador: ícone, produto, variação, estoque, mínimo, status,
+  // última mov. A linha mostra as 4 primeiras (variação+estoque na pílula,
+  // status na cor); a ficha tem as outras.
+  const ficha = cel.slice(cel.indexOf('function FichaEstoque'), cel.indexOf('const CLASSE_TIPO'));
+  assert.match(ficha, /Mínimo \{v\.minimo\}/u);
+  assert.match(ficha, /formatarDataMov\(v\.ultima_mov\)/u);
+  assert.match(ficha, /ROTULO_NIVEL\[nivel\]/u);
+  // E as 6 colunas das movimentações: data, produto, tipo, qtd, saldo, por.
+  const movs = cel.slice(cel.indexOf('function ListaMovimentacoes'));
+  for (const campo of ['formatarDataMov(m.created_at)', 'loja_produtos?.nome', 'rotuloTipoMovimentacao(m.tipo)', 'm.quantidade', 'm.saldo_apos', 'colaboradores?.apelido']) {
+    assert.ok(movs.includes(campo), `coluna ${campo} sumiu das movimentações`);
+  }
+});
+
+test('🔴 a tela não busca nem escreve — recebe e devolve por callback', () => {
+  const c = semComentarios(cel);
+  assert.doesNotMatch(c, /supabase|functions\.invoke|\.from\(/u);
+  const tab = le('src/components/App/Lojinha/TabEstoque.tsx');
+  assert.match(tab, /onAlertar=\{handleEnviarAlerta\}/u, 'o celular precisa do MESMO envio de alerta');
+  assert.match(tab, /onAlertarTodos=\{handleEnviarTodosAlertas\}/u);
+  assert.match(tab, /onEntradaLote=\{\(\) => setModalEntradaLote\(true\)\}/u);
+});
+
+test('🔴 o modal de entrada fica FORA da bifurcação', () => {
+  // Bifurcar antes dele deixaria o botão "Entrada em lote" mudo no telefone.
+  const tab = le('src/components/App/Lojinha/TabEstoque.tsx');
+  const fimDaBifurcacao = tab.indexOf('        </>\n      )}');
+  assert.ok(fimDaBifurcacao > 0);
+  assert.ok(tab.indexOf('<ModalEntradaLote') > fimDaBifurcacao, 'o modal entrou num dos ramos');
+});
+
+test('o título do celular lê a mesma regra do computador', () => {
+  const tab = le('src/components/App/Lojinha/TabEstoque.tsx');
+  assert.match(tab, /tituloUnidade=\{tituloDaUnidade\(unidadeId, nomeUnidade\)\}/u);
+});
+
+test('alvos de toque têm 44px no elemento que recebe o toque', () => {
+  const c = semComentarios(cel);
+  const botoes = [...c.matchAll(/<button[\s\S]*?className=(?:"([^"]*)"|\{cn\(\s*'([^']*)')/gu)].map((m) => m[1] ?? m[2]);
+  assert.ok(botoes.length >= 5, 'faltam botões');
+  for (const classes of botoes) assert.match(classes, /min-h-\[44px\]/u, `botão sem alvo: ${classes.slice(0, 50)}`);
+  assert.match(c, /<input[\s\S]*?min-h-\[44px\]/u, 'a busca é tocada no input, não na caixa');
+});
+
+test('pílula e tipo usam os textos do computador', () => {
+  assert.equal(rotuloPilula({ variacao_nome: 'GG', quantidade: 0 }), 'GG 0');
+  assert.equal(rotuloPilula({ variacao_nome: null, quantidade: 4 }), '4 un');
+  assert.equal(rotuloTipoMovimentacao('entrada'), 'Entrada');
+  assert.equal(rotuloTipoMovimentacao('venda'), 'Venda');
+  assert.equal(rotuloTipoMovimentacao('estorno'), 'Estorno');
+  assert.equal(rotuloTipoMovimentacao('ajuste'), 'Ajuste');
+  assert.equal(rotuloTipoMovimentacao('qualquer'), 'Ajuste');
+  // O computador mostra 5 alertas. O celular também — e diz quantos ficaram.
+  assert.equal(ALERTAS_VISIVEIS, 5);
+  assert.match(cel, /E mais \{alertasOcultos\}/u);
+  assert.match(le('src/components/App/Lojinha/TabEstoque.tsx'), /alertas\.slice\(0, 5\)/u);
+});
+
+test('a Lojinha segue FORA das abas portadas — o Histórico de Vendas não foi adaptado', () => {
+  // Marcar a aba inteira apagaria a faixa âmbar dele: o erro de Alunos em 14/09.
+  const abas = le('src/mobile/abasPortadas.ts');
+  assert.doesNotMatch(abas, /'lojinha'/u);
+});
