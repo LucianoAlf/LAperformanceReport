@@ -187,9 +187,25 @@ function pagamentosNaLegenda(pagamentos, legenda) {
   });
 }
 
+// 🔴 29/09/2026 (Recreio): "a parcela dos cursos bateria e piano" de UMA aluna virou
+//    "mais de um aluno" — o detector lia "bateria e piano" como dois nomes. Nome de curso/
+//    instrumento ligado por "e" é UMA pessoa com dois cursos (o Report guarda uma linha
+//    por curso; 150 alunos ativos têm 2+). As frases de curso saem ANTES da detecção.
+const _INSTR_CURSO = '(?:bateria|piano|teclado|violao|viola|guitarra|contrabaixo|baixo|canto|tecnica vocal|violino|violoncelo|cello|ukulele|cavaquinho|flauta|saxofone|sax|trompete|musicalizacao|percussao|harpa|acordeon|sanfona|producao musical|teoria musical)';
+const _CURSO_FRASE_RE = new RegExp(`\\b(?:cursos?|aulas?)\\s+(?:(?:de|do|da)\\s+)?${_INSTR_CURSO}(?:\\s*(?:,|\\be\\b|\\+|&)\\s*(?:(?:de|do|da)\\s+)?${_INSTR_CURSO})*\\b`, 'g');
+const _INSTR_PAR_RE = new RegExp(`\\b${_INSTR_CURSO}\\s*(?:\\be\\b|\\+|&)\\s*${_INSTR_CURSO}\\b`, 'g');
+function _semFrasesDeCurso(t) {
+  return String(t || '').replace(_CURSO_FRASE_RE, ' curso ').replace(_INSTR_PAR_RE, ' cursos ')
+    .replace(/\bcursos?(?:\s*(?:,|\be\b|\+|&)\s*cursos?)+\b/g, ' cursos ')
+    .replace(/\s+/g, ' ').trim();
+}
+
 function detectarContextoMultiAluno(texto) {
-  const t = _normConf(texto);
-  if (!t) return false;
+  const t0 = _normConf(texto);
+  if (!t0) return false;
+  const t = _semFrasesDeCurso(t0);
+  // Mais de um curso citado e nenhuma marca de mais de uma PESSOA: "R$ 500 cada" é por curso.
+  const variosCursos = t !== t0 && /\bcursos\b|\bcurso\b[^\n]{0,40}\bcurso\b/.test(t);
 
   // NOMES_LIGADOS: dois (ou mais) NOMES PROPRIOS ligados por "e" / "+" / "&".
   // Exige 2+ palavras alfabeticas de CADA lado -- e' o que separa
@@ -200,7 +216,7 @@ function detectarContextoMultiAluno(texto) {
   const nomesLigados = /\b[a-zà-ÿ]{2,}(?:\s+[a-zà-ÿ]{2,}){1,4}\s*(?:\be\b|\+|&)\s*[a-zà-ÿ]{2,}(?:\s+[a-zà-ÿ]{2,}){1,4}\b/.test(t);
 
   // "350,00 cada" / "cada um": valor POR CABECA so existe com 2+ pessoas.
-  const valorPorCabeca = /\b\d{2,4}(?:[.,]\d{2})?\s*(?:reais\s*)?cada\b|\bcada\s+um\b/.test(t);
+  const valorPorCabeca = !variosCursos && /\b\d{2,4}(?:[.,]\d{2})?\s*(?:reais\s*)?cada\b|\bcada\s+um\b/.test(t);
 
   const pluralidade = /\b(?:dois|2|ambos|mais de um|varios|varias)\s+alun(?:o|os|a|as)\b|\balunos\b|\bpassaportes\b/.test(t);
   const nomesEmConjunto = /\balunos?\b[\s:\-]+[^\n]{3,120}\s+\be\s+[^\n]{3,120}/.test(t)
@@ -1791,6 +1807,36 @@ function casarParcelaCanonica(unidadeId, aluno, valor, { url, key } = carregarEn
 //  - "parcela N de M" so quando os dois existem;
 //  - valor da parcela = valor_com_desconto; vencida = valor_hoje (com multa/mora);
 //  - nunca apresentar valor_sem_desconto_condicional como "o valor da parcela".
+// Base comparável da fatura canônica: a MESMA regra de `linhasDaFatura`
+// (paga → valor pago; vencida em aberto → valor de hoje; senão valor da parcela).
+function baseDaFaturaCanonica(can) {
+  const f = can && can.fatura;
+  if (!f) return null;
+  const n = (v) => (v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v))) ? Number(v) : null;
+  const vp = n(f.valor_da_parcela), vh = n(f.valor_hoje), vPago = n(f.valor_pago);
+  if (f.status === 'paga' && vPago !== null) return vPago;
+  if (f.status !== 'paga' && f.vencida && vh !== null) return vh;
+  return vp;
+}
+
+// 🔴 29/09/2026 (Recreio, 12:54): comprovante de R$ 900 casado com UMA parcela de
+//    R$ 500 saiu com "difere — confere" e "Responde pode"; o "pode" gravava R$ 900
+//    na fatura de R$ 500. Comprovante MAIOR que a única fatura casada significa
+//    outros itens ou excedente: o card explica e pergunta, nunca pede aprovação.
+//    Menor que a fatura (parcial/negociação) continua como antes.
+function excedeFaturaUnica({ canonica, valor, composto, quitacao, multiplas } = {}) {
+  if (composto || multiplas || quitacao) return false;
+  const base = baseDaFaturaCanonica(canonica);
+  const v = Number(valor);
+  if (base === null || !(v > 0)) return false;
+  return v - base > 0.01;
+}
+
+function deveBloquearLancamento({ composto, parcela, canonica, valor, quitacao, multiplas } = {}) {
+  if (!composto && parcela && parcela.multiplas_no_mes && parcela.valor_bate === false) return true;
+  return excedeFaturaUnica({ canonica, valor, composto, quitacao, multiplas });
+}
+
 function linhasDaFatura(can, valorComprovante) {
   const f = can && can.fatura;
   if (!f) return [];
@@ -2036,8 +2082,25 @@ function _saidaExplicitaFromCaption(body) {
   if (/\b(parcela|mensalidade|passaporte|matr[ií]cula)\b/i.test(t)) return null;
   if (/\btroco\b/i.test(t)) return 'troco';
   if (/\b(retirad[ao]s?|retirei)\b/i.test(t)) return 'retirada';
+  // 🔴 29/09/2026 (CG, Jhon): "Sol, pagamento semanal do segurança - R$100,00 dinheiro"
+  //    virou card de `despesa`. Segurança É saída, e o termo genérico ("saída",
+  //    "paguei", "despesa") não pode vencer a categoria que a pessoa nomeou. Antes o
+  //    ditado só acertava porque não tinha termo genérico; o adaptador da ferramenta
+  //    (`saída <cat> R$ …`) sempre tem, então segurança pela ferramenta era impossível.
+  if (/seguran[çc]a|vigia|porteiro/i.test(t)) return 'seguranca';
   if (SAIDA_TERMO_RE.test(t)) return 'despesa';
   return null;
+}
+
+// Categoria de SAÍDA dita pela PESSOA, com a mesma precedência do ditado de texto.
+// É o código que decide a categoria a partir das palavras humanas; o palpite do
+// modelo só vale quando a pessoa não nomeou nenhuma (29/09/2026).
+function categoriaSaidaDoTexto(texto) {
+  const t = String(texto || '');
+  const saida = _saidaExplicitaFromCaption(t);
+  if (saida) return saida;
+  const cat = _categoriaExplicitaFromCaption(t);
+  return categoriaEhSaida(cat) ? cat : null;
 }
 
 function _categoriaFromCaption(body) {
@@ -2056,6 +2119,30 @@ function _categoriaExplicitaFromCaption(body) {
   if (detectarLojinhaProduto(t)) return 'lojinha';
   if (/\b(parcela|mensalidade)\b/i.test(t)) return 'parcela';
   return null;
+}
+
+// Venda de lojinha por texto (V3): exatamente UM valor, aceitando "R$ 40,00",
+// "Valor: 60", "60 reais". Dois valores diferentes = não adivinha (29/09/2026).
+function _valorLojinhaTexto(texto) {
+  const t = String(texto || '');
+  const vals = new Set();
+  const re = /(?:r\$\s*|valor\s*:?\s*(?:r\$\s*)?)(\d{1,5}(?:\.\d{3})*(?:,\d{1,2})?)|(\d{1,5}(?:\.\d{3})*(?:,\d{1,2})?)\s*reais\b/gi;
+  let m;
+  while ((m = re.exec(t))) {
+    const v = parseBRMoney(m[1] || m[2]);
+    if (v > 0) vals.add(Math.round(v * 100));
+  }
+  if (vals.size !== 1) return null;
+  return [...vals][0] / 100;
+}
+
+// Comprador declarado numa venda de lojinha: "aluno: X", "aluno X", "para a aluna X".
+function _compradorDeclaradoLojinha(texto) {
+  const rot = _alunoRotulado(texto);
+  if (rot) return rot;
+  const m = String(texto || '').match(/\b(?:para|pra|pro)\s+(?:[ao]\s+)?alun[oa]\s+([A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+){0,5}?)(?=\s*(?:[-–—:,]|valor\b|r\$|\d|pix\b|dinheiro\b|cart[ãa]o\b|$))/i);
+  const nome = m && m[1] && m[1].trim();
+  return nome && nome.split(/\s+/).length >= 2 ? nome : null;
 }
 
 function _descricaoSaidaTexto(texto, categoria) {
@@ -3474,6 +3561,24 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   }
   // grupos: { [chatId]: { unidade_id, nome } }
   const pendentes = new Map();   // chatId -> [ {previewId, unidade_id, nome, valor, forma, categoria, aluno, idemKey, origem, ts} ]
+  // 🔴 29/09/2026 (CG, Mayra 12:27): "pode" citando um card que já tinha vencido caía em
+  //    `pode_sem_pendencia` e a Sol ficava MUDA — a equipe achou que tinha lançado. Guardo,
+  //    só em memória e por 3 h, os ids dos cards que venceram para responder "venceu".
+  const vencidosRecentes = new Map(); // chatId -> [ { ids:Set, expiradoEm } ]
+  const VENCIDO_GUARDA_MS = 3 * 60 * 60 * 1000;
+  function _registrarVencido(chatId, p, agora) {
+    const ids = new Set([p.previewId, p.origem, ...(Array.isArray(p.msgIds) ? p.msgIds : [])].filter(Boolean));
+    const lista = (vencidosRecentes.get(chatId) || []).filter((v) => agora - v.expiradoEm < VENCIDO_GUARDA_MS);
+    lista.push({ ids, expiradoEm: agora });
+    vencidosRecentes.set(chatId, lista.slice(-20));
+  }
+  function _cardVencidoDoPode(chatId, quotedId, agora) {
+    const lista = (vencidosRecentes.get(chatId) || []).filter((v) => agora - v.expiradoEm < VENCIDO_GUARDA_MS);
+    vencidosRecentes.set(chatId, lista);
+    if (quotedId) return lista.find((v) => v.ids.has(quotedId)) || null;
+    // Sem citação: só responde se um card venceu há pouco (2 h) neste grupo.
+    return lista.filter((v) => agora - v.expiradoEm < 2 * 60 * 60 * 1000).pop() || null;
+  }
   const lancadosRecentes = new Map(); // chatId -> [ {confirmMessageId, movimentacao_id, unidade_id, nome, valor, forma, ts} ]
   const vistos = new Set();      // idemKeys ja processados (anti-redelivery)
   const textosRecentes = new Map(); // chatId+senderId -> {texto, ts}: legenda/nome que veio em bolha IRMA (comprovante + nome em mensagens separadas)
@@ -5146,6 +5251,7 @@ _Não lanço nada pela metade._`);
     const expirados = arr.filter((p) => agora - p.ts >= janelaMs);
     pendentes.set(chatId, vivos);
     for (const p of expirados) {
+      _registrarVencido(chatId, p, agora);
       limparEnvelopeDaPendencia(chatId, p, 'expirou');
       // A aprovacao vence no mesmo limite do card. A RPC tambem confere a idade,
       // portanto esta escrita e trilha/auditoria — nao a unica barreira.
@@ -5167,10 +5273,32 @@ _Não lanço nada pela metade._`);
   //    recebe o motivo na resposta da tool e fala ele mesmo.
   const _enviosPorChat = new Map();
   const _sendOriginal = sendFn;
+  // Ids das mensagens que a PRÓPRIA Sol mandou (6 h, só memória): permitem saber se
+  // uma resposta citada está falando COM ela ou entre colegas (29/09/2026).
+  const _idsDaSol = new Map(); // messageId -> ts
   sendFn = async (chatId, texto, ...resto) => {
     _enviosPorChat.set(chatId, (_enviosPorChat.get(chatId) || 0) + 1);
-    return _sendOriginal(chatId, texto, ...resto);
+    const id = await _sendOriginal(chatId, texto, ...resto);
+    if (id) {
+      const agoraId = Date.now();
+      _idsDaSol.set(String(id), agoraId);
+      if (_idsDaSol.size > 2000) {
+        for (const [k, t] of _idsDaSol) { if (agoraId - t > 6 * 60 * 60 * 1000) _idsDaSol.delete(k); }
+      }
+    }
+    return id;
   };
+  // 🔴 29/09/2026 (Recreio 16:11, Rose → Vitória): conversa ENTRE colegas ("Não muda o
+  //    valor da parcela", citando a Vitória) virou "Consigo corrigir/estornar, mas preciso
+  //    saber qual lançamento" — a Sol falou no meio da conversa. Mexer em lançamento já
+  //    gravado (ou responder sobre isso) só quando falam COM ela: chamaram pelo nome
+  //    ("Sol, …") ou citaram uma mensagem dela.
+  function _falouComSol(event) {
+    if (event && (event.caixaToolCommand || event.caixaToolTarget || event._sintetico)) return true;
+    if (/^\s*@?sol\b/i.test(String(event && event.body || ''))) return true;
+    const q = event && event.quotedMessageId;
+    return !!(q && _idsDaSol.has(String(q)));
+  }
   async function handle(event, agora = Date.now()) {
     // Chamadas internas repassam `{...event}`: só o topo decide o aviso.
     if (!event || event.__handleTopo) return _handleInterno(event, agora);
@@ -5377,6 +5505,33 @@ _Não lanço nada pela metade._`);
       if (!_ehDitado && !_pendAbertaTexto && _saidaExplicitaFromCaption(texto)) {
         log({ acao: 'saida_texto_ignorada_prosa', chatId, len: texto.length });
       }
+      // 🔴 29/09/2026: venda de lojinha por TEXTO só abria card pela V4 (#525). Com a V3 de
+      //    volta, "Venda de corda para a aluna X Valor:60 reais pix" ficava sem resposta.
+      //    Mesmo fluxo/cofre do card de lojinha (pendência V3 + "pode"), montado por regra.
+      // Só no caminho V3: com a V4 ligada no grupo, a lojinha por texto é dela.
+      if (!_v4CanarioLigado(chatId) && _ehDitado && !_pendAbertaTexto && categoriaTexto === 'lojinha'
+          && /(?<!\p{L})vend(?:a|as|i|emos|eu|ido|ida)(?!\p{L})/iu.test(texto)
+          && !/\b(parcela|mensalidade|passaporte|matr[ií]cula)\b/i.test(texto)) {
+        const _vl = _valorLojinhaTexto(texto);
+        const _fl = extrairForma(texto, null);
+        const _prod = detectarLojinhaProduto(texto);
+        if (!_vl) {
+          await sendFn(chatId, `Entendi venda de ${(_prod && _prod.item) || 'lojinha'}, mas não achei *um* valor. Manda numa linha, por exemplo: *Venda de capotraste — aluno Fulano — R$ 40,00 — pix*`);
+          log({ acao: 'lojinha_texto_sem_valor', chatId });
+          return { acao: 'lojinha_texto_sem_valor' };
+        }
+        if (!_fl) {
+          await sendFn(chatId, `Entendi venda de ${(_prod && _prod.item) || 'lojinha'} de ${fmtBRL(_vl)}. Me diz a forma: *pix*, *dinheiro*, *cartão* ou *transferência* — manda a venda de novo numa linha.`);
+          log({ acao: 'lojinha_texto_sem_forma', chatId, valor: _vl });
+          return { acao: 'lojinha_texto_sem_forma' };
+        }
+        const _comprador = _compradorDeclaradoLojinha(texto);
+        const _envelope = { valor_total: _vl, forma: _fl,
+          itens: _comprador ? [{ aluno: _comprador, categorias: ['lojinha'] }] : [] };
+        log({ acao: 'lojinha_texto_v3', chatId, valor: _vl, com_aluno: !!_comprador });
+        return abrirFluxoAgentFirstLojinha({ event, grupo: grp, envelope: _envelope, texto, agora: Date.now(),
+          origemMessageId: event.messageId });
+      }
       if (categoriaEhSaida(categoriaTexto)) {
         const valor = extrairValor(texto);
         const forma = extrairForma(texto, null);
@@ -5540,6 +5695,10 @@ _Não lanço nada pela metade._`);
         pendentesAtivos.some((p) => p.previewId === event.quotedMessageId) ||
         (!event.quotedBody && pendentesAtivos.length === 1)
       );
+      if (cmdMov && !corrigePreviewAtivo && !_falouComSol(event)) {
+        log({ acao: 'comando_movimento_ignorado_conversa', chatId, tipo: cmdMov.tipo, citou: !!event.quotedMessageId });
+        cmdMov = null;
+      }
       if (cmdMov && !corrigePreviewAtivo) {
         // A tool `caixa_localizar_lancamento` devolve o ID exato. Quando a LLM
         // passa esse alvo, nao reabrimos busca por texto/valor e nunca escolhemos
@@ -6432,7 +6591,7 @@ _Não lanço nada pela metade._`);
             n: quitacao.faturas && quitacao.faturas.n, motivo: quitacao.faturas && quitacao.faturas.motivo });
         }
       }
-      const bloqueiaLancamento = !composto && parcela && parcela.multiplas_no_mes && parcela.valor_bate === false;
+      const bloqueiaLancamento = deveBloquearLancamento({ composto, parcela, canonica, valor, quitacao, multiplas });
       const saidaCaixa = categoriaEhSaida(categoria);
       const descricaoSaida = saidaCaixa
         ? (bodyLimpo(legendaEfetiva)
@@ -7094,14 +7253,18 @@ _Não lanço nada pela metade._`);
           const _citaVD = (x, id) => x.previewId === id || x.origem === id || (Array.isArray(x.msgIds) && x.msgIds.includes(id));
           let alvoVD = null;
           if (event.quotedMessageId) alvoVD = arrP.find((x) => _citaVD(x, event.quotedMessageId)) || null;
-          if (!alvoVD && arrP.length === 1) alvoVD = arrP[0];
+          // 🔴 29/09/2026 (Recreio 16:10): explicação de 1.032 caracteres para a colega
+          //    ("…cada R$ 500,00…") trocou o valor do card de R$ 1.850 para R$ 500. Sem citar
+          //    o card, só vale ditado curto — prosa longa é conversa, não comando.
+          if (!alvoVD && arrP.length === 1 && (bodyLimpo(txt).length <= 220 || _falouComSol(event))) alvoVD = arrP[0];
+          if (!alvoVD && arrP.length === 1) log({ acao: 'valor_ditado_ignorado_prosa', chatId, len: bodyLimpo(txt).length });
           if (alvoVD && !categoriaEhSaida(alvoVD.categoria) && Math.abs((alvoVD.valor || 0) - _valorDitado) >= 0.01) {
             log({ acao: 'preview_valor_corrigido', chatId, de: alvoVD.valor || null, para: _valorDitado });
             alvoVD.valor = _valorDitado;
             if (alvoVD.parcela && alvoVD.parcela.valor_da_parcela != null) {
               alvoVD.parcela.valor_bate = Math.abs(Number(alvoVD.parcela.valor_da_parcela) - _valorDitado) < 0.01;
             }
-            alvoVD.bloqueiaLancamento = !alvoVD.composto && alvoVD.parcela && alvoVD.parcela.multiplas_no_mes && alvoVD.parcela.valor_bate === false;
+            alvoVD.bloqueiaLancamento = deveBloquearLancamento({ composto: alvoVD.composto, parcela: alvoVD.parcela, canonica: alvoVD.canonica, valor: alvoVD.valor, quitacao: alvoVD.quitacao, multiplas: alvoVD.multiplas });
             alvoVD.ts = agora;
             let textoVD = 'Corrigi o valor:\n\n' + montarPreview({
               unidadeNome: alvoVD.nome, valor: alvoVD.valor, forma: alvoVD.forma,
@@ -7530,7 +7693,7 @@ _Não lanço nada pela metade._`);
           alvoP.parcela = _trocouAluno ? (parcela === alvoP.parcela ? null : parcela) : parcela;
           alvoP.composto = _trocouAluno ? (composto || null) : (composto || alvoP.composto || null);
           alvoP.canonica = _trocouAluno ? (canonica || null) : (canonica || alvoP.canonica || null);
-          alvoP.bloqueiaLancamento = !alvoP.composto && parcela && parcela.multiplas_no_mes && parcela.valor_bate === false;
+          alvoP.bloqueiaLancamento = deveBloquearLancamento({ composto: alvoP.composto, parcela, canonica: alvoP.canonica, valor: alvoP.valor, quitacao: alvoP.quitacao, multiplas: alvoP.multiplas });
           alvoP.faturaIndisponivel = canonicaIndisponivel;
           alvoP.bloqueiaFonteIndisponivel = bloqueiaFonteIndisponivel;
           alvoP.responsavelFinanceiro = responsavelFinanceiro;
@@ -7745,7 +7908,7 @@ _Não lanço nada pela metade._`);
           alvoP.composto = null;
           alvoP.divisao = null;
           alvoP.competencia = competencia;
-          alvoP.bloqueiaLancamento = !alvoP.composto && parcela && parcela.multiplas_no_mes && parcela.valor_bate === false;
+          alvoP.bloqueiaLancamento = deveBloquearLancamento({ composto: alvoP.composto, parcela, canonica: alvoP.canonica, valor: alvoP.valor, quitacao: alvoP.quitacao, multiplas: alvoP.multiplas });
           alvoP.confirmacaoManualFonte = !!(confirmacaoManual && faturaIndisponivel);
           alvoP.bloqueiaFonteIndisponivel = faturaIndisponivel && !alvoP.confirmacaoManualFonte;
           alvoP.faturaIndisponivel = faturaIndisponivel && !alvoP.confirmacaoManualFonte;
@@ -7900,7 +8063,17 @@ _Não lanço nada pela metade._`);
     const conf = casarPode(event.body, { respondeuPreview });
       if (conf.pode) {
       const arr = arrPend;
-      if (arr.length === 0) return { acao: 'pode_sem_pendencia' };
+      if (arr.length === 0) {
+        const _venc = _cardVencidoDoPode(chatId, event.quotedMessageId, agora);
+        if (_venc) {
+          const _min = Math.round(janelaMs / 60000);
+          await sendFn(chatId, `⏰ Esse card *venceu* (o card fica aberto por ${_min} min) e *nada foi lançado*. `
+            + 'Reenvia o comprovante com a legenda que eu monto um card novo.');
+          log({ acao: 'pode_card_vencido', chatId, citou: !!event.quotedMessageId });
+          return { acao: 'pode_card_vencido' };
+        }
+        return { acao: 'pode_sem_pendencia' };
+      }
       let alvo = null;
       if (event.quotedMessageId) alvo = arr.find((p) => _citaPend(p, event.quotedMessageId)) || null;
       // Citar um card velho/estranho NAO pode cair na unica pendencia atual.
@@ -8107,7 +8280,7 @@ _Não lanço nada pela metade._`);
           snapshot_soma_divergente: 'a soma das faturas não confere com o total',
           fonte_indisponivel: 'a fonte oficial de faturas está indisponível',
         }[motivoLote] || 'a validação final não reproduziu o preview';
-        await sendFn(chatId, `⚠️ Não lancei o lote: ${motivoHumano}. Nada foi lançado parcialmente. O preview original foi preservado; não precisa reenviar o comprovante.`);
+        await sendFn(chatId, `⚠️ Não lancei o lote: ${motivoHumano}. Nada foi lançado parcialmente. O card continua aberto por até ${Math.round(janelaMs / 60000)} min desde que foi enviado; depois disso, reenvia o comprovante.`);
         log({ acao: 'lote_multi_recusado', chatId, motivo: motivoLote });
         return { acao: 'lote_multi_recusado', motivo: motivoLote };
       }
@@ -8699,7 +8872,7 @@ module.exports = {
   _fonteFuturaLateralAoMesDeclarado,
   selecionarFaturasQuitacao, resolverFaturasQuitacao,
   parseBRMoney, valorDoModelo, normalizarCompetenciaV4, montarEnvelopeV4, extrairValor, extrairForma, extrairFormaHumana, detectarComprovante, casarPode,
-  _saidaExplicitaFromCaption, _nomeHumanoTardio, extrairValorOcr, _vendedorRotulado, _mesmaPessoa,
+  _saidaExplicitaFromCaption, categoriaSaidaDoTexto, excedeFaturaUnica, deveBloquearLancamento, _valorLojinhaTexto, _compradorDeclaradoLojinha, _nomeHumanoTardio, extrairValorOcr, _vendedorRotulado, _mesmaPessoa,
   _alunoRotulado, _limparAlunoRotulado, _semAlunoDeclarado, extrairCategoriaCorrecao,
   _ehDitadoDeCaixa, classificarCorrecaoPendencia, listarPreviewsAbertosV3, _contestaFatura, rotearMensagemV4,
   montarEnvelopeV4, aplicarCorrecaoEnvelope, _v4CanarioLigado, resolverEnvelopeCaixaV1, valorConfereComTexto,

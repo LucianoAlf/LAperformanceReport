@@ -1,0 +1,1607 @@
+{
+  "gerado_em": "2026-09-29",
+  "fonte": "tmp/sol-bateria/catalogo-incidentes.json (139 casos); nomes trocados (Aluno A = 'Fulana Beltrana de Souza', fictício)",
+  "como_rodar": "cd tests/sol-runtime && SOL_CAIXA_V3_LEDGER_FAKE=1 node bateria/bateria-regressao.test.cjs [-v] [--so SOL-131]",
+  "status": {
+    "passa": "comportamento certo hoje; quebrar = vermelho",
+    "falha_conhecida": "defeito aberto; esperado falhar; não derruba a suíte",
+    "requer_banco": "depende de RPC/tabela real; consulta descrita, não executada"
+  },
+  "checks": {
+    "acao": "resultado do handler no passo casa (ou não, com nega) a regex",
+    "envio": "alguma mensagem da Sol no passo casa (ou não) a regex",
+    "contagem_envios": "quantas mensagens do passo casam a regex (min/max)",
+    "fala": "o passo teve ao menos uma mensagem da Sol",
+    "lancamentos": "total de gravações (recebimento, saída e itens de lote)",
+    "lancamento": "campo do lançamento #indice",
+    "nenhum_lancamento_valor": "nenhuma gravação com esse valor",
+    "fatura_sem_duplo": "nenhuma fatura recebe dois lançamentos",
+    "cards_aprovaveis": "cards abertos aprováveis no fim",
+    "estornos": "estornos executados (min/max/movimentacao_id)"
+  },
+  "casos": [
+    {
+      "id": "B-131a",
+      "incidente": "SOL-131",
+      "tipo": "duplicidade",
+      "status": "passa",
+      "titulo": "Mesmo comprovante em 2 mensagens (texto e midia a 46 ms) gera um card só",
+      "entrada": "Texto e midia do MESMO comprovante do mesmo autor, 46 ms de diferença; depois 'pode' duas vezes.",
+      "defeito": "Guarda da V3: com legenda de UM aluno, texto e mídia a 46 ms viram um card só (o duplo de 29/09 foi no caminho agent-first). Ver B-131c para o caso multi-aluno.",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "ocr": {
+            "text": "Comprovante Pix\nValor R$ 457,95\nPagador CICLANO PAGADOR DE SOUZA\nRecebedor LA MUSIC ESCOLA",
+            "status": "ok",
+            "file_bytes": 51001
+          },
+          "visao": {
+            "valor": 457.95,
+            "forma": "pix",
+            "pagador_nome": "Ciclano Pagador de Souza"
+          },
+          "interpretar": {
+            "categoria": "parcela",
+            "aluno": "Fulana Beltrana de Souza",
+            "competencia": "09/2026",
+            "forma": "pix"
+          },
+          "canonica": [
+            {
+              "se_nome": "fulana|ciclano",
+              "resposta": {
+                "ok": true,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "motivo_escolha": "valor_exato",
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000001",
+                  "aluno_id": 101,
+                  "tipo_fatura": "parcela",
+                  "descricao": "Parcela 09/2026 do curso de Canto",
+                  "competencia": "2026-09-01",
+                  "numero_parcela": 9,
+                  "total_parcelas_contrato": 12,
+                  "status": "aberta",
+                  "data_vencimento": "2026-09-10",
+                  "vencida": false,
+                  "dias_atraso": 0,
+                  "valor_da_parcela": 457.95,
+                  "valor_hoje": 457.95
+                }
+              }
+            }
+          ],
+          "duplicata": "simula_banco"
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "body": "PG pix parcela 09/2026 aluna Fulana Beltrana de Souza - LA CG R$457,95"
+          }
+        },
+        {
+          "evento": {
+            "midia": "document",
+            "body": ""
+          },
+          "simultaneo_ms": 46
+        },
+        {
+          "t_s": 30,
+          "evento": {
+            "body": "pode"
+          }
+        },
+        {
+          "t_s": 40,
+          "evento": {
+            "body": "pode"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "contagem_envios",
+          "passo": "todos",
+          "regex": "Comprovante recebido|Posso lan[çc]ar",
+          "max": 1,
+          "porque": "um comprovante = um card"
+        },
+        {
+          "check": "lancamentos",
+          "max": 1,
+          "porque": "o mesmo dinheiro não entra duas vezes"
+        },
+        {
+          "check": "fatura_sem_duplo"
+        }
+      ]
+    },
+    {
+      "id": "B-131b",
+      "incidente": "SOL-131",
+      "tipo": "duplicidade",
+      "status": "passa",
+      "titulo": "Mesmo comprovante em 2 mensagens (midia e texto a 46 ms) gera um card só",
+      "entrada": "Midia e texto do MESMO comprovante do mesmo autor, 46 ms de diferença; depois 'pode' duas vezes.",
+      "defeito": "Guarda da V3: com legenda de UM aluno, texto e mídia a 46 ms viram um card só (o duplo de 29/09 foi no caminho agent-first). Ver B-131c para o caso multi-aluno.",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "ocr": {
+            "text": "Comprovante Pix\nValor R$ 457,95\nPagador CICLANO PAGADOR DE SOUZA\nRecebedor LA MUSIC ESCOLA",
+            "status": "ok",
+            "file_bytes": 51001
+          },
+          "visao": {
+            "valor": 457.95,
+            "forma": "pix",
+            "pagador_nome": "Ciclano Pagador de Souza"
+          },
+          "interpretar": {
+            "categoria": "parcela",
+            "aluno": "Fulana Beltrana de Souza",
+            "competencia": "09/2026",
+            "forma": "pix"
+          },
+          "canonica": [
+            {
+              "se_nome": "fulana|ciclano",
+              "resposta": {
+                "ok": true,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "motivo_escolha": "valor_exato",
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000001",
+                  "aluno_id": 101,
+                  "tipo_fatura": "parcela",
+                  "descricao": "Parcela 09/2026 do curso de Canto",
+                  "competencia": "2026-09-01",
+                  "numero_parcela": 9,
+                  "total_parcelas_contrato": 12,
+                  "status": "aberta",
+                  "data_vencimento": "2026-09-10",
+                  "vencida": false,
+                  "dias_atraso": 0,
+                  "valor_da_parcela": 457.95,
+                  "valor_hoje": 457.95
+                }
+              }
+            }
+          ],
+          "duplicata": "simula_banco"
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "document",
+            "body": ""
+          }
+        },
+        {
+          "evento": {
+            "body": "PG pix parcela 09/2026 aluna Fulana Beltrana de Souza - LA CG R$457,95"
+          },
+          "simultaneo_ms": 46
+        },
+        {
+          "t_s": 30,
+          "evento": {
+            "body": "pode"
+          }
+        },
+        {
+          "t_s": 40,
+          "evento": {
+            "body": "pode"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "contagem_envios",
+          "passo": "todos",
+          "regex": "Comprovante recebido|Posso lan[çc]ar",
+          "max": 1,
+          "porque": "um comprovante = um card"
+        },
+        {
+          "check": "lancamentos",
+          "max": 1,
+          "porque": "o mesmo dinheiro não entra duas vezes"
+        },
+        {
+          "check": "fatura_sem_duplo"
+        }
+      ]
+    },
+    {
+      "id": "B-131c",
+      "incidente": "SOL-131",
+      "tipo": "duplicidade",
+      "status": "passa",
+      "titulo": "Passaportes de 2 alunos: legenda e comprovante a 46 ms geram UM card de lote",
+      "entrada": "Legenda 'PG pix passaporte alunos Aluno A e Aluno B R$ 200,00 cada' e o comprovante de R$ 400 em 2 mensagens (46 ms); 'pode' duas vezes.",
+      "defeito": "Em 29/09 (CG) saíram 2 cards de lote (itens da legenda × pagador do OCR); o caixa.log mostra os dois pelo caminho agent-first (V4). Guarda: a mesma entrada pela V3 dá um card só. O defeito segue aberto para quando a V4 voltar.",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "ocr": {
+            "text": "Comprovante Pix\nValor R$ 400,00\nPagador CICLANO PAGADOR DE SOUZA\nRecebedor LA MUSIC ESCOLA",
+            "status": "ok",
+            "file_bytes": 51001
+          },
+          "visao": {
+            "valor": 400,
+            "forma": "pix",
+            "pagador_nome": "Ciclano Pagador de Souza"
+          },
+          "interpretar": {
+            "categoria": "passaporte",
+            "aluno": "Fulana Beltrana de Souza",
+            "forma": "pix",
+            "pagamentos": [
+              {
+                "aluno": "Fulana Beltrana de Souza",
+                "valor": 200
+              },
+              {
+                "aluno": "Ciclana Outra Pereira",
+                "valor": 200
+              }
+            ]
+          },
+          "resolver_multi": {
+            "ok": true,
+            "valor_total": 400,
+            "itens": [
+              {
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "valor": 200,
+                "categoria": "passaporte",
+                "competencia": null,
+                "canonical_fatura_id": "0a000000-0000-4000-8000-000000000011",
+                "descricao": "Passaporte",
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000011",
+                  "tipo_fatura": "passaporte",
+                  "status": "aberta",
+                  "valor": 200
+                }
+              },
+              {
+                "aluno_nome": "Ciclana Outra Pereira",
+                "valor": 200,
+                "categoria": "passaporte",
+                "competencia": null,
+                "canonical_fatura_id": "0a000000-0000-4000-8000-000000000012",
+                "descricao": "Passaporte",
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000012",
+                  "tipo_fatura": "passaporte",
+                  "status": "aberta",
+                  "valor": 200
+                }
+              }
+            ]
+          },
+          "duplicata": "simula_banco"
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "body": "PG pix passaporte alunos Fulana Beltrana de Souza e Ciclana Outra Pereira R$ 200,00 cada"
+          }
+        },
+        {
+          "simultaneo_ms": 46,
+          "evento": {
+            "midia": "image",
+            "body": ""
+          }
+        },
+        {
+          "t_s": 30,
+          "evento": {
+            "body": "pode",
+            "cita": "envio:1"
+          }
+        },
+        {
+          "t_s": 40,
+          "evento": {
+            "body": "pode",
+            "cita": "ultimo_envio"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "contagem_envios",
+          "passo": "todos",
+          "regex": "Posso lan[çc]ar|Comprovante recebido|v[áa]rios alunos|2 alunos",
+          "max": 1,
+          "porque": "um comprovante = um card"
+        },
+        {
+          "check": "lancamentos",
+          "min": 2,
+          "max": 2,
+          "porque": "dois passaportes, uma vez cada"
+        },
+        {
+          "check": "fatura_sem_duplo"
+        }
+      ]
+    },
+    {
+      "id": "B-104r",
+      "incidente": "SOL-104",
+      "tipo": "duplicidade",
+      "status": "passa",
+      "titulo": "Dois cards do mesmo aluno/valor no mesmo dia: o 2º 'pode' é barrado pela duplicidade",
+      "entrada": "Dois comprovantes (arquivos diferentes) da mesma parcela do Aluno A; 'pode' citando cada card.",
+      "defeito": "Camada do runtime (sol_caixa_ja_lancado_hoje). A trava por fatura_id no banco é outro caso (requer_banco).",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "ocr": {
+            "padrao": {
+              "text": "Comprovante Pix\nValor R$ 457,95\nPagador CICLANO PAGADOR DE SOUZA\nRecebedor LA MUSIC ESCOLA",
+              "status": "ok",
+              "file_bytes": 51001
+            },
+            "por_mensagem": {
+              "M2": {
+                "text": "Comprovante Pix\nValor R$ 457,95\nPagador CICLANO PAGADOR DE SOUZA\nRecebedor LA MUSIC ESCOLA",
+                "status": "ok",
+                "file_bytes": 61002
+              }
+            }
+          },
+          "visao": {
+            "valor": 457.95,
+            "forma": "pix",
+            "pagador_nome": "Ciclano Pagador de Souza"
+          },
+          "interpretar": {
+            "categoria": "parcela",
+            "aluno": "Fulana Beltrana de Souza",
+            "competencia": "09/2026",
+            "forma": "pix"
+          },
+          "canonica": [
+            {
+              "se_nome": "fulana",
+              "resposta": {
+                "ok": true,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "motivo_escolha": "valor_exato",
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000001",
+                  "aluno_id": 101,
+                  "tipo_fatura": "parcela",
+                  "descricao": "Parcela 09/2026 do curso de Canto",
+                  "competencia": "2026-09-01",
+                  "numero_parcela": 9,
+                  "total_parcelas_contrato": 12,
+                  "status": "aberta",
+                  "data_vencimento": "2026-09-10",
+                  "vencida": false,
+                  "dias_atraso": 0,
+                  "valor_da_parcela": 457.95,
+                  "valor_hoje": 457.95
+                }
+              }
+            }
+          ],
+          "duplicata": "simula_banco"
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "image",
+            "body": "PG pix parcela 09/2026 aluna Fulana Beltrana de Souza - LA CG R$457,95"
+          }
+        },
+        {
+          "t_s": 60,
+          "evento": {
+            "midia": "image",
+            "body": "PG pix parcela 09/2026 aluna Fulana Beltrana de Souza - LA CG R$457,95",
+            "remetente": "B"
+          }
+        },
+        {
+          "t_s": 90,
+          "evento": {
+            "body": "pode",
+            "cita": "envio:1"
+          }
+        },
+        {
+          "t_s": 100,
+          "evento": {
+            "body": "pode",
+            "cita": "envio:2",
+            "remetente": "B"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "lancamentos",
+          "max": 1
+        },
+        {
+          "check": "fatura_sem_duplo"
+        },
+        {
+          "check": "acao",
+          "passo": 3,
+          "regex": "pode_bloqueado_duplicidade"
+        }
+      ]
+    },
+    {
+      "id": "B-135",
+      "incidente": "SOL-135",
+      "tipo": "recebimento_foto",
+      "status": "passa",
+      "titulo": "Card de R$ 900 contra fatura de R$ 500 não pode pedir 'pode' nem gravar",
+      "entrada": "Comprovante de R$ 900 (parte de um pagamento maior) com legenda 'PG pix parcela 10/2026 aluna Aluno A'; a fonte devolve a parcela de R$ 500; depois 'pode'.",
+      "defeito": "Divergência de valor só sinaliza ('difere — confere') e o card segue aprovável (metodologia, regra 8).",
+      "contexto": {
+        "unidade": "Recreio",
+        "fakes": {
+          "ocr": {
+            "text": "Pix enviado\nR$ 900,00\nPagador CICLANO PAGADOR",
+            "status": "ok",
+            "file_bytes": 70001
+          },
+          "visao": {
+            "valor": 900,
+            "forma": "pix"
+          },
+          "interpretar": {
+            "categoria": "parcela",
+            "aluno": "Fulana Beltrana de Souza",
+            "competencia": "10/2026",
+            "forma": "pix"
+          },
+          "canonica": [
+            {
+              "se_nome": "fulana",
+              "resposta": {
+                "ok": true,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "motivo_escolha": "ultima_da_janela",
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000002",
+                  "aluno_id": 101,
+                  "tipo_fatura": "parcela",
+                  "descricao": "Parcela 10/2026 do curso de Bateria",
+                  "competencia": "2026-10-01",
+                  "numero_parcela": 10,
+                  "total_parcelas_contrato": 12,
+                  "status": "aberta",
+                  "data_vencimento": "2026-10-10",
+                  "vencida": false,
+                  "dias_atraso": 0,
+                  "valor_da_parcela": 500,
+                  "valor_hoje": 500
+                }
+              }
+            }
+          ],
+          "duplicata": "simula_banco"
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "document",
+            "body": "PG pix parcela 10/2026 aluna Fulana Beltrana de Souza"
+          }
+        },
+        {
+          "t_s": 30,
+          "evento": {
+            "body": "pode",
+            "cita": "envio:1"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "difere|n[ãa]o fecha|diverg",
+          "porque": "explica a divergência"
+        },
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "responde\\W+pode|\\*pode\\*",
+          "nega": true,
+          "porque": "card que não fecha não pede 'pode'"
+        },
+        {
+          "check": "nenhum_lancamento_valor",
+          "valor": 900,
+          "porque": "R$ 900 contra fatura de R$ 500"
+        }
+      ]
+    },
+    {
+      "id": "B-136",
+      "incidente": "SOL-136",
+      "tipo": "recebimento_foto",
+      "status": "passa",
+      "titulo": "Dois comprovantes (R$ 750 + R$ 900) de um pagamento de R$ 1.650 não viram cards parciais",
+      "entrada": "Dois PDFs do mesmo autor com 0,4 s de diferença; a legenda do 1º declara o total de R$ 1.650; 'pode' em cada card.",
+      "defeito": "Cada comprovante é tratado sozinho; a soma não fecha em nenhum card.",
+      "contexto": {
+        "unidade": "Recreio",
+        "fakes": {
+          "ocr": {
+            "padrao": null,
+            "por_mensagem": {
+              "M1": {
+                "text": "Comprovante Pix\nValor R$ 750,00\nPagador CICLANO PAGADOR DE SOUZA\nRecebedor LA MUSIC ESCOLA",
+                "status": "ok",
+                "file_bytes": 71001
+              },
+              "M2": {
+                "text": "Comprovante Pix\nValor R$ 900,00\nPagador CICLANO PAGADOR DE SOUZA\nRecebedor LA MUSIC ESCOLA",
+                "status": "ok",
+                "file_bytes": 72002
+              }
+            }
+          },
+          "visao": null,
+          "interpretar": {
+            "categoria": "passaporte",
+            "aluno": "Fulana Beltrana de Souza",
+            "competencia": "10/2026",
+            "forma": "pix"
+          },
+          "canonica": [
+            {
+              "se_nome": "fulana",
+              "resposta": {
+                "ok": true,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "motivo_escolha": "ultima_da_janela",
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000002",
+                  "aluno_id": 101,
+                  "tipo_fatura": "parcela",
+                  "descricao": "Parcela 10/2026 do curso de Bateria",
+                  "competencia": "2026-10-01",
+                  "numero_parcela": 10,
+                  "total_parcelas_contrato": 12,
+                  "status": "aberta",
+                  "data_vencimento": "2026-10-10",
+                  "vencida": false,
+                  "dias_atraso": 0,
+                  "valor_da_parcela": 500,
+                  "valor_hoje": 500
+                }
+              }
+            }
+          ],
+          "duplicata": "simula_banco"
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "document",
+            "body": "PG pix passaporte + parcelas 10/2026 aluna Fulana Beltrana de Souza - total R$1.650,00"
+          }
+        },
+        {
+          "simultaneo_ms": 400,
+          "evento": {
+            "midia": "document",
+            "body": ""
+          }
+        },
+        {
+          "t_s": 60,
+          "evento": {
+            "body": "pode",
+            "cita": "envio:1"
+          }
+        },
+        {
+          "t_s": 70,
+          "evento": {
+            "body": "pode",
+            "cita": "envio:2"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "nenhum_lancamento_valor",
+          "valor": 750
+        },
+        {
+          "check": "nenhum_lancamento_valor",
+          "valor": 900
+        },
+        {
+          "check": "nenhum_lancamento_valor",
+          "valor": 1650,
+          "porque": "total declarado num card de um comprovante só de R$ 750/900"
+        },
+        {
+          "check": "fatura_sem_duplo",
+          "porque": "a mesma parcela de R$ 500 não recebe dois lançamentos"
+        }
+      ]
+    },
+    {
+      "id": "B-133",
+      "incidente": "SOL-133",
+      "tipo": "multi_curso",
+      "status": "passa",
+      "titulo": "Aluna com 2 cursos ('curso bateria e curso piano') não é 'mais de um aluno'",
+      "entrada": "Legenda 'PG pix passaporte e parcelas 10/2026 aluna Aluno A curso bateria e curso piano R$1.650,00'.",
+      "defeito": "O detector de multi-aluno lê 'curso X e curso Y' como dois nomes; identificação deveria ser pela pessoa.",
+      "contexto": {
+        "unidade": "Recreio",
+        "fakes": {
+          "ocr": {
+            "text": "Pix R$ 1.650,00",
+            "status": "ok",
+            "file_bytes": 73001
+          },
+          "visao": null,
+          "interpretar": {
+            "categoria": "parcela",
+            "aluno": "Fulana Beltrana de Souza",
+            "competencia": "10/2026",
+            "forma": "pix",
+            "pagamentos": [
+              {
+                "aluno": "Fulana Beltrana de Souza",
+                "valor": 1650
+              }
+            ]
+          },
+          "canonica": [
+            {
+              "se_nome": "fulana",
+              "resposta": {
+                "ok": true,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "motivo_escolha": "ultima_da_janela",
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000002",
+                  "aluno_id": 101,
+                  "tipo_fatura": "parcela",
+                  "descricao": "Parcela 10/2026 do curso de Bateria",
+                  "competencia": "2026-10-01",
+                  "numero_parcela": 10,
+                  "total_parcelas_contrato": 12,
+                  "status": "aberta",
+                  "data_vencimento": "2026-10-10",
+                  "vencida": false,
+                  "dias_atraso": 0,
+                  "valor_da_parcela": 500,
+                  "valor_hoje": 500
+                }
+              }
+            }
+          ]
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "document",
+            "body": "PG pix passaporte e parcelas 10/2026 aluna Fulana Beltrana de Souza curso bateria e curso piano R$1.650,00"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "acao",
+          "passo": 0,
+          "regex": "manual_review_multi|multi_aluno",
+          "nega": true
+        },
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "mais de um aluno|v[áa]rios alunos",
+          "nega": true
+        }
+      ]
+    },
+    {
+      "id": "B-076",
+      "incidente": "SOL-076",
+      "tipo": "multi_curso",
+      "status": "passa",
+      "titulo": "'curso canto e curso de violão' de UMA aluna: nem nome = frase, nem card parcial",
+      "entrada": "Legenda 'PG parcelas aluna Aluno A curso canto e curso de violão Kids CG' com comprovante de R$ 714 (duas parcelas de R$ 357).",
+      "defeito": "Consertado só no caminho V4 (envelope). Com a V3 de volta, o legado trata como multi-aluno/nome errado.",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "ocr": {
+            "text": "Pix R$ 714,00",
+            "status": "ok",
+            "file_bytes": 74001
+          },
+          "visao": null,
+          "interpretar": {
+            "categoria": "parcela",
+            "aluno": "Fulana Beltrana de Souza",
+            "competencia": "09/2026",
+            "forma": "pix"
+          },
+          "canonica": [
+            {
+              "se_nome": "fulana",
+              "resposta": {
+                "ok": true,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "motivo_escolha": "valor_exato",
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000003",
+                  "aluno_id": 101,
+                  "tipo_fatura": "parcela",
+                  "descricao": "Parcela 09/2026 do curso de Canto",
+                  "competencia": "2026-09-01",
+                  "numero_parcela": 9,
+                  "total_parcelas_contrato": 12,
+                  "status": "aberta",
+                  "data_vencimento": "2026-09-10",
+                  "vencida": false,
+                  "dias_atraso": 0,
+                  "valor_da_parcela": 357,
+                  "valor_hoje": 357
+                }
+              }
+            }
+          ]
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "image",
+            "body": "PG parcelas aluna Fulana Beltrana de Souza curso canto e curso de violão Kids CG"
+          }
+        },
+        {
+          "t_s": 30,
+          "evento": {
+            "body": "pode, pix",
+            "cita": "envio:1"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "curso canto e curso",
+          "nega": true,
+          "porque": "frase inteira não é nome"
+        },
+        {
+          "check": "acao",
+          "passo": 0,
+          "regex": "manual_review_multi",
+          "nega": true,
+          "porque": "é uma pessoa só"
+        },
+        {
+          "check": "nenhum_lancamento_valor",
+          "valor": 357,
+          "porque": "nunca card parcial"
+        }
+      ]
+    },
+    {
+      "id": "B-114",
+      "incidente": "SOL-114",
+      "tipo": "estorno",
+      "status": "falha_conhecida",
+      "titulo": "Estorno com 3 lançamentos iguais: lista hora/quem/id e estorna só o escolhido",
+      "entrada": "'Sol, estorna o de R$ 550' com 3 passaportes de R$ 550 no dia; resposta '2' citando a lista; 'pode'.",
+      "defeito": "A lista não traz hora/quem lançou/id e a escolha por número não é tratada (PR #528 não publicado).",
+      "contexto": {
+        "unidade": "Barra",
+        "fakes": {
+          "buscar_movimentos": {
+            "items": [
+              {
+                "movimentacao_id": "MOV-550-1",
+                "valor": 550,
+                "categoria": "passaporte",
+                "forma_pagamento": "pix",
+                "responsavel": "Aluno A",
+                "hora": "08:56",
+                "lancado_por": "Equipe A"
+              },
+              {
+                "movimentacao_id": "MOV-550-2",
+                "valor": 550,
+                "categoria": "passaporte",
+                "forma_pagamento": "pix",
+                "responsavel": "Aluno A",
+                "hora": "09:12",
+                "lancado_por": "Equipe B"
+              },
+              {
+                "movimentacao_id": "MOV-550-3",
+                "valor": 550,
+                "categoria": "passaporte",
+                "forma_pagamento": "pix",
+                "responsavel": "Aluno A",
+                "hora": "09:40",
+                "lancado_por": "Equipe A"
+              }
+            ]
+          }
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "body": "Sol, estorna o de R$ 550"
+          }
+        },
+        {
+          "t_s": 20,
+          "evento": {
+            "body": "2",
+            "cita": "envio:1"
+          }
+        },
+        {
+          "t_s": 30,
+          "evento": {
+            "body": "pode",
+            "cita": "ultimo_envio"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "09:12",
+          "porque": "lista traz a hora"
+        },
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "Equipe B|lan[çc]ou",
+          "porque": "lista traz quem lançou"
+        },
+        {
+          "check": "estornos",
+          "min": 1,
+          "max": 1,
+          "movimentacao_id": "MOV-550-2"
+        }
+      ]
+    },
+    {
+      "id": "B-132",
+      "incidente": "SOL-132",
+      "tipo": "expiracao_card",
+      "status": "passa",
+      "titulo": "'pode' 32 min depois do card: avisa que venceu e pede reenvio",
+      "entrada": "Card completo às 12:27; 'pode' às 12:59.",
+      "defeito": "pode_sem_pendencia sai em silêncio; a equipe acha que lançou.",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "ocr": {
+            "text": "Comprovante Pix\nValor R$ 457,95\nPagador CICLANO PAGADOR DE SOUZA\nRecebedor LA MUSIC ESCOLA",
+            "status": "ok",
+            "file_bytes": 51001
+          },
+          "visao": {
+            "valor": 457.95,
+            "forma": "pix",
+            "pagador_nome": "Ciclano Pagador de Souza"
+          },
+          "interpretar": {
+            "categoria": "parcela",
+            "aluno": "Fulana Beltrana de Souza",
+            "competencia": "09/2026",
+            "forma": "pix"
+          },
+          "canonica": [
+            {
+              "se_nome": "fulana",
+              "resposta": {
+                "ok": true,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "motivo_escolha": "valor_exato",
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000001",
+                  "aluno_id": 101,
+                  "tipo_fatura": "parcela",
+                  "descricao": "Parcela 09/2026 do curso de Canto",
+                  "competencia": "2026-09-01",
+                  "numero_parcela": 9,
+                  "total_parcelas_contrato": 12,
+                  "status": "aberta",
+                  "data_vencimento": "2026-09-10",
+                  "vencida": false,
+                  "dias_atraso": 0,
+                  "valor_da_parcela": 457.95,
+                  "valor_hoje": 457.95
+                }
+              }
+            }
+          ]
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "image",
+            "body": "PG pix parcela 09/2026 aluna Fulana Beltrana de Souza - LA CG R$457,95"
+          }
+        },
+        {
+          "t_s": 1920,
+          "evento": {
+            "body": "pode"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "lancamentos",
+          "max": 0
+        },
+        {
+          "check": "fala",
+          "passo": 1,
+          "porque": "'pode' nunca fica mudo"
+        },
+        {
+          "check": "envio",
+          "passo": 1,
+          "regex": "venc|expir|reenvi|manda de novo"
+        }
+      ]
+    },
+    {
+      "id": "B-110a",
+      "incidente": "SOL-110",
+      "tipo": "recebimento_foto",
+      "status": "falha_conhecida",
+      "titulo": "Legenda que chega depois de mídia recusada reavalia a mídia",
+      "entrada": "Comprovante sem legenda e ilegível (recusado); 20 s depois o autor manda a legenda completa.",
+      "defeito": "A mídia recusada não é reavaliada; a legenda sozinha não vira card.",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "ocr": {
+            "text": "",
+            "status": "tesseract_error"
+          },
+          "visao": null,
+          "interpretar": {
+            "categoria": "parcela",
+            "aluno": "Fulana Beltrana de Souza",
+            "competencia": "09/2026",
+            "forma": "pix"
+          },
+          "canonica": [
+            {
+              "se_nome": "fulana",
+              "resposta": {
+                "ok": true,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "motivo_escolha": "valor_exato",
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000001",
+                  "aluno_id": 101,
+                  "tipo_fatura": "parcela",
+                  "descricao": "Parcela 09/2026 do curso de Canto",
+                  "competencia": "2026-09-01",
+                  "numero_parcela": 9,
+                  "total_parcelas_contrato": 12,
+                  "status": "aberta",
+                  "data_vencimento": "2026-09-10",
+                  "vencida": false,
+                  "dias_atraso": 0,
+                  "valor_da_parcela": 457.95,
+                  "valor_hoje": 457.95
+                }
+              }
+            }
+          ]
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "image",
+            "body": ""
+          }
+        },
+        {
+          "t_s": 20,
+          "evento": {
+            "body": "PG pix parcela 09/2026 aluna Fulana Beltrana de Souza - LA CG R$457,95"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "acao",
+          "passo": 0,
+          "regex": "midia_recusada"
+        },
+        {
+          "check": "envio",
+          "passo": 1,
+          "regex": "Comprovante recebido",
+          "porque": "a legenda completa a mídia recusada"
+        }
+      ]
+    },
+    {
+      "id": "B-110b",
+      "incidente": "SOL-110",
+      "tipo": "recebimento_foto",
+      "status": "falha_conhecida",
+      "titulo": "Mídia sem legenda não adota texto velho que não era legenda",
+      "entrada": "Autor comenta 'Sol, a Aluno A já pagou ontem, desconsidera'; 90 s depois manda outro comprovante sem legenda (de outro pagamento).",
+      "defeito": "A mídia sem legenda pega o último texto dos 150 s como legenda, mesmo sendo outra conversa.",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "ocr": {
+            "text": "Pix R$ 300,00 Pagador BELTRANO QUALQUER",
+            "status": "ok",
+            "file_bytes": 75001
+          },
+          "visao": {
+            "valor": 300,
+            "forma": "pix",
+            "pagador_nome": "Beltrano Qualquer"
+          },
+          "interpretar": null,
+          "canonica": [
+            {
+              "se_nome": "fulana",
+              "resposta": {
+                "ok": true,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "motivo_escolha": "valor_exato",
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000004",
+                  "aluno_id": 101,
+                  "tipo_fatura": "parcela",
+                  "descricao": "Parcela 09/2026 do curso de Canto",
+                  "competencia": "2026-09-01",
+                  "numero_parcela": 9,
+                  "total_parcelas_contrato": 12,
+                  "status": "aberta",
+                  "data_vencimento": "2026-09-10",
+                  "vencida": false,
+                  "dias_atraso": 0,
+                  "valor_da_parcela": 300,
+                  "valor_hoje": 300
+                }
+              }
+            }
+          ]
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "body": "Sol, a Fulana Beltrana de Souza já pagou ontem, desconsidera"
+          }
+        },
+        {
+          "t_s": 90,
+          "evento": {
+            "midia": "image",
+            "body": ""
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "envio",
+          "passo": 1,
+          "regex": "Fulana",
+          "nega": true,
+          "porque": "texto de outra conversa não vira aluno do card"
+        }
+      ]
+    },
+    {
+      "id": "B-126",
+      "incidente": "SOL-126",
+      "tipo": "lojinha",
+      "status": "passa",
+      "titulo": "Venda de lojinha por texto vira card de lojinha e grava com 'pode'",
+      "entrada": "'Venda de corda para a aluna Aluno A Valor:60 reais pix' (só texto); 'pode'.",
+      "defeito": "Consertado só no caminho V4 (PR #525). Na V3, texto de lojinha não abre card.",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "interpretar": {
+            "categoria": "lojinha",
+            "aluno": "Fulana Beltrana de Souza",
+            "forma": "pix"
+          }
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "body": "Venda de corda para a aluna Fulana Beltrana de Souza Valor:60 reais pix"
+          }
+        },
+        {
+          "t_s": 20,
+          "evento": {
+            "body": "pode",
+            "cita": "ultimo_envio"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "R\\$ ?60,00"
+        },
+        {
+          "check": "lancamentos",
+          "min": 1,
+          "max": 1
+        },
+        {
+          "check": "lancamento",
+          "campo": "categoria",
+          "regex": "lojinha|venda"
+        }
+      ]
+    },
+    {
+      "id": "B-010",
+      "incidente": "SOL-010",
+      "tipo": "outro",
+      "status": "passa",
+      "titulo": "'pode' com o caixa fechado diz que o caixa está fechado (não 'divergência de fatura')",
+      "entrada": "Card completo; 'pode'; a RPC recusa com caixa_nao_aberto.",
+      "defeito": "Resolvido em 22/08 sem teste.",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "ocr": {
+            "text": "Comprovante Pix\nValor R$ 457,95\nPagador CICLANO PAGADOR DE SOUZA\nRecebedor LA MUSIC ESCOLA",
+            "status": "ok",
+            "file_bytes": 51001
+          },
+          "visao": {
+            "valor": 457.95,
+            "forma": "pix",
+            "pagador_nome": "Ciclano Pagador de Souza"
+          },
+          "interpretar": {
+            "categoria": "parcela",
+            "aluno": "Fulana Beltrana de Souza",
+            "competencia": "09/2026",
+            "forma": "pix"
+          },
+          "canonica": [
+            {
+              "se_nome": "fulana",
+              "resposta": {
+                "ok": true,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "motivo_escolha": "valor_exato",
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000001",
+                  "aluno_id": 101,
+                  "tipo_fatura": "parcela",
+                  "descricao": "Parcela 09/2026 do curso de Canto",
+                  "competencia": "2026-09-01",
+                  "numero_parcela": 9,
+                  "total_parcelas_contrato": 12,
+                  "status": "aberta",
+                  "data_vencimento": "2026-09-10",
+                  "vencida": false,
+                  "dias_atraso": 0,
+                  "valor_da_parcela": 457.95,
+                  "valor_hoje": 457.95
+                }
+              }
+            }
+          ],
+          "lancar": {
+            "ok": false,
+            "motivo": "caixa_nao_aberto"
+          }
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "image",
+            "body": "PG pix parcela 09/2026 aluna Fulana Beltrana de Souza - LA CG R$457,95"
+          }
+        },
+        {
+          "t_s": 20,
+          "evento": {
+            "body": "pode"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "envio",
+          "passo": 1,
+          "regex": "caixa.{0,40}(aberto|fechad)"
+        },
+        {
+          "check": "envio",
+          "passo": 1,
+          "regex": "fatura",
+          "nega": true
+        }
+      ]
+    },
+    {
+      "id": "B-138",
+      "incidente": "SOL-138",
+      "tipo": "saida",
+      "status": "passa",
+      "titulo": "Saída 'pagamento semanal do segurança' pela V3 grava categoria segurança",
+      "entrada": "'Sol, Pagamento semanal do segurança - R$100,00 dinheiro'; 'pode'.",
+      "defeito": "O defeito aberto é no caminho de ferramentas (V4). Esta guarda prova que a V3 acerta.",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {}
+      },
+      "passos": [
+        {
+          "evento": {
+            "body": "Sol, Pagamento semanal do segurança - R$100,00 dinheiro"
+          }
+        },
+        {
+          "t_s": 20,
+          "evento": {
+            "body": "pode",
+            "cita": "ultimo_envio"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "Sa[íi]da de caixa"
+        },
+        {
+          "check": "lancamentos",
+          "min": 1,
+          "max": 1
+        },
+        {
+          "check": "lancamento",
+          "campo": "categoria",
+          "igual": "seguranca"
+        },
+        {
+          "check": "lancamento",
+          "campo": "forma",
+          "igual": "dinheiro"
+        }
+      ]
+    },
+    {
+      "id": "B-137",
+      "incidente": "SOL-137",
+      "tipo": "ocr",
+      "status": "passa",
+      "titulo": "PDF ilegível sem valor na legenda: não fica mudo e não grava sem valor",
+      "entrada": "PDF com tesseract_error e visão vazia; legenda 'PG pix passaporte aluna Aluno A' sem valor; 'pode'.",
+      "defeito": "Desconhecido no catálogo; esta guarda fixa o mínimo: falar e não gravar.",
+      "contexto": {
+        "unidade": "Recreio",
+        "fakes": {
+          "ocr": {
+            "text": "",
+            "status": "tesseract_error"
+          },
+          "visao": null,
+          "interpretar": {
+            "categoria": "passaporte",
+            "aluno": "Fulana Beltrana de Souza",
+            "forma": "pix"
+          }
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "document",
+            "body": "PG pix passaporte aluna Fulana Beltrana de Souza"
+          }
+        },
+        {
+          "t_s": 20,
+          "evento": {
+            "body": "pode"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "fala",
+          "passo": 0
+        },
+        {
+          "check": "lancamentos",
+          "max": 0
+        },
+        {
+          "check": "fala",
+          "passo": 1
+        }
+      ]
+    },
+    {
+      "id": "B-103",
+      "incidente": "SOL-103",
+      "tipo": "correcao",
+      "status": "falha_conhecida",
+      "titulo": "Resposta 'de 10/2026 a 09/2027' corrige o período do card de quitação",
+      "entrada": "Comprovante de quitação de 12 parcelas de R$ 397; o card propõe o período; resposta citando o card com outro período.",
+      "defeito": "Nenhum caminho trata a resposta; é preciso reenviar o comprovante.",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "ocr": {
+            "text": "Pix R$ 4.764,00",
+            "status": "ok",
+            "file_bytes": 76001
+          },
+          "visao": null,
+          "interpretar": {
+            "categoria": "parcela",
+            "aluno": "Fulana Beltrana de Souza",
+            "forma": "pix"
+          },
+          "canonica": [
+            {
+              "se_nome": "fulana",
+              "resposta": {
+                "ok": true,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "motivo_escolha": "valor_exato",
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000005",
+                  "aluno_id": 101,
+                  "tipo_fatura": "parcela",
+                  "descricao": "Parcela 09/2026 do curso de Canto",
+                  "competencia": "2026-09-01",
+                  "numero_parcela": 9,
+                  "total_parcelas_contrato": 12,
+                  "status": "aberta",
+                  "data_vencimento": "2026-09-10",
+                  "vencida": false,
+                  "dias_atraso": 0,
+                  "valor_da_parcela": 397,
+                  "valor_hoje": 397
+                }
+              }
+            }
+          ]
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "image",
+            "body": "PG pix quitação 12 parcelas aluna Fulana Beltrana de Souza R$4.764,00"
+          }
+        },
+        {
+          "t_s": 30,
+          "evento": {
+            "body": "de 10/2026 a 09/2027",
+            "cita": "envio:1"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "acao",
+          "passo": 0,
+          "regex": "preview_enviado"
+        },
+        {
+          "check": "envio",
+          "passo": 1,
+          "regex": "10/2026 a 09/2027",
+          "porque": "card remontado com o período informado"
+        }
+      ]
+    },
+    {
+      "id": "B-134",
+      "incidente": "SOL-134",
+      "tipo": "adiantamento_excedente",
+      "status": "falha_conhecida",
+      "titulo": "Excedente declarado vira item 'adiantamento parcela 11/2026' sem vínculo",
+      "entrada": "Legenda com passaporte R$ 550 + parcelas 10/2026 R$ 500 + R$ 500 + 'adiantamento parcela 11/2026 R$ 100', total R$ 1.650.",
+      "defeito": "Não existe caminho para valor sem fatura (regra decidida pelo Alf em 29/09, não implementada).",
+      "contexto": {
+        "unidade": "Recreio",
+        "fakes": {
+          "ocr": {
+            "text": "Pix R$ 1.650,00",
+            "status": "ok",
+            "file_bytes": 77001
+          },
+          "visao": null,
+          "interpretar": {
+            "categoria": "parcela",
+            "aluno": "Fulana Beltrana de Souza",
+            "forma": "pix"
+          },
+          "canonica": [
+            {
+              "se_nome": "fulana",
+              "resposta": {
+                "ok": true,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "motivo_escolha": "ultima_da_janela",
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000002",
+                  "aluno_id": 101,
+                  "tipo_fatura": "parcela",
+                  "descricao": "Parcela 10/2026 do curso de Bateria",
+                  "competencia": "2026-10-01",
+                  "numero_parcela": 10,
+                  "total_parcelas_contrato": 12,
+                  "status": "aberta",
+                  "data_vencimento": "2026-10-10",
+                  "vencida": false,
+                  "dias_atraso": 0,
+                  "valor_da_parcela": 500,
+                  "valor_hoje": 500
+                }
+              }
+            }
+          ]
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "document",
+            "body": "Aluna Fulana Beltrana de Souza\nPassaporte R$ 550,00\nParcela 10/2026 Bateria R$ 500,00\nParcela 10/2026 Piano R$ 500,00\nAdiantamento parcela 11/2026 R$ 100,00\nTotal R$ 1.650,00 pix"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "adiantamento",
+          "porque": "o excedente aparece como item próprio"
+        },
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "mais de um aluno",
+          "nega": true
+        }
+      ]
+    },
+    {
+      "id": "B-104b",
+      "incidente": "SOL-104",
+      "tipo": "duplicidade",
+      "status": "requer_banco",
+      "titulo": "Mesma fatura não pode ganhar dois donos (trava no banco)",
+      "consulta": "SELECT indexname, indexdef FROM pg_indexes WHERE tablename='caixa_movimentacao_faturas' AND indexdef ILIKE '%UNIQUE%fatura_id%'; SELECT fatura_id, count(*) FROM caixa_movimentacao_faturas GROUP BY 1 HAVING count(*)>1;  -- e ler o corpo de sol_caixa_lancar_recebimento / _lote procurando revalidação do dono",
+      "defeito": "Sem índice único por fatura_id e sem revalidação do dono no 'pode'."
+    },
+    {
+      "id": "B-106",
+      "incidente": "SOL-106",
+      "tipo": "correcao",
+      "status": "requer_banco",
+      "titulo": "Movimento R$ 397 de CG (0a2e91a7…) corrigido: descrição e fatura",
+      "consulta": "SELECT id, valor, descricao, fatura_id, aluno_id, created_at FROM caixa_movimentacoes WHERE id::text LIKE '0a2e91a7%';  -- esperado: descrição 'Parcela 09/2026 - <aluno>' e fatura_id preenchido",
+      "defeito": "Dado sujo gravado em 26/09, sem registro de correção."
+    },
+    {
+      "id": "B-116",
+      "incidente": "SOL-116",
+      "tipo": "cheque/malote",
+      "status": "requer_banco",
+      "titulo": "Primeiro 'pode' real de card de cheque conferido",
+      "consulta": "SELECT id, forma_pagamento, descricao, fatura_id, created_at FROM caixa_movimentacoes WHERE forma_pagamento='cheque' ORDER BY created_at DESC LIMIT 5;  -- conferir nº do cheque na descrição e fatura ligada. Caminho coberto com dado inventado em tests/sol-runtime/cheques-lote-e2e.cjs.",
+      "defeito": "O caminho que grava com o nº do cheque nunca rodou em produção."
+    },
+    {
+      "id": "B-133b",
+      "incidente": "SOL-133",
+      "tipo": "multi_curso",
+      "status": "requer_banco",
+      "titulo": "Pessoas com 2+ matrículas ativas (1 linha por curso)",
+      "consulta": "SELECT emusys_student_id, unidade_id, count(*) FROM alunos WHERE status='ativo' GROUP BY 1,2 HAVING count(*)>1;  -- ~150 esperados; conferir se o resolvedor de multi-aluno agrupa por emusys_student_id",
+      "defeito": "Identificação deveria ser pela pessoa, não pela linha de curso."
+    },
+    {
+      "id": "B-025",
+      "incidente": "SOL-025",
+      "tipo": "lote_multi_aluno",
+      "status": "requer_banco",
+      "titulo": "Diferença de passaporte de irmãos: o total desambigua (20 + 20 = 40)",
+      "consulta": "SELECT sol_caixa_derivar_valores_multi_aluno_v1(...) com dois irmãos de faturas R$ 360 e R$ 20 cada e total R$ 40 (em banco isolado/branch, nunca produção).",
+      "defeito": "Resolvido na RPC (PR #227), sem teste."
+    },
+    {
+      "id": "B-099",
+      "incidente": "SOL-099",
+      "tipo": "competencia/janela",
+      "status": "requer_banco",
+      "titulo": "Fatura paga nos últimos 4 dias com valor exato vence a aberta",
+      "consulta": "Chamar sol_caixa_casar_parcela_canonica com aluno de parcela baixada hoje no Emusys (banco isolado) e conferir motivo_escolha='paga_hoje_valor_exato'.",
+      "defeito": "Regra só existe na RPC."
+    },
+    {
+      "id": "B-100",
+      "incidente": "SOL-100",
+      "tipo": "recebimento_foto",
+      "status": "requer_banco",
+      "titulo": "Aluno trancado/aviso prévio/ex-aluno com cobrança pode pagar",
+      "consulta": "Chamar a RPC canônica para aluno com status trancado e fatura aberta (banco isolado); esperado: ok=true com a fatura dele, nunca outro aluno.",
+      "defeito": "Parte de banco sem teste em tests/sol-runtime."
+    },
+    {
+      "id": "B-040",
+      "incidente": "SOL-040",
+      "tipo": "outro",
+      "status": "requer_banco",
+      "titulo": "Todo DELETE em caixa_movimentacoes deixa trilha",
+      "consulta": "SELECT tgname FROM pg_trigger WHERE tgrelid='caixa_movimentacoes'::regclass AND NOT tgisinternal;  -- esperado: gatilho de auditoria de DELETE",
+      "defeito": "Resolvido no banco, sem teste."
+    },
+    {
+      "id": "B-108",
+      "incidente": "SOL-108",
+      "tipo": "recebimento_foto",
+      "status": "requer_banco",
+      "titulo": "Comprovante de R$ 380 (outubro) nunca lançado",
+      "consulta": "SELECT id, valor, descricao, created_at FROM caixa_movimentacoes WHERE valor=380 AND descricao ILIKE '%10/2026%' ORDER BY created_at DESC;  -- esperado: 1 movimento após o reenvio",
+      "defeito": "Consequência do SOL-107; depende de reenvio humano."
+    }
+  ]
+}
