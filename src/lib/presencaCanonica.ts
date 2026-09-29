@@ -12,7 +12,8 @@ export type PresencaFonte =
   | 'agenda_secretaria'
   | 'professor_la_teacher'
   | 'fabio_audio'
-  | 'manual';
+  | 'manual'
+  | 'aluno_presente';
 
 export interface PresencaOcorrenciaAgenda {
   slot_key: string;
@@ -76,6 +77,8 @@ const ROTULOS_FONTE: Record<PresencaFonte, string> = {
   professor_la_teacher: 'LA Teacher · professor',
   fabio_audio: 'Fábio · áudio',
   manual: 'Registro manual',
+  // Professor marcado presente porque um aluno da aula foi marcado presente.
+  aluno_presente: 'Aluno presente na aula',
 };
 
 export function rotuloPresencaFonte(fonte: PresencaFonte | null): string {
@@ -96,6 +99,7 @@ function normalizarFonte(fonte: string): PresencaFonte | null {
   if (fonte === 'professor_la_teacher') return 'professor_la_teacher';
   if (fonte === 'fabio_audio') return 'fabio_audio';
   if (fonte === 'manual' || fonte === 'professor_whatsapp') return 'manual';
+  if (fonte === 'aluno_presente') return 'aluno_presente';
   return null;
 }
 
