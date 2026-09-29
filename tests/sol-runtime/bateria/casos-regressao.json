@@ -1843,6 +1843,70 @@
           "max": 0
         }
       ]
+    },
+    {
+      "id": "B-144",
+      "incidente": "SOL-144",
+      "tipo": "roteamento/silencio",
+      "status": "passa",
+      "titulo": "Pergunta para colega citando o comprovante humano não chama a Sol",
+      "entrada": "Há um card aberto; outra pessoa cita a foto original e pergunta ao autor se a aluna tem parcela atrasada.",
+      "defeito": "A Sol tratava a citação da foto humana como citação do próprio card e interrompia com 'Não entendi essa'.",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "interpretar": {
+            "categoria": "parcela",
+            "aluno": "Fulana Beltrana de Souza",
+            "competencia": "10/2026",
+            "forma": "dinheiro"
+          },
+          "canonica": [
+            {
+              "se_nome": "fulana",
+              "resposta": {
+                "ok": false,
+                "motivo": "nenhuma_fatura_na_competencia"
+              }
+            }
+          ]
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "id": "COMPROVANTE-HUMANO",
+            "midia": "image",
+            "body": "PG parcela 10/26\nAluno: Fulana Beltrana de Souza\nLA CG - R$450,00 (dinheiro)",
+            "remetente": "A"
+          }
+        },
+        {
+          "t_s": 20,
+          "evento": {
+            "body": "Jhon ela tem parcela atrasada?",
+            "remetente": "B",
+            "cita": "msg:COMPROVANTE-HUMANO"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "acao",
+          "passo": 1,
+          "regex": "nada"
+        },
+        {
+          "check": "contagem_envios",
+          "passo": 1,
+          "regex": ".",
+          "max": 0
+        },
+        {
+          "check": "lancamentos",
+          "max": 0
+        }
+      ]
     }
   ]
 }

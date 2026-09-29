@@ -1395,8 +1395,12 @@ async function caixaAbf() {
               // pendencia travada "envenena" a conversa inteira do grupo: qualquer
               // mensagem de qualquer pessoa, sobre qualquer assunto, levava "nao entendi".
               const _pareceProSol = !!(groupEngagement.pareceChamarSol && groupEngagement.pareceChamarSol(body));
-              const _citouCard = !!(event.quotedMessageId && _fh.citaAlgumaPendencia
-                && _fh.citaAlgumaPendencia(chatId, event.quotedMessageId));
+              // Citar o comprovante de uma pessoa nao e falar com a Sol. So uma
+              // mensagem que a propria Sol enviou (card/continuacao) aciona esta
+              // guarda; a relacao ampla com a origem segue disponivel ao handler
+              // deterministico para correcoes explicitamente reconhecidas.
+              const _citouCard = !!(event.quotedMessageId && _fh.citaCardPendenteDaSol
+                && _fh.citaCardPendenteDaSol(chatId, event.quotedMessageId));
               let _v4JaRegistrou = false;
               // Pré-flight operacional V4: frase inédita dirigida à Sol pode
               // escolher apenas os executores determinísticos de ABERTURA ou
