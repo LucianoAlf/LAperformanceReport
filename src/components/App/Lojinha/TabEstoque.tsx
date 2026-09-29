@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { LojaEstoque, LojaMovimentacaoEstoque, AlertaEstoque } from '@/types/lojinha';
 import { ModalEntradaLote } from './ModalEntradaLote';
+import { agruparEstoque, filtrarEstoquePorBusca, tituloDaUnidade } from '@/lib/lojinhaEstoque';
 
 interface TabEstoqueProps {
   unidadeId: string;
@@ -23,6 +24,7 @@ export function TabEstoque({ unidadeId }: TabEstoqueProps) {
   const [estoque, setEstoque] = useState<any[]>([]);
   const [movimentacoes, setMovimentacoes] = useState<LojaMovimentacaoEstoque[]>([]);
   const [busca, setBusca] = useState('');
+  const [nomeUnidade, setNomeUnidade] = useState<string | null>(null);
   const [modalEntradaLote, setModalEntradaLote] = useState(false);
 
   useEffect(() => {
@@ -32,6 +34,22 @@ export function TabEstoque({ unidadeId }: TabEstoqueProps) {
   async function loadData() {
     setLoading(true);
     try {
+      // O nome da unidade vai no titulo da tabela. Ate 29/09/2026 ele estava
+      // escrito fixo ("Barra"), e quem estava em Campo Grande lia Barra.
+      if (unidadeId && unidadeId !== 'todos') {
+        const { data: unidade, error: erroUnidade } = await supabase
+          .from('unidades')
+          .select('nome')
+          .eq('id', unidadeId)
+          .maybeSingle();
+        if (erroUnidade) {
+          console.error(`[TabEstoque] nome da unidade ${unidadeId}:`, erroUnidade.message);
+        }
+        setNomeUnidade(unidade?.nome ?? null);
+      } else {
+        setNomeUnidade(null);
+      }
+
       // Carregar estoque com produtos
       let estoqueQuery = supabase
         .from('loja_estoque')
@@ -161,28 +179,11 @@ export function TabEstoque({ unidadeId }: TabEstoqueProps) {
     }
   }
 
-  // Agrupar estoque por produto
-  const estoqueAgrupado = estoque.reduce((acc, e) => {
-    const key = e.produto_id;
-    if (!acc[key]) {
-      acc[key] = {
-        produto_id: e.produto_id,
-        produto_nome: e.loja_produtos?.nome || '',
-        icone: e.loja_produtos?.loja_categorias?.icone || '📦',
-        variacoes: [],
-      };
-    }
-    acc[key].variacoes.push({
-      variacao_id: e.variacao_id,
-      variacao_nome: e.loja_variacoes?.nome || null,
-      quantidade: e.quantidade,
-      minimo: e.loja_produtos?.estoque_minimo || 5,
-      ultima_mov: e.updated_at,
-    });
-    return acc;
-  }, {} as Record<number, any>);
-
-  const estoqueLista = Object.values(estoqueAgrupado);
+  // Agrupar estoque por produto — a regra mora em `@/lib/lojinhaEstoque`,
+  // a mesma que o celular le.
+  const estoqueAgrupado = agruparEstoque(estoque);
+  // 🔴 A caixa "Buscar..." guardava o texto e nao filtrava nada ate 29/09/2026.
+  const estoqueLista = filtrarEstoquePorBusca(estoqueAgrupado, busca);
 
   return (
     <div className="space-y-6">
@@ -258,7 +259,7 @@ export function TabEstoque({ unidadeId }: TabEstoqueProps) {
         <div className="p-4 border-b border-slate-700 flex items-center justify-between">
           <h3 className="font-semibold text-white flex items-center gap-2">
             <BarChart3 className="w-4 h-4" />
-            Estoque — {unidadeId === 'todos' ? 'Consolidado' : 'Barra'}
+            Estoque — {tituloDaUnidade(unidadeId, nomeUnidade)}
           </h3>
           <div className="flex items-center gap-2">
             <div className="relative">
@@ -295,6 +296,12 @@ export function TabEstoque({ unidadeId }: TabEstoqueProps) {
                 <tr>
                   <td colSpan={7} className="p-8 text-center text-slate-400">
                     Carregando...
+                  </td>
+                </tr>
+              ) : estoqueLista.length === 0 && busca.trim() ? (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-slate-400">
+                    Nenhum produto ou variação com “{busca.trim()}”.
                   </td>
                 </tr>
               ) : (
