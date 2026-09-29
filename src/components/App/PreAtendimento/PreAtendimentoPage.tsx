@@ -76,6 +76,7 @@ export function PreAtendimentoPage() {
   const [modalNovoLeadAberto, setModalNovoLeadAberto] = useState(false);
   const [modalAgendarAberto, setModalAgendarAberto] = useState(false);
   const [modalMoverEtapaAberto, setModalMoverEtapaAberto] = useState(false);
+  const [leadAgendarVisita, setLeadAgendarVisita] = useState<LeadCRM | null>(null);
   const [modalArquivarAberto, setModalArquivarAberto] = useState(false);
   const [leadParaModal, setLeadParaModal] = useState<LeadCRM | null>(null);
   const [modalConfigurarEtapasAberto, setModalConfigurarEtapasAberto] = useState(false);
@@ -211,6 +212,17 @@ export function PreAtendimentoPage() {
         onSalvo={refetch}
         lead={leadParaModal}
         etapas={etapas}
+        onAgendarVisita={setLeadAgendarVisita}
+      />
+
+      {/* "Mover etapa" para Visita sem visita marcada: o modal grava a etapa E a visita. */}
+      <ModalAgendar
+        aberto={leadAgendarVisita !== null}
+        lead={leadAgendarVisita}
+        tipoInicial="visita"
+        tipoTravado
+        onClose={() => setLeadAgendarVisita(null)}
+        onSalvo={() => { setLeadAgendarVisita(null); refetch(); }}
       />
 
       {/* Modal Arquivar */}

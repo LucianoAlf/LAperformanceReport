@@ -16,7 +16,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ArrowRightLeft, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
+import { ETAPA_PIPELINE_VISITA } from '@/lib/visitasComercial';
+import { consultarVisitaVigenteDoLead, quandoDaVisita } from '../lib/visitaDoLead';
 import type { LeadCRM, PipelineEtapa } from '../types';
 
 interface ModalMoverEtapaProps {
@@ -25,9 +28,14 @@ interface ModalMoverEtapaProps {
   onSalvo?: () => void;
   lead: LeadCRM | null;
   etapas: PipelineEtapa[];
+  /**
+   * Chamado quando o destino e a etapa de visita e o lead ainda nao tem visita marcada:
+   * quem abre o ModalAgendar (que grava a etapa E a visita) e a pagina.
+   */
+  onAgendarVisita?: (lead: LeadCRM) => void;
 }
 
-export function ModalMoverEtapa({ aberto, onClose, onSalvo, lead, etapas }: ModalMoverEtapaProps) {
+export function ModalMoverEtapa({ aberto, onClose, onSalvo, lead, etapas, onAgendarVisita }: ModalMoverEtapaProps) {
   const [salvando, setSalvando] = useState(false);
   const [etapaDestinoId, setEtapaDestinoId] = useState('');
 
@@ -43,6 +51,23 @@ export function ModalMoverEtapa({ aberto, onClose, onSalvo, lead, etapas }: Moda
 
     setSalvando(true);
     try {
+      // Mesma regra do arrasto do Kanban: a etapa de visita so vale com visita na
+      // tabela `visitas`. Sem visita marcada, quem grava e o ModalAgendar.
+      if (novaEtapaId === ETAPA_PIPELINE_VISITA) {
+        const consulta = await consultarVisitaVigenteDoLead(lead.id);
+        if (!consulta.ok) throw new Error(`nao foi possivel conferir a visita: ${consulta.erro}`);
+        if (!consulta.visita) {
+          if (!onAgendarVisita) throw new Error('agendamento de visita indisponivel nesta tela');
+          setEtapaDestinoId('');
+          onClose();
+          onAgendarVisita(lead);
+          return;
+        }
+        toast.info(`${lead.nome || 'Lead'} já tem visita agendada para ${quandoDaVisita(consulta.visita)}`, {
+          description: 'A etapa foi alterada sem criar outra visita.',
+        });
+      }
+
       const { error } = await supabase
         .from('leads')
         .update({
@@ -65,7 +90,10 @@ export function ModalMoverEtapa({ aberto, onClose, onSalvo, lead, etapas }: Moda
       onClose();
       onSalvo?.();
     } catch (err) {
-      console.error('Erro ao mover etapa:', err);
+      // Falha muda deixava a consultora achando que moveu.
+      const detalhe = err instanceof Error ? err.message : String(err);
+      console.error(`[mover-etapa] lead ${lead.id} -> etapa ${novaEtapaId}: ${detalhe}`);
+      toast.error('Não foi possível mover a etapa', { description: detalhe });
     } finally {
       setSalvando(false);
     }
