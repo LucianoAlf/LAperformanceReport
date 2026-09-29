@@ -7739,6 +7739,78 @@ _Não lanço nada pela metade._`);
           }
         }
 
+        // ── PERÍODO DA QUITAÇÃO (SOL-103, 29/09/2026). O card de quitação ensina
+        // "se for outro período, me diz: *de 09/2026 a 08/2027*", e a resposta
+        // "de 10/2026 a 09/2027" caía no caminho de VÁRIAS COMPETÊNCIAS abaixo —
+        // lida como duas parcelas (10/2026 e 09/2027), invalidava o card. Num card
+        // de quitação, intervalo é o PERÍODO: vira a lista de competências, as
+        // faturas do período são resolvidas de novo e o MESMO card é remontado.
+        const _periodoQuit = (!event.hasMedia && !casarPode(txt).pode) ? extrairPeriodoMeses(txt) : null;
+        if (_periodoQuit) {
+          const _citaQ = (x, id) => x.previewId === id || x.origem === id
+            || (Array.isArray(x.msgIds) && x.msgIds.includes(id));
+          const elegiveisQ = arrP.filter((x) => x.multiplas && !categoriaEhSaida(x.categoria)
+            && x.tipoOperacao !== 'manual_review_multi_student' && x.tipoOperacao !== 'lancar_recebimento_lote');
+          const alvoQ = event.quotedMessageId
+            ? (elegiveisQ.find((x) => _citaQ(x, event.quotedMessageId)) || null)
+            : (elegiveisQ.length === 1 ? elegiveisQ[0] : null);
+          if (alvoQ) {
+            const [mi, ai] = _periodoQuit.inicio.split('/').map(Number);
+            const [mf, af] = _periodoQuit.fim.split('/').map(Number);
+            const nMeses = (af * 12 + mf) - (ai * 12 + mi) + 1;
+            if (!(nMeses >= 2 && nMeses <= 13)) {
+              await sendFn(chatId, `Esse período (*${_periodoQuit.inicio} a ${_periodoQuit.fim}*) não fecha uma quitação de 2 a 13 parcelas. Me diz de novo, por exemplo: *de 10/2026 a 09/2027*.`);
+              log({ acao: 'quitacao_periodo_invalido', chatId, inicio: _periodoQuit.inicio, fim: _periodoQuit.fim, n: nMeses });
+              return { acao: 'quitacao_periodo_invalido' };
+            }
+            const qAnt = alvoQ.quitacao || {};
+            const vparcQ = qAnt.vparc || (alvoQ.canonica && alvoQ.canonica.fatura
+              && Number(alvoQ.canonica.fatura.valor_da_parcela)) || null;
+            const qNova = { n: nMeses, vparc: vparcQ, inicio: _periodoQuit.inicio, fim: _periodoQuit.fim,
+              proposto: false, competencias: [] };
+            for (let k = 0; k < nMeses; k++) { const s = _somaMeses(mi, ai, k); qNova.competencias.push(_mm(s.mes, s.ano)); }
+            const _alunoQ = derivarVinculo({ canonica: alvoQ.canonica, parcela: alvoQ.parcela, alunoNovoId: alvoQ.alunoNovoId }).aluno_id;
+            try {
+              qNova.faturas = _alunoQ ? await faturasQuitacaoFn(grp.unidade_id, _alunoQ, qNova) : { ok: false, motivo: 'aluno_sem_vinculo' };
+            } catch (e) {
+              qNova.faturas = { ok: false, motivo: 'erro_leitura' };
+              log({ acao: 'quitacao_faturas_erro', chatId, erro: String(e && e.message) });
+            }
+            alvoQ.quitacao = qNova;
+            alvoQ.multiplas = true;
+            alvoQ.descricao = (qNova.faturas && qNova.faturas.ok)
+              ? (`Parcelas ${qNova.faturas.inicio} a ${qNova.faturas.fim}`
+                 + (qNova.faturas.curso ? ` do curso de ${qNova.faturas.curso}` : '') + (alvoQ.aluno ? ' - ' + alvoQ.aluno : ''))
+              : (`Quitacao ${nMeses}x (${qNova.inicio} a ${qNova.fim})` + (alvoQ.aluno ? ' - ' + alvoQ.aluno : ''));
+            alvoQ.bloqueiaLancamento = deveBloquearLancamento({ composto: alvoQ.composto, parcela: alvoQ.parcela,
+              canonica: alvoQ.canonica, valor: alvoQ.valor, quitacao: qNova, multiplas: true });
+            alvoQ.ts = agora;
+            let textoQ = 'Atualizei o período da quitação:\n\n' + montarPreview({
+              unidadeNome: alvoQ.nome, valor: alvoQ.valor, forma: alvoQ.forma,
+              categoria: alvoQ.categoria, aluno: alvoQ.aluno, competencia: alvoQ.competencia,
+              parcela: alvoQ.parcela, confiancaBaixa: false, responsavelFinanceiro: alvoQ.responsavelFinanceiro,
+              formaIncerta: alvoQ.formaIncerta, cartaoModalidade: alvoQ.cartaoModalidade,
+              cartaoParcelas: alvoQ.cartaoParcelas, multiplas: true,
+              alunoViaPagador: null, pagadorNome: null, candidatosAluno: null,
+              canonica: alvoQ.canonica, duplicata: null, quitacao: qNova,
+              faturaIndisponivel: alvoQ.faturaIndisponivel, composto: alvoQ.composto,
+              bloqueiaLancamento: alvoQ.bloqueiaLancamento,
+            });
+            if (dryRun) textoQ += '\n\n_(modo teste — nada será gravado no caixa)_';
+            alvoQ.previewId = await sendFn(chatId, textoQ);
+            (alvoQ.msgIds = alvoQ.msgIds || []).push(alvoQ.previewId);
+            alvoQ.toquePor = String(event.senderPhone || event.senderId || '') || alvoQ.toquePor;
+            alvoQ.toqueTs = agora;
+            log({ acao: 'quitacao_periodo_corrigido', chatId, inicio: qNova.inicio, fim: qNova.fim, n: nMeses,
+                  faturas_ok: !!(qNova.faturas && qNova.faturas.ok) });
+            if (!await vincularPreviewRemontadoV3({
+              event, grupo: grp, pendencia: alvoQ, previewId: alvoQ.previewId, texto: textoQ,
+              result: { acao: 'quitacao_periodo_corrigido', inicio: qNova.inicio, fim: qNova.fim },
+            })) return { acao: 'quitacao_periodo_corrigido_sem_v3' };
+            return { acao: 'quitacao_periodo_corrigido', inicio: qNova.inicio, fim: qNova.fim };
+          }
+        }
+
         // ── correcao para VARIAS COMPETENCIAS do mesmo aluno. Precisa vir
         // antes da correcao singular e, sobretudo, antes de _nomeHumanoTardio:
         // "sao duas parcelas ..." descreve faturas, nunca uma pessoa.

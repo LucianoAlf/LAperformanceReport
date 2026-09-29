@@ -1511,7 +1511,7 @@
       "id": "B-103",
       "incidente": "SOL-103",
       "tipo": "correcao",
-      "status": "falha_conhecida",
+      "status": "passa",
       "titulo": "Resposta 'de 10/2026 a 09/2027' corrige o período do card de quitação",
       "entrada": "Comprovante de quitação de 12 parcelas de R$ 397; o card propõe o período; resposta citando o card com outro período.",
       "defeito": "Nenhum caminho trata a resposta; é preciso reenviar o comprovante.",
@@ -1582,8 +1582,28 @@
           "passo": 1,
           "regex": "10/2026 a 09/2027",
           "porque": "card remontado com o período informado"
+        },
+        {
+          "check": "acao",
+          "passo": 1,
+          "regex": "quitacao_periodo_corrigido",
+          "porque": "resposta vira período"
+        },
+        {
+          "check": "envio",
+          "passo": 1,
+          "regex": "parcelas \\*10/2026 e 09/2027\\*",
+          "nega": true,
+          "porque": "não é lido como duas parcelas"
+        },
+        {
+          "check": "cards_aprovaveis",
+          "min": 1,
+          "max": 1,
+          "porque": "o mesmo card, remontado"
         }
-      ]
+      ],
+      "consertado": "29/09/2026 (fix/sol-v3-fila-29set): num card de quitação, intervalo é o período — vira a lista de competências e o mesmo card é remontado."
     },
     {
       "id": "B-134",
