@@ -3589,6 +3589,17 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   const legendasEsperando = new Map(); // key -> { texto, ts, reclamada }
   const midiasEmVoo = new Map();       // key -> { ts }
   const midiaRecente = new Map();      // key -> ts da última mídia do autor (com ou sem legenda)
+  // 🔴 LEGENDA TARDIA (29/09/2026, CG 14:36). A foto chegou SEM legenda e, 12 s depois,
+  //    o MESMO autor mandou "PG parcela 09/26 Aluno: … LA CG R$457,95" como mensagem
+  //    separada — enquanto a foto ainda era interpretada (~34 s). O lote só costura
+  //    texto dos primeiros ~0,9 s e a bolha irmã só é lida antes da interpretação;
+  //    o card saiu sem a legenda ("não achei pelo pagador") e o texto foi tratado
+  //    sozinho. Aqui cada mídia sem legenda guarda, por autor e por 60 s, um registro:
+  //    texto com cara de legenda do mesmo autor nesse intervalo vira a legenda DELA
+  //    (em voo: entra antes da interpretação ou a mídia é reavaliada no fim; depois
+  //    do card: o card incompleto é substituído; recusada: é reavaliada). Um card só.
+  const LEGENDA_TARDIA_MS = 60000;
+  const midiasSemLegenda = new Map();  // key -> { ts, evento, emVoo, legenda, consumida, evidencia, resultado }
   const loteJanelaMs = Math.max(0, Number(process.env.SOL_CAIXA_LOTE_MS || 900));
   const v3LedgerMode = String(process.env.SOL_CAIXA_V3_LEDGER_MODE || '').toLowerCase();
   const cheques = chequesFn !== undefined ? chequesFn
@@ -5171,7 +5182,8 @@ _Não lanço nada pela metade._`);
   }
 
   async function prepararLoteMidia(event, agora) {
-    if (!loteJanelaMs) return { event };
+    // A reavaliação por legenda tardia já é UMA mídia com UMA legenda: sem lote.
+    if (!loteJanelaMs || event._legendaTardia) return { event };
     const k = textoIrmaoKey(event);
     let lote = lotesMidia.get(k);
     if (!lote || (agora - lote.ts) > 5000) {
@@ -5299,6 +5311,38 @@ _Não lanço nada pela metade._`);
     const q = event && event.quotedMessageId;
     return !!(q && _idsDaSol.has(String(q)));
   }
+  // LEGENDA TARDIA (29/09/2026, CG 14:36) — ver `midiasSemLegenda`. O card que a
+  // própria mídia publicou (por um caminho sem adiamento) e ainda está aberto.
+  function _cardDaMidia(chatId, rec, agora) {
+    return limparVelhos(chatId, agora).find((x) => (rec.resultado && rec.resultado.previewId
+      && x.previewId === rec.resultado.previewId) || x.origem === rec.evento.messageId) || null;
+  }
+
+  async function _reavaliarMidiaComLegenda(rec, agora) {
+    const ev0 = rec.evento;
+    const chatId = ev0.chatId;
+    rec.consumida = true;
+    const cartaoAnterior = _cardDaMidia(chatId, rec, agora);
+    if (cartaoAnterior) {
+      const fim = await finalizarPreviewSeguroV3({ alvo: cartaoAnterior, status: 'rejected',
+        motivo: 'substituido_por_legenda_tardia' });
+      if (fim && fim.ok === false && !fim.sem_ledger) {
+        log({ acao: 'legenda_tardia_card_nao_substituido', chatId, motivo: fim.motivo });
+        return null;
+      }
+      pendentes.set(chatId, (pendentes.get(chatId) || []).filter((p) => p !== cartaoAnterior));
+      limparEnvelopeDaPendencia(chatId, cartaoAnterior, 'substituido_por_legenda_tardia');
+    }
+    vistos.delete(`${chatId}:${ev0.messageId}`);
+    const ev = { ...ev0, body: rec.legenda, _legendaTardia: true, __handleTopo: true };
+    delete ev._legendaTardiaRec;
+    if (rec.evidencia) ev.caixaMediaEvidence = rec.evidencia;
+    log({ acao: 'midia_reavaliada_legenda_tardia', chatId, substituiu_card: !!cartaoAnterior,
+          antes: rec.resultado && rec.resultado.acao, segundos: Math.round((agora - rec.ts) / 1000) });
+    const r = await _handleInterno(ev, agora);
+    return r ? { ...r, legendaTardia: true } : r;
+  }
+
   async function handle(event, agora = Date.now()) {
     // Chamadas internas repassam `{...event}`: só o topo decide o aviso.
     if (!event || event.__handleTopo) return _handleInterno(event, agora);
@@ -5333,11 +5377,49 @@ _Não lanço nada pela metade._`);
           }
           midiasEmVoo.set(_k, { ts: agora });
         }
+        // Registro da legenda tardia: só mídia que ficou SEM legenda (nem própria,
+        // nem adotada acima). Mídia nova do autor substitui o registro anterior.
+        if (!event._sintetico && !bodyLimpo(event.body)) {
+          const _rec = { ts: agora, evento: event, emVoo: true, legenda: null, consumida: false,
+                         evidencia: null, resultado: null };
+          midiasSemLegenda.set(_k, _rec);
+          event._legendaTardiaRec = _rec;
+        } else {
+          midiasSemLegenda.delete(_k);
+        }
       } else {
         const _t = bodyLimpo(event.body);
         const _pareceLegenda = _t && _t.length <= 300 && !event.quotedMessageId
           && !casarPode(_t).pode && !casarNao(_t)
           && (extrairValor(_t) || _alunoRotulado(_t));
+        // LEGENDA TARDIA (29/09/2026, CG 14:36): texto do mesmo autor até 60 s depois
+        // de uma mídia sem legenda dele. O lote curto (primeiros ~0,9 s) tem
+        // precedência — é o caminho de sempre e já trata.
+        //    • mídia em voo: o texto é a legenda dela (não é tratado sozinho);
+        //    • mídia recusada ("não consegui ler"): é reavaliada com a legenda;
+        //    • card já publicado: NÃO reavalia aqui — o autor completando o próprio
+        //      card é o caminho de correção de sempre (1.5 / aluno corrigido), que
+        //      remonta o MESMO card. Reavaliar ali sequestrava a divisão multi-aluno
+        //      e o "Sol, o valor foi R$100" (testes de 31/08 e 29/08).
+        //    "Sol, …" com card aberto do mesmo autor é resposta a ele, não legenda.
+        const _recLT = _pareceLegenda ? midiasSemLegenda.get(_k) : null;
+        const _loteVivoLT = (() => { const l = lotesMidia.get(_k); return !!(l && agora - l.ts <= 5000); })();
+        const _respondeCardLT = /^\s*@?sol\b/i.test(_t) && (pendentes.get(event.chatId) || []).some((p) =>
+          String(p.autorPhone || p.autorId || '') === String(event.senderPhone || event.senderId || ''));
+        if (_recLT && !_recLT.legenda && !_recLT.temLegenda && !_loteVivoLT && !_respondeCardLT
+            && agora - _recLT.ts >= 0 && agora - _recLT.ts <= LEGENDA_TARDIA_MS) {
+          if (_recLT.emVoo) {
+            _recLT.legenda = _t;
+            log({ acao: 'legenda_tardia_anexada_a_midia', chatId: event.chatId,
+                  segundos: Math.round((agora - _recLT.ts) / 1000) });
+            return { acao: 'legenda_tardia_anexada_a_midia' };
+          }
+          if (_recLT.resultado && _recLT.resultado.acao === 'midia_recusada') {
+            _recLT.legenda = _t;
+            const _r2 = await _reavaliarMidiaComLegenda(_recLT, agora);
+            if (_r2) return _r2;
+          }
+        }
         if (_pareceLegenda) {
           // Mídia já em voo ou lote aberto: é legenda que chegou DEPOIS, e o
           // caminho de sempre (lote/bolha irmã) já trata — não esperar nem desviar.
@@ -5362,6 +5444,18 @@ _Não lanço nada pela metade._`);
         const _kv = textoIrmaoKey(event);
         const _v = midiasEmVoo.get(_kv);
         if (_v && _v.ts === agora) midiasEmVoo.delete(_kv);
+        const _rec = event._legendaTardiaRec;
+        if (_rec) { _rec.emVoo = false; _rec.resultado = r || null; }
+      }
+    }
+    // A legenda tardia chegou depois de a mídia já ter lido a legenda (em geral
+    // durante a interpretação): a mídia é reavaliada UMA vez com ela, com a mesma
+    // leitura da imagem, e o card que tenha saído é substituído.
+    {
+      const _rec = event.hasMedia ? event._legendaTardiaRec : null;
+      if (_rec && _rec.legenda && !_rec.consumida && midiasSemLegenda.get(textoIrmaoKey(event)) === _rec) {
+        const _r2 = await _reavaliarMidiaComLegenda(_rec, agora);
+        if (_r2) { _rec.resultado = _r2; r = _r2; }
       }
     }
     const nao = event && event._agentFirstNaoResolveu;
@@ -5865,6 +5959,8 @@ _Não lanço nada pela metade._`);
       const lote = await prepararLoteMidia(event, agora);
       if (lote.skip) return { acao: lote.acao };
       event = lote.event;
+      // O lote costurou legenda: a mídia deixou de ser "sem legenda" (SOL-110).
+      if (event._legendaTardiaRec && !event._legendaTardia && bodyLimpo(event.body)) event._legendaTardiaRec.temLegenda = true;
       const idemKey = `${chatId}:${event.messageId}`;
       if (vistos.has(idemKey)) return { acao: 'dup_ignorada' };
       vistos.add(idemKey);
@@ -5976,11 +6072,34 @@ _Não lanço nada pela metade._`);
       //    acabado de receber, e o lançamento de R$ 347 nunca saiu.
       // ⚠️ Só ESPIA: não consome (`textosRecentes.delete` é do bloco de baixo,
       //    que ainda faz o backfill de valor/forma). Deletar aqui quebraria ele.
+      // LEGENDA TARDIA (29/09/2026, CG 14:36): guarda a leitura da IMAGEM (antes de
+      // qualquer legenda) para a reavaliação não repetir OCR/visão; e, se a legenda
+      // do mesmo autor já chegou enquanto a imagem era lida, ela entra AGORA, antes
+      // de classificar e de interpretar — é a legenda desta mídia.
+      const _recLT = event._legendaTardiaRec || null;
+      if (_recLT && !_recLT.evidencia) {
+        _recLT.evidencia = {
+          ocrText, ocrMeta, visao, valor: Number(valor) || null, forma: forma || null,
+          cartaoModalidade, cartaoParcelas,
+          pagador: pagadorVis || (visao && (visao.pagador_nome || visao.aluno)) || null,
+        };
+      }
+      if (_recLT && _recLT.legenda && !_recLT.consumida && !bodyLimpo(event.body)) {
+        _recLT.consumida = true;
+        event = { ...event, body: _recLT.legenda };
+        const _vLT = extrairValor(event.body);
+        if (_vLT) valor = _vLT;
+        log({ acao: 'legenda_tardia_lida_antes_da_interpretacao', chatId });
+      }
       let _bodyComIrma = event.body;
       try {
         const _kEsp = textoIrmaoKey(event);
         const _bufEsp = textosRecentes.get(_kEsp);
-        const _frescoEsp = _bufEsp && _bufEsp.ts >= agora - 150000 && _bufEsp.ts <= agora + 60000;
+        // 🔴 29/09/2026 (SOL-110b): a janela era de 150 s para trás, e "Sol, a Fulana
+        //    já pagou ontem, desconsidera" virou a legenda de um comprovante de OUTRO
+        //    pagamento mandado 90 s depois. Legenda é o texto que acompanha a mídia:
+        //    a mesma janela de 60 s da legenda tardia, nos dois sentidos.
+        const _frescoEsp = _bufEsp && _bufEsp.ts >= agora - LEGENDA_TARDIA_MS && _bufEsp.ts <= agora + 60000;
         if (_frescoEsp && bodyLimpo(_bufEsp.texto)
             && bodyLimpo(_bufEsp.texto) !== bodyLimpo(event.body)) {
           _bodyComIrma = (bodyLimpo(event.body) ? bodyLimpo(event.body) + ' \u00b7 ' : '')
@@ -5995,6 +6114,12 @@ _Não lanço nada pela metade._`);
       // print/orcamento sem esse sinal continua bloqueado.
       if (cls.tipo !== 'comprovante' && visao && (visao.valor || visao.aluno)) cls = { tipo: 'comprovante', motivo: 'vision_fallback' };
       if (cls.tipo !== 'comprovante') {
+        // Legenda tardia chegou durante a leitura: não recusa em cima dela — a
+        // reavaliação (no topo do handle) decide com a legenda.
+        if (_recLT && _recLT.legenda && !_recLT.consumida) {
+          log({ acao: 'midia_adiada_legenda_tardia', chatId, etapa: 'recusa' });
+          return { acao: 'midia_adiada_legenda_tardia' };
+        }
         log({ acao: 'midia_recusada', tipo: cls.tipo, motivo: cls.motivo, chatId });
         if (cls.tipo === 'despesa') {
           await sendFn(chatId, '📄 Isso parece um orçamento/compra (despesa), não um recebimento — não lancei nada no caixa.');
@@ -6010,7 +6135,7 @@ _Não lanço nada pela metade._`);
       {
         const _kTextoIrmao = textoIrmaoKey(event);
         const _buf = textosRecentes.get(_kTextoIrmao);
-        const _fresco = _buf && _buf.ts >= agora - 150000 && _buf.ts <= agora + 60000;
+        const _fresco = _buf && _buf.ts >= agora - LEGENDA_TARDIA_MS && _buf.ts <= agora + 60000;
         const _temNome = _fresco && (_alunoRotulado(_buf.texto) || nomePlausivel(_alunoFromCaption(_buf.texto)));
         if (_temNome && bodyLimpo(_buf.texto) && bodyLimpo(_buf.texto) !== legendaEfetiva) {
           legendaEfetiva = (legendaEfetiva ? legendaEfetiva + ' \u00b7 ' : '') + bodyLimpo(_buf.texto);
@@ -6667,6 +6792,12 @@ _Não lanço nada pela metade._`);
         });
         log({ acao: 'evidence_resolver_shadow', trilho: 'legado_midia', chatId,
           divergencias: cmp.divergencias, conflitos: cmp.conflitos, ok: cmp.ok });
+      }
+      // Legenda tardia chegou durante a interpretação: este card sairia sem ela.
+      // Nada é enviado; a mídia é reavaliada com a legenda (um card só).
+      if (_recLT && _recLT.legenda && !_recLT.consumida) {
+        log({ acao: 'midia_adiada_legenda_tardia', chatId, etapa: 'card' });
+        return { acao: 'midia_adiada_legenda_tardia' };
       }
       let texto = montarPreview({ unidadeNome: grp.nome, valor, forma, categoria, aluno, competencia, parcela, confiancaBaixa, alunoNovoOrigem, responsavelFinanceiro, formaIncerta, cartaoModalidade, cartaoParcelas, multiplas, alunoViaPagador, pagadorNome, candidatosAluno, canonica, duplicata, quitacao, faturaIndisponivel: canonicaIndisponivel || bloqueiaFonteIndisponivel, composto, bloqueiaLancamento, itemLojinha: lojinhaInfo && lojinhaInfo.item, valorMaiorNaLegenda });
       if (dryRun) texto += '\n\n_(modo teste — nada será gravado no caixa)_';

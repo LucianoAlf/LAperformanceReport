@@ -88,7 +88,10 @@ const ev = (id, extra) => ({ chatId: CHAT, senderId: '5521911112222@s.whatsapp.n
     checar(!enviadas.some((t) => /Entendi um pagamento/.test(t)), 'midia_antes: o aviso não pode sair por cima do card da mídia');
     checar(enviadas.some((t) => /Julia Silva de Freitas/.test(t)), 'midia_antes: a aluna tem de aparecer no card');
     checar(logs.some((l) => l.acao === 'agent_first_nao_resolveu_aviso_suprimido_midia' || l.acao === 'lote_texto_anexado'
-      || l.acao === 'legenda_irma_anexada'), 'midia_antes: sem registro de que o texto ficou com a mídia');
+      || l.acao === 'legenda_irma_anexada'
+      // 29/09/2026 (SOL-110): com a mídia ainda em leitura, o texto do mesmo autor
+      // vira a legenda dela pelo registro de legenda tardia — mesmo resultado.
+      || l.acao === 'legenda_tardia_anexada_a_midia'), 'midia_antes: sem registro de que o texto ficou com a mídia');
   }
 
   // Controle: texto SEM mídia nenhuma continua recebendo o aviso (nunca silêncio)

@@ -115,7 +115,9 @@ function montar(caso) {
     sendFn: async (_c, t) => { const id = 'MSG' + (++seq); reg.enviadas.push({ passo: passoAtual, id, texto: String(t) }); return id; },
     ocrFn: porMensagem(f.ocr === undefined ? { text: '', status: 'texto_vazio' } : f.ocr),
     visaoFn: porMensagem(f.visao === undefined ? null : f.visao),
-    interpretarFn: async () => clone(f.interpretar === undefined ? null : f.interpretar),
+    // `interpretar_atraso_ms`: a interpretação demora (CG 29/09 14:36: ~34 s), para
+    // reproduzir mensagens que chegam com a mídia ainda em processamento.
+    interpretarFn: async () => { if (f.interpretar_atraso_ms) await sleep(f.interpretar_atraso_ms); return clone(f.interpretar === undefined ? null : f.interpretar); },
     interpretarMultiFn: async () => clone(f.interpretar_multi === undefined ? null : f.interpretar_multi),
     resolverMultiFn: async () => clone(f.resolver_multi === undefined ? { ok: false, motivo: 'fake_sem_resolucao' } : f.resolver_multi),
     resolverEnvelopeFn: async () => ({ ok: false, motivo: 'v4_desligada_na_bateria' }),

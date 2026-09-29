@@ -989,7 +989,7 @@
       "id": "B-110a",
       "incidente": "SOL-110",
       "tipo": "recebimento_foto",
-      "status": "falha_conhecida",
+      "status": "passa",
       "titulo": "Legenda que chega depois de mídia recusada reavalia a mídia",
       "entrada": "Comprovante sem legenda e ilegível (recusado); 20 s depois o autor manda a legenda completa.",
       "defeito": "A mídia recusada não é reavaliada; a legenda sozinha não vira card.",
@@ -1060,13 +1060,14 @@
           "regex": "Comprovante recebido",
           "porque": "a legenda completa a mídia recusada"
         }
-      ]
+      ],
+      "consertado": "29/09/2026 (fix/sol-v3-fila-29set): mídia sem legenda guarda registro por autor por 60 s; legenda do mesmo autor reavalia a mídia recusada com a mesma leitura da imagem."
     },
     {
       "id": "B-110b",
       "incidente": "SOL-110",
       "tipo": "recebimento_foto",
-      "status": "falha_conhecida",
+      "status": "passa",
       "titulo": "Mídia sem legenda não adota texto velho que não era legenda",
       "entrada": "Autor comenta 'Sol, a Aluno A já pagou ontem, desconsidera'; 90 s depois manda outro comprovante sem legenda (de outro pagamento).",
       "defeito": "A mídia sem legenda pega o último texto dos 150 s como legenda, mesmo sendo outra conversa.",
@@ -1074,7 +1075,7 @@
         "unidade": "CG",
         "fakes": {
           "ocr": {
-            "text": "Pix R$ 300,00 Pagador BELTRANO QUALQUER",
+            "text": "Comprovante de transferência Pix R$ 300,00 Pagador BELTRANO QUALQUER",
             "status": "ok",
             "file_bytes": 75001
           },
@@ -1132,6 +1133,115 @@
           "regex": "Fulana",
           "nega": true,
           "porque": "texto de outra conversa não vira aluno do card"
+        },
+        {
+          "check": "envio",
+          "passo": 1,
+          "regex": "Comprovante recebido",
+          "porque": "o comprovante novo segue com o card dele, sem a conversa velha"
+        }
+      ],
+      "consertado": "29/09/2026 (fix/sol-v3-fila-29set): a bolha irmã só vale até 60 s antes da mídia (era 150 s)."
+    },
+    {
+      "id": "B-110c",
+      "incidente": "SOL-110",
+      "tipo": "recebimento_foto",
+      "status": "passa",
+      "titulo": "Legenda que chega 12 s depois da foto, com a foto ainda em interpretação, entra no card (um só)",
+      "entrada": "CG 29/09 14:36: foto sem legenda; 12 s depois o mesmo autor manda 'PG parcela 09/26 Aluno: X LA CG R$457,95' enquanto a interpretação (~34 s) ainda roda.",
+      "defeito": "O card saiu sem a legenda ('não achei pelo pagador') e o texto foi tratado sozinho.",
+      "consertado": "29/09/2026 (fix/sol-v3-fila-29set): o texto vira a legenda da mídia em voo; o card sem legenda não sai e a mídia é reavaliada uma vez com ela.",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "ocr": {
+            "text": "Comprovante de transferência Pix R$ 457,95 Pagador SICRANO PAI DA SILVA",
+            "status": "ok",
+            "file_bytes": 78001
+          },
+          "visao": null,
+          "interpretar": {
+            "categoria": "parcela",
+            "aluno": null,
+            "competencia": null,
+            "forma": "pix"
+          },
+          "interpretar_atraso_ms": 600,
+          "canonica": [
+            {
+              "se_nome": "fulana",
+              "resposta": {
+                "ok": true,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "motivo_escolha": "valor_exato",
+                "fatura": {
+                  "canonical_fatura_id": "0a000000-0000-4000-8000-000000000001",
+                  "aluno_id": 101,
+                  "tipo_fatura": "parcela",
+                  "descricao": "Parcela 09/2026 do curso de Canto",
+                  "competencia": "2026-09-01",
+                  "numero_parcela": 9,
+                  "total_parcelas_contrato": 12,
+                  "status": "aberta",
+                  "data_vencimento": "2026-09-10",
+                  "vencida": false,
+                  "dias_atraso": 0,
+                  "valor_da_parcela": 457.95,
+                  "valor_hoje": 457.95
+                }
+              }
+            }
+          ]
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "image",
+            "body": ""
+          }
+        },
+        {
+          "t_s": 12,
+          "simultaneo_ms": 1200,
+          "evento": {
+            "body": "PG parcela 09/26 Aluno: Fulana Beltrana de Souza LA CG R$457,95"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "acao",
+          "passo": 1,
+          "regex": "legenda_tardia_anexada_a_midia",
+          "porque": "o texto é a legenda da foto"
+        },
+        {
+          "check": "contagem_envios",
+          "passo": "todos",
+          "regex": "Comprovante recebido",
+          "min": 1,
+          "max": 1,
+          "porque": "um card só"
+        },
+        {
+          "check": "envio",
+          "passo": "todos",
+          "regex": "Fulana Beltrana de Souza",
+          "porque": "o card traz a aluna da legenda"
+        },
+        {
+          "check": "envio",
+          "passo": "todos",
+          "regex": "N[ãa]o achei pelo pagador",
+          "nega": true,
+          "porque": "o card sem legenda não sai"
+        },
+        {
+          "check": "cards_aprovaveis",
+          "min": 1,
+          "max": 1
         }
       ]
     },
