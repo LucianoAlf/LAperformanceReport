@@ -636,7 +636,8 @@ export function useGradeDoEvento(eventoId: number | null) {
           'id, bloco_id, aluno_id, pessoa_chave, curso_id, ordem, grupo_id, musica, musica_artista,' +
             ' duracao_segundos, tem_playback, musica_link, playback_path, detalhes_origem,' +
             ' professor, professor_em, certificado_status, certificado_em,' +
-            ' observacao_mapa, alunos(nome, data_nascimento), cursos(nome), professores(nome),' +
+            ' observacao_mapa, alunos(nome, data_nascimento), cursos(nome),' +
+            ' professores!evento_apresentacao_professor_id_fkey(nome),' +
             // Itens embutidos em vez de uma segunda leitura: aqui a FK existe
             // (`apresentacao_id -> evento_apresentacao`), entao o PostgREST resolve o embed —
             // ao contrario da participacao, que cruza com uma VIEW e por isso vai separada.

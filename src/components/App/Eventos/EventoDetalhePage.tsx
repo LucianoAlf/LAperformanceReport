@@ -14,9 +14,12 @@ import {
   ClipboardCheck,
   UserCheck,
   Pencil,
+  Sheet,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
+import { supabase } from '@/lib/supabase';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -58,6 +61,26 @@ export function EventoDetalhePage() {
   const [editando, setEditando] = useState(false);
   /** Sobe quando o sync do LA Teacher gravou algo — remonta a aba para ler o novo dado. */
   const [syncTick, setSyncTick] = useState(0);
+  const [sincSheets, setSincSheets] = useState(false);
+
+  /** Botao manual — forca uma corrida da edge de planilhas (o cron roda a cada 15 min). */
+  const atualizarPlanilhas = async () => {
+    if (!evento?.id || sincSheets) return;
+    setSincSheets(true);
+    const { data, error } = await supabase.functions.invoke('recital-sheets-sync', {
+      body: { evento_id: evento.id, origem: 'manual' },
+    });
+    setSincSheets(false);
+    if (error) {
+      toast.error(`Não consegui atualizar as planilhas: ${error.message}`);
+      return;
+    }
+    if (data?.erros?.length) {
+      toast.warning(`Planilhas atualizadas com ${data.erros.length} pendência(s) — a equipe confere o log.`);
+      return;
+    }
+    toast.success(`Planilhas atualizadas — ${data?.planilhas ?? 0} aba(s) reescrita(s).`);
+  };
 
   // Canal professor: ao abrir a sala, puxa o que o LA Teacher ja tem. A RPC e idempotente
   // e barata (uma passada sobre a view); a remontagem so acontece quando algo MUDOU, para
@@ -163,6 +186,17 @@ export function EventoDetalhePage() {
             </span>
           )}
           <Badge variant={STATUS_VARIANT[evento.status]}>{EVENTO_STATUS_LABEL[evento.status]}</Badge>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1.5 px-2 text-[12px]"
+            onClick={atualizarPlanilhas}
+            disabled={sincSheets}
+            title="Reescreve as planilhas do Drive agora (o cron roda a cada 15 min)"
+          >
+            <Sheet className="h-3.5 w-3.5" />
+            {sincSheets ? 'Atualizando…' : 'Atualizar planilhas'}
+          </Button>
           <Button
             variant="ghost"
             size="sm"

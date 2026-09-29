@@ -287,3 +287,9 @@ verify_jwt = true
 # usuario; a porta e a validacao interna, igual ao padrao dos syncs.
 [functions.recital-drive-sync]
 verify_jwt = false
+
+# Cron a cada 15 min sem JWT de usuario (x-sync-token do Vault) + botao "Atualizar
+# planilhas" com JWT de equipe — ambos autenticados DENTRO da funcao (o JWT de equipe
+# e resolvido em usuarios.perfil/unidade antes de qualquer chamada ao Drive).
+[functions.recital-sheets-sync]
+verify_jwt = false
