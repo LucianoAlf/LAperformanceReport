@@ -1139,7 +1139,7 @@
       "id": "B-126",
       "incidente": "SOL-126",
       "tipo": "lojinha",
-      "status": "falha_conhecida",
+      "status": "passa",
       "titulo": "Venda de lojinha por texto vira card de lojinha e grava com 'pode'",
       "entrada": "'Venda de corda para a aluna Aluno A Valor:60 reais pix' (só texto); 'pode'.",
       "defeito": "Consertado só no caminho V4 (PR #525). Na V3, texto de lojinha não abre card.",

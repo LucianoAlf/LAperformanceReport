@@ -2104,6 +2104,30 @@ function _categoriaExplicitaFromCaption(body) {
   return null;
 }
 
+// Venda de lojinha por texto (V3): exatamente UM valor, aceitando "R$ 40,00",
+// "Valor: 60", "60 reais". Dois valores diferentes = não adivinha (29/09/2026).
+function _valorLojinhaTexto(texto) {
+  const t = String(texto || '');
+  const vals = new Set();
+  const re = /(?:r\$\s*|valor\s*:?\s*(?:r\$\s*)?)(\d{1,5}(?:\.\d{3})*(?:,\d{1,2})?)|(\d{1,5}(?:\.\d{3})*(?:,\d{1,2})?)\s*reais\b/gi;
+  let m;
+  while ((m = re.exec(t))) {
+    const v = parseBRMoney(m[1] || m[2]);
+    if (v > 0) vals.add(Math.round(v * 100));
+  }
+  if (vals.size !== 1) return null;
+  return [...vals][0] / 100;
+}
+
+// Comprador declarado numa venda de lojinha: "aluno: X", "aluno X", "para a aluna X".
+function _compradorDeclaradoLojinha(texto) {
+  const rot = _alunoRotulado(texto);
+  if (rot) return rot;
+  const m = String(texto || '').match(/\b(?:para|pra|pro)\s+(?:[ao]\s+)?alun[oa]\s+([A-Za-zÀ-ÿ]+(?:\s+[A-Za-zÀ-ÿ]+){0,5}?)(?=\s*(?:[-–—:,]|valor\b|r\$|\d|pix\b|dinheiro\b|cart[ãa]o\b|$))/i);
+  const nome = m && m[1] && m[1].trim();
+  return nome && nome.split(/\s+/).length >= 2 ? nome : null;
+}
+
 function _descricaoSaidaTexto(texto, categoria) {
   const cat = String(categoria || '').toLowerCase();
   let t = bodyLimpo(texto)
@@ -5442,6 +5466,33 @@ _Não lanço nada pela metade._`);
       if (!_ehDitado && !_pendAbertaTexto && _saidaExplicitaFromCaption(texto)) {
         log({ acao: 'saida_texto_ignorada_prosa', chatId, len: texto.length });
       }
+      // 🔴 29/09/2026: venda de lojinha por TEXTO só abria card pela V4 (#525). Com a V3 de
+      //    volta, "Venda de corda para a aluna X Valor:60 reais pix" ficava sem resposta.
+      //    Mesmo fluxo/cofre do card de lojinha (pendência V3 + "pode"), montado por regra.
+      // Só no caminho V3: com a V4 ligada no grupo, a lojinha por texto é dela.
+      if (!_v4CanarioLigado(chatId) && _ehDitado && !_pendAbertaTexto && categoriaTexto === 'lojinha'
+          && /(?<!\p{L})vend(?:a|as|i|emos|eu|ido|ida)(?!\p{L})/iu.test(texto)
+          && !/\b(parcela|mensalidade|passaporte|matr[ií]cula)\b/i.test(texto)) {
+        const _vl = _valorLojinhaTexto(texto);
+        const _fl = extrairForma(texto, null);
+        const _prod = detectarLojinhaProduto(texto);
+        if (!_vl) {
+          await sendFn(chatId, `Entendi venda de ${(_prod && _prod.item) || 'lojinha'}, mas não achei *um* valor. Manda numa linha, por exemplo: *Venda de capotraste — aluno Fulano — R$ 40,00 — pix*`);
+          log({ acao: 'lojinha_texto_sem_valor', chatId });
+          return { acao: 'lojinha_texto_sem_valor' };
+        }
+        if (!_fl) {
+          await sendFn(chatId, `Entendi venda de ${(_prod && _prod.item) || 'lojinha'} de ${fmtBRL(_vl)}. Me diz a forma: *pix*, *dinheiro*, *cartão* ou *transferência* — manda a venda de novo numa linha.`);
+          log({ acao: 'lojinha_texto_sem_forma', chatId, valor: _vl });
+          return { acao: 'lojinha_texto_sem_forma' };
+        }
+        const _comprador = _compradorDeclaradoLojinha(texto);
+        const _envelope = { valor_total: _vl, forma: _fl,
+          itens: _comprador ? [{ aluno: _comprador, categorias: ['lojinha'] }] : [] };
+        log({ acao: 'lojinha_texto_v3', chatId, valor: _vl, com_aluno: !!_comprador });
+        return abrirFluxoAgentFirstLojinha({ event, grupo: grp, envelope: _envelope, texto, agora: Date.now(),
+          origemMessageId: event.messageId });
+      }
       if (categoriaEhSaida(categoriaTexto)) {
         const valor = extrairValor(texto);
         const forma = extrairForma(texto, null);
@@ -8774,7 +8825,7 @@ module.exports = {
   _fonteFuturaLateralAoMesDeclarado,
   selecionarFaturasQuitacao, resolverFaturasQuitacao,
   parseBRMoney, valorDoModelo, normalizarCompetenciaV4, montarEnvelopeV4, extrairValor, extrairForma, extrairFormaHumana, detectarComprovante, casarPode,
-  _saidaExplicitaFromCaption, excedeFaturaUnica, deveBloquearLancamento, _nomeHumanoTardio, extrairValorOcr, _vendedorRotulado, _mesmaPessoa,
+  _saidaExplicitaFromCaption, excedeFaturaUnica, deveBloquearLancamento, _valorLojinhaTexto, _compradorDeclaradoLojinha, _nomeHumanoTardio, extrairValorOcr, _vendedorRotulado, _mesmaPessoa,
   _alunoRotulado, _limparAlunoRotulado, _semAlunoDeclarado, extrairCategoriaCorrecao,
   _ehDitadoDeCaixa, classificarCorrecaoPendencia, listarPreviewsAbertosV3, _contestaFatura, rotearMensagemV4,
   montarEnvelopeV4, aplicarCorrecaoEnvelope, _v4CanarioLigado, resolverEnvelopeCaixaV1, valorConfereComTexto,
