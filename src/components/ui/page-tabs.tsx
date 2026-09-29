@@ -1,5 +1,6 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
+import { SeletorSecaoMobile } from '@/mobile/SeletorSecaoMobile';
 
 export interface PageTab<T extends string = string> {
   id: T;
@@ -26,6 +27,18 @@ interface PageTabsProps<T extends string = string> {
   activeShadow?: string;
   className?: string;
   'data-tour'?: string;
+  /**
+   * No celular, troca o trilho deslizante por um botão que diz a aba atual e
+   * abre a lista inteira numa folha (LAPE-32). O valor é o título da folha.
+   *
+   * ⚠️ A folha lê a MESMA `tabs` e chama o MESMO `onTabChange` do trilho:
+   * não existe segunda lista de abas, e trocar pela folha é trocar pela aba.
+   * Só vale abaixo de `lg` — o bloco do computador não é tocado. Opt-in: tela
+   * que não passa isto segue com o trilho.
+   */
+  seletorNoCelular?: string;
+  /** Ao lado do botão, na mesma linha — o seletor de uma sub-seção (Farmer). */
+  acessorioNoCelular?: React.ReactNode;
 }
 
 /**
@@ -43,7 +56,10 @@ export function PageTabs<T extends string = string>({
   activeShadow = 'shadow-violet-500/20',
   className,
   'data-tour': dataTour,
+  seletorNoCelular,
+  acessorioNoCelular,
 }: PageTabsProps<T>) {
+  const atual = tabs.find(t => t.id === activeTab);
   return (
     <div className={cn("space-y-0", className)}>
       {/* Desktop Tabs */}
@@ -93,6 +109,7 @@ export function PageTabs<T extends string = string>({
       </div>
 
       {/* Mobile Tabs */}
+      {seletorNoCelular === undefined && (
       <div className="lg:hidden">
         {/* ⚠️ O desvanecimento na borda direita e a pista de que o trilho rola —
             ele substitui a barra de rolagem que `scrollbar-hide` agora esconde
@@ -131,6 +148,48 @@ export function PageTabs<T extends string = string>({
           })}
         </div>
       </div>
+      )}
+
+      {/* Mobile: botão + folha, quando a tela pediu */}
+      {seletorNoCelular !== undefined && (
+        <div className="flex items-center gap-2 lg:hidden" data-tour={dataTour}>
+          <SeletorSecaoMobile
+            ehCelular
+            compacto
+            alvoCheio
+            titulo={seletorNoCelular}
+            rotuloAtual={atual ? atual.shortLabel || atual.label : seletorNoCelular}
+          >
+            {/* Mesmo filtro do trilho: aba desabilitada não aparece. */}
+            <div role="tablist" aria-label={seletorNoCelular} className="flex flex-col gap-1">
+              {tabs.filter(t => !t.disabled).map(tab => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={() => onTabChange(tab.id)}
+                    className={cn(
+                      'flex min-h-[44px] items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold',
+                      isActive ? 'bg-slate-800 text-violet-400' : 'text-slate-300',
+                    )}
+                  >
+                    {Icon && <Icon className="h-4 w-4 flex-none" />}
+                    <span className="flex-1">{tab.label}</span>
+                    {tab.count !== undefined && (
+                      <span className="rounded-full bg-slate-700 px-2 py-0.5 text-xs text-slate-300">{tab.count}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </SeletorSecaoMobile>
+          {acessorioNoCelular}
+        </div>
+      )}
     </div>
   );
 }

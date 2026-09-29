@@ -61,7 +61,12 @@ export const ABAS_PORTADAS: Readonly<Record<string, readonly string[]>> = {
   // MRR perdido e LTV ficam no computador, e a tela diz isso por escrito (ver
   // `@/lib/administrativoMobile`). A faixa some porque a aba foi adaptada, não
   // porque faz tudo o que a do computador faz.
-  '/app/administrativo': ['lancamentos', 'contratos', 'fideliza', 'lojinha'],
+  //
+  // `'farmer'` entrou em 29/09 com `DashboardFarmerMobile` (o resumo em linhas,
+  // cada bloco do computador numa folha) e o botão de seção no lugar das duas
+  // fileiras de abas. As outras 4 sub-abas da Farmer tiveram só ajuste de largura
+  // e de alvo (ver `tests/farmerMobile.test.mjs`).
+  '/app/administrativo': ['lancamentos', 'contratos', 'fideliza', 'lojinha', 'farmer'],
 };
 
 export function rotaTemFaixaPorAba(

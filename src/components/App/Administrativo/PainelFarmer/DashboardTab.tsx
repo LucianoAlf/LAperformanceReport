@@ -47,6 +47,12 @@ import { useColaboradorAtual, useRotinas, useAlertas, useTarefas, useFarmersUnid
 import type { AlertaRenovacao, AlertaInadimplente, AlertaAniversariante, AlertaNovoMatriculado } from './types';
 import { supabase } from '@/lib/supabase';
 import { podeCobrarInadimplenciaCanonica } from '@/lib/inadimplenciaCanonica';
+import { useShellMobile } from '@/hooks/useShellMobile';
+import { DashboardFarmerMobile } from '@/mobile/telas/farmer/DashboardFarmerMobile';
+
+// Os cartões do computador e as linhas do celular vão para o mesmo lugar.
+const LINK_ALUNOS_CRITICOS = '/app/alunos?tab=sucesso&filtro=critico';
+const LINK_ENVIAR_FEEDBACK = '/app/alunos?tab=sucesso&modal=enviar-feedback';
 
 interface DashboardTabProps {
   unidadeId: string;
@@ -114,6 +120,7 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
   
   // Verificar se está no consolidado
   const isConsolidado = unidadeId === 'todos';
+  const ehCelular = useShellMobile() === 'mobile';
 
   // Estados de expansão dos alertas
   const [expandedAlerts, setExpandedAlerts] = useState<Set<string>>(new Set());
@@ -267,10 +274,10 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
     );
   }
 
-  return (
-    <div className="space-y-6">
-      {/* === SEÇÃO FULL-WIDTH: Alertas de Checklist === */}
-      {checklistAlertas.length > 0 && (
+  // Os blocos do Dashboard, cada um numa variável (LAPE-32). O computador os
+  // desenha no mesmo lugar de sempre; o celular abre os MESMOS numa folha —
+  // não há segunda versão de nenhum deles.
+  const blocoChecklists = (
         <div className="space-y-3">
           {checklistAlertas.map((alerta) => {
             const isVencido = alerta.urgencia === 'vencido';
@@ -325,104 +332,9 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
             );
           })}
         </div>
-      )}
+  );
 
-      {/* === SEÇÃO FULL-WIDTH: KPIs em Grid 4 colunas === */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-slate-800/50 border border-slate-700/30 rounded-xl p-4 text-center">
-          <div className="text-2xl font-bold text-violet-400">{stats.checklistsAtivos}</div>
-          <div className="text-xs text-slate-500 mt-1">Checklists Ativos</div>
-        </div>
-        <div className="bg-slate-800/50 border border-slate-700/30 rounded-xl p-4 text-center">
-          <div className="text-2xl font-bold text-emerald-400">{stats.checklistsConcluidos}</div>
-          <div className="text-xs text-slate-500 mt-1">Concluídos este mês</div>
-        </div>
-        <div className="bg-slate-800/50 border border-slate-700/30 rounded-xl p-4 text-center">
-          <div className="text-2xl font-bold text-amber-400">{stats.tarefasPendentes}</div>
-          <div className="text-xs text-slate-500 mt-1">Tarefas Rápidas</div>
-        </div>
-        <div className="bg-slate-800/50 border border-slate-700/30 rounded-xl p-4 text-center">
-          <div className="text-2xl font-bold text-cyan-400">{stats.taxaSucessoContatos}%</div>
-          <div className="text-xs text-slate-500 mt-1">Taxa Sucesso Contatos</div>
-        </div>
-      </div>
-
-      {/* === SEÇÃO FULL-WIDTH: Alertas Sucesso do Aluno (FASE 6) === */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {/* Card: Alunos Críticos */}
-        <div 
-          className={cn(
-            "bg-slate-800/50 border rounded-xl p-4 cursor-pointer transition-all hover:scale-[1.02]",
-            totalCriticos > 0 ? "border-rose-500/30 bg-rose-500/5" : "border-slate-700/30"
-          )}
-          onClick={() => window.location.href = '/app/alunos?tab=sucesso&filtro=critico'}
-        >
-          <div className="flex items-center gap-3">
-            <div className={cn(
-              "w-10 h-10 rounded-lg flex items-center justify-center",
-              totalCriticos > 0 ? "bg-rose-500/20" : "bg-slate-700/50"
-            )}>
-              <Heart className={cn("w-5 h-5", totalCriticos > 0 ? "text-rose-400" : "text-slate-400")} />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <span className={cn(
-                  "text-xl font-bold",
-                  totalCriticos > 0 ? "text-rose-400" : "text-slate-400"
-                )}>
-                  {totalCriticos}
-                </span>
-                {totalCriticos > 0 && (
-                  <span className="text-xs text-rose-400/70">⚠️ Críticos</span>
-                )}
-              </div>
-              <p className="text-xs text-slate-500">
-                {totalCriticos === 1 ? 'aluno com saúde crítica' : 'alunos com saúde crítica'}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Card: Feedback Pendente */}
-        <div 
-          className={cn(
-            "bg-slate-800/50 border rounded-xl p-4 cursor-pointer transition-all hover:scale-[1.02]",
-            totalPendentes > 0 ? "border-amber-500/30 bg-amber-500/5" : "border-slate-700/30"
-          )}
-          onClick={() => window.location.href = '/app/alunos?tab=sucesso&modal=enviar-feedback'}
-        >
-          <div className="flex items-center gap-3">
-            <div className={cn(
-              "w-10 h-10 rounded-lg flex items-center justify-center",
-              totalPendentes > 0 ? "bg-amber-500/20" : "bg-slate-700/50"
-            )}>
-              <ClipboardList className={cn("w-5 h-5", totalPendentes > 0 ? "text-amber-400" : "text-slate-400")} />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <span className={cn(
-                  "text-xl font-bold",
-                  totalPendentes > 0 ? "text-amber-400" : "text-slate-400"
-                )}>
-                  {totalPendentes}
-                </span>
-                {totalPendentes > 0 && (
-                  <span className="text-xs text-amber-400/70">📋 Pendente</span>
-                )}
-              </div>
-              <p className="text-xs text-slate-500">
-                {totalPendentes === 1 ? 'professor sem feedback este mês' : 'professores sem feedback este mês'}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* === SEÇÃO 2 COLUNAS: Alertas + Rotinas === */}
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* Coluna Esquerda - Alertas e Tarefas */}
-      <div className="space-y-6">
-        {/* Card: Alertas do Dia */}
+  const blocoAlertasDia = (
         <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-700/50 flex items-center justify-between">
             <h3 className="font-semibold text-white flex items-center gap-2">
@@ -678,9 +590,9 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
             )}
           </div>
         </div>
+  );
 
-        {/* Card: Tarefas Urgentes */}
-        {(tarefasHoje.length > 0 || tarefasAtrasadas.length > 0 || tarefasSemPrazo.length > 0) && (
+  const blocoTarefas = (
           <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
             <div className="px-5 py-4 border-b border-slate-700/50 flex items-center justify-between">
               <h3 className="font-semibold text-white flex items-center gap-2">
@@ -726,12 +638,9 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
               ))}
             </div>
           </div>
-        )}
-      </div>
+  );
 
-      {/* Coluna Direita - Rotinas do Dia */}
-      <div className="space-y-6">
-        {/* Card: Rotinas de Hoje */}
+  const blocoRotinas = (
         <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-700/50 flex items-center justify-between">
             <h3 className="font-semibold text-white">✅ Rotinas de Hoje</h3>
@@ -801,9 +710,9 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
             </div>
           </div>
         </div>
+  );
 
-        {/* Card: Info do(s) Farmer(s) */}
-        {farmers.length > 0 && (
+  const blocoEquipe = (
           <div className="bg-gradient-to-br from-violet-500/10 to-purple-500/10 rounded-xl border border-violet-500/20 p-4">
             {isConsolidado ? (
               // No consolidado, mostrar todos os farmers em grid
@@ -844,9 +753,157 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
               </div>
             )}
           </div>
-        )}
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* 🔴 A bifurcação cobre só as seções: o modal de Nova Tarefa fica fora,
+          senão o "+ Nova" da folha abriria nada no celular. */}
+      {ehCelular ? (
+        <DashboardFarmerMobile
+          numeros={stats}
+          entrada={{
+            checklistsComAlerta: checklistAlertas.length,
+            checklistsVencidos: checklistAlertas.filter(a => a.urgencia === 'vencido').length,
+            totalAlertas,
+            renovacoesVencidas: renovacoesVencidas.length,
+            tarefasAtrasadas: tarefasAtrasadas.length,
+            tarefasTotal: tarefasHoje.length + tarefasAtrasadas.length + tarefasSemPrazo.length,
+            rotinasConcluidas: progresso.concluidas,
+            rotinasTotal: progresso.total,
+            alunosCriticos: totalCriticos,
+            professoresSemFeedback: totalPendentes,
+            equipe: farmers.length,
+          }}
+          blocos={{
+            checklists: blocoChecklists,
+            alertas: blocoAlertasDia,
+            tarefas: blocoTarefas,
+            rotinas: blocoRotinas,
+            equipe: blocoEquipe,
+          }}
+          onAbrirCriticos={() => window.location.href = LINK_ALUNOS_CRITICOS}
+          onAbrirFeedback={() => window.location.href = LINK_ENVIAR_FEEDBACK}
+        />
+      ) : (
+        <>
+      {/* === SEÇÃO FULL-WIDTH: Alertas de Checklist === */}
+      {checklistAlertas.length > 0 && blocoChecklists}
+
+      {/* === SEÇÃO FULL-WIDTH: KPIs em Grid 4 colunas === */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="bg-slate-800/50 border border-slate-700/30 rounded-xl p-4 text-center">
+          <div className="text-2xl font-bold text-violet-400">{stats.checklistsAtivos}</div>
+          <div className="text-xs text-slate-500 mt-1">Checklists Ativos</div>
+        </div>
+        <div className="bg-slate-800/50 border border-slate-700/30 rounded-xl p-4 text-center">
+          <div className="text-2xl font-bold text-emerald-400">{stats.checklistsConcluidos}</div>
+          <div className="text-xs text-slate-500 mt-1">Concluídos este mês</div>
+        </div>
+        <div className="bg-slate-800/50 border border-slate-700/30 rounded-xl p-4 text-center">
+          <div className="text-2xl font-bold text-amber-400">{stats.tarefasPendentes}</div>
+          <div className="text-xs text-slate-500 mt-1">Tarefas Rápidas</div>
+        </div>
+        <div className="bg-slate-800/50 border border-slate-700/30 rounded-xl p-4 text-center">
+          <div className="text-2xl font-bold text-cyan-400">{stats.taxaSucessoContatos}%</div>
+          <div className="text-xs text-slate-500 mt-1">Taxa Sucesso Contatos</div>
+        </div>
+      </div>
+
+      {/* === SEÇÃO FULL-WIDTH: Alertas Sucesso do Aluno (FASE 6) === */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Card: Alunos Críticos */}
+        <div 
+          className={cn(
+            "bg-slate-800/50 border rounded-xl p-4 cursor-pointer transition-all hover:scale-[1.02]",
+            totalCriticos > 0 ? "border-rose-500/30 bg-rose-500/5" : "border-slate-700/30"
+          )}
+          onClick={() => window.location.href = LINK_ALUNOS_CRITICOS}
+        >
+          <div className="flex items-center gap-3">
+            <div className={cn(
+              "w-10 h-10 rounded-lg flex items-center justify-center",
+              totalCriticos > 0 ? "bg-rose-500/20" : "bg-slate-700/50"
+            )}>
+              <Heart className={cn("w-5 h-5", totalCriticos > 0 ? "text-rose-400" : "text-slate-400")} />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className={cn(
+                  "text-xl font-bold",
+                  totalCriticos > 0 ? "text-rose-400" : "text-slate-400"
+                )}>
+                  {totalCriticos}
+                </span>
+                {totalCriticos > 0 && (
+                  <span className="text-xs text-rose-400/70">⚠️ Críticos</span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500">
+                {totalCriticos === 1 ? 'aluno com saúde crítica' : 'alunos com saúde crítica'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Card: Feedback Pendente */}
+        <div 
+          className={cn(
+            "bg-slate-800/50 border rounded-xl p-4 cursor-pointer transition-all hover:scale-[1.02]",
+            totalPendentes > 0 ? "border-amber-500/30 bg-amber-500/5" : "border-slate-700/30"
+          )}
+          onClick={() => window.location.href = LINK_ENVIAR_FEEDBACK}
+        >
+          <div className="flex items-center gap-3">
+            <div className={cn(
+              "w-10 h-10 rounded-lg flex items-center justify-center",
+              totalPendentes > 0 ? "bg-amber-500/20" : "bg-slate-700/50"
+            )}>
+              <ClipboardList className={cn("w-5 h-5", totalPendentes > 0 ? "text-amber-400" : "text-slate-400")} />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className={cn(
+                  "text-xl font-bold",
+                  totalPendentes > 0 ? "text-amber-400" : "text-slate-400"
+                )}>
+                  {totalPendentes}
+                </span>
+                {totalPendentes > 0 && (
+                  <span className="text-xs text-amber-400/70">📋 Pendente</span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500">
+                {totalPendentes === 1 ? 'professor sem feedback este mês' : 'professores sem feedback este mês'}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* === SEÇÃO 2 COLUNAS: Alertas + Rotinas === */}
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Coluna Esquerda - Alertas e Tarefas */}
+      <div className="space-y-6">
+        {/* Card: Alertas do Dia */}
+        {blocoAlertasDia}
+
+        {/* Card: Tarefas Urgentes */}
+        {(tarefasHoje.length > 0 || tarefasAtrasadas.length > 0 || tarefasSemPrazo.length > 0) && blocoTarefas}
+      </div>
+
+      {/* Coluna Direita - Rotinas do Dia */}
+      <div className="space-y-6">
+        {/* Card: Rotinas de Hoje */}
+        {blocoRotinas}
+
+        {/* Card: Info do(s) Farmer(s) */}
+        {farmers.length > 0 && blocoEquipe}
       </div>
     </div>
+
+        </>
+      )}
 
     {/* Modal: Nova Tarefa Rápida (completo) */}
     <Dialog open={modalNovaTarefaAberto} onOpenChange={setModalNovaTarefaAberto}>

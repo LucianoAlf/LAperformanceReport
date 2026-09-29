@@ -101,7 +101,9 @@ test('os trilhos de sub-abas ROLAM em vez de espremer', () => {
   ];
   for (const [rel, marcador] of trilhos) {
     const fonte = readFileSync(join(RAIZ, 'src/components/App/Administrativo', rel), 'utf8');
-    const i = fonte.indexOf(marcador);
+    // Na Farmer, desde 29/09 o `subTabs.map` aparece antes no botão do
+    // celular; o trilho do computador é o ÚLTIMO.
+    const i = rel.startsWith('PainelFarmer') ? fonte.lastIndexOf(marcador) : fonte.indexOf(marcador);
     assert.ok(i > 0, `${rel}: o trilho mudou de forma`);
     const container = fonte.slice(Math.max(0, i - 400), i);
     assert.match(container, /overflow-x-auto/, `${rel}: o trilho não rola`);
@@ -125,14 +127,15 @@ test('as abas sem tela própria continuam avisando que são telas de computador'
   // truncado.
   //
   // `lojinha` entrou em 29/09 com as cinco sub-abas adaptadas (a prova de
-  // cada uma está em `tests/lojinhaEstoque.test.mjs`). Farmer, Caixa e
-  // Entrada seguem sendo a tela do computador dentro do shell.
+  // cada uma está em `tests/lojinhaEstoque.test.mjs`). `farmer` entrou no
+  // mesmo dia, com `DashboardFarmerMobile` (prova em
+  // `tests/farmerMobile.test.mjs`). Caixa e Entrada seguem sendo a tela do computador dentro do shell.
   const linha = /'\/app\/administrativo':\s*\[([^\]]*)\]/.exec(abas);
   assert.ok(linha, 'a rota sumiu de ABAS_PORTADAS');
   const portadas = [...linha[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
   assert.deepEqual(
     portadas,
-    ['lancamentos', 'contratos', 'fideliza', 'lojinha'],
+    ['lancamentos', 'contratos', 'fideliza', 'lojinha', 'farmer'],
     'aba declarada portada precisa de tela própria — colapsar a grade não basta',
   );
 });
