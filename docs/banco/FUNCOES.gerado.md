@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-28 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-29 -->
 
 <!-- fim do cabecalho gerado -->
 # Funções
 
-1727 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
+1728 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
 chamadas diretas ao PostgREST não são visíveis para o gerador.
 
 ## aluno
@@ -87,7 +87,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `evento_bilheteria_conciliar_v1(p_venda_id bigint, p_status text, p_ref text, p_obs text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `evento_bilheteria_estornos_v1(p_unidade_id uuid, p_de timestamp with time zone, p_ate timestamp with time zone)` | ORFA | DEFINER | sem consumidor conhecido |
 | `evento_bilheteria_pendentes_v1(p_unidade_id uuid, p_de timestamp with time zone, p_ate timestamp with time zone)` | ORFA | DEFINER | sem consumidor conhecido |
-| `evento_bilheteria_vender_v1(p_evento_id bigint, p_bloco_id bigint, p_comprador_nome text, p_quantidade integer, p_forma_pagamento text, p_canal text, p_comprador_contato text, p_participacao_id bigint, p_pacote_id bigint, p_convidados jsonb, p_marcar_pago boolean, p_pagamento_identificador text, p_observacao text)` | ATIVA | DEFINER | front:src/lib/eventos.ts |
+| `evento_bilheteria_vender_v1(p_evento_id bigint, p_bloco_id bigint, p_comprador_nome text, p_quantidade integer, p_forma_pagamento text, p_canal text, p_comprador_contato text, p_participacao_id bigint, p_pacote_id bigint, p_convidados jsonb, p_marcar_pago boolean, p_pagamento_identificador text, p_observacao text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `evento_bloco_reordenar_v1(p_evento_id bigint, p_ids bigint[])` | ATIVA | INVOKER | front:src/hooks/useEventos.ts |
 | `evento_buscar_aluno_outra_unidade_v1(p_evento_id bigint, p_termo text)` | ATIVA | DEFINER | front:src/hooks/useEventos.ts |
 | `evento_grade_reordenar_v1(p_evento_id bigint, p_itens jsonb)` | ATIVA | INVOKER | front:src/hooks/useEventos.ts |
@@ -129,7 +129,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_evento_apresentacao_deriva()` | ATIVA | INVOKER | trigger:evento_apresentacao.trg_evento_apresentacao_deriva |
 | `fn_evento_apresentacao_grupo_coerente()` | ATIVA | INVOKER | trigger:evento_apresentacao.trg_evento_apresentacao_grupo_coerente |
 | `fn_evento_apresentacao_origem_adm()` | ATIVA | INVOKER | trigger:evento_apresentacao.trg_evento_apresentacao_origem_adm |
-| `fn_evento_audit_log()` | ATIVA | DEFINER | trigger:evento_apresentacao_item.trg_audit_evento_apresentacao_item, trigger:evento_apresentacao.trg_audit_evento_apresentacao, trigger:evento_bloco.trg_audit_evento_bloco, trigger:evento_comunicacao.trg_audit_evento_comunicacao, trigger:evento_convidado_checkin.trg_audit_evento_convidado_checkin, trigger:evento_convidado_participacao.trg_audit_evento_convidado_participacao, +7 outros |
+| `fn_evento_audit_log()` | ATIVA | DEFINER | trigger:evento_apresentacao_item.trg_audit_evento_apresentacao_item, trigger:evento_apresentacao.trg_audit_evento_apresentacao, trigger:evento_bloco.trg_audit_evento_bloco, trigger:evento_comunicacao.trg_audit_evento_comunicacao, trigger:evento_convidado_checkin.trg_audit_evento_convidado_checkin, trigger:evento_convidado_participacao.trg_audit_evento_convidado_participacao, +9 outros |
 | `fn_evento_comunicacao_deriva()` | ATIVA | INVOKER · 🔓 anon | trigger:evento_comunicacao.trg_evento_comunicacao_deriva |
 | `fn_evento_convidado_checkin_deriva()` | ATIVA | INVOKER · 🔓 anon | trigger:evento_convidado_checkin.trg_evento_convidado_checkin_deriva |
 | `fn_evento_convidado_cortesia()` | ATIVA | INVOKER · 🔓 anon | trigger:evento_convidado_participacao.trg_evento_convidado_cortesia |
@@ -143,7 +143,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_evento_pessoa_chave(p_aluno_id integer, p_evento_id bigint)` | SO-INTERNA | DEFINER | funcao:evento_apresentacao_adicionar_v1, funcao:evento_apresentacao_juntar_v1, funcao:evento_buscar_aluno_outra_unidade_v1, funcao:evento_recital_sincronizar_v1, funcao:evento_relatorios_v1, funcao:fn_evento_apresentacao_deriva, +1 outros |
 | `fn_evento_pode_ver(p_evento_id bigint)` | ATIVA | DEFINER | edge:supabase/functions/recital-midia-url/index.ts, funcao:evento_apresentacao_adicionar_v1, funcao:evento_buscar_aluno_outra_unidade_v1, funcao:evento_recital_sincronizar_v1, funcao:evento_relatorios_v1, funcao:evento_visitantes_v1 |
 | `fn_evento_staff_deriva()` | ATIVA | INVOKER · 🔓 anon | trigger:evento_staff.trg_evento_staff_deriva |
-| `fn_evento_touch()` | ATIVA | INVOKER | trigger:evento_apresentacao.trg_evento_apresentacao_touch, trigger:evento_bloco.trg_evento_bloco_touch, trigger:evento_convidado.trg_evento_convidado_touch, trigger:evento_ingresso_venda.trg_evento_ingresso_venda_touch, trigger:evento_participacao.trg_evento_participacao_touch, trigger:evento_staff.trg_evento_staff_touch, +1 outros |
+| `fn_evento_touch()` | ATIVA | INVOKER | trigger:evento_apresentacao.trg_evento_apresentacao_touch, trigger:evento_bloco.trg_evento_bloco_touch, trigger:evento_convidado.trg_evento_convidado_touch, trigger:evento_ingresso_venda.trg_evento_ingresso_venda_touch, trigger:evento_participacao.trg_evento_participacao_touch, trigger:evento_sheets_destino.trg_evento_sheets_destino_touch, +3 outros |
 | `fn_exigir_equipe_para_anamnese()` | SO-INTERNA | DEFINER | funcao:buscar_anamnese_pendente, funcao:buscar_anamneses_pendentes, funcao:get_anamnese_aluno, funcao:vincular_anamnese_aluno |
 | `fn_gavetas_so_do_aluno(p_tronco jsonb, p_fatia jsonb)` | SO-INTERNA | INVOKER | funcao:fn_gavetas_da_aula |
 | `fn_jornada_marca_ciclo_sucedido()` | ATIVA | INVOKER | trigger:aluno_jornada_matricula_disciplina.trg_jornada_ciclo_sucedido |
@@ -327,7 +327,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_experimental_tem_registro(p_aula_local_id bigint)` | SO-INTERNA | DEFINER | funcao:app_minha_agenda_sessao_canonica_v2, funcao:fn_sessao_tem_registro |
 | `fn_lead_estado_pauta_v1(p_lead_id bigint)` | SO-INTERNA | DEFINER | funcao:radar_detectar_sinais_comercial_v1 |
 | `fn_matriculas_trancadas_do_professor(p_professor_id integer)` | SO-INTERNA | INVOKER | funcao:fabio_contexto_professor |
-| `fn_normalizar_telefone_br_key(p_telefone text)` | ATIVA | INVOKER | front:src/lib/eventos.ts, edge:supabase/functions/sincronizar-comunidade-whatsapp/index.ts, view:vw_jornada_lead_v1, funcao:aluno_comunidade_estado_v1, funcao:buscar_anamneses_pendentes, funcao:exec_normalizar_telefone_atendimento, +4 outros |
+| `fn_normalizar_telefone_br_key(p_telefone text)` | ATIVA | INVOKER | front:src/lib/eventos.ts, edge:supabase/functions/sincronizar-comunidade-whatsapp/index.ts, view:vw_jornada_lead_v1, funcao:aluno_comunidade_estado_v1, funcao:buscar_anamneses_pendentes, funcao:exec_normalizar_telefone_atendimento, +5 outros |
 | `fn_propagar_professor_experimental()` | ATIVA | DEFINER | trigger:lead_experimentais.trg_propagar_professor_experimental |
 | `fn_reconciliar_experimental_aulas(p_dias integer, p_limite integer)` | SO-INTERNA | DEFINER | funcao:fn_reconciliar_experimental_tick |
 | `fn_reconciliar_experimental_por_lead(p_dias_atras integer, p_dias_frente integer, p_limite integer)` | SO-INTERNA | DEFINER | funcao:fn_reconciliar_experimental_tick |
@@ -346,6 +346,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `get_kpis_experimentais_professor(p_ano integer, p_mes integer, p_unidade_id uuid)` | ORFA | DEFINER | sem consumidor conhecido |
 | `get_matriculas_comerciais_resumo_v1(p_unidade_id uuid, p_de date, p_ate_exclusivo date, p_criado_ate timestamp with time zone)` | ATIVA | DEFINER | front:src/components/GestaoMensal/TabComercialNew.tsx, edge:supabase/functions/relatorio-admin-whatsapp/index.ts, funcao:get_kpis_comercial_competencia_v1, funcao:montar_relatorio_comercial_mensal_payload_sem_adicionais_v1 |
 | `get_situacao_lead_v1(p_solicitante_telefone text, p_telefone_lead text, p_nome_lead text, p_lead_id integer)` | ORFA | DEFINER | sem consumidor conhecido |
+| `identidade_por_telefone_v1(p_telefone text, p_unidade_id uuid)` | ORFA | DEFINER | sem consumidor conhecido |
 | `incrementar_respondidos_campanha(p_campanha_id uuid)` | ATIVA | DEFINER | edge:supabase/functions/meta-webhook-campanhas/index.ts |
 | `limpar_mila_buffer_antigo()` | ORFA | DEFINER | sem consumidor conhecido |
 | `marcar_conversa_lida(p_conversa_id uuid)` | ATIVA | DEFINER | front:src/components/App/PreAtendimento/hooks/useConversas.ts |
