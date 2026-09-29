@@ -122,14 +122,17 @@ test('as abas sem tela própria continuam avisando que são telas de computador'
   // `fideliza` entrou em 25/09 com `FidelizaMobile`: a dupla primeiro e a
   // comparação no pódio, medida em 4.198px → 919px no Consolidado e
   // 2.751px → 740px com unidade escolhida, sem rolagem lateral e sem nada
-  // truncado. As outras quatro seguem sendo a tela do computador dentro do
-  // shell.
+  // truncado.
+  //
+  // `lojinha` entrou em 29/09 com as cinco sub-abas adaptadas (a prova de
+  // cada uma está em `tests/lojinhaEstoque.test.mjs`). Farmer, Caixa e
+  // Entrada seguem sendo a tela do computador dentro do shell.
   const linha = /'\/app\/administrativo':\s*\[([^\]]*)\]/.exec(abas);
   assert.ok(linha, 'a rota sumiu de ABAS_PORTADAS');
   const portadas = [...linha[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
   assert.deepEqual(
     portadas,
-    ['lancamentos', 'contratos', 'fideliza'],
+    ['lancamentos', 'contratos', 'fideliza', 'lojinha'],
     'aba declarada portada precisa de tela própria — colapsar a grade não basta',
   );
 });

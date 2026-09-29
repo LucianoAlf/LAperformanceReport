@@ -219,10 +219,18 @@ test('pílula e tipo usam os textos do computador', () => {
   assert.match(le('src/components/App/Lojinha/TabEstoque.tsx'), /alertas\.slice\(0, 5\)/u);
 });
 
-test('a Lojinha segue FORA das abas portadas — o Histórico de Vendas não foi adaptado', () => {
-  // Marcar a aba inteira apagaria a faixa âmbar dele: o erro de Alunos em 14/09.
+test('a Lojinha só entra nas abas portadas com as CINCO sub-abas adaptadas', () => {
+  // Marcar a aba com uma sub-aba de fora apagaria a faixa âmbar dela: o erro
+  // de Alunos em 14/09. Cada sub-aba tem de ter o seu ramo de celular.
   const abas = le('src/mobile/abasPortadas.ts');
-  assert.doesNotMatch(abas, /'lojinha'/u);
+  assert.match(abas, /'\/app\/administrativo': \[[^\]]*'lojinha'/u);
+  assert.match(le('src/components/App/Lojinha/TabProdutos.tsx'), /ProdutosMobile/u);
+  assert.match(le('src/components/App/Lojinha/TabEstoque.tsx'), /<EstoqueMobile/u);
+  assert.match(le('src/components/App/Lojinha/TabVendas.tsx'), /<HistoricoVendasMobile/u);
+  assert.match(le('src/components/App/Lojinha/TabVendas.tsx'), /<FolhaMobile/u);
+  assert.match(le('src/components/App/Lojinha/TabComissoes.tsx'), /<ComissoesMobile/u);
+  // Configurações é formulário: não bifurca, só ganha alvos de toque.
+  assert.match(le('src/components/App/Lojinha/TabConfiguracoes.tsx'), /max-lg:w-11/u);
 });
 
 // ---------------------------------------------------------------------------
