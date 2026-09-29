@@ -91,11 +91,20 @@ function recusa(motivo) {
 function textoContemValor(texto, valor) {
   const alvo = Math.round(Number(valor) * 100);
   if (!Number.isFinite(alvo) || alvo <= 0) return false;
-  const encontrados = String(texto || '').match(/\d{1,3}(?:\.\d{3})*(?:,\d{1,2})|\d+(?:[.,]\d{1,2})?/g) || [];
-  return encontrados.some((bruto) => {
+  const paraCentavos = (bruto) => {
     const n = Number(bruto.includes(',') ? bruto.replace(/\./g, '').replace(',', '.') : bruto);
-    return Number.isFinite(n) && Math.round(n * 100) === alvo;
-  });
+    return Number.isFinite(n) ? Math.round(n * 100) : NaN;
+  };
+  const encontrados = String(texto || '').match(/\d{1,3}(?:\.\d{3})*(?:,\d{1,2})|\d+(?:[.,]\d{1,2})?/g) || [];
+  if (encontrados.some((bruto) => paraCentavos(bruto) === alvo)) return true;
+  // 🔴 A SOMA DO QUE A PESSOA ESCREVEU TAMBÉM É O TOTAL (CG 29/09, Mayra): "segunda parcela
+  //    do passaporte de A (R$200,00) e B (R$200,00)" era recusada porque "400" não estava
+  //    escrito. A trava existe para o modelo não INVENTAR total; somar os valores que a
+  //    pessoa escreveu não inventa nada. Só valores marcados com R$ (senão data, telefone e
+  //    "13/13" entrariam na soma), e só com 2+ valores.
+  const comRS = (String(texto || '').match(/R\$\s*(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})|\d+(?:[.,]\d{1,2})?)/gi) || [])
+    .map((m) => paraCentavos(m.replace(/R\$\s*/i, '')));
+  return comRS.length >= 2 && comRS.every(Number.isFinite) && comRS.reduce((a, b) => a + b, 0) === alvo;
 }
 
 function idMensagem(ctx, action, args) {

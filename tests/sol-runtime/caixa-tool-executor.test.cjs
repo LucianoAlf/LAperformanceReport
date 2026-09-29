@@ -85,3 +85,17 @@ test('erro no meio depois de publicar: a resposta diz o que saiu e não é ok', 
   assert.deepEqual(out.mensagens_publicadas, ['PERGUNTA']);
   assert.equal(out.motivo, 'erro_interno');
 });
+
+// CG 29/09 10:38 (Mayra): "segunda parcela do passaporte de A (R$200,00) e B (R$200,00)"
+// era recusada com "o total não aparece no texto". Somar o que a pessoa escreveu não é
+// inventar total; somar data, "13/13" ou telefone seria.
+test('total pela SOMA dos valores escritos com R$', () => {
+  const { textoContemValor } = require('../../vps/la-hq/sol/runtime/caixa-tool-executor.cjs');
+  const frase = 'Sol, são a segunda parcela do passaporte de Aluno A (R$200,00) e Aluno B (R$200,00)';
+  assert.equal(textoContemValor(frase, 400), true, 'soma de dois valores com R$ fecha o total');
+  assert.equal(textoContemValor(frase, 200), true, 'valor literal continua valendo');
+  assert.equal(textoContemValor(frase, 401), false, 'soma que não fecha no centavo recusa');
+  assert.equal(textoContemValor('Aluno A R$200,00 parcela 13/13 vence 05/10', 213), false, 'número sem R$ não entra na soma');
+  assert.equal(textoContemValor('PG R$ 1.290,00 e R$ 432,00', 1722), true, 'milhar com ponto');
+  assert.equal(textoContemValor('R$ 200,00', 400), false, 'um valor só não vira total dobrado');
+});
