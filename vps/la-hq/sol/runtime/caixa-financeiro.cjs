@@ -1045,14 +1045,21 @@ function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competenci
 
 function montarPreviewMultiAluno({ unidadeNome, valorTotal, forma, categoria, itens }) {
   const lista = Array.isArray(itens) ? itens : [];
-  const semVinculo = lista.filter((i) => i && i.sem_vinculo_fatura === true);
-  const vinculadas = lista.length - semVinculo.length;
+  // Adiantamento declarado (SOL-134, 29/09/2026) é item sem fatura por definição,
+  // não exceção de desconto: tem linha e aviso próprios.
+  const adiantamentos = lista.filter((i) => i && i.adiantamento === true);
+  const semVinculo = lista.filter((i) => i && i.sem_vinculo_fatura === true && i.adiantamento !== true);
+  const vinculadas = lista.length - semVinculo.length - adiantamentos.length;
   const formaTxt = forma === 'cartao' ? 'cartão' : (forma || '❓ forma não identificada');
   const nomes = [...new Set(lista.map((i) => String(i.aluno_nome || '').trim()).filter(Boolean))];
   const mesmoAlunoVariasFaturas = lista.length >= 2 && nomes.length === 1;
   const categorias = [...new Set(lista.map((i) => String(i.categoria || '').toLowerCase().trim()).filter(Boolean))];
   const mesmoAlunoCategoriasMistas = mesmoAlunoVariasFaturas && categorias.length >= 2;
   const linhas = lista.map((item) => {
+    if (item.adiantamento === true) {
+      return `• Adiantamento parcela ${item.competencia} — ${fmtBRL(item.valor)} (sem fatura)`
+        + (mesmoAlunoVariasFaturas ? '' : ` · ${item.aluno_nome}`);
+    }
     const rotulo = mesmoAlunoVariasFaturas
       ? (mesmoAlunoCategoriasMistas
         ? (item.descricao || `${cap(item.categoria || 'Fatura')}${item.competencia ? ' ' + item.competencia : ''}`)
@@ -1063,7 +1070,8 @@ function montarPreviewMultiAluno({ unidadeNome, valorTotal, forma, categoria, it
   const responsaveis = [...new Set(lista.map((i) => String(i.responsavel_financeiro || '').trim()).filter(Boolean))];
   const linhaResponsavel = responsaveis.length === 1 ? `\n• Resp. financeiro: ${responsaveis[0]}`
     : (responsaveis.length > 1 ? `\n• Resp. financeiros: ${responsaveis.join(' · ')}` : '');
-  const descricoes = [...new Set(lista.map((i) => String(i.descricao || '').trim()).filter(Boolean))];
+  const descricoes = [...new Set(lista.filter((i) => i.adiantamento !== true)
+    .map((i) => String(i.descricao || '').trim()).filter(Boolean))];
   const cursos = descricoes.map((d) => d.match(/^taxa(?:s)? de matr[íi]cula do curso de (.+)$/i)).filter(Boolean).map((m) => m[1]);
   const faturaTexto = cursos.length === descricoes.length && cursos.length > 0
     ? `Taxas de Matrícula dos cursos de ${cursos.join(' e ')}`
@@ -1073,7 +1081,9 @@ function montarPreviewMultiAluno({ unidadeNome, valorTotal, forma, categoria, it
   const formasPagas = [...new Set(faturasPagas.map((f) => String((f.forma_pagamento && f.forma_pagamento.nome) || '').trim()).filter(Boolean))];
   const dataBR = datasPagas.length === 1 && /^\d{4}-\d{2}-\d{2}$/.test(datasPagas[0])
     ? datasPagas[0].slice(8, 10) + '/' + datasPagas[0].slice(5, 7) : null;
-  const linhaStatus = semVinculo.length > 0
+  const linhaStatus = adiantamentos.length > 0
+    ? `• ${vinculadas} fatura(s) validada(s) no Emusys + adiantamento declarado pela equipe (${adiantamentos.map((a) => `${fmtBRL(a.valor)} para ${a.competencia}`).join(', ')}), sem fatura — fica registrado para vincular quando a fatura nascer`
+    : semVinculo.length > 0
     ? `• ${vinculadas} de ${lista.length} item(ns) com fatura validada no Emusys`
     : (faturasPagas.length === lista.length && dataBR
       ? `• Já pago no Emusys em ${dataBR}${formasPagas.length === 1 ? ` no ${formasPagas[0]}` : ''} — falta lançar no caixa`
@@ -3335,6 +3345,59 @@ function extrairCompetenciasTexto(texto) {
   return achadas;
 }
 
+// 🔴 ADIANTAMENTO DECLARADO (SOL-134, decisão do Alf em 29/09/2026). Recreio 29/09:
+//    aluna com 2 cursos pagou R$ 1.650 = passaporte R$ 550 + parcelas 10/2026 de
+//    Bateria e Piano (R$ 500 cada) + R$ 100, e a equipe escreveu "vai sobrar R$100
+//    que será adiantamento para a parcela de novembro". O excedente vira o item
+//    "adiantamento parcela <competência>", declarado pela equipe, SEM fatura.
+// ⚠️ Só vale a declaração EXPLÍCITA: um trecho (linha ou frase) com a palavra
+//    adiantamento/adiantar, UM valor em R$ e o mês. Sem isso, nada — o código nunca
+//    deduz adiantamento de sobra (o comprovante maior que a fatura segue bloqueado).
+//    Mês sem ano é o próximo mês com esse nome a partir de hoje; mês passado não é
+//    adiantamento. Dois trechos declarando adiantamento = ambíguo = nada.
+function extrairAdiantamentoDeclarado(texto, hoje = new Date()) {
+  const bruto = String(texto || '');
+  if (!/adiant/i.test(bruto)) return null;
+  const trechos = bruto.split(/\n|;|\.(?=\s)|\s[·•]\s/).map((s) => s.trim()).filter(Boolean);
+  const mesHoje = hoje.getFullYear() * 12 + hoje.getMonth() + 1;
+  const achados = [];
+  for (const trecho of trechos) {
+    const tNorm = _normConf(trecho);
+    const posAdiant = tNorm.search(/\badiant(?:amento|ar|ado|ada|ei|ou|a)?\b/);
+    if (posAdiant < 0) continue;
+    const valores = trecho.match(/r\$\s*\d{1,3}(?:\.\d{3})*(?:,\d{2})?|r\$\s*\d+(?:,\d{2})?/gi) || [];
+    if (valores.length !== 1) { achados.push(null); continue; }
+    const valor = parseBRMoney(valores[0]);
+    // O mês do adiantamento é o que vem DEPOIS da palavra ("… adiantamento para a
+    // parcela de novembro"); só sem nenhum depois vale o de antes. "parcelas de
+    // outubro" no começo da frase é o que foi pago, não o adiantado.
+    const t = _normConf(trecho.replace(valores[0], ' '));
+    const pos = t.search(/\badiant/);
+    const candidatos = [];
+    for (const m of t.matchAll(/\b(0?[1-9]|1[0-2])\s*[\/.-]\s*(20\d{2}|\d{2})\b/g)) {
+      candidatos.push({ i: m.index, mes: Number(m[1]), ano: Number(m[2].length === 2 ? '20' + m[2] : m[2]) });
+    }
+    for (const m of t.matchAll(/\b(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b(?:\s*(?:de|\/|-)?\s*(20\d{2}))?/g)) {
+      const mes = _MES_NOME[m[1]];
+      let ano = m[2] ? Number(m[2]) : null;
+      if (!ano) {
+        // Sem ano: o próximo mês com esse nome, e só se estiver perto (até 3 meses).
+        ano = hoje.getFullYear();
+        if (ano * 12 + mes < mesHoje) ano += 1;
+        if (ano * 12 + mes - mesHoje > 3) ano = null;
+      }
+      if (ano) candidatos.push({ i: m.index, mes, ano });
+    }
+    const depois = candidatos.filter((c) => c.i > pos).sort((a, b) => a.i - b.i);
+    const antes = candidatos.filter((c) => c.i < pos).sort((a, b) => b.i - a.i);
+    const escolhido = depois[0] || (antes.length === 1 ? antes[0] : null);
+    if (!(valor > 0) || !escolhido || escolhido.ano * 12 + escolhido.mes < mesHoje) { achados.push(null); continue; }
+    achados.push({ valor, competencia: _mm(escolhido.mes, escolhido.ano), trecho });
+  }
+  if (achados.length !== 1 || !achados[0]) return null;
+  return achados[0];
+}
+
 // Correcao de competencia e um comando de CAMPO, nao uma correcao de aluno.
 // Exige linguagem corretiva; uma legenda nova como "PG parcela 09/2026" nao
 // pode sequestrar um card aberto, e "pode" continua sendo o unico gesto de
@@ -3589,6 +3652,17 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   const legendasEsperando = new Map(); // key -> { texto, ts, reclamada }
   const midiasEmVoo = new Map();       // key -> { ts }
   const midiaRecente = new Map();      // key -> ts da última mídia do autor (com ou sem legenda)
+  // 🔴 LEGENDA TARDIA (29/09/2026, CG 14:36). A foto chegou SEM legenda e, 12 s depois,
+  //    o MESMO autor mandou "PG parcela 09/26 Aluno: … LA CG R$457,95" como mensagem
+  //    separada — enquanto a foto ainda era interpretada (~34 s). O lote só costura
+  //    texto dos primeiros ~0,9 s e a bolha irmã só é lida antes da interpretação;
+  //    o card saiu sem a legenda ("não achei pelo pagador") e o texto foi tratado
+  //    sozinho. Aqui cada mídia sem legenda guarda, por autor e por 60 s, um registro:
+  //    texto com cara de legenda do mesmo autor nesse intervalo vira a legenda DELA
+  //    (em voo: entra antes da interpretação ou a mídia é reavaliada no fim; depois
+  //    do card: o card incompleto é substituído; recusada: é reavaliada). Um card só.
+  const LEGENDA_TARDIA_MS = 60000;
+  const midiasSemLegenda = new Map();  // key -> { ts, evento, emVoo, legenda, consumida, evidencia, resultado }
   const loteJanelaMs = Math.max(0, Number(process.env.SOL_CAIXA_LOTE_MS || 900));
   const v3LedgerMode = String(process.env.SOL_CAIXA_V3_LEDGER_MODE || '').toLowerCase();
   const cheques = chequesFn !== undefined ? chequesFn
@@ -3799,6 +3873,81 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   // categoria ou vinculo seguro. Tambem e persistido no ledger para sobreviver
   // a restart sem depender da memoria do processo.
   const rascunhosV4 = new Map();
+  // 🔴 ESTORNO/CORREÇÃO AMBÍGUO (§8.2, 28/09/2026): com mais de um lançamento
+  //    igual a Sol NUNCA escolhe. Lista os candidatos (hora, quem lançou, id
+  //    curto) e guarda a lista; só quem pediu — ou quem citar a lista — escolhe,
+  //    pelo NÚMERO ou pelo ID. A escolha só define o alvo: o card de
+  //    estorno/correção e o "pode" continuam obrigatórios.
+  const escolhasMovimento = new Map();
+
+  function horaBRT(iso) {
+    const d = new Date(iso);
+    if (!iso || Number.isNaN(d.getTime())) return '--:--';
+    return d.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+  }
+
+  // 🔴 29/09/2026 (revisão do PR #528): `criado_por` de lançamento feito pela Sol é
+  //    "sol-agente:grupo:<telefone>" (conferido em caixa_movimentacoes) — o PR o
+  //    mostraria no grupo, com o número da pessoa. Quem lançou vem de `responsavel`
+  //    ("Mayra · via Sol", "Mayra (aut.) · … (env.) · via Sol"); `criado_por` só
+  //    quando é nome de gente (lançamento manual no sistema). Nunca telefone.
+  function quemLancouMovimento(x) {
+    const limpar = (s) => String(s || '').replace(/\s+/g, ' ').replace(/\s*·\s*via Sol\s*$/i, '').trim();
+    const ehTecnico = (s) => /sol-agente|backfill|:\S*\d{6,}|\d{8,}/i.test(String(s || ''));
+    const resp = limpar(x && x.responsavel);
+    if (resp && !ehTecnico(resp)) return resp.slice(0, 50);
+    const criado = limpar(x && x.criado_por);
+    if (criado && !ehTecnico(criado)) return criado.slice(0, 50);
+    return /sol-agente/i.test(String(x && x.criado_por || '')) ? 'Sol' : 'sem registro de quem lançou';
+  }
+
+  function horaMovimento(x) {
+    return x && x.created_at ? horaBRT(x.created_at) : (x && /^\d{1,2}:\d{2}$/.test(String(x.hora || '')) ? String(x.hora) : '--:--');
+  }
+
+  function linhaCandidatoMovimento(x, i) {
+    const id = String(x.movimentacao_id || '').slice(0, 8);
+    const oque = String(x.descricao || '').replace(/\s+/g, ' ').slice(0, 60);
+    return `*${i + 1}.* ${fmtBRL(x.valor)} · ${x.categoria || 'sem categoria'} · ${x.forma_pagamento || 'sem forma'} · ${horaMovimento(x)}\n`
+      + `    lançado por ${quemLancouMovimento(x)} · id \`${id}\`${oque ? '\n    ' + oque : ''}`;
+  }
+
+  async function pedirEscolhaMovimento({ event, chatId, cmdMov, items, agora }) {
+    const lista = items.slice(0, 5);
+    const verbo = cmdMov.tipo === 'estornar' ? 'estornar' : 'corrigir';
+    const texto = `Achei *${items.length}* lançamentos que batem com o pedido. Não vou escolher sozinha qual ${verbo}.\n\n`
+      + lista.map(linhaCandidatoMovimento).join('\n\n')
+      + (items.length > lista.length ? `\n\n_(mostrando os ${lista.length} mais recentes)_` : '')
+      + '\n\n👉 Responde com o *número* (ex.: *2*) ou o *id* do lançamento certo.';
+    const msgId = await sendFn(chatId, texto);
+    escolhasMovimento.set(chatId, { cmdMov, items: lista, ts: agora, msgIds: [msgId].filter(Boolean),
+      autor: String(event.senderPhone || event.senderId || '') });
+    log({ acao: 'movimento_alvo_ambiguo', chatId, count: items.length, listados: lista.length });
+    return { acao: 'movimento_alvo_ambiguo', previewId: msgId };
+  }
+
+  // A resposta à lista: número 1..N sozinho (com "o"/"número"/"nº" opcional) ou
+  // o id curto de um dos candidatos. Protocolo que a própria Sol ensinou.
+  function escolhaDaResposta(event, agora) {
+    const esc = escolhasMovimento.get(event && event.chatId);
+    if (!esc || event.hasMedia) return null;
+    if (agora - esc.ts >= janelaMs) { escolhasMovimento.delete(event.chatId); return null; }
+    const autor = String(event.senderPhone || event.senderId || '');
+    const citou = event.quotedMessageId && esc.msgIds.includes(String(event.quotedMessageId));
+    if (!citou && (!autor || autor !== esc.autor)) return null;
+    const t = bodyLimpo(event.body).toLowerCase().replace(/^sol\b\s*[,;:-]?\s*/, '').trim();
+    const mNum = t.match(/^(?:o|a|n[uú]mero|n[ºo°]\.?)?\s*(\d{1,2})\s*[.!]?$/);
+    if (mNum) {
+      const i = Number(mNum[1]) - 1;
+      return { esc, item: esc.items[i] || null, foraDaLista: !esc.items[i] };
+    }
+    const porId = esc.items.filter((x) => {
+      const id = String(x.movimentacao_id || '').toLowerCase();
+      return id && t.split(/[^0-9a-f-]+/).some((tok) => tok.length >= 6 && id.startsWith(tok));
+    });
+    if (porId.length === 1) return { esc, item: porId[0], foraDaLista: false };
+    return null;
+  }
 
   function identidadeRascunhoV4(event) {
     const bruto = String((event && (event.senderPhone || event.senderId)) || '')
@@ -4565,6 +4714,95 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       motivo: res && res.motivo || 'fonte_indisponivel' };
   }
 
+  // 🔴 ADIANTAMENTO DECLARADO (SOL-134, decisão do Alf em 29/09/2026; caso Recreio
+  //    29/09, R$ 1.650 = passaporte 550 + parcelas 10/2026 de Bateria e Piano + R$ 100
+  //    "que será adiantamento para a parcela de novembro"). O código decide:
+  //    • o adiantamento é o que a equipe ESCREVEU (valor + mês), nunca a sobra;
+  //    • o restante (comprovante − adiantamento) tem de fechar NO CENTAVO com faturas
+  //      oficiais do aluno — o mesmo resolvedor de combinação única do Core;
+  //    • só então sai o card multi-item (faturas + "Adiantamento parcela MM/AAAA —
+  //      R$ X (sem fatura)") pelo lote de sempre (sol_caixa_lancar_recebimento_lote_v1),
+  //      e ele pede "pode". Não fechou: explica e não cria card aprovável.
+  function _competenciasDoTexto(texto, excluir, hoje = new Date()) {
+    const lista = extrairCompetenciasTexto(texto);
+    const t = _normConf(texto);
+    const mesHoje = hoje.getFullYear() * 12 + hoje.getMonth() + 1;
+    for (const m of t.matchAll(/\b(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b(?:\s*(?:de|\/|-)?\s*(20\d{2}))?/g)) {
+      const mes = _MES_NOME[m[1]];
+      let ano = m[2] ? Number(m[2]) : hoje.getFullYear();
+      // sem ano: o mês com esse nome mais perto de hoje (parcela paga pode estar atrasada)
+      if (!m[2]) {
+        if (ano * 12 + mes - mesHoje > 6) ano -= 1;
+        else if (mesHoje - (ano * 12 + mes) > 6) ano += 1;
+      }
+      const c = _mm(mes, ano);
+      if (!lista.includes(c)) lista.push(c);
+    }
+    return lista.filter((c) => c !== excluir);
+  }
+
+  async function tratarPagamentoComAdiantamento({ event, grupo, agora, textoHumano, textoFonte,
+    adiantamento, aluno, valor, forma, evidenceEnvelope }) {
+    const total = Number(valor);
+    const base = Math.round((total - Number(adiantamento.valor)) * 100) / 100;
+    const nome = String(aluno || '').trim();
+    if (!(base > 0) || !nomePlausivel(nome)) return null;
+    const falar = async (porque, motivo) => {
+      await sendFn(event.chatId,
+        `Entendi o adiantamento de *${fmtBRL(adiantamento.valor)}* para a parcela *${adiantamento.competencia}*`
+        + ` (${nome ? '*' + nome + '*, ' : ''}comprovante de *${fmtBRL(total)}*). ${porque}\n\n`
+        + '⚠️ Não criei um card aprovável.');
+      log({ acao: 'adiantamento_sem_fechamento', chatId: event.chatId, motivo,
+            valor_total: total, adiantamento: adiantamento.valor, competencia: adiantamento.competencia });
+      return { acao: 'adiantamento_sem_fechamento', motivo };
+    };
+    if (!forma) return falar('Falta a forma de pagamento (pix, dinheiro, cartão…).', 'forma_ausente');
+    const tn = _normConf(textoHumano.replace(adiantamento.trecho, ' '));
+    const categorias = [];
+    if (/\bpassaporte/.test(tn)) categorias.push('passaporte');
+    if (/\bmatr[ií]cula/.test(tn)) categorias.push('matricula');
+    if (/\b(parcela|mensalidade)/.test(tn) || !categorias.length) categorias.push('parcela');
+    const competencias = _competenciasDoTexto(textoHumano, adiantamento.competencia);
+    const envelope = { pagador: null, valor_total: base, forma,
+      itens: [{ aluno: nome, categorias, competencias }] };
+    let res = null;
+    try { res = await resolverEnvelopeFn({ unidade_id: grupo.unidade_id, envelope }); }
+    catch (e) { log({ acao: 'adiantamento_resolver_erro', chatId: event.chatId, erro: String(e && e.message) }); }
+    const itensFat = res && res.ok && Array.isArray(res.itens) ? res.itens : [];
+    const soma = itensFat.reduce((s, i) => s + Number(i && i.valor || 0), 0);
+    const mesmaPessoa = itensFat.length > 0 && itensFat.every((i) => i && nomePlausivel(i.aluno_nome)
+      && _mesmaPessoa(i.aluno_nome, nome));
+    const comFatura = itensFat.every((i) => i && i.canonical_fatura_id && i.sem_vinculo_fatura !== true);
+    if (!itensFat.length || Math.abs(soma - base) > 0.01 || !mesmaPessoa || !comFatura) {
+      const porque = res && res.motivo === 'combinacao_ambigua'
+        ? `Achei mais de uma combinação de faturas que fecha os *${fmtBRL(base)}* restantes — me diz quais são.`
+        : `Não achei faturas oficiais${nome ? ' de ' + nome : ''} que fechem exatamente os *${fmtBRL(base)}* restantes. Confere o nome, os meses e os valores.`;
+      return falar(porque, (res && res.motivo) || (!mesmaPessoa ? 'outra_pessoa' : 'soma_nao_fecha'));
+    }
+    const cat = categoriaDosItensV4(itensFat);
+    if (!cat.ok) return falar('A categoria de uma das faturas não veio completa da fonte oficial.', cat.motivo);
+    const titular = itensFat[0];
+    const itemAdiant = {
+      ordem: itensFat.length + 1, aluno_nome: titular.aluno_nome,
+      responsavel_financeiro: titular.responsavel_financeiro || null,
+      valor: Number(adiantamento.valor), categoria: 'parcela', competencia: adiantamento.competencia,
+      canonical_fatura_id: null, fatura: null,
+      descricao: `Adiantamento parcela ${adiantamento.competencia} · declarado pela equipe, sem vínculo de fatura`,
+      sem_vinculo_fatura: true, declarado_pelo_humano: true, adiantamento: true,
+    };
+    const itens = [...itensFat, itemAdiant];
+    log({ acao: 'adiantamento_declarado_resolvido', chatId: event.chatId, faturas: itensFat.length,
+          base, adiantamento: adiantamento.valor, competencia: adiantamento.competencia });
+    return abrirFluxoMultiAluno({
+      event, grupo, textoFonte: textoFonte || textoHumano, textoHumano, agora,
+      origemMessageId: event.messageId,
+      resolvidoPronto: { ...res, itens, valor_total: total, soma_itens: total },
+      agentFirstEnvelope: envelope, evidenceEnvelope, adiantamento,
+      intent: { ok: true, valor_total: total, forma, categoria: cat.categoria,
+        itens: itens.map((i) => ({ aluno_nome: i.aluno_nome, valor: Number(i.valor), categoria: i.categoria })) },
+    });
+  }
+
   async function prepararEPublicarPreviewV4({ event, grupo, texto, pendencia, result, previewStatus }) {
     if (!v3LedgerAtivo) return { ok: false, motivo: 'v3_indisponivel' };
     const origem = pendencia.origem || event.messageId;
@@ -4842,7 +5080,8 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
 
   async function abrirFluxoMultiAluno({ event, grupo, textoFonte, textoHumano, intent, agora,
     origemMessageId, resolvidoPronto = null, agentFirstEnvelope = null,
-    evidenceEnvelope = null, supersedePreviewId = null, textoPronto = null, tetoItens = null }) {
+    evidenceEnvelope = null, supersedePreviewId = null, textoPronto = null, tetoItens = null,
+    adiantamento = null }) {
     const arr = limparVelhos(event.chatId, agora);
     // Janela de reenvio: OCR lento (frequente, ~45s de timeout) leva a equipe a mandar o
     // MESMO comprovante de novo. Sem isto, cada reenvio empilha outra pendencia MANUAL
@@ -5005,7 +5244,22 @@ _Não lanço nada pela metade._`);
     // Defesa em profundidade: mesmo que a RPC antiga ou um mock devolva
     // `ok:true` com item sem fatura, o runtime não cria card aprovável sem a
     // evidência humana explícita. Isso cobre as três unidades no mesmo Core.
-    const _semVinculo = resolvido.itens.filter((item) => item && item.sem_vinculo_fatura === true);
+    // ADIANTAMENTO DECLARADO (SOL-134, 29/09/2026): o único item sem fatura que
+    // dispensa o protocolo de desconto é o adiantamento que a EQUIPE escreveu
+    // (valor e competência iguais ao declarado). Qualquer outro segue a regra.
+    const _ehAdiantamentoDeclarado = (item) => !!(adiantamento && item && item.adiantamento === true
+      && item.sem_vinculo_fatura === true && item.declarado_pelo_humano === true && !item.canonical_fatura_id
+      && Math.abs(Number(item.valor) - Number(adiantamento.valor)) < 0.01
+      && item.competencia === adiantamento.competencia);
+    const _adiantamentos = resolvido.itens.filter((item) => item && item.adiantamento === true);
+    if (_adiantamentos.length > 1 || _adiantamentos.some((item) => !_ehAdiantamentoDeclarado(item))) {
+      await colocarEmRevisao('adiantamento_incoerente');
+      await sendFn(event.chatId, '⚠️ Não consegui montar o adiantamento com segurança. Não criei card aprovável.');
+      log({ acao: 'adiantamento_incoerente', chatId: event.chatId, itens: _adiantamentos.length });
+      return { acao: 'manual_review_multi_student' };
+    }
+    const _semVinculo = resolvido.itens.filter((item) => item && item.sem_vinculo_fatura === true
+      && !_ehAdiantamentoDeclarado(item));
     // A RPC pode devolver o nome canônico completo, diferente do rótulo curto
     // digitado. A identidade estável dentro do lote é ordem + valor.
     const _chaveItem = (item, indice = null) => {
@@ -5046,8 +5300,9 @@ _Não lanço nada pela metade._`);
       cheque_banco: item.cheque_banco || null,
       cheque_bom_para: item.cheque_bom_para || null,
       sem_vinculo_fatura: !!item.sem_vinculo_fatura, declarado_pelo_humano: !!item.declarado_pelo_humano,
-      desconto_negociado_explicito: !!item.sem_vinculo_fatura
+      desconto_negociado_explicito: !!item.sem_vinculo_fatura && !_ehAdiantamentoDeclarado(item)
         && _autorizacaoDesconto.ok && _entradasAutorizadas.has(_chaveItem(item)),
+      ...(_ehAdiantamentoDeclarado(item) ? { adiantamento: true } : {}),
     }));
     const texto = textoPronto || montarPreviewMultiAluno({ unidadeNome: grupo.nome, valorTotal: intent.valor_total, forma: intent.forma, categoria: intent.categoria, itens });
     let idEnviou = null;
@@ -5171,7 +5426,8 @@ _Não lanço nada pela metade._`);
   }
 
   async function prepararLoteMidia(event, agora) {
-    if (!loteJanelaMs) return { event };
+    // A reavaliação por legenda tardia já é UMA mídia com UMA legenda: sem lote.
+    if (!loteJanelaMs || event._legendaTardia) return { event };
     const k = textoIrmaoKey(event);
     let lote = lotesMidia.get(k);
     if (!lote || (agora - lote.ts) > 5000) {
@@ -5299,6 +5555,38 @@ _Não lanço nada pela metade._`);
     const q = event && event.quotedMessageId;
     return !!(q && _idsDaSol.has(String(q)));
   }
+  // LEGENDA TARDIA (29/09/2026, CG 14:36) — ver `midiasSemLegenda`. O card que a
+  // própria mídia publicou (por um caminho sem adiamento) e ainda está aberto.
+  function _cardDaMidia(chatId, rec, agora) {
+    return limparVelhos(chatId, agora).find((x) => (rec.resultado && rec.resultado.previewId
+      && x.previewId === rec.resultado.previewId) || x.origem === rec.evento.messageId) || null;
+  }
+
+  async function _reavaliarMidiaComLegenda(rec, agora) {
+    const ev0 = rec.evento;
+    const chatId = ev0.chatId;
+    rec.consumida = true;
+    const cartaoAnterior = _cardDaMidia(chatId, rec, agora);
+    if (cartaoAnterior) {
+      const fim = await finalizarPreviewSeguroV3({ alvo: cartaoAnterior, status: 'rejected',
+        motivo: 'substituido_por_legenda_tardia' });
+      if (fim && fim.ok === false && !fim.sem_ledger) {
+        log({ acao: 'legenda_tardia_card_nao_substituido', chatId, motivo: fim.motivo });
+        return null;
+      }
+      pendentes.set(chatId, (pendentes.get(chatId) || []).filter((p) => p !== cartaoAnterior));
+      limparEnvelopeDaPendencia(chatId, cartaoAnterior, 'substituido_por_legenda_tardia');
+    }
+    vistos.delete(`${chatId}:${ev0.messageId}`);
+    const ev = { ...ev0, body: rec.legenda, _legendaTardia: true, __handleTopo: true };
+    delete ev._legendaTardiaRec;
+    if (rec.evidencia) ev.caixaMediaEvidence = rec.evidencia;
+    log({ acao: 'midia_reavaliada_legenda_tardia', chatId, substituiu_card: !!cartaoAnterior,
+          antes: rec.resultado && rec.resultado.acao, segundos: Math.round((agora - rec.ts) / 1000) });
+    const r = await _handleInterno(ev, agora);
+    return r ? { ...r, legendaTardia: true } : r;
+  }
+
   async function handle(event, agora = Date.now()) {
     // Chamadas internas repassam `{...event}`: só o topo decide o aviso.
     if (!event || event.__handleTopo) return _handleInterno(event, agora);
@@ -5333,11 +5621,49 @@ _Não lanço nada pela metade._`);
           }
           midiasEmVoo.set(_k, { ts: agora });
         }
+        // Registro da legenda tardia: só mídia que ficou SEM legenda (nem própria,
+        // nem adotada acima). Mídia nova do autor substitui o registro anterior.
+        if (!event._sintetico && !bodyLimpo(event.body)) {
+          const _rec = { ts: agora, evento: event, emVoo: true, legenda: null, consumida: false,
+                         evidencia: null, resultado: null };
+          midiasSemLegenda.set(_k, _rec);
+          event._legendaTardiaRec = _rec;
+        } else {
+          midiasSemLegenda.delete(_k);
+        }
       } else {
         const _t = bodyLimpo(event.body);
         const _pareceLegenda = _t && _t.length <= 300 && !event.quotedMessageId
           && !casarPode(_t).pode && !casarNao(_t)
           && (extrairValor(_t) || _alunoRotulado(_t));
+        // LEGENDA TARDIA (29/09/2026, CG 14:36): texto do mesmo autor até 60 s depois
+        // de uma mídia sem legenda dele. O lote curto (primeiros ~0,9 s) tem
+        // precedência — é o caminho de sempre e já trata.
+        //    • mídia em voo: o texto é a legenda dela (não é tratado sozinho);
+        //    • mídia recusada ("não consegui ler"): é reavaliada com a legenda;
+        //    • card já publicado: NÃO reavalia aqui — o autor completando o próprio
+        //      card é o caminho de correção de sempre (1.5 / aluno corrigido), que
+        //      remonta o MESMO card. Reavaliar ali sequestrava a divisão multi-aluno
+        //      e o "Sol, o valor foi R$100" (testes de 31/08 e 29/08).
+        //    "Sol, …" com card aberto do mesmo autor é resposta a ele, não legenda.
+        const _recLT = _pareceLegenda ? midiasSemLegenda.get(_k) : null;
+        const _loteVivoLT = (() => { const l = lotesMidia.get(_k); return !!(l && agora - l.ts <= 5000); })();
+        const _respondeCardLT = /^\s*@?sol\b/i.test(_t) && (pendentes.get(event.chatId) || []).some((p) =>
+          String(p.autorPhone || p.autorId || '') === String(event.senderPhone || event.senderId || ''));
+        if (_recLT && !_recLT.legenda && !_recLT.temLegenda && !_loteVivoLT && !_respondeCardLT
+            && agora - _recLT.ts >= 0 && agora - _recLT.ts <= LEGENDA_TARDIA_MS) {
+          if (_recLT.emVoo) {
+            _recLT.legenda = _t;
+            log({ acao: 'legenda_tardia_anexada_a_midia', chatId: event.chatId,
+                  segundos: Math.round((agora - _recLT.ts) / 1000) });
+            return { acao: 'legenda_tardia_anexada_a_midia' };
+          }
+          if (_recLT.resultado && _recLT.resultado.acao === 'midia_recusada') {
+            _recLT.legenda = _t;
+            const _r2 = await _reavaliarMidiaComLegenda(_recLT, agora);
+            if (_r2) return _r2;
+          }
+        }
         if (_pareceLegenda) {
           // Mídia já em voo ou lote aberto: é legenda que chegou DEPOIS, e o
           // caminho de sempre (lote/bolha irmã) já trata — não esperar nem desviar.
@@ -5362,6 +5688,18 @@ _Não lanço nada pela metade._`);
         const _kv = textoIrmaoKey(event);
         const _v = midiasEmVoo.get(_kv);
         if (_v && _v.ts === agora) midiasEmVoo.delete(_kv);
+        const _rec = event._legendaTardiaRec;
+        if (_rec) { _rec.emVoo = false; _rec.resultado = r || null; }
+      }
+    }
+    // A legenda tardia chegou depois de a mídia já ter lido a legenda (em geral
+    // durante a interpretação): a mídia é reavaliada UMA vez com ela, com a mesma
+    // leitura da imagem, e o card que tenha saído é substituído.
+    {
+      const _rec = event.hasMedia ? event._legendaTardiaRec : null;
+      if (_rec && _rec.legenda && !_rec.consumida && midiasSemLegenda.get(textoIrmaoKey(event)) === _rec) {
+        const _r2 = await _reavaliarMidiaComLegenda(_rec, agora);
+        if (_r2) { _rec.resultado = _r2; r = _r2; }
       }
     }
     const nao = event && event._agentFirstNaoResolveu;
@@ -5675,6 +6013,23 @@ _Não lanço nada pela metade._`);
       }
     }
 
+    // 0.55) resposta à lista de lançamentos ambíguos: vira alvo EXATO e reentra
+    //       no 0.6 — que monta o card e segue exigindo "pode".
+    {
+      const escolha = escolhaDaResposta(event, agora);
+      if (escolha) {
+        if (escolha.foraDaLista) {
+          await sendFn(chatId, `Esse número não está na lista. Responde de *1* a *${escolha.esc.items.length}*, ou com o id.`);
+          return { acao: 'movimento_escolha_fora_da_lista' };
+        }
+        escolhasMovimento.delete(chatId);
+        log({ acao: 'movimento_escolhido_pelo_humano', chatId, id: String(escolha.item.movimentacao_id || '').slice(0, 8) });
+        return handle({ ...event, _sintetico: true, quotedMessageId: null, quotedBody: null,
+          body: escolha.esc.cmdMov.tipo === 'estornar' ? 'estornar lançamento' : 'corrigir lançamento',
+          caixaToolCommand: escolha.esc.cmdMov, caixaToolTarget: escolha.item, _escolhaMovimento: true }, agora);
+      }
+    }
+
     // 0.6) correção/estorno de lançamento já gravado.
     // "Excluir" no caixa vira estorno auditado; alteração de valor/categoria/
     // descrição passa pela RPC de correção controlada. O alvo precisa vir de
@@ -5728,11 +6083,7 @@ _Não lanço nada pela metade._`);
           }
           const items = rBusca && Array.isArray(rBusca.items) ? rBusca.items : [];
           if (items.length === 1) alvo = items[0];
-          else if (items.length > 1) {
-            await sendFn(chatId, 'Achei mais de um lançamento parecido. Responde citando a minha mensagem exata do lançamento ou informa o valor/aluno.');
-            log({ acao: 'movimento_alvo_ambiguo', chatId, count: items.length });
-            return { acao: 'movimento_alvo_ambiguo' };
-          }
+          else if (items.length > 1) return pedirEscolhaMovimento({ event, chatId, cmdMov, items, agora });
         }
         if (!alvo) {
           const valorBusca = cmdMov.correcoes && cmdMov.correcoes.valor ? cmdMov.correcoes.valor : extrairValor(event.body, { allowBare: true });
@@ -5754,12 +6105,7 @@ _Não lanço nada pela metade._`);
           }
           const items = rBusca && Array.isArray(rBusca.items) ? rBusca.items : [];
           if (items.length === 1) alvo = items[0];
-          else if (items.length > 1) {
-            const linhas = items.slice(0, 5).map((x, i) => `${i + 1}. ${fmtBRL(x.valor)} · ${x.categoria || 'sem categoria'} · ${x.forma_pagamento || 'sem forma'} · ${x.responsavel || x.descricao || ''}`.trim()).join('\n');
-            await sendFn(chatId, `Achei mais de um lançamento. Me diz qual é, ou responde citando a mensagem correta:\n${linhas}`);
-            log({ acao: 'movimento_alvo_ambiguo', chatId, count: items.length });
-            return { acao: 'movimento_alvo_ambiguo' };
-          }
+          else if (items.length > 1) return pedirEscolhaMovimento({ event, chatId, cmdMov, items, agora });
         }
         const movimentacaoId = alvo && (alvo.movimentacao_id || alvo.movimentacaoId);
         if (!movimentacaoId) {
@@ -5798,6 +6144,11 @@ _Não lanço nada pela metade._`);
           let textoPreview = cmdMov.tipo === 'estornar'
             ? `Vou estornar este lançamento no caixa da ${grp.nome}: ${fmtBRL(valorPreview)} · ${categoriaPreview} · ${formaPreview}.\nNão vou apagar o original; vou criar um movimento inverso auditado.\n\n👉 Posso estornar agora? Responde *pode*.`
             : `Vou corrigir este lançamento no caixa da ${grp.nome}: ${fmtBRL(valorPreview)} · ${categoriaPreview} · ${formaPreview}.\n\n👉 Posso corrigir agora? Responde *pode*.`;
+          // Escolhido numa lista de iguais (SOL-114, 29/09/2026): o card diz QUAL é —
+          // hora, quem lançou e id — para o "pode" ser sobre o lançamento certo.
+          if (event._escolhaMovimento) {
+            textoPreview = textoPreview.replace('\n', `\nÉ o lançamento das ${horaMovimento(alvo)} · lançado por ${quemLancouMovimento(alvo)} · id \`${String(movimentacaoId).slice(0, 8)}\`.\n`);
+          }
           const previewId = await sendFn(chatId, textoPreview);
           const pendenciaOperacao = {
             previewId,
@@ -5865,6 +6216,8 @@ _Não lanço nada pela metade._`);
       const lote = await prepararLoteMidia(event, agora);
       if (lote.skip) return { acao: lote.acao };
       event = lote.event;
+      // O lote costurou legenda: a mídia deixou de ser "sem legenda" (SOL-110).
+      if (event._legendaTardiaRec && !event._legendaTardia && bodyLimpo(event.body)) event._legendaTardiaRec.temLegenda = true;
       const idemKey = `${chatId}:${event.messageId}`;
       if (vistos.has(idemKey)) return { acao: 'dup_ignorada' };
       vistos.add(idemKey);
@@ -5976,11 +6329,34 @@ _Não lanço nada pela metade._`);
       //    acabado de receber, e o lançamento de R$ 347 nunca saiu.
       // ⚠️ Só ESPIA: não consome (`textosRecentes.delete` é do bloco de baixo,
       //    que ainda faz o backfill de valor/forma). Deletar aqui quebraria ele.
+      // LEGENDA TARDIA (29/09/2026, CG 14:36): guarda a leitura da IMAGEM (antes de
+      // qualquer legenda) para a reavaliação não repetir OCR/visão; e, se a legenda
+      // do mesmo autor já chegou enquanto a imagem era lida, ela entra AGORA, antes
+      // de classificar e de interpretar — é a legenda desta mídia.
+      const _recLT = event._legendaTardiaRec || null;
+      if (_recLT && !_recLT.evidencia) {
+        _recLT.evidencia = {
+          ocrText, ocrMeta, visao, valor: Number(valor) || null, forma: forma || null,
+          cartaoModalidade, cartaoParcelas,
+          pagador: pagadorVis || (visao && (visao.pagador_nome || visao.aluno)) || null,
+        };
+      }
+      if (_recLT && _recLT.legenda && !_recLT.consumida && !bodyLimpo(event.body)) {
+        _recLT.consumida = true;
+        event = { ...event, body: _recLT.legenda };
+        const _vLT = extrairValor(event.body);
+        if (_vLT) valor = _vLT;
+        log({ acao: 'legenda_tardia_lida_antes_da_interpretacao', chatId });
+      }
       let _bodyComIrma = event.body;
       try {
         const _kEsp = textoIrmaoKey(event);
         const _bufEsp = textosRecentes.get(_kEsp);
-        const _frescoEsp = _bufEsp && _bufEsp.ts >= agora - 150000 && _bufEsp.ts <= agora + 60000;
+        // 🔴 29/09/2026 (SOL-110b): a janela era de 150 s para trás, e "Sol, a Fulana
+        //    já pagou ontem, desconsidera" virou a legenda de um comprovante de OUTRO
+        //    pagamento mandado 90 s depois. Legenda é o texto que acompanha a mídia:
+        //    a mesma janela de 60 s da legenda tardia, nos dois sentidos.
+        const _frescoEsp = _bufEsp && _bufEsp.ts >= agora - LEGENDA_TARDIA_MS && _bufEsp.ts <= agora + 60000;
         if (_frescoEsp && bodyLimpo(_bufEsp.texto)
             && bodyLimpo(_bufEsp.texto) !== bodyLimpo(event.body)) {
           _bodyComIrma = (bodyLimpo(event.body) ? bodyLimpo(event.body) + ' \u00b7 ' : '')
@@ -5995,6 +6371,12 @@ _Não lanço nada pela metade._`);
       // print/orcamento sem esse sinal continua bloqueado.
       if (cls.tipo !== 'comprovante' && visao && (visao.valor || visao.aluno)) cls = { tipo: 'comprovante', motivo: 'vision_fallback' };
       if (cls.tipo !== 'comprovante') {
+        // Legenda tardia chegou durante a leitura: não recusa em cima dela — a
+        // reavaliação (no topo do handle) decide com a legenda.
+        if (_recLT && _recLT.legenda && !_recLT.consumida) {
+          log({ acao: 'midia_adiada_legenda_tardia', chatId, etapa: 'recusa' });
+          return { acao: 'midia_adiada_legenda_tardia' };
+        }
         log({ acao: 'midia_recusada', tipo: cls.tipo, motivo: cls.motivo, chatId });
         if (cls.tipo === 'despesa') {
           await sendFn(chatId, '📄 Isso parece um orçamento/compra (despesa), não um recebimento — não lancei nada no caixa.');
@@ -6010,7 +6392,7 @@ _Não lanço nada pela metade._`);
       {
         const _kTextoIrmao = textoIrmaoKey(event);
         const _buf = textosRecentes.get(_kTextoIrmao);
-        const _fresco = _buf && _buf.ts >= agora - 150000 && _buf.ts <= agora + 60000;
+        const _fresco = _buf && _buf.ts >= agora - LEGENDA_TARDIA_MS && _buf.ts <= agora + 60000;
         const _temNome = _fresco && (_alunoRotulado(_buf.texto) || nomePlausivel(_alunoFromCaption(_buf.texto)));
         if (_temNome && bodyLimpo(_buf.texto) && bodyLimpo(_buf.texto) !== legendaEfetiva) {
           legendaEfetiva = (legendaEfetiva ? legendaEfetiva + ' \u00b7 ' : '') + bodyLimpo(_buf.texto);
@@ -6136,6 +6518,38 @@ _Não lanço nada pela metade._`);
       // o card do Lucas (contrato inteiro, 12 meses) como "duas parcelas divergentes".
       // Periodo declarado e quitacao: vai para `multiplas`, que resolve as N faturas.
       const _periodoDaLegenda = extrairPeriodoMeses(legendaEfetiva);
+      // SOL-134 (29/09/2026): excedente declarado como adiantamento. Antes das
+      // competências explícitas: o mês do adiantamento não é parcela a quitar.
+      {
+        const _adiant = extrairAdiantamentoDeclarado(legendaEfetiva);
+        if (_adiant && !categoriaEhSaida(categoria)) {
+          // O total do pagamento: o "total" escrito pela equipe; sem ele, o valor
+          // lido do comprovante. A 1ª cifra da legenda (que vence o OCR no card
+          // singular) aqui é um dos ITENS, não o pagamento.
+          const _mTot = _normConf(legendaEfetiva).match(/\btotal\b[^0-9]{0,15}?(?:r\$\s*)?(\d{1,3}(?:\.\d{3})*(?:,\d{2})?|\d+(?:,\d{2})?)/);
+          const _totDecl = _mTot ? parseBRMoney('R$ ' + _mTot[1]) : null;
+          const _totOcr = extrairValorOcr(ocrText) || (visao && Number(visao.valor)) || null;
+          const _alunoNoTexto = (n) => !!(n && nomePlausivel(n)
+            && _normConf(legendaEfetiva).includes(_normConf(n)));
+          // Aluno: o rótulo humano ou o nome que o modelo tirou do texto — desde
+          // que esteja escrito na legenda. Nunca o pagador, nunca um palpite.
+          const _alunoAd = _alunoDaLegenda || (_alunoNoTexto(aluno) ? aluno : null);
+          if (_totDecl && _totOcr && Math.abs(_totDecl - _totOcr) > 0.01) {
+            await sendFn(chatId, `Entendi o adiantamento de *${fmtBRL(_adiant.valor)}* para a parcela *${_adiant.competencia}*, `
+              + `mas o total escrito (*${fmtBRL(_totDecl)}*) difere do comprovante (*${fmtBRL(_totOcr)}*). Confere o valor.\n\n⚠️ Não criei um card aprovável.`);
+            log({ acao: 'adiantamento_sem_fechamento', chatId, motivo: 'total_diverge_comprovante',
+                  total_escrito: _totDecl, comprovante: _totOcr });
+            return { acao: 'adiantamento_sem_fechamento', motivo: 'total_diverge_comprovante' };
+          }
+          const _totalAd = _totDecl || _totOcr || Number(valor);
+          if (_totalAd > _adiant.valor) {
+            const _rAd = await tratarPagamentoComAdiantamento({ event, grupo: grp, agora,
+              textoHumano: legendaEfetiva, textoFonte: textoClassificacao, adiantamento: _adiant,
+              aluno: _alunoAd, valor: _totalAd, forma, evidenceEnvelope });
+            if (_rAd) return _rAd;
+          }
+        }
+      }
       if (_competenciasDaLegenda.length >= 2 && _alunoDaLegenda && !_periodoDaLegenda
           && Number(valor) > 0 && forma && !categoriaEhSaida(categoria)) {
         const _parcelas = await tratarParcelasCompetenciasExplicitas({
@@ -6667,6 +7081,12 @@ _Não lanço nada pela metade._`);
         });
         log({ acao: 'evidence_resolver_shadow', trilho: 'legado_midia', chatId,
           divergencias: cmp.divergencias, conflitos: cmp.conflitos, ok: cmp.ok });
+      }
+      // Legenda tardia chegou durante a interpretação: este card sairia sem ela.
+      // Nada é enviado; a mídia é reavaliada com a legenda (um card só).
+      if (_recLT && _recLT.legenda && !_recLT.consumida) {
+        log({ acao: 'midia_adiada_legenda_tardia', chatId, etapa: 'card' });
+        return { acao: 'midia_adiada_legenda_tardia' };
       }
       let texto = montarPreview({ unidadeNome: grp.nome, valor, forma, categoria, aluno, competencia, parcela, confiancaBaixa, alunoNovoOrigem, responsavelFinanceiro, formaIncerta, cartaoModalidade, cartaoParcelas, multiplas, alunoViaPagador, pagadorNome, candidatosAluno, canonica, duplicata, quitacao, faturaIndisponivel: canonicaIndisponivel || bloqueiaFonteIndisponivel, composto, bloqueiaLancamento, itemLojinha: lojinhaInfo && lojinhaInfo.item, valorMaiorNaLegenda });
       if (dryRun) texto += '\n\n_(modo teste — nada será gravado no caixa)_';
@@ -7316,6 +7736,78 @@ _Não lanço nada pela metade._`);
               result: { acao: 'preview_valor_corrigido', valor: _valorDitado },
             })) return { acao: 'preview_valor_corrigido_sem_v3' };
             return { acao: 'preview_valor_corrigido', valor: _valorDitado };
+          }
+        }
+
+        // ── PERÍODO DA QUITAÇÃO (SOL-103, 29/09/2026). O card de quitação ensina
+        // "se for outro período, me diz: *de 09/2026 a 08/2027*", e a resposta
+        // "de 10/2026 a 09/2027" caía no caminho de VÁRIAS COMPETÊNCIAS abaixo —
+        // lida como duas parcelas (10/2026 e 09/2027), invalidava o card. Num card
+        // de quitação, intervalo é o PERÍODO: vira a lista de competências, as
+        // faturas do período são resolvidas de novo e o MESMO card é remontado.
+        const _periodoQuit = (!event.hasMedia && !casarPode(txt).pode) ? extrairPeriodoMeses(txt) : null;
+        if (_periodoQuit) {
+          const _citaQ = (x, id) => x.previewId === id || x.origem === id
+            || (Array.isArray(x.msgIds) && x.msgIds.includes(id));
+          const elegiveisQ = arrP.filter((x) => x.multiplas && !categoriaEhSaida(x.categoria)
+            && x.tipoOperacao !== 'manual_review_multi_student' && x.tipoOperacao !== 'lancar_recebimento_lote');
+          const alvoQ = event.quotedMessageId
+            ? (elegiveisQ.find((x) => _citaQ(x, event.quotedMessageId)) || null)
+            : (elegiveisQ.length === 1 ? elegiveisQ[0] : null);
+          if (alvoQ) {
+            const [mi, ai] = _periodoQuit.inicio.split('/').map(Number);
+            const [mf, af] = _periodoQuit.fim.split('/').map(Number);
+            const nMeses = (af * 12 + mf) - (ai * 12 + mi) + 1;
+            if (!(nMeses >= 2 && nMeses <= 13)) {
+              await sendFn(chatId, `Esse período (*${_periodoQuit.inicio} a ${_periodoQuit.fim}*) não fecha uma quitação de 2 a 13 parcelas. Me diz de novo, por exemplo: *de 10/2026 a 09/2027*.`);
+              log({ acao: 'quitacao_periodo_invalido', chatId, inicio: _periodoQuit.inicio, fim: _periodoQuit.fim, n: nMeses });
+              return { acao: 'quitacao_periodo_invalido' };
+            }
+            const qAnt = alvoQ.quitacao || {};
+            const vparcQ = qAnt.vparc || (alvoQ.canonica && alvoQ.canonica.fatura
+              && Number(alvoQ.canonica.fatura.valor_da_parcela)) || null;
+            const qNova = { n: nMeses, vparc: vparcQ, inicio: _periodoQuit.inicio, fim: _periodoQuit.fim,
+              proposto: false, competencias: [] };
+            for (let k = 0; k < nMeses; k++) { const s = _somaMeses(mi, ai, k); qNova.competencias.push(_mm(s.mes, s.ano)); }
+            const _alunoQ = derivarVinculo({ canonica: alvoQ.canonica, parcela: alvoQ.parcela, alunoNovoId: alvoQ.alunoNovoId }).aluno_id;
+            try {
+              qNova.faturas = _alunoQ ? await faturasQuitacaoFn(grp.unidade_id, _alunoQ, qNova) : { ok: false, motivo: 'aluno_sem_vinculo' };
+            } catch (e) {
+              qNova.faturas = { ok: false, motivo: 'erro_leitura' };
+              log({ acao: 'quitacao_faturas_erro', chatId, erro: String(e && e.message) });
+            }
+            alvoQ.quitacao = qNova;
+            alvoQ.multiplas = true;
+            alvoQ.descricao = (qNova.faturas && qNova.faturas.ok)
+              ? (`Parcelas ${qNova.faturas.inicio} a ${qNova.faturas.fim}`
+                 + (qNova.faturas.curso ? ` do curso de ${qNova.faturas.curso}` : '') + (alvoQ.aluno ? ' - ' + alvoQ.aluno : ''))
+              : (`Quitacao ${nMeses}x (${qNova.inicio} a ${qNova.fim})` + (alvoQ.aluno ? ' - ' + alvoQ.aluno : ''));
+            alvoQ.bloqueiaLancamento = deveBloquearLancamento({ composto: alvoQ.composto, parcela: alvoQ.parcela,
+              canonica: alvoQ.canonica, valor: alvoQ.valor, quitacao: qNova, multiplas: true });
+            alvoQ.ts = agora;
+            let textoQ = 'Atualizei o período da quitação:\n\n' + montarPreview({
+              unidadeNome: alvoQ.nome, valor: alvoQ.valor, forma: alvoQ.forma,
+              categoria: alvoQ.categoria, aluno: alvoQ.aluno, competencia: alvoQ.competencia,
+              parcela: alvoQ.parcela, confiancaBaixa: false, responsavelFinanceiro: alvoQ.responsavelFinanceiro,
+              formaIncerta: alvoQ.formaIncerta, cartaoModalidade: alvoQ.cartaoModalidade,
+              cartaoParcelas: alvoQ.cartaoParcelas, multiplas: true,
+              alunoViaPagador: null, pagadorNome: null, candidatosAluno: null,
+              canonica: alvoQ.canonica, duplicata: null, quitacao: qNova,
+              faturaIndisponivel: alvoQ.faturaIndisponivel, composto: alvoQ.composto,
+              bloqueiaLancamento: alvoQ.bloqueiaLancamento,
+            });
+            if (dryRun) textoQ += '\n\n_(modo teste — nada será gravado no caixa)_';
+            alvoQ.previewId = await sendFn(chatId, textoQ);
+            (alvoQ.msgIds = alvoQ.msgIds || []).push(alvoQ.previewId);
+            alvoQ.toquePor = String(event.senderPhone || event.senderId || '') || alvoQ.toquePor;
+            alvoQ.toqueTs = agora;
+            log({ acao: 'quitacao_periodo_corrigido', chatId, inicio: qNova.inicio, fim: qNova.fim, n: nMeses,
+                  faturas_ok: !!(qNova.faturas && qNova.faturas.ok) });
+            if (!await vincularPreviewRemontadoV3({
+              event, grupo: grp, pendencia: alvoQ, previewId: alvoQ.previewId, texto: textoQ,
+              result: { acao: 'quitacao_periodo_corrigido', inicio: qNova.inicio, fim: qNova.fim },
+            })) return { acao: 'quitacao_periodo_corrigido_sem_v3' };
+            return { acao: 'quitacao_periodo_corrigido', inicio: qNova.inicio, fim: qNova.fim };
           }
         }
 
@@ -8924,6 +9416,7 @@ _Não lanço nada pela metade._`);
 
   function deveTratarComplementoDeterministico(event, agora = Date.now()) {
     if (!event || event.hasMedia) return false;
+    if (escolhaDaResposta(event, agora)) return true;
     let draft = rascunhosV4.get(event.chatId) || null;
     if (!draft) return completaCardClassicoIncompleto(event, agora) || corrigeAlunoCardClassico(event, agora);
     if (agora - draft.ts >= janelaMs) {
@@ -8943,7 +9436,7 @@ _Não lanço nada pela metade._`);
   return { handle, temPendencia, tokenEstadoPendencias, citaAlgumaPendencia, citaCardPendenteDaSol, ehConversaSemComando,
     reidratarPendencias, tratarNaoEntendida, observarRoteadorV4, decidirRoteadorV4, tratarAgentFirst,
     deveTratarConfirmacaoDeterministica, deveTratarComplementoDeterministico, resumoCardsAbertosParaAgente,
-    _pendentes: pendentes, _envelopesV4: envelopesV4, _rascunhosV4: rascunhosV4 };
+    _pendentes: pendentes, _envelopesV4: envelopesV4, _rascunhosV4: rascunhosV4, _escolhasMovimento: escolhasMovimento };
 }
 
 function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
@@ -8951,7 +9444,7 @@ function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slic
 module.exports = {
   _fonteFuturaLateralAoMesDeclarado,
   selecionarFaturasQuitacao, resolverFaturasQuitacao,
-  parseBRMoney, valorDoModelo, normalizarCompetenciaV4, montarEnvelopeV4, extrairValor, extrairForma, extrairFormaHumana, detectarComprovante, casarPode,
+  parseBRMoney, extrairAdiantamentoDeclarado, valorDoModelo, normalizarCompetenciaV4, montarEnvelopeV4, extrairValor, extrairForma, extrairFormaHumana, detectarComprovante, casarPode,
   _saidaExplicitaFromCaption, categoriaSaidaDoTexto, excedeFaturaUnica, deveBloquearLancamento, _valorLojinhaTexto, _compradorDeclaradoLojinha, _nomeHumanoTardio, extrairValorOcr, _vendedorRotulado, _mesmaPessoa,
   _alunoRotulado, _limparAlunoRotulado, _semAlunoDeclarado, extrairCategoriaCorrecao,
   _ehDitadoDeCaixa, classificarCorrecaoPendencia, listarPreviewsAbertosV3, _contestaFatura, rotearMensagemV4,

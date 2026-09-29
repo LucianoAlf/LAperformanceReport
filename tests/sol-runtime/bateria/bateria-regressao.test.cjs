@@ -92,7 +92,7 @@ function porMensagem(spec) {
 function montar(caso) {
   const g = GRUPOS[caso.contexto.unidade || 'CG'];
   const f = caso.contexto.fakes || {};
-  const reg = { enviadas: [], lancados: [], lotes: [], saidas: [], estornos: [], correcoes: [], logs: [], buscas: [] };
+  const reg = { enviadas: [], lancados: [], lotes: [], saidas: [], estornos: [], correcoes: [], logs: [], buscas: [], envelopes: [] };
   let seq = 0;
   let passoAtual = 0;
   // Espelho da RPC sol_caixa_ja_lancado_hoje: mesmo valor + mesmo aluno no caixa de hoje.
@@ -115,10 +115,14 @@ function montar(caso) {
     sendFn: async (_c, t) => { const id = 'MSG' + (++seq); reg.enviadas.push({ passo: passoAtual, id, texto: String(t) }); return id; },
     ocrFn: porMensagem(f.ocr === undefined ? { text: '', status: 'texto_vazio' } : f.ocr),
     visaoFn: porMensagem(f.visao === undefined ? null : f.visao),
-    interpretarFn: async () => clone(f.interpretar === undefined ? null : f.interpretar),
+    // `interpretar_atraso_ms`: a interpretação demora (CG 29/09 14:36: ~34 s), para
+    // reproduzir mensagens que chegam com a mídia ainda em processamento.
+    interpretarFn: async () => { if (f.interpretar_atraso_ms) await sleep(f.interpretar_atraso_ms); return clone(f.interpretar === undefined ? null : f.interpretar); },
     interpretarMultiFn: async () => clone(f.interpretar_multi === undefined ? null : f.interpretar_multi),
     resolverMultiFn: async () => clone(f.resolver_multi === undefined ? { ok: false, motivo: 'fake_sem_resolucao' } : f.resolver_multi),
-    resolverEnvelopeFn: async () => ({ ok: false, motivo: 'v4_desligada_na_bateria' }),
+    // `resolver_envelope`: o resolvedor de combinação única do Core (sol_caixa_resolver_envelope_v1),
+    // que a V3 também usa (parcelas explícitas, adiantamento). Sem fake, responde "desligado".
+    resolverEnvelopeFn: async (q) => { reg.envelopes.push(q); return clone(f.resolver_envelope === undefined ? { ok: false, motivo: 'v4_desligada_na_bateria' } : f.resolver_envelope); },
     casarFn: porNome(f.casar, { ok: false, motivo: 'aluno_nao_encontrado' }),
     canonicaFn: porNome(f.canonica, { ok: false, motivo: 'aluno_nao_encontrado' }),
     responsavelFn: porNome(f.responsavel, { ok: false }),
