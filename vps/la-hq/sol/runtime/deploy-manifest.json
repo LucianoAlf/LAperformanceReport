@@ -20,7 +20,7 @@
     {
       "class": "caixa-runtime",
       "mode": "0644",
-      "sha256": "56b3c1617d250fbb8722dfece9fb1d9da6ff76fdb761febe7589499c65108b18",
+      "sha256": "5af6261906cbb5fbfe6e38134d3d2acc442e734ecbf0e74d7869443a7f43483e",
       "size": 509387,
       "source": "vps/la-hq/sol/runtime/caixa-financeiro.cjs",
       "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs"
