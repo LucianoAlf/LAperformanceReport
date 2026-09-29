@@ -20,8 +20,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
+import { ETAPA_PIPELINE_VISITA } from '@/lib/visitasComercial';
 import { useLeadsCRM } from '../hooks/useLeadsCRM';
+import { ModalAgendar } from '../components/ModalAgendar';
+import { consultarVisitaVigenteDoLead, quandoDaVisita } from '../lib/visitaDoLead';
 import type { LeadCRM, PipelineEtapa } from '../types';
 
 interface PipelineTabProps {
@@ -39,6 +43,7 @@ export function PipelineTab({ unidadeId, ano, mes, onLeadClick, onConfigurarEtap
   const [filtroTelefone, setFiltroTelefone] = useState<string>('todos');
   const [dragLeadId, setDragLeadId] = useState<number | null>(null);
   const [dropTargetEtapa, setDropTargetEtapa] = useState<number | null>(null);
+  const [leadAgendarVisita, setLeadAgendarVisita] = useState<LeadCRM | null>(null);
 
   // Agrupar leads por etapa
   const leadsPorEtapa = useMemo(() => {
@@ -102,6 +107,28 @@ export function PipelineTab({ unidadeId, ano, mes, onLeadClick, onConfigurarEtap
 
     const etapaAnterior = lead.etapa_pipeline_id;
     const leadIdMovido = dragLeadId;
+
+    // Visita tem dia e hora proprios, e so existe para a contagem se houver linha em
+    // `visitas`. Mover o card direto deixava o lead na coluna sem visita nenhuma (caso
+    // Edna/Recreio, 23/09/2026). Sem visita marcada, o ModalAgendar pergunta e grava a
+    // etapa E a visita; com visita ja marcada (a Mila agenda e move sozinha), so move.
+    if (etapaId === ETAPA_PIPELINE_VISITA) {
+      setDragLeadId(null);
+      setDropTargetEtapa(null);
+      const consulta = await consultarVisitaVigenteDoLead(leadIdMovido);
+      if (!consulta.ok) {
+        console.error(`[pipeline] visita do lead ${leadIdMovido}: ${consulta.erro}`);
+        toast.error('Não foi possível conferir a visita do lead', { description: consulta.erro });
+        return;
+      }
+      if (!consulta.visita) {
+        setLeadAgendarVisita(lead);
+        return;
+      }
+      toast.info(`${lead.nome || 'Lead'} já tem visita agendada para ${quandoDaVisita(consulta.visita)}`, {
+        description: 'O card foi movido sem criar outra visita.',
+      });
+    }
 
     // Update otimista — mover localmente ANTES de salvar no banco
     setLeads(prev => prev.map(l =>
@@ -244,6 +271,17 @@ export function PipelineTab({ unidadeId, ano, mes, onLeadClick, onConfigurarEtap
           })}
         </div>
       </div>
+
+      {/* Arrasto para a etapa de visita sem visita marcada: o modal grava a etapa E a
+          linha em `visitas`. Cancelar deixa o card onde estava. */}
+      <ModalAgendar
+        aberto={leadAgendarVisita !== null}
+        lead={leadAgendarVisita}
+        tipoInicial="visita"
+        tipoTravado
+        onClose={() => setLeadAgendarVisita(null)}
+        onSalvo={() => { setLeadAgendarVisita(null); refetchSilencioso(); }}
+      />
     </div>
   );
 }
