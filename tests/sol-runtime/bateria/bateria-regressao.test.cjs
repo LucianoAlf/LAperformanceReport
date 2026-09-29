@@ -89,12 +89,45 @@ function porMensagem(spec) {
   };
 }
 
+// Malote de cheques (tipo cheque/malote, 29/09/2026): módulo REAL de cheques com
+// banco falso (_cheques-fakes.cjs). `fakes.cheques`:
+//   leituras: { padrao: [...], por_mensagem: { M1: [...] } } — cada cheque é
+//             { k, valor?, emitente?, banco?, bom_para? } (CMC-7 gerado com DVs);
+//   faturas: { "<n>": {campos da fatura} } (id = U(n)); resolver: { EMITENTE: {fatura: n} | "desconhecido" };
+//   movimentos: [...] no caixa antes do caso; arquivo: { M2: "M1" } (mesmo conteúdo);
+//   modo: grupo|sombra (padrão grupo).
+function chequesDoCaso(f, send) {
+  if (!f.cheques) return { chequesFn: null, db: null };
+  const C = require('../_cheques-fakes.cjs');
+  const spec = f.cheques;
+  const faturas = {};
+  for (const [n, fat] of Object.entries(spec.faturas || {})) faturas[C.U(Number(n))] = C.faturaPadrao(C.U(Number(n)), fat);
+  const resolver = {};
+  for (const [e, r] of Object.entries(spec.resolver || {})) resolver[e] = r;
+  const db = C.criarBancoFalso({ faturas, resolver, movimentos: spec.movimentos || [] });
+  const expandir = (lista) => (lista || []).map((c) => C.chequeLido(c.k, { ...(c.valor != null ? { valor: c.valor } : {}),
+    ...(c.emitente ? { emitente: c.emitente } : {}), ...(c.banco ? { banco: c.banco } : {}), ...(c.bom_para ? { bom_para: c.bom_para } : {}) }));
+  const chequesFn = C.chq.criarCheques({
+    carregarEnv: () => ({ url: 'https://bateria.invalid', key: 'x' }), sendFn: send, albumMs: 60,
+    lerLoteFn: async (arq) => {
+      const id = path.basename(String(arq)).replace(/\.[^.]*$/, '');
+      const pm = spec.leituras && spec.leituras.por_mensagem;
+      const lista = pm && id in pm ? pm[id] : (spec.leituras && spec.leituras.padrao);
+      return { ok: true, cheques: expandir(lista) };
+    },
+    rpcFn: db.rpcFn, consultaFn: db.consultaFn,
+  });
+  return { chequesFn, db };
+}
+
 function montar(caso) {
   const g = GRUPOS[caso.contexto.unidade || 'CG'];
   const f = caso.contexto.fakes || {};
   const reg = { enviadas: [], lancados: [], lotes: [], saidas: [], estornos: [], correcoes: [], logs: [], buscas: [] };
   let seq = 0;
   let passoAtual = 0;
+  const enviar = async (_c, t) => { const id = 'MSG' + (++seq); reg.enviadas.push({ passo: passoAtual, id, texto: String(t) }); return id; };
+  const chq = chequesDoCaso(f, enviar);
   // Espelho da RPC sol_caixa_ja_lancado_hoje: mesmo valor + mesmo aluno no caixa de hoje.
   const duplicata = f.duplicata === 'nunca'
     ? async () => ({ ja_lancado: false })
@@ -108,11 +141,12 @@ function montar(caso) {
   const lancar = async (p) => {
     if (resultadoLancar) return clone(resultadoLancar);
     reg.lancados.push(p);
+    if (chq.db) chq.db.gravar(p, [{ ...p, canonical_fatura_id: p.fatura_id }]);
     return { ok: true, movimentacao_id: 'MOV-' + reg.lancados.length, valor: Number(p.valor), forma: p.forma };
   };
   const h = mod.criarHandlerFinanceiro({
     grupos: { [g.chat]: { grupo_jid: g.chat, unidade_id: g.unidade_id, nome: g.nome } },
-    sendFn: async (_c, t) => { const id = 'MSG' + (++seq); reg.enviadas.push({ passo: passoAtual, id, texto: String(t) }); return id; },
+    sendFn: enviar,
     ocrFn: porMensagem(f.ocr === undefined ? { text: '', status: 'texto_vazio' } : f.ocr),
     visaoFn: porMensagem(f.visao === undefined ? null : f.visao),
     interpretarFn: async () => clone(f.interpretar === undefined ? null : f.interpretar),
@@ -132,12 +166,13 @@ function montar(caso) {
     classificarCorrecaoFn: async () => clone(f.classificar_correcao === undefined ? null : f.classificar_correcao),
     listarPreviewsAbertosFn: async () => [],
     rotearV4Fn: async () => null,
-    chequesFn: null,
+    chequesFn: chq.chequesFn,
     lancarFn: lancar,
     lancarSaidaFn: async (p) => { reg.saidas.push(p); reg.lancados.push(p); return { ok: true, movimentacao_id: 'SAI-' + reg.saidas.length, valor: Number(p.valor), forma: p.forma }; },
     lancarLoteFn: async (p) => {
       reg.lotes.push(p);
       for (const it of p.itens || []) reg.lancados.push({ ...it, forma: p.forma, lote: true });
+      if (chq.db) chq.db.gravar(p, p.itens || []);
       return { ok: true, lote_id: 'LOTE-' + reg.lotes.length, movimentacoes: (p.itens || []).map((i, n) => ({ aluno_nome: i.aluno_nome, valor: i.valor, movimentacao_id: 'LM-' + n })) };
     },
     buscarMovimentosFn: async (q) => { reg.buscas.push(q); return clone(f.buscar_movimentos === undefined ? { items: [] } : f.buscar_movimentos); },
@@ -146,7 +181,7 @@ function montar(caso) {
     corrigirMovimentoFn: async (p) => { reg.correcoes.push(p); return { ok: true, depois: {} }; },
     log: (o) => reg.logs.push({ passo: passoAtual, ...o }),
   });
-  return { h, g, reg, setPasso: (i) => { passoAtual = i; } };
+  return { h, g, reg, cheques: !!chq.chequesFn, setPasso: (i) => { passoAtual = i; } };
 }
 
 function evento(g, passo, i, reg) {
@@ -169,7 +204,25 @@ function evento(g, passo, i, reg) {
   return ev;
 }
 
+let _tmpBateria = null;
+function arquivoReal(id, ext, conteudo) {
+  if (!_tmpBateria) _tmpBateria = fs.mkdtempSync(path.join(require('os').tmpdir(), 'sol-bateria-chq-'));
+  const dir = path.join(_tmpBateria, String(Date.now()) + Math.random().toString(16).slice(2), 'bateria');
+  fs.mkdirSync(dir, { recursive: true });
+  const p = path.join(dir, `${id}.${ext}`);
+  fs.writeFileSync(p, conteudo);
+  return p;
+}
+
 async function executar(caso) {
+  const modoAntes = process.env.SOL_CHEQUES_MODO;
+  const spec = (caso.contexto.fakes || {}).cheques;
+  if (spec) process.env.SOL_CHEQUES_MODO = spec.modo || 'grupo';
+  try { return await _executar(caso, spec); }
+  finally { if (modoAntes === undefined) delete process.env.SOL_CHEQUES_MODO; else process.env.SOL_CHEQUES_MODO = modoAntes; }
+}
+
+async function _executar(caso, spec) {
   const ctx = montar(caso);
   const base = Date.now();
   const resultados = [];
@@ -179,6 +232,13 @@ async function executar(caso) {
     const p = passos[i];
     ctx.setPasso(i);
     const ev = evento(ctx.g, p, i, ctx.reg);
+    if (spec && ev.hasMedia) {
+      // O módulo de cheques lê o arquivo de verdade (sha256 do malote).
+      const ext = ev.mediaType === 'image' ? 'jpg' : 'pdf';
+      const mesmo = (spec.arquivo || {})[ev.messageId] || ev.messageId;
+      ev.mediaPath = arquivoReal(ev.messageId, ext, 'malote-' + mesmo);
+      ev.mediaUrls = [ev.mediaPath];
+    }
     const agora = base + Math.round((p.t_s || 0) * 1000);
     const run = ctx.h.handle(ev, agora).then((r) => { resultados[i] = r; }, (e) => { resultados[i] = { acao: 'EXCECAO', erro: String(e && e.stack || e) }; });
     const prox = passos[i + 1];
