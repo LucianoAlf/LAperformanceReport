@@ -187,9 +187,25 @@ function pagamentosNaLegenda(pagamentos, legenda) {
   });
 }
 
+// 🔴 29/09/2026 (Recreio): "a parcela dos cursos bateria e piano" de UMA aluna virou
+//    "mais de um aluno" — o detector lia "bateria e piano" como dois nomes. Nome de curso/
+//    instrumento ligado por "e" é UMA pessoa com dois cursos (o Report guarda uma linha
+//    por curso; 150 alunos ativos têm 2+). As frases de curso saem ANTES da detecção.
+const _INSTR_CURSO = '(?:bateria|piano|teclado|violao|viola|guitarra|contrabaixo|baixo|canto|tecnica vocal|violino|violoncelo|cello|ukulele|cavaquinho|flauta|saxofone|sax|trompete|musicalizacao|percussao|harpa|acordeon|sanfona|producao musical|teoria musical)';
+const _CURSO_FRASE_RE = new RegExp(`\\b(?:cursos?|aulas?)\\s+(?:(?:de|do|da)\\s+)?${_INSTR_CURSO}(?:\\s*(?:,|\\be\\b|\\+|&)\\s*(?:(?:de|do|da)\\s+)?${_INSTR_CURSO})*\\b`, 'g');
+const _INSTR_PAR_RE = new RegExp(`\\b${_INSTR_CURSO}\\s*(?:\\be\\b|\\+|&)\\s*${_INSTR_CURSO}\\b`, 'g');
+function _semFrasesDeCurso(t) {
+  return String(t || '').replace(_CURSO_FRASE_RE, ' curso ').replace(_INSTR_PAR_RE, ' cursos ')
+    .replace(/\bcursos?(?:\s*(?:,|\be\b|\+|&)\s*cursos?)+\b/g, ' cursos ')
+    .replace(/\s+/g, ' ').trim();
+}
+
 function detectarContextoMultiAluno(texto) {
-  const t = _normConf(texto);
-  if (!t) return false;
+  const t0 = _normConf(texto);
+  if (!t0) return false;
+  const t = _semFrasesDeCurso(t0);
+  // Mais de um curso citado e nenhuma marca de mais de uma PESSOA: "R$ 500 cada" é por curso.
+  const variosCursos = t !== t0 && /\bcursos\b|\bcurso\b[^\n]{0,40}\bcurso\b/.test(t);
 
   // NOMES_LIGADOS: dois (ou mais) NOMES PROPRIOS ligados por "e" / "+" / "&".
   // Exige 2+ palavras alfabeticas de CADA lado -- e' o que separa
@@ -200,7 +216,7 @@ function detectarContextoMultiAluno(texto) {
   const nomesLigados = /\b[a-zà-ÿ]{2,}(?:\s+[a-zà-ÿ]{2,}){1,4}\s*(?:\be\b|\+|&)\s*[a-zà-ÿ]{2,}(?:\s+[a-zà-ÿ]{2,}){1,4}\b/.test(t);
 
   // "350,00 cada" / "cada um": valor POR CABECA so existe com 2+ pessoas.
-  const valorPorCabeca = /\b\d{2,4}(?:[.,]\d{2})?\s*(?:reais\s*)?cada\b|\bcada\s+um\b/.test(t);
+  const valorPorCabeca = !variosCursos && /\b\d{2,4}(?:[.,]\d{2})?\s*(?:reais\s*)?cada\b|\bcada\s+um\b/.test(t);
 
   const pluralidade = /\b(?:dois|2|ambos|mais de um|varios|varias)\s+alun(?:o|os|a|as)\b|\balunos\b|\bpassaportes\b/.test(t);
   const nomesEmConjunto = /\balunos?\b[\s:\-]+[^\n]{3,120}\s+\be\s+[^\n]{3,120}/.test(t)
