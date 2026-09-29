@@ -1461,10 +1461,24 @@ async function caixaAbf() {
                 // a mensagem para a gramatica canonica. Nunca escreve, nunca
                 // aprova dinheiro; falha => segue para o "nao entendi".
                 let _llmTratou = null;
+                const _tokenPendenciasAntes = _fh.tokenEstadoPendencias
+                  ? _fh.tokenEstadoPendencias(chatId) : null;
                 try { _llmTratou = _fh.tratarNaoEntendida ? await _fh.tratarNaoEntendida(event) : null; }
                 catch (e) { _caixaLog({ step: 'fallback_llm_erro', msg: e.message }); }
+                const _tokenPendenciasDepois = _fh.tokenEstadoPendencias
+                  ? _fh.tokenEstadoPendencias(chatId) : null;
+                const _estadoAindaEOMesmo = _tokenPendenciasAntes !== null
+                  ? !!_tokenPendenciasDepois && _tokenPendenciasDepois === _tokenPendenciasAntes
+                  : !!(_fh.temPendencia && _fh.temPendencia(chatId));
                 if (_llmTratou && _llmTratou.tratou) {
                   _caixaLog({ step: 'fallback_llm_tratou', acao: _llmTratou.acao, intencao: _llmTratou.intencao });
+                  _tratouCaixa = true;
+                } else if (!_estadoAindaEOMesmo) {
+                  // A resposta nasceu para um card que já foi lançado,
+                  // descartado ou corrigido enquanto o fallback aguardava.
+                  // Silêncio aqui evita que uma guarda atrasada interrompa a
+                  // conversa humana do grupo.
+                  _caixaLog({ step: 'fallback_llm_estado_obsoleto_bridge', chatId: chatId });
                   _tratouCaixa = true;
                 } else {
                 try {
