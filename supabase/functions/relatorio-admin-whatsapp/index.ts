@@ -1590,6 +1590,11 @@ async function gerarRelatorioComercialDiario(
       experimentaisRealizadas: realizadasCrmMes,
       presencasVinculadas: n(resumoConciliacaoMes.experimentais_realizadas_confirmadas),
       faltas: n(kpisMes.experimentais_no_show),
+      // Mesma v2 mensal do card "Visitas" do dashboard e do fechamento do dia 1º.
+      visitas: n(kpisMes.visitas),
+      visitasSemHoraMarcada: n(kpisMes.visitas_sem_hora_marcada),
+      visitasAgendadas: n(kpisMes.visitas_agendadas),
+      visitasConfirmadas: n(kpisMes.visitas_confirmadas),
       matriculas: matriculasCanonicasMes,
     },
     metas: {
