@@ -328,7 +328,15 @@ function decidirCheque(it, fatura, jaLigada, hoje = hojeBRT()) {
   if (!it.escolha.fatura || !fatura) return 'sem_parcela';
   if (jaLigada) return 'ja_no_caixa';
   if (fatura.status === 'cancelada') return 'retirar';
-  if (fatura.status === 'paga' && fatura.forma && !/cheque/i.test(fatura.forma)) return 'retirar';
+  if (fatura.status === 'paga' && String(fatura.forma || '').trim() && !/cheque/i.test(fatura.forma)) return 'retirar';
+  // 🔴 PAGA SEM FORMA NÃO É "PAGA EM CHEQUE" (auditoria D4, 29/09). Baixa manual ou
+  //    payload antigo deixam a forma vazia; se foi Pix/cartão, o cheque tem de voltar
+  //    ao cliente, e lançá-lo dobraria a receita. Sem forma, a equipe confirma
+  //    ("N foi cheque" / "N foi pix", citando a lista).
+  if (fatura.status === 'paga' && !String(fatura.forma || '').trim()) {
+    if (it.formaConfirmada && it.formaConfirmada !== 'cheque') return 'retirar';
+    if (it.formaConfirmada !== 'cheque') return 'forma_indefinida';
+  }
   const vb = valorDoBanco(fatura, hoje);
   it.valorBanco = vb;
   if (!vb || !(vb.valor > 0) || Math.abs(vb.valor - Number(it.cheque.valor)) > 0.01) return 'valor';
@@ -398,18 +406,21 @@ function blocoCheque(it, i) {
   if (d === 'lancar') {
     const vb = it.valorBanco || valorDoBanco(f);
     l.push(f && f.status === 'paga'
-      ? `💳 Paga no Emusys${f.data_pagamento ? ' em ' + ddmm(f.data_pagamento) : ''}${f.forma ? ' · ' + f.forma : ''} — ✅ confere`
+      ? `💳 Paga no Emusys${f.data_pagamento ? ' em ' + ddmm(f.data_pagamento) : ''}${f.forma ? ' · ' + f.forma : (it.formaConfirmada === 'cheque' ? ' · em cheque (confirmado pela equipe)' : '')} — ✅ confere`
       : vb && vb.vencida
         ? `💳 Em aberto no Emusys, vencida em ${ddmm(f.data_vencimento)} — valor de hoje ${fmtBRL(vb.valor)} (com multa/juros) — ✅ confere`
         : '💳 Em aberto no Emusys — ✅ valor confere');
   } else if (d === 'retirar') {
     l.push(f && f.status === 'cancelada'
       ? '↩️ Essa parcela foi *cancelada* no Emusys — devolver o cheque ao cliente.'
-      : `↩️ Essa parcela já foi paga${f && f.forma ? ' por *' + f.forma + '*' : ''}${f && f.data_pagamento ? ' em ' + ddmm(f.data_pagamento) : ''} — devolver o cheque ao cliente.`);
+      : `↩️ Essa parcela já foi paga${f && (f.forma || it.formaConfirmada) ? ' por *' + (f.forma || it.formaConfirmada) + '*' : ''}${f && f.data_pagamento ? ' em ' + ddmm(f.data_pagamento) : ''} — devolver o cheque ao cliente.`);
   } else if (d === 'ja_no_caixa') {
     l.push(it.chequeNoCaixa
       ? `🚫 Esse cheque já está no caixa${it.chequeNoCaixa.data ? ' (lançado em ' + ddmm(it.chequeNoCaixa.data) + ')' : ''} — não lanço de novo.`
       : '🚫 Essa parcela já está lançada no caixa — não lanço de novo.');
+  } else if (d === 'forma_indefinida') {
+    l.push(`❔ Paga no Emusys${f && f.data_pagamento ? ' em ' + ddmm(f.data_pagamento) : ''}, mas *sem forma de pagamento registrada* — não dá para afirmar que foi com este cheque.`);
+    l.push(`   Se foi com ele, responde citando esta mensagem: *${i + 1} foi cheque*. Se foi Pix/cartão: *${i + 1} foi pix* (aí o cheque volta ao cliente).`);
   } else if (d === 'ja_em_card') {
     l.push(`🔁 Esse cheque já está no card aberto${it.cardAberto && it.cardAberto.ts ? ' das ' + hhmm(it.cardAberto.ts) : ''} — responde *pode* naquele card; aqui ele não entra.`);
   } else if (d === 'repetido') {
@@ -444,7 +455,7 @@ function blocoCheque(it, i) {
 const SECOES = [
   { chave: 'caixa', titulo: '✅ *VAI PARA O CAIXA*', decisoes: ['lancar'] },
   { chave: 'malote', titulo: '⚠️ *RETIRAR DO MALOTE*', decisoes: ['retirar'] },
-  { chave: 'voce', titulo: '❓ *PRECISA DE VOCÊ*', decisoes: ['sem_parcela', 'valor', 'leitura', 'ja_no_caixa', 'ja_em_card', 'repetido'] },
+  { chave: 'voce', titulo: '❓ *PRECISA DE VOCÊ*', decisoes: ['sem_parcela', 'forma_indefinida', 'valor', 'leitura', 'ja_no_caixa', 'ja_em_card', 'repetido'] },
 ];
 
 // A mensagem do lote É o card: com cheque ✅, o "pode" citando ESTA mensagem lança
@@ -479,6 +490,9 @@ function montarMensagem({ unidadeNome, loteData, itens, sombra = false, cabecalh
   }
   if (!sombra && porSecao[2].itens.some((x) => x.it.decisao === 'sem_parcela')) {
     fim.push(`❓ Para os demais, responde citando esta mensagem: *${porSecao[2].itens.find((x) => x.it.decisao === 'sem_parcela').i + 1} é da Fulana*.`);
+  }
+  if (!sombra && porSecao[2].itens.some((x) => x.it.decisao === 'forma_indefinida')) {
+    fim.push(`❔ Parcela paga sem forma registrada: responde citando esta mensagem *${porSecao[2].itens.find((x) => x.it.decisao === 'forma_indefinida').i + 1} foi cheque* (ou *foi pix*).`);
   }
   if (fim.length) partes.push(`${SEP}\n${fim.join('\n')}`);
   return partes.join('\n\n');
@@ -883,6 +897,30 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
       await sendFn(event.chatId, 'Esse lote não tem cheque pronto para o caixa, então não há o que aprovar — nada foi lançado. Para um ❓, responde citando a lista: *N é da Fulana*.');
       log({ acao: 'cheques_pode_sem_card', chatId: event.chatId });
       return { tratou: true, acao: 'cheques_pode_sem_card' };
+    }
+    // "3 foi cheque" / "3 foi pix" citando a lista: confirma a forma de uma parcela
+    // paga sem forma registrada (D4). Só vale para cheque em 'forma_indefinida'.
+    const mForma = txt.match(/^\s*(?:cheque\s*)?(\d{1,2})\s*[-:–)]?\s*(?:foi|e|é|eh|era)?\s*(?:pag[oa]\s*)?(?:em|no|na|de|por|via|com)?\s*(cheque|pix|cart[aã]o|dinheiro|transfer[eê]ncia|boleto|d[eé]bito|cr[eé]dito)\b/i);
+    if (mForma) {
+      const n = Number(mForma[1]);
+      const it = lote.itens[n - 1];
+      if (!it || it.decisao !== 'forma_indefinida') {
+        await sendFn(event.chatId, `O cheque ${n} não está esperando confirmação de forma. Nada mudou.`);
+        return { tratou: true, acao: 'cheques_forma_indice_invalido' };
+      }
+      it.formaConfirmada = /cheque/i.test(mForma[2]) ? 'cheque' : norm(mForma[2]).replace(/^cart.*/, 'cartão');
+      it.decisao = decidirCheque(it, it.fatura, it.jaLigada, hojeBRT(agoraFn()));
+      if (it.decisao === 'lancar' && lote.itens.some((x) => x !== it && x.decisao === 'lancar' && x.fatura && x.fatura.id === it.fatura.id)) it.decisao = 'sem_parcela';
+      log({ acao: 'cheques_forma_confirmada', indice: n, forma: it.formaConfirmada, decisao: it.decisao });
+      const textoAtual = montarMensagem({ unidadeNome: lote.unidadeNome, loteData: lote.loteData, itens: [it], indices: [n - 1],
+        cabecalho: `🧾 *Cheque ${n} — forma confirmada — ${lote.unidadeNome}*` });
+      if (it.decisao === 'lancar') {
+        lote.pendenteCard = { chaves: new Set([chaveCheque(it.cheque)]), ts: agoraFn() };
+        return { tratou: true, acao: 'cheques_forma_confirmada', itensCaixa: [itemDoCaixa(it)], texto: textoAtual, lote };
+      }
+      const msg = await sendFn(event.chatId, textoAtual);
+      if (msg) lote.msgIds.push(msg);
+      return { tratou: true, acao: 'cheques_forma_confirmada' };
     }
     const pend = lote.itens.map((it, i) => ({ it, i })).filter((x) => x.it.decisao === 'sem_parcela' && x.it.cheque.confiavel);
     let alvo = null; let resto = txt; let rotulado = false;

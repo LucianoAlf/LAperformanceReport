@@ -289,5 +289,39 @@ const tres = [chequeLido(1), chequeLido(2), chequeLido(3)];
     console.log('D3. parcela vencida: card usa o valor de hoje do banco e mostra a diferença — OK');
   }
 
+  // ------------------------------------------------------------ D4
+  {
+    const SEMF = U(41);
+    const banco = () => ({ faturas: { [SEMF]: F.faturaPadrao(SEMF, { forma: null }) } });
+    assert.strictEqual(chq.decidirCheque({ cheque: { confiavel: true, valor: 367 }, escolha: { fatura: {} } }, F.faturaPadrao(SEMF, { forma: null }), false), 'forma_indefinida');
+    assert.strictEqual(chq.decidirCheque({ cheque: { confiavel: true, valor: 367 }, escolha: { fatura: {} } }, F.faturaPadrao(SEMF, { forma: '  ' }), false), 'forma_indefinida');
+    assert.strictEqual(chq.decidirCheque({ cheque: { confiavel: true, valor: 367 }, escolha: { fatura: {} }, formaConfirmada: 'cheque' }, F.faturaPadrao(SEMF, { forma: null }), false), 'lancar');
+    assert.strictEqual(chq.decidirCheque({ cheque: { confiavel: true, valor: 367 }, escolha: { fatura: {} }, formaConfirmada: 'pix' }, F.faturaPadrao(SEMF, { forma: null }), false), 'retirar');
+    // No lote: 1 ✅ + 1 paga sem forma → a sem forma fica ❓, fora do card.
+    const t = montar({ leituras: [chequeLido(1), chequeLido(41)], banco: banco() });
+    const r = await t.h.handle(midia('L1', arquivoTemp('D4')));
+    assert.strictEqual(r.acao, 'preview_cheque_enviado', JSON.stringify(r));
+    const lista = t.enviadas[0];
+    assert.ok(/sem forma de pagamento registrada\* — não dá para afirmar que foi com este cheque/.test(lista.t), lista.t);
+    assert.ok(/responde citando esta mensagem \*2 foi cheque\*/.test(lista.t), lista.t);
+    assert.ok(!/Paga no Emusys em 20\/09 — ✅ confere[\s\S]*Cheque 2/.test(lista.t.split('❓ *PRECISA DE VOCÊ*')[0]), 'cheque 2 não está no ✅');
+    assert.strictEqual(t.pendCheque()[0].cheque_numero, '100001');
+    // "2 foi cheque" citando a lista → card só do 2; "pode" → lança.
+    const rc = await t.h.handle(ev({ messageId: 'F1', body: '2 foi cheque', quotedMessageId: lista.id }));
+    assert.strictEqual(rc.acao, 'preview_cheque_enviado', JSON.stringify(rc));
+    assert.ok(/em cheque \(confirmado pela equipe\) — ✅ confere/.test(t.enviadas[t.enviadas.length - 1].t));
+    const c2 = t.pendCheque().find((p) => p.cheque_numero === '100041');
+    const p = await t.h.handle(ev({ messageId: 'P1', body: 'pode', quotedMessageId: c2.previewId }));
+    assert.strictEqual(p.acao, 'lancado', JSON.stringify(p));
+    // "2 foi pix" → retirar do malote, sem card.
+    const t2 = montar({ leituras: [chequeLido(1), chequeLido(41)], banco: banco() });
+    await t2.h.handle(midia('L1', arquivoTemp('D4b')));
+    const rp = await t2.h.handle(ev({ messageId: 'F1', body: '2 foi pix', quotedMessageId: t2.enviadas[0].id }));
+    assert.strictEqual(rp.acao, 'cheques_forma_confirmada', JSON.stringify(rp));
+    assert.ok(/RETIRAR DO MALOTE[\s\S]*já foi paga por \*pix\*/.test(t2.enviadas[t2.enviadas.length - 1].t), t2.enviadas[t2.enviadas.length - 1].t);
+    assert.strictEqual(t2.pendCheque().length, 1, 'só o card original');
+    console.log('D4. paga sem forma → ❔ pede confirmação; "N foi cheque" abre card, "N foi pix" manda retirar — OK');
+  }
+
   console.log('\nRESULTADO: OK');
 })().catch((e) => { console.error('FALHOU:', e && e.stack || e); process.exit(1); });
