@@ -2036,8 +2036,25 @@ function _saidaExplicitaFromCaption(body) {
   if (/\b(parcela|mensalidade|passaporte|matr[ií]cula)\b/i.test(t)) return null;
   if (/\btroco\b/i.test(t)) return 'troco';
   if (/\b(retirad[ao]s?|retirei)\b/i.test(t)) return 'retirada';
+  // 🔴 29/09/2026 (CG, Jhon): "Sol, pagamento semanal do segurança - R$100,00 dinheiro"
+  //    virou card de `despesa`. Segurança É saída, e o termo genérico ("saída",
+  //    "paguei", "despesa") não pode vencer a categoria que a pessoa nomeou. Antes o
+  //    ditado só acertava porque não tinha termo genérico; o adaptador da ferramenta
+  //    (`saída <cat> R$ …`) sempre tem, então segurança pela ferramenta era impossível.
+  if (/seguran[çc]a|vigia|porteiro/i.test(t)) return 'seguranca';
   if (SAIDA_TERMO_RE.test(t)) return 'despesa';
   return null;
+}
+
+// Categoria de SAÍDA dita pela PESSOA, com a mesma precedência do ditado de texto.
+// É o código que decide a categoria a partir das palavras humanas; o palpite do
+// modelo só vale quando a pessoa não nomeou nenhuma (29/09/2026).
+function categoriaSaidaDoTexto(texto) {
+  const t = String(texto || '');
+  const saida = _saidaExplicitaFromCaption(t);
+  if (saida) return saida;
+  const cat = _categoriaExplicitaFromCaption(t);
+  return categoriaEhSaida(cat) ? cat : null;
 }
 
 function _categoriaFromCaption(body) {
@@ -8699,7 +8716,7 @@ module.exports = {
   _fonteFuturaLateralAoMesDeclarado,
   selecionarFaturasQuitacao, resolverFaturasQuitacao,
   parseBRMoney, valorDoModelo, normalizarCompetenciaV4, montarEnvelopeV4, extrairValor, extrairForma, extrairFormaHumana, detectarComprovante, casarPode,
-  _saidaExplicitaFromCaption, _nomeHumanoTardio, extrairValorOcr, _vendedorRotulado, _mesmaPessoa,
+  _saidaExplicitaFromCaption, categoriaSaidaDoTexto, _nomeHumanoTardio, extrairValorOcr, _vendedorRotulado, _mesmaPessoa,
   _alunoRotulado, _limparAlunoRotulado, _semAlunoDeclarado, extrairCategoriaCorrecao,
   _ehDitadoDeCaixa, classificarCorrecaoPendencia, listarPreviewsAbertosV3, _contestaFatura, rotearMensagemV4,
   montarEnvelopeV4, aplicarCorrecaoEnvelope, _v4CanarioLigado, resolverEnvelopeCaixaV1, valorConfereComTexto,
