@@ -1137,3 +1137,474 @@ export async function marcarCertificadosEmitidos(apresentacaoIds: number[]) {
   }
   return { error: null };
 }
+
+/* ─────────── bilheteria (M9) — venda registrada pela equipe, conciliacao da Sol ─────────── */
+
+export type VendaStatus = 'pendente' | 'pago' | 'cancelado' | 'reembolsado';
+export type ConciliacaoStatus = 'pendente' | 'conciliado' | 'divergente' | 'estornado';
+export type FormaPagamento = 'pix' | 'cartao_credito' | 'cartao_debito' | 'dinheiro' | 'outro';
+export type CanalVenda = 'online' | 'balcao' | 'porta';
+
+export const VENDA_STATUS_LABEL: Record<VendaStatus, string> = {
+  pendente: 'Pendente',
+  pago: 'Pago',
+  cancelado: 'Cancelado',
+  reembolsado: 'Reembolsado',
+};
+export const CONCILIACAO_LABEL: Record<ConciliacaoStatus, string> = {
+  pendente: 'A conciliar',
+  conciliado: 'Conciliado',
+  divergente: 'Divergente',
+  estornado: 'Estornado',
+};
+export const FORMA_PAGAMENTO_LABEL: Record<FormaPagamento, string> = {
+  pix: 'Pix',
+  cartao_credito: 'Cartão de crédito',
+  cartao_debito: 'Cartão de débito',
+  dinheiro: 'Dinheiro',
+  outro: 'Outro',
+};
+export const CANAL_LABEL: Record<CanalVenda, string> = {
+  online: 'Online',
+  balcao: 'Balcão',
+  porta: 'Porta',
+};
+
+export interface ConvidadoDaVenda {
+  id: number;
+  nome: string;
+  /** checkin_em do bloco credenciado — null = ainda nao entrou */
+  checkin_em: string | null;
+}
+
+export interface VendaIngresso {
+  id: number;
+  bloco_id: number;
+  bloco_nome: string | null;
+  comprador_nome: string;
+  comprador_contato: string | null;
+  quantidade: number;
+  valor_unitario: number;
+  valor_meia: number | null;
+  desconto_pct: number;
+  valor_bruto: number;
+  valor_final: number;
+  forma_pagamento: FormaPagamento;
+  canal: CanalVenda;
+  provedor: string | null;
+  status: VendaStatus;
+  pagamento_identificador: string | null;
+  pago_em: string | null;
+  conciliacao_status: ConciliacaoStatus;
+  conciliacao_obs: string | null;
+  conciliacao_ref: string | null;
+  created_at: string;
+  convidados: ConvidadoDaVenda[];
+}
+
+export interface LotacaoBloco {
+  bloco_id: number;
+  capacidade: number | null;
+  cortesias: number;
+  vendidos_pagos: number;
+  pendentes: number;
+  livres: number | null;
+}
+
+export interface PrecoEvento {
+  preco_unitario: number;
+  preco_meia: number | null;
+}
+
+export interface PacoteEvento {
+  id: number;
+  quantidade_minima: number;
+  desconto_pct: number;
+}
+
+export interface BlocoBilheteria {
+  id: number;
+  nome: string;
+  ordem: number;
+  data: string | null;
+  horario_inicial: string | null;
+  capacidade: number | null;
+}
+
+export interface ConfigBilheteria {
+  cortesias_por_aluno: number | null;
+  provedor_pagamento: string | null;
+  provedor_conta: string | null;
+}
+
+export interface ParticipanteParaVenda {
+  id: number;
+  aluno_id: number;
+  nome: string;
+}
+
+export function useBilheteria(eventoId: number | null) {
+  const [vendas, setVendas] = useState<VendaIngresso[]>([]);
+  const [lotacao, setLotacao] = useState<LotacaoBloco[]>([]);
+  const [preco, setPreco] = useState<PrecoEvento | null>(null);
+  const [pacotes, setPacotes] = useState<PacoteEvento[]>([]);
+  const [blocos, setBlocos] = useState<BlocoBilheteria[]>([]);
+  const [config, setConfig] = useState<ConfigBilheteria | null>(null);
+  const [cortesiasUsadas, setCortesiasUsadas] = useState(0);
+  const [participantes, setParticipantes] = useState<ParticipanteParaVenda[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const recarregar = useCallback(async () => {
+    if (!eventoId) {
+      setVendas([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setErro(null);
+
+    const [rVendas, rLotacao, rPreco, rPacotes, rBlocos, rEvento, rCortesias] = await Promise.all([
+      supabase
+        .from('evento_ingresso_venda')
+        .select(
+          'id, bloco_id, comprador_nome, comprador_contato, quantidade, valor_unitario,' +
+            ' valor_meia, desconto_pct, valor_bruto, valor_final, forma_pagamento, canal,' +
+            ' provedor, status, pagamento_identificador, pago_em, conciliacao_status,' +
+            ' conciliacao_obs, conciliacao_ref, created_at,' +
+            ' evento_bloco(nome),' +
+            ' evento_convidado(id, nome)',
+        )
+        .eq('evento_id', eventoId)
+        .order('created_at', { ascending: false }),
+      supabase.from('vw_evento_bloco_lotacao').select('*').eq('evento_id', eventoId),
+      supabase
+        .from('evento_ingresso_preco')
+        .select('preco_unitario, preco_meia')
+        .eq('evento_id', eventoId)
+        .maybeSingle(),
+      supabase
+        .from('evento_ingresso_pacote')
+        .select('id, quantidade_minima, desconto_pct')
+        .eq('evento_id', eventoId)
+        .order('quantidade_minima'),
+      supabase
+        .from('evento_bloco')
+        .select('id, nome, ordem, data, horario_inicial, capacidade')
+        .eq('evento_id', eventoId)
+        .order('ordem'),
+      supabase
+        .from('evento')
+        .select('cortesias_por_aluno, provedor_pagamento, provedor_conta')
+        .eq('id', eventoId)
+        .single(),
+      // cortesias em uso (convidados cortesia credenciados ou nao)
+      supabase
+        .from('evento_convidado')
+        .select('id', { count: 'exact', head: true })
+        .eq('evento_id', eventoId)
+        .eq('tipo_entrada', 'cortesia'),
+    ]);
+
+    // participantes do evento (vinculo opcional da venda com o aluno da familia)
+    const { data: rPart } = await supabase
+      .from('evento_participacao')
+      .select('id, aluno_id, alunos(nome)')
+      .eq('evento_id', eventoId)
+      .order('aluno_id');
+    const listaPart: ParticipanteParaVenda[] = ((rPart ?? []) as any[]).map((p) => ({
+      id: p.id,
+      aluno_id: p.aluno_id,
+      nome: p.alunos?.nome ?? `Aluno #${p.aluno_id}`,
+    }));
+
+    const falha =
+      rVendas.error ?? rLotacao.error ?? rPreco.error ?? rPacotes.error ?? rBlocos.error ?? rEvento.error;
+    if (falha) {
+      setErro(falha.message);
+      setVendas([]);
+      setLoading(false);
+      return;
+    }
+
+    // check-in dos convidados de cada venda (tabela separada, PK composta)
+    const convIds = ((rVendas.data ?? []) as any[]).flatMap((v) =>
+      (v.evento_convidado ?? []).map((c: any) => c.id),
+    );
+    const checkins = new Map<number, string>();
+    if (convIds.length > 0) {
+      const { data: cks } = await supabase
+        .from('evento_convidado_checkin')
+        .select('convidado_id, checkin_em')
+        .in('convidado_id', convIds);
+      for (const ck of cks ?? []) checkins.set(ck.convidado_id, ck.checkin_em);
+    }
+
+    setVendas(
+      ((rVendas.data ?? []) as any[]).map((v) => ({
+        ...v,
+        bloco_nome: v.evento_bloco?.nome ?? null,
+        convidados: ((v.evento_convidado ?? []) as any[])
+          .map((c) => ({ id: c.id, nome: c.nome, checkin_em: checkins.get(c.id) ?? null }))
+          .sort((a, b) => a.id - b.id),
+      })),
+    );
+    setLotacao((rLotacao.data ?? []) as LotacaoBloco[]);
+    setPreco((rPreco.data as PrecoEvento | null) ?? null);
+    setPacotes((rPacotes.data ?? []) as PacoteEvento[]);
+    setBlocos((rBlocos.data ?? []) as BlocoBilheteria[]);
+    setConfig(rEvento.data as ConfigBilheteria);
+    setCortesiasUsadas(rCortesias.count ?? 0);
+    setParticipantes(listaPart);
+    setLoading(false);
+  }, [eventoId]);
+
+  useEffect(() => {
+    recarregar();
+  }, [recarregar]);
+
+  return { vendas, lotacao, preco, pacotes, blocos, config, cortesiasUsadas, participantes, loading, erro, recarregar };
+}
+
+export interface NovaVendaInput {
+  evento_id: number;
+  bloco_id: number;
+  comprador_nome: string;
+  /** contato do comprador (telefone/e-mail) — necessidade operacional, nao sai pra planilha de professor */
+  comprador_contato?: string | null;
+  quantidade: number;
+  forma_pagamento: FormaPagamento;
+  canal: CanalVenda;
+  convidados: { nome?: string; documento?: string }[];
+  /** pacote que a tela previu; null = a RPC escolhe o melhor sozinha */
+  pacote_id?: number | null;
+  /** pago na hora (porta/balcao): marca 'pago' + pago_em + identificador na mesma gravacao */
+  pago_agora: boolean;
+  pagamento_identificador?: string | null;
+  participacao_id?: number | null;
+  observacao?: string | null;
+}
+
+/**
+ * Registra a venda pela RPC com lock de bloco — duas recepcionistas simultaneas nunca
+ * furam a lotacao. O erro ja vem pronto do banco ("Bloco lotado: 0 livres, 1 pedidos").
+ */
+export async function venderIngresso(input: NovaVendaInput) {
+  const { data, error } = await supabase.rpc('evento_bilheteria_vender_v1', {
+    p_evento_id: input.evento_id,
+    p_bloco_id: input.bloco_id,
+    p_comprador_nome: input.comprador_nome,
+    p_quantidade: input.quantidade,
+    p_forma_pagamento: input.forma_pagamento,
+    p_canal: input.canal,
+    p_comprador_contato: input.comprador_contato ?? null,
+    p_convidados: input.convidados,
+    p_pacote_id: input.pacote_id ?? null,
+    p_marcar_pago: input.pago_agora,
+    p_pagamento_identificador: input.pagamento_identificador ?? null,
+    p_participacao_id: input.participacao_id ?? null,
+    p_observacao: input.observacao ?? null,
+  });
+  return { vendaId: (data as number | null) ?? null, error };
+}
+
+/**
+ * Marca a venda como PAGA. O CHECK do banco exige identificador (NSU/autorizacao ou
+ * comprovante Pix) para tudo que nao e dinheiro — a tela valida antes, mas o banco
+ * e quem decide.
+ */
+export async function marcarVendaPaga(
+  vendaId: number,
+  formaPagamento: FormaPagamento,
+  identificador: string | null,
+) {
+  const { data, error } = await supabase
+    .from('evento_ingresso_venda')
+    .update({
+      status: 'pago',
+      forma_pagamento: formaPagamento,
+      pagamento_identificador: identificador,
+      pago_em: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', vendaId)
+    .eq('status', 'pendente')
+    .select('id');
+  if (error) return { error };
+  if ((data ?? []).length === 0) {
+    return { error: { message: 'A venda não estava pendente ou não é da sua unidade.' } };
+  }
+  return { error: null };
+}
+
+/** Cancelar/reembolsar libera o lugar na hora (a view so conta pendente+pago). */
+export async function mudarStatusVenda(vendaId: number, status: 'cancelado' | 'reembolsado') {
+  const { data, error } = await supabase
+    .from('evento_ingresso_venda')
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq('id', vendaId)
+    .select('id');
+  if (error) return { error };
+  if ((data ?? []).length === 0) {
+    return { error: { message: 'Venda não encontrada ou fora da sua unidade.' } };
+  }
+  return { error: null };
+}
+
+/* ── configuracao da bilheteria do evento ── */
+
+/** preco_unitario = referencia (inteira); preco_meia = preco COBRADO de todos. */
+export async function salvarPrecoEvento(
+  eventoId: number,
+  precoUnitario: number,
+  precoCobrado: number | null,
+) {
+  return supabase
+    .from('evento_ingresso_preco')
+    .upsert(
+      { evento_id: eventoId, preco_unitario: precoUnitario, preco_meia: precoCobrado, updated_at: new Date().toISOString() },
+      { onConflict: 'evento_id' },
+    )
+    .select('evento_id');
+}
+
+export async function criarPacote(eventoId: number, quantidadeMinima: number, descontoPct: number) {
+  return supabase
+    .from('evento_ingresso_pacote')
+    .insert({ evento_id: eventoId, quantidade_minima: quantidadeMinima, desconto_pct: descontoPct })
+    .select('id');
+}
+
+export async function removerPacote(pacoteId: number) {
+  return supabase.from('evento_ingresso_pacote').delete().eq('id', pacoteId).select('id');
+}
+
+export async function salvarCapacidadeBloco(blocoId: number, capacidade: number | null) {
+  const { data, error } = await supabase
+    .from('evento_bloco')
+    .update({ capacidade, updated_at: new Date().toISOString() })
+    .eq('id', blocoId)
+    .select('id');
+  if (error) return { error };
+  if ((data ?? []).length === 0) return { error: { message: 'Bloco não é da sua unidade.' } };
+  return { error: null };
+}
+
+export async function salvarConfigBilheteria(eventoId: number, campos: Partial<ConfigBilheteria>) {
+  return supabase
+    .from('evento')
+    .update({ ...campos, updated_at: new Date().toISOString() })
+    .eq('id', eventoId)
+    .select('id');
+}
+
+/* ── convidados nominais na porta (check-in por bloco) ── */
+
+export interface ConvidadoDaPorta {
+  id: number;
+  nome: string;
+  tipo_entrada: 'cortesia' | 'vendido';
+  bloco_id: number | null;
+  venda_status: VendaStatus | null;
+  checkin_em: string | null;
+  alunos: string[];
+}
+
+/** Lista nominal da porta: cortesia + vendido, com o bloco credenciado e quem ja entrou. */
+export function useConvidadosDoEvento(eventoId: number | null) {
+  const [convidados, setConvidados] = useState<ConvidadoDaPorta[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const recarregar = useCallback(async () => {
+    if (!eventoId) {
+      setConvidados([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setErro(null);
+    const [rConv, rPonte, rCheck] = await Promise.all([
+      supabase
+        .from('evento_convidado')
+        .select('id, nome, tipo_entrada, bloco_id, venda_id, evento_ingresso_venda(status)')
+        .eq('evento_id', eventoId)
+        .order('nome'),
+      // quem o convidado veio ver (ponte com participacao → nome do aluno)
+      supabase
+        .from('evento_convidado_participacao')
+        .select('convidado_id, participacao_id, evento_participacao(aluno_id, alunos(nome))'),
+      supabase
+        .from('evento_convidado_checkin')
+        .select('convidado_id, checkin_em'),
+    ]);
+    const falha = rConv.error ?? rPonte.error ?? rCheck.error;
+    if (falha) {
+      setErro(falha.message);
+      setConvidados([]);
+      setLoading(false);
+      return;
+    }
+    const alunosPorConv = new Map<number, string[]>();
+    for (const p of (rPonte.data ?? []) as any[]) {
+      const nome = p.evento_participacao?.alunos?.nome;
+      if (!nome) continue;
+      alunosPorConv.set(p.convidado_id, [...(alunosPorConv.get(p.convidado_id) ?? []), nome]);
+    }
+    const checkinPorConv = new Map<number, string>();
+    for (const ck of rCheck.data ?? []) checkinPorConv.set(ck.convidado_id, ck.checkin_em);
+
+    setConvidados(
+      ((rConv.data ?? []) as any[]).map((c) => ({
+        id: c.id,
+        nome: c.nome,
+        tipo_entrada: c.tipo_entrada,
+        bloco_id: c.bloco_id,
+        venda_status: c.evento_ingresso_venda?.status ?? null,
+        checkin_em: checkinPorConv.get(c.id) ?? null,
+        alunos: alunosPorConv.get(c.id) ?? [],
+      })),
+    );
+    setLoading(false);
+  }, [eventoId]);
+
+  useEffect(() => {
+    recarregar();
+  }, [recarregar]);
+
+  return { convidados, loading, erro, recarregar };
+}
+
+/** Renomeia o convidado nominal — o placeholder "Convidado N de X" se corrige ate o dia. */
+export async function renomearConvidado(convidadoId: number, nome: string) {
+  const limpo = nome.trim();
+  if (limpo === '') return { error: { message: 'O nome não pode ficar vazio.' } };
+  const { data, error } = await supabase
+    .from('evento_convidado')
+    .update({ nome: limpo, updated_at: new Date().toISOString() })
+    .eq('id', convidadoId)
+    .select('id');
+  if (error) return { error };
+  if ((data ?? []).length === 0) return { error: { message: 'Convidado fora da sua unidade.' } };
+  return { error: null };
+}
+
+/** Check-in do convidado no bloco credenciado. Desfazer = apagar a linha. */
+export async function marcarCheckinConvidado(convidadoId: number, blocoId: number, entrou: boolean) {
+  if (entrou) {
+    const { error } = await supabase
+      .from('evento_convidado_checkin')
+      .insert({ convidado_id: convidadoId, bloco_id: blocoId })
+      .select('convidado_id');
+    return { error };
+  }
+  const { data, error } = await supabase
+    .from('evento_convidado_checkin')
+    .delete()
+    .eq('convidado_id', convidadoId)
+    .eq('bloco_id', blocoId)
+    .select('convidado_id');
+  if (error) return { error };
+  if ((data ?? []).length === 0) return { error: { message: 'Check-in não encontrado.' } };
+  return { error: null };
+}

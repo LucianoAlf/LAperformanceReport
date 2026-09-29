@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Award, CheckCircle2, Clock, ListOrdered, Search, UserCheck, Users, X } from 'lucide-react';
+import { Award, CheckCircle2, Clock, ListOrdered, Search, Ticket, UserCheck, Users, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,9 +20,13 @@ import { abrirDocumento, gerarCertificadosHtml, type DadosDaImpressao } from '@/
 import {
   marcarChegada,
   marcarCertificadosEmitidos,
+  marcarCheckinConvidado,
   useCheckinDoEvento,
+  useConvidadosDoEvento,
   useGradeDoEvento,
   PARTICIPACAO_SELO,
+  type BlocoDaGrade,
+  type ConvidadoDaPorta,
   type EventoComResumo,
   type ParticipacaoStatus,
 } from '@/hooks/useEventos';
@@ -432,6 +436,11 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
           )}
         </>
       )}
+
+      {/* Convidados nominais (M3/M9): cortesia e vendido na mesma lista da porta,
+          com check-in por bloco. Vendido sem 'pago' aparece com o selo amber e o
+          banco barra a entrada — a tela mostra o motivo antes do clique. */}
+      <SecaoConvidados eventoId={evento.id} blocos={blocos} termo={termo} />
     </div>
   );
 }
@@ -625,6 +634,136 @@ function LinhaOrdem({
         {salvando ? '…' : chegou ? 'Desfazer' : 'Chegou'}
       </Button>
     </div>
+  );
+}
+
+/** Lista nominal da porta (M3/M9): cortesia e vendido, check-in por bloco credenciado. */
+function SecaoConvidados({
+  eventoId,
+  blocos,
+  termo,
+}: {
+  eventoId: number;
+  blocos: BlocoDaGrade[];
+  termo: string;
+}) {
+  const { convidados, loading, recarregar } = useConvidadosDoEvento(eventoId);
+  const [ocupado, setOcupado] = useState<Set<number>>(new Set());
+
+  const nomeDoBloco = (id: number | null) =>
+    blocos.find((b) => b.id === id)?.nome ?? (id != null ? `Bloco ${id}` : null);
+
+  const alternarConvidado = async (c: ConvidadoDaPorta) => {
+    if (c.bloco_id == null) {
+      toast.error('Este convidado ainda não tem bloco credenciado.');
+      return;
+    }
+    setOcupado((s) => new Set(s).add(c.id));
+    const { error } = await marcarCheckinConvidado(c.id, c.bloco_id, c.checkin_em === null);
+    setOcupado((s) => {
+      const prox = new Set(s);
+      prox.delete(c.id);
+      return prox;
+    });
+    if (error) {
+      // o banco devolve a frase pronta — ex.: "Ingresso vendido so entra com a venda paga"
+      toast.error(error.message);
+      return;
+    }
+    await recarregar();
+  };
+
+  if (loading) return null;
+  if (convidados.length === 0) return null;
+
+  const visiveis = convidados.filter(
+    (c) => termo === '' || `${c.nome} ${c.alunos.join(' ')}`.toLowerCase().includes(termo),
+  );
+  const entraram = convidados.filter((c) => c.checkin_em !== null).length;
+
+  return (
+    <section className="rounded-xl border border-slate-700 bg-slate-800/40">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700/60 px-4 py-2.5">
+        <h3 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <Ticket className="h-3.5 w-3.5" />
+          Convidados
+        </h3>
+        <p className="text-[11.5px] tabular-nums text-slate-500">
+          {entraram} de {convidados.length} entraram
+        </p>
+      </header>
+      <div className="divide-y divide-slate-700/40">
+        {visiveis.map((c) => {
+          const entrou = c.checkin_em !== null;
+          const pendenteDePagamento = c.tipo_entrada === 'vendido' && c.venda_status !== 'pago';
+          return (
+            <div
+              key={c.id}
+              className={cn(
+                'flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2',
+                entrou && 'bg-emerald-500/5',
+              )}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] font-medium text-white">
+                  {c.nome}
+                  <span
+                    className={cn(
+                      'ml-2 rounded px-1.5 py-0.5 text-[10.5px]',
+                      c.tipo_entrada === 'vendido'
+                        ? 'bg-sky-500/15 text-sky-300'
+                        : 'bg-violet-500/15 text-violet-300',
+                    )}
+                  >
+                    {c.tipo_entrada === 'vendido' ? 'vendido' : 'cortesia'}
+                  </span>
+                  {pendenteDePagamento && (
+                    <span className="ml-1.5 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10.5px] text-amber-300">
+                      pagamento pendente
+                    </span>
+                  )}
+                </p>
+                <p className="truncate text-[11.5px] text-slate-500">
+                  {nomeDoBloco(c.bloco_id) ?? 'sem bloco credenciado'}
+                  {c.alunos.length > 0 && ` · veio por ${c.alunos.join(', ')}`}
+                </p>
+              </div>
+              {entrou ? (
+                <>
+                  <SeloChegada chegouEm={c.checkin_em} />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="gap-1.5"
+                    disabled={ocupado.has(c.id)}
+                    onClick={() => alternarConvidado(c)}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Desfazer
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                  disabled={ocupado.has(c.id)}
+                  onClick={() => alternarConvidado(c)}
+                >
+                  <UserCheck className="h-3.5 w-3.5" />
+                  {ocupado.has(c.id) ? '…' : 'Entrou'}
+                </Button>
+              )}
+            </div>
+          );
+        })}
+        {visiveis.length === 0 && (
+          <p className="px-4 py-6 text-center text-[12.5px] text-slate-500">
+            Nenhum convidado com esse nome.
+          </p>
+        )}
+      </div>
+    </section>
   );
 }
 
