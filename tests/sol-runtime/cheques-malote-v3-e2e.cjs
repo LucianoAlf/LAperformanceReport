@@ -174,5 +174,82 @@ const tres = [chequeLido(1), chequeLido(2), chequeLido(3)];
     console.log('D1f. cheque repetido no arquivo → uma vez — OK');
   }
 
+  // ------------------------------------------------------------ D2
+  {
+    // 1 ✅ + 1 ❓ (emitente desconhecido): decisão citando o card nunca vira nome.
+    const umMaisUm = [chequeLido(1), chequeLido(2, { emitente: 'DESCONHECIDO DA SILVA' })];
+    const banco = { resolver: { 'Fulana Teste': { fatura: 9 } } };
+    for (const [resposta, espera] of [['não', 'descarta'], ['Não.', 'descarta'], ['cancela', 'pergunta'], ['descarta esse', 'pergunta'],
+      ['sim', 'lanca'], ['ok, pode', 'lanca'], ['Ok, pode', 'lanca'], ['pode', 'lanca']]) {
+      const t = montar({ leituras: umMaisUm, banco });
+      const r = await t.h.handle(midia('L1', arquivoTemp('D2-' + resposta)));
+      assert.strictEqual(r.acao, 'preview_cheque_enviado', JSON.stringify(r));
+      const card = t.pendCheque()[0].previewId;
+      const antes = t.db.resolvidos.length;
+      const rr = await t.h.handle(ev({ messageId: 'R1', body: resposta, quotedMessageId: card }));
+      assert.strictEqual(t.db.resolvidos.length, antes, `"${resposta}" não pode ir ao resolver como nome`);
+      assert.ok(!t.enviadas.some((m) => /Não achei uma parcela única/.test(m.t)), `"${resposta}" virou nome`);
+      if (espera === 'pergunta') {
+        assert.strictEqual(rr.acao, 'cheques_cancelar_pergunta', JSON.stringify(rr));
+        assert.strictEqual(t.pendCheque().length, 1, 'card intacto até o não');
+        const rn = await t.h.handle(ev({ messageId: 'R2', body: 'não', quotedMessageId: card }));
+        assert.strictEqual(t.pendCheque().length, 0, 'não descarta: ' + JSON.stringify(rn));
+        assert.strictEqual(t.singulares.length, 0);
+      } else if (espera === 'descarta') {
+        assert.strictEqual(t.pendCheque().length, 0, `"${resposta}" tem de descartar o card: ${JSON.stringify(rr)}`);
+        const p = await t.h.handle(ev({ messageId: 'P1', body: 'pode', quotedMessageId: card }));
+        assert.notStrictEqual(p.acao, 'lancado', 'pode depois do não não lança');
+        assert.strictEqual(t.singulares.length, 0);
+      } else {
+        assert.strictEqual(rr.acao, 'lancado', `"${resposta}" citando o card aprova: ${JSON.stringify(rr)}`);
+        assert.strictEqual(t.singulares.length, 1);
+        assert.strictEqual(t.singulares[0].cheque_numero, '100001', 'só o ✅ entra');
+      }
+    }
+    // A identificação continua funcionando: com rótulo, com índice e nome solto (2 palavras).
+    for (const resposta of ['é da Fulana Teste', '2 é da Fulana Teste', 'Fulana Teste', 'cheque 2 - Fulana Teste']) {
+      const t = montar({ leituras: umMaisUm, banco });
+      await t.h.handle(midia('L1', arquivoTemp('D2id-' + resposta)));
+      const card = t.pendCheque()[0].previewId;
+      const ri = await t.h.handle(ev({ messageId: 'I1', body: resposta, quotedMessageId: card }));
+      assert.strictEqual(ri.acao, 'preview_cheque_enviado', `"${resposta}": ${JSON.stringify(ri)}`);
+      assert.ok(/Cheque 2 identificado/.test(t.enviadas[t.enviadas.length - 1].t));
+    }
+    // Palavra solta sem rótulo nem índice não vai ao resolver.
+    {
+      const t = montar({ leituras: umMaisUm, banco });
+      await t.h.handle(midia('L1', arquivoTemp('D2solta')));
+      const card = t.pendCheque()[0].previewId;
+      const antes = t.db.resolvidos.length;
+      await t.h.handle(ev({ messageId: 'I1', body: 'beleza', quotedMessageId: card }));
+      await t.h.handle(ev({ messageId: 'I2', body: 'Fulana', quotedMessageId: card }));
+      assert.strictEqual(t.db.resolvidos.length, antes);
+    }
+    // Índice de cheque que não espera nome: resposta honesta, card intacto.
+    {
+      const t = montar({ leituras: umMaisUm, banco });
+      await t.h.handle(midia('L1', arquivoTemp('D2idx')));
+      const card = t.pendCheque()[0].previewId;
+      const ri = await t.h.handle(ev({ messageId: 'I1', body: '1 é da Fulana Teste', quotedMessageId: card }));
+      assert.strictEqual(ri.acao, 'cheques_identificacao_indice_invalido', JSON.stringify(ri));
+      assert.strictEqual(t.pendCheque().length, 1);
+      assert.strictEqual(t.pendCheque()[0].aluno, 'Aluno Teste 1', 'o card não foi corrigido');
+    }
+    // 2 ❓ sem card (nenhum ✅): "não"/"pode" citando a lista → o módulo responde; nada lançado.
+    {
+      const soDuvida = [chequeLido(1, { emitente: 'DESCONHECIDO UM' }), chequeLido(2, { emitente: 'DESCONHECIDO DOIS' })];
+      const t = montar({ leituras: soDuvida, banco });
+      const r = await t.h.handle(midia('L1', arquivoTemp('D2semcard')));
+      assert.strictEqual(r.acao, 'cheques_lote_sem_lancavel');
+      const lista = t.enviadas[0].id;
+      const rn = await t.h.handle(ev({ messageId: 'N1', body: 'sim', quotedMessageId: lista }));
+      assert.strictEqual(rn.acao, 'cheques_pode_sem_card', JSON.stringify(rn));
+      const rc = await t.h.handle(ev({ messageId: 'N2', body: 'não', quotedMessageId: lista }));
+      assert.strictEqual(rc.acao, 'cheques_lote_descartado_sem_card', JSON.stringify(rc));
+      assert.strictEqual(t.singulares.length + t.lotes.length, 0);
+    }
+    console.log('D2. não descarta, cancela pergunta, sim/ok pode aprovam só o ✅, nada vira nome — OK');
+  }
+
   console.log('\nRESULTADO: OK');
 })().catch((e) => { console.error('FALHOU:', e && e.stack || e); process.exit(1); });

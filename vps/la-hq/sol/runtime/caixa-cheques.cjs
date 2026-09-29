@@ -530,6 +530,19 @@ async function lerLote(arquivo, modelo) {
   }
 }
 
+// Resposta que é DECISÃO sobre o card, nunca nome: 'nao' | 'pode' | null.
+// A primeira palavra manda ("ok, pode", "sim", "não", "cancela", "pode lançar").
+const CTL_NAO = /^(nao|n|cancela|cancelar|cancelado|descarta|descartar|ignora|ignorar|esquece|esquecer|deixa|errado|errada)$/;
+const CTL_PODE = /^(pode|sim|ok|okay|isso|certo|confirmo|confirma|confirmado|autorizo|autorizado|lanca|lancar|beleza|blz|perfeito|manda|aprovado|aprova|s)$/;
+function controleDaResposta(texto) {
+  const n = norm(texto).replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!n) return null;
+  const w = n.split(' ')[0];
+  if (CTL_NAO.test(w)) return 'nao';
+  if (CTL_PODE.test(w)) return 'pode';
+  return null;
+}
+
 const JANELA_CARD_MS = 30 * 60 * 1000;   // a mesma janela do card no caixa
 const LEITURA_MAX_MS = 10 * 60 * 1000;   // leitura de lote que passou disso travou
 const AGUARDA_CARD_MS = 2 * 60 * 1000;   // entre "li" e o caixa publicar o card
@@ -803,23 +816,57 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
     const lote = arr.find((x) => (Array.isArray(x.msgIds) && x.msgIds.includes(event.quotedMessageId)) || x.origem === event.quotedMessageId);
     if (!lote) return null;
     const txt = String(event.body || '').trim();
-    // "pode" citando o lote é aprovação do CARD: segue para o caixa (a mensagem do
-    // lote é o próprio preview). Sem ✅ no lote não há card, e o caixa responde
-    // que não há pendência.
-    if (/^\s*[*_~]*\s*pode\b/i.test(txt)) return null;
+    const temCard = (lote.cards || []).length > 0 || !!lote.pendenteCard;
+    // 🔴 DECISÃO NÃO É NOME (auditoria D2, 29/09). "não", "cancela", "sim",
+    //    "ok, pode" citando o card viravam nome de aluno quando havia 1 cheque ❓:
+    //    o "não" não descartava, o "sim" não aprovava e a equipe achava que sim.
+    //    • com card: a decisão vai ao CAIXA (ele aprova ou descarta o card citado);
+    //    • sem card (lista só com ⚠️/❓): nada a aprovar — o módulo responde,
+    //      e o "não" não cai na regra "a única pendência do chat" do caixa.
+    const ctl = controleDaResposta(txt);
+    if (ctl) {
+      // "cancela/descarta…" citando card o caixa lê como pedido de ESTORNO de um
+      // lançamento ("preciso saber qual lançamento") — o card fica vivo e a equipe
+      // acha que cancelou. Aqui a Sol pergunta; o "não" citando o card descarta.
+      if (temCard && ctl === 'nao' && !/^(nao|n)$/.test(norm(txt).replace(/[^a-z\s]/g, ' ').trim().split(/\s+/)[0])) {
+        await sendFn(event.chatId, 'Quer descartar esse card de cheques? Responde *não* citando o card e eu descarto — nada foi lançado.');
+        log({ acao: 'cheques_cancelar_pergunta', chatId: event.chatId });
+        return { tratou: true, acao: 'cheques_cancelar_pergunta' };
+      }
+      if (temCard) return null;
+      if (ctl === 'nao') {
+        lote.descartado = true;
+        await sendFn(event.chatId, 'Ok. Esse lote não tem nenhum cheque indo para o caixa, então não há card para descartar — nada foi lançado.');
+        log({ acao: 'cheques_lote_descartado_sem_card', chatId: event.chatId });
+        return { tratou: true, acao: 'cheques_lote_descartado_sem_card' };
+      }
+      await sendFn(event.chatId, 'Esse lote não tem cheque pronto para o caixa, então não há o que aprovar — nada foi lançado. Para um ❓, responde citando a lista: *N é da Fulana*.');
+      log({ acao: 'cheques_pode_sem_card', chatId: event.chatId });
+      return { tratou: true, acao: 'cheques_pode_sem_card' };
+    }
     const pend = lote.itens.map((it, i) => ({ it, i })).filter((x) => x.it.decisao === 'sem_parcela' && x.it.cheque.confiavel);
-    if (!pend.length) return null;
-    let alvo = null; let resto = txt;
+    let alvo = null; let resto = txt; let rotulado = false;
     const mIdx = txt.match(/^\s*(?:cheque\s*)?(\d{1,2}|[①②③④⑤⑥⑦⑧⑨⑩])\s*[-:–)]?\s*/i);
     if (mIdx) {
       const n = /\d/.test(mIdx[1]) ? Number(mIdx[1]) : CIRC.indexOf(mIdx[1]) + 1;
-      alvo = pend.find((x) => x.i + 1 === n) || null;
       resto = txt.slice(mIdx[0].length);
-      if (!alvo) return null;
+      if (!(n >= 1 && n <= lote.itens.length)) return null;
+      alvo = pend.find((x) => x.i + 1 === n) || null;
+      if (!alvo) {
+        // Índice explícito de cheque que não espera nome: responder, não deixar o
+        // caixa ler a frase como correção do card inteiro.
+        await sendFn(event.chatId, `O cheque ${n} não está esperando identificação${lote.itens[n - 1] && lote.itens[n - 1].decisao === 'lancar' ? ' — ele já está no card' : ''}. Nada mudou.`);
+        return { tratou: true, acao: 'cheques_identificacao_indice_invalido' };
+      }
     } else if (pend.length === 1) alvo = pend[0];
     else return null;
-    const nome = resto.replace(/^(e|é|eh)\s+/i, '').replace(/^(d[aoe]s?)\s+/i, '').replace(/[.!?]+$/, '').trim();
-    if (nome.length < 3 || /\d/.test(nome)) return null;
+    if (!pend.length) return null;
+    const semRotulo = resto.replace(/^(e|é|eh)\s+/i, '');
+    rotulado = semRotulo !== resto || /^(d[aoe]s?)\s+/i.test(semRotulo);
+    const nome = semRotulo.replace(/^(d[aoe]s?)\s+/i, '').replace(/[.!?]+$/, '').trim();
+    // Sem índice e sem "é da/do", só vale texto que PAREÇA nome (duas palavras de letras).
+    if (!mIdx && !rotulado && !/^[a-zà-ú'’-]{2,}(\s+[a-zà-ú'’-]{2,})+$/i.test(nome)) return null;
+    if (nome.length < 3 || /\d/.test(nome) || controleDaResposta(nome)) return null;
     const it = alvo.it;
     let res = null;
     try {
@@ -828,7 +875,7 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
     } catch (_) { res = null; }
     const esc = escolherFatura(res, it.cheque, lote.loteData);
     if (!esc.fatura) {
-      await sendFn(event.chatId, `❓ Não achei uma parcela única de "${nome}" para o cheque ${CIRC[alvo.i] || alvo.i + 1}. Manda o nome completo do aluno.`);
+      await sendFn(event.chatId, `❓ Não achei uma parcela única de "${nome}" para o cheque ${alvo.i + 1}. Manda o nome completo do aluno.`);
       return { tratou: true, acao: 'cheques_identificacao_sem_parcela' };
     }
     it.escolha = esc;

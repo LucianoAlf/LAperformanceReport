@@ -59,13 +59,14 @@ function faturaPadrao(id, extra = {}) {
 
 // Banco falso. `resolver`: emitente -> { fatura: n, aluno } | 'desconhecido'.
 function criarBancoFalso({ faturas = {}, links = [], resolver = {}, movimentos = [], falhaCaixa = false } = {}) {
-  const db = { faturas, links: new Set(links), movimentos: movimentos.slice(), estornos: [], consultas: [] };
+  const db = { faturas, links: new Set(links), movimentos: movimentos.slice(), estornos: [], consultas: [], resolvidos: [] };
   const cand = (n, extra = {}) => ({ emusys_fatura_id: n, la_report_fatura_id: U(n), score: 0.9, status: 'paga',
     valor_original: 367, valor_pago: 367, data_pagamento: '2026-09-20', data_vencimento: '2026-09-10',
     aluno_nome: 'Aluno Teste ' + n, responsavel_nome: 'Resp Teste ' + n, ...extra });
   db.rpcFn = async (nome, args) => {
     if (nome === 'sol_cheque_documento_hash_v1') return 'a'.repeat(64);
     const e = String(args.p_emitente_nome || '');
+    db.resolvidos.push(e);
     const r = resolver[e];
     if (r && r !== 'desconhecido') {
       return { ok: true, emitente: { resolvido: true }, candidatas: [cand(r.fatura, { aluno_nome: r.aluno || 'Aluno Teste ' + r.fatura })] };
