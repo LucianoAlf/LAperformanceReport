@@ -1602,6 +1602,133 @@
       "titulo": "Comprovante de R$ 380 (outubro) nunca lançado",
       "consulta": "SELECT id, valor, descricao, created_at FROM caixa_movimentacoes WHERE valor=380 AND descricao ILIKE '%10/2026%' ORDER BY created_at DESC;  -- esperado: 1 movimento após o reenvio",
       "defeito": "Consequência do SOL-107; depende de reenvio humano."
+    },
+    {
+      "id": "B-141",
+      "incidente": "SOL-141",
+      "tipo": "competencia/janela",
+      "status": "passa",
+      "titulo": "Parcela declarada 10/2026 nunca vira card da parcela atrasada 06/2026",
+      "entrada": "Foto de dinheiro + legenda 'PG parcela 10/26 Aluno: Fulana … R$450,00 (dinheiro)' (CG 29/09 17:39).",
+      "defeito": "A RPC antiga devolvia a parcela atrasada mais antiga quando o mês pedido não vinha; o card saiu com 06/2026.",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {
+          "ocr": {
+            "text": "foto de cedulas",
+            "status": "ok_parcial",
+            "file_bytes": 91830
+          },
+          "visao": null,
+          "interpretar": {
+            "categoria": "parcela",
+            "aluno": "Fulana Beltrana de Souza",
+            "competencia": "10/2026",
+            "forma": "dinheiro"
+          },
+          "canonica": [
+            {
+              "se_nome": "fulana",
+              "resposta": {
+                "ok": false,
+                "motivo": "nenhuma_fatura_na_competencia"
+              }
+            }
+          ],
+          "casar": [
+            {
+              "se_nome": "fulana",
+              "resposta": {
+                "ok": true,
+                "ambiguo": false,
+                "parcela": {
+                  "valor": 447,
+                  "status": "aberta",
+                  "aluno_id": 3,
+                  "atrasada": true,
+                  "descricao": "Parcela 06/2026 do curso de Guitarra",
+                  "fatura_id": "0a000000-0000-4000-8000-000000000006",
+                  "ja_quitada": false,
+                  "valor_bate": false,
+                  "vencimento": "20/06",
+                  "competencia": "06/2026",
+                  "dias_atraso": 101,
+                  "valor_tabela": 447,
+                  "multiplas_no_mes": false
+                },
+                "aluno_id": 3,
+                "aluno_nome": "Fulana Beltrana de Souza",
+                "confianca_nome": 1,
+                "parcelas_abertas": 4
+              }
+            }
+          ]
+        }
+      },
+      "passos": [
+        {
+          "evento": {
+            "midia": "image",
+            "body": "PG parcela 10/26\nAluno: Fulana Beltrana de Souza\nLA CG - R$450,00 (dinheiro)"
+          }
+        },
+        {
+          "t_s": 30,
+          "evento": {
+            "body": "pode",
+            "cita": "ultimo_envio"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "envio",
+          "passo": 0,
+          "regex": "06/2026",
+          "nega": true,
+          "porque": "a pessoa escreveu 10/2026"
+        },
+        {
+          "check": "lancamentos",
+          "max": 0
+        }
+      ]
+    },
+    {
+      "id": "B-142",
+      "incidente": "SOL-142",
+      "tipo": "correcao",
+      "status": "passa",
+      "titulo": "Pergunta de outra pessoa ('Parcela 06/2026, John? Tá certo?') não corrige o card",
+      "entrada": "Card aberto do remetente A; remetente B pergunta ao colega sem citar o card.",
+      "defeito": "A Sol respondeu 'Atualizei a competência para 06/2026' à pergunta do Alf para o Jhon.",
+      "contexto": {
+        "unidade": "CG",
+        "fakes": {}
+      },
+      "passos": [
+        {
+          "evento": {
+            "body": "Sol, Pagamento semanal do segurança - R$100,00 dinheiro",
+            "remetente": "A"
+          }
+        },
+        {
+          "t_s": 20,
+          "evento": {
+            "body": "Categoria despesa, John? Tá certo isso?",
+            "remetente": "B"
+          }
+        }
+      ],
+      "esperado": [
+        {
+          "check": "contagem_envios",
+          "passo": 1,
+          "regex": ".",
+          "max": 0
+        }
+      ]
     }
   ]
 }

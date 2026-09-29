@@ -6253,6 +6253,17 @@ _Não lanço nada pela metade._`);
         }
         if (m.aluno_nome) aluno = m.aluno_nome;
         if (m.ambiguo) confiancaBaixa = true;
+        // 🔴 29/09/2026 (CG 17:39, "PG parcela 10/26 … R$450 dinheiro"): pedida a 10/2026,
+        //    a RPC antiga devolveu a parcela ATRASADA de 06/2026 e o card saiu com ela.
+        //    O mês que a pessoa escreveu manda: parcela de OUTRO mês nunca entra no card;
+        //    a aluna fica confirmada, a fatura não, e o "pode" fica travado até conferir.
+        if (m.parcela && querParcela && competenciaHumana && m.parcela.competencia
+            && competenciaIso(m.parcela.competencia) !== competenciaIso(competenciaHumana)) {
+          log({ acao: 'casar_competencia_divergente', chatId, pedida: competenciaHumana,
+                veio: m.parcela.competencia, abertas: m.parcelas_abertas || null });
+          bloqueiaFonteIndisponivel = true;
+          return true;
+        }
         if (m.parcela && querParcela) {
           parcela = m.parcela;
           if (m.parcela.competencia) competencia = m.parcela.competencia;
@@ -6722,8 +6733,25 @@ _Não lanço nada pela metade._`);
     // 1.5) resposta curta que COMPLETA o que ela pediu (valor e/ou forma).
     // Nao lanca: so preenche a lacuna e repergunta -- o gate do "pode" continua valendo.
     {
-      const arrP = limparVelhos(chatId, agora);
+      const _arrPTodos = limparVelhos(chatId, agora);
       const txt = String(event.body || '').trim();
+      // 🔴 29/09/2026 (CG 17:41): o Alf perguntou ao Jhon "Parcela 06/2026, John? Tá certo
+      //    isso?" e a Sol respondeu "Atualizei a competência para 06/2026" — pergunta entre
+      //    pessoas virou correção do card. Corrigir o card SEM citá-lo só vale para quem
+      //    mandou o comprovante (ou quem chamou "Sol, …"), e nunca para pergunta com "?".
+      //    Citando o card (ou o comprovante), segue valendo para qualquer pessoa do grupo.
+      const _citaCard = (p, q) => !!q && (p.previewId === q || p.origem === q
+        || (Array.isArray(p.msgIds) && p.msgIds.includes(q)));
+      const _falante = String(event.senderPhone || event.senderId || '');
+      const _ehAutor = (p) => !!_falante && [p.autorPhone, p.autorId, p.toquePor]
+        .some((x) => x && String(x) === _falante);
+      const _pergunta = /\?\s*$/.test(txt);
+      const arrP = event.quotedMessageId
+        ? _arrPTodos.filter((p) => _citaCard(p, event.quotedMessageId))
+        : _arrPTodos.filter((p) => _falouComSol(event) || (_ehAutor(p) && !_pergunta));
+      if (!event.hasMedia && txt && _arrPTodos.length && !arrP.length && !casarPode(txt).pode && !casarNao(txt)) {
+        log({ acao: 'correcao_card_ignorada_conversa', chatId, citou: !!event.quotedMessageId, pergunta: _pergunta });
+      }
 
       // ⚠️ MIDIA DESTE REMETENTE CONSOLIDANDO AGORA (lote aberto): este texto e
       // a LEGENDA dela — vai para o lote ANTES de qualquer caminho de correcao.
@@ -6743,7 +6771,7 @@ _Não lanço nada pela metade._`);
       // o conjunto original + complemento, nunca deixa a correção cair no
       // handler de categoria singular.
       if (!event.hasMedia && txt && !casarPode(txt).pode) {
-        const manuais = arrP.filter((p) => p.tipoOperacao === 'manual_review_multi_student');
+        const manuais = _arrPTodos.filter((p) => p.tipoOperacao === 'manual_review_multi_student');
         // 🔴 A REVISÃO NÃO É DONA DO GRUPO (26/09/2026, Barra). Sem citar o card,
         // QUALQUER texto de QUALQUER pessoa ("Sim", "Botar agora", "Falta mais
         // algum?") era lido como tentativa de divisão, e a Sol respondeu "Ainda falta
