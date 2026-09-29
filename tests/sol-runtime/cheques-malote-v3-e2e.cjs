@@ -22,14 +22,16 @@ const CHAT = 'grupo-cg@g.us';
 const UNIDADE = '2ec861f6-023f-4d7b-9927-3960ad8c2a92';
 const AGORA = Date.parse('2026-09-29T15:00:00Z');
 
-function montar({ leituras, banco = {}, lerDelayMs = 0 } = {}) {
+function montar({ leituras, banco = {}, lerDelayMs = 0, ocr = null, albumMs = 80, extra = {} } = {}) {
   const db = criarBancoFalso(banco);
-  const enviadas = []; const lotes = []; const singulares = []; let seq = 0; let led = 0; let leitura = 0;
+  const enviadas = []; const lotes = []; const singulares = []; const ocrs = []; let seq = 0; let led = 0; let leitura = 0;
   const send = async (c, t) => { const id = 'MSG' + (++seq); enviadas.push({ c, t, id }); return id; };
   const modCheques = chq.criarCheques({
     carregarEnv: () => ({ url: 'https://x', key: 'k' }), sendFn: send, agoraFn: () => AGORA,
-    lerLoteFn: async () => {
-      const cheques = Array.isArray(leituras[0]) ? leituras[Math.min(leitura, leituras.length - 1)] : leituras;
+    albumMs,
+    lerLoteFn: async (arq) => {
+      const cheques = typeof leituras === 'function' ? leituras(arq)
+        : Array.isArray(leituras[0]) ? leituras[Math.min(leitura, leituras.length - 1)] : leituras;
       leitura += 1;
       if (lerDelayMs) await new Promise((r) => setTimeout(r, lerDelayMs));
       return { ok: true, cheques: JSON.parse(JSON.stringify(cheques)) };
@@ -47,10 +49,12 @@ function montar({ leituras, banco = {}, lerDelayMs = 0 } = {}) {
     lancarFn: async (p) => { singulares.push(p); db.gravar(p, [{ ...p, canonical_fatura_id: p.fatura_id }]); return { ok: true, movimentacao_id: 'MOV-S' + singulares.length, valor: Number(p.valor), forma: p.forma }; },
     lancarLoteFn: async (p) => { lotes.push(p); db.gravar(p, p.itens); return { ok: true, lote_id: 'LOTE-' + lotes.length, movimentacoes: p.itens.map((i, n) => ({ aluno_nome: i.aluno_nome, valor: i.valor, movimentacao_id: 'MOV-' + n })) }; },
     buscarMovimentosFn: async () => ({ ok: true, items: [] }),
+    ocrFn: async (arq) => { ocrs.push(arq); const k = Object.keys(ocr || {}).find((x) => String(arq).includes(x)); return { text: k ? ocr[k] : '', status: 'ok' }; },
     log: () => {},
+    ...extra,
   });
   const pendCheque = () => (h._pendentes.get(CHAT) || []).filter((p) => p.forma === 'cheque');
-  return { h, db, enviadas, lotes, singulares, pendCheque };
+  return { h, db, enviadas, lotes, singulares, pendCheque, ocrs };
 }
 const ev = (o) => ({ chatId: CHAT, senderPhone: '5521900000011', senderId: '5521900000011@lid', hasMedia: false, ...o });
 const midia = (id, arq, extra = {}) => ev({ messageId: id, body: '', hasMedia: true, mediaType: 'document', mediaUrls: [arq], ...extra });
@@ -321,6 +325,91 @@ const tres = [chequeLido(1), chequeLido(2), chequeLido(3)];
     assert.ok(/RETIRAR DO MALOTE[\s\S]*já foi paga por \*pix\*/.test(t2.enviadas[t2.enviadas.length - 1].t), t2.enviadas[t2.enviadas.length - 1].t);
     assert.strictEqual(t2.pendCheque().length, 1, 'só o card original');
     console.log('D4. paga sem forma → ❔ pede confirmação; "N foi cheque" abre card, "N foi pix" manda retirar — OK');
+  }
+
+  // ------------------------------------------------------------ D5 (auditoria D6)
+  {
+    const CMC_TXT = (k) => `BANCO BRADESCO\nPague por este cheque a quantia de\n${F.chequeLido(k).cmc7.slice(0, 8)} ${F.chequeLido(k).cmc7.slice(8, 18)} ${F.chequeLido(k).cmc7.slice(18)}`;
+    const foto = (id, nome, extra = {}) => ev({ messageId: id, body: '', hasMedia: true, mediaType: 'image', mediaUrls: [arquivoTemp('FOTO-' + nome, nome)], ...extra });
+    const porNome = (arq) => { const m = String(arq).match(/chq(\d+)/); return m ? [chequeLido(Number(m[1]))] : []; };
+    assert.strictEqual(chq.sinalChequeNoTexto(CMC_TXT(1)), 'forte');
+    assert.strictEqual(chq.sinalChequeNoTexto('Pague por este cheque a quantia de trezentos reais ou à sua ordem'), 'forte');
+    assert.strictEqual(chq.sinalChequeNoTexto('pagamento em cheque R$ 300'), 'fraco');
+    assert.strictEqual(chq.sinalChequeNoTexto('Comprovante Pix R$ 300 · limite cheque especial R$ 1.000'), null);
+    assert.strictEqual(chq.sinalChequeNoTexto('Comprovante de transferência Pix R$ 457,95'), null);
+
+    // D5a. foto AVULSA sem legenda (caso Recreio 21/09) com cara forte → card; nada lançado.
+    {
+      const t = montar({ leituras: porNome, ocr: { chq1: CMC_TXT(1) } });
+      const r = await t.h.handle(foto('F1', 'chq1.jpg'));
+      assert.strictEqual(r.acao, 'preview_cheque_enviado', JSON.stringify(r));
+      assert.strictEqual(t.pendCheque()[0].cheque_numero, '100001');
+      assert.strictEqual(t.lotes.length + t.singulares.length, 0, 'nunca lança sem card');
+    }
+    // D5b. álbum de 3 fotos, legenda só na 1ª → UM lote, UM card com 3 cheques.
+    {
+      const t = montar({ leituras: porNome, ocr: {} });
+      const rs = await Promise.all([
+        t.h.handle(foto('A1', 'chq1.jpg', { body: '3 cheques para depósito' })),
+        new Promise((r) => setTimeout(r, 15)).then(() => t.h.handle(foto('A2', 'chq2.jpg'))),
+        new Promise((r) => setTimeout(r, 30)).then(() => t.h.handle(foto('A3', 'chq3.jpg'))),
+      ]);
+      assert.deepStrictEqual(rs.map((r) => r.acao), ['preview_multi_aluno_enviado', 'cheques_album_agrupado', 'cheques_album_agrupado'], JSON.stringify(rs));
+      assert.strictEqual(t.pendCheque().length, 1);
+      assert.deepStrictEqual(t.pendCheque()[0].itens.map((i) => i.cheque_numero), ['100001', '100002', '100003']);
+      assert.ok(/Li 3 fotos como um malote só/.test(t.enviadas[0].t), t.enviadas[0].t);
+    }
+    // D5c. álbum SEM legenda nenhuma, fotos com cara forte → UM lote.
+    {
+      const t = montar({ leituras: porNome, ocr: { chq1: CMC_TXT(1), chq2: CMC_TXT(2) } });
+      const rs = await Promise.all([
+        t.h.handle(foto('B1', 'chq1.jpg')),
+        new Promise((r) => setTimeout(r, 15)).then(() => t.h.handle(foto('B2', 'chq2.jpg'))),
+      ]);
+      assert.deepStrictEqual(rs.map((r) => r.acao).sort(), ['cheques_album_agrupado', 'preview_multi_aluno_enviado'], JSON.stringify(rs));
+      assert.strictEqual(t.pendCheque()[0].itens.length, 2);
+    }
+    // D5d. cara FRACA → pergunta; "malote" citando a pergunta → card.
+    {
+      const t = montar({ leituras: porNome, ocr: { chq7: 'recebi em cheque' } });
+      const r = await t.h.handle(foto('C1', 'chq7.jpg'));
+      assert.strictEqual(r.acao, 'cheques_foto_duvida', JSON.stringify(r));
+      const q = t.enviadas[t.enviadas.length - 1];
+      assert.ok(/parece de \*cheque\*\. É do malote\/depósito\?/.test(q.t));
+      assert.strictEqual(t.pendCheque().length, 0, 'na dúvida, sem card');
+      const rm = await t.h.handle(ev({ messageId: 'C2', body: 'malote', quotedMessageId: q.id }));
+      assert.strictEqual(rm.acao, 'preview_cheque_enviado', JSON.stringify(rm));
+      assert.strictEqual(t.pendCheque()[0].cheque_numero, '100007');
+      assert.strictEqual(t.lotes.length + t.singulares.length, 0);
+    }
+    // D5e. cara fraca → "comprovante" → a foto volta ao caminho de comprovante.
+    {
+      let visto = null;
+      const t = montar({ leituras: porNome, ocr: { chq8: 'recebi em cheque' },
+        extra: { visaoFn: async (m) => { visto = m; return null; } } });
+      await t.h.handle(foto('D1', 'chq8.jpg'));
+      const q = t.enviadas[t.enviadas.length - 1];
+      const rc = await t.h.handle(ev({ messageId: 'D2', body: 'comprovante', quotedMessageId: q.id }));
+      assert.ok(!/^cheques_|preview_cheque/.test(String(rc.acao)), JSON.stringify(rc));
+      assert.ok(t.ocrs.filter((a) => /chq8/.test(a)).length >= 2, 'o caminho de comprovante leu a mesma foto');
+      assert.strictEqual(t.pendCheque().length, 0);
+      void visto;
+    }
+    // D5f. foto comum (Pix) → módulo não intercepta.
+    {
+      const t = montar({ leituras: porNome, ocr: { pix1: 'Comprovante de transferência Pix R$ 457,95' } });
+      const r = await t.h.handle(foto('E1', 'pix1.jpg'));
+      assert.ok(!/^cheques_|preview_cheque/.test(String(r.acao)), JSON.stringify(r));
+    }
+    // D5g. sombra: foto sem legenda não é interceptada no grupo.
+    {
+      process.env.SOL_CHEQUES_MODO = 'sombra';
+      const t = montar({ leituras: porNome, ocr: { chq9: CMC_TXT(9) } });
+      const r = await t.h.handle(foto('G1', 'chq9.jpg'));
+      assert.ok(!/^cheques_|preview_cheque/.test(String(r.acao)), JSON.stringify(r));
+      process.env.SOL_CHEQUES_MODO = 'grupo';
+    }
+    console.log('D5. foto avulsa/álbum: forte entra no fluxo, fraca pergunta, comum segue; nunca lança sem card — OK');
   }
 
   console.log('\nRESULTADO: OK');

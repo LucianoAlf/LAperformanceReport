@@ -3593,9 +3593,10 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   const v3LedgerMode = String(process.env.SOL_CAIXA_V3_LEDGER_MODE || '').toLowerCase();
   const cheques = chequesFn !== undefined ? chequesFn
     : (_chequesLib ? _chequesLib.criarCheques({ carregarEnv, sendFn, log }) : null);
-  // Cheques (29/09): o módulo pergunta ao caixa se o card de um lote ainda aceita "pode".
+  // Cheques (29/09): o módulo pergunta ao caixa se o card de um lote ainda aceita
+  // "pode", e usa o MESMO OCR local para reconhecer foto de cheque sem legenda.
   if (cheques && typeof cheques.ligarCaixa === 'function') {
-    cheques.ligarCaixa({ cardAberto: (chatId, id) => (pendentes.get(chatId) || []).some((p) =>
+    cheques.ligarCaixa({ ocr: ocrFn, cardAberto: (chatId, id) => (pendentes.get(chatId) || []).some((p) =>
       (p.previewId === id || (Array.isArray(p.msgIds) && p.msgIds.includes(id))) && Date.now() - p.ts < janelaMs) });
   }
   const v3LedgerAtivo = ['production', 'prod', 'on', '1'].includes(v3LedgerMode);
@@ -5425,6 +5426,8 @@ _Não lanço nada pela metade._`);
             if (rCard && rCard.previewId && cheques.vincularMensagem) cheques.vincularMensagem(rc.lote, rCard.previewId);
             return { acao: (rCard && rCard.acao) || rc.acao, previewId: rCard && rCard.previewId };
           }
+          // "comprovante" em resposta a "essa foto é de cheque?": a foto volta ao caminho de sempre.
+          if (rc.reprocessar) return _handleInterno(rc.reprocessar, agora);
           return { acao: rc.acao };
         }
       } catch (e) {

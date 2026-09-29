@@ -82,6 +82,24 @@ function pareceLoteCheques({ body, mediaUrls } = {}) {
   return /\bcheques?\b/.test(leg) && /\b(deposit|malote|lote)/.test(leg);
 }
 
+function ehImagem(event, arquivo) {
+  return /^image/i.test(String(event && event.mediaType || '')) || /\.(jpe?g|png|webp|heic)$/i.test(String(arquivo || ''));
+}
+
+// Texto (OCR) de uma foto com cara de cheque. 'forte' = linha CMC-7 (8·10·12
+// dígitos) ou dois marcadores impressos do cheque; 'fraco' = um marcador ou a
+// palavra "cheque" (fora de "cheque especial", que aparece em print de banco).
+function sinalChequeNoTexto(texto) {
+  const bruto = String(texto || '');
+  const t = norm(bruto).replace(/cheques?\s+especial/g, ' ');
+  const cmc7 = /\d{7,8}\D{1,4}\d{9,10}\D{1,4}\d{11,12}/.test(bruto.replace(/[ \t]+/g, ' '));
+  const marcadores = [/por este cheque/, /a quantia de/, /(ou a|a) sua ordem|ou a ordem/, /\bbom para\b/, /\bcompe\b/]
+    .filter((re) => re.test(t)).length;
+  if (cmc7 || marcadores >= 2) return 'forte';
+  if (marcadores === 1 || /\bcheques?\b/.test(t)) return 'fraco';
+  return null;
+}
+
 // "20SETEMBRO2026", "20SETEMBRO206" (erro de digitação real), "20AGO2026", "dia 20/09".
 function dataDoLote(texto, agora = Date.now()) {
   const brt = new Date(agora - 3 * 3600 * 1000);
@@ -461,7 +479,7 @@ const SECOES = [
 // A mensagem do lote É o card: com cheque ✅, o "pode" citando ESTA mensagem lança
 // os ✅ no caixa do dia; "3 é da Fulana" citando ESTA mensagem resolve um ❓.
 // Hierarquia: cabeçalho → placar → uma seção por destino → um bloco por cheque.
-function montarMensagem({ unidadeNome, loteData, itens, sombra = false, cabecalho = null, indices = null }) {
+function montarMensagem({ unidadeNome, loteData, itens, sombra = false, cabecalho = null, indices = null, avisos = [] }) {
   const total = itens.reduce((s, it) => s + (Number(it.cheque.valor) || 0), 0);
   // `indices` preserva o número do cheque no lote quando a mensagem mostra só parte dele.
   const porSecao = SECOES.map((s) => ({ ...s, itens: itens.map((it, i) => ({ it, i: indices ? indices[i] : i })).filter((x) => s.decisoes.includes(x.it.decisao)) }));
@@ -478,6 +496,7 @@ function montarMensagem({ unidadeNome, loteData, itens, sombra = false, cabecalh
   if (porSecao[1].itens.length) placar.push(`⚠️ ${porSecao[1].itens.length} para retirar do malote`);
   if (porSecao[2].itens.length) placar.push(`❓ ${porSecao[2].itens.length} precisa${porSecao[2].itens.length === 1 ? '' : 'm'} de você`);
   if (placar.length) partes.push(placar.join('\n'));
+  if (avisos && avisos.length) partes.push(avisos.join('\n'));
   for (const s of porSecao) {
     if (!s.itens.length) continue;
     partes.push(`${SEP}\n${s.titulo}\n\n${s.itens.map((x) => blocoCheque(x.it, x.i)).join('\n\n')}`);
@@ -605,12 +624,12 @@ function sha256Arquivo(arquivo) {
   try { return crypto.createHash('sha256').update(fs.readFileSync(arquivo)).digest('hex'); } catch (_) { return null; }
 }
 
-function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote, rpcFn = null, consultaFn = null, agoraFn = () => Date.now() } = {}) {
+function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote, rpcFn = null, consultaFn = null, agoraFn = () => Date.now(), albumMs: albumMsOpt = null } = {}) {
   // chatId -> [{ msgIds, itens, loteData, sigla, unidadeNome, ts, origem, hash,
   //              estado: 'lendo'|'lido', pendenteCard: {chaves, ts}, cards: [{id, chaves, ts}] }]
   const lotes = new Map();
   // Ganchos do caixa (ligarCaixa): quem sabe se um card ainda aceita "pode".
-  const caixa = { cardAberto: null };
+  const caixa = { cardAberto: null, ocr: null };
 
   async function rpc(nome, args) {
     if (rpcFn) return rpcFn(nome, args);
@@ -740,12 +759,20 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
   }
 
   // Lê + prova + resolve + decide. Nunca escreve.
-  async function processarArquivo({ arquivo, unidadeId, unidadeNome, textoLote, modelo, abertos = [] }) {
+  // `arquivos` (várias fotos de um álbum) vira UM lote, na ordem de chegada.
+  async function processarArquivo({ arquivo, arquivos = null, unidadeId, unidadeNome, textoLote, modelo, abertos = [] }) {
     const sigla = UNIDADE_SIGLA[unidadeId];
     if (!sigla) return { ok: false, motivo: 'unidade_desconhecida' };
     const loteData = dataDoLote(textoLote, agoraFn());
-    const lido = await lerLoteFn(arquivo, modelo);
-    if (!lido.ok) return { ok: false, motivo: lido.motivo || 'leitura_falhou' };
+    const lista = Array.isArray(arquivos) && arquivos.length ? arquivos : [arquivo];
+    const lido = { ok: true, cheques: [] };
+    const semCheque = [];
+    for (let k = 0; k < lista.length; k += 1) {
+      const r = await lerLoteFn(lista[k], modelo);
+      if (!r.ok) return { ok: false, motivo: r.motivo || 'leitura_falhou' };
+      if (!r.cheques.length) semCheque.push(k + 1);
+      lido.cheques.push(...r.cheques);
+    }
     if (!lido.cheques.length) return { ok: false, motivo: 'nenhum_cheque_lido' };
     const itens = new Array(lido.cheques.length);
     let prox = 0;
@@ -776,18 +803,113 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
     // aberto card enquanto este lia.
     decidirTodos(itens, typeof abertos === 'function' ? abertos() : abertos);
     log({ acao: 'cheques_lote_decidido', unidade: sigla, lidos: itens.length, decisoes: itens.map((it) => it.decisao) });
-    return { ok: true, itens, loteData, sigla, unidadeNome };
+    return { ok: true, itens, loteData, sigla, unidadeNome, semCheque: lista.length > 1 ? semCheque : [] };
+  }
+
+  // ---- foto de cheque sem legenda e álbum (D6 da auditoria, caso Recreio 21/09) ----
+  // A foto do WhatsApp não tem nome de arquivo e, no álbum, só a 1ª leva legenda.
+  // • legenda de malote OU texto da foto com cara FORTE de cheque (linha CMC-7, ou
+  //   "pague por este cheque" + "a quantia de"/"à sua ordem") → fluxo de cheques;
+  // • cara FRACA (só a palavra "cheque", ou um marcador) → PERGUNTA, sem lançar;
+  // • nada → segue o caminho de comprovante de sempre.
+  // Fotos do mesmo autor em sequência (álbum) viram UM lote: espera `albumMs` sem
+  // foto nova. Nada disso lança: o lançamento continua sendo o card + "pode".
+  const albumMs = Number(process.env.SOL_CHEQUES_ALBUM_MS || albumMsOpt || 12000);
+  const albuns = new Map();  // chat|autor -> { arquivos, inicio, ultimo, fechado }
+  const duvidas = new Map(); // chatId -> [{ ids, arquivos, evento, grupo, ts, autor }]
+  const tmpDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'sol-chq-foto-'));
+  function guardarCopia(arquivo) {
+    const dst = path.join(tmpDir(), path.basename(arquivo));
+    fs.copyFileSync(arquivo, dst);
+    try { fs.unlinkSync(arquivo); } catch (_) { /* a ponte também limpa */ }
+    return dst;
+  }
+  const apagar = (arqs) => { for (const a of arqs || []) { try { fs.rmSync(path.dirname(a).includes('sol-chq-foto-') ? path.dirname(a) : a, { recursive: true, force: true }); } catch (_) { /* melhor esforço */ } } };
+  const autorDe = (event) => `${event.chatId}|${event.senderPhone || event.senderId || ''}`;
+  function albumAberto(k) {
+    const a = albuns.get(k);
+    return a && !a.fechado && Date.now() - a.ultimo < albumMs ? a : null;
+  }
+  function duvidaDoAutor(event) {
+    const k = autorDe(event);
+    return (duvidas.get(event.chatId) || []).find((d) => d.autor === k && !d.resolvida && Date.now() - d.ultimo < albumMs) || null;
+  }
+  function limparDuvidas(chatId) {
+    const vivas = [];
+    for (const d of duvidas.get(chatId) || []) {
+      if (!d.resolvida && agoraFn() - d.ts < 2 * 3600 * 1000) vivas.push(d); else if (!d.resolvida) apagar(d.arquivos);
+    }
+    duvidas.set(chatId, vivas);
+    return vivas;
+  }
+  async function esperarAlbum(a) {
+    while (Date.now() - a.ultimo < albumMs && Date.now() - a.inicio < 60000) {
+      await new Promise((r) => setTimeout(r, Math.min(250, Math.max(10, albumMs - (Date.now() - a.ultimo)))));
+    }
+    a.fechado = true;
   }
 
   // Hook do caixa. Devolve null (não é lote / desligado) ou
   // { tratou, acao, itensCaixa? } — com itensCaixa o CAIXA abre o card de sempre.
   async function tratarMidia(event, grupo) {
-    if (!event || !event.hasMedia || event._sintetico) return null;
-    if (!pareceLoteCheques(event)) return null;
+    if (!event || !event.hasMedia || event._sintetico || event._chequesNao) return null;
     const cfg = configuracao();
     if (cfg.modo !== 'sombra' && cfg.modo !== 'grupo') return null;
     const arquivo = Array.isArray(event.mediaUrls) ? event.mediaUrls[0] : null;
     if (!arquivo || !fs.existsSync(arquivo)) return null;
+    const sombra = cfg.modo === 'sombra';
+    const imagem = ehImagem(event, arquivo);
+    const kAutor = autorDe(event);
+    if (imagem && !sombra) {
+      // Irmã de álbum de cheques (ou de foto em dúvida) do mesmo autor: entra junto.
+      const alb = albumAberto(kAutor);
+      if (alb) { alb.arquivos.push(guardarCopia(arquivo)); alb.ultimo = Date.now(); return { tratou: true, acao: 'cheques_album_agrupado' }; }
+      const duv = duvidaDoAutor(event);
+      if (duv) { duv.arquivos.push(guardarCopia(arquivo)); duv.ultimo = Date.now(); duv.ids.push(event.messageId); return { tratou: true, acao: 'cheques_foto_duvida_agrupada' }; }
+    }
+    let porFoto = false;
+    if (!pareceLoteCheques(event)) {
+      if (!imagem || !caixa.ocr) return null;
+      let texto = '';
+      try { const o = await caixa.ocr(arquivo, { detailed: true }); texto = typeof o === 'string' ? o : String((o && o.text) || ''); } catch (_) { texto = ''; }
+      const sinal = sinalChequeNoTexto(texto);
+      if (!sinal) return null;
+      if (sombra) { log({ acao: 'cheques_foto_detectada_sombra', chatId: event.chatId, sinal }); return null; }
+      if (!fs.existsSync(arquivo)) return null;
+      // Durante o OCR outra foto do autor pode ter aberto álbum/dúvida.
+      const alb = albumAberto(kAutor);
+      if (alb) { alb.arquivos.push(guardarCopia(arquivo)); alb.ultimo = Date.now(); return { tratou: true, acao: 'cheques_album_agrupado' }; }
+      const duv0 = duvidaDoAutor(event);
+      if (duv0) { duv0.arquivos.push(guardarCopia(arquivo)); duv0.ultimo = Date.now(); duv0.ids.push(event.messageId); return { tratou: true, acao: 'cheques_foto_duvida_agrupada' }; }
+      if (sinal === 'fraco') {
+        const d = { ids: [event.messageId], arquivos: [guardarCopia(arquivo)], grupo: { unidade_id: grupo.unidade_id, nome: grupo.nome },
+          evento: { chatId: event.chatId, messageId: event.messageId, senderPhone: event.senderPhone || null, senderId: event.senderId || null,
+            body: event.body || '', mediaType: event.mediaType || 'image', timestamp: event.timestamp || null, hasMedia: true },
+          ts: agoraFn(), ultimo: Date.now(), autor: kAutor, resolvida: false };
+        const vivas = limparDuvidas(event.chatId); vivas.push(d); duvidas.set(event.chatId, vivas);
+        const q = await sendFn(event.chatId, '📷 Essa foto parece de *cheque*. É do malote/depósito? Responde citando esta mensagem: *malote* (eu leio o cheque e monto o card) ou *comprovante* (sigo como comprovante de pagamento). Nada foi lançado.');
+        if (q) d.ids.push(q);
+        log({ acao: 'cheques_foto_duvida', chatId: event.chatId });
+        return { tratou: true, acao: 'cheques_foto_duvida' };
+      }
+      porFoto = true;
+    }
+    if (imagem && !sombra) {
+      // Foto (com legenda de malote ou com cara forte de cheque): abre o álbum e
+      // espera as irmãs antes de ler — um álbum = um lote = um card.
+      const alb = { arquivos: [guardarCopia(arquivo)], inicio: Date.now(), ultimo: Date.now(), fechado: false };
+      albuns.set(kAutor, alb);
+      await esperarAlbum(alb);
+      if (albuns.get(kAutor) === alb) albuns.delete(kAutor);
+      log({ acao: 'cheques_album_fechado', chatId: event.chatId, fotos: alb.arquivos.length, por_foto: porFoto });
+      return processarLote(event, grupo, alb.arquivos, cfg);
+    }
+    return processarLote(event, grupo, [arquivo], cfg);
+  }
+
+  // Lê um malote (PDF, foto ou álbum) e devolve o que o caixa precisa.
+  async function processarLote(event, grupo, arquivos, cfg) {
+    const arquivo = arquivos[0];
     const textoLote = `${event.body || ''} ${nomeOriginal(arquivo)}`;
     const sombra = cfg.modo === 'sombra';
     // 🔴 MESMO MALOTE DE NOVO (auditoria D1, 29/09). A leitura leva 20–90 s e a
@@ -796,11 +918,13 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
     //    • mesmo ARQUIVO (sha256) com lote aberto → nem lê de novo, aponta o card;
     //    • mesmo CHEQUE (banco + número) num card aberto → ❓ neste envio;
     //    • cheque já gravado no caixa → ❓ (e o "pode" também confere: barrarNoPode).
-    const hash = sha256Arquivo(arquivo);
+    const hashes = arquivos.map(sha256Arquivo);
+    const hash = hashes.every(Boolean) ? (hashes.length === 1 ? hashes[0] : crypto.createHash('sha256').update(hashes.join('|')).digest('hex')) : null;
     if (!sombra && hash) {
       const igual = abertosDoChat(event.chatId).find((a) => a.lote.hash === hash);
       if (igual) {
-        try { fs.unlinkSync(arquivo); } catch (_) { /* a ponte também limpa */ }
+        for (const a of arquivos) { try { fs.unlinkSync(a); } catch (_) { /* a ponte também limpa */ } }
+        apagar(arquivos);
         await sendFn(event.chatId, igual.lendo
           ? '🧾 Esse malote já está sendo lido — o card sai em instantes. Não abri outro.'
           : `🧾 Esse malote já está no card aberto das ${hhmm(igual.ts)}. Não abri outro card: responde *pode* citando aquele.`);
@@ -817,11 +941,12 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
     }
     let r;
     try {
-      r = await processarArquivo({ arquivo, unidadeId: grupo.unidade_id, unidadeNome: grupo.nome, textoLote, modelo: cfg.modelo,
+      r = await processarArquivo({ arquivo, arquivos, unidadeId: grupo.unidade_id, unidadeNome: grupo.nome, textoLote, modelo: cfg.modelo,
         abertos: () => abertosDoChat(event.chatId, lote) });
     } finally {
       lote.estado = 'lido';
-      try { fs.unlinkSync(arquivo); } catch (_) { /* a ponte também limpa */ }
+      for (const a of arquivos) { try { fs.unlinkSync(a); } catch (_) { /* a ponte também limpa */ } }
+      apagar(arquivos);
     }
     if (!r.ok) {
       lote.descartado = true;
@@ -831,7 +956,9 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
       log({ acao: 'cheques_lote_falhou', motivo: r.motivo, modo: cfg.modo });
       return { tratou: true, acao: 'cheques_lote_falhou' };
     }
-    const texto = montarMensagem({ unidadeNome: grupo.nome, loteData: r.loteData, itens: r.itens, sombra });
+    const avisos = (r.semCheque || []).map((k) => `📷 Na foto ${k} não achei cheque — se for comprovante, reenvia com a legenda.`);
+    if (arquivos.length > 1) avisos.unshift(`📷 Li ${arquivos.length} fotos como um malote só.`);
+    const texto = montarMensagem({ unidadeNome: grupo.nome, loteData: r.loteData, itens: r.itens, sombra, avisos });
     if (sombra) {
       if (cfg.sombraJid) await sendFn(cfg.sombraJid, texto);
       log({ acao: 'cheques_lote_sombra', unidade: r.sigla, itens: r.itens.length });
@@ -866,6 +993,32 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
   // (caminho 'nome'); se agora o cheque vira `lancar`, o caixa abre o card dele.
   async function tratarResposta(event, { unidadeId } = {}) {
     if (!event || event.hasMedia || !event.quotedMessageId) return null;
+    // Resposta à pergunta "essa foto é de cheque?" (ou citando a própria foto).
+    const duv = limparDuvidas(event.chatId).find((d) => d.ids.includes(event.quotedMessageId));
+    if (duv) {
+      const t = norm(event.body).replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+      const ehMalote = /\b(malote|deposito|cheques?)\b/.test(t) || controleDaResposta(t) === 'pode';
+      const ehComprovante = /\bcomprovante\b/.test(t) || controleDaResposta(t) === 'nao';
+      if (ehMalote === ehComprovante) {
+        await sendFn(event.chatId, 'Não entendi: responde *malote* (é cheque do depósito) ou *comprovante* citando a minha pergunta.');
+        return { tratou: true, acao: 'cheques_foto_duvida_repergunta' };
+      }
+      duv.resolvida = true;
+      const cfg = configuracao();
+      if (ehMalote) {
+        log({ acao: 'cheques_foto_confirmada', chatId: event.chatId, fotos: duv.arquivos.length });
+        return processarLote({ ...duv.evento, body: 'malote' }, duv.grupo, duv.arquivos, cfg);
+      }
+      log({ acao: 'cheques_foto_nao_e_cheque', chatId: event.chatId, fotos: duv.arquivos.length });
+      if (duv.arquivos.length === 1) {
+        // Volta ao caminho de comprovante de sempre, com a mesma foto.
+        return { tratou: true, acao: 'cheques_foto_nao_e_cheque',
+          reprocessar: { ...duv.evento, mediaUrls: [duv.arquivos[0]], _chequesNao: true } };
+      }
+      apagar(duv.arquivos);
+      await sendFn(event.chatId, 'Ok, não trato como cheque. Como eram várias fotos, reenvia cada comprovante com a legenda (ex.: *comprovante pix R$ 300 - Fulano*).');
+      return { tratou: true, acao: 'cheques_foto_nao_e_cheque' };
+    }
     const arr = lotes.get(event.chatId) || [];
     const lote = arr.find((x) => (Array.isArray(x.msgIds) && x.msgIds.includes(event.quotedMessageId)) || x.origem === event.quotedMessageId);
     if (!lote) return null;
@@ -1012,8 +1165,9 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
     return { acao: 'pode_bloqueado_cheque_duplicado' };
   }
 
-  function ligarCaixa({ cardAberto } = {}) {
+  function ligarCaixa({ cardAberto, ocr } = {}) {
     if (typeof cardAberto === 'function') caixa.cardAberto = cardAberto;
+    if (typeof ocr === 'function') caixa.ocr = ocr;
   }
 
   return { tratarMidia, tratarResposta, processarArquivo, vincularMensagem, barrarNoPode, ligarCaixa };
@@ -1022,5 +1176,5 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
 module.exports = {
   criarCheques, pareceLoteCheques, dataDoLote, dvMod10, lerCmc7, extensoParaNumero,
   normalizarCheque, escolherFatura, decidirCheque, valorDoBanco, itemDoCaixa, categoriaDaFatura, montarMensagem,
-  blocoCheque, nomeBonito, nomeOriginal, chaveCheque, UNIDADE_SIGLA,
+  blocoCheque, nomeBonito, nomeOriginal, chaveCheque, sinalChequeNoTexto, UNIDADE_SIGLA,
 };
