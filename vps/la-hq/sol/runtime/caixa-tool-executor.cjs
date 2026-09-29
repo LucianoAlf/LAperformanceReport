@@ -18,6 +18,14 @@
 const crypto = require('node:crypto');
 const { AsyncLocalStorage } = require('node:async_hooks');
 
+// Mesmo módulo (mesmo caminho absoluto) que a ponte já carregou: o cache do
+// Node devolve a MESMA instância, sem segundo estado. Só funções puras são usadas.
+let _cf = null;
+function cf() {
+  if (!_cf) _cf = require(require('node:path').join(__dirname, 'caixa-financeiro.cjs'));
+  return _cf;
+}
+
 const captura = new AsyncLocalStorage();
 
 // Chamados pela ponte no sendFn e no log do handler: só registram quando há uma
@@ -174,10 +182,19 @@ function criarExecutorCaixaTool({ obterHandler, obterAbf, obterGovernanca, envia
       } }, grupo, Date.now());
     } else if (a === 'preparar_saida') {
       const valor = Number(args.p_valor);
-      const categoria = String(args.p_categoria || '').trim().toLowerCase();
       const forma = String(args.p_forma || '').trim().toLowerCase();
       const descricao = String(args.p_descricao || '').trim();
       const textoOriginal = String(args.p_texto_original || '').trim();
+      // 🔴 29/09/2026 (CG, Jhon): a pessoa escreveu "segurança", o modelo passou
+      //    `despesa` e o card saiu como despesa. A categoria que a PESSOA nomeou decide;
+      //    o palpite do modelo só entra quando o texto humano não nomeia nenhuma.
+      const categoriaModelo = String(args.p_categoria || '').trim().toLowerCase();
+      const categoriaHumana = textoOriginal ? cf().categoriaSaidaDoTexto(textoOriginal) : null;
+      const categoria = categoriaHumana || categoriaModelo;
+      if (categoriaHumana && categoriaModelo && categoriaHumana !== categoriaModelo) {
+        _log({ acao: 'saida_categoria_da_pessoa_prevaleceu', chatId: ctx._chat,
+               categoria_modelo: categoriaModelo, categoria_pessoa: categoriaHumana });
+      }
       if (!(valor > 0) || !['seguranca', 'despesa', 'retirada', 'troco'].includes(categoria)
           || !forma || !descricao || !textoOriginal) return recusa('saida_incompleta');
       // Adaptador canônico do schema para o runtime que monta o mesmo preview V3.
