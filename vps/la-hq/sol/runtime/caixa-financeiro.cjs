@@ -8582,6 +8582,18 @@ _Não lanço nada pela metade._`);
     return limparVelhos(chatId, agora).some((p) => p.previewId === quotedMessageId || p.origem === quotedMessageId || (Array.isArray(p.msgIds) && p.msgIds.includes(quotedMessageId)));
   }
 
+  // O bridge usa esta versao estrita para decidir se uma conversa humana foi
+  // dirigida a Sol. `origem` e a mensagem HUMANA que trouxe o comprovante; cita-la
+  // nao equivale a citar a Sol (CG 29/09: Alf perguntou ao Jhon se a aluna tinha
+  // parcela atrasada, citando a foto, e a Sol se meteu com "nao entendi").
+  // `msgIds` contem respostas complementares enviadas pela propria Sol e, junto do
+  // previewId, continua sendo um endereco valido para ela.
+  function citaCardPendenteDaSol(chatId, quotedMessageId, agora = Date.now()) {
+    if (!quotedMessageId) return false;
+    return limparVelhos(chatId, agora).some((p) => p.previewId === quotedMessageId
+      || (Array.isArray(p.msgIds) && p.msgIds.includes(quotedMessageId)));
+  }
+
   // A3: reconstruir as pendencias a partir do ledger V3 (chamado pelo bridge
   // no boot). O ultimo preview de cada comprovante (origem) e' o vigente.
   async function reidratarPendencias() {
@@ -8905,7 +8917,7 @@ _Não lanço nada pela metade._`);
   // ⚠️ ehConversaSemComando no retorno conserta bug LATENTE: o bridge chama
   // _fh.ehConversaSemComando(body) desde 25/08, mas o handler nunca a expos —
   // o guard de "elogio nao leva nao-entendi" estava morto por undefined.
-  return { handle, temPendencia, citaAlgumaPendencia, ehConversaSemComando,
+  return { handle, temPendencia, citaAlgumaPendencia, citaCardPendenteDaSol, ehConversaSemComando,
     reidratarPendencias, tratarNaoEntendida, observarRoteadorV4, decidirRoteadorV4, tratarAgentFirst,
     deveTratarConfirmacaoDeterministica, deveTratarComplementoDeterministico, resumoCardsAbertosParaAgente,
     _pendentes: pendentes, _envelopesV4: envelopesV4, _rascunhosV4: rascunhosV4 };
