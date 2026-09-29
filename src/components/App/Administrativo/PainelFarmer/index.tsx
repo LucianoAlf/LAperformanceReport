@@ -71,7 +71,7 @@ export function PainelFarmer({ unidadeId, ano, mes }: PainelFarmerProps) {
               key={tab.id}
               onClick={() => setActiveSubTab(tab.id)}
               className={cn(
-                'shrink-0 whitespace-nowrap px-4 py-2 rounded-t-xl rounded-b-none text-sm font-medium transition-all flex items-center gap-2 border border-b-0',
+                'shrink-0 whitespace-nowrap px-4 py-2 rounded-t-xl rounded-b-none text-sm font-medium transition-all flex items-center gap-2 border border-b-0 max-lg:min-h-[44px]',
                 activeSubTab === tab.id
                   ? 'bg-gradient-to-r from-violet-600 to-purple-600 text-white border-violet-600'
                   : 'bg-slate-800/50 text-slate-400 hover:text-white hover:bg-slate-700/50 border-slate-700/50'

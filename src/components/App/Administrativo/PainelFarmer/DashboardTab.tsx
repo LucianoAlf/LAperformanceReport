@@ -1301,11 +1301,11 @@ function RotinaItem({ rotina, onToggle, editando, editandoTexto, onEditStart, on
         )}
 
         {/* Botões editar/excluir - aparecem no hover */}
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 max-lg:opacity-100">
           <Button 
             variant="ghost" 
             size="sm" 
-            className="h-7 w-7 p-0 text-slate-400 hover:text-violet-400"
+            className="h-7 w-7 p-0 text-slate-400 hover:text-violet-400 max-lg:h-11 max-lg:w-11"
             onClick={(e) => { e.stopPropagation(); onEditStart?.(); }}
           >
             <Pencil className="w-3.5 h-3.5" />
@@ -1313,7 +1313,7 @@ function RotinaItem({ rotina, onToggle, editando, editandoTexto, onEditStart, on
           <Button 
             variant="ghost" 
             size="sm" 
-            className="h-7 w-7 p-0 text-slate-400 hover:text-rose-400"
+            className="h-7 w-7 p-0 text-slate-400 hover:text-rose-400 max-lg:h-11 max-lg:w-11"
             onClick={(e) => { e.stopPropagation(); setConfirmandoExclusao(true); }}
           >
             <Trash2 className="w-3.5 h-3.5" />

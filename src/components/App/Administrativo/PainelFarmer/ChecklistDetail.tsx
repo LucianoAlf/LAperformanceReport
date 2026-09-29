@@ -990,11 +990,11 @@ function TarefasSubTab({ items, isConcluido, onToggle, onToggleBatch, onAddItem,
                           )}
                           {/* Botões editar/excluir subtarefa */}
                           {!isConcluido && (
-                            <div className="flex items-center gap-1 opacity-0 group-hover/sub:opacity-100 transition-opacity">
-                              <button onClick={() => iniciarEdicao(sub)} className="text-slate-500 hover:text-violet-400 p-0.5">
+                            <div className="flex items-center gap-1 opacity-0 group-hover/sub:opacity-100 transition-opacity max-lg:opacity-100">
+                              <button onClick={() => iniciarEdicao(sub)} className="text-slate-500 hover:text-violet-400 p-0.5 max-lg:p-3.5">
                                 <Pencil className="w-3 h-3" />
                               </button>
-                              <button onClick={() => onDeleteItem(sub.id)} className="text-slate-500 hover:text-rose-400 p-0.5">
+                              <button onClick={() => onDeleteItem(sub.id)} className="text-slate-500 hover:text-rose-400 p-0.5 max-lg:p-3.5">
                                 <Trash2 className="w-3 h-3" />
                               </button>
                             </div>
@@ -1049,7 +1049,7 @@ function TarefasSubTab({ items, isConcluido, onToggle, onToggleBatch, onAddItem,
                       {/* Botão editar */}
                       <button
                         onClick={() => iniciarEdicao(item)}
-                        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-violet-400 p-1 transition-opacity"
+                        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-violet-400 p-1 transition-opacity max-lg:opacity-100 max-lg:p-3"
                         title="Editar tarefa"
                       >
                         <Pencil className="w-3.5 h-3.5" />
@@ -1057,7 +1057,7 @@ function TarefasSubTab({ items, isConcluido, onToggle, onToggleBatch, onAddItem,
                       {/* Botão adicionar subtarefa */}
                       <button
                         onClick={() => iniciarAddSub(item.id)}
-                        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-emerald-400 p-1 transition-opacity"
+                        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-emerald-400 p-1 transition-opacity max-lg:opacity-100 max-lg:p-3"
                         title="Adicionar subtarefa"
                       >
                         <Plus className="w-3.5 h-3.5" />
@@ -1065,7 +1065,7 @@ function TarefasSubTab({ items, isConcluido, onToggle, onToggleBatch, onAddItem,
                       {/* Botão excluir */}
                       <button
                         onClick={() => onDeleteItem(item.id)}
-                        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-400 p-1 transition-opacity"
+                        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-400 p-1 transition-opacity max-lg:opacity-100 max-lg:p-3"
                         title="Excluir tarefa"
                       >
                         <Trash2 className="w-3.5 h-3.5" />

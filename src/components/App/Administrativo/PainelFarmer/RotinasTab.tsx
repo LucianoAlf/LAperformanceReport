@@ -190,7 +190,7 @@ export function RotinasTab({ unidadeId, modalAberto: modalAbertoExterno, onModal
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between max-lg:flex-wrap max-lg:gap-3">
         <div>
           <h3 className="text-lg font-semibold text-white">Minhas Rotinas</h3>
           <p className="text-sm text-slate-400">Gerencie suas rotinas diárias, semanais e mensais</p>
@@ -206,13 +206,13 @@ export function RotinasTab({ unidadeId, modalAberto: modalAbertoExterno, onModal
 
       {/* Filtro por Farmer */}
       {farmers.length > 1 && (
-        <div className="flex items-center gap-3 p-3 bg-slate-800/30 rounded-lg border border-slate-700/50">
+        <div className="flex items-center gap-3 p-3 bg-slate-800/30 rounded-lg border border-slate-700/50 max-lg:flex-col max-lg:items-stretch">
           <span className="text-sm text-slate-400">👤 Ver rotinas de:</span>
-          <div className="flex gap-2">
+          <div className="flex gap-2 max-lg:flex-wrap">
             <button
               onClick={() => setFarmerSelecionado(null)}
               className={cn(
-                'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
+                'px-3 py-1.5 rounded-lg text-sm font-medium transition-all max-lg:min-h-[44px]',
                 !farmerSelecionado
                   ? 'bg-violet-600 text-white'
                   : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
@@ -225,7 +225,7 @@ export function RotinasTab({ unidadeId, modalAberto: modalAbertoExterno, onModal
                 key={farmer.id}
                 onClick={() => setFarmerSelecionado(farmer.id)}
                 className={cn(
-                  'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
+                  'px-3 py-1.5 rounded-lg text-sm font-medium transition-all max-lg:min-h-[44px]',
                   farmerSelecionado === farmer.id
                     ? 'bg-violet-600 text-white'
                     : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
@@ -239,7 +239,7 @@ export function RotinasTab({ unidadeId, modalAberto: modalAbertoExterno, onModal
       )}
 
       {/* Filtros por Frequência */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 max-lg:flex-wrap">
         <Button variant="secondary" size="sm" className="bg-slate-700/50">
           Todas ({rotinas.length})
         </Button>
@@ -414,7 +414,7 @@ export function RotinasTab({ unidadeId, modalAberto: modalAbertoExterno, onModal
                       type="button"
                       onClick={() => toggleDiaSemana(dia.value)}
                       className={cn(
-                        'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
+                        'px-3 py-1.5 rounded-lg text-sm font-medium transition-all max-lg:min-h-[44px]',
                         diasSemana.includes(dia.value)
                           ? 'bg-violet-600 text-white'
                           : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
@@ -571,11 +571,11 @@ function RotinaRow({ rotina, onEdit, onDelete }: RotinaRowProps) {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Button variant="ghost" size="sm" onClick={onEdit}>
+      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity max-lg:opacity-100">
+        <Button variant="ghost" size="sm" onClick={onEdit} className="max-lg:min-w-[44px]" aria-label="Editar rotina">
           <Pencil className="w-4 h-4 text-slate-400" />
         </Button>
-        <Button variant="ghost" size="sm" onClick={onDelete}>
+        <Button variant="ghost" size="sm" onClick={onDelete} className="max-lg:min-w-[44px]" aria-label="Excluir rotina">
           <Trash2 className="w-4 h-4 text-rose-400" />
         </Button>
       </div>
