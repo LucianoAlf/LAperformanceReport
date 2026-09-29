@@ -170,3 +170,45 @@ export function rotuloPilula(v: Pick<VariacaoEstoque, 'variacao_nome' | 'quantid
   const nome = v.variacao_nome?.trim();
   return nome ? `${nome} ${v.quantidade}` : `${v.quantidade} un`;
 }
+
+/**
+ * De onde a aba Produtos tira o estoque de cada produto.
+ *
+ * 🔴 Três casos, não dois. As policies de `loja_estoque` deixam qualquer
+ * usuário logado ler TODAS as unidades (medido em 29/09/2026: `using (true)`),
+ * então o recorte por unidade é só da tela. Sem unidade ainda carregada — o
+ * primeiro instante de quem não é admin — consultar sem filtro mostraria o
+ * estoque da rede a quem só deveria ver o seu. Nesse caso não se consulta.
+ *
+ * Só `'todos'` é a rede: é o valor que o Administrativo passa quando o admin
+ * escolhe o Consolidado.
+ */
+export type EscopoEstoque =
+  | { tipo: 'rede' }
+  | { tipo: 'unidade'; unidadeId: string }
+  | { tipo: 'aguardando' };
+
+export function escopoDoEstoque(unidadeId: string | null | undefined): EscopoEstoque {
+  if (unidadeId === 'todos') return { tipo: 'rede' };
+  if (unidadeId) return { tipo: 'unidade', unidadeId };
+  return { tipo: 'aguardando' };
+}
+
+/**
+ * Soma as linhas de `loja_estoque` por produto — todas as variações, e no
+ * Consolidado todas as unidades.
+ *
+ * 🔴 Substitui UMA consulta por produto. Eram 20 idas ao banco por abertura
+ * da aba, e no Consolidado as 20 pediam `unidade_id = 'todos'`, uma unidade
+ * que não existe: todas falhavam, o `|| 0` transformava a falha em zero, e a
+ * rede inteira aparecia sem estoque (333 itens em 29/09/2026).
+ */
+export function somarEstoquePorProduto(
+  linhas: ReadonlyArray<{ produto_id: number; quantidade: number | null }>,
+): Map<number, number> {
+  const total = new Map<number, number>();
+  for (const l of linhas) {
+    total.set(l.produto_id, (total.get(l.produto_id) ?? 0) + (l.quantidade ?? 0));
+  }
+  return total;
+}

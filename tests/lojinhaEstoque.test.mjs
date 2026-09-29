@@ -224,3 +224,50 @@ test('a Lojinha segue FORA das abas portadas — o Histórico de Vendas não foi
   const abas = le('src/mobile/abasPortadas.ts');
   assert.doesNotMatch(abas, /'lojinha'/u);
 });
+
+// ---------------------------------------------------------------------------
+// Estoque zerado no Consolidado (aba Produtos)
+// ---------------------------------------------------------------------------
+
+const { escopoDoEstoque, somarEstoquePorProduto } = lib;
+const produtosTab = le('src/components/App/Lojinha/TabProdutos.tsx');
+
+test('🔴 o Consolidado soma a rede — não pede uma unidade chamada "todos"', () => {
+  assert.deepEqual(escopoDoEstoque('todos'), { tipo: 'rede' });
+  assert.deepEqual(escopoDoEstoque('uuid-cg'), { tipo: 'unidade', unidadeId: 'uuid-cg' });
+  // Sem unidade ainda carregada NÃO consulta: as policies deixam qualquer
+  // usuário logado ler todas as unidades, e o recorte é só da tela.
+  assert.deepEqual(escopoDoEstoque(null), { tipo: 'aguardando' });
+  assert.deepEqual(escopoDoEstoque(''), { tipo: 'aguardando' });
+});
+
+test('a soma junta variações e unidades do mesmo produto', () => {
+  const t = somarEstoquePorProduto([
+    { produto_id: 1, quantidade: 3 },
+    { produto_id: 1, quantidade: 4 },
+    { produto_id: 2, quantidade: 0 },
+    { produto_id: 1, quantidade: null },
+  ]);
+  assert.equal(t.get(1), 7);
+  assert.equal(t.get(2), 0);
+  assert.equal(t.get(3), undefined);
+});
+
+test('🔴 a aba Produtos faz UMA consulta de estoque, não uma por produto', () => {
+  assert.doesNotMatch(produtosTab, /'todos' \? unidadeId : unidadeId/u, 'o ternário de ramos iguais voltou');
+  assert.doesNotMatch(produtosTab, /prods\.map\(async/u, 'uma consulta por produto de novo');
+  assert.match(produtosTab, /escopoDoEstoque\(unidadeId\)/u);
+  assert.match(produtosTab, /somarEstoquePorProduto\(estoque \?\? \[\]\)/u);
+  assert.match(produtosTab, /if \(escopo\.tipo !== 'aguardando'\)/u, 'sem unidade carregada consultaria a rede inteira');
+});
+
+test('🔴 falha no estoque aparece — não vira "estoque zero" em silêncio', () => {
+  const bloco = produtosTab.slice(produtosTab.indexOf('const { data: estoque, error: erroEstoque }'));
+  assert.match(bloco, /if \(erroEstoque\)/u);
+  assert.match(bloco, /console\.error\(`\[TabProdutos\] estoque/u);
+  assert.match(bloco, /toast\.error\(/u);
+  // O `tsc` do projeto não checa tipos (para nos erros de sintaxe de dois
+  // arquivos alheios), e foi assim que um `toast` sem import passou em
+  // 29/09/2026. Este assert é a trava que o compilador não está sendo.
+  assert.match(produtosTab, /^import \{ toast \} from 'sonner';$/mu, 'toast usado sem import');
+});
