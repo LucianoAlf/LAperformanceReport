@@ -148,7 +148,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 // v34 (2026-08-13): matricula_alterada passa a reconciliar a grade futura do aluno
 // (edge reconciliar-grade-aluno). Fecha o buraco em que mudar a data da 1a aula
 // deixava a aula do dia antigo viva na Agenda para sempre.
-const VERSAO = 'v35';
+const VERSAO = 'v36';
 const EVENTOS_JORNADA_CANONICA = new Set([
   'matricula_nova',
   'matricula_renovacao',
@@ -1999,16 +1999,44 @@ async function handleAvisoPrevio(supabase: any, p: Payload) {
       .limit(1)
       .maybeSingle();
 
+    // Avisos lançados à mão antes de 03/08 (ou sem webhook) não têm emusys_aviso_previo_id:
+    // é a única forma de casar remoção/edição com eles. Só vale com UM candidato — dois avisos
+    // abertos do mesmo aluno e adivinhar qual mexer apagaria/alteraria o errado.
+    const avisosManuaisAbertos = async (): Promise<{ id: number }[]> => {
+      const { data, error } = await supabase.from('movimentacoes_admin')
+        .select('id')
+        .eq('tipo', 'aviso_previo')
+        .eq('aluno_id', aluno.id)
+        .eq('anulado', false)
+        .is('emusys_aviso_previo_id', null)
+        .limit(3);
+      if (error) throw new Error(`buscar aviso manual do aluno ${aluno.id}: ${error.message}`);
+      return data ?? [];
+    };
+
     if (p.evento === 'matricula_aviso_previo_removido') {
-      if (!existente?.id) {
-        const result = { action: 'aviso_previo_remocao_sem_registro', aluno_id: aluno.id };
-        await gravarLog(supabase, { ...logBase, acao: result.action, aluno_id: aluno.id, invariantes: [], detalhes: { ...result, version: VERSAO } });
-        return result;
+      let alvoId: number | null = existente?.id ?? null;
+      let matchedVia = 'emusys_aviso_previo_id';
+      if (!alvoId) {
+        const manuais = await avisosManuaisAbertos();
+        if (manuais.length === 1) {
+          alvoId = manuais[0].id;
+          matchedVia = 'aviso_manual_unico';
+        } else {
+          const result = { action: 'aviso_previo_remocao_sem_registro', aluno_id: aluno.id };
+          await gravarLog(supabase, { ...logBase, acao: result.action, aluno_id: aluno.id, invariantes: [], detalhes: { ...result, version: VERSAO, emusys_aviso_previo_id: p.avisoPrevioId, candidatos_manuais: manuais.map((m) => m.id) } });
+          return result;
+        }
       }
-      // O aviso deixou de existir na fonte (tipicamente o aluno desistiu de sair) — remove
-      // a linha para nao inflar os KPIs de aviso previo. O DELETE fica auditado pelo trg_audit.
-      await supabase.from('movimentacoes_admin').delete().eq('id', existente.id);
-      const result = { action: 'aviso_previo_removido', aluno_id: aluno.id, movimentacao_id: existente.id };
+      // O aviso deixou de existir na fonte (tipicamente o aluno desistiu de sair). Vai para a
+      // lixeira oficial (movimentacoes_admin_arquivadas, com motivo e data) e sai das listas e
+      // dos KPIs de aviso previo — nao e mais DELETE fisico sem copia. Mesma RPC das telas.
+      const { error: erroArquivar } = await supabase.rpc('arquivar_movimentacao_admin', {
+        p_id: alvoId,
+        p_motivo: `Aviso removido no Emusys — o aluno desistiu de sair (webhook ${p.rawPayload?.id ?? '?'}, aviso ${p.avisoPrevioId}).`,
+      });
+      if (erroArquivar) throw new Error(`arquivar aviso ${alvoId} (aluno ${aluno.id}): ${erroArquivar.message}`);
+      const result = { action: 'aviso_previo_removido', aluno_id: aluno.id, movimentacao_id: alvoId, matched_via: matchedVia };
       await gravarLog(supabase, { ...logBase, acao: result.action, aluno_id: aluno.id, invariantes: [], detalhes: { ...result, version: VERSAO } });
       return result;
     }
@@ -2056,10 +2084,27 @@ async function handleAvisoPrevio(supabase: any, p: Payload) {
     }] : [];
 
     if (existente?.id) {
-      await supabase.from('movimentacoes_admin').update(camposAviso).eq('id', existente.id);
+      const { error: erroUpd } = await supabase.from('movimentacoes_admin').update(camposAviso).eq('id', existente.id);
+      if (erroUpd) throw new Error(`atualizar aviso ${existente.id} (aluno ${aluno.id}): ${erroUpd.message}`);
       const result = { action: 'aviso_previo_atualizado', aluno_id: aluno.id, movimentacao_id: existente.id, matched_via: found.fonte, mes_saida: mesSaida };
       await gravarLog(supabase, { ...logBase, acao: result.action, aluno_id: aluno.id, invariantes: invariantesData, detalhes: { ...result, version: VERSAO, emusys_matricula_id: p.matriculaIdEmusys, data_prevista_fonte: dataPrevistaFonte, data_prevista_aceita: dataPrevista } });
       return result;
+    }
+
+    // Edição de aviso lançado à mão (sem id Emusys): a data de saída mudou, então a adoção por
+    // aluno+mes_saida abaixo NÃO casaria e nasceria uma duplicata ao lado do manual. Com UM
+    // aviso manual aberto do aluno, é ele — adota e atualiza a data.
+    if (p.evento === 'matricula_aviso_previo_editado') {
+      const manuais = await avisosManuaisAbertos();
+      if (manuais.length === 1) {
+        const { error: erroAdocao } = await supabase.from('movimentacoes_admin')
+          .update({ ...camposAviso, emusys_aviso_previo_id: p.avisoPrevioId })
+          .eq('id', manuais[0].id);
+        if (erroAdocao) throw new Error(`adotar aviso manual ${manuais[0].id} na edição (aluno ${aluno.id}): ${erroAdocao.message}`);
+        const result = { action: 'aviso_previo_adotado', aluno_id: aluno.id, movimentacao_id: manuais[0].id, matched_via: 'edicao_aviso_manual_unico', mes_saida: mesSaida };
+        await gravarLog(supabase, { ...logBase, acao: result.action, aluno_id: aluno.id, invariantes: invariantesData, detalhes: { ...result, version: VERSAO, emusys_matricula_id: p.matriculaIdEmusys, data_prevista_fonte: dataPrevistaFonte, data_prevista_aceita: dataPrevista } });
+        return result;
+      }
     }
 
     // Adocao: se a escola registrou o mesmo aviso manualmente (mesmo aluno+mes_saida, sem id
