@@ -1,6 +1,6 @@
 // Edge Function: professor-360-whatsapp
 // Envia notificação via WhatsApp quando uma ocorrência 360° é registrada
-// Integração com UAZAPI
+// Enfileira para a Sol enviar pelo número dela (ver bloco "Envio pelo número da Sol")
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -131,86 +131,58 @@ function montarMensagem(dados: NotificacaoPayload): string {
   return mensagem;
 }
 
-// Faz UMA tentativa de envio. Retorna se foi sucesso e se o erro é transitório (vale retry).
-async function tentarEnvio(
-  formattedPhone: string,
-  mensagem: string,
-  creds: WhatsAppCreds
-): Promise<{ success: boolean; messageId?: string; error?: string; retryable: boolean }> {
+// Envio pelo número da Sol (desde 30/09/2026).
+// A Sol V2 fala pela ponte WhatsApp do Hermes na VPS la-hq, que só escuta em
+// 127.0.0.1 — a edge não alcança. Então a edge ENFILEIRA em
+// fila_relatorios_sol_hermes e o worker da Sol (cron de 1 min) envia por DM,
+// sem fallback para outro número (metadata.rota = 'dm_sol').
+// A caixa antiga "Sol" (WAHA) morreu em 27/07 com a migração, e era por ela
+// que este envio saía — daí o erro "Session PAUSED_SOL_V2_… does not exist".
+const CAIXA_CONSULTA_NUMERO = 3; // Lia (UAZAPI): usada só para CONSULTAR o número, nunca envia.
+
+// Resolve o JID real do número no WhatsApp. Conta antiga do DDD 21 pode ter
+// o JID sem o 9º dígito, e a ponte da Sol não corrige: mandar para o JID
+// errado "sai" sem erro e não chega. Falha da consulta não bloqueia: segue
+// com o número formatado e registra que não foi conferido.
+async function resolverJid(
+  telefone: string,
+  creds: WhatsAppCreds | null
+): Promise<{ jid: string | null; conferido: boolean; semWhatsApp: boolean; motivo?: string }> {
+  const numero = formatPhoneNumber(telefone);
+  const jidPadrao = `${numero}@s.whatsapp.net`;
+  if (!creds || !creds.baseUrl || !creds.token) {
+    return { jid: jidPadrao, conferido: false, semWhatsApp: false, motivo: 'sem_credencial_de_consulta' };
+  }
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-    let response: Response;
-    if (creds.provedor === 'waha') {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (creds.wahaApiKey) headers['X-Api-Key'] = creds.wahaApiKey;
-      response = await fetch(`${creds.wahaUrl}/api/sendText`, {
-        method: 'POST', headers,
-        body: JSON.stringify({ session: creds.wahaSession, chatId: `${formattedPhone}@c.us`, text: mensagem }),
-        signal: controller.signal,
-      });
-    } else {
-      response = await fetch(`${creds.baseUrl}/send/text`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'token': creds.token },
-        body: JSON.stringify({ number: formattedPhone, text: mensagem, delay: 0, readchat: true }),
-        signal: controller.signal,
-      });
-    }
-
+    const resp = await fetch(`${creds.baseUrl}/chat/check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'token': creds.token },
+      body: JSON.stringify({ numbers: [numero] }),
+      signal: controller.signal,
+    });
     clearTimeout(timeoutId);
-
-    const data = await response.json().catch(() => ({}));
-
-    if (response.ok && !data.error) {
-      return { success: true, messageId: data.id || data.messageid || data.key?.id, retryable: false };
+    const data = await resp.json().catch(() => null);
+    const r = Array.isArray(data) ? data[0] : null;
+    if (!resp.ok || !r) {
+      return { jid: jidPadrao, conferido: false, semWhatsApp: false, motivo: `consulta_http_${resp.status}` };
     }
-
-    const errorMsg = (typeof data.error === 'string' ? data.error : null) || data.message || JSON.stringify(data);
-    // Erros 5xx (inclui o "463" transitório do whatsmeow) e 429 são transitórios → vale retry.
-    // 4xx (exceto 429) é erro do request (número inválido etc) → não adianta repetir.
-    const retryable = response.status >= 500 || response.status === 429;
-    return { success: false, error: errorMsg, retryable };
+    if (r.isInWhatsapp === false) {
+      return { jid: null, conferido: true, semWhatsApp: true };
+    }
+    if (typeof r.jid === 'string' && r.jid.endsWith('@s.whatsapp.net')) {
+      return { jid: r.jid, conferido: true, semWhatsApp: false };
+    }
+    return { jid: jidPadrao, conferido: false, semWhatsApp: false, motivo: 'consulta_sem_jid' };
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      return { success: false, error: 'Timeout: WhatsApp não respondeu em 10s', retryable: true };
-    }
-    return { success: false, error: `Conexão: ${error instanceof Error ? error.message : 'Erro desconhecido'}`, retryable: true };
+    return {
+      jid: jidPadrao,
+      conferido: false,
+      semWhatsApp: false,
+      motivo: `consulta_falhou: ${error instanceof Error ? error.message : String(error)}`,
+    };
   }
-}
-
-async function enviarWhatsApp(
-  telefone: string,
-  mensagem: string,
-  creds: WhatsAppCreds
-): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const formattedPhone = formatPhoneNumber(telefone);
-  const MAX_TENTATIVAS = 3;
-
-  console.log(`[professor-360-whatsapp] Enviando para: ${formattedPhone}`);
-
-  let ultimoErro = 'Falha desconhecida';
-
-  for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
-    const r = await tentarEnvio(formattedPhone, mensagem, creds);
-
-    if (r.success) {
-      console.log(`[professor-360-whatsapp] Mensagem enviada (tentativa ${tentativa})! ID: ${r.messageId}`);
-      return { success: true, messageId: r.messageId };
-    }
-
-    ultimoErro = r.error || ultimoErro;
-    console.error(`[professor-360-whatsapp] Falha (tentativa ${tentativa}/${MAX_TENTATIVAS}): ${ultimoErro}`);
-
-    // Erro definitivo (não-transitório) ou última tentativa → desiste.
-    if (!r.retryable || tentativa === MAX_TENTATIVAS) break;
-
-    // Backoff progressivo antes de tentar de novo (1.5s, 3s).
-    await new Promise((res) => setTimeout(res, tentativa * 1500));
-  }
-
-  return { success: false, error: `${ultimoErro} (após ${MAX_TENTATIVAS} tentativas)` };
 }
 
 serve(async (req) => {
@@ -260,40 +232,75 @@ serve(async (req) => {
     );
   }
 
-  // 5. Buscar credenciais UAZAPI
-  let creds;
-  try {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    );
-    creds = await getWhatsAppCredentials(supabase, { funcao: 'sistema' });
-  } catch (error) {
-    console.error('[professor-360-whatsapp] Erro ao buscar credenciais UAZAPI:', error);
-    return new Response(
-      JSON.stringify({ success: false, error: 'WhatsApp não configurado: nenhuma caixa UAZAPI ativa encontrada' }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
+  // 5. Resolver o JID do professor e enfileirar para a Sol enviar
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  );
+  const numeroFormatado = formatPhoneNumber(payload.professorWhatsApp);
 
-  // 6. Montar e enviar mensagem
   try {
-    const mensagem = montarMensagem(payload);
-    const resultado = await enviarWhatsApp(payload.professorWhatsApp, mensagem, creds);
-
-    if (resultado.success) {
-      console.log(`[professor-360-whatsapp] Sucesso: ${payload.professorNome} (${payload.tipoOcorrencia})`);
-    } else {
-      console.error(`[professor-360-whatsapp] Falha ao enviar para ${payload.professorNome}: ${resultado.error}`);
+    let credsConsulta: WhatsAppCreds | null = null;
+    try {
+      credsConsulta = await getWhatsAppCredentials(supabase, { caixaId: CAIXA_CONSULTA_NUMERO });
+      if (credsConsulta.caixaId !== CAIXA_CONSULTA_NUMERO) credsConsulta = null;
+    } catch (error) {
+      console.error(`[professor-360-whatsapp] Caixa de consulta ${CAIXA_CONSULTA_NUMERO} indisponível:`, error);
     }
 
+    const destino = await resolverJid(payload.professorWhatsApp, credsConsulta);
+    if (destino.semWhatsApp) {
+      console.error(`[professor-360-whatsapp] ${payload.professorNome}: número ${numeroFormatado} não tem WhatsApp`);
+      return new Response(
+        JSON.stringify({ success: false, error: `O número ${numeroFormatado} não tem WhatsApp. Confira o cadastro do professor.` }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    if (!destino.conferido) {
+      console.warn(`[professor-360-whatsapp] ${payload.professorNome}: JID não conferido (${destino.motivo}), usando ${destino.jid}`);
+    }
+
+    const mensagem = montarMensagem(payload);
+    const { data: fila, error: filaError } = await supabase
+      .from('fila_relatorios_sol_hermes')
+      .insert({
+        tipo_relatorio: 'professor_360',
+        origem: 'professor-360-whatsapp',
+        unidade_nome: payload.unidadeNome || 'Sem unidade',
+        jid: destino.jid,
+        grupo_nome: `DM ${payload.professorNome}`,
+        texto: mensagem,
+        metadata: {
+          rota: 'dm_sol',
+          professor_nome: payload.professorNome,
+          tipo_ocorrencia: payload.tipoOcorrencia,
+          tipo_categoria: payload.tipoCategoria || 'penalidade',
+          data_ocorrencia: payload.dataOcorrencia,
+          registrado_por: payload.registradoPor,
+          jid_conferido: destino.conferido,
+          jid_motivo: destino.motivo ?? null,
+        },
+      })
+      .select('id')
+      .single();
+
+    if (filaError || !fila) {
+      const msg = filaError?.message || 'insert sem retorno';
+      console.error(`[professor-360-whatsapp] Falha ao enfileirar para ${payload.professorNome} (${destino.jid}): ${msg}`);
+      return new Response(
+        JSON.stringify({ success: false, error: `Não consegui enfileirar a mensagem: ${msg}` }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`[professor-360-whatsapp] Enfileirado fila_id=${fila.id}: ${payload.professorNome} (${payload.tipoOcorrencia}) -> ${destino.jid}`);
     return new Response(
-      JSON.stringify(resultado),
+      JSON.stringify({ success: true, enfileirado: true, filaId: fila.id }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error(`[professor-360-whatsapp] Erro inesperado ao enviar para ${payload.professorNome}:`, errorMsg);
+    console.error(`[professor-360-whatsapp] Erro inesperado para ${payload.professorNome} (${numeroFormatado}):`, errorMsg);
     return new Response(
       JSON.stringify({ success: false, error: `Erro interno: ${errorMsg}` }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
