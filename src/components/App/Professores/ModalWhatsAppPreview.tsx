@@ -183,7 +183,8 @@ Em caso de dúvidas, procure a coordenação.`;
           : `Erro ao enviar: ${error.message || 'Falha na conexão com o servidor'}`;
         toast.error(msg);
       } else if (resultado?.success) {
-        toast.success(`Mensagem enviada para ${professorNome.split(' ')[0]} via WhatsApp!`);
+        // A edge só enfileira: quem envia é a Sol, pelo número dela, em até ~1 minuto.
+        toast.success(`Mensagem na fila: ${professorNome.split(' ')[0]} recebe pelo WhatsApp da Sol em até 1 minuto.`);
         onOpenChange(false);
       } else {
         console.error('[WhatsApp 360°] Falha no envio:', resultado?.error);
