@@ -587,6 +587,8 @@ export interface ApresentacaoDaGrade {
   detalhes_origem: 'adm' | 'professor';
   professor: SnapshotDoProfessor | null;
   professor_em: string | null;
+  /** Professor mexeu na música ou no palco depois de enviar — a grade mostra o selo. */
+  editado_apos_envio_em: string | null;
   observacao_mapa: string | null;
   /** Um certificado por CURSO (decisao do Alf, 27/09): o grao e a apresentacao. */
   certificado_status: 'pendente' | 'emitido';
@@ -635,7 +637,8 @@ export function useGradeDoEvento(eventoId: number | null) {
         .select(
           'id, bloco_id, aluno_id, pessoa_chave, curso_id, ordem, grupo_id, musica, musica_artista,' +
             ' duracao_segundos, tem_playback, musica_link, playback_path, detalhes_origem,' +
-            ' professor, professor_em, certificado_status, certificado_em,' +
+            ' professor, professor_em, editado_apos_envio_em,' +
+            ' certificado_status, certificado_em,' +
             ' observacao_mapa, alunos(nome, data_nascimento), cursos(nome),' +
             ' professores!evento_apresentacao_professor_id_fkey(nome),' +
             // Itens embutidos em vez de uma segunda leitura: aqui a FK existe
@@ -1096,6 +1099,68 @@ export function useRelatoriosDoEvento(eventoId: number | null) {
   }, [recarregar]);
 
   return { relatorios, loading, erro, recarregar };
+}
+
+/* ─── toca junto (pedido do professor no LA Teacher, decisao da coordenacao) ─── */
+
+/** Um pedido de "toca junto" — a linha da `evento_toca_junto_lista_v1`. */
+export interface PedidoTocaJunto {
+  id: number;
+  status: 'pedido' | 'confirmado' | 'recusado' | 'cancelado';
+  aluno_id: number;
+  aluno_nome: string;
+  curso_chave: string;
+  /** null = a apresentacao do aluno ainda nao existe na grade. */
+  apresentacao_id: number | null;
+  com_aluno_id: number;
+  com_aluno_nome: string;
+  com_curso_chave: string;
+  com_apresentacao_id: number | null;
+  pedido_por_professor_id: number | null;
+  pedido_por_professor_nome: string | null;
+  pedido_em: string;
+  decidido_por: string | null;
+  decidido_em: string | null;
+  motivo: string | null;
+}
+
+/** Pedidos do evento, todos os status — a grade filtra 'pedido' na hora de exibir. */
+export function useTocaJunto(eventoId: number | null) {
+  const [pedidos, setPedidos] = useState<PedidoTocaJunto[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const recarregar = useCallback(async () => {
+    if (!eventoId) {
+      setPedidos([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const { data, error } = await supabase.rpc('evento_toca_junto_lista_v1', {
+      p_evento_id: eventoId,
+    });
+    if (!error) setPedidos((data ?? []) as PedidoTocaJunto[]);
+    setLoading(false);
+  }, [eventoId]);
+
+  useEffect(() => {
+    recarregar();
+  }, [recarregar]);
+
+  return { pedidos, loading, recarregar };
+}
+
+/**
+ * Decide um pedido. Aprovar junta na grade PRIMEIRO (`evento_apresentacao_juntar_v1`)
+ * e só confirma no LA Teacher se a junção funcionar — a RPC é atômica, uma falha
+ * desfaz os dois lados e o pedido continua 'pedido'. Recusar exige motivo.
+ */
+export async function decidirTocaJunto(pedidoId: number, aprovar: boolean, motivo?: string) {
+  return supabase.rpc('evento_toca_junto_decidir_v1', {
+    p_pedido_id: pedidoId,
+    p_aprovar: aprovar,
+    p_motivo: motivo ?? null,
+  });
 }
 
 /**

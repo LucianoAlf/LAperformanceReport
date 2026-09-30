@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-28 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-30 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — gestao
 
-48 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+51 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## bi_agent_config_lamusic
 
@@ -635,6 +635,22 @@
 **Únicos:**
 - `relatorio_anual_historico_pkey`
 
+## relatorio_anual_item_palco
+
+> Catálogo do palco do recital (rider). id = o que vai em relatorio_anual.rider.itens. Fonte: palco.ts do la-teacher (teste confere). O LA Report lê nome e tipo daqui.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | text | não |  |  |
+| `rotulo` | text | não |  |  |
+| `gaveta` | text | não |  |  |
+| `tipo` | text | não |  |  |
+| `ordem` | integer | não |  |  |
+| `ativo` | boolean | não | true |  |
+
+**Únicos:**
+- `relatorio_anual_item_palco_pkey`
+
 ## relatorio_anual_revisor
 
 | Coluna | Tipo | Nulo | Default | Referência |
@@ -651,6 +667,29 @@
 
 **Triggers:**
 - `trg_relatorio_anual_revisor_valida → fn_relatorio_anual_revisor_valida()`
+
+## relatorio_anual_toca_junto
+
+> Pedido do professor: estes dois alunos tocam juntos no recital. A coordenação confere no LA Report (relatorio_anual_toca_junto_decidir_v1).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `evento_id` | bigint | não |  | evento.id |
+| `aluno_id` | integer | não |  |  |
+| `curso_chave` | text | não |  |  |
+| `com_aluno_id` | integer | não |  |  |
+| `com_curso_chave` | text | não |  |  |
+| `pedido_por_professor_id` | integer | sim |  | professores.id |
+| `pedido_em` | timestamp with time zone | não | now() |  |
+| `status` | text | não | 'pedido'::text |  |
+| `decidido_por` | text | sim |  |  |
+| `decidido_em` | timestamp with time zone | sim |  |  |
+| `motivo` | text | sim |  |  |
+
+**Únicos:**
+- `relatorio_anual_toca_junto_pkey`
+- `uq_toca_junto_par_aberto`
 
 ## relatorio_equipe_unidade
 
@@ -1145,6 +1184,33 @@
 | `rider_nada` | boolean | sim |  |  |
 | `musica_lancada_em` | timestamp with time zone | sim |  |  |
 | `atualizado_em` | timestamp with time zone | sim |  |  |
+| `rider_quantidades` | jsonb | sim |  |  |
+| `rider_extras` | jsonb | sim |  |  |
+| `editado_apos_envio_em` | timestamp with time zone | sim |  |  |
+
+## vw_relatorio_anual_toca_junto_v1
+
+> Contrato LA Teacher -> LA Report (30/09): pedidos de "tocam juntos". apresentacao_id/com_apresentacao_id = a apresentação na grade, quando existe. Só service_role.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | sim |  |  |
+| `evento_id` | bigint | sim |  |  |
+| `status` | text | sim |  |  |
+| `aluno_id` | integer | sim |  |  |
+| `aluno_nome` | character varying(200) | sim |  |  |
+| `curso_chave` | text | sim |  |  |
+| `apresentacao_id` | bigint | sim |  |  |
+| `com_aluno_id` | integer | sim |  |  |
+| `com_aluno_nome` | character varying(200) | sim |  |  |
+| `com_curso_chave` | text | sim |  |  |
+| `com_apresentacao_id` | bigint | sim |  |  |
+| `pedido_por_professor_id` | integer | sim |  |  |
+| `pedido_por_professor_nome` | character varying(100) | sim |  |  |
+| `pedido_em` | timestamp with time zone | sim |  |  |
+| `decidido_por` | text | sim |  |  |
+| `decidido_em` | timestamp with time zone | sim |  |  |
+| `motivo` | text | sim |  |  |
 
 ## vw_sazonalidade
 

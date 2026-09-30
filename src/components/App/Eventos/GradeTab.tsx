@@ -34,6 +34,8 @@ import {
   Play,
   Unlink,
   UserPlus,
+  Check,
+  Users,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -73,6 +75,9 @@ import {
   reordenarBlocos as reordenarBlocos_rpc,
   sincronizarRecital,
   criarUrlDePlayback,
+  useTocaJunto,
+  decidirTocaJunto,
+  type PedidoTocaJunto,
   type ApresentacaoDaGrade,
   type BlocoDaGrade,
   type EventoComResumo,
@@ -99,6 +104,106 @@ function TrocaDePalco({ termina, segundos }: { termina: string | null; segundos:
         {formatarDuracao(segundos)} de troca de palco
       </span>
       <span className="h-px flex-1 bg-slate-700/60" />
+    </div>
+  );
+}
+
+/**
+ * Fila de pedidos "toca junto" que os professores fizeram no LA Teacher.
+ *
+ * Aprovar junta os dois no mesmo número da grade e confirma o pedido numa RPC só —
+ * se a junção falhar (um deles já está em grupo), a transação desfaz e o pedido
+ * continua 'pedido' para a coordenação resolver. Recusar exige um motivo, que vai
+ * de volta para o professor ler no app dele.
+ */
+function FilaTocaJunto({ eventoId, onMudou }: { eventoId: number; onMudou: () => void }) {
+  const { pedidos, loading, recarregar } = useTocaJunto(eventoId);
+  const [decidindo, setDecidindo] = useState<number | null>(null);
+  const pendentes = pedidos.filter((p) => p.status === 'pedido');
+
+  if (loading || pendentes.length === 0) return null;
+
+  const decidir = async (pedido: PedidoTocaJunto, aprovar: boolean) => {
+    let motivo: string | undefined;
+    if (!aprovar) {
+      const texto = window.prompt(
+        `Motivo da recusa — ${pedido.aluno_nome} com ${pedido.com_aluno_nome}:`,
+      );
+      if (texto === null || texto.trim() === '') return;
+      motivo = texto.trim();
+    }
+    setDecidindo(pedido.id);
+    const { error } = await decidirTocaJunto(pedido.id, aprovar, motivo);
+    setDecidindo(null);
+    if (error) {
+      // TOCA_JUNTO_SEM_APRESENTACAO = um dos dois ainda não está na grade — criar a
+      // apresentação (ou recusar com motivo). As demais mensagens já vêm prontas do banco.
+      const msg =
+        error.message === 'TOCA_JUNTO_SEM_APRESENTACAO'
+          ? 'Um dos dois ainda não tem apresentação na grade — adicione antes de aprovar, ou recuse.'
+          : error.message;
+      toast.error(`Não consegui ${aprovar ? 'confirmar' : 'recusar'}: ${msg}`);
+      return;
+    }
+    toast.success(
+      aprovar
+        ? `${pedido.aluno_nome} e ${pedido.com_aluno_nome} agora tocam juntos no mesmo número`
+        : 'Pedido recusado',
+    );
+    recarregar();
+    // Aprovar mexeu na grade (o juntar) — recarrega as apresentações também.
+    if (aprovar) onMudou();
+  };
+
+  return (
+    <div className="rounded-xl border border-violet-500/40 bg-violet-500/5 px-3 py-2.5">
+      <p className="flex items-center gap-1.5 text-[12px] font-medium text-violet-300">
+        <Users className="h-3.5 w-3.5" />
+        {pendentes.length === 1
+          ? '1 pedido de tocar junto'
+          : `${pendentes.length} pedidos de tocar junto`}
+        <span className="font-normal text-violet-300/70">— professores pediram no LA Teacher</span>
+      </p>
+      <ul className="mt-2 space-y-1.5">
+        {pendentes.map((p) => (
+          <li key={p.id} className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[12.5px]">
+            <span className="text-white">
+              <span className="font-medium">{p.aluno_nome}</span>
+              <span className="text-slate-400"> ({p.curso_chave})</span>
+              <span className="text-slate-400"> toca com </span>
+              <span className="font-medium">{p.com_aluno_nome}</span>
+              <span className="text-slate-400"> ({p.com_curso_chave})</span>
+            </span>
+            {p.pedido_por_professor_nome && (
+              <span className="text-[11px] text-slate-500">
+                Prof. {p.pedido_por_professor_nome}
+              </span>
+            )}
+            <span className="ml-auto flex items-center gap-1.5">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 gap-1 border-emerald-500/40 px-2 text-[11px] text-emerald-300 hover:bg-emerald-500/10"
+                disabled={decidindo === p.id}
+                onClick={() => decidir(p, true)}
+              >
+                <Check className="h-3 w-3" />
+                aprovar
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 gap-1 border-rose-500/40 px-2 text-[11px] text-rose-300 hover:bg-rose-500/10"
+                disabled={decidindo === p.id}
+                onClick={() => decidir(p, false)}
+              >
+                <X className="h-3 w-3" />
+                recusar
+              </Button>
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -141,6 +246,16 @@ function LinhaIntegrante({
                 title="Relatório do LA Teacher lançado"
               >
                 prof. lançou
+              </span>
+            )}
+            {/* O professor pode mexer na música e no palco depois de enviar — o selo avisa
+                que vale uma conferida antes de aprovar ou imprimir. */}
+            {apresentacao.editado_apos_envio_em && (
+              <span
+                className="rounded bg-amber-500/15 px-1.5 py-px text-[10.5px] text-amber-300"
+                title={`Editado em ${new Date(apresentacao.editado_apos_envio_em).toLocaleString('pt-BR')}`}
+              >
+                editou após envio
               </span>
             )}
             {apresentacao.certificado_status === 'emitido' && (
@@ -1050,6 +1165,10 @@ export function GradeTab({ evento }: { evento: EventoComResumo }) {
           </Button>
         </div>
       </div>
+
+      {/* Pedidos de toca junto pendentes — ficam em cima da grade porque cada aprovação
+          muda a grade embaixo (o juntar). Sem pedido o componente some sozinho. */}
+      <FilaTocaJunto eventoId={evento.id} onMudou={recarregar} />
 
       {loading && blocos.length === 0 ? (
         <p className="p-8 text-center text-sm text-slate-400">Carregando grade…</p>

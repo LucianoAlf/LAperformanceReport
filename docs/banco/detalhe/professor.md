@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-29 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-30 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — professor
 
-158 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+159 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## anotacoes
 
@@ -422,6 +422,26 @@
 - `fabio_audios_parqueados_pkey`
 - `uq_fabio_audio_parqueado_mensagem`
 
+## fabio_bom_dia_legado_barrado
+
+> Tentativas de gravar o bom-dia no formato antigo (☆ Aluno(a):) no canal app, barradas em 30/09/2026. Serve para achar quem ainda manda.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `quando` | timestamp with time zone | não | now() |  |
+| `tabela` | text | não |  |  |
+| `professor_id` | integer | sim |  |  |
+| `usuario_banco` | text | sim |  |  |
+| `aplicacao` | text | sim |  |  |
+| `endereco` | inet | sim |  |  |
+| `consulta` | text | sim |  |  |
+| `jwt_role` | text | sim |  |  |
+| `inicio` | text | sim |  |  |
+
+**Únicos:**
+- `fabio_bom_dia_legado_barrado_pkey`
+
 ## fabio_canario_execucao
 
 > Prova periodica de que um caminho de ESCRITA ainda funciona. Cada linha e uma corrida que escreveu de verdade e LEU DE VOLTA. `passou=false` e defeito; ausencia de linha e o canario que parou -- os dois sao alarme.
@@ -465,6 +485,9 @@
 **Únicos:**
 - `fabio_chat_mensagens_pkey`
 - `fcm_wa_msg_uq`
+
+**Triggers:**
+- `trg_fabio_barrar_bom_dia_legado → fn_fabio_barrar_bom_dia_legado()`
 
 ## fabio_correcao
 
@@ -865,6 +888,9 @@
 - `uq_fabio_notif_por_referencia`
 - `uq_fabio_notif_recorrente_diario`
 - `uq_fabio_notificacoes_registro_recibo_unico`
+
+**Triggers:**
+- `trg_fabio_barrar_bom_dia_legado → fn_fabio_barrar_bom_dia_legado()`
 
 ## fabio_novidade_envio
 
@@ -1431,9 +1457,9 @@
 | `id` | uuid | não | gen_random_uuid() |  |
 | `snapshot_metrica_id` | uuid | não |  | health_score_professor_v3_snapshot_metricas.id |
 | `config_meta_segmento_id` | uuid | sim |  | health_score_professor_v3_config_metas_curso_modalidade.id |
-| `unidade_id` | uuid | não |  | health_score_professor_v3_config_metas_curso_modalidade.unidade_id |
+| `unidade_id` | uuid | não |  | unidades.id |
 | `curso_id` | integer | não |  | health_score_professor_v3_config_metas_curso_modalidade.curso_id |
-| `modalidade` | text | não |  | professor_unidade_curso_modalidade.modalidade |
+| `modalidade` | text | não |  | health_score_professor_v3_config_metas_curso_modalidade.modalidade |
 | `pessoas_unicas` | integer | não | 0 |  |
 | `vinculos_ativos` | integer | não | 0 |  |
 | `turmas_elegiveis` | integer | não | 0 |  |
@@ -2503,6 +2529,7 @@
 | `whatsapp_confirmado_em` | timestamp with time zone | sim |  |  |
 | `temperamento_codinome` | character varying | sim |  |  |
 | `mesclado_em_professor_id` | integer | sim |  | professores.id |
+| `email_google` | text | sim |  |  |
 
 **Únicos:**
 - `professores_pkey`

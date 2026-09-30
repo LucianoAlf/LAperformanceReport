@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-29 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-30 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — aluno
@@ -1199,6 +1199,7 @@
 | `unidade_origem_id` | uuid | sim |  | unidades.id |
 | `professor_palco_id` | integer | sim |  | professores.id |
 | `professor_apoio_id` | integer | sim |  | professores.id |
+| `editado_apos_envio_em` | timestamp with time zone | sim |  |  |
 
 **Únicos:**
 - `evento_apresentacao_pessoa_curso_unica`
@@ -2318,7 +2319,7 @@
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
 | `id` | uuid | não | gen_random_uuid() |  |
-| `pesquisa_id` | uuid | sim |  | pesquisa_evasao.id |
+| `pesquisa_id` | uuid | sim |  | pesquisa_evasao_analises.pesquisa_id |
 | `caixa_id` | integer | não |  | whatsapp_caixas.id |
 | `direcao` | text | não |  |  |
 | `provider_message_id` | text | sim |  |  |
