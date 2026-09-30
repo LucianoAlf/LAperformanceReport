@@ -6,8 +6,10 @@
 //     com os e-mails da equipe (evento_sheets_destino.emails_equipe) — a pasta
 //     da unidade so tem o dono, heranca NAO basta;
 //   - Planilha do PROFESSOR (aba "Meus alunos" + Pendencias) dentro da pasta
-//     dele — a pasta e criada quando falta e o share vai para usuarios.email
-//     do professor como LEITOR. Sem e-mail -> status 'sem_email' + alerta no
+//     dele — ferramenta do ADMINISTRATIVO, nao do professor (ele so usa o LA
+//     Teacher). Por isso nao exige e-mail do professor: a planilha e criada
+//     para todo professor ativo com alunos na grade e o share vai para os
+//     e-mails da equipe (evento_sheets_destino.emails_equipe), como a geral.
 //     automacao_log (nunca falha em silencio);
 //   - Planilhas protegidas (so o dono do Drive edita; equipe/professor leem).
 //
@@ -361,18 +363,20 @@ serve(async (req: Request) => {
       )] as number[];
       const { data: profs } = profIds.length
         ? await service.from('professores')
-            .select('id, nome, nome_preferido, usuario_id, email_google, usuarios:usuario_id(email)')
+            .select('id, nome, nome_preferido, email_google, usuarios:usuario_id(email)')
             .in('id', profIds)
+            .eq('ativo', true)
         : { data: [] };
       const profPorId = new Map((profs ?? []).map((p: any) => [p.id, p]));
 
       for (const profId of profIds) {
         const prof = profPorId.get(profId);
-        const nomeProf = prof?.nome_preferido || prof?.nome || `Professor ${profId}`;
-        // compartilhamento do Drive exige conta Google: prefere o email_google
-        // do cadastro (a maioria nao tem usuario; quem tem usa @la.internal,
-        // login sintetico que o Drive nao aceita — trata como sem_email)
-        const emailBruto = (prof?.email_google || prof?.usuarios?.email || '').trim();
+        // Professor inativo/mesclado (ex.: 676, fundido no 8) nao ganha planilha —
+        // e professor sem e-mail tambem ganha: quem le e o administrativo, nao ele.
+        if (!prof) continue;
+        const nomeProf = prof.nome_preferido || prof.nome || `Professor ${profId}`;
+        // email fica registrado so como referencia — nao e mais requisito.
+        const emailBruto = (prof.email_google || prof.usuarios?.email || '').trim();
         const email = emailBruto && !emailBruto.endsWith('@la.internal') ? emailBruto : null;
         const linhasProf = [
           ['Aluno', 'Curso', 'Música', 'Artista', 'Duração (s)', 'Playback', 'Link', 'Rider', 'Obs', 'Relatório', 'Pendências'],
@@ -388,19 +392,6 @@ serve(async (req: Request) => {
             }),
           ...rodape,
         ];
-
-        if (!email) {
-          await service.from('evento_sheets_professor').upsert({
-            evento_id: dest.evento_id, professor_id: profId, unidade_id: dest.unidade_id,
-            status: 'sem_email', ultimo_erro: null,
-          }, { onConflict: 'evento_id,professor_id' });
-          await service.from('automacao_log').insert({
-            evento: 'recital_sheets_sync', acao: 'sem_email_professor', status: 'warn',
-            detalhes: `Professor ${nomeProf} (id ${profId}) sem usuarios.email — planilha nao compartilhada.`,
-            unidade_nome: unidadeNome,
-          });
-          continue;
-        }
 
         try {
           const pasta = await chamarPonte({
@@ -429,11 +420,14 @@ serve(async (req: Request) => {
             planilha: planilhaId, aba: 'Meus alunos', linhas: linhasProf, proteger: true,
           });
           if (!escritaProf.ok) throw new Error(escritaProf.erro ?? 'falha_escrita');
-          const share = await chamarPonte({
-            token: BRIDGE_TOKEN, acao: 'compartilhar', arquivo: planilhaId,
-            emails: [email], papel: 'reader',
-          });
-          if (!share.ok) throw new Error(share.erro ?? 'falha_share');
+          // Quem abre e a equipe — o professor nao usa planilha. Mesma lista do geral.
+          if (dest.emails_equipe?.length) {
+            const share = await chamarPonte({
+              token: BRIDGE_TOKEN, acao: 'compartilhar', arquivo: planilhaId,
+              emails: dest.emails_equipe, papel: 'reader',
+            });
+            if (!share.ok) throw new Error(share.erro ?? 'falha_share');
+          }
 
           await service.from('evento_sheets_professor').upsert({
             evento_id: dest.evento_id, professor_id: profId, unidade_id: dest.unidade_id,
