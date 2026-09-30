@@ -770,6 +770,41 @@ async function upsertExperimentalRaw(
   }
 }
 
+// Reagendamento no Emusys mantem o id da aula, mas do nosso lado a linha da data
+// antiga vira `cancelada` e continua segurando esse id. O indice uq_lead_exp_aula
+// conta linha cancelada; o seletor nao. Sem soltar o id, gravar a aula na linha viva
+// estoura 23505 e, no snapshot do relatorio comercial, derruba a unidade inteira
+// (CG 25-29/09/2026). So solta de linha CANCELADA: dona viva segue sendo conflito real.
+async function liberarAulaDeExperimentalCancelada(
+  supabase: any,
+  unidadeId: string,
+  emusysAulaId: unknown,
+  destinoId: number,
+  abortarEmErro: boolean,
+): Promise<void> {
+  if (emusysAulaId == null) return;
+  const { data, error } = await supabase
+    .from('lead_experimentais')
+    .update({ emusys_aula_id: null, updated_at: new Date().toISOString() })
+    .eq('unidade_id', unidadeId)
+    .eq('emusys_aula_id', emusysAulaId)
+    .eq('status', 'cancelada')
+    .neq('id', destinoId)
+    .select('id');
+  if (error) {
+    const mensagem =
+      `FALHA_LIBERAR_AULA_CANCELADA exp=${destinoId} aula=${emusysAulaId} ${error.code ?? ''}: ${error.message}`;
+    if (abortarEmErro) throw new Error(mensagem);
+    console.error(`[experimental] ${mensagem}`);
+    return;
+  }
+  if (data?.length) {
+    console.log(
+      `[experimental] aula ${emusysAulaId} liberada das canceladas ${data.map((r: any) => r.id).join(',')} para exp ${destinoId}`,
+    );
+  }
+}
+
 async function reconciliarExperimentaisOrfas(
   supabase: any,
   experimentais: ExperimentalParaReconciliar[],
@@ -1127,12 +1162,18 @@ async function reconciliarExperimentaisOrfas(
         });
 
         if (Object.keys(patch).length > 1) {
+          if ('emusys_aula_id' in patch) {
+            await liberarAulaDeExperimentalCancelada(supabase, exp.unidadeId, patch.emusys_aula_id, expExistente.id, somenteIdentidadesEstaveis);
+          }
           const { error: atualizacaoExperimentalError } = await supabase
             .from('lead_experimentais')
             .update(patch)
             .eq('id', expExistente.id);
           if (somenteIdentidadesEstaveis && atualizacaoExperimentalError) {
-            throw new Error('FALHA_ATUALIZAR_EXPERIMENTAL_SNAPSHOT');
+            throw new Error(
+              `FALHA_ATUALIZAR_EXPERIMENTAL_SNAPSHOT exp=${expExistente.id} aula=${exp.emusysAulaId} ` +
+                `${atualizacaoExperimentalError.code ?? ''}: ${atualizacaoExperimentalError.message} campos=${Object.keys(patch).join(',')}`,
+            );
           }
           // Propagar status para leads só quando o status mudou (não sobrescrever convertidos/matriculados)
           if (statusMudou && expExistente.lead_id) {
@@ -1254,12 +1295,18 @@ async function reconciliarExperimentaisOrfas(
             atualizadoEm: new Date().toISOString(),
           });
           if (Object.keys(patch).length > 1) {
+            if ('emusys_aula_id' in patch) {
+              await liberarAulaDeExperimentalCancelada(supabase, exp.unidadeId, patch.emusys_aula_id, porLead.id, somenteIdentidadesEstaveis);
+            }
             const { error: atualizarPorLeadError } = await supabase
               .from('lead_experimentais')
               .update(patch)
               .eq('id', porLead.id);
             if (somenteIdentidadesEstaveis && atualizarPorLeadError) {
-              throw new Error('FALHA_ATUALIZAR_EXPERIMENTAL_SNAPSHOT');
+              throw new Error(
+                `FALHA_ATUALIZAR_EXPERIMENTAL_SNAPSHOT exp=${porLead.id} aula=${exp.emusysAulaId} ` +
+                  `${atualizarPorLeadError.code ?? ''}: ${atualizarPorLeadError.message} campos=${Object.keys(patch).join(',')}`,
+              );
             }
             if (statusMudou && porLead.lead_id) {
               const { error: atualizarLeadError } = await supabase.from('leads').update({

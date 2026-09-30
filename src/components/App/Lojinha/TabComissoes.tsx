@@ -14,12 +14,15 @@ import type { LojaCarteira, LojaCarteiraMovimentacao, Colaborador } from '@/type
 import { ModalSaque } from './ModalSaque';
 import { ModalUsarLoja } from './ModalUsarLoja';
 import { ModalHistoricoCarteira } from './ModalHistoricoCarteira';
+import { useShellMobile } from '@/hooks/useShellMobile';
+import { ComissoesMobile } from '@/mobile/telas/lojinha/ComissoesMobile';
 
 interface TabComissoesProps {
   unidadeId: string;
 }
 
 export function TabComissoes({ unidadeId }: TabComissoesProps) {
+  const ehCelular = useShellMobile() === 'mobile';
   const [loading, setLoading] = useState(true);
   const [carteirasFarmers, setCarteirasFarmers] = useState<LojaCarteira[]>([]);
   const [carteirasProfessores, setCarteirasProfessores] = useState<LojaCarteira[]>([]);
@@ -217,6 +220,21 @@ export function TabComissoes({ unidadeId }: TabComissoesProps) {
 
   return (
     <div className="space-y-6">
+      {/* No celular: só as carteiras (o que vem do banco) e as ações — ver
+          `@/lib/lojinhaComissoes`. O conteúdo do computador segue byte a byte
+          no `else`; os modais ficam fora da bifurcação. */}
+      {ehCelular ? (
+        <ComissoesMobile
+          carregando={loading}
+          farmers={carteirasFarmers}
+          professores={carteirasProfessores}
+          onUsarLoja={handleUsarLoja}
+          onSaque={handleSaque}
+          onHistorico={handleHistorico}
+          onEnviarRelatorio={handleEnviarRelatorio}
+        />
+      ) : (
+        <>
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
@@ -352,6 +370,8 @@ export function TabComissoes({ unidadeId }: TabComissoesProps) {
           </table>
         </div>
       </div>
+        </>
+      )}
 
       {/* Modais */}
       <ModalSaque

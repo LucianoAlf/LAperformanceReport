@@ -4,7 +4,7 @@
     {
       "class": "bridge",
       "mode": "0644",
-      "sha256": "aea38ae497e54672483caaaa38e541381c24e697e7c74f9085bf62e7f705fa02",
+      "sha256": "7ad41b824f16f465995fc6044dff9a26357f58d71829523b071f44ede6d2a3d6",
       "size": 89058,
       "source": "vps/la-hq/sol/runtime/bridge.js",
       "target": "/home/sol/.hermes/hermes-agent/scripts/whatsapp-bridge/bridge.js"
@@ -20,7 +20,7 @@
     {
       "class": "caixa-runtime",
       "mode": "0644",
-      "sha256": "6d4b230988861bd12bd79a87d224b7b34927564d5af26a3260bd0bae4b6b3f41",
+      "sha256": "c1907bb4fede353c38c59d941dda357c0c16f8e516451823ab1f73734bb39e27",
       "size": 509387,
       "source": "vps/la-hq/sol/runtime/caixa-financeiro.cjs",
       "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs"
@@ -36,7 +36,7 @@
     {
       "class": "caixa-runtime",
       "mode": "0644",
-      "sha256": "2b95877d594dca66aeb122fef702a30b23c362c62e52d0eabb4454444f33377f",
+      "sha256": "c2767e144989b3b021fc1cd9f3bf630b272f0fae20895623af1e144b0b088b31",
       "size": 14976,
       "source": "vps/la-hq/sol/runtime/caixa-tool-executor.cjs",
       "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-tool-executor.cjs"
@@ -68,7 +68,7 @@
     {
       "class": "caixa-runtime",
       "mode": "0644",
-      "sha256": "6a3ae929563b31052e651d3c8ea16b859615c869df6471a79855abfb1b339828",
+      "sha256": "d591439cb917b8481d9fbe2571e7727814dfa5879d199013d210cda7d4b52840",
       "size": 40638,
       "source": "vps/la-hq/sol/runtime/caixa-cheques.cjs",
       "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-cheques.cjs"

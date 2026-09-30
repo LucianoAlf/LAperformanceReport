@@ -39,9 +39,14 @@ export const ABAS_PORTADAS: Readonly<Record<string, readonly string[]>> = {
   // desktop, com a faixa âmbar. Marcar a rota inteira apagaria a faixa dele
   // junto — que é exatamente o erro cometido com Alunos em 14/09.
   '/app/agenda': ['professor', 'sala', 'chamada'],
-  // ⚠️ Lojinha, Farmer, Caixa e Entrada seguem abrindo a tela do computador
-  // com a faixa âmbar — e Caixa e Entrada são frentes próprias, com escrita de
+  // ⚠️ Farmer, Caixa e Entrada seguem abrindo a tela do computador com a
+  // faixa âmbar — e Caixa e Entrada são frentes próprias, com escrita de
   // dinheiro e conversa de WhatsApp.
+  //
+  // ⚠️ `'lojinha'` entra com as CINCO sub-abas adaptadas (29/09/2026) e com
+  // RECORTE declarado em Comissões: no celular só as carteiras (saldo e
+  // ações), porque os cartões e o histórico de lá são dados de exemplo
+  // escritos no código (ver `@/lib/lojinhaComissoes`).
   //
   // ⚠️ `'fideliza'` entra com RECORTE declarado: no celular a aba responde
   // "como está a dupla e o que falta", que é a sub-aba Ranking. Histórico
@@ -56,7 +61,12 @@ export const ABAS_PORTADAS: Readonly<Record<string, readonly string[]>> = {
   // MRR perdido e LTV ficam no computador, e a tela diz isso por escrito (ver
   // `@/lib/administrativoMobile`). A faixa some porque a aba foi adaptada, não
   // porque faz tudo o que a do computador faz.
-  '/app/administrativo': ['lancamentos', 'contratos', 'fideliza'],
+  //
+  // `'farmer'` entrou em 29/09 com `DashboardFarmerMobile` (o resumo em linhas,
+  // cada bloco do computador numa folha) e o botão de seção no lugar das duas
+  // fileiras de abas. As outras 4 sub-abas da Farmer tiveram só ajuste de largura
+  // e de alvo (ver `tests/farmerMobile.test.mjs`).
+  '/app/administrativo': ['lancamentos', 'contratos', 'fideliza', 'lojinha', 'farmer'],
 };
 
 export function rotaTemFaixaPorAba(

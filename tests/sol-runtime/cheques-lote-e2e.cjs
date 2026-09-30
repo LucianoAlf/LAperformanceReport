@@ -131,6 +131,7 @@ function montar(cheques) {
       const ids = (caminho.match(/in\.\(([^)]*)\)/) || [])[1].split(',');
       if (caminho.startsWith('emusys_faturas')) return ids.map((id) => FATURAS[id] || fat({ id }));
       if (caminho.startsWith('vw_caixa_movimentacao_fatura_links')) return ids.filter((id) => NA_CAIXA.has(id)).map((id) => ({ fatura_id: id }));
+      if (caminho.startsWith('caixa_movimentacoes')) return []; // nenhum cheque já no caixa (D1: cheques-malote-v3-e2e)
       return null;
     },
   });

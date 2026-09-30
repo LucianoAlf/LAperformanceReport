@@ -15,8 +15,20 @@ import type {
   LojaProduto, LojaVenda, ItemCarrinho, DadosPDV,
   FormaPagamento, TipoCliente, FORMAS_PAGAMENTO, TIPOS_CLIENTE 
 } from '@/types/lojinha';
+import { toast } from 'sonner';
 import { useShellMobile } from '@/hooks/useShellMobile';
 import { FolhaMobile } from '@/mobile/FolhaMobile';
+import { HistoricoVendasMobile } from '@/mobile/telas/lojinha/HistoricoVendasMobile';
+import { escopoDoEstoque, somarEstoquePorProduto } from '@/lib/lojinhaEstoque';
+import {
+  filtrarHistorico,
+  formatarDiaCurto,
+  inicioDaJanela,
+  juntarHistorico,
+  resumirHistorico,
+  type MovimentoCaixaLojinha,
+  type VendaHistorico,
+} from '@/lib/lojinhaHistorico';
 import { ModalVendaDetalhes } from './ModalVendaDetalhes';
 import { ModalEstorno } from './ModalEstorno';
 
@@ -58,6 +70,8 @@ export function TabVendas({ unidadeId }: TabVendasProps) {
 
   // Histórico State
   const [vendas, setVendas] = useState<LojaVenda[]>([]);
+  // As vendas que a Sol lançou no caixa — ver `@/lib/lojinhaHistorico`.
+  const [vendasCaixa, setVendasCaixa] = useState<MovimentoCaixaLojinha[]>([]);
   const [buscaVenda, setBuscaVenda] = useState('');
 
   // Modais
@@ -84,6 +98,14 @@ export function TabVendas({ unidadeId }: TabVendasProps) {
 
   async function loadData() {
     setLoading(true);
+    // Sem unidade carregada ainda, não se consulta: as policies de
+    // `loja_vendas` e `loja_estoque` são `using (true)`, e sem filtro a tela
+    // mostraria a rede a quem só deveria ver a sua (mesma regra do Produtos).
+    const escopo = escopoDoEstoque(unidadeId);
+    if (escopo.tipo === 'aguardando') {
+      setLoading(false);
+      return;
+    }
     try {
       // Carregar produtos para o PDV
       const { data: prods } = await supabase
@@ -97,23 +119,25 @@ export function TabVendas({ unidadeId }: TabVendasProps) {
         .order('nome');
 
       if (prods) {
-        // Adicionar estoque
-        const produtosComEstoque = await Promise.all(
-          prods.map(async (p) => {
-            const { data: estoque } = await supabase
-              .from('loja_estoque')
-              .select('quantidade')
-              .eq('produto_id', p.id);
-            
-            const estoqueTotal = estoque?.reduce((acc, e) => acc + e.quantidade, 0) || 0;
-            return { ...p, estoque_total: estoqueTotal };
-          })
-        );
-        setProdutos(produtosComEstoque);
+        // 🔴 Era uma consulta POR PRODUTO e sem unidade: o "N em estoque" do
+        // cartão somava as três escolas, e quem vendia no Recreio via o que
+        // estava na Barra. Uma consulta, recortada pela unidade.
+        let estoqueQuery = supabase.from('loja_estoque').select('produto_id, quantidade');
+        if (escopo.tipo === 'unidade') estoqueQuery = estoqueQuery.eq('unidade_id', escopo.unidadeId);
+        const { data: estoque, error: erroEstoque } = await estoqueQuery;
+        if (erroEstoque) {
+          console.error(`[TabVendas] estoque (${unidadeId}):`, erroEstoque.message);
+          toast.error('Não consegui carregar o estoque — o "em estoque" dos produtos não vale agora.');
+        }
+        const totais = somarEstoquePorProduto(estoque ?? []);
+        setProdutos(prods.map((p) => ({ ...p, estoque_total: totais.get(p.id) ?? 0 })));
       }
 
-      // Carregar vendas
-      const { data: vendasData } = await supabase
+      // 🔴 Histórico: antes eram as 50 últimas vendas do PDV de TODAS as
+      // unidades. Agora é a unidade escolhida, numa janela de datas, e junto
+      // das vendas que a Sol lança no caixa — ver `@/lib/lojinhaHistorico`.
+      const desde = inicioDaJanela();
+      let vendasQuery = supabase
         .from('loja_vendas')
         .select(`
           *,
@@ -122,10 +146,33 @@ export function TabVendas({ unidadeId }: TabVendasProps) {
           professores(nome),
           loja_vendas_itens(*)
         `)
-        .order('data_venda', { ascending: false })
-        .limit(50);
+        .gte('data_venda', `${desde}T03:00:00Z`)
+        .order('data_venda', { ascending: false });
+      let caixaQuery = supabase
+        .from('caixa_movimentacoes')
+        .select('id, data_movimento, created_at, forma_pagamento, descricao, valor, responsavel')
+        .eq('categoria', 'lojinha')
+        .eq('tipo', 'entrada')
+        .eq('ambiente', 'venda')
+        .gte('data_movimento', desde)
+        .order('data_movimento', { ascending: false });
+      if (escopo.tipo === 'unidade') {
+        vendasQuery = vendasQuery.eq('unidade_id', escopo.unidadeId);
+        caixaQuery = caixaQuery.eq('unidade_id', escopo.unidadeId);
+      }
+      const [{ data: vendasData, error: erroVendas }, { data: caixaData, error: erroCaixa }] =
+        await Promise.all([vendasQuery, caixaQuery]);
 
+      if (erroVendas) {
+        console.error(`[TabVendas] loja_vendas (${unidadeId}):`, erroVendas.message);
+        toast.error('Não consegui carregar as vendas do PDV — o histórico está incompleto.');
+      }
+      if (erroCaixa) {
+        console.error(`[TabVendas] caixa lojinha (${unidadeId}):`, erroCaixa.message);
+        toast.error('Não consegui carregar as vendas do caixa — o histórico está incompleto.');
+      }
       setVendas(vendasData || []);
+      setVendasCaixa((caixaData as MovimentoCaixaLojinha[] | null) || []);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     } finally {
@@ -385,15 +432,14 @@ export function TabVendas({ unidadeId }: TabVendasProps) {
     setModalEstorno(true);
   }
 
-  // KPIs do Histórico
-  const vendasHoje = vendas.filter(v => {
-    const hoje = new Date().toISOString().split('T')[0];
-    return v.data_venda.startsWith(hoje) && v.status === 'concluida';
-  });
-  const totalHoje = vendasHoje.reduce((acc, v) => acc + v.total, 0);
-  const vendasMes = vendas.filter(v => v.status === 'concluida');
-  const totalMes = vendasMes.reduce((acc, v) => acc + v.total, 0);
-  const ticketMedio = vendasMes.length > 0 ? totalMes / vendasMes.length : 0;
+  // Histórico: PDV + caixa, uma regra só para o computador e o celular.
+  const historico = juntarHistorico(vendas, vendasCaixa);
+  const historicoFiltrado = filtrarHistorico(historico, buscaVenda);
+  const resumo = resumirHistorico(historico);
+
+  function abrirVendaHistorico(v: VendaHistorico) {
+    if (v.vendaPdv) handleVerDetalhes(v.vendaPdv);
+  }
 
   // O MESMO corpo serve ao painel do desktop e a folha do celular. Duas
   // copias do formulario de venda dariam duas regras para o mesmo dinheiro.
@@ -667,7 +713,7 @@ export function TabVendas({ unidadeId }: TabVendasProps) {
         <button
           onClick={() => setSubTab('pdv')}
           className={cn(
-            'px-4 py-2 rounded-lg text-sm font-medium transition-all',
+            'px-4 py-2 rounded-lg text-sm font-medium transition-all max-lg:min-h-[44px] max-lg:flex-1',
             subTab === 'pdv'
               ? 'bg-sky-500 text-slate-900'
               : 'bg-slate-800 text-slate-400 hover:text-white'
@@ -678,7 +724,7 @@ export function TabVendas({ unidadeId }: TabVendasProps) {
         <button
           onClick={() => setSubTab('historico')}
           className={cn(
-            'px-4 py-2 rounded-lg text-sm font-medium transition-all',
+            'px-4 py-2 rounded-lg text-sm font-medium transition-all max-lg:min-h-[44px] max-lg:flex-1',
             subTab === 'historico'
               ? 'bg-sky-500 text-slate-900'
               : 'bg-slate-800 text-slate-400 hover:text-white'
@@ -819,42 +865,57 @@ export function TabVendas({ unidadeId }: TabVendasProps) {
       )}
 
       {/* Histórico */}
-      {subTab === 'historico' && (
+      {subTab === 'historico' && ehCelular && (
+        <HistoricoVendasMobile
+          carregando={loading}
+          vendas={historicoFiltrado}
+          totalSemFiltro={historico.length}
+          resumo={resumo}
+          busca={buscaVenda}
+          onBusca={setBuscaVenda}
+          onAbrirVenda={abrirVendaHistorico}
+        />
+      )}
+      {subTab === 'historico' && !ehCelular && (
         <div className="space-y-6">
           {/* KPIs */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {/* 🔴 Eram quatro cartões e dois mentiam: "Vendas Fev/2026" com o mês
+              escrito no código (somando as 50 últimas vendas), e "Meta Lojinha
+              Q1: 62%" com número fixo. A meta de verdade é do programa
+              Fideliza, por trimestre — repeti-la aqui seria uma segunda régua. */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
               <p className="text-xs text-slate-400 uppercase font-medium">Vendas Hoje</p>
               <p className="text-2xl font-bold text-emerald-400 font-mono mt-1">
-                R$ {totalHoje.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}
+                R$ {resumo.hojeTotal.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}
               </p>
-              <p className="text-xs text-slate-500 mt-1">{vendasHoje.length} vendas</p>
+              <p className="text-xs text-slate-500 mt-1">{resumo.hojeQtd} vendas</p>
             </div>
             <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
-              <p className="text-xs text-slate-400 uppercase font-medium">Vendas Fev/2026</p>
+              <p className="text-xs text-slate-400 uppercase font-medium">Vendas {resumo.mesRotulo}</p>
               <p className="text-2xl font-bold text-sky-400 font-mono mt-1">
-                R$ {totalMes.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}
+                R$ {resumo.mesTotal.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}
               </p>
-              <p className="text-xs text-slate-500 mt-1">{vendasMes.length} vendas</p>
+              <p className="text-xs text-slate-500 mt-1">{resumo.mesQtd} vendas</p>
             </div>
             <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
               <p className="text-xs text-slate-400 uppercase font-medium">Ticket Médio</p>
               <p className="text-2xl font-bold text-amber-400 font-mono mt-1">
-                R$ {ticketMedio.toFixed(0)}
+                R$ {resumo.ticketMedio.toFixed(0)}
               </p>
-              <p className="text-xs text-slate-500 mt-1">Média por venda</p>
-            </div>
-            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
-              <p className="text-xs text-slate-400 uppercase font-medium">Meta Lojinha Q1</p>
-              <p className="text-2xl font-bold text-purple-400 font-mono mt-1">62%</p>
-              <p className="text-xs text-slate-500 mt-1">R$ {totalMes.toFixed(0)} / R$ 3.000</p>
+              <p className="text-xs text-slate-500 mt-1">Média por venda no mês</p>
             </div>
           </div>
 
           {/* Tabela */}
           <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
             <div className="p-4 border-b border-slate-700 flex items-center justify-between">
-              <h3 className="font-semibold text-white">📋 Histórico de Vendas</h3>
+              <div>
+                <h3 className="font-semibold text-white">📋 Histórico de Vendas</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Últimos 3 meses · vendas do PDV e as lançadas no caixa pela Sol
+                </p>
+              </div>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                 <Input
@@ -881,72 +942,78 @@ export function TabVendas({ unidadeId }: TabVendasProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {vendas.map((venda) => (
-                    <tr 
-                      key={venda.id} 
+                  {historicoFiltrado.length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="p-6 text-center text-sm text-slate-400">
+                        {buscaVenda.trim()
+                          ? `Nenhuma venda com “${buscaVenda.trim()}”.`
+                          : loading
+                            ? 'Carregando…'
+                            : 'Nenhuma venda nos últimos 3 meses.'}
+                      </td>
+                    </tr>
+                  )}
+                  {historicoFiltrado.map((venda) => (
+                    <tr
+                      key={venda.chave}
                       className={cn(
                         'border-b border-slate-700/50 hover:bg-slate-700/30',
-                        venda.status === 'estornada' && 'opacity-50'
+                        venda.estornada && 'opacity-50'
                       )}
                     >
                       <td className="p-3 font-mono text-xs text-slate-300">
-                        {new Date(venda.data_venda).toLocaleDateString('pt-BR', { 
-                          day: '2-digit', 
-                          month: '2-digit',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
+                        {venda.vendaPdv
+                          ? new Date(venda.instante).toLocaleDateString('pt-BR', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })
+                          : formatarDiaCurto(venda.dia)}
                       </td>
                       <td className="p-3">
-                        <p className="font-medium text-white text-sm">
-                          {venda.cliente_nome || venda.alunos?.nome || 'Avulso'}
-                        </p>
-                        <p className="text-xs text-slate-400 capitalize">{venda.tipo_cliente}</p>
+                        {venda.cliente ? (
+                          <>
+                            <p className="font-medium text-white text-sm">{venda.cliente}</p>
+                            <p className="text-xs text-slate-400 capitalize">{venda.vendaPdv?.tipo_cliente}</p>
+                          </>
+                        ) : (
+                          <p className="text-xs text-slate-400">Lançada no caixa</p>
+                        )}
                       </td>
                       <td className="p-3 text-sm text-slate-300">
-                        {venda.loja_vendas_itens?.map(i => `${i.quantidade}x ${i.produto_nome}`).join(', ') || '—'}
+                        {venda.detalhe}
                       </td>
                       <td className={cn(
                         'p-3 font-mono font-semibold',
-                        venda.status === 'estornada' ? 'text-slate-400 line-through' : 'text-emerald-400'
+                        venda.estornada ? 'text-slate-400 line-through' : 'text-emerald-400'
                       )}>
                         R$ {venda.total.toFixed(2).replace('.', ',')}
                       </td>
                       <td className="p-3">
-                        <Badge 
-                          variant={venda.forma_pagamento === 'pix' ? 'success' : 
-                                   venda.forma_pagamento === 'credito' || venda.forma_pagamento === 'debito' ? 'secondary' :
-                                   'warning'}
-                          className={cn(
-                            venda.forma_pagamento === 'pix' && 'bg-emerald-500/20 text-emerald-400',
-                            (venda.forma_pagamento === 'credito' || venda.forma_pagamento === 'debito') && 'bg-sky-500/20 text-sky-400',
-                            venda.forma_pagamento === 'folha' && 'bg-amber-500/20 text-amber-400',
-                            venda.forma_pagamento === 'dinheiro' && 'bg-emerald-500/20 text-emerald-400',
-                          )}
-                        >
-                          {venda.forma_pagamento === 'pix' ? 'Pix' :
-                           venda.forma_pagamento === 'credito' ? 'Cartão' :
-                           venda.forma_pagamento === 'debito' ? 'Débito' :
-                           venda.forma_pagamento === 'folha' ? 'Desc. Folha' :
-                           venda.forma_pagamento === 'dinheiro' ? 'Dinheiro' : 'Saldo'}
+                        <Badge variant="secondary" className="bg-slate-700/60 text-slate-200">
+                          {venda.forma}
                         </Badge>
                       </td>
                       <td className="p-3 text-sm text-slate-300">
-                        {venda.vendedor?.apelido || venda.vendedor?.nome || '—'}
+                        {venda.vendedor || '—'}
                       </td>
                       <td className="p-3">
-                        <Badge variant={venda.status === 'concluida' ? 'success' : 'error'}>
-                          {venda.status === 'concluida' ? '✓' : 'Estornada'}
+                        <Badge variant={venda.estornada ? 'error' : 'success'}>
+                          {venda.estornada ? 'Estornada' : '✓'}
                         </Badge>
                       </td>
                       <td className="p-3">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleVerDetalhes(venda)}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
+                        {/* Detalhe e estorno são do PDV. Venda do caixa se corrige no Caixa. */}
+                        {venda.vendaPdv && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => abrirVendaHistorico(venda)}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   ))}

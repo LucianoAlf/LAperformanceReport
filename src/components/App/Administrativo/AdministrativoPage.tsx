@@ -1354,6 +1354,26 @@ export function AdministrativoPage() {
     );
   }
 
+  // As abas principais, num lugar só: o topo da página e o PainelFarmer (no
+  // celular) desenham a MESMA lista com a MESMA troca.
+  const abasPrincipais = (acessorioNoCelular?: React.ReactNode) => (
+    <PageTabs
+      tabs={[
+        { id: 'lancamentos' as const, label: 'Lançamentos', shortLabel: 'Lanç.', icon: CheckCircle, activeGradient: 'from-purple-500 to-violet-500', activeShadow: 'shadow-purple-500/20' },
+        { id: 'contratos' as const, label: 'Contratos', shortLabel: 'Contratos', icon: CalendarClock, activeGradient: 'from-amber-500 to-orange-500', activeShadow: 'shadow-amber-500/20' },
+        { id: 'fideliza' as const, label: 'Programa Fideliza+ LA', shortLabel: 'Fideliza+', icon: Trophy, activeGradient: 'from-yellow-500 to-orange-500', activeShadow: 'shadow-yellow-500/20' },
+        { id: 'lojinha' as const, label: 'Lojinha', shortLabel: 'Lojinha', icon: ShoppingBag, activeGradient: 'from-sky-500 to-cyan-500', activeShadow: 'shadow-sky-500/20' },
+        { id: 'farmer' as const, label: 'Painel Farmer', shortLabel: 'Farmer', icon: ClipboardList, activeGradient: 'from-violet-500 to-purple-500', activeShadow: 'shadow-violet-500/20' },
+        { id: 'caixa_financeiro' as const, label: 'Caixa', shortLabel: 'Caixa', icon: Wallet, activeGradient: 'from-emerald-500 to-teal-500', activeShadow: 'shadow-emerald-500/20' },
+        { id: 'caixa_entrada' as const, label: 'Entrada', shortLabel: 'Entrada', icon: MessageSquare, activeGradient: 'from-slate-500 to-slate-600', activeShadow: 'shadow-slate-500/20' },
+      ]}
+      activeTab={mainTab}
+      onTabChange={setMainTab}
+      seletorNoCelular="Administrativo"
+      acessorioNoCelular={acessorioNoCelular}
+    />
+  );
+
   return (
     <div className="space-y-6">
       {/* Linha de filtros / ações */}
@@ -1393,19 +1413,10 @@ export function AdministrativoPage() {
       </PageFilterBar>
 
       {/* Tabs Principais */}
-      <PageTabs
-        tabs={[
-          { id: 'lancamentos' as const, label: 'Lançamentos', shortLabel: 'Lanç.', icon: CheckCircle, activeGradient: 'from-purple-500 to-violet-500', activeShadow: 'shadow-purple-500/20' },
-          { id: 'contratos' as const, label: 'Contratos', shortLabel: 'Contratos', icon: CalendarClock, activeGradient: 'from-amber-500 to-orange-500', activeShadow: 'shadow-amber-500/20' },
-          { id: 'fideliza' as const, label: 'Programa Fideliza+ LA', shortLabel: 'Fideliza+', icon: Trophy, activeGradient: 'from-yellow-500 to-orange-500', activeShadow: 'shadow-yellow-500/20' },
-          { id: 'lojinha' as const, label: 'Lojinha', shortLabel: 'Lojinha', icon: ShoppingBag, activeGradient: 'from-sky-500 to-cyan-500', activeShadow: 'shadow-sky-500/20' },
-          { id: 'farmer' as const, label: 'Painel Farmer', shortLabel: 'Farmer', icon: ClipboardList, activeGradient: 'from-violet-500 to-purple-500', activeShadow: 'shadow-violet-500/20' },
-          { id: 'caixa_financeiro' as const, label: 'Caixa', shortLabel: 'Caixa', icon: Wallet, activeGradient: 'from-emerald-500 to-teal-500', activeShadow: 'shadow-emerald-500/20' },
-          { id: 'caixa_entrada' as const, label: 'Entrada', shortLabel: 'Entrada', icon: MessageSquare, activeGradient: 'from-slate-500 to-slate-600', activeShadow: 'shadow-slate-500/20' },
-        ]}
-        activeTab={mainTab}
-        onTabChange={setMainTab}
-      />
+      {/* No celular a fileira vira um botão (LAPE-32). Na Farmer quem desenha
+          esta linha é o PainelFarmer, para o botão dele ficar ao lado deste —
+          a mesma função, então as duas linhas não divergem. */}
+      {!(ehCelular && mainTab === 'farmer') && abasPrincipais()}
 
       {/* 🔴 A faixa fica AQUI, no nivel da rota, e nao dentro do ramo
           `lancamentos`: as outras seis abas continuam abrindo a tela do
@@ -1438,6 +1449,7 @@ export function AdministrativoPage() {
           unidadeId={unidade} 
           ano={competenciaFiltro.filtro.ano}
           mes={competenciaFiltro.filtro.mes}
+          abasPaiNoCelular={ehCelular ? abasPrincipais : undefined}
         />
       ) : (
         <>

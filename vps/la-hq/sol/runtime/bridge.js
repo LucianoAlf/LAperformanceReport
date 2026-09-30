@@ -1395,8 +1395,12 @@ async function caixaAbf() {
               // pendencia travada "envenena" a conversa inteira do grupo: qualquer
               // mensagem de qualquer pessoa, sobre qualquer assunto, levava "nao entendi".
               const _pareceProSol = !!(groupEngagement.pareceChamarSol && groupEngagement.pareceChamarSol(body));
-              const _citouCard = !!(event.quotedMessageId && _fh.citaAlgumaPendencia
-                && _fh.citaAlgumaPendencia(chatId, event.quotedMessageId));
+              // Citar o comprovante de uma pessoa nao e falar com a Sol. So uma
+              // mensagem que a propria Sol enviou (card/continuacao) aciona esta
+              // guarda; a relacao ampla com a origem segue disponivel ao handler
+              // deterministico para correcoes explicitamente reconhecidas.
+              const _citouCard = !!(event.quotedMessageId && _fh.citaCardPendenteDaSol
+                && _fh.citaCardPendenteDaSol(chatId, event.quotedMessageId));
               let _v4JaRegistrou = false;
               // Pré-flight operacional V4: frase inédita dirigida à Sol pode
               // escolher apenas os executores determinísticos de ABERTURA ou
@@ -1457,10 +1461,24 @@ async function caixaAbf() {
                 // a mensagem para a gramatica canonica. Nunca escreve, nunca
                 // aprova dinheiro; falha => segue para o "nao entendi".
                 let _llmTratou = null;
+                const _tokenPendenciasAntes = _fh.tokenEstadoPendencias
+                  ? _fh.tokenEstadoPendencias(chatId) : null;
                 try { _llmTratou = _fh.tratarNaoEntendida ? await _fh.tratarNaoEntendida(event) : null; }
                 catch (e) { _caixaLog({ step: 'fallback_llm_erro', msg: e.message }); }
+                const _tokenPendenciasDepois = _fh.tokenEstadoPendencias
+                  ? _fh.tokenEstadoPendencias(chatId) : null;
+                const _estadoAindaEOMesmo = _tokenPendenciasAntes !== null
+                  ? !!_tokenPendenciasDepois && _tokenPendenciasDepois === _tokenPendenciasAntes
+                  : !!(_fh.temPendencia && _fh.temPendencia(chatId));
                 if (_llmTratou && _llmTratou.tratou) {
                   _caixaLog({ step: 'fallback_llm_tratou', acao: _llmTratou.acao, intencao: _llmTratou.intencao });
+                  _tratouCaixa = true;
+                } else if (!_estadoAindaEOMesmo) {
+                  // A resposta nasceu para um card que já foi lançado,
+                  // descartado ou corrigido enquanto o fallback aguardava.
+                  // Silêncio aqui evita que uma guarda atrasada interrompa a
+                  // conversa humana do grupo.
+                  _caixaLog({ step: 'fallback_llm_estado_obsoleto_bridge', chatId: chatId });
                   _tratouCaixa = true;
                 } else {
                 try {

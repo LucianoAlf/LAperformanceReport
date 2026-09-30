@@ -22,6 +22,12 @@ interface Props {
    */
   compacto?: boolean;
   /**
+   * Pílula compacta com alvo de 44px. Na Agenda ela divide a linha com a data e
+   * fica em 32px; no Administrativo o topo tem espaço, e o toque não precisa
+   * encolher.
+   */
+  alvoCheio?: boolean;
+  /**
    * A `TabsList` inteira, com os seus gatilhos.
    *
    * ⚠️ Ela é passada, não reconstruída: quem monta a navegação continua sendo
@@ -63,6 +69,7 @@ export function SeletorSecaoMobile({
   rotuloAtual,
   titulo = 'Seção',
   compacto = false,
+  alvoCheio = false,
   children,
 }: Props) {
   const [aberto, setAberto] = useState(false);
@@ -88,7 +95,7 @@ export function SeletorSecaoMobile({
         className={cn(
           'flex flex-shrink-0 items-center border border-slate-700 bg-slate-800/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-purple-500',
           compacto
-            ? 'min-h-[32px] max-w-[55%] gap-1 rounded-full px-2.5'
+            ? cn(alvoCheio ? 'min-h-[44px] px-3' : 'min-h-[32px] px-2.5', 'max-w-[55%] gap-1 rounded-full')
             : 'min-h-[44px] w-full justify-between gap-2 rounded-lg px-3',
         )}
       >

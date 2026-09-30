@@ -218,6 +218,29 @@ async function ultimaEscritaNossa(
   return linha && typeof linha.presente === 'boolean' ? { presente: linha.presente } : null;
 }
 
+// O PostgREST corta toda resposta em ~1000 linhas SEM avisar. O livro da janela
+// de 7 dias ja passou disso nas tres unidades (CG 1.680, Recreio 1.887): lido
+// de uma vez, os ids mais recentes ficavam de fora, o escritor os tratava como
+// pendentes, reprocessava os mesmos 200 itens antigos e estourava o orcamento
+// antes de chegar nos eventos novos (CG parou em 26/09, Recreio em 28/09).
+// Le pagina a pagina ate acabar; erro de leitura ABORTA (nunca vira lista
+// vazia, que faria a fila parecer resolvida ou toda pendente).
+const TAMANHO_PAGINA = 1000;
+async function lerTodasAsPaginas<T>(
+  // deno-lint-ignore no-explicit-any
+  pagina: (de: number, ate: number) => PromiseLike<{ data: T[] | null; error: any }>,
+  rotulo: string,
+): Promise<T[]> {
+  const todas: T[] = [];
+  for (let de = 0; ; de += TAMANHO_PAGINA) {
+    const { data, error } = await pagina(de, de + TAMANHO_PAGINA - 1);
+    if (error) throw new Error(`LEITURA_FALHOU:${rotulo}:${error.message}`);
+    const linhas = data ?? [];
+    todas.push(...linhas);
+    if (linhas.length < TAMANHO_PAGINA) return todas;
+  }
+}
+
 async function registrarLivro(
   // deno-lint-ignore no-explicit-any
   supabase: any,
@@ -244,25 +267,30 @@ async function processarEventosAluno(
   // Fila correta: primeiro os ids da janela (barato), depois corta os que ja
   // tem linha no livro e SO ENTAO limita. Sem isso, quando os 200 mais
   // antigos estivessem processados a funcao nao veria nunca os eventos 201+.
-  const { data: idRows } = await supabase
-    .from('presenca_acao_eventos')
-    .select('id')
-    .eq('tipo', 'item_aplicado')
-    .eq('unidade_id', unidade.id)
-    .not('aluno_id', 'is', null)
-    .not('aula_id', 'is', null)
-    .gte('criado_em', lookbackIso)
-    .order('id', { ascending: true })
-    .limit(2000);
-  const todosIds = (idRows ?? []).map((r: { id: number }) => r.id);
+  const idRows = await lerTodasAsPaginas<{ id: number }>((de, ate) =>
+    supabase
+      .from('presenca_acao_eventos')
+      .select('id')
+      .eq('tipo', 'item_aplicado')
+      .eq('unidade_id', unidade.id)
+      .not('aluno_id', 'is', null)
+      .not('aula_id', 'is', null)
+      .gte('criado_em', lookbackIso)
+      .order('id', { ascending: true })
+      .range(de, ate), 'eventos_aluno');
+  const todosIds = idRows.map((r) => r.id);
   if (!todosIds.length) return;
 
-  const { data: jaLancados } = await supabase
-    .from('presenca_emusys_escrita')
-    .select('presenca_evento_id,decisao')
-    .eq('unidade_id', unidade.id)
-    .not('presenca_evento_id', 'is', null)
-    .gte('criado_em', lookbackIso);
+  const jaLancados = await lerTodasAsPaginas<{ presenca_evento_id: number; decisao: string }>(
+    (de, ate) =>
+      supabase
+        .from('presenca_emusys_escrita')
+        .select('presenca_evento_id,decisao')
+        .eq('unidade_id', unidade.id)
+        .not('presenca_evento_id', 'is', null)
+        .gte('criado_em', lookbackIso)
+        .order('id', { ascending: true })
+        .range(de, ate), 'livro_aluno');
   // Em modo ativo, 'seria_escrito' NAO encerra o gatilho: a sombra previu a
   // escrita mas nao a fez — o item volta a ser pendente e desta vez vai de
   // verdade. As demais decisoes (escrito, ja_coerente, pulado_*, conflito)
@@ -519,24 +547,29 @@ async function processarFichasProfessor(
   inicio: number,
 ): Promise<void> {
   // Mesma fila correta do aluno: ids da janela -> corta processados -> limita.
-  const { data: idRows } = await supabase
-    .from('fabio_registros_aula')
-    .select('id')
-    .eq('unidade_id', unidade.id)
-    .in('status', ['confirmado', 'gravado_emusys'])
-    .not('aula_id', 'is', null)
-    .gte('atualizado_em', lookbackIso)
-    .order('id', { ascending: true })
-    .limit(2000);
-  const todosIds = (idRows ?? []).map((r: { id: string }) => r.id);
+  const idRows = await lerTodasAsPaginas<{ id: string }>((de, ate) =>
+    supabase
+      .from('fabio_registros_aula')
+      .select('id')
+      .eq('unidade_id', unidade.id)
+      .in('status', ['confirmado', 'gravado_emusys'])
+      .not('aula_id', 'is', null)
+      .gte('atualizado_em', lookbackIso)
+      .order('id', { ascending: true })
+      .range(de, ate), 'fichas');
+  const todosIds = idRows.map((r) => r.id);
   if (!todosIds.length) return;
 
-  const { data: jaLancados } = await supabase
-    .from('presenca_emusys_escrita')
-    .select('ficha_id,decisao')
-    .eq('unidade_id', unidade.id)
-    .not('ficha_id', 'is', null)
-    .gte('criado_em', lookbackIso);
+  const jaLancados = await lerTodasAsPaginas<{ ficha_id: string; decisao: string }>(
+    (de, ate) =>
+      supabase
+        .from('presenca_emusys_escrita')
+        .select('ficha_id,decisao')
+        .eq('unidade_id', unidade.id)
+        .not('ficha_id', 'is', null)
+        .gte('criado_em', lookbackIso)
+        .order('id', { ascending: true })
+        .range(de, ate), 'livro_ficha');
   const processados = new Set(
     (jaLancados ?? [])
       .filter((l: { decisao: string }) => modo !== 'ativo' || l.decisao !== 'seria_escrito')
@@ -733,17 +766,17 @@ async function processarEventosProfessor(
   resumo: Record<string, number>,
   inicio: number,
 ): Promise<void> {
-  const { data: eventosRows } = await supabase
-    .from('presenca_acao_eventos')
-    .select('id,request_id,unidade_id,aula_id,professor_id,fonte,criado_em')
-    .eq('tipo', 'item_aplicado')
-    .eq('unidade_id', unidade.id)
-    .is('aluno_id', null)
-    .not('professor_id', 'is', null)
-    .gte('criado_em', lookbackIso)
-    .order('id', { ascending: true })
-    .limit(2000);
-  const eventos = (eventosRows ?? []) as EventoProfessor[];
+  const eventos = await lerTodasAsPaginas<EventoProfessor>((de, ate) =>
+    supabase
+      .from('presenca_acao_eventos')
+      .select('id,request_id,unidade_id,aula_id,professor_id,fonte,criado_em')
+      .eq('tipo', 'item_aplicado')
+      .eq('unidade_id', unidade.id)
+      .is('aluno_id', null)
+      .not('professor_id', 'is', null)
+      .gte('criado_em', lookbackIso)
+      .order('id', { ascending: true })
+      .range(de, ate), 'eventos_professor');
   if (!eventos.length) return;
 
   const eventoIds = eventos.map((e) => e.id);
@@ -751,11 +784,18 @@ async function processarEventosProfessor(
   // Dedup por PAR (evento, linha): um evento de dia inteiro toca N aulas e
   // grava uma linha por aula — retomar a meio de um evento so refaz o que
   // falta. Em modo ativo, 'seria_escrito' nao encerra (sombra nao escreveu).
-  const { data: jaLancados } = await supabase
-    .from('presenca_emusys_escrita')
-    .select('presenca_evento_id,linha_emusys_id,decisao')
-    .eq('unidade_id', unidade.id)
-    .in('presenca_evento_id', eventoIds);
+  const jaLancados = await lerTodasAsPaginas<{
+    presenca_evento_id: number;
+    linha_emusys_id: number | null;
+    decisao: string;
+  }>((de, ate) =>
+    supabase
+      .from('presenca_emusys_escrita')
+      .select('presenca_evento_id,linha_emusys_id,decisao')
+      .eq('unidade_id', unidade.id)
+      .in('presenca_evento_id', eventoIds)
+      .order('id', { ascending: true })
+      .range(de, ate), 'livro_professor');
   const paresFeitos = new Set(
     (jaLancados ?? [])
       .filter((l: { decisao: string }) => modo !== 'ativo' || l.decisao !== 'seria_escrito')

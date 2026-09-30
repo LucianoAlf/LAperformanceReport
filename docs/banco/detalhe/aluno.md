@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-28 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-29 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — aluno
 
-160 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+163 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## aluno_acoes
 
@@ -1455,6 +1455,76 @@
 - `trg_evento_participacao_deriva → fn_evento_participacao_deriva()`
 - `trg_evento_participacao_touch → fn_evento_touch()`
 
+## evento_sheets_corrida
+
+> Uma linha por ciclo do recital-sheets-sync — auditoria operacional da equipe (a audit_log cobre dado de aluno; isto cobre a saude do sync em si).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `evento_id` | bigint | não |  | evento.id |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `origem` | text | não | 'cron'::text |  |
+| `iniciado_em` | timestamp with time zone | não | now() |  |
+| `duracao_ms` | integer | sim |  |  |
+| `planilhas_escritas` | integer | não | 0 |  |
+| `professores_ok` | integer | não | 0 |  |
+| `divergencias_lidas` | integer | não | 0 |  |
+| `erros` | jsonb | não | '[]'::jsonb |  |
+
+**Únicos:**
+- `evento_sheets_corrida_pkey`
+
+## evento_sheets_destino
+
+> Configuracao do espelho Sheets por evento: pasta "Recital 2026" da unidade + e-mails da equipe que recebem a planilha geral. A edge recital-sheets-sync so espelha eventos com uma linha aqui.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `evento_id` | bigint | não |  | evento.id |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `pasta_recital_id` | text | sim |  |  |
+| `emails_equipe` | text[] | não | '{}'::text[] |  |
+| `planilha_geral_id` | text | sim |  |  |
+| `ativo` | boolean | não | true |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `evento_sheets_destino_evento_id_key`
+- `evento_sheets_destino_pkey`
+
+**Triggers:**
+- `trg_audit_evento_sheets_destino → fn_evento_audit_log()`
+- `trg_evento_sheets_destino_touch → fn_evento_touch()`
+
+## evento_sheets_professor
+
+> Estado do espelho por professor: pasta/planilha criadas, e-mail do share e o ultimo erro. sem_email = professor sem usuarios.email vinculado — a equipe cadastra e a proxima corrida resolve.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `evento_id` | bigint | não |  | evento.id |
+| `professor_id` | integer | não |  | professores.id |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `pasta_id` | text | sim |  |  |
+| `planilha_id` | text | sim |  |  |
+| `email` | text | sim |  |  |
+| `status` | text | não | 'pendente'::text |  |
+| `ultimo_erro` | text | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `evento_sheets_professor_evento_id_professor_id_key`
+- `evento_sheets_professor_pkey`
+
+**Triggers:**
+- `trg_audit_evento_sheets_professor → fn_evento_audit_log()`
+- `trg_evento_sheets_professor_touch → fn_evento_touch()`
+
 ## evento_staff
 
 > Escala de staff do evento. bloco_id null = funcao do evento inteiro (credenciamento, boas-vindas); preenchido = funcao daquele bloco (roadie de palco do bloco 2).
@@ -2248,7 +2318,7 @@
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
 | `id` | uuid | não | gen_random_uuid() |  |
-| `pesquisa_id` | uuid | sim |  | pesquisa_evasao_analises.pesquisa_id |
+| `pesquisa_id` | uuid | sim |  | pesquisa_evasao.id |
 | `caixa_id` | integer | não |  | whatsapp_caixas.id |
 | `direcao` | text | não |  |  |
 | `provider_message_id` | text | sim |  |  |
