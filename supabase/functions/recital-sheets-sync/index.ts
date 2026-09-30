@@ -93,7 +93,7 @@ async function chamarPonte(payload: Record<string, unknown>) {
 // nao aplica. divergencia > 0 = alguem editou a planilha protegida por fora.
 function divergenciasDaAba(antiga: string[][], nova: string[][]) {
   const semRodape = (linhas: string[][]) =>
-    (linhas ?? []).filter((l) => !(l[0] ?? '').startsWith('espelho de '));
+    (linhas ?? []).filter((l) => !String(l?.[0] ?? '').startsWith('espelho de '));
   const a = semRodape(antiga);
   const n = semRodape(nova);
   let diffs = Math.abs(a.length - n.length);
@@ -361,7 +361,7 @@ serve(async (req: Request) => {
       )] as number[];
       const { data: profs } = profIds.length
         ? await service.from('professores')
-            .select('id, nome, nome_preferido, usuario_id, usuarios:usuario_id(email)')
+            .select('id, nome, nome_preferido, usuario_id, email_google, usuarios:usuario_id(email)')
             .in('id', profIds)
         : { data: [] };
       const profPorId = new Map((profs ?? []).map((p: any) => [p.id, p]));
@@ -369,7 +369,11 @@ serve(async (req: Request) => {
       for (const profId of profIds) {
         const prof = profPorId.get(profId);
         const nomeProf = prof?.nome_preferido || prof?.nome || `Professor ${profId}`;
-        const email = prof?.usuarios?.email?.trim() || null;
+        // compartilhamento do Drive exige conta Google: prefere o email_google
+        // do cadastro (a maioria nao tem usuario; quem tem usa @la.internal,
+        // login sintetico que o Drive nao aceita — trata como sem_email)
+        const emailBruto = (prof?.email_google || prof?.usuarios?.email || '').trim();
+        const email = emailBruto && !emailBruto.endsWith('@la.internal') ? emailBruto : null;
         const linhasProf = [
           ['Aluno', 'Curso', 'Música', 'Artista', 'Duração (s)', 'Playback', 'Link', 'Rider', 'Obs', 'Relatório', 'Pendências'],
           ...(rAps.data ?? [])

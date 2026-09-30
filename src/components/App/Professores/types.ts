@@ -20,6 +20,7 @@ export interface Professor {
   observacoes: string | null;
   foto_url: string | null;
   telefone_whatsapp: string | null;
+  email_google: string | null;
   nps_medio: number | null;
   media_alunos_turma: number | null;
   created_at: string;
@@ -105,6 +106,7 @@ export interface ProfessorFormData {
   observacoes: string;
   foto_url: string;
   telefone_whatsapp: string;
+  email_google: string;
   unidades_ids: string[];
   cursos_ids: number[];
   // Disponibilidade por unidade: { unidade_id: { "Segunda": { inicio, fim }, ... } }
