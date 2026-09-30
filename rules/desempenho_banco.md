@@ -51,6 +51,15 @@ memória, então **toda varredura vira leitura de disco**, e o disco tem cota.
    (`pg_try_advisory_xact_lock`) em todo job agendado.
 10. **Se proteger quando o banco está no vermelho:** job não essencial deve pular a rodada se
     houver pressão (conexões altas), em vez de somar peso.
+11. **Função que GRAVA cache contamina quem a chama.** O PostgREST roda RPC `STABLE`/`IMMUTABLE`
+    em transação **read-only**: se ela chega (direta ou indiretamente) numa função que grava
+    cache, falha com `25006 cannot execute INSERT in a read-only transaction` — **só quando o
+    cache está vazio**, então passa em teste com cache quente e quebra em produção. Os caches de
+    23–25/09 deixaram **41** funções assim; a Mila ficou sem `numeros_do_mes` de 26 a 29/09 e
+    respondeu com número velho. Ao criar cache: marcar `VOLATILE` todo o fecho de chamadores
+    (query pronta na migration `20260930130000_funcoes_que_alcancam_cache_viram_volatile.sql`)
+    e testar **pela API com o cache vazio** — `set transaction_read_only` na mão não serve, ele
+    força read-only mesmo em função `VOLATILE`.
 
 ## Como ficar de olho sempre
 

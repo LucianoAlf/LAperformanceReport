@@ -24,6 +24,12 @@ Não entram:
 | **banda, coral, Power Kids, atividade extra** | coberto por `movimentacao_conta_nos_kpis_v1`. |
 | **sem passaporte pago** | matrícula do comercial é quem pagou a **taxa de matrícula / passaporte** (`emusys_faturas` com descrição `taxa de matr` ou `passaporte` e `data_pagamento` preenchida). |
 
+**Ex-aluno que volta CONTA** (decisão do Hugo, 30/09/2026): é entrada nova que pagou
+passaporte novo. `is_ex_aluno` e `is_aluno_retorno` **não** excluem. Até 30/09 a cópia
+própria da conta em `kpis_comercial_v2_sem_cache_20260923` excluía os dois e divergia
+da implementação única (CG/set: 16 × 17, caso Adam Sales). Corrigido na migration
+`20260930120000_matricula_comercial_conta_ex_aluno_e_retorno.sql`.
+
 Validação em ago/2026, Campo Grande, contra o número que a consultora tinha na
 mão (24): 37 linhas → −7 segundo curso → 30 → −5 bolsista/extra → 25 → −1 sem
 passaporte → **24**. Nas outras: Recreio 26 → 21, Barra 22 → 17.
