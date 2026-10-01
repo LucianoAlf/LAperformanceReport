@@ -82,7 +82,7 @@ RPCs leem o estado **atual** do banco, não o de então.
   `aprovado` — nunca fechou nada, e não incluía os dois documentos mensais. Junho foi
   gravado à mão em 30/06 23:05 e julho em 31/07 21:12.
 - **Automação completa (02/09/2026, LAPE-14):** cron **`fechamento-mensal-dia1`**
-  (jobid 189, `15 12 1 * *` = 09:15 BRT) → **`fechar_competencia_mensal_dia1_v1()`**, que
+  (jobid 189, `20 7 1 * *` = 04:20 BRT desde 01/10/2026 — era 09:15; madrugada para nada do dia 1º entrar no mês fechado) → **`fechar_competencia_mensal_dia1_v1()`**, que
   por unidade, em bloco protegido: valida a fonte financeira →
   **`garantir_bloco_financeiro_gerencial_v1`** → `capturar_relatorios_mensais_canonicos_v1`
   → **`fechar_competencia_mensal_canonica_v2`** (fecha **uma** unidade). Placar em
