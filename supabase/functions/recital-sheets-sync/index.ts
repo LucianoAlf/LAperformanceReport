@@ -109,8 +109,13 @@ function divergenciasDaAba(antiga: string[][], nova: string[][]) {
   return diffs;
 }
 
-const dt = (iso: string | null | undefined) =>
-  iso ? new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '';
+// DATE ('YYYY-MM-DD') nao pode passar por new Date(): UTC midnight vira dia anterior em SP.
+// Só timestamptz (tem 'T') recebe conversao de fuso.
+const dt = (iso: string | null | undefined) => {
+  if (!iso) return '';
+  if (iso.length === 10) return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+  return new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+};
 const hhmm = (t: string | null | undefined) => (t ? String(t).slice(0, 5) : '');
 // timestamptz ISO → hora de Brasilia (check-in na planilha nao pode sair 3h adiantado)
 const hhmmBrt = (iso: string | null | undefined) =>
@@ -242,6 +247,16 @@ serve(async (req: Request) => {
       if (erroFonte) { falha('leitura_banco', erroFonte.message); continue; }
 
       const blocoPorId = new Map((rBlocos.data ?? []).map((b) => [b.id, b]));
+      // Ordem da grade: data → horario do bloco → ordem dentro do bloco
+      // (ordenar so por a.ordem mistura os blocos: todos os 1o, depois todos os 2o...)
+      const apsOrdenadas = (rAps.data ?? []).slice().sort((x: any, y: any) => {
+        const bx = blocoPorId.get(x.bloco_id);
+        const by = blocoPorId.get(y.bloco_id);
+        return String(bx?.data ?? '').localeCompare(String(by?.data ?? ''))
+          || String(bx?.horario_inicial ?? '').localeCompare(String(by?.horario_inicial ?? ''))
+          || (bx?.ordem ?? 0) - (by?.ordem ?? 0)
+          || (x.ordem ?? 0) - (y.ordem ?? 0);
+      });
       const partPorChave = new Map((rPart.data ?? []).map((p) => [p.pessoa_chave, p]));
       const relPorApresentacao = new Map(
         ((rRelatorios.data ?? []) as any[]).map((r) => [r.apresentacao_id, r]),
@@ -275,7 +290,7 @@ serve(async (req: Request) => {
         ['Ordem', 'Aluno', 'Curso', 'Professor', 'Unidade origem', 'Música', 'Artista',
           'Duração (s)', 'Playback', 'Link', 'Rider/Obs mapa', 'Convidados', 'Participa?',
           'Formatura', 'Relatório'],
-        ...(rAps.data ?? []).filter((a: any) => a.tipo === 'aluno').map((a: any) => {
+        ...(apsOrdenadas).filter((a: any) => a.tipo === 'aluno').map((a: any) => {
           const part = partPorChave.get(a.pessoa_chave);
           const rel = relPorApresentacao.get(a.id);
           return [
@@ -292,7 +307,7 @@ serve(async (req: Request) => {
 
       const abaOrdem = [
         ['Bloco', 'Data', 'Início', 'Ordem', 'Quem/Número', 'Música', 'Duração', 'Tipo'],
-        ...(rAps.data ?? []).map((a: any) => {
+        ...(apsOrdenadas).map((a: any) => {
           const b = blocoPorId.get(a.bloco_id);
           return [
             b?.nome ?? '', dt(b?.data), hhmm(b?.horario_inicial), a.ordem ?? '',
@@ -359,7 +374,7 @@ serve(async (req: Request) => {
 
       // ── planilha de cada professor ─────────────────────────────────────
       const profIds = [...new Set(
-        (rAps.data ?? []).filter((a: any) => a.tipo === 'aluno' && a.professor_id).map((a: any) => a.professor_id),
+        apsOrdenadas.filter((a: any) => a.tipo === 'aluno' && a.professor_id).map((a: any) => a.professor_id),
       )] as number[];
       const { data: profs } = profIds.length
         ? await service.from('professores')
@@ -383,7 +398,7 @@ serve(async (req: Request) => {
         const email = emailBruto && !emailBruto.endsWith('@la.internal') ? emailBruto : null;
         const linhasProf = [
           ['Aluno', 'Curso', 'Música', 'Artista', 'Duração (s)', 'Playback', 'Link', 'Rider', 'Obs', 'Relatório', 'Pendências'],
-          ...(rAps.data ?? [])
+          ...(apsOrdenadas)
             .filter((a: any) => a.tipo === 'aluno' && a.professor_id === profId)
             .map((a: any) => {
               const rel = relPorApresentacao.get(a.id);
