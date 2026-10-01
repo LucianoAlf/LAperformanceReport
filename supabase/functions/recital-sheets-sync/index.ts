@@ -369,11 +369,14 @@ serve(async (req: Request) => {
         : { data: [] };
       const profPorId = new Map((profs ?? []).map((p: any) => [p.id, p]));
 
-      for (const profId of profIds) {
+      // Professor por professor em série estourava o teto de 150s da edge quando o
+      // evento tem muita gente (Recreio: 21). Cada professor custa ~3 chamadas de
+      // ponte que são pura espera de I/O — rodamos em blocos de 5 em paralelo.
+      const processarProf = async (profId: number) => {
         const prof = profPorId.get(profId);
         // Professor inativo/mesclado (ex.: 676, fundido no 8) nao ganha planilha —
         // e professor sem e-mail tambem ganha: quem le e o administrativo, nao ele.
-        if (!prof) continue;
+        if (!prof) return;
         const nomeProf = prof.nome_preferido || prof.nome || `Professor ${profId}`;
         // email fica registrado so como referencia — nao e mais requisito.
         const emailBruto = (prof.email_google || prof.usuarios?.email || '').trim();
@@ -394,13 +397,21 @@ serve(async (req: Request) => {
         ];
 
         try {
-          const pasta = await chamarPonte({
-            token: BRIDGE_TOKEN, acao: 'garantir_pasta',
-            pastaPai: pastaRecital, nome: nomeProf,
-          });
-          if (!pasta.ok || !pasta.id) throw new Error(pasta.erro ?? 'pasta_nao_criada');
+          // Com pasta já gravada no destino não gastamos a chamada garantir_pasta
+          // da ponte — cada professor custava ~3 chamadas e evento com muita gente
+          // (Recreio, 21 professores) estourava o timeout de 150s da edge.
           const { data: profRow } = await service.from('evento_sheets_professor')
-            .select('planilha_id').eq('evento_id', dest.evento_id).eq('professor_id', profId).maybeSingle();
+            .select('planilha_id, pasta_id').eq('evento_id', dest.evento_id).eq('professor_id', profId).maybeSingle();
+          let pastaId = profRow?.pasta_id;
+          if (!pastaId) {
+            const pasta = await chamarPonte({
+              token: BRIDGE_TOKEN, acao: 'garantir_pasta',
+              pastaPai: pastaRecital, nome: nomeProf,
+            });
+            if (!pasta.ok || !pasta.id) throw new Error(pasta.erro ?? 'pasta_nao_criada');
+            pastaId = pasta.id as string;
+          }
+          const pasta = { id: pastaId };
           let planilhaId = profRow?.planilha_id;
           if (!planilhaId) {
             const pl = await chamarPonte({
@@ -447,6 +458,9 @@ serve(async (req: Request) => {
             detalhes: `Professor ${nomeProf}: ${msg.slice(0, 300)}`, unidade_nome: unidadeNome,
           });
         }
+      };
+      for (let i = 0; i < profIds.length; i += 5) {
+        await Promise.all(profIds.slice(i, i + 5).map(processarProf));
       }
 
       resumo.corridas += 1;
