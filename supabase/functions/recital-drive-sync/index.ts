@@ -119,7 +119,7 @@ serve(async (req: Request) => {
   // último envio). Filtro em JS porque PostgREST não compara coluna com coluna.
   let query = service
     .from('evento_apresentacao')
-    .select('id, playback_path, aluno_id, evento:evento_id(titulo), unidade:unidade_id(nome), curso:curso_id(nome), professor:professor_id(nome), aluno:aluno_id(nome), drive_playback_path')
+    .select('id, playback_path, aluno_id, evento:evento_id(titulo), unidade:unidade_id(nome), curso:curso_id(nome), professor:professor_id(nome), aluno:aluno_id(nome), drive_playback_path, drive_file_id, drive_erro')
     .or('playback_path.not.is.null,drive_playback_path.not.is.null')
     .order('id');
   if (typeof corpo.evento_id === 'number') query = query.eq('evento_id', corpo.evento_id);
@@ -133,17 +133,34 @@ serve(async (req: Request) => {
     .slice(0, limite);
 
   // Professor voltou para "Ao vivo": playback_path zera, mas o arquivo JA esta no
-  // Drive — a ponte nao apaga, entao o orfao fica. Marcar na linha e o minimo honesto:
-  // sem isso a divergencia so apareceria olhando a pasta.
+  // Drive. A ponte passou a ter acao 'renomear' — o orfao vira "NÃO USAR — nome"
+  // para a equipe de som nao tocar o arquivo errado no dia. Quem ja foi renomeado
+  // carimba o marcador no drive_erro e sai da fila: sem isso cada corrida refazia
+  // a mesma renomeacao (inofensiva, mas ruido e custo).
+  const MARCA_RENOMEADO = 'playback_removido_no_lateacher: renomeado no Drive para NAO USAR';
   const removidos = (linhas ?? [])
-    .filter((l) => !l.playback_path && l.drive_playback_path);
+    .filter((l) => !l.playback_path && l.drive_playback_path
+      && !(l.drive_erro ?? '').startsWith(MARCA_RENOMEADO));
   for (const l of removidos) {
+    const ext = (String(l.drive_playback_path).split('.').pop() ?? 'mp3').toLowerCase();
+    const alunoNome = texto(l.aluno, `Aluno ${l.aluno_id ?? ''}`.trim());
+    const cursoNome = texto(l.curso, 'Curso');
+    let marcador = 'playback_removido_no_lateacher: arquivo antigo ficou no Drive';
+    if (l.drive_file_id) {
+      const ren = await chamarPonte({
+        token: BRIDGE_TOKEN, acao: 'renomear', arquivo: l.drive_file_id,
+        nome: `NÃO USAR — ${alunoNome} — ${cursoNome}.${ext}`,
+      });
+      // Ponte antiga devolve erro de acao desconhecida: cai no marcador antigo,
+      // que e honesto — o arquivo segue la com nome normal ate a ponte subir.
+      if (ren.ok) marcador = MARCA_RENOMEADO;
+    }
     await service.from('evento_apresentacao')
-      .update({ drive_erro: 'playback_removido_no_lateacher: arquivo antigo ficou no Drive' })
+      .update({ drive_erro: marcador })
       .eq('id', l.id);
   }
 
-  const resultado = { ok: true, varridos: linhas?.length ?? 0, processados: 0, enviados: 0, orfaos: removidos.length, erros: [] as Record<string, unknown>[] };
+  const resultado = { ok: true, varridos: linhas?.length ?? 0, processados: 0, enviados: 0, reaproveitados: 0, orfaos: removidos.length, erros: [] as Record<string, unknown>[] };
 
   for (const linha of pendentes) {
     resultado.processados += 1;
@@ -177,11 +194,35 @@ serve(async (req: Request) => {
     const aluno = texto(linha.aluno, `Aluno ${linha.aluno_id ?? ''}`.trim());
     const curso = texto(linha.curso, 'Curso');
     const ext = (linha.playback_path.split('.').pop() ?? 'mp3').toLowerCase();
+    const nomeAlvo = `${aluno} — ${curso}.${ext}`;
+
+    // Dedup: o playback do Antonio foi parar no Drive antes de ele ter
+    // apresentacao (subido a mao). Se a pasta ja tem o arquivo, reaproveitamos
+    // o id em vez de criar copia. Ponte sem a acao 'buscar' devolve erro e o
+    // fluxo cai no upload normal — a ponte substitui homonimo, entao o risco
+    // residual e so arquivo com nome diferente do padrao.
+    const subpastas = [unidade, evento, professor];
+    const achado = await chamarPonte({
+      token: BRIDGE_TOKEN, acao: 'buscar', subpastas, nome: nomeAlvo,
+    });
+    if (achado.ok && achado.id) {
+      resultado.enviados += 1;
+      resultado.reaproveitados += 1;
+      await service.from('evento_apresentacao')
+        .update({
+          drive_playback_path: linha.playback_path,
+          drive_file_id: achado.id,
+          drive_sincronizado_em: new Date().toISOString(),
+          drive_erro: null,
+        })
+        .eq('id', linha.id);
+      continue;
+    }
 
     const respostaPonte = await chamarPonte({
       token: BRIDGE_TOKEN,
-      subpastas: [unidade, evento, professor],
-      nome: `${aluno} — ${curso}.${ext}`,
+      subpastas,
+      nome: nomeAlvo,
       tipo: arquivo.type || 'audio/mpeg',
       conteudoBase64: base64De(buffer),
     });

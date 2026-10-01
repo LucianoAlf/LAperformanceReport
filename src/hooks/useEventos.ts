@@ -297,6 +297,12 @@ export interface AlunoElegivel {
   /** Atalho de `alocacoes.length`, para a contagem nao ter de percorrer o array. */
   cursos_alocados: number;
   /**
+   * O professor ja enviou o relatorio do LA Teacher (musica/palco/playback prontos) mas a
+   * pessoa ainda nao tem apresentacao na grade — o conteudo so entra quando ela for
+   * alocada. Selo de prioridade para a coordenacao: e quem "ja fez a licao e falta cadeira".
+   */
+  relatorio_pronto: boolean;
+  /**
    * Preenchido so para aluno de OUTRA unidade que se apresenta neste evento (nome da unidade
    * de origem). `null`/ausente = aluno da casa.
    */
@@ -315,7 +321,7 @@ export interface AlunoDeOutraUnidade {
 }
 
 interface VisitantesDoEvento {
-  pessoas: (Omit<AlunoElegivel, 'status' | 'convidados' | 'alocacoes' | 'cursos_alocados'> & {
+  pessoas: (Omit<AlunoElegivel, 'status' | 'convidados' | 'alocacoes' | 'cursos_alocados' | 'relatorio_pronto'> & {
     unidade_origem_nome: string;
   })[];
   /** aluno_id -> nome de toda matricula de outra unidade que o evento referencia. */
@@ -393,7 +399,7 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
     setLoading(true);
     setErro(null);
 
-    const [elegiveis, participacoes, apresentacoes, visitantes] = await Promise.all([
+    const [elegiveis, participacoes, apresentacoes, visitantes, relatorios] = await Promise.all([
       supabase
         .from('vw_evento_aluno_elegivel_v1')
         .select('*')
@@ -410,6 +416,12 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
         .select('pessoa_chave, curso_id, bloco_id, evento_bloco(nome, ordem, horario_inicial)')
         .eq('evento_id', eventoId),
       lerVisitantes(eventoId),
+      // Relatorio enviado sem apresentacao = "falta alocar". Nao pode derrubar a lista
+      // inteira se a RPC falhar: o selo e auxiliar, a fila principal e a participacao.
+      supabase
+        .rpc('evento_relatorios_v1', { p_evento_id: eventoId })
+        .then((r) => r)
+        .catch(() => ({ data: null, error: null })),
     ]);
 
     const falha = elegiveis.error ?? participacoes.error ?? apresentacoes.error ?? visitantes.error;
@@ -458,11 +470,20 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
       alocacoesPorChave.set(linha.pessoa_chave, lista);
     }
 
+    // Relatorio 'enviado' que ainda nao casou com apresentacao nenhuma — o professor ja
+    // entregou musica/palco/playback e falta cadeira na grade. Caso por PESSOA: a chave
+    // do relatorio e a mesma da participacao.
+    const relatorioProntoPorChave = new Set<string>(
+      ((relatorios.data ?? []) as RelatorioDoProfessor[])
+        .filter((r) => r.relatorio_status === 'enviado' && r.apresentacao_id === null)
+        .map((r) => r.pessoa_chave),
+    );
+
     // Visitantes depois dos da casa: a lista e da unidade, e quem vem de fora e excecao.
     const base = [
       ...((elegiveis.data ?? []) as unknown as Omit<
         AlunoElegivel,
-        'status' | 'alocacoes' | 'cursos_alocados'
+        'status' | 'alocacoes' | 'cursos_alocados' | 'relatorio_pronto'
       >[]),
       ...visitantes.visitantes.pessoas,
     ];
@@ -479,6 +500,7 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
           formatura_origem: formaturaPorChave.get(a.pessoa_chave)?.origem ?? null,
           alocacoes,
           cursos_alocados: alocacoes.length,
+          relatorio_pronto: relatorioProntoPorChave.has(a.pessoa_chave),
         };
       }),
     );

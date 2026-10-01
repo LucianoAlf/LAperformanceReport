@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Search, Users, Check, HelpCircle, X, Music, AlertTriangle, Guitar, LayoutList, UserPlus, Trash2, GraduationCap } from 'lucide-react';
+import { Search, Users, Check, HelpCircle, X, Music, AlertTriangle, Guitar, LayoutList, UserPlus, Trash2, GraduationCap, FileCheck } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -177,6 +177,18 @@ function LinhaAluno({
             <GraduationCap className="h-3 w-3" />
             {aluno.formatura_tipo ? `formando · ${FORMATURA_ROTULO[aluno.formatura_tipo] ?? ''}` : ''}
           </button>
+          {/* O professor ja entregou o relatorio no LA Teacher e a pessoa nao tem
+              apresentacao: e a fila que a coordenacao precisa zerar primeiro — alocar
+              aqui e o que traz musica, palco e playback pra dentro da grade. */}
+          {aluno.relatorio_pronto && (
+            <span
+              className="flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-px text-[10.5px] font-medium text-amber-300"
+              title="O professor já enviou o relatório no LA Teacher (música, palco e playback prontos) — falta alocar a pessoa num bloco"
+            >
+              <FileCheck className="h-3 w-3" />
+              relatório pronto · falta alocar
+            </span>
+          )}
         </div>
 
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px] text-slate-400">
@@ -286,6 +298,7 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
   const [filtroProfessor, setFiltroProfessor] = useState('todos');
   const [filtroCurso, setFiltroCurso] = useState('todos');
   const [soSemAlocar, setSoSemAlocar] = useState(false);
+  const [soRelatorioPronto, setSoRelatorioPronto] = useState(false);
   const [gravando, setGravando] = useState<string | null>(null);
   const [modalOutraUnidade, setModalOutraUnidade] = useState(false);
   // Alvos congelados no clique: o modal promete N pessoas e a confirmacao grava
@@ -293,6 +306,9 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
   const [lotePendente, setLotePendente] = useState<AlunoElegivel[] | null>(null);
 
   const resumo = useMemo(() => resumirParticipacao(alunos), [alunos]);
+  // O botao so aparece quando existe alguem no estado — um filtro que nunca filtra
+  // nada e controle morto na barra.
+  const temRelatorioPronto = useMemo(() => alunos.some((a) => a.relatorio_pronto), [alunos]);
 
   // Opcoes dos filtros saem da PROPRIA lista: um professor sem aluno elegivel no recital
   // nao pode ter aluno para filtrar, entao oferece-lo seria um caminho para o vazio.
@@ -332,6 +348,7 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
       if (soSemAlocar && (a.cursos_alocados >= a.cursos_no_recital || a.cursos_no_recital === 0)) {
         return false;
       }
+      if (soRelatorioPronto && !a.relatorio_pronto) return false;
       if (!termo) return true;
       const alvo = normalizarBusca(
         `${a.nome} ${a.cursos.map((c) => `${c.curso_nome} ${c.professor_nome ?? ''}`).join(' ')}`,
@@ -559,6 +576,19 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
           >
             <LayoutList className="h-3.5 w-3.5" />
             Sem alocar
+          </Button>
+        )}
+        {/* Quem o professor ja entregou relatorio e falta cadeira — a fila que a
+            coordenacao zera primeiro (Caio do Isaque foi o caso que originou). */}
+        {temRelatorioPronto && (
+          <Button
+            variant={soRelatorioPronto ? 'default' : 'outline'}
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setSoRelatorioPronto((v) => !v)}
+          >
+            <FileCheck className="h-3.5 w-3.5" />
+            Relatório pronto
           </Button>
         )}
 
