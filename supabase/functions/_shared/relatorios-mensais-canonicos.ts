@@ -294,7 +294,9 @@ export function formatarRelatorioAdminMensalCanonico(payload: JsonObject): strin
   const saidasSegundoCurso = quebraEvasoes.interrompido_2_curso ?? 0;
   const saidasBanda = quebraEvasoes.interrompido_banda ?? 0;
   const saidasTransferencia = quebraEvasoes.transferencia ?? 0;
-  const saidasForaDoChurn = saidasBolsistas + saidasSegundoCurso + saidasBanda + saidasTransferencia;
+  const saidasMesmaPessoa = quebraEvasoes.mesma_pessoa ?? 0;
+  const saidasForaDoChurn = saidasBolsistas + saidasSegundoCurso + saidasBanda + saidasTransferencia
+    + saidasMesmaPessoa;
   const saidasChurnPagantes = evasoesCompletas.length - saidasForaDoChurn;
   const baseChurnPagantes = inteiro(r.alunos_pagantes);
   const churnCalculado = baseChurnPagantes > 0
@@ -313,7 +315,10 @@ export function formatarRelatorioAdminMensalCanonico(payload: JsonObject): strin
     composicaoSaidas.push(`${saidasBolsistas} ${saidasBolsistas === 1 ? "bolsista" : "bolsistas"}`);
   }
   if (saidasSegundoCurso > 0) {
-    composicaoSaidas.push(`${saidasSegundoCurso} de curso adicional`);
+    composicaoSaidas.push(`${saidasSegundoCurso} que ${saidasSegundoCurso === 1 ? "segue" : "seguem"} em outro curso`);
+  }
+  if (saidasMesmaPessoa > 0) {
+    composicaoSaidas.push(`${saidasMesmaPessoa} da mesma pessoa`);
   }
   if (saidasBanda > 0) {
     composicaoSaidas.push(`${saidasBanda} de banda`);
@@ -502,7 +507,8 @@ export function formatarRelatorioAdminMensalCanonico(payload: JsonObject): strin
     linhas.push(
       "",
       "Não entram no total (regra da casa):",
-      `• Interrompido 2º Curso: *${saidasSegundoCurso}*`,
+      `• Encerrou 1 curso, segue na escola: *${saidasSegundoCurso}*`,
+      `• 2º curso da mesma pessoa: *${saidasMesmaPessoa}*`,
       `• Interrompido Bolsista: *${saidasBolsistas}*`,
       `• Interrompido Banda: *${saidasBanda}*`,
       `• Transferência: *${saidasTransferencia}*`,

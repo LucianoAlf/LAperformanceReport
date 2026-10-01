@@ -102,3 +102,24 @@ Deno.test("mês sem saída fora da regra não inventa bloco nem quebra a conta",
   assertEquals(c.totalQueConta, 7);
   assertEquals(c.avisos, []);
 });
+
+Deno.test("classificacao_churn do banco manda sobre o tipo_evasao (churn por pessoa, 01/10/2026)", () => {
+  // Ana Luiza/CG: saiu do 1º curso e segue em Canto — tipo_evasao dizia interrompido.
+  assertEquals(
+    classificarSaida({ tipo_evasao: "interrompido", classificacao_churn: "segue_na_escola" }),
+    "interrompido_2_curso",
+  );
+  // Júlia/Barra: não renovou Canto e Violão — a 2ª saída é a mesma pessoa.
+  assertEquals(classificarSaida({ tipo_evasao: "nao_renovou", classificacao_churn: "mesma_pessoa" }), "mesma_pessoa");
+  assertEquals(entraNoTotal("mesma_pessoa"), false);
+  // Equipe marcou 2º curso, mas a pessoa saiu da escola: o fato vence a marcação.
+  assertEquals(classificarSaida({ tipo_evasao: "interrompido_2_curso", classificacao_churn: "conta" }), "interrompido");
+  assertEquals(classificarSaida({ tipo_evasao: "nao_renovou", classificacao_churn: "conta" }), "nao_renovou");
+  const c = composicaoDeSaidas(
+    [{ classificacao_churn: "conta" }, { classificacao_churn: "mesma_pessoa" }, { classificacao_churn: "segue_na_escola" }],
+    0,
+    3,
+  );
+  assertEquals([c.interrompido, c.mesmaPessoa, c.segundoCurso, c.totalQueConta, c.foraDoTotal], [1, 1, 1, 1, 2]);
+  assertEquals(c.avisos, []);
+});

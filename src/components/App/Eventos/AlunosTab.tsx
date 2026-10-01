@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Search, Users, Check, HelpCircle, X, Music, AlertTriangle, Guitar, LayoutList, UserPlus, Trash2 } from 'lucide-react';
+import { Search, Users, Check, HelpCircle, X, Music, AlertTriangle, Guitar, LayoutList, UserPlus, Trash2, GraduationCap, FileCheck } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,7 @@ import {
   definirParticipacao,
   definirConvidados,
   definirParticipacaoEmLote,
+  definirFormando,
   removerAlunoDeOutraUnidade,
   type AlocacaoDoCurso,
   type AlunoElegivel,
@@ -100,15 +101,25 @@ function SeloBloco({ alocacao }: { alocacao: AlocacaoDoCurso | undefined }) {
   );
 }
 
+/** Rótulo do selo de formando: o tipo diz PARA ONDE a pessoa passa. */
+const FORMATURA_ROTULO: Record<string, string> = {
+  kids: 'Kids → School',
+  bebes: 'Bebês → Preparatória',
+  la: 'formando',
+};
+
 function LinhaAluno({
   aluno,
   onEscolher,
   onConvidados,
+  onFormando,
   onRemover,
 }: {
   aluno: AlunoElegivel;
   onEscolher: (s: ParticipacaoStatus) => void;
   onConvidados: (n: number) => void;
+  /** Marca/desmarca formando à mão ('manual' prevalece sobre a rotina). */
+  onFormando: () => void;
   /** So para aluno de outra unidade: tira do evento (participacao + apresentacoes). */
   onRemover?: () => void;
 }) {
@@ -119,7 +130,7 @@ function LinhaAluno({
   return (
     <div
       className={cn(
-        'flex items-center gap-3 border-b border-slate-800 px-3 py-2.5 last:border-b-0',
+        'group flex items-center gap-3 border-b border-slate-800 px-3 py-2.5 last:border-b-0',
         aluno.status === 'participa' && 'bg-emerald-500/[0.04]',
         aluno.status === 'nao' && 'opacity-60',
       )}
@@ -143,6 +154,40 @@ function LinhaAluno({
               <Guitar className="h-2.5 w-2.5" />
               banda
             </Badge>
+          )}
+          {/* Selo de formando: clicável porque a coordenação pode marcar/desmarcar à
+              mão — 'manual' prevalece e a rotina do LA Teacher não sobrescreve. */}
+          <button
+            type="button"
+            onClick={onFormando}
+            title={
+              aluno.formatura_tipo
+                ? `Formando (${aluno.formatura_origem === 'manual' ? 'marcado à mão' : 'marcado pela regra'}) — clique para desmarcar`
+                : 'Marcar como formando (passa de ciclo este ano)'
+            }
+            className={cn(
+              'flex items-center gap-1 rounded px-1.5 py-px text-[10.5px] font-medium transition-colors',
+              aluno.formatura_tipo
+                ? 'bg-violet-500/15 text-violet-300 hover:bg-violet-500/25'
+                : // Marcacao manual e excecao — o botao fantasma so aparece no hover da
+                  // linha, senao seria um controle morto em 270 alunos.
+                  'text-slate-600 opacity-0 hover:bg-slate-800 hover:text-slate-400 group-hover:opacity-100',
+            )}
+          >
+            <GraduationCap className="h-3 w-3" />
+            {aluno.formatura_tipo ? `formando · ${FORMATURA_ROTULO[aluno.formatura_tipo] ?? ''}` : ''}
+          </button>
+          {/* O professor ja entregou o relatorio no LA Teacher e a pessoa nao tem
+              apresentacao: e a fila que a coordenacao precisa zerar primeiro — alocar
+              aqui e o que traz musica, palco e playback pra dentro da grade. */}
+          {aluno.relatorio_pronto && (
+            <span
+              className="flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-px text-[10.5px] font-medium text-amber-300"
+              title="O professor já enviou o relatório no LA Teacher (música, palco e playback prontos) — falta alocar a pessoa num bloco"
+            >
+              <FileCheck className="h-3 w-3" />
+              relatório pronto · falta alocar
+            </span>
           )}
         </div>
 
@@ -253,6 +298,7 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
   const [filtroProfessor, setFiltroProfessor] = useState('todos');
   const [filtroCurso, setFiltroCurso] = useState('todos');
   const [soSemAlocar, setSoSemAlocar] = useState(false);
+  const [soRelatorioPronto, setSoRelatorioPronto] = useState(false);
   const [gravando, setGravando] = useState<string | null>(null);
   const [modalOutraUnidade, setModalOutraUnidade] = useState(false);
   // Alvos congelados no clique: o modal promete N pessoas e a confirmacao grava
@@ -260,6 +306,9 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
   const [lotePendente, setLotePendente] = useState<AlunoElegivel[] | null>(null);
 
   const resumo = useMemo(() => resumirParticipacao(alunos), [alunos]);
+  // O botao so aparece quando existe alguem no estado — um filtro que nunca filtra
+  // nada e controle morto na barra.
+  const temRelatorioPronto = useMemo(() => alunos.some((a) => a.relatorio_pronto), [alunos]);
 
   // Opcoes dos filtros saem da PROPRIA lista: um professor sem aluno elegivel no recital
   // nao pode ter aluno para filtrar, entao oferece-lo seria um caminho para o vazio.
@@ -299,6 +348,7 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
       if (soSemAlocar && (a.cursos_alocados >= a.cursos_no_recital || a.cursos_no_recital === 0)) {
         return false;
       }
+      if (soRelatorioPronto && !a.relatorio_pronto) return false;
       if (!termo) return true;
       const alvo = normalizarBusca(
         `${a.nome} ${a.cursos.map((c) => `${c.curso_nome} ${c.professor_nome ?? ''}`).join(' ')}`,
@@ -322,6 +372,35 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
   const salvarConvidados = async (aluno: AlunoElegivel, n: number) => {
     const { error } = await definirConvidados(eventoId, aluno.aluno_id_referencia, n);
     if (error) toast.error(`Não consegui gravar os convidados de ${aluno.nome}: ${error.message}`);
+    else recarregar();
+  };
+
+  // Formando: o selo vem da regra do LA Teacher (idade no ano + curso); o clique é o
+  // override da coordenação — grava 'manual' e a rotina automática não sobrescreve.
+  const alternarFormando = async (aluno: AlunoElegivel) => {
+    if (aluno.formatura_tipo) {
+      if (!window.confirm(`Tirar o selo de formando de ${aluno.nome}? A rotina não vai marcá-lo de novo.`)) return;
+      const { error } = await definirFormando(eventoId, aluno.pessoa_chave, aluno.aluno_id_referencia, null);
+      if (error) toast.error(`Não consegui desmarcar: ${error.message}`);
+      else recarregar();
+      return;
+    }
+    const tipo = window.prompt(
+      `Marcar ${aluno.nome} como formando. Qual passagem?\n` +
+        'kids — fez 12 anos no ano (Kids → LA Music School)\n' +
+        'bebes — fez 2 anos e está em Musicalização para Bebês (→ Preparatória)',
+      'kids',
+    );
+    if (tipo === null) return;
+    const normalizado = tipo.trim().toLowerCase();
+    if (normalizado !== 'kids' && normalizado !== 'bebes') {
+      toast.error('Tipo inválido — use "kids" ou "bebes".');
+      return;
+    }
+    const { error } = await definirFormando(
+      eventoId, aluno.pessoa_chave, aluno.aluno_id_referencia, normalizado,
+    );
+    if (error) toast.error(`Não consegui marcar: ${error.message}`);
     else recarregar();
   };
 
@@ -499,6 +578,19 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
             Sem alocar
           </Button>
         )}
+        {/* Quem o professor ja entregou relatorio e falta cadeira — a fila que a
+            coordenacao zera primeiro (Caio do Isaque foi o caso que originou). */}
+        {temRelatorioPronto && (
+          <Button
+            variant={soRelatorioPronto ? 'default' : 'outline'}
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setSoRelatorioPronto((v) => !v)}
+          >
+            <FileCheck className="h-3.5 w-3.5" />
+            Relatório pronto
+          </Button>
+        )}
 
         <Button
           variant="outline"
@@ -547,6 +639,7 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
                 aluno={a}
                 onEscolher={(s) => escolher(a, s)}
                 onConvidados={(n) => salvarConvidados(a, n)}
+                onFormando={() => alternarFormando(a)}
                 onRemover={a.unidade_origem_nome ? () => removerVisitante(a) : undefined}
               />
             ))}

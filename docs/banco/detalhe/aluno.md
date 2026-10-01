@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-30 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-01 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — aluno
 
-163 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+164 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## aluno_acoes
 
@@ -1445,6 +1445,7 @@
 | `unidade_origem_id` | uuid | sim |  | unidades.id |
 | `formatura` | boolean | não | false |  |
 | `formatura_tipo` | text | sim |  |  |
+| `formatura_origem` | text | sim |  |  |
 
 **Únicos:**
 - `evento_participacao_pessoa_unica`
@@ -4077,6 +4078,20 @@
 | `detector_da_regra` | text | sim |  |  |
 | `rodada_referencia` | timestamp with time zone | sim |  |  |
 | `vigencia` | text | sim |  |  |
+
+## vw_recital_passagem_de_ciclo_v1
+
+> Contrato LA Teacher -> LA Report (30/09): formandos de cada recital aberto (tipo kids_para_school \| bebes_para_preparatoria), um por aluno+curso. Só service_role.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `evento_id` | bigint | sim |  |  |
+| `aluno_id` | integer | sim |  |  |
+| `pessoa_chave` | text | sim |  |  |
+| `curso` | text | sim |  |  |
+| `curso_chave` | text | sim |  |  |
+| `data_nascimento` | date | sim |  |  |
+| `tipo` | text | sim |  |  |
 
 ## vw_renovacao_ciclos
 

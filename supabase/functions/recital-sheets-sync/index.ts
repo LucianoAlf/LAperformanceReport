@@ -109,8 +109,13 @@ function divergenciasDaAba(antiga: string[][], nova: string[][]) {
   return diffs;
 }
 
-const dt = (iso: string | null | undefined) =>
-  iso ? new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '';
+// DATE ('YYYY-MM-DD') nao pode passar por new Date(): UTC midnight vira dia anterior em SP.
+// Só timestamptz (tem 'T') recebe conversao de fuso.
+const dt = (iso: string | null | undefined) => {
+  if (!iso) return '';
+  if (iso.length === 10) return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+  return new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+};
 const hhmm = (t: string | null | undefined) => (t ? String(t).slice(0, 5) : '');
 // timestamptz ISO → hora de Brasilia (check-in na planilha nao pode sair 3h adiantado)
 const hhmmBrt = (iso: string | null | undefined) =>
@@ -242,6 +247,16 @@ serve(async (req: Request) => {
       if (erroFonte) { falha('leitura_banco', erroFonte.message); continue; }
 
       const blocoPorId = new Map((rBlocos.data ?? []).map((b) => [b.id, b]));
+      // Ordem da grade: data → horario do bloco → ordem dentro do bloco
+      // (ordenar so por a.ordem mistura os blocos: todos os 1o, depois todos os 2o...)
+      const apsOrdenadas = (rAps.data ?? []).slice().sort((x: any, y: any) => {
+        const bx = blocoPorId.get(x.bloco_id);
+        const by = blocoPorId.get(y.bloco_id);
+        return String(bx?.data ?? '').localeCompare(String(by?.data ?? ''))
+          || String(bx?.horario_inicial ?? '').localeCompare(String(by?.horario_inicial ?? ''))
+          || (bx?.ordem ?? 0) - (by?.ordem ?? 0)
+          || (x.ordem ?? 0) - (y.ordem ?? 0);
+      });
       const partPorChave = new Map((rPart.data ?? []).map((p) => [p.pessoa_chave, p]));
       const relPorApresentacao = new Map(
         ((rRelatorios.data ?? []) as any[]).map((r) => [r.apresentacao_id, r]),
@@ -275,7 +290,7 @@ serve(async (req: Request) => {
         ['Ordem', 'Aluno', 'Curso', 'Professor', 'Unidade origem', 'Música', 'Artista',
           'Duração (s)', 'Playback', 'Link', 'Rider/Obs mapa', 'Convidados', 'Participa?',
           'Formatura', 'Relatório'],
-        ...(rAps.data ?? []).filter((a: any) => a.tipo === 'aluno').map((a: any) => {
+        ...(apsOrdenadas).filter((a: any) => a.tipo === 'aluno').map((a: any) => {
           const part = partPorChave.get(a.pessoa_chave);
           const rel = relPorApresentacao.get(a.id);
           return [
@@ -292,7 +307,7 @@ serve(async (req: Request) => {
 
       const abaOrdem = [
         ['Bloco', 'Data', 'Início', 'Ordem', 'Quem/Número', 'Música', 'Duração', 'Tipo'],
-        ...(rAps.data ?? []).map((a: any) => {
+        ...(apsOrdenadas).map((a: any) => {
           const b = blocoPorId.get(a.bloco_id);
           return [
             b?.nome ?? '', dt(b?.data), hhmm(b?.horario_inicial), a.ordem ?? '',
@@ -359,7 +374,7 @@ serve(async (req: Request) => {
 
       // ── planilha de cada professor ─────────────────────────────────────
       const profIds = [...new Set(
-        (rAps.data ?? []).filter((a: any) => a.tipo === 'aluno' && a.professor_id).map((a: any) => a.professor_id),
+        apsOrdenadas.filter((a: any) => a.tipo === 'aluno' && a.professor_id).map((a: any) => a.professor_id),
       )] as number[];
       const { data: profs } = profIds.length
         ? await service.from('professores')
@@ -369,18 +384,21 @@ serve(async (req: Request) => {
         : { data: [] };
       const profPorId = new Map((profs ?? []).map((p: any) => [p.id, p]));
 
-      for (const profId of profIds) {
+      // Professor por professor em série estourava o teto de 150s da edge quando o
+      // evento tem muita gente (Recreio: 21). Cada professor custa ~3 chamadas de
+      // ponte que são pura espera de I/O — rodamos em blocos de 5 em paralelo.
+      const processarProf = async (profId: number) => {
         const prof = profPorId.get(profId);
         // Professor inativo/mesclado (ex.: 676, fundido no 8) nao ganha planilha —
         // e professor sem e-mail tambem ganha: quem le e o administrativo, nao ele.
-        if (!prof) continue;
+        if (!prof) return;
         const nomeProf = prof.nome_preferido || prof.nome || `Professor ${profId}`;
         // email fica registrado so como referencia — nao e mais requisito.
         const emailBruto = (prof.email_google || prof.usuarios?.email || '').trim();
         const email = emailBruto && !emailBruto.endsWith('@la.internal') ? emailBruto : null;
         const linhasProf = [
           ['Aluno', 'Curso', 'Música', 'Artista', 'Duração (s)', 'Playback', 'Link', 'Rider', 'Obs', 'Relatório', 'Pendências'],
-          ...(rAps.data ?? [])
+          ...(apsOrdenadas)
             .filter((a: any) => a.tipo === 'aluno' && a.professor_id === profId)
             .map((a: any) => {
               const rel = relPorApresentacao.get(a.id);
@@ -394,13 +412,21 @@ serve(async (req: Request) => {
         ];
 
         try {
-          const pasta = await chamarPonte({
-            token: BRIDGE_TOKEN, acao: 'garantir_pasta',
-            pastaPai: pastaRecital, nome: nomeProf,
-          });
-          if (!pasta.ok || !pasta.id) throw new Error(pasta.erro ?? 'pasta_nao_criada');
+          // Com pasta já gravada no destino não gastamos a chamada garantir_pasta
+          // da ponte — cada professor custava ~3 chamadas e evento com muita gente
+          // (Recreio, 21 professores) estourava o timeout de 150s da edge.
           const { data: profRow } = await service.from('evento_sheets_professor')
-            .select('planilha_id').eq('evento_id', dest.evento_id).eq('professor_id', profId).maybeSingle();
+            .select('planilha_id, pasta_id').eq('evento_id', dest.evento_id).eq('professor_id', profId).maybeSingle();
+          let pastaId = profRow?.pasta_id;
+          if (!pastaId) {
+            const pasta = await chamarPonte({
+              token: BRIDGE_TOKEN, acao: 'garantir_pasta',
+              pastaPai: pastaRecital, nome: nomeProf,
+            });
+            if (!pasta.ok || !pasta.id) throw new Error(pasta.erro ?? 'pasta_nao_criada');
+            pastaId = pasta.id as string;
+          }
+          const pasta = { id: pastaId };
           let planilhaId = profRow?.planilha_id;
           if (!planilhaId) {
             const pl = await chamarPonte({
@@ -447,6 +473,9 @@ serve(async (req: Request) => {
             detalhes: `Professor ${nomeProf}: ${msg.slice(0, 300)}`, unidade_nome: unidadeNome,
           });
         }
+      };
+      for (let i = 0; i < profIds.length; i += 5) {
+        await Promise.all(profIds.slice(i, i + 5).map(processarProf));
       }
 
       resumo.corridas += 1;

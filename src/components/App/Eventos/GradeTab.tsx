@@ -36,6 +36,7 @@ import {
   UserPlus,
   Check,
   Users,
+  GraduationCap,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -256,6 +257,17 @@ function LinhaIntegrante({
                 title={`Editado em ${new Date(apresentacao.editado_apos_envio_em).toLocaleString('pt-BR')}`}
               >
                 editou após envio
+              </span>
+            )}
+            {/* Formando (passagem de ciclo): é o ritual da beca — o bloco conta quantos
+                tem no cabeçalho e a linha diz para onde a pessoa vai. */}
+            {apresentacao.formatura_tipo && (
+              <span
+                className="flex items-center gap-0.5 rounded bg-violet-500/15 px-1.5 py-px text-[10.5px] font-medium text-violet-300"
+                title={apresentacao.formatura_tipo === 'kids' ? 'Passa para a LA Music School' : apresentacao.formatura_tipo === 'bebes' ? 'Passa para a Musicalização Preparatória' : 'Formando'}
+              >
+                <GraduationCap className="h-3 w-3" />
+                formando
               </span>
             )}
             {apresentacao.certificado_status === 'emitido' && (
@@ -687,6 +699,13 @@ function CartaoBloco({
   // O que sobe ao palco de uma vez. A consolidação do palco do bloco inteiro continua na aba
   // Palco e na folha impressa; aqui cada número mostra o dele (pedido do Hugo, 28/09).
   const numeros = useMemo(() => agruparEmNumeros(bloco.apresentacoes), [bloco.apresentacoes]);
+  // Ritual da beca (pedido do Marcos, 30/09): QUANTOS formandos por bloco. É por
+  // PESSOA — quem toca dois cursos no mesmo bloco conta uma vez só.
+  const formandosDoBloco = useMemo(() => {
+    const pessoas = new Set<string>();
+    for (const a of bloco.apresentacoes) if (a.formatura_tipo) pessoas.add(a.pessoa_chave);
+    return pessoas.size;
+  }, [bloco.apresentacoes]);
   // `useSortable` faz as DUAS coisas: o bloco é item arrastável (trocar de ordem com os
   // outros) e alvo de soltura (receber apresentação, inclusive vazio). Antes eu usava
   // `useDroppable` e o bloco só recebia — não dava para reordenar os blocos entre si.
@@ -787,6 +806,16 @@ function CartaoBloco({
             ` (${bloco.apresentacoes.length} apresentações)`}
           {horario && horario.duracaoSegundos > 0 && ` · ${formatarDuracao(horario.duracaoSegundos)}`}
         </span>
+
+        {formandosDoBloco > 0 && (
+          <span
+            className="flex items-center gap-1 rounded bg-violet-500/15 px-2 py-0.5 text-[11px] font-medium text-violet-300"
+            title="Formandos neste bloco — passagem de ciclo (ritual da beca)"
+          >
+            <GraduationCap className="h-3 w-3" />
+            {formandosDoBloco} {formandosDoBloco === 1 ? 'formando' : 'formandos'}
+          </span>
+        )}
 
         {horario?.conflitaComAnterior && (
           <span className="flex items-center gap-1 text-[11.5px] text-rose-300">

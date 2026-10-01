@@ -280,6 +280,14 @@ export interface AlunoElegivel {
   /** Quantos convidados a pessoa leva. Por PESSOA, como o check-in. 0 = ninguem informou. */
   convidados: number;
   /**
+   * Selo de formando (passagem de ciclo), por PESSOA. 'kids' = 12 anos no ano → LA
+   * Music School; 'bebes' = 2 anos no ano estando em Musicalização para Bebês →
+   * Preparatória. A regra mora no LA Teacher; aqui chega pronta pela rotina.
+   */
+  formatura_tipo: 'kids' | 'bebes' | 'la' | null;
+  /** 'manual' = a coordenação decidiu à mão e a rotina automática não sobrescreve. */
+  formatura_origem: 'auto' | 'manual' | null;
+  /**
    * Alocacoes por CURSO, nao por pessoa.
    *
    * O grao e (pessoa, curso) porque a UNIQUE de `evento_apresentacao` e essa: quem faz 2
@@ -288,6 +296,12 @@ export interface AlunoElegivel {
   alocacoes: AlocacaoDoCurso[];
   /** Atalho de `alocacoes.length`, para a contagem nao ter de percorrer o array. */
   cursos_alocados: number;
+  /**
+   * O professor ja enviou o relatorio do LA Teacher (musica/palco/playback prontos) mas a
+   * pessoa ainda nao tem apresentacao na grade — o conteudo so entra quando ela for
+   * alocada. Selo de prioridade para a coordenacao: e quem "ja fez a licao e falta cadeira".
+   */
+  relatorio_pronto: boolean;
   /**
    * Preenchido so para aluno de OUTRA unidade que se apresenta neste evento (nome da unidade
    * de origem). `null`/ausente = aluno da casa.
@@ -307,7 +321,7 @@ export interface AlunoDeOutraUnidade {
 }
 
 interface VisitantesDoEvento {
-  pessoas: (Omit<AlunoElegivel, 'status' | 'convidados' | 'alocacoes' | 'cursos_alocados'> & {
+  pessoas: (Omit<AlunoElegivel, 'status' | 'convidados' | 'alocacoes' | 'cursos_alocados' | 'relatorio_pronto'> & {
     unidade_origem_nome: string;
   })[];
   /** aluno_id -> nome de toda matricula de outra unidade que o evento referencia. */
@@ -385,7 +399,7 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
     setLoading(true);
     setErro(null);
 
-    const [elegiveis, participacoes, apresentacoes, visitantes] = await Promise.all([
+    const [elegiveis, participacoes, apresentacoes, visitantes, relatorios] = await Promise.all([
       supabase
         .from('vw_evento_aluno_elegivel_v1')
         .select('*')
@@ -393,7 +407,7 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
         .order('nome'),
       supabase
         .from('evento_participacao')
-        .select('pessoa_chave, status, convidados')
+        .select('pessoa_chave, status, convidados, formatura_tipo, formatura_origem')
         .eq('evento_id', eventoId),
       // O embed do bloco depende da FK `bloco_id -> evento_bloco`, que existe desde a
       // migration de criacao — foi a FK AUSENTE de `evento_id` que derrubou a lista antes.
@@ -402,6 +416,12 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
         .select('pessoa_chave, curso_id, bloco_id, evento_bloco(nome, ordem, horario_inicial)')
         .eq('evento_id', eventoId),
       lerVisitantes(eventoId),
+      // Relatorio enviado sem apresentacao = "falta alocar". Nao pode derrubar a lista
+      // inteira se a RPC falhar: o selo e auxiliar, a fila principal e a participacao.
+      supabase
+        .rpc('evento_relatorios_v1', { p_evento_id: eventoId })
+        .then((r) => r)
+        .catch(() => ({ data: null, error: null })),
     ]);
 
     const falha = elegiveis.error ?? participacoes.error ?? apresentacoes.error ?? visitantes.error;
@@ -419,6 +439,15 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
       (participacoes.data ?? []).map((p) => [
         p.pessoa_chave as string,
         (p.convidados as number) ?? 0,
+      ]),
+    );
+    const formaturaPorChave = new Map(
+      (participacoes.data ?? []).map((p) => [
+        p.pessoa_chave as string,
+        {
+          tipo: (p.formatura_tipo as AlunoElegivel['formatura_tipo']) ?? null,
+          origem: (p.formatura_origem as AlunoElegivel['formatura_origem']) ?? null,
+        },
       ]),
     );
 
@@ -441,11 +470,20 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
       alocacoesPorChave.set(linha.pessoa_chave, lista);
     }
 
+    // Relatorio 'enviado' que ainda nao casou com apresentacao nenhuma — o professor ja
+    // entregou musica/palco/playback e falta cadeira na grade. Caso por PESSOA: a chave
+    // do relatorio e a mesma da participacao.
+    const relatorioProntoPorChave = new Set<string>(
+      ((relatorios.data ?? []) as RelatorioDoProfessor[])
+        .filter((r) => r.relatorio_status === 'enviado' && r.apresentacao_id === null)
+        .map((r) => r.pessoa_chave),
+    );
+
     // Visitantes depois dos da casa: a lista e da unidade, e quem vem de fora e excecao.
     const base = [
       ...((elegiveis.data ?? []) as unknown as Omit<
         AlunoElegivel,
-        'status' | 'alocacoes' | 'cursos_alocados'
+        'status' | 'alocacoes' | 'cursos_alocados' | 'relatorio_pronto'
       >[]),
       ...visitantes.visitantes.pessoas,
     ];
@@ -458,8 +496,11 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
           cursos: (a.cursos ?? []) as CursoDoAluno[],
           status: porChave.get(a.pessoa_chave) ?? 'indefinido',
           convidados: convidadosPorChave.get(a.pessoa_chave) ?? 0,
+          formatura_tipo: formaturaPorChave.get(a.pessoa_chave)?.tipo ?? null,
+          formatura_origem: formaturaPorChave.get(a.pessoa_chave)?.origem ?? null,
           alocacoes,
           cursos_alocados: alocacoes.length,
+          relatorio_pronto: relatorioProntoPorChave.has(a.pessoa_chave),
         };
       }),
     );
@@ -585,6 +626,8 @@ export interface ApresentacaoDaGrade {
   playback_path: string | null;
   /** Quem escreveu os campos de detalhe por ultimo. Ver a regra de posse no banco. */
   detalhes_origem: 'adm' | 'professor';
+  /** Selo de formando da PESSOA (vem de evento_participacao, cruzado por pessoa_chave). */
+  formatura_tipo: 'kids' | 'bebes' | 'la' | null;
   professor: SnapshotDoProfessor | null;
   professor_em: string | null;
   /** Professor mexeu na música ou no palco depois de enviar — a grade mostra o selo. */
@@ -623,7 +666,7 @@ export function useGradeDoEvento(eventoId: number | null) {
     setLoading(true);
     setErro(null);
 
-    const [resBlocos, resApresentacoes, resVisitantes] = await Promise.all([
+    const [resBlocos, resApresentacoes, resVisitantes, resFormaturas] = await Promise.all([
       supabase
         .from('evento_bloco')
         .select('id, evento_id, nome, ordem, data, horario_inicial, inicio_manual, observacoes')
@@ -649,9 +692,16 @@ export function useGradeDoEvento(eventoId: number | null) {
         .eq('evento_id', eventoId)
         .order('ordem'),
       lerVisitantes(eventoId),
+      // Formando é da PESSOA (evento_participacao), não da apresentação — o cruzamento
+      // é por pessoa_chave, a mesma identidade que a aba Alunos usa.
+      supabase
+        .from('evento_participacao')
+        .select('pessoa_chave, formatura_tipo')
+        .eq('evento_id', eventoId)
+        .not('formatura_tipo', 'is', null),
     ]);
 
-    const falha = resBlocos.error ?? resApresentacoes.error ?? resVisitantes.error;
+    const falha = resBlocos.error ?? resApresentacoes.error ?? resVisitantes.error ?? resFormaturas.error;
     // Aluno de outra unidade: a RLS esconde o embed `alunos(...)`, o nome vem da RPC.
     const nomeDeFora = resVisitantes.visitantes.nomes;
     if (falha) {
@@ -671,11 +721,19 @@ export function useGradeDoEvento(eventoId: number | null) {
       evento_apresentacao_item: ItemDaApresentacao[] | null;
     };
 
+    const formaturaPorChave = new Map<string, ApresentacaoDaGrade['formatura_tipo']>(
+      (resFormaturas.data ?? []).map((p) => [
+        p.pessoa_chave as string,
+        (p.formatura_tipo as ApresentacaoDaGrade['formatura_tipo']) ?? null,
+      ]),
+    );
+
     const porBloco = new Map<number, ApresentacaoDaGrade[]>();
     for (const linha of (resApresentacoes.data ?? []) as unknown as LinhaAp[]) {
       const lista = porBloco.get(linha.bloco_id) ?? [];
       lista.push({
         ...linha,
+        formatura_tipo: formaturaPorChave.get(linha.pessoa_chave) ?? null,
         aluno_nome:
           linha.alunos?.nome ?? nomeDeFora[String(linha.aluno_id)]?.nome ?? '(aluno removido)',
         aluno_data_nascimento:
@@ -1028,6 +1086,15 @@ export interface ResultadoSyncRecital {
   apresentacoes_atualizadas: number;
   itens_professor: number;
   codigos_sem_mapa: string[];
+  /** Contadores da rotina de formandos que anda junto (M12). */
+  formandos?: {
+    formandos_na_view: number;
+    inseridos: number;
+    marcados: number;
+    desmarcados: number;
+    manuais_preservados: number;
+    erro?: string;
+  } | null;
   sincronizado_em: string;
 }
 
@@ -1160,6 +1227,24 @@ export async function decidirTocaJunto(pedidoId: number, aprovar: boolean, motiv
     p_pedido_id: pedidoId,
     p_aprovar: aprovar,
     p_motivo: motivo ?? null,
+  });
+}
+
+/**
+ * Coordenação marca (`tipo`) ou desmarca (null) o selo de formando à mão.
+ * Grava formatura_origem='manual' — a rotina automática nunca sobrescreve.
+ */
+export async function definirFormando(
+  eventoId: number,
+  pessoaChave: string,
+  alunoId: number,
+  tipo: 'kids' | 'bebes' | null,
+) {
+  return supabase.rpc('evento_formando_definir_v1', {
+    p_evento_id: eventoId,
+    p_pessoa_chave: pessoaChave,
+    p_aluno_id: alunoId,
+    p_tipo: tipo,
   });
 }
 
