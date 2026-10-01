@@ -245,6 +245,8 @@
     "reposicao": "professor",
     "reposicoes": "professor",
     "passagem_bastao": "professor",
+    "passagem_de_ciclo": "aluno",
+    "recital": "aluno",
     "hs_prof": "professor",
     "hs": "professor",
     "anotacoes": "professor",
