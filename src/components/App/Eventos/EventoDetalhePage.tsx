@@ -289,7 +289,11 @@ export function EventoDetalhePage() {
           pedidoFaltaAlocar={pedidoFaltaAlocar}
         />
       )}
-      {tabAtiva === 'grade' && <GradeTab key={`grade-${syncTick}`} evento={evento} />}
+      {tabAtiva === 'grade' && <GradeTab
+          key={`grade-${syncTick}`}
+          evento={evento}
+          onEventoMudou={() => recarregar({ silencioso: true })}
+        />}
       {tabAtiva === 'palco' && <PalcoTab key={`palco-${syncTick}`} evento={evento} />}
       {tabAtiva === 'bilheteria' && <BilheteriaTab key={`bilheteria-${syncTick}`} evento={evento} />}
       {tabAtiva === 'revisao' && (

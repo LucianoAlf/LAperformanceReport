@@ -217,9 +217,10 @@ Check-in (o dia). Detalhe completo em [`docs/sistema/aluno.md`](docs/sistema/alu
   trigger de `fn_pessoa_chave_aluno`, **nunca escrita à mão**; `aluno_id` é PROCEDÊNCIA (padrão da
   anamnese). **Banda não entra na grade** (decisão do Arthur) — `banda_evento` é outra coisa.
 - **Horário é CALCULADO, nunca persistido** (`calcularHorariosDaGrade` em `src/lib/eventos.ts`):
-  `inicio(N+1) = fim(N) + intervalo` entre blocos e **5 min de troca entre apresentações do mesmo
-  bloco** (`INTERVALO_ENTRE_APRESENTACOES_PADRAO_SEGUNDOS`, desde 25/09 — sem ela a programação dava a
-  entender que uma começa no segundo em que a outra termina; não há troca depois da última). `evento_bloco.horario_inicial` guarda só o que o humano
+  `inicio(N+1) = fim(N) + intervalo` entre blocos e **sem folga entre apresentações do mesmo bloco**
+  (desde 02/10, pedido do Arthur — os 5 min de 25/09 saíram; a troca entra no **tempo padrão por
+  apresentação**, `evento.duracao_padrao_segundos`, editável na própria Grade; o cartão pode ter
+  tempo próprio, que vence o padrão). `evento_bloco.horario_inicial` guarda só o que o humano
   digitou. ⚠️ Persistir o derivado daria duas verdades e a programação impressa mentiria no primeiro
   caminho de escrita que esquecesse de recalcular. ⚠️ O recorte por bloco na impressão é de
   **exibição, depois do cálculo** — filtrar antes faria o bloco 3 começar às 09:00.

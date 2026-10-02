@@ -98,9 +98,9 @@ test('quem toca junto comeca no mesmo minuto e ocupa UM slot', () => {
   const inicio = Object.fromEntries(h.apresentacoes.map((a) => [a.id, a.inicio]));
   assert.equal(inicio[1], '09:00');
   assert.equal(inicio[2], '09:00');
-  // 09:00 + 3 min do duo + 5 min de troca = 09:08. Sem o grupo seria 09:16.
-  assert.equal(inicio[3], '09:08');
-  assert.equal(h.fim, '09:13');
+  // 09:00 + 3 min do duo = 09:03. Sem o grupo seria 09:06.
+  assert.equal(inicio[3], '09:03');
+  assert.equal(h.fim, '09:08');
 });
 
 test('o numero dura o MAIOR dos integrantes quando as duracoes divergem', () => {
@@ -114,7 +114,7 @@ test('o numero dura o MAIOR dos integrantes quando as duracoes divergem', () => 
   const porId = Object.fromEntries(h.apresentacoes.map((a) => [a.id, a]));
   assert.equal(porId[1].duracaoSegundos, 240);
   assert.equal(porId[2].duracaoSegundos, 240);
-  assert.equal(porId[3].inicio, '09:09');
+  assert.equal(porId[3].inicio, '09:04');
 });
 
 test('grupo de um integrante so (sobra de quem saiu) e igual a apresentacao sozinha', () => {

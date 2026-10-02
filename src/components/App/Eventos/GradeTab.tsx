@@ -49,7 +49,6 @@ import { cn } from '@/lib/utils';
 import {
   agruparEmNumeros,
   calcularHorariosDaGrade,
-  INTERVALO_ENTRE_APRESENTACOES_PADRAO_SEGUNDOS,
   chaveDoItem,
   consolidarItensDoPalco,
   diasDoEvento,
@@ -66,6 +65,7 @@ import {
 import {
   useGradeDoEvento,
   useAlunosDoEvento,
+  atualizarEvento,
   criarBloco,
   excluirBloco,
   atualizarBloco,
@@ -89,23 +89,59 @@ import { PalcoApresentacao } from './PalcoApresentacao';
 /* ─────────────────────────── número ─────────────────────────── */
 
 /**
- * Linha entre um número e o seguinte: a troca de palco que o horário já conta.
- *
- * Sem ela, a grade mostra 09:00 numa apresentação de 3 min e 09:08 na próxima, e quem lê não
- * sabe de onde saíram os 5 minutos (pedido do Hugo, 28/09). Não é item arrastável — fica fora
- * do `SortableContext`, só entre os cartões.
+ * Tempo padrão de cada apresentação da unidade (`evento.duracao_padrao_segundos` — um recital
+ * por unidade). Fica à vista na Grade porque é o número que mais mexe no horário; antes só
+ * existia dentro de "Editar evento". O cartão continua podendo ter tempo próprio.
  */
-function TrocaDePalco({ termina, segundos }: { termina: string | null; segundos: number }) {
+function TempoPadraoApresentacao({
+  evento,
+  onSalvo,
+}: {
+  evento: EventoComResumo;
+  onSalvo: () => void;
+}) {
+  const atual = Math.round(evento.duracao_padrao_segundos / 60);
+  const [valor, setValor] = useState(String(atual));
+  useEffect(() => setValor(String(atual)), [atual]);
+
+  const salvar = async () => {
+    const min = Number(valor);
+    if (!(min > 0) || !Number.isInteger(min)) {
+      toast.error('O tempo padrão precisa ser um número inteiro de minutos, maior que zero');
+      setValor(String(atual));
+      return;
+    }
+    if (min === atual) return;
+    const { error } = await atualizarEvento(evento.id, { duracao_padrao_segundos: min * 60 });
+    if (error) {
+      toast.error('Não consegui salvar o tempo padrão', { description: error.message });
+      setValor(String(atual));
+      return;
+    }
+    toast.success(`Tempo padrão: ${min} min por apresentação`);
+    onSalvo();
+  };
+
   return (
-    <div className="flex items-center gap-2 px-2 text-[10.5px] text-slate-500">
-      <span className="h-px flex-1 bg-slate-700/60" />
-      <Clock className="h-3 w-3 shrink-0 text-slate-600" />
-      <span className="tabular-nums">
-        {termina ? `termina ${termina} · ` : ''}
-        {formatarDuracao(segundos)} de troca de palco
-      </span>
-      <span className="h-px flex-1 bg-slate-700/60" />
-    </div>
+    <label
+      className="flex items-center gap-1.5 text-[12.5px] text-slate-400"
+      title="Vale para toda apresentação sem tempo próprio. Para mudar só uma, use o campo de minutos no cartão dela."
+    >
+      <Clock className="h-3.5 w-3.5 text-slate-500" />
+      Tempo padrão
+      <Input
+        type="number"
+        min={1}
+        value={valor}
+        onChange={(e) => setValor(e.target.value)}
+        onBlur={salvar}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+        }}
+        className="h-7 w-14 text-[12.5px]"
+      />
+      min por apresentação
+    </label>
   );
 }
 
@@ -941,9 +977,8 @@ function CartaoBloco({
               Nenhuma apresentação neste bloco ainda.
             </p>
           ) : (
-            numeros.map((numero, i) => {
+            numeros.map((numero) => {
               const h = horario?.apresentacoes.find((x) => x.id === numero[0].id);
-              const ini = horaParaSegundos(h?.inicio);
               // Chave pelos ids dos integrantes: entrar ou sair alguém do número remonta o
               // cartão, e os campos voltam a ler o que o banco gravou.
               const chave = numero.map((a) => a.id).join('-');
@@ -958,14 +993,6 @@ function CartaoBloco({
                     blocoId={bloco.id}
                     onMudou={onMudou}
                   />
-                  {/* Troca de palco entre este número e o seguinte — não depois do último, onde
-                      o bloco já termina e quem manda é o intervalo entre blocos. */}
-                  {i < numeros.length - 1 && (
-                    <TrocaDePalco
-                      termina={h && ini !== null ? segundosParaHora(ini + h.duracaoSegundos) : null}
-                      segundos={INTERVALO_ENTRE_APRESENTACOES_PADRAO_SEGUNDOS}
-                    />
-                  )}
                 </div>
               );
             })
@@ -979,7 +1006,14 @@ function CartaoBloco({
 
 /* ───────────────────────────── aba ───────────────────────────── */
 
-export function GradeTab({ evento }: { evento: EventoComResumo }) {
+export function GradeTab({
+  evento,
+  onEventoMudou,
+}: {
+  evento: EventoComResumo;
+  /** Recarrega o evento (tempo padrão mudou) — o horário de toda a grade depende dele. */
+  onEventoMudou: () => void;
+}) {
   const { blocos, loading, erro, recarregar } = useGradeDoEvento(evento.id);
   const { alunos, recarregar: recarregarAlunos } = useAlunosDoEvento(evento.id, evento.unidade_id);
   const [sincronizando, setSincronizando] = useState(false);
@@ -1195,10 +1229,10 @@ export function GradeTab({ evento }: { evento: EventoComResumo }) {
             </>
           )}
           {' · intervalo de '}
-          {formatarDuracao(evento.intervalo_entre_blocos_segundos ?? 2700)} entre blocos e{' '}
-          {formatarDuracao(INTERVALO_ENTRE_APRESENTACOES_PADRAO_SEGUNDOS)} entre apresentações
+          {formatarDuracao(evento.intervalo_entre_blocos_segundos ?? 2700)} entre blocos
         </p>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <TempoPadraoApresentacao evento={evento} onSalvo={onEventoMudou} />
           <Button
             size="sm"
             variant="outline"
