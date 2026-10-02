@@ -126,17 +126,16 @@ export interface EventoParaCalculo {
   horario_inicio: string;
   duracao_padrao_segundos: number;
   intervalo_entre_blocos_segundos: number;
-  /** Troca de palco entre uma apresentacao e a seguinte do MESMO bloco. Ausente = 5 min. */
+  /** Folga entre uma apresentacao e a seguinte do MESMO bloco. Ausente = sem folga. */
   intervalo_entre_apresentacoes_segundos?: number;
 }
 
 /**
- * Sem folga, a programacao dava a entender que a apresentacao seguinte comeca no segundo
- * em que a anterior termina (pedido do Hugo, 25/09). Vale so DENTRO do bloco: entre
- * blocos quem manda e `intervalo_entre_blocos_segundos`, e depois da ultima apresentacao
- * nao ha troca, entao o fim do bloco e o fim dela.
+ * Sem folga entre apresentacoes do mesmo bloco (pedido do Arthur, 02/10): a troca de palco
+ * entra no tempo padrao de cada apresentacao, que a unidade configura no evento. Os 5 min
+ * de 25/09 sairam. Entre blocos quem manda continua sendo `intervalo_entre_blocos_segundos`.
  */
-export const INTERVALO_ENTRE_APRESENTACOES_PADRAO_SEGUNDOS = 300;
+export const INTERVALO_ENTRE_APRESENTACOES_PADRAO_SEGUNDOS = 0;
 
 export interface BlocoComHorario {
   blocoId: number;

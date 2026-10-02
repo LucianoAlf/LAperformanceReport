@@ -463,8 +463,8 @@ test('quem sobe junto sai numa linha so da programacao, com um horario', () => {
   );
   const linhas = html.match(/<tr>/gu) ?? [];
   assert.equal(linhas.length, 2, 'duo + Bia = 2 linhas');
-  // A Bia comeca depois do duo + 5 min de troca: 09:00 + 5 + 5 = 09:10.
-  assert.match(html, /09:10/u);
+  // A Bia comeca quando o duo termina: 09:00 + 5 = 09:05.
+  assert.match(html, /09:05/u);
   assert.match(html, /Ana Souza<\/span> <span class="prof">12 anos<\/span>/u);
   // Os dois professores, sem repetir, na mesma linha.
   assert.match(html, /Prof\. Lohana Araújo, Gabriel/u);

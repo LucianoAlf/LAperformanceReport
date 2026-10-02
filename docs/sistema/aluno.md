@@ -126,15 +126,18 @@ apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **L
   `20260918173000`, `20260919020000`, `20260919030000`, `20260919050000`, `20260928164338`
   (número).
 - **Horário é CALCULADO, nunca persistido** (`calcularHorariosDaGrade`): `inicio(N+1) = fim(N) +
-  intervalo`, com o intervalo configurável por evento (2700s = os 45 min do protótipo). Dentro do
-  bloco, 5 min de troca entre uma apresentação e a seguinte (`INTERVALO_ENTRE_APRESENTACOES_PADRAO_SEGUNDOS`,
-  25/09); o campo opcional `intervalo_entre_apresentacoes_segundos` já é aceito pelo cálculo, mas ainda
-  não existe coluna em `evento`.
+  intervalo`, com o intervalo configurável por evento (2700s = os 45 min do protótipo). **Dentro do
+  bloco não há folga** desde 02/10 (pedido do Arthur): a apresentação seguinte começa quando a
+  anterior termina, e a troca de palco entra no **tempo padrão por apresentação**
+  (`evento.duracao_padrao_segundos` — um recital por unidade, então é o padrão da unidade). Ele é
+  editável na própria Grade (`TempoPadraoApresentacao`, ao lado do botão de sincronizar) e em
+  "Editar evento"; o cartão continua podendo ter tempo próprio (`duracao_segundos`), que vence o
+  padrão. Os 5 min de troca de 25/09 e a linha `TrocaDePalco` de 28/09 saíram;
+  `INTERVALO_ENTRE_APRESENTACOES_PADRAO_SEGUNDOS` vale 0 e o campo opcional
+  `intervalo_entre_apresentacoes_segundos` segue aceito pelo cálculo, sem coluna em `evento`.
   `evento_bloco.horario_inicial` guarda só o que o humano DIGITOU (`inicio_manual`). ⚠️ Persistir o
   derivado daria duas verdades, e qualquer caminho de escrita que esquecesse de recalcular deixaria
-  a programação impressa mentindo. Desde 28/09 a Grade **desenha** a troca entre um cartão e o
-  seguinte (`TrocaDePalco`: "termina 09:03 · 5 min de troca de palco") e cada cartão mostra início e
-  fim — antes os 5 min só apareciam como um salto no horário do cartão de baixo.
+  a programação impressa mentindo. Cada cartão mostra início e fim.
 - **Número — alunos que sobem JUNTOS (28/09/2026, protótipo novo do Arthur).** A Ana no Violão
   acompanhando o Pedro no Canto é **um** número: um horário, uma música, um slot, os dois listados.
   🔴 **A apresentação CONTINUA sendo o par (pessoa, curso)** e a UNIQUE não muda — é nela que moram o
@@ -157,7 +160,7 @@ apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **L
   sobra com 1 integrante (alguém foi removido) é tratado como apresentação sozinha, não é erro.
 - 🔴 **O cartão da Grade apagava a música que o LA Teacher acabara de trazer (corrigido 02/10).**
   Os campos Música/Link guardavam o valor da montagem e não acompanhavam o banco: depois do sync
-  o campo seguia vazio, e entrar e sair dele gravava vazio por cima (Stella/CG, 02/10 16:24 e
+  o campo seguia vazio, e entrar e sair dele gravava vazio por cima (Stella/Barra, 02/10 16:24 e
   16:25 — provado no `audit_log`). Hoje o campo acompanha o banco enquanto não está em edição, e
   o blur só grava se a pessoa **digitou**; a duração (`defaultValue`) remonta por `key`. ⚠️ Pôr
   aluno na Grade **não dispara** o sync — a música chega ao abrir a página ou no botão

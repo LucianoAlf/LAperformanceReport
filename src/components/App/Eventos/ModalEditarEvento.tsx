@@ -196,7 +196,7 @@ export function ModalEditarEvento({ aberto, evento, onFechar, onSalvo }: Props) 
 
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="edit-duracao">Duração padrão</Label>
+              <Label htmlFor="edit-duracao">Tempo padrão por apresentação</Label>
               <div className="flex items-center gap-1.5">
                 <Input
                   id="edit-duracao"
