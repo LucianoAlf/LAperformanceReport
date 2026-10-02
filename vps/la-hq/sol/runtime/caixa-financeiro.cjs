@@ -11,6 +11,10 @@ const https = require('https');
 // lança nada no caixa. Arquivo ausente não pode derrubar o caixa de comprovantes.
 let _chequesLib = null;
 try { _chequesLib = require('./caixa-cheques.cjs'); } catch (_) { _chequesLib = null; }
+// Venda de ingresso (02/10/2026): trilho próprio, config de evento/lote fora do código.
+// Sem o módulo a Sol não reconhece ingresso — falha fechada, o resto do caixa segue.
+let _ingressosLib = null;
+try { _ingressosLib = require('./caixa-ingressos.cjs'); } catch (_) { _ingressosLib = null; }
 const crypto = require('crypto');
 const { execFile } = require('child_process');
 
@@ -397,42 +401,13 @@ function detectarLojinhaProduto(texto) {
 }
 
 // Venda de ingresso e receita de EVENTO, nao mensalidade nem produto de lojinha.
-// O evento vivo de 02/10/2026 tem contrato conhecido: LA Session com Felipe Alves,
-// R$ 40 por ingresso. A legenda "2 ingressos LA Session Felipe Alves" nao pode
-// transformar o artista em aluno nem esconder a quantidade no card.
-function detectarVendaIngressoEvento(texto) {
-  const raw = bodyLimpo(texto);
-  const n = _normConf(raw);
-  if (!/\bingressos?\b/.test(n)) return null;
-
-  const qtdMatch = n.match(/(?:^|\s)(\d{1,3})\s+ingressos?\b/);
-  const quantidade = qtdMatch ? Number(qtdMatch[1]) : 1;
-  if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > 100) return null;
-
-  const laSession = /\bla\s+session\b/.test(n);
-  const felipeAlves = /\bfelipe\s+alves\b/.test(n);
-  if (laSession || felipeAlves) {
-    return {
-      categoria: 'venda',
-      quantidade,
-      evento: 'LA Session — Felipe Alves',
-      preco_unitario: 40,
-      valor_esperado: quantidade * 40,
-    };
-  }
-
-  // Outros eventos continuam reconhecidos como venda sem aluno, mas sem inventar
-  // preço. O total precisa vir do texto/comprovante e será confirmado no card.
-  if (/\b(workshop|evento|show|apresentacao|apresentação|recital|festival)\b/i.test(raw)) {
-    return {
-      categoria: 'venda',
-      quantidade,
-      evento: 'Evento/workshop',
-      preco_unitario: null,
-      valor_esperado: null,
-    };
-  }
-  return null;
+// A decisao mora em caixa-ingressos.cjs (sinal explicito, nunca o valor); aqui so
+// entram os detectores do caixa que ela reaproveita: a lista de produtos da lojinha
+// (um produto citado vence alias de evento) e a saida declarada.
+function naturezaVendaDoTexto(texto, { config = null, unidade = null, resposta = null, agora = Date.now() } = {}) {
+  if (!_ingressosLib) return null;
+  return _ingressosLib.classificarNaturezaVenda(texto, { config, unidade, resposta, agora,
+    detectarProduto: detectarLojinhaProduto, saidaExplicita: _saidaExplicitaFromCaption });
 }
 
 // OCR de cupom nao tem "R$": aceita 5.700,00 / 1.234,56 (decimal obrigatorio, pra nao
@@ -1022,7 +997,7 @@ function descricaoParcelaCoerente(parcela, competencia) {
   return atual === correta ? descricao : descricao.replace(noTexto[0], correta);
 }
 
-function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competencia, parcela, confiancaBaixa, alunoNovoOrigem, responsavelFinanceiro, formaIncerta, cartaoModalidade, cartaoParcelas, multiplas, alunoViaPagador, pagadorNome, candidatosAluno, canonica, duplicata, quitacao, faturaIndisponivel, composto, bloqueiaLancamento, itemLojinha, semAlunoDeclarado, entidade, valorMaiorNaLegenda, valorConflito, valorBaixaConfianca }) {
+function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competencia, parcela, confiancaBaixa, alunoNovoOrigem, responsavelFinanceiro, formaIncerta, cartaoModalidade, cartaoParcelas, multiplas, alunoViaPagador, pagadorNome, candidatosAluno, canonica, duplicata, quitacao, faturaIndisponivel, composto, bloqueiaLancamento, itemLojinha, semAlunoDeclarado, entidade, valorMaiorNaLegenda, valorConflito, valorBaixaConfianca, ingresso }) {
   // forma legível
   let formaTxt;
   if (forma === 'cartao') {
@@ -1087,7 +1062,11 @@ function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competenci
   // ⚠️ Lojinha sem comprador: PERGUNTA em vez de esconder. Esconder (25/08)
   // limpava o card poluido, mas deixava a venda sem dono e ninguem reparava —
   // foi assim que a camisa do Theo quase entrou no nome do vendedor.
-  if (!ehSaidaPreview && semAlunoDeclarado) {
+  if (!ehSaidaPreview && ingresso && Array.isArray(ingresso.linhas)) {
+    // Venda de ingresso (02/10/2026): o bloco diz evento, quantidade x lote e que
+    // nao ha aluno — o artista/evento nunca aparece no lugar do aluno.
+    blocos.push(['*VENDA DE INGRESSO*'].concat(ingresso.linhas));
+  } else if (!ehSaidaPreview && semAlunoDeclarado) {
     // Receita de banda/evento nao tem aluno — declarado pelo humano (CG 31/08).
     blocos.push(['*ALUNO*', (entidade ? entidade + ' — ' : '') + 'sem aluno específico _(banda/evento)_ ✓']);
   } else if (!ehSaidaPreview && _lojinhaSemComprador) {
@@ -1147,6 +1126,7 @@ function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competenci
   } else {
     const b = ['*LANÇAMENTO*', `Categoria: ${categoria || 'parcela'}`];
     if (categoria === 'lojinha' && itemLojinha) b.push(`Item: ${itemLojinha}`);
+    if (ingresso && ingresso.descricao) b.push(`Descrição: ${ingresso.descricao}`);
     if (competencia) b.push(`Competência: ${competencia}`);
     if (faturaIndisponivel) b.push('⚠️ Não consegui confirmar a fatura na fonte oficial agora — não vou lançar com *pode* até confirmar.');
     blocos.push(b);
@@ -3763,7 +3743,7 @@ function categoriaEhSaida(categoria) {
   return ['seguranca', 'despesa', 'retirada', 'troco'].includes(String(categoria || '').toLowerCase());
 }
 
-function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, finalizarPreviewV3Fn = finalizarPreviewV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, resolverEnvelopeFn = resolverEnvelopeCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, identificarAlunoNovoFn = identificarAlunoNovo, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, faturasQuitacaoFn = resolverFaturasQuitacao, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, chequesFn = undefined, log = () => {}, governanceFn = () => Promise.resolve({ ok: false, disabled: true }), janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
+function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, finalizarPreviewV3Fn = finalizarPreviewV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, resolverEnvelopeFn = resolverEnvelopeCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, identificarAlunoNovoFn = identificarAlunoNovo, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, faturasQuitacaoFn = resolverFaturasQuitacao, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, chequesFn = undefined, ingressosConfigFn = undefined, log = () => {}, governanceFn = () => Promise.resolve({ ok: false, disabled: true }), janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
   // SOL_CAIXA_V3_LEDGER_FAKE=1 (suite de testes): fiacao V3 ativa, banco intacto.
   // Sem isto, teste que nao mocka os registradores grava preview/approval REAL
   // no ledger de producao — 62% dos previews de 24-31/08 eram artefato de teste.
@@ -3816,6 +3796,13 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   //    do card: o card incompleto é substituído; recusada: é reavaliada). Um card só.
   const LEGENDA_TARDIA_MS = 60000;
   const midiasSemLegenda = new Map();  // key -> { ts, evento, emVoo, legenda, consumida, evidencia, resultado }
+  // VENDA DE INGRESSO (02/10/2026). Config relida do disco a cada mudança (sem deploy
+  // para trocar evento/lote); a pergunta "ingresso ou lojinha?" guarda o caso original
+  // por 15 min para a resposta continuar dele, sem reenviar comprovante.
+  const configIngressos = typeof ingressosConfigFn === 'function' ? ingressosConfigFn
+    : () => (_ingressosLib ? _ingressosLib.carregarConfigIngressos({ log }) : { ok: false, eventos: [] });
+  const perguntasNatureza = new Map(); // chatId -> { evento, autor, msgId, ts, motivo }
+  const PERGUNTA_NATUREZA_MS = 15 * 60 * 1000;
   const loteJanelaMs = Math.max(0, Number(process.env.SOL_CAIXA_LOTE_MS || 900));
   const v3LedgerMode = String(process.env.SOL_CAIXA_V3_LEDGER_MODE || '').toLowerCase();
   const cheques = chequesFn !== undefined ? chequesFn
@@ -5110,59 +5097,89 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     return { acao: 'preview_agent_first_lojinha', previewId: pendencia.previewId };
   }
 
-  // Ingresso de evento e uma venda sem aluno. Mantem quantidade, evento e preco
-  // unitario no proprio card; o total conhecido do evento funciona como trava,
-  // nunca como autorizacao. Dinheiro so entra depois de um novo "pode".
-  async function abrirFluxoVendaIngresso({ event, grupo, eventoInfo, valor, forma, agora,
+  // Ingresso de evento e uma venda SEM aluno (02/10/2026). A natureza ja foi decidida
+  // por sinal explicito (caixa-ingressos.cjs); aqui o valor CONFERIDO (texto/comprovante,
+  // nunca o preco) so calcula a quantidade pelo lote vigente. O card e o de sempre e o
+  // dinheiro so entra pelo "pode", na mesma RPC sem aluno de cheques/avulsas.
+  async function abrirFluxoVendaIngresso({ event, grupo, natureza, valor, forma, agora,
     origemMessageId, cartaoModalidade = null, cartaoParcelas = null }) {
-    const esperado = Number(eventoInfo && eventoInfo.valor_esperado) || null;
-    const total = Number(valor || esperado || 0);
+    const sobre = natureza.evento ? ` de *${natureza.evento}*` : '';
+    const total = Number(valor) || 0;
     if (!(total > 0)) {
-      await sendFn(event.chatId, `Entendi ${eventoInfo.quantidade} ingresso(s) de *${eventoInfo.evento}*, mas não achei o valor total. Nada foi lançado.`);
-      log({ acao: 'venda_ingresso_sem_valor', chatId: event.chatId, quantidade: eventoInfo.quantidade });
+      await sendFn(event.chatId, `Entendi venda de ingresso${sobre}, mas não achei o valor total. Manda numa linha, por exemplo: *2 ingressos LA Session R$ 80 pix*. Nada foi lançado.`);
+      log({ acao: 'venda_ingresso_sem_valor', chatId: event.chatId, evento_id: natureza.evento_id });
       return { acao: 'venda_ingresso_sem_valor' };
     }
-    if (esperado && Math.abs(total - esperado) > 0.01) {
-      await sendFn(event.chatId, `⚠️ Não criei card: ${eventoInfo.quantidade} ingresso(s) de *${eventoInfo.evento}* a ${fmtBRL(eventoInfo.preco_unitario)} somam *${fmtBRL(esperado)}*, mas o comprovante/texto mostra *${fmtBRL(total)}*. Confere o valor.`);
-      log({ acao: 'venda_ingresso_total_diverge', chatId: event.chatId,
-        quantidade: eventoInfo.quantidade, esperado, recebido: total });
-      return { acao: 'venda_ingresso_total_diverge' };
-    }
     if (!forma) {
-      await sendFn(event.chatId, `Entendi ${eventoInfo.quantidade} ingresso(s) de *${eventoInfo.evento}* por *${fmtBRL(total)}*. Me diz a forma: *pix*, *dinheiro*, *cartão* ou *transferência*. Nada foi lançado.`);
+      await sendFn(event.chatId, `Entendi venda de ingresso${sobre} de *${fmtBRL(total)}*. Me diz a forma: *pix*, *dinheiro*, *cartão* ou *transferência* — manda a venda de novo numa linha. Nada foi lançado.`);
       log({ acao: 'venda_ingresso_sem_forma', chatId: event.chatId, valor: total });
       return { acao: 'venda_ingresso_sem_forma' };
     }
-
-    const detalhe = `${eventoInfo.quantidade} ingresso(s) — ${eventoInfo.evento}`
-      + (eventoInfo.preco_unitario ? ` — ${fmtBRL(eventoInfo.preco_unitario)} cada` : '');
-    const descricao = `Venda - ${eventoInfo.quantidade} ingresso(s) - ${eventoInfo.evento}`;
+    const res = _ingressosLib.resolverIngresso(natureza, total, { fmtBRL });
     let idEnviou = null;
     try { idEnviou = await identidadeFn(event.senderPhone, grupo.unidade_id); } catch (e) { /* melhor esforco */ }
     const textoCard = montarPreview({ unidadeNome: grupo.nome, valor: total, forma, categoria: 'venda',
       aluno: null, formaIncerta: false, cartaoModalidade, cartaoParcelas, multiplas: false,
-      semAlunoDeclarado: true, entidade: detalhe });
+      semAlunoDeclarado: true, entidade: natureza.evento, ingresso: { linhas: res.linhas, descricao: res.descricao } });
     const origem = origemMessageId || event.messageId;
     const pendencia = {
       previewId: null, unidade_id: grupo.unidade_id, nome: grupo.nome,
-      valor: total, forma, categoria: 'venda', aluno: null, competencia: null, descricao,
+      valor: total, forma, categoria: 'venda', aluno: null, competencia: null, descricao: res.descricao,
       responsavelFinanceiro: null, cartaoModalidade, cartaoParcelas, formaIncerta: false,
-      canonica: null, semAluno: true, entidade: detalhe, eventoInfo,
+      canonica: null, semAluno: true, entidade: natureza.evento || 'Venda de ingresso',
+      ingresso: { evento_id: natureza.evento_id, evento: natureza.evento, setor: natureza.setor,
+        preco_unitario: natureza.preco_unitario, lote: natureza.lote, quantidade: res.quantidade, fecha: res.fecha },
       origem, idemKey: `${event.chatId}:${origem}:venda-ingresso`,
       enviadoPor: nomeParaCarimbo(idEnviou, event), ts: agora,
     };
     const seguro = await prepararEPublicarPreviewV4({
       event, grupo, texto: textoCard, pendencia,
-      result: { acao: 'preview_venda_ingresso', valor: total, categoria: 'venda', quantidade: eventoInfo.quantidade },
+      result: { acao: 'preview_venda_ingresso', valor: total, categoria: 'venda', quantidade: res.quantidade },
       previewStatus: 'public_preview_sent',
     });
     if (!seguro.ok) return { acao: seguro.motivo };
     const arr = limparVelhos(event.chatId, agora);
     arr.push(pendencia);
     pendentes.set(event.chatId, arr);
-    log({ acao: 'preview_venda_ingresso', chatId: event.chatId, valor: total,
-      quantidade: eventoInfo.quantidade, evento: eventoInfo.evento });
+    log({ acao: 'preview_venda_ingresso', chatId: event.chatId, valor: total, quantidade: res.quantidade,
+      fecha_com_lote: res.fecha, evento_id: natureza.evento_id, evento_configurado: !!natureza.evento_id });
     return { acao: 'preview_venda_ingresso', previewId: pendencia.previewId };
+  }
+
+  // "É venda de ingresso ou da lojinha?" — a Sol pergunta em vez de chutar. O caso
+  // original fica guardado; a resposta do mesmo autor (ou citando a pergunta) volta a
+  // processá-lo com a resposta anexada, e a resposta decide sem nova pergunta.
+  async function perguntarNaturezaVenda({ event, motivo, valor = null, forma = null, guardar = true }) {
+    const texto = _ingressosLib.textoPerguntaNatureza(motivo, { valor, forma, fmtBRL });
+    let msgId = null;
+    try { msgId = await sendFn(event.chatId, texto); } catch (e) { /* sem pergunta, sem estado */ }
+    if (guardar && msgId) {
+      perguntasNatureza.set(event.chatId, { evento: { ...event }, msgId, ts: Date.now(), motivo,
+        autor: String(event.senderPhone || event.senderId || '') });
+    }
+    log({ acao: 'venda_natureza_perguntada', chatId: event.chatId, motivo, midia: !!event.hasMedia });
+    return { acao: 'venda_natureza_perguntada', motivo };
+  }
+
+  async function responderPerguntaNatureza(event, agora) {
+    const p = perguntasNatureza.get(event.chatId);
+    if (!p || event.hasMedia) return null;
+    if (agora - p.ts > PERGUNTA_NATUREZA_MS) { perguntasNatureza.delete(event.chatId); return null; }
+    const txt = bodyLimpo(event.body);
+    if (!txt || casarPode(txt).pode) return null;
+    const citou = !!(event.quotedMessageId && event.quotedMessageId === p.msgId);
+    const mesmoAutor = !event.quotedMessageId && p.autor
+      && p.autor === String(event.senderPhone || event.senderId || '');
+    if (!citou && !mesmoAutor) return null;
+    if (!_ingressosLib.ehRespostaNatureza(txt, { citou })) return null;
+    perguntasNatureza.delete(event.chatId);
+    const orig = p.evento;
+    vistos.delete(`${orig.chatId}:${orig.messageId}`);
+    const ev = { ...orig, body: [bodyLimpo(orig.body), txt].filter(Boolean).join(' · '),
+      _respostaNatureza: txt, __handleTopo: true };
+    delete ev._legendaTardiaRec;
+    log({ acao: 'venda_natureza_respondida', chatId: event.chatId, motivo: p.motivo, midia: !!orig.hasMedia });
+    return _handleInterno(ev, agora);
   }
 
   async function abrirFluxoAgentFirstSingular({ event, grupo, intent, agora, origemMessageId,
@@ -5980,6 +5997,11 @@ _Não lanço nada pela metade._`);
         log({ acao: 'cheques_erro', chatId, erro: String(e && e.message) });
       }
     }
+    // Resposta a "é venda de ingresso ou da lojinha?": continua o caso guardado.
+    if (!event.hasMedia && perguntasNatureza.size) {
+      const rNat = await responderPerguntaNatureza(event, agora);
+      if (rNat) return rNat;
+    }
     // A foto sai aqui, antes de qualquer coisa consumir pendencia (P2).
     fotografarContextoV4(event, chatId, agora);
     const senderNum = String(event.senderPhone || event.senderId || '').replace(/@.*/, '').replace(/\D/g, '');
@@ -6059,14 +6081,35 @@ _Não lanço nada pela metade._`);
       if (!_ehDitado && !_pendAbertaTexto && _saidaExplicitaFromCaption(texto)) {
         log({ acao: 'saida_texto_ignorada_prosa', chatId, len: texto.length });
       }
-      // Venda de ingresso por texto: evento e receita sem aluno. O contrato vivo
-      // do LA Session permite conferir quantidade x R$ 40 sem depender do LLM.
-      const _eventoIngresso = !_pendAbertaTexto ? detectarVendaIngressoEvento(texto) : null;
-      if (_eventoIngresso) {
-        const _valorEvento = extrairValor(texto) || _eventoIngresso.valor_esperado;
-        const _formaEvento = extrairForma(texto, null);
-        return abrirFluxoVendaIngresso({ event, grupo: grp, eventoInfo: _eventoIngresso,
-          valor: _valorEvento, forma: _formaEvento, agora: Date.now(), origemMessageId: event.messageId });
+      // VENDA DE INGRESSO / "ingresso ou lojinha?" por TEXTO (02/10/2026). A natureza
+      // vem de sinal explícito (caixa-ingressos.cjs), ANTES da lojinha: produto citado
+      // devolve null aqui e a lojinha segue como sempre. Só reage a ditado com valor
+      // ou forma — "quais os valores dos ingressos?" (CG 01/10) é conversa.
+      if (_ingressosLib && _ehDitado && !_pendAbertaTexto && !/\?\s*$/.test(texto)) {
+        const _valorIng = _ingressosLib.valorTextoIngresso(texto, { candidatosMonetariosBR, extrairValor });
+        const _formaIng = extrairForma(texto, null);
+        if (_valorIng || _formaIng) {
+          const _nat = naturezaVendaDoTexto(texto, { config: configIngressos(),
+            unidade: { id: grp.unidade_id, nome: grp.nome }, resposta: event._respostaNatureza || null });
+          if (_nat && _nat.tipo === 'ingresso') {
+            return abrirFluxoVendaIngresso({ event, grupo: grp, natureza: _nat, valor: _valorIng, forma: _formaIng,
+              agora: Date.now(), origemMessageId: event.messageId });
+          }
+          if (_nat && _nat.tipo === 'perguntar' && _valorIng && !event._respostaNatureza) {
+            return perguntarNaturezaVenda({ event, motivo: _nat.motivo, valor: _valorIng, forma: _formaIng });
+          }
+        }
+        // "80 pix" e nada mais: o valor sozinho não diz se é ingresso, lojinha ou aluno.
+        // Pergunta em vez de silêncio — mas não fala por cima de comprovante do mesmo autor.
+        const _midiaDoAutor = Math.abs(Date.now() - (midiaRecente.get(textoIrmaoKey(event)) || -1e15)) <= 60000;
+        // Exige a FORMA: número sozinho ("5", "1") é resposta de lista (estorno, cheques).
+        if (!event._respostaNatureza && !_midiaDoAutor && !event.quotedMessageId
+            && !rascunhosV4.get(chatId) && !escolhasMovimento.get(chatId)
+            && extrairForma(texto, null) && _ingressosLib.ehSoValorEForma(texto)) {
+          const _vSo = _ingressosLib.valorTextoIngresso(texto, { candidatosMonetariosBR, extrairValor });
+          if (_vSo) return perguntarNaturezaVenda({ event, motivo: 'sem_contexto', valor: _vSo,
+            forma: extrairForma(texto, null), guardar: false });
+        }
       }
       // 🔴 29/09/2026: venda de lojinha por TEXTO só abria card pela V4 (#525). Com a V3 de
       //    volta, "Venda de corda para a aluna X Valor:60 reais pix" ficava sem resposta.
@@ -6075,7 +6118,13 @@ _Não lanço nada pela metade._`);
       if (!_v4CanarioLigado(chatId) && _ehDitado && !_pendAbertaTexto && categoriaTexto === 'lojinha'
           && /(?<!\p{L})vend(?:a|as|i|emos|eu|ido|ida)(?!\p{L})/iu.test(texto)
           && !/\b(parcela|mensalidade|passaporte|matr[ií]cula)\b/i.test(texto)) {
-        const _vl = _valorLojinhaTexto(texto);
+        // Um número solto também é o valor quando é o ÚNICO ("vendi um caderno 80 pix"),
+        // pela mesma gramática pt-BR estrita da sangria (02/10/2026).
+        let _vl = _valorLojinhaTexto(texto);
+        if (!_vl) {
+          const _soltosL = candidatosMonetariosBR(texto.replace(/#\s*\d+/g, ' '), { incluirSoltos: true });
+          if (_soltosL.length === 1) _vl = _soltosL[0].valor;
+        }
         const _fl = extrairForma(texto, null);
         const _prod = detectarLojinhaProduto(texto);
         if (!_vl) {
@@ -6703,21 +6752,25 @@ _Não lanço nada pela metade._`);
         const _max = _vals.length ? Math.max.apply(null, _vals) : 0;
         if (valor && _max > Number(valor) + 0.01) valorMaiorNaLegenda = _max;
       }
-      // Caso real 02/10/2026: "2 ingressos LA Session Felipe Alves". Antes o
-      // interpretador chamou Felipe Alves de aluno e classificou como lojinha.
-      // Ingresso e venda de evento sem aluno; quantidade x preco conhecido trava
-      // o total antes do card. Conflito de leitura continua fail-closed.
-      const _eventoIngressoMidia = detectarVendaIngressoEvento(legendaEfetiva);
-      if (_eventoIngressoMidia) {
+      // VENDA DE INGRESSO por comprovante (02/10/2026). Caso real CG 18:21: "2 ingressos
+      // LA Session Felipe Alves" virou lojinha e o artista virou aluno. A natureza vem
+      // só da fala humana (legenda + bolha irmã), nunca do OCR nem do valor, e é
+      // decidida ANTES do interpretador LLM. Conflito de leitura continua fail-closed.
+      const _natMidia = naturezaVendaDoTexto(legendaEfetiva, { config: configIngressos(),
+        unidade: { id: grp.unidade_id, nome: grp.nome }, resposta: event._respostaNatureza || null });
+      if (_natMidia && _natMidia.tipo === 'ingresso') {
         if (valorConflito || valorBaixaConfianca) {
           await sendFn(chatId, '⚠️ Entendi que é venda de ingresso, mas o valor do texto e do comprovante não ficou seguro. Não criei card; confere o valor total e reenvia.');
           log({ acao: 'venda_ingresso_valor_inseguro', chatId,
             conflito: !!valorConflito, baixa_confianca: valorBaixaConfianca });
           return { acao: 'venda_ingresso_valor_inseguro' };
         }
-        return abrirFluxoVendaIngresso({ event, grupo: grp, eventoInfo: _eventoIngressoMidia,
-          valor: valor || _eventoIngressoMidia.valor_esperado, forma, agora,
+        return abrirFluxoVendaIngresso({ event, grupo: grp, natureza: _natMidia, valor, forma, agora,
           origemMessageId: event.messageId, cartaoModalidade, cartaoParcelas });
+      }
+      if (_natMidia && _natMidia.tipo === 'perguntar' && !event._respostaNatureza) {
+        // Guarda a fala humana EFETIVA (legenda + bolha irmã): a resposta continua dela.
+        return perguntarNaturezaVenda({ event: { ...event, body: legendaEfetiva }, motivo: _natMidia.motivo, valor, forma });
       }
       // Camada 3: INTERPRETACAO FLUIDA (categoria/aluno/competencia via LLM texto; humano confirma)
       let categoria = null, aluno = null, competencia = null;
@@ -9727,7 +9780,7 @@ module.exports = {
   montarPreview, montarPreviewMultiAluno, descricaoParcelaCoerente, fmtBRL, carregarEnv, lancarRecebimento, lancarRecebimentoLote, resolverMultiAlunoCaixaV1, resolverPagamentoItensV1, resolverCompostoAlunoCaixaV1, lancarSaidaCaixa, buscarLancamentoParaCorrecao,
   buscarMovimentosCaixa, corrigirMovimentoCaixa, estornarMovimentoCaixa, registrarPreviewV3, registrarApprovalV3, finalizarPreviewV3, criarHandlerFinanceiro,
   confirmacaoLimpa, classificarMidia, bodyLimpo, nomeDoAtor, buscarResponsavel, mesmaPessoa, pagamentoMultiplo,
-  extrairDivisaoPagamento, extrairSomaAditivaPagamento, extrairAdicionalPagamento, detectarLojinhaProduto, detectarVendaIngressoEvento, detectarContextoMultiAluno, validarIntencaoMultiAluno,
+  extrairDivisaoPagamento, extrairSomaAditivaPagamento, extrairAdicionalPagamento, detectarLojinhaProduto, naturezaVendaDoTexto, detectarContextoMultiAluno, validarIntencaoMultiAluno,
   identificarPessoa, nomeParaCarimbo, ehPerguntaDeCaixa, resumoDoDia, montarResumoCaixa,
   extrairCartao, extrairValorOcr, extrairPagador, identificarPorPagador, nomePlausivel,
   _alunoRotulado, _alunoFromCaption, _cortarComentarioPagamentoDoNome, _alunoSuspeito,

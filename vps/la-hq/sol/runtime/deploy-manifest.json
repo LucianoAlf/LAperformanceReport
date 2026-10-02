@@ -5,7 +5,7 @@
       "class": "bridge",
       "mode": "0644",
       "sha256": "7ad41b824f16f465995fc6044dff9a26357f58d71829523b071f44ede6d2a3d6",
-      "size": 89058,
+      "size": 90354,
       "source": "vps/la-hq/sol/runtime/bridge.js",
       "target": "/home/sol/.hermes/hermes-agent/scripts/whatsapp-bridge/bridge.js"
     },
@@ -20,8 +20,8 @@
     {
       "class": "caixa-runtime",
       "mode": "0644",
-      "sha256": "d5494654e1f74cbed63bb99f7837af34636988a1693127d83f9ebeb294eb1375",
-      "size": 579626,
+      "sha256": "3ba908bd9e953c406c83e28bc3bcea419a8e108e9992927d7a8e389b50b37af5",
+      "size": 584588,
       "source": "vps/la-hq/sol/runtime/caixa-financeiro.cjs",
       "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs"
     },
@@ -69,7 +69,7 @@
       "class": "caixa-runtime",
       "mode": "0644",
       "sha256": "d591439cb917b8481d9fbe2571e7727814dfa5879d199013d210cda7d4b52840",
-      "size": 40638,
+      "size": 71136,
       "source": "vps/la-hq/sol/runtime/caixa-cheques.cjs",
       "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-cheques.cjs"
     },
@@ -80,6 +80,14 @@
       "size": 2287,
       "source": "vps/la-hq/sol/runtime/cheques-lote-cli.cjs",
       "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/cheques-lote-cli.cjs"
+    },
+    {
+      "class": "caixa-runtime",
+      "mode": "0644",
+      "sha256": "934a0576042aaf4eb43f987598d5ae44f6242898189cfb2a77d3ff50ed7439e9",
+      "size": 18239,
+      "source": "vps/la-hq/sol/runtime/caixa-ingressos.cjs",
+      "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-ingressos.cjs"
     }
   ],
   "excluded": [

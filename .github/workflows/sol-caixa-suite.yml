@@ -79,6 +79,8 @@ jobs:
           node -c vps/la-hq/sol/runtime/caixa-abertura-fechamento.cjs
           node -c vps/la-hq/sol/runtime/caixa-governanca-shadow.cjs
           node -c vps/la-hq/sol/runtime/caixa-auditor-conformidade.cjs
+          node -c vps/la-hq/sol/runtime/caixa-ingressos.cjs
+          node -e "const c=require('./vps/la-hq/sol/runtime/caixa-ingressos.cjs');const v=c.validarConfigIngressos(require('./vps/la-hq/sol/runtime/ingressos-eventos.example.json'));if(!v.ok){console.error(v.erros);process.exit(1)}"
           node --check vps/la-hq/sol/scripts/sol-portas-mcp.mjs
 
       - name: suíte do caixa
