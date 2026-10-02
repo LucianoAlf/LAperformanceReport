@@ -25,21 +25,84 @@ const FORMA_KW = /\b(pix|dinheiro|cart[ãa]o|cheque|transfer[êe]ncia)\b/i;
 
 // ---- funções puras -------------------------------------------------------
 
+// ── LEITOR MONETÁRIO pt-BR, ÚNICO E DETERMINÍSTICO (02/10/2026, Recreio 14:50) ──
+// Retirada para depósito, legenda "Valor: 1.000 - dinheiro", comprovante
+// Banco24Horas com "QTDE NOTAS: 020". O card saiu R$ 2,00: (1) "Valor: 1.000"
+// sem "R$" não era reconhecido como dinheiro humano, então a legenda nem
+// competia; (2) o OCR leu a quantidade de cédulas como "R$ 02" e o leitor
+// aceitava "02" como dinheiro; (3) o modo "solto" lia "1.000" como 1 e
+// "1 mil" como 1 — o mesmo erro esperava no "pode, 1.000".
+// Contrato: um token só vira valor se a gramática dele for INEQUÍVOCA.
+//   1.234.567,89 · 1.000 · 1234,5 · 1234,56 · 1234.56 · 1,234.56 · 1234
+// Ambíguo ("1.0", "1,000", "1.000.00", "02", "020") devolve null — quem chama
+// pergunta em vez de chutar.
+function _centavosBR(inteiro, decimal) {
+  const i = Number(inteiro);
+  const d = decimal ? Number(String(decimal).padEnd(2, '0')) : 0;
+  const v = Math.round(i * 100 + d) / 100;
+  return Number.isFinite(v) && v > 0 && v < 1e9 ? v : null;
+}
+function lerNumeroMonetarioBR(bruto) {
+  const s = String(bruto == null ? '' : bruto).replace(/\s+/g, '');
+  if (!s) return null;
+  let m;
+  if ((m = s.match(/^(\d{1,3}(?:\.\d{3})+)(?:,(\d{1,2}))?$/))) return _centavosBR(m[1].replace(/\./g, ''), m[2]);
+  if ((m = s.match(/^(\d{1,3}(?:,\d{3})+)\.(\d{2})$/))) return _centavosBR(m[1].replace(/,/g, ''), m[2]);
+  if ((m = s.match(/^(\d+),(\d{1,2})$/))) return _centavosBR(m[1], m[2]);
+  if ((m = s.match(/^(\d+)\.(\d{2})$/))) return _centavosBR(m[1], m[2]);
+  // Inteiro com zero à esquerda é código/quantidade ("020" cédulas), nunca dinheiro.
+  if ((m = s.match(/^(\d+)$/))) return /^0\d/.test(m[1]) ? null : _centavosBR(m[1], null);
+  return null;
+}
+
 function parseBRMoney(s) {
   if (s === null || s === undefined) return null;
-  let t = String(s).replace(/[^\d.,]/g, '');
-  if (!t) return null;
-  if (t.includes(',')) {
-    t = t.replace(/\./g, '').replace(',', '.');           // 1.397,00 -> 1397.00
-  } else if (t.includes('.')) {
-    const parts = t.split('.');
-    const last = parts[parts.length - 1];
-    if (!(parts.length === 2 && last.length === 2)) {
-      t = t.replace(/\./g, '');                            // 1.397 -> 1397 (milhar)
+  // Só tira moldura (R$, espaço, pontuação de frase nas pontas); o miolo passa
+  // inteiro pela gramática estrita.
+  const t = String(s).replace(/[^\d.,]/g, '').replace(/^[.,]+|[.,]+$/g, '');
+  return lerNumeroMonetarioBR(t);
+}
+
+// Candidatos a dinheiro num texto, cada um com o SINAL que o marca como dinheiro:
+//   rotulo_rs  "Valor pago: R$ 405,00"     rs     "R$ 1.000" / "R$ 1 mil"
+//   reais      "60 reais" / "mil reais"    mil    "1 mil" / "1,5 mil" / "1 mil e 500"
+//   rotulo     "Valor: 1.000"              solto  número sem sinal (só se pedido)
+// Um token ambíguo ocupa a posição e não vira candidato em nenhum sinal.
+const _NUM_BR = '\\d[\\d.,]*\\d|\\d';
+const _SINAIS_MONETARIOS = [
+  ['rotulo_rs', new RegExp('\\bvalor(?:\\s+(?:da\\s+conta|do\\s+pix|pago|total|da\\s+transa[çc][ãa]o|recebido))?\\s*[:\\-]?\\s*r\\$\\s*(' + _NUM_BR + ')(\\s*mil\\b)?', 'gid')],
+  ['rs', new RegExp('r\\$\\s*(' + _NUM_BR + ')(\\s*mil\\b(?:\\s+e\\s+(\\d{1,3})(?![\\d.,]))?)?', 'gid')],
+  ['reais', new RegExp('(?<![\\d.,])(' + _NUM_BR + ')(\\s*mil)?\\s*(?:reais|real)\\b', 'gid')],
+  ['mil', new RegExp('(?<![\\d.,])(' + _NUM_BR + ')(\\s*mil\\b(?:\\s+e\\s+(\\d{1,3})(?![\\d.,]))?)', 'gid')],
+  ['rotulo', new RegExp('\\bvalor(?:\\s+(?:total|pago|recebido))?\\s*(?:[:=\\-]|\\b(?:foi|é|eh|de)\\b)\\s*(' + _NUM_BR + ')(?![\\d/%]|\\s*x\\b)', 'gid')],
+];
+const _SOLTO_MONETARIO = new RegExp('(?<![\\d.,/:])(' + _NUM_BR + ')(?![\\d/%:]|\\s*x\\b)', 'gd');
+function candidatosMonetariosBR(texto, { incluirSoltos = false } = {}) {
+  const t = String(texto || '');
+  const out = [];
+  const ocupado = new Set();
+  const regs = incluirSoltos ? _SINAIS_MONETARIOS.concat([['solto', _SOLTO_MONETARIO]]) : _SINAIS_MONETARIOS;
+  for (const [sinal, re] of regs) {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(t)) !== null) {
+      const idx = m.indices[1][0];
+      if (ocupado.has(idx)) continue;
+      ocupado.add(idx);
+      const base = lerNumeroMonetarioBR(m[1]);
+      if (base == null) continue;
+      const ehMil = !!(m[2] && /mil/i.test(m[2]));
+      const extra = ehMil && m[3] ? Number(m[3]) : 0;
+      const valor = ehMil ? _centavosBR(String(Math.round(base * 1000 + extra)), null) : base;
+      if (valor) out.push({ valor, idx, sinal, bruto: m[0].trim() });
     }
   }
-  const v = parseFloat(t);
-  return isFinite(v) && v > 0 ? v : null;
+  const milSo = /(?<![\d.,]\s*)\bmil\s+reais\b/gi;
+  let mm;
+  while ((mm = milSo.exec(t)) !== null) {
+    if (!ocupado.has(mm.index)) { ocupado.add(mm.index); out.push({ valor: 1000, idx: mm.index, sinal: 'reais', bruto: mm[0] }); }
+  }
+  return out.sort((a, b) => a.idx - b.idx);
 }
 
 // 🔴 NÚMERO QUE VEM DE MODELO NÃO É TEXTO BRASILEIRO (28/09/2026, Recreio).
@@ -61,37 +124,54 @@ function valorDoModelo(v) {
   return parseBRMoney(s);
 }
 
-// Rótulos que marcam O valor do comprovante (vence "R$ 0,00" de taxa/desconto).
-const VALOR_ROTULADO = /(valor\s*(da\s*conta|do\s*pix|pago|total|da\s*transa[çc][ãa]o|recebido)?\s*[:\-]?\s*)r\$\s*([\d.]+(?:,\d{1,2})?)/gi;
 
+// Prioridade dos sinais: o rótulo do comprovante ("Valor pago R$ X") vence o
+// primeiro R$ (tarifa, R$ 0,00); "R$" vence "reais"/"mil"/"Valor:"; número
+// solto só quando o chamador pede (resposta curta a "me manda o valor").
+const _PRIORIDADE_SINAL = ['rotulo_rs', 'rs', 'reais', 'mil', 'rotulo', 'solto'];
 function extrairValor(text, { allowBare = false } = {}) {
   if (!text) return null;
-  const t = String(text);
-  // 1) valor rotulado > 0 (o "Valor da conta: R$ 405,00" do comprovante)
-  let m;
-  VALOR_ROTULADO.lastIndex = 0;
-  while ((m = VALOR_ROTULADO.exec(t)) !== null) {
-    if (!m[1] || !m[1].trim()) continue;              // sem rótulo -> deixa pro passo 2
-    const v = parseBRMoney(m[3]);
-    if (v) return v;
-  }
-  // 2) primeiro R$ com valor > 0 (antes parava no primeiro "R$ 0,00" e desistia)
-  const todos = t.match(/r\$\s*[\d.]+(?:,\d{1,2})?/gi) || [];
-  for (const bruto of todos) {
-    const v = parseBRMoney(String(bruto).replace(/r\$\s*/i, ''));
-    if (v) return v;
-  }
-  if (allowBare) {
-    const b = t.match(/(?<![\d\/])(\d{1,3}(?:\.\d{3})*(?:,\d{2})|\d+(?:,\d{2})?)(?![\d\/])/);
-    if (b) return parseBRMoney(b[1]);
+  const cands = candidatosMonetariosBR(text, { incluirSoltos: allowBare });
+  for (const sinal of _PRIORIDADE_SINAL) {
+    const c = cands.find((x) => x.sinal === sinal);
+    if (c) return c.valor;
   }
   return null;
 }
 
 function valoresMonetarios(texto) {
-  return [...String(texto || '').matchAll(/r\$\s*[\d.]+(?:,\d{1,2})?/gi)]
-    .map((m) => ({ valor: parseBRMoney(String(m[0]).replace(/r\$\s*/i, '')), idx: m.index || 0 }))
-    .filter((m) => m.valor && m.valor > 0);
+  return candidatosMonetariosBR(texto)
+    .filter((c) => c.sinal === 'rs' || c.sinal === 'rotulo_rs')
+    .map((c) => ({ valor: c.valor, idx: c.idx }));
+}
+
+// ARBITRAGEM LEGENDA × COMPROVANTE. O humano declarou um valor e a imagem
+// mostra outro: ninguém chuta. Única exceção, por invariante e não por exemplo:
+// o OCR perdeu a vírgula decimal (o inteiro lido é exatamente o valor humano em
+// centavos: "387,00" → 38700). Comprovante sozinho com leitura de baixa
+// confiança também vira pergunta.
+// `declarados` = todos os valores que a pessoa escreveu. Legenda com itens e
+// total ("A R$ 1.290 · B R$ 432 · total R$ 1.722") não conflita quando o
+// comprovante bate com um deles ou com a soma: aí o valor principal segue o
+// de sempre e os fluxos de composto/multi decidem a divisão.
+function arbitrarValorComprovante({ humano, declarados = [], comprovante, comprovanteBaixaConfianca = false } = {}) {
+  const r2 = (v) => (Number(v) > 0 && Number.isFinite(Number(v)) ? Math.round(Number(v) * 100) / 100 : null);
+  const h = r2(humano);
+  const c = r2(comprovante);
+  if (h && c) {
+    const cc = Math.round(c * 100);
+    if (Math.round(h * 100) === cc) return { valor: h, motivo: 'concordam', conflito: null };
+    if (Number.isInteger(c) && c === Math.round(h * 100)) return { valor: h, motivo: 'ocr_perdeu_virgula', conflito: null };
+    const decl = (Array.isArray(declarados) ? declarados : []).map(r2).filter(Boolean).map((v) => Math.round(v * 100));
+    if (decl.length >= 2 && (decl.includes(cc) || decl.reduce((a, b) => a + b, 0) === cc)) {
+      return { valor: h, motivo: 'comprovante_bate_com_valor_declarado', conflito: null };
+    }
+    return { valor: null, motivo: 'conflito_legenda_comprovante', conflito: { legenda: h, comprovante: c } };
+  }
+  if (h) return { valor: h, motivo: 'so_legenda', conflito: null };
+  if (c && comprovanteBaixaConfianca) return { valor: null, motivo: 'comprovante_baixa_confianca', conflito: null, baixaConfianca: true };
+  if (c) return { valor: c, motivo: 'so_comprovante', conflito: null };
+  return { valor: null, motivo: 'sem_valor', conflito: null };
 }
 
 function extrairSomaAditivaPagamento(texto) {
@@ -319,6 +399,34 @@ function detectarLojinhaProduto(texto) {
 // OCR de cupom nao tem "R$": aceita 5.700,00 / 1.234,56 (decimal obrigatorio, pra nao
 // confundir com CNPJ, NSU, AUT, data ou numero de terminal).
 function extrairValorOcr(text) {
+  return extrairValorOcrDetalhado(text).valor;
+}
+
+// Mesma leitura, com a FONTE e a confiança. Baixa confiança = nenhum total
+// rotulado e mais de um valor distinto possível no comprovante: escolher o
+// primeiro seria chute.
+function extrairValorOcrDetalhado(text) {
+  const t = String(text || '');
+  const semTributos = t.split('\n')
+    .filter((l) => !/trib|ibpt|federal|estadual|municipal/i.test(l))
+    .join('\n');
+  const valor = _extrairValorOcrBruto(t);
+  if (!valor) return { valor: null, fonte: null, baixaConfianca: false, candidatos: [] };
+  const RE_TOTAL = /(?:valor\s+total|total\s+a\s+pagar|valor\s+pago|valor\s+a\s+pagar|vl\.?\s*total|subtotal)[^\d\n]{0,12}(\d{1,3}(?:\.\d{3})*,\d{2}|\d{1,6}[.,]\d{2})/i;
+  const rotulados = candidatosMonetariosBR(semTributos).filter((c) => c.sinal === 'rotulo_rs');
+  const fonte = (RE_TOTAL.test(semTributos) || rotulados.length) ? 'rotulo' : 'sem_rotulo';
+  const distintos = new Set(candidatosMonetariosBR(semTributos).filter((c) => c.sinal === 'rs').map((c) => Math.round(c.valor * 100)));
+  const reDec = /(?<![\d.,:\/-])(\d{1,3}(?:\.\d{3})+,\d{2}|\d{1,6},\d{2})(?![\d.,:\/-])/g;
+  let m;
+  while ((m = reDec.exec(semTributos)) !== null) {
+    const v = parseBRMoney(m[1]);
+    if (v && v < 1000000) distintos.add(Math.round(v * 100));
+  }
+  const candidatos = [...distintos].map((c) => c / 100);
+  return { valor, fonte, baixaConfianca: fonte !== 'rotulo' && candidatos.length > 1, candidatos };
+}
+
+function _extrairValorOcrBruto(text) {
   const t = String(text || '');
   // A Lei da Transparencia poe "Tributos aproximados: Federal R$ 5,01 ..." em TODO
   // cupom fiscal — e quando o R$ do total sai sujo do OCR ("Subtotal R$ y 34,00",
@@ -875,7 +983,7 @@ function descricaoParcelaCoerente(parcela, competencia) {
   return atual === correta ? descricao : descricao.replace(noTexto[0], correta);
 }
 
-function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competencia, parcela, confiancaBaixa, alunoNovoOrigem, responsavelFinanceiro, formaIncerta, cartaoModalidade, cartaoParcelas, multiplas, alunoViaPagador, pagadorNome, candidatosAluno, canonica, duplicata, quitacao, faturaIndisponivel, composto, bloqueiaLancamento, itemLojinha, semAlunoDeclarado, entidade, valorMaiorNaLegenda }) {
+function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competencia, parcela, confiancaBaixa, alunoNovoOrigem, responsavelFinanceiro, formaIncerta, cartaoModalidade, cartaoParcelas, multiplas, alunoViaPagador, pagadorNome, candidatosAluno, canonica, duplicata, quitacao, faturaIndisponivel, composto, bloqueiaLancamento, itemLojinha, semAlunoDeclarado, entidade, valorMaiorNaLegenda, valorConflito, valorBaixaConfianca }) {
   // forma legível
   let formaTxt;
   if (forma === 'cartao') {
@@ -900,6 +1008,8 @@ function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competenci
     ehSaidaPreview ? '*PAGAMENTO (saída)*' : '*RECEBIMENTO*',
     `${valor ? '*' + fmtBRL(valor) + '*' : '❓ valor não identificado'} · ${formaTxt}`,
     ...(valorMaiorNaLegenda ? [`⚠️ A mensagem cita ${fmtBRL(valorMaiorNaLegenda)} — este card cobre só ${fmtBRL(Number(valor) || 0)}. Se é pagamento de mais de um aluno, manda cada um: *Nome — R$ valor*.`] : []),
+    ...(!valor && valorConflito ? [`⚠️ A mensagem diz *${fmtBRL(valorConflito.legenda)}* e o comprovante mostra *${fmtBRL(valorConflito.comprovante)}*. Não vou escolher no chute.`] : []),
+    ...(!valor && !valorConflito && valorBaixaConfianca ? ['⚠️ Não consegui ler o valor do comprovante com segurança.'] : []),
   ]);
 
   // ---- ALUNO: de quem é
@@ -1020,6 +1130,8 @@ function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competenci
     fecho = '👉 Confirma aluno, competência e curso/parcela antes de lançar.';
   } else if (semAluno && valor && !formaIncerta) {
     fecho = '👉 Me diz de qual aluno é que eu lanço.';
+  } else if (!valor && (valorConflito || valorBaixaConfianca)) {
+    fecho = '👉 Qual é o valor certo? Responde citando este card: *pode, R$ valor*' + (formaIncerta ? ' e a forma' : '') + '.';
   } else if (!valor && formaIncerta) {
     fecho = '👉 Me diz o valor e a forma: *pode, R$ 5.700 no cartão 12x*';
   } else if (!valor) {
@@ -6439,12 +6551,34 @@ _Não lanço nada pela metade._`);
       // O tesseract perdeu a virgula ("387,00" -> "38700") e o card nasceu com
       // R$ 38.700,00 tendo "R$387,00" escrito pela Mayra na legenda-irma — o
       // backfill era só `if (!valor)`, entao o OCR errado ganhava do humano.
+      // 02/10/2026 (Recreio, retirada R$ 1.000 que virou R$ 2,00): a regra acima
+      // virou ARBITRAGEM. O valor da imagem é lido sempre (não só quando a
+      // legenda não tem valor) e confrontado com o humano; divergência real e
+      // leitura de baixa confiança produzem card SEM valor, que pergunta.
+      let valorConflito = null;
+      let valorBaixaConfianca = false;
+      const somaLegenda = extrairSomaAditivaPagamento(legendaEfetiva);
       {
-        const _vLegenda = extrairValor(legendaEfetiva);
-        if (_vLegenda && valor && Math.abs(_vLegenda - valor) >= 0.01) {
-          log({ acao: 'valor_da_legenda_vence_ocr', chatId, ocr: valor, legenda: _vLegenda });
-          valor = _vLegenda;
+        const _vHumano = somaLegenda ? somaLegenda.total : extrairValor(legendaEfetiva);
+        const _ocrDet = extrairValorOcrDetalhado(ocrText);
+        const _vImagem = _ocrDet.valor
+          || valorDoModelo(visao && visao.valor)
+          || valorDoModelo(midiaPreprocessada && midiaPreprocessada.valor)
+          || (!_vHumano ? (Number(valor) || null) : null);
+        const _declarados = candidatosMonetariosBR(legendaEfetiva).map((c) => c.valor);
+        const _arb = arbitrarValorComprovante({ humano: _vHumano, declarados: _declarados, comprovante: _vImagem,
+          comprovanteBaixaConfianca: !!(_ocrDet.valor && _ocrDet.baixaConfianca) });
+        if (_arb.motivo === 'ocr_perdeu_virgula') {
+          log({ acao: 'valor_da_legenda_vence_ocr', chatId, ocr: _vImagem, legenda: _vHumano });
+        } else if (_arb.motivo === 'conflito_legenda_comprovante') {
+          log({ acao: 'valor_conflito_legenda_comprovante', chatId, legenda: _vHumano, comprovante: _vImagem });
+        } else if (_arb.motivo === 'comprovante_baixa_confianca') {
+          log({ acao: 'valor_comprovante_baixa_confianca', chatId, candidatos: _ocrDet.candidatos.length });
         }
+        if (somaLegenda && _arb.valor) log({ acao: 'valor_soma_legenda', chatId, total: _arb.valor, partes: somaLegenda.partes.length });
+        valor = _arb.valor;
+        valorConflito = _arb.conflito;
+        valorBaixaConfianca = !!_arb.baixaConfianca;
       }
       // F2 (01/09): a legenda trazia 1.290, 432 E o total 1.722; o card saiu
       // com 1.290 dizendo "confere". Se a propria legenda tem um valor MAIOR
@@ -6455,11 +6589,6 @@ _Não lanço nada pela metade._`);
           .map((s) => parseBRMoney(s)).filter((v) => v && v > 0);
         const _max = _vals.length ? Math.max.apply(null, _vals) : 0;
         if (valor && _max > Number(valor) + 0.01) valorMaiorNaLegenda = _max;
-      }
-      const somaLegenda = extrairSomaAditivaPagamento(legendaEfetiva);
-      if (somaLegenda) {
-        valor = somaLegenda.total;
-        log({ acao: 'valor_soma_legenda', chatId, total: valor, partes: somaLegenda.partes.length });
       }
       // Camada 3: INTERPRETACAO FLUIDA (categoria/aluno/competencia via LLM texto; humano confirma)
       let categoria = null, aluno = null, competencia = null;
@@ -7096,12 +7225,12 @@ _Não lanço nada pela metade._`);
         log({ acao: 'midia_adiada_legenda_tardia', chatId, etapa: 'card' });
         return { acao: 'midia_adiada_legenda_tardia' };
       }
-      let texto = montarPreview({ unidadeNome: grp.nome, valor, forma, categoria, aluno, competencia, parcela, confiancaBaixa, alunoNovoOrigem, responsavelFinanceiro, formaIncerta, cartaoModalidade, cartaoParcelas, multiplas, alunoViaPagador, pagadorNome, candidatosAluno, canonica, duplicata, quitacao, faturaIndisponivel: canonicaIndisponivel || bloqueiaFonteIndisponivel, composto, bloqueiaLancamento, itemLojinha: lojinhaInfo && lojinhaInfo.item, valorMaiorNaLegenda });
+      let texto = montarPreview({ unidadeNome: grp.nome, valor, forma, categoria, aluno, competencia, parcela, confiancaBaixa, alunoNovoOrigem, responsavelFinanceiro, formaIncerta, cartaoModalidade, cartaoParcelas, multiplas, alunoViaPagador, pagadorNome, candidatosAluno, canonica, duplicata, quitacao, faturaIndisponivel: canonicaIndisponivel || bloqueiaFonteIndisponivel, composto, bloqueiaLancamento, itemLojinha: lojinhaInfo && lojinhaInfo.item, valorMaiorNaLegenda, valorConflito, valorBaixaConfianca });
       if (dryRun) texto += '\n\n_(modo teste — nada será gravado no caixa)_';
       const previewId = await sendFn(chatId, texto);
       const arr = limparVelhos(chatId, agora);
       log({ acao: 'identidade_envio', identificado: !!(idEnviou && idEnviou.identificado) });
-      const pendencia = { previewId, unidade_id: grp.unidade_id, nome: grp.nome, valor, forma, categoria, aluno, competencia, descricao, parcela, responsavelFinanceiro, cartaoModalidade, cartaoParcelas, formaIncerta, quitacao, multiplas, composto, canonica, alunoNovoId, itemLojinha: lojinhaInfo && lojinhaInfo.item, bloqueiaLancamento, faturaIndisponivel: canonicaIndisponivel, bloqueiaFonteIndisponivel, categoriaInterpretada: _categoriaAntesDaFatura || null, enviadoPor: nomeParaCarimbo(idEnviou, event), idemKey, origem: event.messageId, evidenceEnvelope,
+      const pendencia = { previewId, unidade_id: grp.unidade_id, nome: grp.nome, valor, forma, categoria, aluno, competencia, descricao, parcela, responsavelFinanceiro, cartaoModalidade, cartaoParcelas, formaIncerta, quitacao, multiplas, composto, canonica, alunoNovoId, itemLojinha: lojinhaInfo && lojinhaInfo.item, valorConflito, valorBaixaConfianca, bloqueiaLancamento, faturaIndisponivel: canonicaIndisponivel, bloqueiaFonteIndisponivel, categoriaInterpretada: _categoriaAntesDaFatura || null, enviadoPor: nomeParaCarimbo(idEnviou, event), idemKey, origem: event.messageId, evidenceEnvelope,
         msgIds: [previewId], autorPhone: event.senderPhone || null, autorId: event.senderId || null,
         toquePor: String(event.senderPhone || event.senderId || ''), toqueTs: agora,
         arquivoBytes: (ocrMeta && ocrMeta.file_bytes) || null, ts: agora };
@@ -7714,7 +7843,7 @@ _Não lanço nada pela metade._`);
           //    o card, só vale ditado curto — prosa longa é conversa, não comando.
           if (!alvoVD && arrP.length === 1 && (bodyLimpo(txt).length <= 220 || _falouComSol(event))) alvoVD = arrP[0];
           if (!alvoVD && arrP.length === 1) log({ acao: 'valor_ditado_ignorado_prosa', chatId, len: bodyLimpo(txt).length });
-          if (alvoVD && !categoriaEhSaida(alvoVD.categoria) && Math.abs((alvoVD.valor || 0) - _valorDitado) >= 0.01) {
+          if (alvoVD && Math.abs((alvoVD.valor || 0) - _valorDitado) >= 0.01) {
             log({ acao: 'preview_valor_corrigido', chatId, de: alvoVD.valor || null, para: _valorDitado });
             alvoVD.valor = _valorDitado;
             if (alvoVD.parcela && alvoVD.parcela.valor_da_parcela != null) {
@@ -9270,7 +9399,7 @@ _Não lanço nada pela metade._`);
       let sintetico = null;
       if (cls.intencao === 'corrigir_aluno' && cls.aluno_nome) sintetico = 'aluno: ' + cls.aluno_nome;
       else if (cls.intencao === 'corrigir_categoria' && cls.categoria) sintetico = 'coloca a categoria como ' + cls.categoria;
-      else if (cls.intencao === 'corrigir_valor' && cls.valor) sintetico = 'o valor é R$ ' + String(cls.valor).replace('.', ',');
+      else if (cls.intencao === 'corrigir_valor' && valorDoModelo(cls.valor)) sintetico = 'o valor é R$ ' + valorDoModelo(cls.valor).toFixed(2).replace('.', ',');
       else if (cls.intencao === 'corrigir_forma' && cls.forma) sintetico = 'a forma é ' + cls.forma;
       else if (cls.intencao === 'corrigir_competencia' && cls.competencia) {
         // Campo estruturado, nunca frase sintetica com o nome do card. A frase
@@ -9457,7 +9586,7 @@ function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slic
 module.exports = {
   _fonteFuturaLateralAoMesDeclarado,
   selecionarFaturasQuitacao, resolverFaturasQuitacao,
-  parseBRMoney, extrairAdiantamentoDeclarado, valorDoModelo, normalizarCompetenciaV4, montarEnvelopeV4, extrairValor, extrairForma, extrairFormaHumana, detectarComprovante, casarPode,
+  parseBRMoney, lerNumeroMonetarioBR, candidatosMonetariosBR, arbitrarValorComprovante, extrairValorOcrDetalhado, extrairAdiantamentoDeclarado, valorDoModelo, normalizarCompetenciaV4, montarEnvelopeV4, extrairValor, extrairForma, extrairFormaHumana, detectarComprovante, casarPode,
   _saidaExplicitaFromCaption, categoriaSaidaDoTexto, excedeFaturaUnica, deveBloquearLancamento, _valorLojinhaTexto, _compradorDeclaradoLojinha, _nomeHumanoTardio, extrairValorOcr, _vendedorRotulado, _mesmaPessoa,
   _alunoRotulado, _limparAlunoRotulado, _semAlunoDeclarado, extrairCategoriaCorrecao,
   _ehDitadoDeCaixa, classificarCorrecaoPendencia, listarPreviewsAbertosV3, _contestaFatura, rotearMensagemV4,
