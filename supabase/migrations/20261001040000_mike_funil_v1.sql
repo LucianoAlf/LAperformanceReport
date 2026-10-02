@@ -1,12 +1,14 @@
 -- Mike v2 (marketing, Hermes): leitura do funil comercial por canal, só números agregados.
 -- Não cria métrica nova: embrulha a fonte canônica kpis_comercial_v2_sem_cache_20260923 (somente leitura, STABLE),
 -- a mesma que alimenta get_kpis_comercial_canonicos_v2, sem gravar cache.
--- Crachá mike_mcp: sem acesso a tabela; só executa esta função. Login/senha definidos fora do repo.
+-- Crachá mike_mcp: sem acesso a tabela; só executa esta função. LOGIN intencional (o MCP do Mike
+-- conecta pelo pooler); senha definida fora do repo, nunca em arquivo. Espelha o papel já existente
+-- em produção (rolcanlogin=true).
 -- Aprovado pelo Alf em 2026-10-01 ("começa pelo A"). Rollback: supabase/rollbacks/20261001040000_mike_funil_v1_ROLLBACK.sql
 do $$
 begin
   if not exists (select 1 from pg_roles where rolname = 'mike_mcp') then
-    create role mike_mcp nologin noinherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls;
+    create role mike_mcp login noinherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls;
   end if;
 end $$;
 
