@@ -396,6 +396,45 @@ function detectarLojinhaProduto(texto) {
   return { categoria: 'lojinha', item: item || 'Produto de lojinha' };
 }
 
+// Venda de ingresso e receita de EVENTO, nao mensalidade nem produto de lojinha.
+// O evento vivo de 02/10/2026 tem contrato conhecido: LA Session com Felipe Alves,
+// R$ 40 por ingresso. A legenda "2 ingressos LA Session Felipe Alves" nao pode
+// transformar o artista em aluno nem esconder a quantidade no card.
+function detectarVendaIngressoEvento(texto) {
+  const raw = bodyLimpo(texto);
+  const n = _normConf(raw);
+  if (!/\bingressos?\b/.test(n)) return null;
+
+  const qtdMatch = n.match(/(?:^|\s)(\d{1,3})\s+ingressos?\b/);
+  const quantidade = qtdMatch ? Number(qtdMatch[1]) : 1;
+  if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > 100) return null;
+
+  const laSession = /\bla\s+session\b/.test(n);
+  const felipeAlves = /\bfelipe\s+alves\b/.test(n);
+  if (laSession || felipeAlves) {
+    return {
+      categoria: 'venda',
+      quantidade,
+      evento: 'LA Session — Felipe Alves',
+      preco_unitario: 40,
+      valor_esperado: quantidade * 40,
+    };
+  }
+
+  // Outros eventos continuam reconhecidos como venda sem aluno, mas sem inventar
+  // preço. O total precisa vir do texto/comprovante e será confirmado no card.
+  if (/\b(workshop|evento|show|apresentacao|apresentação|recital|festival)\b/i.test(raw)) {
+    return {
+      categoria: 'venda',
+      quantidade,
+      evento: 'Evento/workshop',
+      preco_unitario: null,
+      valor_esperado: null,
+    };
+  }
+  return null;
+}
+
 // OCR de cupom nao tem "R$": aceita 5.700,00 / 1.234,56 (decimal obrigatorio, pra nao
 // confundir com CNPJ, NSU, AUT, data ou numero de terminal).
 function extrairValorOcr(text) {
@@ -5071,6 +5110,61 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     return { acao: 'preview_agent_first_lojinha', previewId: pendencia.previewId };
   }
 
+  // Ingresso de evento e uma venda sem aluno. Mantem quantidade, evento e preco
+  // unitario no proprio card; o total conhecido do evento funciona como trava,
+  // nunca como autorizacao. Dinheiro so entra depois de um novo "pode".
+  async function abrirFluxoVendaIngresso({ event, grupo, eventoInfo, valor, forma, agora,
+    origemMessageId, cartaoModalidade = null, cartaoParcelas = null }) {
+    const esperado = Number(eventoInfo && eventoInfo.valor_esperado) || null;
+    const total = Number(valor || esperado || 0);
+    if (!(total > 0)) {
+      await sendFn(event.chatId, `Entendi ${eventoInfo.quantidade} ingresso(s) de *${eventoInfo.evento}*, mas não achei o valor total. Nada foi lançado.`);
+      log({ acao: 'venda_ingresso_sem_valor', chatId: event.chatId, quantidade: eventoInfo.quantidade });
+      return { acao: 'venda_ingresso_sem_valor' };
+    }
+    if (esperado && Math.abs(total - esperado) > 0.01) {
+      await sendFn(event.chatId, `⚠️ Não criei card: ${eventoInfo.quantidade} ingresso(s) de *${eventoInfo.evento}* a ${fmtBRL(eventoInfo.preco_unitario)} somam *${fmtBRL(esperado)}*, mas o comprovante/texto mostra *${fmtBRL(total)}*. Confere o valor.`);
+      log({ acao: 'venda_ingresso_total_diverge', chatId: event.chatId,
+        quantidade: eventoInfo.quantidade, esperado, recebido: total });
+      return { acao: 'venda_ingresso_total_diverge' };
+    }
+    if (!forma) {
+      await sendFn(event.chatId, `Entendi ${eventoInfo.quantidade} ingresso(s) de *${eventoInfo.evento}* por *${fmtBRL(total)}*. Me diz a forma: *pix*, *dinheiro*, *cartão* ou *transferência*. Nada foi lançado.`);
+      log({ acao: 'venda_ingresso_sem_forma', chatId: event.chatId, valor: total });
+      return { acao: 'venda_ingresso_sem_forma' };
+    }
+
+    const detalhe = `${eventoInfo.quantidade} ingresso(s) — ${eventoInfo.evento}`
+      + (eventoInfo.preco_unitario ? ` — ${fmtBRL(eventoInfo.preco_unitario)} cada` : '');
+    const descricao = `Venda - ${eventoInfo.quantidade} ingresso(s) - ${eventoInfo.evento}`;
+    let idEnviou = null;
+    try { idEnviou = await identidadeFn(event.senderPhone, grupo.unidade_id); } catch (e) { /* melhor esforco */ }
+    const textoCard = montarPreview({ unidadeNome: grupo.nome, valor: total, forma, categoria: 'venda',
+      aluno: null, formaIncerta: false, cartaoModalidade, cartaoParcelas, multiplas: false,
+      semAlunoDeclarado: true, entidade: detalhe });
+    const origem = origemMessageId || event.messageId;
+    const pendencia = {
+      previewId: null, unidade_id: grupo.unidade_id, nome: grupo.nome,
+      valor: total, forma, categoria: 'venda', aluno: null, competencia: null, descricao,
+      responsavelFinanceiro: null, cartaoModalidade, cartaoParcelas, formaIncerta: false,
+      canonica: null, semAluno: true, entidade: detalhe, eventoInfo,
+      origem, idemKey: `${event.chatId}:${origem}:venda-ingresso`,
+      enviadoPor: nomeParaCarimbo(idEnviou, event), ts: agora,
+    };
+    const seguro = await prepararEPublicarPreviewV4({
+      event, grupo, texto: textoCard, pendencia,
+      result: { acao: 'preview_venda_ingresso', valor: total, categoria: 'venda', quantidade: eventoInfo.quantidade },
+      previewStatus: 'public_preview_sent',
+    });
+    if (!seguro.ok) return { acao: seguro.motivo };
+    const arr = limparVelhos(event.chatId, agora);
+    arr.push(pendencia);
+    pendentes.set(event.chatId, arr);
+    log({ acao: 'preview_venda_ingresso', chatId: event.chatId, valor: total,
+      quantidade: eventoInfo.quantidade, evento: eventoInfo.evento });
+    return { acao: 'preview_venda_ingresso', previewId: pendencia.previewId };
+  }
+
   async function abrirFluxoAgentFirstSingular({ event, grupo, intent, agora, origemMessageId,
     resolvidoPronto, agentFirstEnvelope, supersedePreviewId = null,
     cartaoModalidade = null, cartaoParcelas = null }) {
@@ -5965,6 +6059,15 @@ _Não lanço nada pela metade._`);
       if (!_ehDitado && !_pendAbertaTexto && _saidaExplicitaFromCaption(texto)) {
         log({ acao: 'saida_texto_ignorada_prosa', chatId, len: texto.length });
       }
+      // Venda de ingresso por texto: evento e receita sem aluno. O contrato vivo
+      // do LA Session permite conferir quantidade x R$ 40 sem depender do LLM.
+      const _eventoIngresso = !_pendAbertaTexto ? detectarVendaIngressoEvento(texto) : null;
+      if (_eventoIngresso) {
+        const _valorEvento = extrairValor(texto) || _eventoIngresso.valor_esperado;
+        const _formaEvento = extrairForma(texto, null);
+        return abrirFluxoVendaIngresso({ event, grupo: grp, eventoInfo: _eventoIngresso,
+          valor: _valorEvento, forma: _formaEvento, agora: Date.now(), origemMessageId: event.messageId });
+      }
       // 🔴 29/09/2026: venda de lojinha por TEXTO só abria card pela V4 (#525). Com a V3 de
       //    volta, "Venda de corda para a aluna X Valor:60 reais pix" ficava sem resposta.
       //    Mesmo fluxo/cofre do card de lojinha (pendência V3 + "pode"), montado por regra.
@@ -6599,6 +6702,22 @@ _Não lanço nada pela metade._`);
           .map((s) => parseBRMoney(s)).filter((v) => v && v > 0);
         const _max = _vals.length ? Math.max.apply(null, _vals) : 0;
         if (valor && _max > Number(valor) + 0.01) valorMaiorNaLegenda = _max;
+      }
+      // Caso real 02/10/2026: "2 ingressos LA Session Felipe Alves". Antes o
+      // interpretador chamou Felipe Alves de aluno e classificou como lojinha.
+      // Ingresso e venda de evento sem aluno; quantidade x preco conhecido trava
+      // o total antes do card. Conflito de leitura continua fail-closed.
+      const _eventoIngressoMidia = detectarVendaIngressoEvento(legendaEfetiva);
+      if (_eventoIngressoMidia) {
+        if (valorConflito || valorBaixaConfianca) {
+          await sendFn(chatId, '⚠️ Entendi que é venda de ingresso, mas o valor do texto e do comprovante não ficou seguro. Não criei card; confere o valor total e reenvia.');
+          log({ acao: 'venda_ingresso_valor_inseguro', chatId,
+            conflito: !!valorConflito, baixa_confianca: valorBaixaConfianca });
+          return { acao: 'venda_ingresso_valor_inseguro' };
+        }
+        return abrirFluxoVendaIngresso({ event, grupo: grp, eventoInfo: _eventoIngressoMidia,
+          valor: valor || _eventoIngressoMidia.valor_esperado, forma, agora,
+          origemMessageId: event.messageId, cartaoModalidade, cartaoParcelas });
       }
       // Camada 3: INTERPRETACAO FLUIDA (categoria/aluno/competencia via LLM texto; humano confirma)
       let categoria = null, aluno = null, competencia = null;
@@ -9608,7 +9727,7 @@ module.exports = {
   montarPreview, montarPreviewMultiAluno, descricaoParcelaCoerente, fmtBRL, carregarEnv, lancarRecebimento, lancarRecebimentoLote, resolverMultiAlunoCaixaV1, resolverPagamentoItensV1, resolverCompostoAlunoCaixaV1, lancarSaidaCaixa, buscarLancamentoParaCorrecao,
   buscarMovimentosCaixa, corrigirMovimentoCaixa, estornarMovimentoCaixa, registrarPreviewV3, registrarApprovalV3, finalizarPreviewV3, criarHandlerFinanceiro,
   confirmacaoLimpa, classificarMidia, bodyLimpo, nomeDoAtor, buscarResponsavel, mesmaPessoa, pagamentoMultiplo,
-  extrairDivisaoPagamento, extrairSomaAditivaPagamento, extrairAdicionalPagamento, detectarLojinhaProduto, detectarContextoMultiAluno, validarIntencaoMultiAluno,
+  extrairDivisaoPagamento, extrairSomaAditivaPagamento, extrairAdicionalPagamento, detectarLojinhaProduto, detectarVendaIngressoEvento, detectarContextoMultiAluno, validarIntencaoMultiAluno,
   identificarPessoa, nomeParaCarimbo, ehPerguntaDeCaixa, resumoDoDia, montarResumoCaixa,
   extrairCartao, extrairValorOcr, extrairPagador, identificarPorPagador, nomePlausivel,
   _alunoRotulado, _alunoFromCaption, _cortarComentarioPagamentoDoNome, _alunoSuspeito,
