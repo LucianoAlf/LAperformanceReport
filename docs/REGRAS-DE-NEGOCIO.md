@@ -735,6 +735,8 @@ Como `leads.telefone` recebe o `telefone_responsavel` e existe UNIQUE `(telefone
 
 **Efeito:** matrículas de irmãos extras somem do funil e o nome exibido é o do irmão. Ver §14, pendência P4.
 
+✅ **Conversão experimental → matrícula corrigida para irmãos (02/10/2026):** cada criança que fez experimental e matriculou conta como **uma conversão**. A conciliação resolve o aluno da experimental pelo **lead Emusys da própria criança** (`alunos.emusys_lead_id = lead_experimentais.emusys_lead_id`, mesma unidade) **antes** de cair no aluno do lead da família (`leads.aluno_id`, um só por telefone). Antes, os dois irmãos caíam no mesmo aluno e o `count(distinct aluno)` os juntava (Barra set/26: 12 → 14; Recreio set/26: 15 → 17). Matrículas e experimentais com presença não mudam. Migration `20261002120000` (funções `get_conciliacao_experimentais_snapshot_v1` e `..._v2_legacy_p21_20260707`). O lead único por família no funil (P4) **continua**.
+
 ### 6.8 Origem e atribuição de anúncio 📋
 
 - Leads chegam ao Supabase pela via **Emusys** (os agentes Mila SDR cadastram no Emusys, que dispara o webhook).
