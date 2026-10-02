@@ -2180,7 +2180,7 @@ function extrairAdicionalPagamento(texto) {
 // ⚠️ "vale" so como substantivo com complemento ("vale de R$50", "vale pro
 // instrutor") — "vale confirmar" e' verbo, e foi o que transformou um RELATO
 // em saida de R$633 (31/08).
-const SAIDA_TERMO_RE = /\b(?:despesas?|desembolso|reembolso|sa[ií]das?|retirad[ao]s?|retirei|compra(?:mos|ram)?|comprei|paguei|pagamos|gastei|gastos?)\b|\bvale\s+(?:de|do|da|pr[ao])\b|\bvale\s+(?:r\$\s*)?\d/i;
+const SAIDA_TERMO_RE = /\b(?:despesas?|desembolso|reembolso|sa[ií]das?|retirad[ao]s?|retirei|sangrias?|compra(?:mos|ram)?|comprei|paguei|pagamos|gastei|gastos?)\b|\bvale\s+(?:de|do|da|pr[ao])\b|\bvale\s+(?:r\$\s*)?\d/i;
 
 // Devolve a categoria de SAIDA declarada na legenda, ou null.
 // ⚠️ Recebimento de aluno nunca e' saida, mesmo com verbo de compra na frase
@@ -2203,7 +2203,9 @@ function _saidaExplicitaFromCaption(body) {
   if (!t) return null;
   if (/\b(parcela|mensalidade|passaporte|matr[ií]cula)\b/i.test(t)) return null;
   if (/\btroco\b/i.test(t)) return 'troco';
-  if (/\b(retirad[ao]s?|retirei)\b/i.test(t)) return 'retirada';
+  // "Sangria" é o nome de balcão da retirada de dinheiro do caixa (02/10/2026):
+  // mesma categoria, sem categoria nova no banco.
+  if (/\b(retirad[ao]s?|retirei|sangrias?)\b/i.test(t)) return 'retirada';
   // 🔴 29/09/2026 (CG, Jhon): "Sol, pagamento semanal do segurança - R$100,00 dinheiro"
   //    virou card de `despesa`. Segurança É saída, e o termo genérico ("saída",
   //    "paguei", "despesa") não pode vencer a categoria que a pessoa nomeou. Antes o
@@ -2275,7 +2277,7 @@ function _descricaoSaidaTexto(texto, categoria) {
     // ANTES da lista abaixo, e com lookaround Unicode em vez de \b: "\b" em JS e ASCII,
     // entao em "saida" acentuada ele ve fronteira entre "sai" e "da" e o "\bda\b" da
     // lista arranca o miolo da palavra. Sobrava "sai" na descricao (Mayra/CG 25/08).
-    .replace(/(?<!\p{L})(teve|houve|tivemos|sa[íi]da|retirada|gasto|despesa|uma?|hoje)(?!\p{L})/giu, ' ')
+    .replace(/(?<!\p{L})(teve|houve|tivemos|sa[íi]da|retirada|sangria|gasto|despesa|uma?|hoje)(?!\p{L})/giu, ' ')
     .replace(/\b(pagamento|pg|semanal|semana|comprovante|recibo|dinheiro|pix|cart[ãa]o|transfer[êe]ncia|foi|no|na|de|do|da|em)\b/ig, ' ')
     .replace(/[^\p{L}\d\s./-]/gu, ' ')
     // hifen que sobrou depois de tirar as palavras em volta ("dinheiro - PG seguranca")
@@ -2418,7 +2420,7 @@ function _alunoRotulado(body) {
 // Em uma pendência única, a equipe costuma responder só com o nome em uma
 // linha e "Parcela 08/2026" na outra. Isso é dado humano forte; não deve ser
 // descartado só por faltar a etiqueta "aluno:". Ainda passa pela canônica.
-const META_NAO_E_NOME_RE = /\b(descri[cç][aã]o|categoria|despesa|sa[ií]da|entrada|retirada|troco|forma|valor|corrig|corre[cç][aã]o|lan[cç]|altera|muda|troca|confirma|pode|n[aã]o\s+e|cofre|caixa)\b/i;
+const META_NAO_E_NOME_RE = /\b(descri[cç][aã]o|categoria|despesa|sa[ií]da|entrada|retirada|sangria|troco|forma|valor|corrig|corre[cç][aã]o|lan[cç]|altera|muda|troca|confirma|pode|n[aã]o\s+e|cofre|caixa)\b/i;
 // Vocabulario que, logo depois de "aluno", prova que a frase fala DO
 // LANCAMENTO e nao dita um nome. Reusa META (fonte unica) e acrescenta os
 // substantivos do dominio — duas listas soltas divergiriam com o tempo.
@@ -3049,7 +3051,7 @@ function rotearMensagemV4(texto, contexto, { timeout = 30000, documento = null }
       + '"lancamento_por_texto" quando a mensagem DITA um pagamento novo, sem comprovante e sem card aberto: traz aluno e/ou valor e/ou competencia ("PG parcela 09/26 Aluno: Fulano LA CG - R$377,00"). Nao confundir com "aprovar" — aqui nao ha card para aprovar, ha um lancamento sendo criado. '
       + '"contestar_fatura" quando dizem que a fatura/parcela do card esta errada ou desatualizada SEM dizer qual e a certa ("essa parcela nao esta vencida", "ja foi corrigido no sistema"). '
       + 'Se a pessoa DIZ QUAL e a competencia certa ("e a parcela de 08/26 e 09/26 juntas", "e de setembro"), e "corrigir_competencia", nao contestacao — quem aponta o valor certo esta corrigindo, quem so aponta o erro esta contestando. '
-      + '"saida_dinheiro" quando o dinheiro SAI do caixa — despesa, compra, retirada, vale, reembolso, troco, pagamento a fornecedor ou a prestador. '
+      + '"saida_dinheiro" quando o dinheiro SAI do caixa — despesa, compra, retirada, sangria, vale, reembolso, troco, pagamento a fornecedor ou a prestador. '
       + 'Vale mesmo sem a palavra "saida" e mesmo sem forma de pagamento: "comprei agua 45", "paguei o motoboy 30", "retirei 200 pro cofre", "vale de R$ 100 pra Ana" sao todos saida_dinheiro. '
       + '"fechar_caixa" quando pedem para fechar OU pedem o relatorio/demonstrativo OFICIAL do caixa atual para revisar, aprovar ou fechar; isso cria apenas o preview e ainda exige "pode" humano depois. '
       + '"consulta_caixa" para perguntas de numeros/resumo e para relatorios historicos que nao iniciam fechamento. '
@@ -5991,7 +5993,15 @@ _Não lanço nada pela metade._`);
           origemMessageId: event.messageId });
       }
       if (categoriaEhSaida(categoriaTexto)) {
-        const valor = extrairValor(texto);
+        let valor = extrairValor(texto);
+        // 02/10/2026: "sangria do caixa 1.000 dinheiro" ouvia "falta o valor". Ditado de
+        // saída NOVO (sem card aberto) com exatamente UM número e nenhum sinal monetário:
+        // esse número é o valor, lido pela mesma gramática pt-BR estrita. Dois números
+        // ("20 notas de 50") continuam virando pergunta; o card ainda exige "pode".
+        if (!valor && !_pendAbertaTexto) {
+          const _soltos = candidatosMonetariosBR(texto, { incluirSoltos: true });
+          if (_soltos.length === 1) valor = _soltos[0].valor;
+        }
         const forma = extrairForma(texto, null);
         if (!valor) {
           // 🔴 COM CARD ABERTO, ISTO E CORRECAO — E O VALOR ESTA NO CARD (09/09/2026).
