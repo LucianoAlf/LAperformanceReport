@@ -2,8 +2,13 @@
 -- Reproduz só o que kpis_comercial_v2_sem_cache_20260923 e upsert_lead tocam.
 create extension if not exists unaccent;
 
-create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;
-create role mike_mcp nologin noinherit nobypassrls;
+do $$
+begin
+  if not exists(select 1 from pg_roles where rolname='anon') then create role anon nologin; end if;
+  if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated nologin; end if;
+  if not exists(select 1 from pg_roles where rolname='service_role') then create role service_role nologin bypassrls; end if;
+  if not exists(select 1 from pg_roles where rolname='mike_mcp') then create role mike_mcp nologin noinherit nobypassrls; end if;
+end $$;
 create schema if not exists auth;
 create or replace function auth.role() returns text language sql stable as $$ select nullif(current_setting('request.jwt.claim.role',true),'') $$;
 

@@ -18,7 +18,7 @@ end $$;
 
 -- 2) origem_canal agrupada: Google=5 (3+2), Instagram=1, Sem canal=1; total=7
 do $$
-declare v jsonb; c record; tot int;
+declare v jsonb; c jsonb; tot int;
 begin
   v := public.kpis_comercial_v2_sem_cache_20260923('00000000-0000-0000-0000-0000000000aa', 2026, 9, 'mensal', null)->'origem_canal';
 

@@ -411,7 +411,7 @@ SELECT jsonb_build_object(
   END
 )
 FROM periodo;
-$function$
+$function$;
 CREATE OR REPLACE FUNCTION public.upsert_lead(p_nome text, p_telefone text, p_email text, p_unidade_id uuid, p_curso text, p_canal text, p_source_id integer, p_source_type text DEFAULT 'emusys'::text, p_arquivar boolean DEFAULT false, p_data_contato date DEFAULT NULL::date, p_data_nascimento date DEFAULT NULL::date)
  RETURNS json
  LANGUAGE plpgsql
@@ -641,7 +641,7 @@ begin
   values (v_log_nome, v_lead_id, p_unidade_id::text, p_source_type, v_action, v_detalhes, now());
   return json_build_object('action', v_action, 'lead_id', v_lead_id);
 end;
-$function$
+$function$;
 create or replace function public.mike_funil_v2(p_ano integer, p_mes integer, p_unidade text default null)
 returns jsonb
 language plpgsql
