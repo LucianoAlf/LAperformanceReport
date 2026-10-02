@@ -688,6 +688,21 @@ taxa_conversao_exp_mat = novas_matriculas / experimentais_realizadas × 100
 taxa_lead_experimental = leads que agendaram/realizaram experimental / total de leads × 100
 ```
 
+✅ **Conversão experimental → matrícula, como é calculada (decisão do Hugo, 02/10/2026):**
+
+```
+numerador   = matrículas COMERCIAIS do mês cuja pessoa fez experimental com PRESENÇA,
+              na mesma unidade, em QUALQUER data até a matrícula (pode ser meses antes)
+denominador = experimentais com presença no Emusys no mês (sem internas e sem decisão humana de exclusão)
+```
+
+- A matrícula conta no **mês da matrícula**, não no da experimental. Ex.: experimental em fevereiro e matrícula em setembro = conversão de setembro.
+- Quem **faltou** ou teve a experimental **cancelada** e matriculou depois é matrícula direta: não conta.
+- Irmãos contam um por criança (§6.7).
+- Consequência declarada: numerador e denominador são de coortes diferentes. Por isso a taxa pode passar de 100% num mês fraco de experimental. **Não é erro.**
+- ⚠️ É diferente da conversão **do professor** (§7.3), que credita a matrícula em até 30 dias depois da experimental.
+- Implementação: `get_conciliacao_experimentais_snapshot_v1` (migration `20261002130000`). A fórmula escrita acima (`novas_matriculas / experimentais_realizadas`) é a forma resumida desta regra: o numerador são só as matrículas que tiveram experimental.
+
 ⚠️ **Taxa de conversão geral do funil segue pendente** — `novas / total_leads` (código) vs. `novas / leads_com_experimental`. Ver §14, pendência P3.
 
 ### 6.5 Matrículas novas — fonte é `alunos` ✅
