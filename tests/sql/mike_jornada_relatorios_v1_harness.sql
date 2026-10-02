@@ -18,7 +18,7 @@ create table public.vw_jornada_lead_v1(
   lead_id integer,nome text,telefone text,unidade_id uuid,unidade_nome text,canal_origem text,
   meta_ad_source_id text,campanha_meta text,entrou_em date,convertido_em date,
   aulas_experimentais bigint,experimentais_realizadas bigint,converteu boolean,
-  created_at timestamptz,ultimo_contato_em timestamptz
+  created_at timestamptz,ultimo_contato_em timestamptz,aluno_id integer
 );
 insert into public.vw_jornada_lead_v1
 select g,'Pessoa '||g,'2199999'||g,'00000000-0000-0000-0000-000000000001','Campo Grande',
@@ -26,7 +26,8 @@ select g,'Pessoa '||g,'2199999'||g,'00000000-0000-0000-0000-000000000001','Campo
   case when g<=8 then 'ad-'||g end,case when g<=8 then 'Campanha A' end,
   date '2026-09-01'+g,case when g<=6 then date '2026-09-03'+g end,
   case when g<=7 then 1 else 0 end,case when g<=6 then 1 else 0 end,g<=6,
-  timestamptz '2026-09-20 12:00:00+00',timestamptz '2026-09-20 12:00:00+00'
+  timestamptz '2026-09-20 12:00:00+00',timestamptz '2026-09-20 12:00:00+00',
+  case when g<=6 then least(g,5) end
 from generate_series(1,10) g;
 
 create table public.vw_ads_gasto_diario_v1(
