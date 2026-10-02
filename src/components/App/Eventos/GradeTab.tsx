@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   DndContext,
@@ -361,6 +361,18 @@ function CartaoNumero({
   });
   const [musica, setMusica] = useState(principal.musica ?? '');
   const [musicaLink, setMusicaLink] = useState(principal.musica_link ?? '');
+  // O banco muda por fora do campo (sync do LA Teacher, outro integrante do número). Sem
+  // acompanhar, o campo seguia vazio com a música já gravada, e o blur seguinte gravava
+  // vazio por cima — foi o que apagou a música da Stella em 02/10. Enquanto a pessoa
+  // edita, o que ela digita manda.
+  const focoMusica = useRef<string | null>(null);
+  const focoLink = useRef<string | null>(null);
+  useEffect(() => {
+    if (focoMusica.current === null) setMusica(principal.musica ?? '');
+  }, [principal.musica]);
+  useEffect(() => {
+    if (focoLink.current === null) setMusicaLink(principal.musica_link ?? '');
+  }, [principal.musica_link]);
   const [palcoAberto, setPalcoAberto] = useState(false);
   const [adicionando, setAdicionando] = useState(false);
   const [abrindoPlayback, setAbrindoPlayback] = useState<number | null>(null);
@@ -485,9 +497,19 @@ function CartaoNumero({
             <Input
               value={musica}
               onChange={(e) => setMusica(e.target.value)}
+              onFocus={() => {
+                focoMusica.current = musica;
+              }}
               // Salva ao sair do campo, não a cada tecla: um PATCH por caractere numa grade de
               // 270 apresentações é o tipo de coisa que derruba a tela.
               onBlur={() => {
+                const digitouAlgo = musica !== focoMusica.current;
+                focoMusica.current = null;
+                // Só entrar e sair do campo não é decisão: grava apenas o que foi digitado.
+                if (!digitouAlgo) {
+                  setMusica(principal.musica ?? '');
+                  return;
+                }
                 const valor = musica.trim();
                 const mudou = numero.some((a) => (a.musica ?? '') !== valor);
                 if (mudou) salvarNoNumero({ musica: valor || null });
@@ -498,6 +520,9 @@ function CartaoNumero({
             <div className="flex items-center gap-1">
               <Clock className="h-3 w-3 text-slate-600" />
               <Input
+                // defaultValue só vale na montagem: a chave remonta o campo quando a duração
+                // muda no banco (sync do LA Teacher), senão ele seguia mostrando o valor velho.
+                key={`duracao-${duracaoPropria && duracaoMin !== null ? duracaoMin : ''}`}
                 type="number"
                 min={1}
                 defaultValue={duracaoPropria && duracaoMin !== null ? duracaoMin : ''}
@@ -558,7 +583,16 @@ function CartaoNumero({
               <Input
                 value={musicaLink}
                 onChange={(e) => setMusicaLink(e.target.value)}
+                onFocus={() => {
+                  focoLink.current = musicaLink;
+                }}
                 onBlur={() => {
+                  const digitouAlgo = musicaLink !== focoLink.current;
+                  focoLink.current = null;
+                  if (!digitouAlgo) {
+                    setMusicaLink(principal.musica_link ?? '');
+                    return;
+                  }
                   const valor = musicaLink.trim();
                   const mudou = numero.some((a) => (a.musica_link ?? '') !== valor);
                   if (mudou) salvarNoNumero({ musica_link: valor || null });

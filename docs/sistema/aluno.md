@@ -155,6 +155,13 @@ apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **L
   `trg_evento_apresentacao_grupo_coerente` (**deferida**, conferida no commit): o número inteiro fica
   num bloco só — arrastar move o número, e o front manda todos os integrantes juntos. ⚠️ Número que
   sobra com 1 integrante (alguém foi removido) é tratado como apresentação sozinha, não é erro.
+- 🔴 **O cartão da Grade apagava a música que o LA Teacher acabara de trazer (corrigido 02/10).**
+  Os campos Música/Link guardavam o valor da montagem e não acompanhavam o banco: depois do sync
+  o campo seguia vazio, e entrar e sair dele gravava vazio por cima (Stella/CG, 02/10 16:24 e
+  16:25 — provado no `audit_log`). Hoje o campo acompanha o banco enquanto não está em edição, e
+  o blur só grava se a pessoa **digitou**; a duração (`defaultValue`) remonta por `key`. ⚠️ Pôr
+  aluno na Grade **não dispara** o sync — a música chega ao abrir a página ou no botão
+  sincronizar.
 - **Idade do aluno** (28/09): ao lado do nome no cartão da Grade, no Check-in (porta e coxia), na
   lista de relatórios da Revisão e na programação/planilha impressas. Regra única em
   `idadeEmAnos`/`idadeHoje` (`src/lib/eventos.ts`): idade de **hoje** em BRT, a mesma da aba Alunos
