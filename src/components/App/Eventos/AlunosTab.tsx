@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Search, Users, Check, HelpCircle, X, Music, AlertTriangle, Guitar, LayoutList, UserPlus, Trash2, GraduationCap, FileCheck } from 'lucide-react';
 
@@ -177,16 +177,33 @@ function LinhaAluno({
             <GraduationCap className="h-3 w-3" />
             {aluno.formatura_tipo ? `formando · ${FORMATURA_ROTULO[aluno.formatura_tipo] ?? ''}` : ''}
           </button>
-          {/* O professor ja entregou o relatorio no LA Teacher e a pessoa nao tem
+          {/* O professor ja mexeu no relatorio do LA Teacher e a pessoa nao tem
               apresentacao: e a fila que a coordenacao precisa zerar primeiro — alocar
-              aqui e o que traz musica, palco e playback pra dentro da grade. */}
-          {aluno.relatorio_pronto && (
+              aqui e o que traz musica, palco e playback pra dentro da grade. A cor
+              escala com a urgencia: aprovado (vermelho) > enviado (ambar) > musica
+              lancada (amarelo). */}
+          {aluno.relatorio_falta_alocar && (
             <span
-              className="flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-px text-[10.5px] font-medium text-amber-300"
-              title="O professor já enviou o relatório no LA Teacher (música, palco e playback prontos) — falta alocar a pessoa num bloco"
+              className={cn(
+                'flex items-center gap-1 rounded px-1.5 py-px text-[10.5px] font-medium',
+                aluno.relatorio_falta_alocar === 'aprovado' && 'bg-rose-500/15 text-rose-300',
+                aluno.relatorio_falta_alocar === 'enviado' && 'bg-amber-500/15 text-amber-300',
+                aluno.relatorio_falta_alocar === 'musica' && 'bg-yellow-500/15 text-yellow-300',
+              )}
+              title={
+                aluno.relatorio_falta_alocar === 'aprovado'
+                  ? 'Relatório já APROVADO pelo revisor — só falta alocar num bloco'
+                  : aluno.relatorio_falta_alocar === 'enviado'
+                    ? 'Relatório enviado pelo professor, aguardando revisão — falta alocar num bloco'
+                    : 'O professor já lançou a música no LA Teacher — falta alocar num bloco'
+              }
             >
               <FileCheck className="h-3 w-3" />
-              relatório pronto · falta alocar
+              {aluno.relatorio_falta_alocar === 'aprovado'
+                ? 'aprovado · falta alocar'
+                : aluno.relatorio_falta_alocar === 'enviado'
+                  ? 'enviado · falta alocar'
+                  : 'música lançada · falta alocar'}
             </span>
           )}
         </div>
@@ -291,7 +308,12 @@ function LinhaAluno({
   );
 }
 
-export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId: string }) {
+export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
+  eventoId: number;
+  unidadeId: string;
+  /** Sobe a cada clique no quadro do topo: abre a aba ja com o filtro "falta alocar". */
+  pedidoFaltaAlocar?: number;
+}) {
   const { alunos, loading, erro, recarregar } = useAlunosDoEvento(eventoId, unidadeId);
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<FiltroStatus>('todos');
@@ -299,6 +321,12 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
   const [filtroCurso, setFiltroCurso] = useState('todos');
   const [soSemAlocar, setSoSemAlocar] = useState(false);
   const [soRelatorioPronto, setSoRelatorioPronto] = useState(false);
+
+  // O quadro do topo manda um "tick": cada clique religa o filtro — mesmo se a
+  // pessoa ja tiver desligado, o proximo clique precisa reaplicar.
+  useEffect(() => {
+    if (pedidoFaltaAlocar) setSoRelatorioPronto(true);
+  }, [pedidoFaltaAlocar]);
   const [gravando, setGravando] = useState<string | null>(null);
   const [modalOutraUnidade, setModalOutraUnidade] = useState(false);
   // Alvos congelados no clique: o modal promete N pessoas e a confirmacao grava
@@ -308,7 +336,7 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
   const resumo = useMemo(() => resumirParticipacao(alunos), [alunos]);
   // O botao so aparece quando existe alguem no estado — um filtro que nunca filtra
   // nada e controle morto na barra.
-  const temRelatorioPronto = useMemo(() => alunos.some((a) => a.relatorio_pronto), [alunos]);
+  const temRelatorioPronto = useMemo(() => alunos.some((a) => a.relatorio_falta_alocar), [alunos]);
 
   // Opcoes dos filtros saem da PROPRIA lista: um professor sem aluno elegivel no recital
   // nao pode ter aluno para filtrar, entao oferece-lo seria um caminho para o vazio.
@@ -348,14 +376,14 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
       if (soSemAlocar && (a.cursos_alocados >= a.cursos_no_recital || a.cursos_no_recital === 0)) {
         return false;
       }
-      if (soRelatorioPronto && !a.relatorio_pronto) return false;
+      if (soRelatorioPronto && !a.relatorio_falta_alocar) return false;
       if (!termo) return true;
       const alvo = normalizarBusca(
         `${a.nome} ${a.cursos.map((c) => `${c.curso_nome} ${c.professor_nome ?? ''}`).join(' ')}`,
       );
       return alvo.includes(termo);
     });
-  }, [alunos, busca, filtro, filtroProfessor, filtroCurso, soSemAlocar]);
+  }, [alunos, busca, filtro, filtroProfessor, filtroCurso, soSemAlocar, soRelatorioPronto]);
 
   const escolher = async (aluno: AlunoElegivel, status: ParticipacaoStatus) => {
     setGravando(aluno.pessoa_chave);

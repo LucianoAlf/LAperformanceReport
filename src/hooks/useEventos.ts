@@ -297,11 +297,13 @@ export interface AlunoElegivel {
   /** Atalho de `alocacoes.length`, para a contagem nao ter de percorrer o array. */
   cursos_alocados: number;
   /**
-   * O professor ja enviou o relatorio do LA Teacher (musica/palco/playback prontos) mas a
-   * pessoa ainda nao tem apresentacao na grade — o conteudo so entra quando ela for
-   * alocada. Selo de prioridade para a coordenacao: e quem "ja fez a licao e falta cadeira".
+   * O professor ja trabalhou o relatorio do LA Teacher mas a pessoa ainda nao tem
+   * apresentacao na grade — o conteudo so entra quando ela for alocada. A faixa diz
+   * a urgencia: 'musica' (lancou a musica), 'enviado' (mandou p/ revisao) ou
+   * 'aprovado' (revisor ja aprovou — o mais urgente, so falta cadeira). Selo de
+   * prioridade para a coordenacao: e quem "ja fez a licao e falta cadeira".
    */
-  relatorio_pronto: boolean;
+  relatorio_falta_alocar: 'musica' | 'enviado' | 'aprovado' | null;
   /**
    * Preenchido so para aluno de OUTRA unidade que se apresenta neste evento (nome da unidade
    * de origem). `null`/ausente = aluno da casa.
@@ -321,7 +323,7 @@ export interface AlunoDeOutraUnidade {
 }
 
 interface VisitantesDoEvento {
-  pessoas: (Omit<AlunoElegivel, 'status' | 'convidados' | 'alocacoes' | 'cursos_alocados' | 'relatorio_pronto'> & {
+  pessoas: (Omit<AlunoElegivel, 'status' | 'convidados' | 'alocacoes' | 'cursos_alocados' | 'relatorio_falta_alocar'> & {
     unidade_origem_nome: string;
   })[];
   /** aluno_id -> nome de toda matricula de outra unidade que o evento referencia. */
@@ -470,20 +472,31 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
       alocacoesPorChave.set(linha.pessoa_chave, lista);
     }
 
-    // Relatorio 'enviado' que ainda nao casou com apresentacao nenhuma — o professor ja
-    // entregou musica/palco/playback e falta cadeira na grade. Caso por PESSOA: a chave
-    // do relatorio e a mesma da participacao.
-    const relatorioProntoPorChave = new Set<string>(
-      ((relatorios.data ?? []) as RelatorioDoProfessor[])
-        .filter((r) => r.relatorio_status === 'enviado' && r.apresentacao_id === null)
-        .map((r) => r.pessoa_chave),
-    );
+    // Relatorio que ainda nao casou com apresentacao nenhuma — o professor ja mexeu
+    // no LA Teacher e falta cadeira na grade. Tres faixas de urgencia, contadas por
+    // PESSOA (a chave do relatorio e a mesma da participacao), guardando a mais alta:
+    // musica lancada < enviado < aprovado. Rascunho sem musica nao entra — o professor
+    // ainda nao fez nada de fato.
+    const PESO_FAIXA = { musica: 1, enviado: 2, aprovado: 3 } as const;
+    const relatorioProntoPorChave = new Map<string, 'musica' | 'enviado' | 'aprovado'>();
+    for (const r of (relatorios.data ?? []) as RelatorioDoProfessor[]) {
+      if (r.apresentacao_id !== null) continue;
+      const faixa = r.aprovado_em || r.relatorio_status === 'aprovado' ? 'aprovado' as const
+        : r.enviado_em || r.relatorio_status === 'enviado' ? 'enviado' as const
+        : r.musica_lancada ? 'musica' as const
+        : null;
+      if (!faixa) continue;
+      const atual = relatorioProntoPorChave.get(r.pessoa_chave);
+      if (!atual || PESO_FAIXA[faixa] > PESO_FAIXA[atual]) {
+        relatorioProntoPorChave.set(r.pessoa_chave, faixa);
+      }
+    }
 
     // Visitantes depois dos da casa: a lista e da unidade, e quem vem de fora e excecao.
     const base = [
       ...((elegiveis.data ?? []) as unknown as Omit<
         AlunoElegivel,
-        'status' | 'alocacoes' | 'cursos_alocados' | 'relatorio_pronto'
+        'status' | 'alocacoes' | 'cursos_alocados' | 'relatorio_falta_alocar'
       >[]),
       ...visitantes.visitantes.pessoas,
     ];
@@ -500,7 +513,7 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
           formatura_origem: formaturaPorChave.get(a.pessoa_chave)?.origem ?? null,
           alocacoes,
           cursos_alocados: alocacoes.length,
-          relatorio_pronto: relatorioProntoPorChave.has(a.pessoa_chave),
+          relatorio_falta_alocar: relatorioProntoPorChave.get(a.pessoa_chave) ?? null,
         };
       }),
     );

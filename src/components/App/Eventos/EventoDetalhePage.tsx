@@ -25,6 +25,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   useEvento,
+  useRelatoriosDoEvento,
   sincronizarRecital,
   EVENTO_STATUS_LABEL,
   type EventoStatus,
@@ -48,6 +49,56 @@ const STATUS_VARIANT: Record<EventoStatus, 'default' | 'success' | 'warning' | '
 
 const TABS_VALIDAS: TabAtiva[] = ['alunos', 'grade', 'palco', 'bilheteria', 'revisao', 'checkin'];
 
+/**
+ * Fila de alocacao: quem ja tem trabalho do professor no LA Teacher e nao tem
+ * apresentacao na grade. O quadro vive no topo do evento porque e a pergunta que a
+ * coordenacao responde primeiro — some sozinho quando a fila zera. Um clique abre a
+ * aba Alunos ja filtrada nessas pessoas.
+ */
+function QuadroFaltaAlocar({ eventoId, onAbrir }: { eventoId: number; onAbrir: () => void }) {
+  const { relatorios } = useRelatoriosDoEvento(eventoId);
+  const faixas = { musica: 0, enviado: 0, aprovado: 0 };
+  // Uma pessoa pode ter relatorio em dois cursos: conta pela faixa MAIS urgente dela.
+  const porPessoa = new Map<string, number>();
+  for (const r of relatorios) {
+    if (r.apresentacao_id !== null) continue;
+    const tier = r.aprovado_em || r.relatorio_status === 'aprovado' ? 3
+      : r.enviado_em || r.relatorio_status === 'enviado' ? 2
+      : r.musica_lancada ? 1 : 0;
+    if (tier > (porPessoa.get(r.pessoa_chave) ?? 0)) porPessoa.set(r.pessoa_chave, tier);
+  }
+  for (const t of porPessoa.values()) {
+    if (t === 3) faixas.aprovado += 1;
+    else if (t === 2) faixas.enviado += 1;
+    else faixas.musica += 1;
+  }
+  const total = faixas.musica + faixas.enviado + faixas.aprovado;
+  if (total === 0) return null;
+  return (
+    <button
+      type="button"
+      onClick={onAbrir}
+      className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-left transition-colors hover:bg-amber-500/15"
+    >
+      <span className="text-[13px] font-medium text-amber-200">
+        {total} aluno{total > 1 ? 's' : ''} com trabalho do professor no LA Teacher ainda sem lugar na grade
+      </span>
+      <span className="flex items-center gap-3 text-[12px]">
+        {faixas.musica > 0 && (
+          <span className="text-yellow-300">● {faixas.musica} música lançada</span>
+        )}
+        {faixas.enviado > 0 && (
+          <span className="text-amber-300">● {faixas.enviado} enviado{faixas.enviado > 1 ? 's' : ''}</span>
+        )}
+        {faixas.aprovado > 0 && (
+          <span className="font-medium text-rose-300">● {faixas.aprovado} aprovado{faixas.aprovado > 1 ? 's' : ''} — só falta cadeira</span>
+        )}
+      </span>
+      <span className="ml-auto text-[11.5px] text-amber-400/80">abrir a fila →</span>
+    </button>
+  );
+}
+
 // O `AbaFutura` (placeholder "Fase N — em breve") foi removido: as quatro abas passaram a
 // ter tela de verdade. Ele nao fica "por via das duvidas" porque placeholder esquecido e o
 // defeito que ele mesmo causou — a aba Palco anunciou a fase 4 como futura por dois commits
@@ -62,6 +113,8 @@ export function EventoDetalhePage() {
   /** Sobe quando o sync do LA Teacher gravou algo — remonta a aba para ler o novo dado. */
   const [syncTick, setSyncTick] = useState(0);
   const [sincSheets, setSincSheets] = useState(false);
+  /** Cada clique no quadro "falta alocar" sobe — a aba Alunos aplica o filtro de novo. */
+  const [pedidoFaltaAlocar, setPedidoFaltaAlocar] = useState(0);
 
   /** Botao manual — forca uma corrida da edge de planilhas (o cron roda a cada 15 min). */
   const atualizarPlanilhas = async () => {
@@ -216,12 +269,25 @@ export function EventoDetalhePage() {
         onSalvo={recarregar}
       />
 
+      <QuadroFaltaAlocar
+        eventoId={evento.id}
+        onAbrir={() => {
+          setPedidoFaltaAlocar((t) => t + 1);
+          alterarTab('alunos');
+        }}
+      />
+
       <PageTabs tabs={tabs} activeTab={tabAtiva} onTabChange={alterarTab} />
 
       {/* `key={syncTick}`: remonta a aba quando o sync gravou algo do professor. Sem ela a
           Grade continuaria mostrando o estado de antes da sincronizacao ate o F5. */}
       {tabAtiva === 'alunos' && (
-        <AlunosTab key={`alunos-${syncTick}`} eventoId={evento.id} unidadeId={evento.unidade_id} />
+        <AlunosTab
+          key={`alunos-${syncTick}`}
+          eventoId={evento.id}
+          unidadeId={evento.unidade_id}
+          pedidoFaltaAlocar={pedidoFaltaAlocar}
+        />
       )}
       {tabAtiva === 'grade' && <GradeTab key={`grade-${syncTick}`} evento={evento} />}
       {tabAtiva === 'palco' && <PalcoTab key={`palco-${syncTick}`} evento={evento} />}
