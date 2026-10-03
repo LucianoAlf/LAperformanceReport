@@ -250,6 +250,11 @@ export function TabelaRenovacoes({
               const agente = draft.agente_comercial.trim() || item.agente_comercial || '';
               const semValidacaoFinanceira = isLinhaSemValidacaoFinanceira(item, valorAnterior);
               const podeValidar = semValidacaoFinanceira || (valorNovo > 0 && agente.trim().length > 0);
+              // A aba Antecipadas lista tudo o que foi lançado no mês para valer num mês
+              // futuro — validado ou não. Sem isto a linha já confirmada seguia com selo
+              // âmbar e ✓, e a equipe achava que faltava validar (Jhon/CG, 03/10/2026).
+              const jaConfirmada = isAntecipada && item.renovacao_status === 'antecipada_confirmada';
+              const aguardando = isPendente && !jaConfirmada;
               const reajuste = valorAnterior > 0 && valorNovo > 0
                 ? ((valorNovo - valorAnterior) / valorAnterior) * 100
                 : 0;
@@ -259,7 +264,7 @@ export function TabelaRenovacoes({
                   key={key}
                   className={cn(
                     'border-t border-slate-700/30',
-                    isPendente
+                    aguardando
                       ? 'bg-amber-500/[0.06] hover:bg-amber-500/[0.09]'
                       : 'hover:bg-slate-800/30'
                   )}
@@ -281,9 +286,15 @@ export function TabelaRenovacoes({
                   </td>
                   {isPendente && (
                     <td className="px-3 py-2.5 text-center">
-                      <span className="inline-flex items-center rounded-full border border-amber-400/30 bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
-                        {isAntecipada ? 'Antecipada' : 'Pendente'}
-                      </span>
+                      {jaConfirmada ? (
+                        <span className="inline-flex items-center rounded-full border border-emerald-400/30 bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
+                          Confirmada
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full border border-amber-400/30 bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
+                          {isAntecipada ? 'Antecipada' : 'Pendente'}
+                        </span>
+                      )}
                     </td>
                   )}
                   <td className="min-w-[280px] px-3 py-2.5 font-medium text-white">
@@ -403,7 +414,7 @@ export function TabelaRenovacoes({
                   </td>
                   <td className="px-3 py-2.5 text-center">
                     <div className="flex items-center justify-center gap-1">
-                      {isPendente && podeValidar && (
+                      {aguardando && podeValidar && (
                         <Button
                           variant="ghost"
                           size="sm"
