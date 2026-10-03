@@ -82,13 +82,24 @@ declare p jsonb;
 begin
   p := public.mike_funil_semana_v1('2026-09-05', '2026-09-05', null);
   assert p->>'erro' = 'periodo_invalido', 'fim<=inicio';
-  p := public.mike_funil_semana_v1('2026-01-01', '2027-02-01', null);
-  assert p->>'erro' = 'periodo_invalido', 'span>370';
+  p := public.mike_funil_semana_v1('2026-08-01', '2026-11-01', null);
+  assert p->>'erro' = 'periodo_longo_demais', 'span>62';
   p := public.mike_funil_semana_v1('2026-09-01', '2026-09-06', 'XX');
   assert p->>'erro' = 'unidade_invalida', 'unidade';
   p := public.mike_funil_semana_v1('2026-09-01', '2026-09-06', null);
   assert p::text not like '%PESSOA FIXTURE%' and p::text not like '%5599999%', 'PII vazou no payload';
   raise notice 'OK 5: validações + sem PII (lista do resumo nunca sai)';
+end $$;
+
+-- 6b) competencias_cobertas cobre os dois meses quando a janela vira o mês
+--     (bug encontrado na revisão: generate_series a partir de p_inicio perdia o 2º mês)
+do $$
+declare p jsonb := public.mike_funil_semana_v1('2026-09-15', '2026-10-04', null);
+begin
+  assert (p->'periodo'->>'competencias_cobertas')::text like '%09/2026%'
+     and (p->'periodo'->>'competencias_cobertas')::text like '%10/2026%',
+    'competencias_cobertas deve incluir 09 e 10';
+  raise notice 'OK 6b: janela 15/09–03/10 cobre 09/2026 e 10/2026';
 end $$;
 
 -- 6) gate: sessão sem papel permitido levanta acesso_negado

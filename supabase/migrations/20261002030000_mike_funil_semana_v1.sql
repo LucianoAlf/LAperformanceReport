@@ -11,6 +11,7 @@
 -- (pessoa única + cap mensal). Em set/2026: soma diária 16 conv / 114 denom vs
 -- oficiais 37 / 115. Para decisão de taxa exp→mat usar a mike_funil_v2 do mês.
 -- Semana não tem snapshot oficial: fechado sai sempre false e os números são vivos.
+-- Limite de 62 dias por chamada (cada dia dispara 2 chamadas canônicas pesadas).
 -- Produção: NÃO aplicar sem revisão. Rollback pareado em supabase/rollbacks/.
 
 do $$
@@ -60,9 +61,13 @@ begin
      and coalesce(auth.role(), '') <> 'service_role' then
     raise exception 'acesso_negado' using errcode = '42501';
   end if;
-  if p_inicio is null or p_fim_exclusivo is null
-     or p_fim_exclusivo <= p_inicio or p_fim_exclusivo - p_inicio > 370 then
+  if p_inicio is null or p_fim_exclusivo is null or p_fim_exclusivo <= p_inicio then
     return jsonb_build_object('ok', false, 'erro', 'periodo_invalido');
+  end if;
+  -- cada dia dispara duas chamadas pesadas (sem_cache + conciliação); 62 dias cobre
+  -- qualquer semana + mês civil inteiro e limita o custo por chamada.
+  if p_fim_exclusivo - p_inicio > 62 then
+    return jsonb_build_object('ok', false, 'erro', 'periodo_longo_demais', 'limite_dias', 62);
   end if;
   if nullif(btrim(p_unidade), '') is not null then
     select u.id, u.nome into v_unidade, v_nome
@@ -154,8 +159,10 @@ begin
     'periodo', jsonb_build_object(
       'inicio', p_inicio, 'fim_exclusivo', p_fim_exclusivo, 'dias', v_dias,
       'tipo', 'janela_custom', 'competencias_cobertas',
-      (select jsonb_agg(distinct to_char(mm, 'MM/YYYY'))
-         from generate_series(p_inicio, p_fim_exclusivo - interval '1 day', interval '1 month') mm)
+      (select jsonb_agg(to_char(mm, 'MM/YYYY') order by mm)
+         from generate_series(date_trunc('month', p_inicio)::date,
+                              (p_fim_exclusivo - interval '1 day')::date,
+                              interval '1 month') mm)
     ),
     'fechado', false,
     'fonte', 'ao vivo: não existe fechamento oficial semanal; métricas por data de evento somam dia a dia a mesma fonte do relatório diário (comercial_v2 transacional); matrículas, tickets e passaporte pelo resumo comercial canônico no intervalo exato',
