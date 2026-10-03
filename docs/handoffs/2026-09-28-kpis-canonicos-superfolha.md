@@ -205,6 +205,22 @@ com `payload_v2` inteiro em `evidencias` + `dados_mensais`
 (`ticket_medio`, `ticket_medio_contratual`, `mrr_contratual`,
 `tempo_permanencia`). v2 e v1 intactas.
 
+**Retificação jun–set — permanência na régua as-of (04/10/2026, migration
+`20261004150000`).** Pedido da Super Folha para a série do ano ficar numa
+régua só: jan–mai medem permanência como tenure da base viva (v3), jun–set
+seguiam na permanência canônica antiga (média das passagens encerradas —
+REC 14,9 vs as-of ~19,7). Escopo cirúrgico: **só `alunos_executivo`** (a
+métrica não existe no payload admin), sobrescrevendo
+`tempo_permanencia`/`tempo_permanencia_medio`/`permanencia_metodo`/`ltv`/
+`ltv_medio` (ltv = ticket congelado × permanência nova). 12 snapshots exec
+fechados em nova versão (jun→v3, jul→v2, ago→v3/v3/v8-REC, set→v5/v3/v3) +
+12 retificações com `payload_anterior` e `permanencia_anterior` em
+`evidencias` + `dados_mensais.tempo_permanencia` alinhado. Série final:
+BARRA ~14,0–14,7 o ano todo; CG 17,5 jan → 19,5 set; REC ~19,5–20,2 —
+sem degrau mai→jun. Divergência honesta: a base as-of difere da congelada
+em ±4% nos meses recentes (reativações sem movimentação); registrada em
+`evidencias.ativos_asof`/`ativos_frozen`, sem abortar.
+
 **Mudança de semântica do export (mesmo contrato):** para meses com snapshot
 fechado, os campos de alunos vêm do **payload congelado** (merge
 `alunos_executivo || alunos_admin`), não mais do canônico vivo — `fechado`
