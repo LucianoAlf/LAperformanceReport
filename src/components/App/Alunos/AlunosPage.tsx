@@ -219,6 +219,9 @@ export interface KPIsAlunos {
   matriculasSegundoCurso?: number;
   matriculasBanda?: number;
   matriculasCoral?: number;
+  // null = a fonte nao respondeu ("—"), nunca 0: zero afirmaria que ninguem esta trancado.
+  matriculasTrancadas: number | null;
+  alunosTrancados: number | null;
 }
 
 interface KPIsAlunosAdminOperacional {
@@ -230,7 +233,12 @@ interface KPIsAlunosAdminOperacional {
   matriculasCoral: number;
   bolsistasIntegrais: number;
   bolsistasParciais: number;
+  matriculasTrancadas: number | null;
+  alunosTrancados: number | null;
 }
+
+const numeroOuNulo = (v: unknown): number | null =>
+  v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v);
 
 async function fetchKPIsAlunosAdminOperacional({
   unidadeId,
@@ -262,6 +270,8 @@ async function fetchKPIsAlunosAdminOperacional({
     matriculasCoral: Number(totais.matriculas_coral) || 0,
     bolsistasIntegrais: Number(totais.bolsistas_integrais) || 0,
     bolsistasParciais: Number(totais.bolsistas_parciais) || 0,
+    matriculasTrancadas: numeroOuNulo(totais.matriculas_trancadas),
+    alunosTrancados: numeroOuNulo(totais.alunos_trancados),
   };
 }
 
@@ -414,7 +424,9 @@ export function AlunosPage() {
     ticketMedio: 0,
     ltvMedio: 0,
     totalTurmas: 0,
-    turmasSozinhos: 0
+    turmasSozinhos: 0,
+    matriculasTrancadas: null,
+    alunosTrancados: null
   });
 
   // Estados de filtros
@@ -1335,7 +1347,10 @@ export function AlunosPage() {
         ticketMedio: Math.round(ticketMedioCanonico || ticketMedio),
         ltvMedio: Math.round((tempoPermanenciaCanonico || ltvMedio) * 10) / 10,
         totalTurmas,
-        turmasSozinhos
+        turmasSozinhos,
+        // Sem a fonte operacional nao ha contagem de trancados: "—", nunca 0.
+        matriculasTrancadas: usarKpisAdminOperacional ? kpisAdminOperacional.matriculasTrancadas : null,
+        alunosTrancados: usarKpisAdminOperacional ? kpisAdminOperacional.alunosTrancados : null,
       });
     }
 
@@ -2292,7 +2307,7 @@ export function AlunosPage() {
           clique E foco de teclado de uma vez, sem precisar de prop em cada botao. */}
       <div inert={!!copiaExibida} className={cn('space-y-6', copiaExibida && 'opacity-80')}>
       {/* KPI Cards */}
-      <GradeKPIs data-tour="alunos-kpis" className="grid grid-cols-2 gap-2 md:grid-cols-3 md:gap-4 lg:grid-cols-7">
+      <GradeKPIs data-tour="alunos-kpis" className="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-4 lg:grid-cols-8">
         <KPICard
           size={ehCelular ? 'sm' : undefined}
           title="Matrículas Ativas"
@@ -2320,6 +2335,17 @@ export function AlunosPage() {
           subvalue={`${kpis.totalBolsistas} bolsistas`}
           icon={DollarSign}
           variant="amber"
+        />
+        <KPICard
+          size={ehCelular ? 'sm' : undefined}
+          title="Trancadas"
+          tooltip="Matriculas com trancamento em vigor. Ficam FORA de Matriculas Ativas; o Emusys as conta como ativas, entao Matriculas Ativas + Trancadas = numero do Emusys."
+          value={kpis.matriculasTrancadas ?? '—'}
+          subvalue={kpis.matriculasTrancadas === null
+            ? 'fonte indisponivel'
+            : `${kpis.alunosTrancados ?? '—'} ${kpis.alunosTrancados === 1 ? 'aluno' : 'alunos'}`}
+          icon={Lock}
+          variant="violet"
         />
         <KPICard
           size={ehCelular ? 'sm' : undefined}
