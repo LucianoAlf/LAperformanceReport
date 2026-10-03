@@ -262,18 +262,28 @@ Estado final da permanência 2026: **jan–mai na régua legada de
 metodologias antigas, por decisão do Alf. O degrau mai→jun de método existe
 (ex.: REC mai 16,1 → jun 14,9) e é esperado.
 
-**Divergência tela × export em jun–ago (investigado 04/10, sem alteração).**
-A tela de KPIs lê **`dados_mensais`** para meses fechados
-(`get_kpis_alunos_canonicos` → `base_p01q`, `fonte='dados_mensais'` quando a
-competência está bloqueada — nunca lê `fechamento_mensal_snapshots`). O
-export, desde a migration `20261004130000`, lê o **payload congelado** do
-snapshot. Resultado: os dois divergem onde payload ≠ dados_mensais —
-jun: evasões BARRA 4↔3, CG 25↔24, REC 17↔14 (churn 1,81↔1,26 / 5,32↔5,59 /
-5,26↔4,28; inadimplência REC 2,68↔0,31); ago CG: evasões 32↔31, churn
-8,14↔7,87 (tela↔export). O resto dos meses bate. Qual é "o certo" é decisão
-do Alf — `dados_mensais` foi o valor apurado no fechamento, o payload foi o
-canônico congelado na mesma ocasião; as réguas de evasão/inadimplência
-diferem no detalhe. Pendente de orientação antes de mexer.
+**Divergência tela × export em jun–ago — RESOLVIDA (04/10, migration
+`20261004180000`).** A tela de KPIs lê `dados_mensais` para meses fechados
+(`get_kpis_alunos_canonicos` → `base_p01q`; nunca lê
+`fechamento_mensal_snapshots`). O export lia o payload congelado desde a
+migration `20261004130000` e divergiu nos pontos apontados pela SF.
+**Decisão do Alf: vale o número da tela.** O export agora emite os campos
+de alunos **direto do `por_unidade` do canônico** — a mesma saída que a
+tela renderiza — sempre que a fonte canônica é `'dados_mensais'` ou
+`'preliminar'` (fechado ou com linha mensal). Emitir o canônico (não
+`dados_mensais` cru) importa: o ticket passa por
+`aplicar_denominador_ticket_kpis_v1` na tela (ago BARRA 446,30 ≠ dm 447,94).
+Metadados do snapshot (`status_fechamento`, `versao`, `payload_hash`,
+`retificado_em`) inalterados; `fonte_kpis` passa a refletir a fonte
+canônica (`'dados_mensais'`/`'preliminar'`/`'vivo'`). Verificação:
+**zero divergências** export×tela em jan–set × 3 unidades × 10 campos
+(ativos, pagantes, novos, evasões, churn, ticket, permanência,
+inadimplência, ltv, mrr). Mudanças no export vs. payload anterior:
+jun evasões BARRA 3→4 / CG 24→25 / REC 14→17, churn jun 1,26→1,81 /
+5,59→5,32 / 4,28→5,26, churn jul 4,47→4,62 / 4,56→4,43 / 2,07→2,14,
+ago CG evasões 31→32 e churn 7,87→8,14, jun REC inadimplência
+0,31→2,68, ltv reemitido na fórmula canônica (REC ago 6782,25→6500,70;
+demais centesimal).
 
 **Mudança de semântica do export (mesmo contrato):** para meses com snapshot
 fechado, os campos de alunos vêm do **payload congelado** (merge
