@@ -3743,7 +3743,29 @@ function categoriaEhSaida(categoria) {
   return ['seguranca', 'despesa', 'retirada', 'troco'].includes(String(categoria || '').toLowerCase());
 }
 
-function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, finalizarPreviewV3Fn = finalizarPreviewV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, resolverEnvelopeFn = resolverEnvelopeCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, identificarAlunoNovoFn = identificarAlunoNovo, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, faturasQuitacaoFn = resolverFaturasQuitacao, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, chequesFn = undefined, ingressosConfigFn = undefined, log = () => {}, governanceFn = () => Promise.resolve({ ok: false, disabled: true }), janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
+function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, finalizarPreviewV3Fn = finalizarPreviewV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, resolverEnvelopeFn = resolverEnvelopeCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, identificarAlunoNovoFn = identificarAlunoNovo, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, faturasQuitacaoFn = resolverFaturasQuitacao, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, chequesFn = undefined, ingressosConfigFn = undefined, abrirPreviewFn = undefined, log = () => {}, governanceFn = () => Promise.resolve({ ok: false, disabled: true }), janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
+  // Caixa fechado não é beco sem saída (CG 03/10): quem mandou o comprovante
+  // recebe ali mesmo o card OFICIAL de abertura. Só cria preview; abrir continua
+  // exigindo "pode" atual nesse card, e o comprovante guardado exige outro "pode".
+  // Uma vez a cada 10 min por grupo, para não repostar a cada tentativa.
+  const _aberturaOferecidaEm = new Map();
+  async function oferecerAberturaCaixaFechado(event, chatId) {
+    const grp = grupos[chatId];
+    if (!grp || !grp.unidade_id) return 'sem_grupo';
+    const ultima = _aberturaOferecidaEm.get(chatId) || 0;
+    if (Date.now() - ultima < 10 * 60 * 1000) return 'recente';
+    try {
+      const postar = abrirPreviewFn || ((g, o) => require('./caixa-abertura-fechamento.cjs').postarAbertura(g, o));
+      const r = await postar({ chat_id: chatId, unidade_id: grp.unidade_id, nome: grp.nome },
+        { sendFn, event, governanceFn: governance });
+      if (r && r.ok) { _aberturaOferecidaEm.set(chatId, Date.now()); log({ acao: 'abertura_oferecida_caixa_fechado', chatId }); return 'oferecida'; }
+      log({ acao: 'abertura_nao_oferecida', chatId, motivo: r && r.skip });
+      return (r && r.skip) || 'sem_dados';
+    } catch (e) {
+      log({ acao: 'abertura_oferta_erro', chatId, erro: String(e && e.message).slice(0, 200) });
+      return 'erro';
+    }
+  }
   // SOL_CAIXA_V3_LEDGER_FAKE=1 (suite de testes): fiacao V3 ativa, banco intacto.
   // Sem isto, teste que nao mocka os registradores grava preview/approval REAL
   // no ledger de producao — 62% dos previews de 24-31/08 eram artefato de teste.
@@ -9126,7 +9148,8 @@ _Não lanço nada pela metade._`);
           return { acao: 'lote_multi_lancado', lote_id: lote.lote_id };
         }
         if (lote && lote.motivo === 'caixa_nao_aberto') {
-          await sendFn(chatId, `⚠️ O caixa da ${alvo.nome} ainda não está aberto. O lote está conferido, mas não pode ser lançado agora. Nada foi lançado parcialmente. Gere um preview novo quando o caixa estiver aberto.`);
+          await sendFn(chatId, `⚠️ O caixa da ${alvo.nome} ainda não está aberto. O lote está conferido, mas não pode ser lançado agora. Nada foi lançado parcialmente. Responde *pode* citando a mensagem de *abertura*; com o caixa aberto, reenvia o comprovante para um preview novo.`);
+          await oferecerAberturaCaixaFechado(event, chatId);
           log({ acao: 'lote_multi_recusado', chatId, motivo: lote.motivo });
           return { acao: 'lote_multi_recusado', motivo: lote.motivo };
         }
@@ -9360,8 +9383,22 @@ _Não lanço nada pela metade._`);
       const msg = motivos[r && r.motivo] || 'não consegui lançar agora';
       await governance(event, 'write_refused', { action: 'lancamento', reason_code: (r && r.motivo) || 'unknown', outcome: 'refused' });
       // devolve a pendência (pode reabrir caixa e tentar de novo)
-      if (r && r.motivo === 'caixa_nao_aberto') { arr.push(alvo); pendentes.set(chatId, arr); }
-      await sendFn(chatId, `⚠️ Não lancei: ${msg}.`);
+      if (r && r.motivo === 'caixa_nao_aberto') {
+        arr.push(alvo); pendentes.set(chatId, arr);
+        await sendFn(chatId, `⚠️ Não lancei: ${msg}. O comprovante ficou guardado.`
+          + '\n\n1️⃣ Responde *pode* citando a mensagem de *abertura* do caixa.'
+          + '\n2️⃣ Com o caixa aberto, responde *pode* de novo citando o card do comprovante.');
+        const oferta = await oferecerAberturaCaixaFechado(event, chatId);
+        if (oferta === 'ja_aberto') {
+          await sendFn(chatId, 'O caixa acabou de ser aberto. Responde *pode* citando o card do comprovante que eu lanço.');
+        } else if (oferta === 'ja_existe') {
+          await sendFn(chatId, 'O caixa de hoje já foi fechado. Se precisa reabrir, peça *Sol, reabre o caixa de hoje*.');
+        } else if (oferta !== 'oferecida' && oferta !== 'recente') {
+          await sendFn(chatId, 'Não consegui trazer a abertura agora. Escreve *Sol, abre o caixa* que eu mando o card.');
+        }
+      } else {
+        await sendFn(chatId, `⚠️ Não lancei: ${msg}.`);
+      }
       log({ acao: 'recusado', chatId, motivo: r && r.motivo });
       return { acao: 'recusado', motivo: r && r.motivo };
     }

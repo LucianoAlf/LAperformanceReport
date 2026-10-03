@@ -4,32 +4,32 @@
     {
       "class": "bridge",
       "mode": "0644",
-      "sha256": "7ad41b824f16f465995fc6044dff9a26357f58d71829523b071f44ede6d2a3d6",
-      "size": 90354,
+      "sha256": "358c1d5af25dac503983956d263affd9dc4a4d42fae69120bbb8177a596236e1",
+      "size": 91708,
       "source": "vps/la-hq/sol/runtime/bridge.js",
       "target": "/home/sol/.hermes/hermes-agent/scripts/whatsapp-bridge/bridge.js"
     },
     {
       "class": "bridge-module",
       "mode": "0644",
-      "sha256": "f0b39b3339fdc1812c802dfd31bb4b6535592c0c9c46e8c9b91ee4c6ae6702ca",
-      "size": 8608,
+      "sha256": "8ca778314dae65cba9fcacb763874a635428800840b55a0b4c22babacb3dc9ae",
+      "size": 8964,
       "source": "vps/la-hq/sol/runtime/group-engagement.cjs",
       "target": "/home/sol/.hermes/hermes-agent/scripts/whatsapp-bridge/group-engagement.cjs"
     },
     {
       "class": "caixa-runtime",
       "mode": "0644",
-      "sha256": "3ba908bd9e953c406c83e28bc3bcea419a8e108e9992927d7a8e389b50b37af5",
-      "size": 584588,
+      "sha256": "229c8b64ea0d04044b7b0ca4fb229cd38060c78b3f5fcfa6459c2a99071182e1",
+      "size": 586979,
       "source": "vps/la-hq/sol/runtime/caixa-financeiro.cjs",
       "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs"
     },
     {
       "class": "caixa-runtime",
       "mode": "0644",
-      "sha256": "c6305a386b188a3c31a74609ac2aec859a137be49998a30d26a88cf7aed568d6",
-      "size": 28883,
+      "sha256": "55d4741335dc07c85973289bc25c659ce7eaaf5e36b0add722133cab1d0fd42c",
+      "size": 29401,
       "source": "vps/la-hq/sol/runtime/caixa-abertura-fechamento.cjs",
       "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-abertura-fechamento.cjs"
     },
