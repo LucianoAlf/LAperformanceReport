@@ -399,8 +399,12 @@ async function resolverSolicitante(args) {
   if (/^SOL1\./.test(_bruto)) {
     const cracha = _bruto.replace(/[^A-Za-z0-9.]/g, "");
     const chat = String((args && args.p_chat_id) || '').trim().replace(/[^A-Za-z0-9@._:-]/g, '');
-    if (!chat.endsWith('@g.us')) return { erro: { ok: false, motivo: 'chat_oficial_obrigatorio',
-      recado: 'Esse crachá foi emitido em grupo. Passe também o `[chat_caixa: ...]` da mensagem.' } };
+    // Portas de LEITURA aceitam o crachá do privado também: a assinatura amarra
+    // telefone + chat, então prova quem fala no grupo e no DM; o escopo segue
+    // decidido pelo banco (sol_resolver_escopo_v1). O caixa NÃO passa por aqui —
+    // validarEnvelopeCaixa continua exigindo grupo oficial.
+    if (!/@(g\.us|lid|s\.whatsapp\.net)$/.test(chat)) return { erro: { ok: false, motivo: 'chat_obrigatorio',
+      recado: 'Passe também o `[chat_caixa: ...]` da mensagem, junto com o `[cracha: ...]`.' } };
     const verificado = await rpc('sol_cracha_verificar_v1', { p_cracha: cracha, p_chat: chat });
     if (!verificado || !verificado.ok) return { erro: { ok: false, motivo: 'cracha_invalido',
       detalhe: String((verificado && verificado.motivo) || 'verificacao_falhou').slice(0, 80) } };
