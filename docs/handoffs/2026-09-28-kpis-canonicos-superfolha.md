@@ -185,6 +185,26 @@ Super Folha guardava (0,8% — a régua pré-08/08 era diferente). Trilha: 30
 snapshots **versão 2** `fechado` + 15 retificações (`payload_v1` preservado em
 `evidencias`) + `dados_mensais` atualizado; a v1 não foi apagada.
 
+**Retificação v3 — ticket contratual + permanência da base viva (04/10/2026,
+migration `20261004140000`).** Segundo defeito apontado pela Super Folha na
+releitura: a v2 dividia o `mrr`/faturamento_previsto do payload v1 (numerador
+de outra régua) pelos pagantes as-of — o ticket crescia mês a mês até encostar
+em junho partindo de ~metade do real; e a permanência media a média das
+passagens **encerradas** com saída ≤ fim do mês — amostra minúscula, pulava
+sem lógica (REC fev 5,68; CG jan 9,35). A v3 é um merge cirúrgico sobre os
+payloads v2: `ticket_medio = mrr_asof / alunos_pagantes` (soma de
+`valor_parcela` das matrículas acadêmicas pagantes vivas no fim do mês —
+a chave `mrr_asof` já existia na v2) e `tempo_permanencia` = tenure médio
+(`fim − data_matricula` da entrada vigente) das pessoas **ativas** no fim do
+mês. `ltv_medio = ticket × permanência`. Ativos, pagantes, novos, evasões,
+churn e `mrr` (faturamento previsto da competência) **ficam como na v2**.
+Resultado: ticket jan BARRA 428,95 / CG 377,36 / REC 429,38 (junho real: 446 /
+391 / 446 — encosta suave); permanência estabiliza ~14,1–14,7 BARRA, ~17,5 CG,
+~19,5–20,2 REC. Trilha: 30 snapshots **versão 3** `fechado` + 15 retificações
+com `payload_v2` inteiro em `evidencias` + `dados_mensais`
+(`ticket_medio`, `ticket_medio_contratual`, `mrr_contratual`,
+`tempo_permanencia`). v2 e v1 intactas.
+
 **Mudança de semântica do export (mesmo contrato):** para meses com snapshot
 fechado, os campos de alunos vêm do **payload congelado** (merge
 `alunos_executivo || alunos_admin`), não mais do canônico vivo — `fechado`
