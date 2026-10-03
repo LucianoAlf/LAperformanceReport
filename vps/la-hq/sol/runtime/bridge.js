@@ -32,6 +32,7 @@ import qrcode from 'qrcode-terminal';
 import { matchesAllowedUser, parseAllowedUsers } from './allowlist.js';
 import { registerReportSingleMessageRoute } from './report-single-message.js';
 import groupEngagement from './group-engagement.cjs';
+import groupMembroNovo from './group-membro-novo.cjs';
 
 // Parse CLI args
 const args = process.argv.slice(2);
@@ -754,6 +755,38 @@ async function startSocket() {
   });
 
   sock.ev.on('creds.update', () => { saveCreds(); lidToPhone = buildLidMap(); });
+
+  // 🔔 Membro novo num grupo financeiro oficial avisa o Alf (28/09/2026): estar
+  //    no grupo passou a ser permissão financeira (autoriza_qualquer_membro).
+  //    Só avisa. Destino em SOL_CAIXA_ALERTA_MEMBRO_PARA (sem ele, só registra).
+  //    ⚠️ Handler async com try/catch: erro aqui nunca pode derrubar a ponte.
+  let _alertaMembro = null;
+  function alertaMembroNovo() {
+    if (_alertaMembro) return _alertaMembro;
+    const para = String(process.env.SOL_CAIXA_ALERTA_MEMBRO_PARA || '').replace(/D/g, '');
+    _alertaMembro = groupMembroNovo.criarAlertaMembroNovo({
+      gruposFinanceiros: financeGroupMap,
+      destino: para ? para + '@s.whatsapp.net' : null,
+      enviar: async function (jid, texto) {
+        const s2 = await sendWithTimeout(jid, { text: texto });
+        const id = s2 && s2.key && s2.key.id;
+        if (id) recentlySentIds.add(id);
+        return id;
+      },
+      resolverTelefone: resolverTelefoneDoRemetente,
+      nomeDe: async function (tel, grupo) {
+        const mod = (await import('file:///home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs')).default;
+        const r = await mod.identificarPessoa(tel, grupo && grupo.unidade_id);
+        return r && r.identificado ? r.nome : null;
+      },
+      log: _caixaLog,
+    });
+    return _alertaMembro;
+  }
+  sock.ev.on('group-participants.update', async (update) => {
+    try { await alertaMembroNovo().tratar(update); }
+    catch (e) { try { _caixaLog({ step: 'grupo_financeiro_membro_novo_erro', msg: String(e && e.message) }); } catch (_) { /* nunca derruba */ } }
+  });
 
   sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect, qr } = update;
