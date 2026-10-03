@@ -2307,7 +2307,7 @@ export function AlunosPage() {
           clique E foco de teclado de uma vez, sem precisar de prop em cada botao. */}
       <div inert={!!copiaExibida} className={cn('space-y-6', copiaExibida && 'opacity-80')}>
       {/* KPI Cards */}
-      <GradeKPIs data-tour="alunos-kpis" className="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-4 lg:grid-cols-8">
+      <GradeKPIs data-tour="alunos-kpis" className="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-4">
         <KPICard
           size={ehCelular ? 'sm' : undefined}
           title="Matrículas Ativas"
