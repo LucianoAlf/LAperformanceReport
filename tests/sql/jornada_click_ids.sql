@@ -5,6 +5,9 @@
 \set QUIET on
 \pset footer off
 
+-- 0) ACL da view intacta (o migration não emite revoke/grant nela)
+\ir jornada_click_ids_acl.sql
+
 -- 1) view ganhou as flags booleanas (e só elas — o valor não vira coluna)
 do $$
 declare

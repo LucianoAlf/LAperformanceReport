@@ -207,11 +207,13 @@ begin
   return v_resultado;
 end;
 $$;
-revoke all on public.vw_jornada_lead_v1 from public, anon, authenticated;
-grant select on public.vw_jornada_lead_v1 to authenticated, service_role;
+-- NÃO emitir revoke/grant na view: create or replace preserva a ACL viva, que hoje é
+-- {postgres=arwdDxtm, service_role=arwdDxtm, sol/mila/fabio/lia_acesso_restrito=r} —
+-- authenticated foi revogado de propósito em 20260919195000 (a view expõe nome/telefone).
 revoke all on function public.mike_jornada_resumo_v1(date,date,text,text) from public,anon,authenticated;
 grant execute on function public.mike_jornada_resumo_v1(date,date,text,text) to mike_mcp,service_role;
 
+-- acrescenta ao comentário vivo de produção (não substitui o texto atual)
 comment on view public.vw_jornada_lead_v1 is
-  'Jornada do lead. etapa: a FONTE CANONICA (lead_experimentais) manda quando existe linha; flags de leads so resgatam quem nao tem nenhuma. tem_gclid/tem_meta_ctwa_clid: só PRESENCA do click-id — o valor nunca sai pela view.';
+  'Jornada do lead. ⚠️ `etapa`: a FONTE CANONICA (lead_experimentais) manda quando existe linha; os flags de `leads` so resgatam quem nao tem nenhuma. Corrigido em 04/09 apos falso positivo reportado pela Daiana: o Marcelo tinha aula `cancelada` na fonte canonica e `experimental_realizada=true` no flag, e o R15 dizia que ele fez a experimental. 10 leads tinham os dois flags contraditorios. tem_gclid/tem_meta_ctwa_clid: só PRESENÇA do click-id — o valor nunca sai pela view.';
 comment on function public.mike_jornada_resumo_v1(date,date,text,text) is 'Mike: coorte agregada da jornada; sem PII; cobertura inclui presença de click-ids (valores nunca expostos). com_agendamento = agendada_para OU linha de experimental.';
