@@ -154,9 +154,21 @@ Item 3 de "falta criar" retirado. Vocês já têm o gasto por unidade.
 
 **Recomendação:** emitimos `professor_id` + `emusys_professor_id` + `hmac_sha256(telefone_whatsapp)` por linha. O SF tenta o match automático por telefone-HMAC; onde não casar (8 sem telefone), o de-para é manual único na ficha do colaborador (vocês guardam nosso `professor_id`). Se preferirem zero trabalho manual, entregamos **também** a linha agregada unidade×mês sem professor — as duas coisas convivem no mesmo export.
 
-## Ajuste 4 — jan–mai `status_fechamento='legado'` ✅
+## Ajuste 4 — jan–mai `status_fechamento='legado'` → **REVERTIDO em 03/10/2026**
 
-Confirmado, sem reapuração. Export emite exatamente isso.
+~~Confirmado, sem reapuração.~~ **O Alf autorizou em 03/10/2026 a reapuração de
+jan–mai sob a régua corrigida de 08/08** (migration `20261003120000_reapuracao_kpis_alunos_jan_mai_2026`).
+Desde então jan–mai emitem `status_fechamento='fechado'`, `versao=1`, com
+`retificado_em` preenchido: 30 snapshots `fechado` (5 meses × 3 unidades × domínios
+`alunos_admin`+`alunos_executivo`), 15 registros em `fechamento_mensal_retificacoes`
+guardando a linha legada de `dados_mensais` em `evidencias.dados_mensais_anterior`
+(a versão legada **não** foi apagada — está na trilha), e `dados_mensais` atualizado
+com os valores corrigidos. Jan/2026 saiu de `alunos_ativos=0` para 267 BARRA /
+389 CG / 347 REC. Mai precisou de reabertura transacional da competência
+(`fechado` desde 07/06) só para a leitura do canônico vivo — restaurada na mesma tx.
+Detalhe residual: jan–abr emitem `fonte_kpis='preliminar'` (competência nunca foi
+fechada formalmente — exigiria os 6 domínios); mai emite `fonte_kpis='dados_mensais'`.
+Super Folha deve reler jan–mai via `kpis-alunos-sync`.
 
 ---
 
