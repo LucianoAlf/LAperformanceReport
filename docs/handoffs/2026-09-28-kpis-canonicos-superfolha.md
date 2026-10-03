@@ -170,6 +170,31 @@ Detalhe residual: jan–abr emitem `fonte_kpis='preliminar'` (competência nunca
 fechada formalmente — exigiria os 6 domínios); mai emite `fonte_kpis='dados_mensais'`.
 Super Folha deve reler jan–mai via `kpis-alunos-sync`.
 
+**Retificação v2 — posição AS-OF (04/10/2026, migrations `20261004120000` +
+`20261004130000`).** A v1 tinha um defeito que a Super Folha apontou na releitura:
+ativos/pagantes/permanência saíam **idênticos nos 5 meses e iguais a out/2026**
+(267/263/13,5 BARRA…), porque o canônico recomputava a posição sobre a base
+atual. A v2 reconstrói a base **como estava no fim de cada mês**
+(`movimentacoes_admin_vigentes` + `data_saida` + `alunos_historico` + bound de
+`updated_at`, mesma régua de pessoa do admin): jan BARRA passa a 224 ativos /
+224 pagantes / perm. 18,2 e os meses variam entre si (CG 475→503, REC 303→341).
+Métricas de fluxo ficam como na v1 (evasões, MRR/faturamento da competência);
+churn/ticket/LTV/permanência foram derivados com o denominador corrigido.
+Referência de fidelidade: CG fev as-of = 489 vs 485 da versão legada que a
+Super Folha guardava (0,8% — a régua pré-08/08 era diferente). Trilha: 30
+snapshots **versão 2** `fechado` + 15 retificações (`payload_v1` preservado em
+`evidencias`) + `dados_mensais` atualizado; a v1 não foi apagada.
+
+**Mudança de semântica do export (mesmo contrato):** para meses com snapshot
+fechado, os campos de alunos vêm do **payload congelado** (merge
+`alunos_executivo || alunos_admin`), não mais do canônico vivo — `fechado`
+passa a significar "o valor que foi congelado", não "recomputa na hora".
+`fonte_kpis` ganha o valor `'snapshot_fechado'` nesses meses (jan–mai inclusive;
+antes era `'preliminar'`/`'dados_mensais'`). Efeito colateral honesto: jun–set
+podem diferir centesimalmente do que uma releitura viva mostraria — o payload é
+o que foi capturado no fechamento/retificação (ex.: ago CG churn 7,87 congelado
+vs 8,14 que o vivo recomputava). Sem snapshot, nada muda (canônico vivo).
+
 ---
 
 ## Contrato final — `export-kpis-mensais`
@@ -198,7 +223,7 @@ Super Folha deve reler jan–mai via `kpis-alunos-sync`.
 
 + linha agregada `{"unidade_codigo":"CG","horas_banda_total":…,"horas_aula_total":…}` por competência (fallback sem professor).
 
-**Regra de `status_fechamento`:** `fechado` (snapshot status fechado, maior versão) · `legado` (jan–mai/2026, só `dados_mensais`, régua pré-08/08) · `aberto` (mês corrente, RPC viva — ticket/permanência/inadimplência calculados com as mesmas funções do fechamento, marcados como preview).
+**Regra de `status_fechamento`:** `fechado` (snapshot não-preview, maior versão — campos de alunos vêm do payload congelado, `fonte_kpis='snapshot_fechado'`) · `legado` (só `dados_mensais`, sem snapshot) · `aberto` (sem snapshot nem `dados_mensais`, RPC viva).
 
 ## Exemplo real — ago/2026 (fechado, de `dados_mensais`+snapshots)
 
