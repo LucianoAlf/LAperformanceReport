@@ -221,6 +221,22 @@ sem degrau mai→jun. Divergência honesta: a base as-of difere da congelada
 em ±4% nos meses recentes (reativações sem movimentação); registrada em
 `evidencias.ativos_asof`/`ativos_frozen`, sem abortar.
 
+**REVERTIDA em 04/10/2026 (migration `20261004160000`)** — o Alf determinou
+que a régua certa de permanência para jun–set é a canônica antiga
+(`get_tempo_permanencia`, média das passagens encerradas): "estava certo
+antes". Reversão feita por nova versão por caso (jun exec→v4, jul→v3,
+ago→v4/v4/v9-REC, set→v6/v4/v4): cada payload restaura as 5 chaves do
+`payload_anterior` guardado nas evidências (`tempo_permanencia`,
+`tempo_permanencia_medio`, `ltv`, `ltv_medio`, `fonte`; `permanencia_metodo`
+removida por não existir no anterior). `dados_mensais.tempo_permanencia`
+voltou via `evidencias.permanencia_anterior` (o `dados_mensais_anterior`
+das evidências tinha sido capturado pós-update — contém o valor novo).
+12 retificações `reversao_permanencia_jun_set_2026_alf`. Export e tela
+voltaram a: BARRA 13,0/13,5/13,5/13,5 · CG 19,5/19,3/19,0/19,1 ·
+REC 14,9/14,9/15,0/15,1. **jan–mai v3 não foram tocadas** — lá a régua de
+permanência segue sendo tenure da base viva (o degrau mai→jun voltou a
+existir, por decisão do Alf: jun–set na régua canônica, jan–mai na as-of).
+
 **Mudança de semântica do export (mesmo contrato):** para meses com snapshot
 fechado, os campos de alunos vêm do **payload congelado** (merge
 `alunos_executivo || alunos_admin`), não mais do canônico vivo — `fechado`
