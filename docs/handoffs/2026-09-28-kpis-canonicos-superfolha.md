@@ -233,9 +233,47 @@ voltou via `evidencias.permanencia_anterior` (o `dados_mensais_anterior`
 das evidências tinha sido capturado pós-update — contém o valor novo).
 12 retificações `reversao_permanencia_jun_set_2026_alf`. Export e tela
 voltaram a: BARRA 13,0/13,5/13,5/13,5 · CG 19,5/19,3/19,0/19,1 ·
-REC 14,9/14,9/15,0/15,1. **jan–mai v3 não foram tocadas** — lá a régua de
-permanência segue sendo tenure da base viva (o degrau mai→jun voltou a
-existir, por decisão do Alf: jun–set na régua canônica, jan–mai na as-of).
+REC 14,9/14,9/15,0/15,1.
+
+**Reversão jan–mai — permanência ao valor legado (04/10/2026, migration
+`20261004170000`).** O mesmo pedido do Alf cobriu jan–mai: a permanência
+volta ao que a **tela mostrava antes da reapuração** — o `tempo_permanencia`
+legado de `dados_mensais`, preservado em
+`retificacoes.evidencias->'dados_mensais_anterior'` da v1 (NÃO o payload exec
+v1, que trazia o canônico vivo da época — ex.: BARRA jan 13,5 × legado 12,6).
+Nova versão nos **dois** domínios (admin vence o merge do export e a v3 tinha
+gravado a chave lá): `tempo_permanencia`(_`_medio`) = legado, `ltv`/`ltv_medio`
+= ticket v3 × legado, `permanencia_metodo='canonico_legado_dados_mensais'`.
+Ativos, pagantes, ticket, churn, novos, evasões, inadimplência e mrr da v3
+**intocados**. 30 snapshots v4 `fechado` (15 admin + 15 exec) + 15
+retificações `reversao_permanencia_jan_mai_2026_alf` com os dois payloads v3
+em `evidencias` + guarda de sanidade (o valor extraído das evidências teve
+que bater com a tabela esperada — passou 15/15). Verificado no export e em
+`dados_mensais`:
+
+| | jan | fev | mar | abr | mai |
+|---|---|---|---|---|---|
+| BARRA | 12,6 | 12,6 | 12,4 | 12,7 | 12,6 |
+| CG | 15,5 | 15,5 | 15,4 | 15,4 | 15,4 |
+| REC | 15,9 | 15,9 | 15,6 | 15,8 | 16,1 |
+
+Estado final da permanência 2026: **jan–mai na régua legada de
+`dados_mensais`, jun–set na canônica `get_tempo_permanencia`** — as duas
+metodologias antigas, por decisão do Alf. O degrau mai→jun de método existe
+(ex.: REC mai 16,1 → jun 14,9) e é esperado.
+
+**Divergência tela × export em jun–ago (investigado 04/10, sem alteração).**
+A tela de KPIs lê **`dados_mensais`** para meses fechados
+(`get_kpis_alunos_canonicos` → `base_p01q`, `fonte='dados_mensais'` quando a
+competência está bloqueada — nunca lê `fechamento_mensal_snapshots`). O
+export, desde a migration `20261004130000`, lê o **payload congelado** do
+snapshot. Resultado: os dois divergem onde payload ≠ dados_mensais —
+jun: evasões BARRA 4↔3, CG 25↔24, REC 17↔14 (churn 1,81↔1,26 / 5,32↔5,59 /
+5,26↔4,28; inadimplência REC 2,68↔0,31); ago CG: evasões 32↔31, churn
+8,14↔7,87 (tela↔export). O resto dos meses bate. Qual é "o certo" é decisão
+do Alf — `dados_mensais` foi o valor apurado no fechamento, o payload foi o
+canônico congelado na mesma ocasião; as réguas de evasão/inadimplência
+diferem no detalhe. Pendente de orientação antes de mexer.
 
 **Mudança de semântica do export (mesmo contrato):** para meses com snapshot
 fechado, os campos de alunos vêm do **payload congelado** (merge
