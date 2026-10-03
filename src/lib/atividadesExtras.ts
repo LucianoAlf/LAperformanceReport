@@ -90,9 +90,34 @@ export function isBolsistaOuBandaMatricula(row: any): boolean {
   return false;
 }
 
+function codigoTipoMatricula(row: any): string {
+  const aluno = firstRelation<any>(row?.alunos) || row;
+  const codigo = normalizarTexto(
+    firstRelation<any>(aluno?.tipos_matricula)?.codigo ?? aluno?.tipo_matricula_codigo,
+  ).toUpperCase();
+  if (codigo) return codigo;
+  const id = Number(aluno?.tipo_matricula_id);
+  if (id === 3) return 'BOLSISTA_INT';
+  if (id === 4) return 'BOLSISTA_PARC';
+  if (id === 5) return 'BANDA';
+  return '';
+}
+
+/**
+ * Por que esta movimentação fica fora dos KPIs — ou `null` se ela conta.
+ * Existe para a tela MOSTRAR a linha marcada em vez de escondê-la (Jhon/CG,
+ * 02/10/2026: bolsistas "faltando" que estavam no banco). Banda vence bolsista:
+ * é o curso que a tira da taxa.
+ */
+export function motivoForaDosKpis(row: any): 'banda' | 'bolsista' | null {
+  if (isAtividadeExtraAcademica(row)) return 'banda';
+  if (!isBolsistaOuBandaMatricula(row)) return null;
+  return codigoTipoMatricula(row) === 'BANDA' ? 'banda' : 'bolsista';
+}
+
 /** Esta movimentação entra em KPI de retenção/financeiro? */
 export function contaNosKpis(row: any): boolean {
-  return !isAtividadeExtraAcademica(row) && !isBolsistaOuBandaMatricula(row);
+  return motivoForaDosKpis(row) === null;
 }
 
 /**
