@@ -222,7 +222,17 @@ export interface KPIsAlunos {
   // null = a fonte nao respondeu ("—"), nunca 0: zero afirmaria que ninguem esta trancado.
   matriculasTrancadas: number | null;
   alunosTrancados: number | null;
+  // De onde vieram os cards de contagem (Matriculas/Alunos/Pagantes/Trancadas).
+  fonteCards: FonteCardsAlunos;
 }
+
+// 'vivo' = carteira de hoje (get_kpis_alunos_admin_operacional), usada no mes corrente.
+// Mes passado le o historico canonico (fechamento, dados_mensais ou preliminar) -- antes os
+// cards mostravam a carteira de HOJE para qualquer mes escolhido.
+type FonteCardsAlunos =
+  | { tipo: 'vivo' }
+  | { tipo: 'historico'; fonte: 'snapshot' | 'dados_mensais' | 'preliminar' | 'vivo'; competencia: string }
+  | { tipo: 'historico_indisponivel'; competencia: string };
 
 interface KPIsAlunosAdminOperacional {
   alunosAtivos: number;
@@ -239,6 +249,50 @@ interface KPIsAlunosAdminOperacional {
 
 const numeroOuNulo = (v: unknown): number | null =>
   v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v);
+
+// Trancadas de mes passado so existem no fechamento (alunos_admin): a API do Emusys so
+// expoe o trancamento em vigor HOJE, e a canonica devolve null para meses passados.
+// Consolidado = soma das unidades, e so vale com TODAS presentes -- a linha de rede do
+// snapshot nao e confiavel (ago/2026 diverge da soma; set/2026 nem existe).
+async function fetchTrancadasFechamento({
+  unidadeId,
+  ano,
+  mes,
+  unidadesEsperadas,
+}: {
+  unidadeId?: string | 'todos' | null;
+  ano: number;
+  mes: number;
+  unidadesEsperadas: number;
+}): Promise<{ matriculas: number; alunos: number | null } | null> {
+  let query = supabase
+    .from('fechamento_mensal_snapshots')
+    .select('unidade_id, versao, matriculas_trancadas:payload->matriculas_trancadas, alunos_trancados:payload->alunos_trancados')
+    .eq('dominio', 'alunos_admin')
+    .eq('status', 'fechado')
+    .eq('ano', ano)
+    .eq('mes', mes)
+    .not('unidade_id', 'is', null);
+  if (unidadeId && unidadeId !== 'todos') query = query.eq('unidade_id', unidadeId);
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const ultimaPorUnidade = new Map<string, any>();
+  for (const linha of data || []) {
+    const atual = ultimaPorUnidade.get(linha.unidade_id);
+    if (!atual || linha.versao > atual.versao) ultimaPorUnidade.set(linha.unidade_id, linha);
+  }
+  const linhas = Array.from(ultimaPorUnidade.values());
+  const esperadas = unidadeId && unidadeId !== 'todos' ? 1 : unidadesEsperadas;
+  if (linhas.length === 0 || linhas.length < esperadas) return null;
+  if (linhas.some(l => numeroOuNulo(l.matriculas_trancadas) === null)) return null;
+
+  const alunosValores = linhas.map(l => numeroOuNulo(l.alunos_trancados));
+  return {
+    matriculas: linhas.reduce((soma, l) => soma + Number(l.matriculas_trancadas), 0),
+    alunos: alunosValores.some(v => v === null) ? null : alunosValores.reduce((a, b) => a! + b!, 0),
+  };
+}
 
 async function fetchKPIsAlunosAdminOperacional({
   unidadeId,
@@ -273,6 +327,47 @@ async function fetchKPIsAlunosAdminOperacional({
     matriculasTrancadas: numeroOuNulo(totais.matriculas_trancadas),
     alunosTrancados: numeroOuNulo(totais.alunos_trancados),
   };
+}
+
+const MESES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+const rotuloCompetencia = (mmAaaa: string) => {
+  const [mm, aaaa] = mmAaaa.split('/');
+  return `${MESES_ABREV[Number(mm) - 1] ?? mm}/${aaaa}`;
+};
+
+// Diz de onde vem o numero dos cards: sem isso, mes passado e mes corrente pareciam iguais.
+function SeloFonteCards({ fonte }: { fonte?: FonteCardsAlunos }) {
+  const base = 'inline-flex max-w-full items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium';
+  if (!fonte || fonte.tipo === 'vivo') {
+    return (
+      <div className={cn(base, 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200')}>
+        <BarChart3 className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate">Dados operacionais — carteira ao vivo</span>
+      </div>
+    );
+  }
+  const mes = rotuloCompetencia(fonte.competencia);
+  if (fonte.tipo === 'historico_indisponivel') {
+    return (
+      <div className={cn(base, 'border-amber-500/40 bg-amber-500/10 text-amber-200')}>
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate">Sem histórico de {mes} — os cards mostram a carteira de hoje</span>
+      </div>
+    );
+  }
+  const texto = fonte.fonte === 'snapshot'
+    ? `Fechamento de ${mes}`
+    : fonte.fonte === 'preliminar'
+      ? `Dado preliminar de ${mes}`
+      : `Histórico de ${mes}`;
+  return (
+    <div className={cn(base, fonte.fonte === 'snapshot'
+      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+      : 'border-amber-500/40 bg-amber-500/10 text-amber-200')}>
+      <Lock className="h-3.5 w-3.5 shrink-0" />
+      <span className="truncate">{texto}</span>
+    </div>
+  );
 }
 
 export interface Filtros {
@@ -426,7 +521,8 @@ export function AlunosPage() {
     totalTurmas: 0,
     turmasSozinhos: 0,
     matriculasTrancadas: null,
-    alunosTrancados: null
+    alunosTrancados: null,
+    fonteCards: { tipo: 'vivo' }
   });
 
   // Estados de filtros
@@ -924,6 +1020,10 @@ export function AlunosPage() {
       console.error('Erro ao buscar KPIs operacionais de alunos:', err);
       return null;
     });
+    const [anoHoje, mesHoje] = hojeBrasilia().split('-').map(Number);
+    const ehMesPassado = competenciaFiltro.tipo === 'mensal'
+      && (competenciaFiltro.ano < anoHoje || (competenciaFiltro.ano === anoHoje && competenciaFiltro.mes < mesHoje));
+    const competenciaRotulo = `${String(competenciaFiltro.mes).padStart(2, '0')}/${competenciaFiltro.ano}`;
     const kpisAlunosCanonicosPromise = fetchKPIsAlunosCanonicos({
       unidadeId: unidadeAtual,
       ano: competenciaFiltro.ano,
@@ -932,6 +1032,18 @@ export function AlunosPage() {
       console.error('Erro ao buscar KPIs financeiros canônicos de alunos:', err);
       return null;
     });
+    // So mes passado: no corrente as trancadas vem da carteira ao vivo.
+    const trancadasFechamentoPromise = ehMesPassado
+      ? kpisAlunosCanonicosPromise.then(canonicos => fetchTrancadasFechamento({
+          unidadeId: unidadeAtual,
+          ano: competenciaFiltro.ano,
+          mes: competenciaFiltro.mes,
+          unidadesEsperadas: canonicos?.porUnidade.length ?? 0,
+        })).catch((err) => {
+          console.error(`Erro ao buscar trancadas do fechamento ${competenciaRotulo} (unidade ${unidadeAtual}):`, err);
+          return null;
+        })
+      : Promise.resolve(null);
 
     const alunosPromise = fetchAllAlunos(buildMainQuery);
     const alunosSaidaPromise = buildSaidaQuery
@@ -1313,10 +1425,11 @@ export function AlunosPage() {
         console.error('Erro ao buscar média canônica de alunos por turma:', kpisTurmasR.error);
       }
 
-      const [kpisAdminOperacional, kpisAlunosCanonicos]: [
+      const [kpisAdminOperacional, kpisAlunosCanonicos, trancadasFechamento]: [
         KPIsAlunosAdminOperacional | null,
         Awaited<ReturnType<typeof fetchKPIsAlunosCanonicos>> | null,
-      ] = await Promise.all([kpisAdminOperacionalPromise, kpisAlunosCanonicosPromise]);
+        Awaited<ReturnType<typeof fetchTrancadasFechamento>>,
+      ] = await Promise.all([kpisAdminOperacionalPromise, kpisAlunosCanonicosPromise, trancadasFechamentoPromise]);
 
       const usarKpisAdminOperacional = !!kpisAdminOperacional;
       const kpisFinanceirosCanonicos = kpisAlunosCanonicos?.fonte !== 'indisponivel'
@@ -1325,9 +1438,17 @@ export function AlunosPage() {
           : kpisAlunosCanonicos?.porUnidade.find(row => row.unidade_id === unidadeAtual)
         : null;
       const ticketMedioCanonico = Number(kpisFinanceirosCanonicos?.ticketMedio) || 0;
+      // Mes passado com historico canonico: os cards de contagem saem dele (mesma fonte do
+      // ticket). Sem historico, ficam na carteira ao vivo e o selo DIZ isso.
+      const historicoCards = ehMesPassado ? kpisFinanceirosCanonicos : null;
+      const fonteCards: FonteCardsAlunos = !ehMesPassado
+        ? { tipo: 'vivo' }
+        : historicoCards && kpisAlunosCanonicos && kpisAlunosCanonicos.fonte !== 'indisponivel'
+          ? { tipo: 'historico', fonte: kpisAlunosCanonicos.fonte, competencia: competenciaRotulo }
+          : { tipo: 'historico_indisponivel', competencia: competenciaRotulo };
       const tempoPermanenciaCanonico = Number(kpisFinanceirosCanonicos?.tempoPermanencia) || 0;
 
-      setKpis({
+      const contagensAoVivo = {
         totalAtivos: usarKpisAdminOperacional ? kpisAdminOperacional.alunosAtivos : totalAtivos,
         totalMatriculasAtivas: usarKpisAdminOperacional ? kpisAdminOperacional.matriculasAtivas : totalMatriculasAtivas,
         matriculasSegundoCurso: usarKpisAdminOperacional ? kpisAdminOperacional.matriculasSegundoCurso : matriculasSegundoCurso,
@@ -1337,6 +1458,27 @@ export function AlunosPage() {
         totalBolsistas: usarKpisAdminOperacional
           ? Math.round(kpisAdminOperacional.bolsistasIntegrais + kpisAdminOperacional.bolsistasParciais)
           : totalBolsistas,
+        // Sem a fonte operacional nao ha contagem de trancados: "—", nunca 0.
+        matriculasTrancadas: usarKpisAdminOperacional ? kpisAdminOperacional.matriculasTrancadas : null,
+        alunosTrancados: usarKpisAdminOperacional ? kpisAdminOperacional.alunosTrancados : null,
+      };
+      const contagens = fonteCards.tipo === 'historico' && historicoCards
+        ? {
+            totalAtivos: historicoCards.alunosAtivos,
+            totalMatriculasAtivas: historicoCards.matriculasAtivas,
+            matriculasSegundoCurso: historicoCards.matriculasSegundoCurso,
+            matriculasBanda: historicoCards.matriculasBanda,
+            matriculasCoral: historicoCards.matriculasCoral ?? 0,
+            totalPagantes: historicoCards.alunosPagantes,
+            totalBolsistas: Math.round(historicoCards.bolsistasIntegrais + historicoCards.bolsistasParciais),
+            matriculasTrancadas: trancadasFechamento?.matriculas ?? null,
+            alunosTrancados: trancadasFechamento?.alunos ?? null,
+          }
+        : contagensAoVivo;
+
+      setKpis({
+        ...contagens,
+        fonteCards,
         mediaAlunosTurma: mediaAlunosTurma === null
           ? null
           : Math.round(mediaAlunosTurma * 100) / 100,
@@ -1348,9 +1490,6 @@ export function AlunosPage() {
         ltvMedio: Math.round((tempoPermanenciaCanonico || ltvMedio) * 10) / 10,
         totalTurmas,
         turmasSozinhos,
-        // Sem a fonte operacional nao ha contagem de trancados: "—", nunca 0.
-        matriculasTrancadas: usarKpisAdminOperacional ? kpisAdminOperacional.matriculasTrancadas : null,
-        alunosTrancados: usarKpisAdminOperacional ? kpisAdminOperacional.alunosTrancados : null,
       });
     }
 
@@ -2297,10 +2436,7 @@ export function AlunosPage() {
           )}
         </div>
       ) : (
-        <div className="inline-flex max-w-full items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-medium text-cyan-200">
-          <BarChart3 className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">Dados operacionais — carteira ao vivo</span>
-        </div>
+        <SeloFonteCards fonte={kpis.fonteCards} />
       )}
 
       {/* Com a copia na tela nada e clicavel: so se age sobre o dado fresco. `inert` tira
@@ -2342,7 +2478,7 @@ export function AlunosPage() {
           tooltip="Matriculas com trancamento em vigor. Ficam FORA de Matriculas Ativas; o Emusys as conta como ativas, entao Matriculas Ativas + Trancadas = numero do Emusys."
           value={kpis.matriculasTrancadas ?? '—'}
           subvalue={kpis.matriculasTrancadas === null
-            ? 'fonte indisponivel'
+            ? (kpis.fonteCards?.tipo === 'historico' ? 'sem registro neste mês' : 'fonte indisponivel')
             : `${kpis.alunosTrancados ?? '—'} ${kpis.alunosTrancados === 1 ? 'aluno' : 'alunos'}`}
           icon={Lock}
           variant="violet"
@@ -2610,7 +2746,9 @@ export function AlunosPage() {
         open={modalMatriculasAtivas}
         onClose={() => setModalMatriculasAtivas(false)}
         titulo={`Matrículas Ativas (${competenciaRange.label})`}
-        descricao="Cada aluno conta 1x; banda, 2º curso e coral somam como vínculos extras — o total bate com o card."
+        descricao={kpis.fonteCards?.tipo === 'vivo' || !kpis.fonteCards
+          ? 'Cada aluno conta 1x; banda, 2º curso e coral somam como vínculos extras — o total bate com o card.'
+          : `⚠️ Esta lista é a carteira de HOJE. O fechamento de ${kpis.fonteCards.competencia} guardou só os totais, então ela não bate com o card desse mês.`}
         dados={dadosModalMatriculasAtivas}
         colunas={[
           { key: 'nome', label: 'Aluno' },
