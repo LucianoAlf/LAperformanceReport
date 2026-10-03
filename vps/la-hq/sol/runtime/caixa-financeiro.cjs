@@ -3424,7 +3424,10 @@ function extrairPeriodoMeses(texto) {
   const t = _normConf(texto);
   if (!t) return null;
   const anoAtual = new Date().getFullYear();
-  const num = /(\d{1,2})\s*[\/-]\s*(\d{2,4})\s*(?:a|ate|até|-|\u2192|=>)\s*(\d{1,2})\s*[\/-]\s*(\d{2,4})/;
+  // 🔴 03/10/2026 (CG, Sabrina): sem fronteira de palavra, "sABRin(A) MARia" virou
+  //    "abr a mar" = quitação 04/2026 a 03/2027 numa parcela única de 10/2026. Mês só
+  //    conta como PALAVRA inteira e o conector "a/até" precisa estar solto.
+  const num = /(\d{1,2})\s*[\/-]\s*(\d{2,4})\s*(?:\s(?:a|ate|até)\s|-|\u2192|=>)\s*(\d{1,2})\s*[\/-]\s*(\d{2,4})/;
   let m = t.match(num);
   if (m) {
     const a1 = Number(m[2]) < 100 ? 2000 + Number(m[2]) : Number(m[2]);
@@ -3432,7 +3435,7 @@ function extrairPeriodoMeses(texto) {
     return { inicio: _mm(Number(m[1]), a1), fim: _mm(Number(m[3]), a2) };
   }
   const nomes = Object.keys(_MES_NOME).join('|');
-  const re = new RegExp('(' + nomes + ')[a-z]*\\s*(?:\\/|de\\s*)?(\\d{2,4})?\\s*(?:a|ate|até|-)\\s*(' + nomes + ')[a-z]*\\s*(?:\\/|de\\s*)?(\\d{2,4})?');
+  const re = new RegExp('\\b(' + nomes + ')\\b\\s*(?:\\/|de\\s+)?(\\d{2,4})?\\s*(?:\\s(?:a|ate|até)\\s|-)\\s*\\b(' + nomes + ')\\b\\s*(?:\\/|de\\s+)?(\\d{2,4})?');
   m = t.match(re);
   if (m) {
     const m1 = _MES_NOME[m[1]], m2 = _MES_NOME[m[3]];
@@ -4971,8 +4974,18 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     });
   }
 
+  // Todo card guarda QUEM o enviou: o "pode" seco com 2+ cards abertos resolve
+  // pelo autor. O card de ingresso (CG 03/10) nascia sem autor e o "pode" do
+  // próprio Jereh virou "tem mais de um comprovante aguardando".
+  function _carimbarAutor(pendencia, event) {
+    if (!pendencia || !event) return pendencia;
+    if (pendencia.autorPhone == null) pendencia.autorPhone = event.senderPhone || null;
+    if (pendencia.autorId == null) pendencia.autorId = event.senderId || null;
+    return pendencia;
+  }
   async function prepararEPublicarPreviewV4({ event, grupo, texto, pendencia, result, previewStatus }) {
     if (!v3LedgerAtivo) return { ok: false, motivo: 'v3_indisponivel' };
+    _carimbarAutor(pendencia, event);
     const origem = pendencia.origem || event.messageId;
     const previewHash = sha256(JSON.stringify({
       tipo: pendencia.tipoOperacao || 'lancamento_singular', chat: md5(event.chatId),
@@ -6283,6 +6296,7 @@ _Não lanço nada pela metade._`);
           composto: null, itemLojinha: null, bloqueiaLancamento: false,
           faturaIndisponivel: false, bloqueiaFonteIndisponivel: false,
           enviadoPor: nomeParaCarimbo(idEnviou, event),
+          autorPhone: event.senderPhone || null, autorId: event.senderId || null,
           idemKey: `${chatId}:${event.messageId}`, origem: event.messageId, ts: agora,
         };
         const v3 = await registrarPreviewPublicoV3({
@@ -8253,6 +8267,10 @@ _Não lanço nada pela metade._`);
           // outro mes. Sem casamento exato, soltamos o vinculo: e mais seguro
           // lancar sem fatura do que baixar a fatura errada.
           alvoComp.competencia = _competenciaCorrigida;
+          // Uma competência declarada é UMA parcela: a quitação deduzida antes
+          // (período/meses/faturas) não sobrevive à correção humana (CG 03/10).
+          alvoComp.multiplas = false;
+          alvoComp.quitacao = null;
           alvoComp.canonica = compostoComp ? null : canonicaComp;
           alvoComp.parcela = compostoComp ? null : parcelaComp;
           alvoComp.composto = compostoComp;
