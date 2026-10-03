@@ -1394,7 +1394,12 @@ async function caixaAbf() {
               // Sol -- menciona o nome dela ou cita um card pendente. Sem isto, uma
               // pendencia travada "envenena" a conversa inteira do grupo: qualquer
               // mensagem de qualquer pessoa, sobre qualquer assunto, levava "nao entendi".
-              const _pareceProSol = !!(groupEngagement.pareceChamarSol && groupEngagement.pareceChamarSol(body));
+              // Responder citando uma mensagem que a PRÓPRIA Sol mandou (card, recusa,
+              // aviso) é falar com ela, mesmo sem o nome (CG 03/10: "Pode abrir sol"
+              // citando "Não lancei: o caixa de hoje ainda não está aberto" ficou mudo).
+              const _citouSol = !!(event.quotedMessageId && recentlySentIds.has(event.quotedMessageId));
+              const _pareceProSol = _citouSol
+                || !!(groupEngagement.pareceChamarSol && groupEngagement.pareceChamarSol(body));
               // Citar o comprovante de uma pessoa nao e falar com a Sol. So uma
               // mensagem que a propria Sol enviou (card/continuacao) aciona esta
               // guarda; a relacao ampla com a origem segue disponivel ao handler
@@ -1447,6 +1452,19 @@ async function caixaAbf() {
                     continue;
                   }
                 }
+              }
+              // Resposta direta a uma mensagem da Sol que nenhum caminho tratou e sem
+              // card aberto: orienta em vez de ficar muda. Com card aberto, o fallback
+              // abaixo já responde. Nunca escreve nem aprova nada.
+              if (!_tratouCaixa && _citouSol && _r && _r.acao === 'nada' && !_cardPendente) {
+                try {
+                  const _sa = await sendWithTimeout(chatId, { text:
+                    'Não entendi essa 🤔. Para abrir o caixa, escreve *Sol, abre o caixa*; '
+                    + 'para fechar, *Sol, fecha o caixa*; para lançar, manda o comprovante.' });
+                  const _said = _sa && _sa.key && _sa.key.id; if (_said) recentlySentIds.add(_said);
+                } catch (e) { _caixaLog({ step: 'orientacao_citou_sol_erro', msg: e.message }); }
+                _caixaLog({ step: 'orientacao_citou_sol', chatId: chatId });
+                _tratouCaixa = true;
               }
               // Nos demais casos, o mesmo roteador continua em shadow. O
               // preflight acima já registrou sua decisão e não chama de novo.

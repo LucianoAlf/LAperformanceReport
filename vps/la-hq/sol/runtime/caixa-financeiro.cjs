@@ -3424,7 +3424,10 @@ function extrairPeriodoMeses(texto) {
   const t = _normConf(texto);
   if (!t) return null;
   const anoAtual = new Date().getFullYear();
-  const num = /(\d{1,2})\s*[\/-]\s*(\d{2,4})\s*(?:a|ate|até|-|\u2192|=>)\s*(\d{1,2})\s*[\/-]\s*(\d{2,4})/;
+  // 🔴 03/10/2026 (CG, Sabrina): sem fronteira de palavra, "sABRin(A) MARia" virou
+  //    "abr a mar" = quitação 04/2026 a 03/2027 numa parcela única de 10/2026. Mês só
+  //    conta como PALAVRA inteira e o conector "a/até" precisa estar solto.
+  const num = /(\d{1,2})\s*[\/-]\s*(\d{2,4})\s*(?:\s(?:a|ate|até)\s|-|\u2192|=>)\s*(\d{1,2})\s*[\/-]\s*(\d{2,4})/;
   let m = t.match(num);
   if (m) {
     const a1 = Number(m[2]) < 100 ? 2000 + Number(m[2]) : Number(m[2]);
@@ -3432,7 +3435,7 @@ function extrairPeriodoMeses(texto) {
     return { inicio: _mm(Number(m[1]), a1), fim: _mm(Number(m[3]), a2) };
   }
   const nomes = Object.keys(_MES_NOME).join('|');
-  const re = new RegExp('(' + nomes + ')[a-z]*\\s*(?:\\/|de\\s*)?(\\d{2,4})?\\s*(?:a|ate|até|-)\\s*(' + nomes + ')[a-z]*\\s*(?:\\/|de\\s*)?(\\d{2,4})?');
+  const re = new RegExp('\\b(' + nomes + ')\\b\\s*(?:\\/|de\\s+)?(\\d{2,4})?\\s*(?:\\s(?:a|ate|até)\\s|-)\\s*\\b(' + nomes + ')\\b\\s*(?:\\/|de\\s+)?(\\d{2,4})?');
   m = t.match(re);
   if (m) {
     const m1 = _MES_NOME[m[1]], m2 = _MES_NOME[m[3]];
@@ -3743,7 +3746,29 @@ function categoriaEhSaida(categoria) {
   return ['seguranca', 'despesa', 'retirada', 'troco'].includes(String(categoria || '').toLowerCase());
 }
 
-function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, finalizarPreviewV3Fn = finalizarPreviewV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, resolverEnvelopeFn = resolverEnvelopeCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, identificarAlunoNovoFn = identificarAlunoNovo, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, faturasQuitacaoFn = resolverFaturasQuitacao, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, chequesFn = undefined, ingressosConfigFn = undefined, log = () => {}, governanceFn = () => Promise.resolve({ ok: false, disabled: true }), janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
+function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, finalizarPreviewV3Fn = finalizarPreviewV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, resolverEnvelopeFn = resolverEnvelopeCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, identificarAlunoNovoFn = identificarAlunoNovo, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, faturasQuitacaoFn = resolverFaturasQuitacao, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, chequesFn = undefined, ingressosConfigFn = undefined, abrirPreviewFn = undefined, log = () => {}, governanceFn = () => Promise.resolve({ ok: false, disabled: true }), janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
+  // Caixa fechado não é beco sem saída (CG 03/10): quem mandou o comprovante
+  // recebe ali mesmo o card OFICIAL de abertura. Só cria preview; abrir continua
+  // exigindo "pode" atual nesse card, e o comprovante guardado exige outro "pode".
+  // Uma vez a cada 10 min por grupo, para não repostar a cada tentativa.
+  const _aberturaOferecidaEm = new Map();
+  async function oferecerAberturaCaixaFechado(event, chatId) {
+    const grp = grupos[chatId];
+    if (!grp || !grp.unidade_id) return 'sem_grupo';
+    const ultima = _aberturaOferecidaEm.get(chatId) || 0;
+    if (Date.now() - ultima < 10 * 60 * 1000) return 'recente';
+    try {
+      const postar = abrirPreviewFn || ((g, o) => require('./caixa-abertura-fechamento.cjs').postarAbertura(g, o));
+      const r = await postar({ chat_id: chatId, unidade_id: grp.unidade_id, nome: grp.nome },
+        { sendFn, event, governanceFn: governance });
+      if (r && r.ok) { _aberturaOferecidaEm.set(chatId, Date.now()); log({ acao: 'abertura_oferecida_caixa_fechado', chatId }); return 'oferecida'; }
+      log({ acao: 'abertura_nao_oferecida', chatId, motivo: r && r.skip });
+      return (r && r.skip) || 'sem_dados';
+    } catch (e) {
+      log({ acao: 'abertura_oferta_erro', chatId, erro: String(e && e.message).slice(0, 200) });
+      return 'erro';
+    }
+  }
   // SOL_CAIXA_V3_LEDGER_FAKE=1 (suite de testes): fiacao V3 ativa, banco intacto.
   // Sem isto, teste que nao mocka os registradores grava preview/approval REAL
   // no ledger de producao — 62% dos previews de 24-31/08 eram artefato de teste.
@@ -4949,8 +4974,18 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     });
   }
 
+  // Todo card guarda QUEM o enviou: o "pode" seco com 2+ cards abertos resolve
+  // pelo autor. O card de ingresso (CG 03/10) nascia sem autor e o "pode" do
+  // próprio Jereh virou "tem mais de um comprovante aguardando".
+  function _carimbarAutor(pendencia, event) {
+    if (!pendencia || !event) return pendencia;
+    if (pendencia.autorPhone == null) pendencia.autorPhone = event.senderPhone || null;
+    if (pendencia.autorId == null) pendencia.autorId = event.senderId || null;
+    return pendencia;
+  }
   async function prepararEPublicarPreviewV4({ event, grupo, texto, pendencia, result, previewStatus }) {
     if (!v3LedgerAtivo) return { ok: false, motivo: 'v3_indisponivel' };
+    _carimbarAutor(pendencia, event);
     const origem = pendencia.origem || event.messageId;
     const previewHash = sha256(JSON.stringify({
       tipo: pendencia.tipoOperacao || 'lancamento_singular', chat: md5(event.chatId),
@@ -6261,6 +6296,7 @@ _Não lanço nada pela metade._`);
           composto: null, itemLojinha: null, bloqueiaLancamento: false,
           faturaIndisponivel: false, bloqueiaFonteIndisponivel: false,
           enviadoPor: nomeParaCarimbo(idEnviou, event),
+          autorPhone: event.senderPhone || null, autorId: event.senderId || null,
           idemKey: `${chatId}:${event.messageId}`, origem: event.messageId, ts: agora,
         };
         const v3 = await registrarPreviewPublicoV3({
@@ -8231,6 +8267,10 @@ _Não lanço nada pela metade._`);
           // outro mes. Sem casamento exato, soltamos o vinculo: e mais seguro
           // lancar sem fatura do que baixar a fatura errada.
           alvoComp.competencia = _competenciaCorrigida;
+          // Uma competência declarada é UMA parcela: a quitação deduzida antes
+          // (período/meses/faturas) não sobrevive à correção humana (CG 03/10).
+          alvoComp.multiplas = false;
+          alvoComp.quitacao = null;
           alvoComp.canonica = compostoComp ? null : canonicaComp;
           alvoComp.parcela = compostoComp ? null : parcelaComp;
           alvoComp.composto = compostoComp;
@@ -9126,7 +9166,8 @@ _Não lanço nada pela metade._`);
           return { acao: 'lote_multi_lancado', lote_id: lote.lote_id };
         }
         if (lote && lote.motivo === 'caixa_nao_aberto') {
-          await sendFn(chatId, `⚠️ O caixa da ${alvo.nome} ainda não está aberto. O lote está conferido, mas não pode ser lançado agora. Nada foi lançado parcialmente. Gere um preview novo quando o caixa estiver aberto.`);
+          await sendFn(chatId, `⚠️ O caixa da ${alvo.nome} ainda não está aberto. O lote está conferido, mas não pode ser lançado agora. Nada foi lançado parcialmente. Responde *pode* citando a mensagem de *abertura*; com o caixa aberto, reenvia o comprovante para um preview novo.`);
+          await oferecerAberturaCaixaFechado(event, chatId);
           log({ acao: 'lote_multi_recusado', chatId, motivo: lote.motivo });
           return { acao: 'lote_multi_recusado', motivo: lote.motivo };
         }
@@ -9360,8 +9401,22 @@ _Não lanço nada pela metade._`);
       const msg = motivos[r && r.motivo] || 'não consegui lançar agora';
       await governance(event, 'write_refused', { action: 'lancamento', reason_code: (r && r.motivo) || 'unknown', outcome: 'refused' });
       // devolve a pendência (pode reabrir caixa e tentar de novo)
-      if (r && r.motivo === 'caixa_nao_aberto') { arr.push(alvo); pendentes.set(chatId, arr); }
-      await sendFn(chatId, `⚠️ Não lancei: ${msg}.`);
+      if (r && r.motivo === 'caixa_nao_aberto') {
+        arr.push(alvo); pendentes.set(chatId, arr);
+        await sendFn(chatId, `⚠️ Não lancei: ${msg}. O comprovante ficou guardado.`
+          + '\n\n1️⃣ Responde *pode* citando a mensagem de *abertura* do caixa.'
+          + '\n2️⃣ Com o caixa aberto, responde *pode* de novo citando o card do comprovante.');
+        const oferta = await oferecerAberturaCaixaFechado(event, chatId);
+        if (oferta === 'ja_aberto') {
+          await sendFn(chatId, 'O caixa acabou de ser aberto. Responde *pode* citando o card do comprovante que eu lanço.');
+        } else if (oferta === 'ja_existe') {
+          await sendFn(chatId, 'O caixa de hoje já foi fechado. Se precisa reabrir, peça *Sol, reabre o caixa de hoje*.');
+        } else if (oferta !== 'oferecida' && oferta !== 'recente') {
+          await sendFn(chatId, 'Não consegui trazer a abertura agora. Escreve *Sol, abre o caixa* que eu mando o card.');
+        }
+      } else {
+        await sendFn(chatId, `⚠️ Não lancei: ${msg}.`);
+      }
       log({ acao: 'recusado', chatId, motivo: r && r.motivo });
       return { acao: 'recusado', motivo: r && r.motivo };
     }
