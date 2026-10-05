@@ -241,6 +241,9 @@
 | `emusys_presenca_bruta_anterior` | text | sim |  |  |
 | `emusys_presenca_alterada_em` | timestamp with time zone | sim |  |  |
 | `espelhado_de_presenca_id` | uuid | sim |  | aluno_presenca.id |
+| `emusys_registro_presenca` | text | sim |  |  |
+| `emusys_registro_presenca_anterior` | text | sim |  |  |
+| `emusys_registro_presenca_alterada_em` | timestamp with time zone | sim |  |  |
 
 **Únicos:**
 - `aluno_presenca_pkey`
@@ -2320,7 +2323,7 @@
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
 | `id` | uuid | não | gen_random_uuid() |  |
-| `pesquisa_id` | uuid | sim |  | pesquisa_evasao_analises.pesquisa_id |
+| `pesquisa_id` | uuid | sim |  | pesquisa_evasao.id |
 | `caixa_id` | integer | não |  | whatsapp_caixas.id |
 | `direcao` | text | não |  |  |
 | `provider_message_id` | text | sim |  |  |
@@ -3116,6 +3119,7 @@
 | `revisao_operacional_exigida` | boolean | sim |  |  |
 | `revisao_operacional_status` | text | sim |  |  |
 | `status_presenca` | text | sim |  |  |
+| `emusys_registro_presenca` | text | sim |  |  |
 
 ## vw_aluno_sucesso_lista
 

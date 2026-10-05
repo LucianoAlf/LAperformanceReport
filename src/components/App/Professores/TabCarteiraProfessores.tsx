@@ -33,6 +33,7 @@ import { fetchHealthScoreProfessorV3Performance } from '@/hooks/useHealthScorePr
 import {
   buscarCarteiraProfessorDetalheCanonica,
   type AlunoCarteiraCanonico,
+  type PeriodoCarteira,
 } from '@/lib/carteiraProfessorDetalheCanonica';
 import { montarCarteirasFallbackContratual } from '@/lib/carteiraFallbackContratual.mjs';
 import {
@@ -126,6 +127,18 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
   const [expandido, setExpandido] = useState<number | null>(null);
   const [alunosExpandido, setAlunosExpandido] = useState<AlunoCarteiraCanonico[]>([]);
   const [loadingAlunos, setLoadingAlunos] = useState(false);
+  const [origemListaExpandida, setOrigemListaExpandida] = useState<{
+    origem: 'atual' | 'fechamento';
+    aviso: string | null;
+  }>({ origem: 'atual', aviso: null });
+  // A lista do professor expandido fala do mesmo período do total do cabeçalho:
+  // mês fechado lê os nomes gravados no fechamento, não a carteira de hoje.
+  const periodoCarteira: PeriodoCarteira = {
+    ano: competencia.range.ano,
+    mes: competencia.range.mesInicio,
+    dataInicio: competencia.range.startDate,
+    dataFim: competencia.range.endDate,
+  };
   
   // Modal de detalhes
   const [modalDetalhes, setModalDetalhes] = useState<{ open: boolean; professor: CarteiraProfessor | null }>({
@@ -464,12 +477,15 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
       const detalhe = await buscarCarteiraProfessorDetalheCanonica({
         professorId,
         unidadeId: unidadeAtual,
+        periodo: periodoCarteira,
       });
 
       setAlunosExpandido([...detalhe.alunos, ...detalhe.alunosTrancados]);
+      setOrigemListaExpandida({ origem: detalhe.origem, aviso: detalhe.aviso });
     } catch (error) {
       console.error('Erro ao carregar alunos:', error);
       setAlunosExpandido([]);
+      setOrigemListaExpandida({ origem: 'atual', aviso: null });
     } finally {
       setLoadingAlunos(false);
     }
@@ -485,6 +501,12 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
       carregarAlunosProfessor(professorId);
     }
   };
+
+  // Trocar o período com um professor aberto recarrega a lista dele; sem isto,
+  // o cabeçalho mudaria de mês e a lista continuaria no anterior.
+  useEffect(() => {
+    if (expandido !== null) carregarAlunosProfessor(expandido);
+  }, [competencia.range.startDate, competencia.range.endDate]);
 
   // Filtrar e ordenar
   const carteirasFiltradas = useMemo(() => {
@@ -911,7 +933,20 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
                   </div>
-                ) : alunosExpandido.length === 0 ? (
+                ) : (
+                <>
+                  {origemListaExpandida.origem === 'fechamento' && (
+                    <p className="mb-3 text-xs text-slate-400">
+                      Alunos do fechamento de {competencia.range.label}: a mesma foto do total acima.
+                      Parcela, permanência e fim de contrato são os de hoje.
+                    </p>
+                  )}
+                  {origemListaExpandida.aviso && (
+                    <p className="mb-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                      {origemListaExpandida.aviso}
+                    </p>
+                  )}
+                {alunosExpandido.length === 0 ? (
                   <p className="text-center text-slate-400 py-4">Nenhum aluno encontrado</p>
                 ) : (
                   <div className="overflow-x-auto">
@@ -1026,6 +1061,8 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
                     </table>
                   </div>
                 )}
+                </>
+                )}
               </div>
                 </td>
               </tr>
@@ -1052,6 +1089,7 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
         onClose={() => setModalDetalhes({ open: false, professor: null })}
         professor={modalDetalhes.professor}
         unidadeAtual={unidadeAtual}
+        periodo={periodoCarteira}
       />
     </div>
   );
