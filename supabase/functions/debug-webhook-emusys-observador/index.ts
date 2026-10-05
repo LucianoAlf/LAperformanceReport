@@ -724,6 +724,66 @@ async function encerrarExperimentaisSubstituidas(
   return encerradas.length ? { encerradas } : null;
 }
 
+// ------------------------------------------------- aula_id do webhook (LAPE-61) ---
+//
+// Desde a v1.8.1 do Emusys (04/10/2026) os 3 webhooks de experimental trazem `aula.aula_id`
+// (o mesmo id de GET /aulas, ESTÁVEL no reagendamento) e `aula.data_hora_inicio_original`.
+// Antes não havia nenhuma referência à aula: `body.id` é id de EVENTO, e o reagendamento
+// criava linha nova com a antiga viva (96 casos desde maio; relatório de CG travado 25-29/09).
+//
+// O id vai para `emusys_aula_id_webhook`, NÃO para `emusys_aula_id`: este passa por um trigger
+// que zera id ausente da grade, e experimental recém-marcada quase nunca está na grade ainda.
+// Quando a grade chega, `fn_experimental_recebe_id_da_aula` liga `emusys_aula_id` por ele.
+//
+// A RPC continua sendo quem escreve: aqui só (a) movemos a linha certa para o slot novo
+// ANTES dela, para que a chave de negócio dela (lead+data+hora+curso) caia na mesma linha, e
+// (b) carimbamos o id depois. A reconciliação de 15 min segue como rede (webhook antigo não
+// traz o campo).
+
+function idAulaDoWebhook(aula: any): number | null {
+  const n = Number(aula?.aula_id);
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
+/** "2026-10-06 13:30" (formato de GET /aulas, BRT, sem segundos) -> {data, horario}. */
+function slotDoWebhook(bruto: unknown): { data: string; horario: string } | null {
+  const m = String(bruto ?? '').trim().match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+  return m ? { data: m[1], horario: m[2] } : null;
+}
+
+type LinhaPorAula = {
+  linha: { id: number; status: string; data_experimental: string | null; horario_experimental: string | null } | null;
+  via: string | null;
+  ambiguas?: number[];
+};
+
+/** Qual linha viva o Emusys está chamando de `aulaId`? Pelo id (coluna do webhook, depois a da
+ *  grade); sem id, pelo slot ORIGINAL do mesmo lead — que é o que identifica a linha criada
+ *  antes de 04/10. Mais de uma candidata = não escolhe (devolve as ids para o log). */
+async function localizarExperimentalPorAula(
+  sb: any, unidadeId: string, aulaId: number, emusysLeadId: number | null,
+  original: { data: string; horario: string } | null,
+): Promise<LinhaPorAula> {
+  const sel = 'id, status, data_experimental, horario_experimental';
+  for (const coluna of ['emusys_aula_id_webhook', 'emusys_aula_id']) {
+    const { data, error } = await sb.from('lead_experimentais').select(sel)
+      .eq('unidade_id', unidadeId).eq(coluna, aulaId).neq('status', 'cancelada').limit(2);
+    if (error) throw error;
+    if (data?.length === 1) return { linha: data[0], via: coluna };
+    if (data?.length > 1) return { linha: null, via: coluna, ambiguas: data.map((d: any) => d.id) };
+  }
+  if (original && emusysLeadId) {
+    const { data, error } = await sb.from('lead_experimentais').select(sel)
+      .eq('unidade_id', unidadeId).eq('emusys_lead_id', emusysLeadId)
+      .eq('data_experimental', original.data).eq('horario_experimental', original.horario)
+      .eq('status', 'experimental_agendada').is('emusys_aula_id_webhook', null).limit(2);
+    if (error) throw error;
+    if (data?.length === 1) return { linha: data[0], via: 'data_hora_inicio_original' };
+    if (data?.length > 1) return { linha: null, via: 'data_hora_inicio_original', ambiguas: data.map((d: any) => d.id) };
+  }
+  return { linha: null, via: null };
+}
+
 /** A RPC recusou por não achar lead? O motivo vem DENTRO do retorno, não em `error`. */
 function recusouPorLeadNaoEncontrado(data: any): boolean {
   return data?.success === false && data?.reason === 'lead_not_found';
@@ -850,22 +910,77 @@ async function processarExperimental(sb: any, body: any, unidadeId: string, even
   // omitir p_created_at deixa a RPC aplicar o default now(), como o n8n faz com ''
   if (criadoEm) args.p_created_at = criadoEm;
 
+  const aulaIdWebhook = idAulaDoWebhook(aula);
+  const slotOriginal = slotDoWebhook(aula?.data_hora_inicio_original);
+
   if (!escrever) {
     const achado = await previewLeadExperimental(sb, unidadeId, emusysLeadId, telefone, nomeAluno);
     const cursoId = cancelamento ? null : await previewCurso(sb, aula?.curso);
+    const porAula = aulaIdWebhook
+      ? await localizarExperimentalPorAula(sb, unidadeId, aulaIdWebhook, emusysLeadId, slotOriginal)
+      : null;
     return {
       acao: `registrar_experimental(dry) -> ${achado.lead_id ? 'registra' : 'lead_not_found'}`,
       match: achado,
       professor_via: professor.via,
       curso_id_previsto: cursoId,
       observacoes_a_gravar: observacoes,
+      aula_id_webhook: { aula_id: aulaIdWebhook, original: slotOriginal, localizado: porAula },
       args,
     };
   }
 
+  // (LAPE-61) Reagendamento/reenvio com id de aula: mover a linha certa para o slot novo
+  // ANTES da RPC. Só linha ainda agendada — realizada/faltou não se move por webhook.
+  const rastroAula: Record<string, unknown> = { aula_id: aulaIdWebhook, original: slotOriginal };
+  let linhaPorAula: LinhaPorAula | null = null;
+  if (aulaIdWebhook) {
+    try {
+      linhaPorAula = await localizarExperimentalPorAula(sb, unidadeId, aulaIdWebhook, emusysLeadId, slotOriginal);
+      rastroAula.localizado = linhaPorAula.linha?.id ?? null;
+      rastroAula.via = linhaPorAula.via;
+      if (linhaPorAula.ambiguas) {
+        rastroAula.alerta = 'mais de uma linha viva para a mesma aula — nada movido';
+        rastroAula.ambiguas = linhaPorAula.ambiguas;
+      }
+      const linha = linhaPorAula.linha;
+      const novaData = textoOuNulo(aula?.data);
+      const novoHorario = textoOuNulo(aula?.horario);
+      if (linha && !cancelamento && novaData && novoHorario) {
+        if (linha.status !== 'experimental_agendada') {
+          rastroAula.movida = false;
+          rastroAula.motivo = `linha ${linha.id} em ${linha.status} — nao se move`;
+        } else {
+          const patch: Record<string, unknown> = {
+            data_experimental: novaData,
+            horario_experimental: novoHorario,
+            emusys_aula_id_webhook: aulaIdWebhook,
+            updated_at: new Date().toISOString(),
+          };
+          // Mesmo curso que a RPC vai resolver (mesma normalização e desempate), senão a
+          // chave dela não cai nesta linha. Sem curso resolvido, não mexe no curso.
+          const cursoNovo = await previewCurso(sb, aula?.curso);
+          if (cursoNovo) patch.curso_interesse_id = cursoNovo;
+          if (professor.id) patch.professor_experimental_id = professor.id;
+          const { data: movidas, error: erroMover } = await sb.from('lead_experimentais')
+            .update(patch).eq('id', linha.id).eq('status', 'experimental_agendada').select('id');
+          if (erroMover) {
+            rastroAula.alerta = `falha ao mover linha ${linha.id}: ${erroMover.message}`;
+          } else {
+            rastroAula.movida = (movidas?.length ?? 0) === 1;
+            rastroAula.de = { data: linha.data_experimental, horario: linha.horario_experimental };
+            rastroAula.para = { data: novaData, horario: novoHorario };
+          }
+        }
+      }
+    } catch (e: any) {
+      rastroAula.alerta = `falha ao localizar aula ${aulaIdWebhook}: ${String(e?.message ?? e)}`;
+    }
+  }
+
   // Retry curto antes de qualquer escrita: cobre a corrida com o webhook de lead sem criar nada.
   let { data, error, tentativas } = await registrarExperimentalComRetry(sb, args, !cancelamento);
-  if (error) return { acao: 'erro_rpc', rpc: 'registrar_experimental', erro: error.message, args };
+  if (error) return { acao: 'erro_rpc', rpc: 'registrar_experimental', erro: error.message, args, aula_id_webhook: rastroAula };
 
   let leadFallback: { lead_id: number } | null = null;
   if (evento === 'aula_experimental_criada' && recusouPorLeadNaoEncontrado(data)) {
@@ -905,9 +1020,41 @@ async function processarExperimental(sb: any, body: any, unidadeId: string, even
     }
   }
 
+  const expId = data?.experimental_id ?? null;
+
+  // (LAPE-61) Depois da RPC: cancelamento atinge a linha da aula (a RPC cancela por lead+nome
+  // e erra quando o nome difere); agendamento carimba o id na linha que a RPC devolveu.
+  if (aulaIdWebhook) {
+    try {
+      const linha = linhaPorAula?.linha ?? null;
+      if (cancelamento) {
+        if (linha && linha.status === 'experimental_agendada') {
+          const { data: canc, error: erroCanc } = await sb.from('lead_experimentais')
+            .update({ status: 'cancelada', updated_at: new Date().toISOString() })
+            .eq('id', linha.id).eq('status', 'experimental_agendada').select('id');
+          if (erroCanc) rastroAula.alerta = `falha ao cancelar linha ${linha.id}: ${erroCanc.message}`;
+          else rastroAula.cancelada_pela_aula = (canc?.length ?? 0) === 1 ? linha.id : 'ja_cancelada_pela_rpc';
+        }
+      } else if (expId) {
+        if (linha && rastroAula.movida && Number(linha.id) !== Number(expId)) {
+          // A chave da RPC não caiu na linha movida: há duas vivas para a mesma aula.
+          // A reconciliação de 15 min resolve; aqui só não pode passar calado.
+          rastroAula.alerta = `RPC gravou na linha ${expId}, mas a aula estava na ${linha.id}`;
+        } else {
+          const { error: erroCarimbo } = await sb.from('lead_experimentais')
+            .update({ emusys_aula_id_webhook: aulaIdWebhook })
+            .eq('id', Number(expId)).is('emusys_aula_id_webhook', null);
+          if (erroCarimbo) rastroAula.alerta = `falha ao carimbar aula ${aulaIdWebhook} na linha ${expId}: ${erroCarimbo.message}`;
+          else rastroAula.linha = Number(expId);
+        }
+      }
+    } catch (e: any) {
+      rastroAula.alerta = `falha pos-RPC aula ${aulaIdWebhook}: ${String(e?.message ?? e)}`;
+    }
+  }
+
   // Delta: só o que a RPC não conhece. Nunca bloqueia o resultado principal.
   let delta: unknown = null;
-  const expId = data?.experimental_id ?? null;
   const idEventoBruto = Number(body?.id);
   const emusysAgendamentoId = Number.isSafeInteger(idEventoBruto) && idEventoBruto > 0
     ? idEventoBruto
@@ -969,6 +1116,7 @@ async function processarExperimental(sb: any, body: any, unidadeId: string, even
     delta_observador: delta,
     nascimento_do_lead: nascimento,
     substituidas,
+    aula_id_webhook: aulaIdWebhook ? rastroAula : null,
     lead_fallback: leadFallback,
     // >1 significa que a corrida com o webhook de lead aconteceu e o retry a absorveu.
     // Serve para saber se a espera está sendo usada e se a janela está bem dimensionada.
@@ -1249,7 +1397,9 @@ serve(async (req: Request) => {
         // telefone já é de outro lead: o fallback recuou de propósito, precisa de humano
         || acaoInterna === 'lead_existente_nao_casado'
         || acaoInterna.indexOf('lead_not_found') >= 0
-        || rpcRecusou)
+        || rpcRecusou
+        // LAPE-61: aula do webhook não casou limpo (ambígua, RPC em outra linha, falha de escrita)
+        || !!resultado?.aula_id_webhook?.alerta)
     ) {
       status = 'warn';
     }
