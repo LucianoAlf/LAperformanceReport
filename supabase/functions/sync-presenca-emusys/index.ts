@@ -169,6 +169,8 @@ function normalizarCurso(nome: string): string {
 interface AlunoEmusys extends ExperimentalAluno {
   nome_aluno: string;
   presenca: string;
+  // v1.8.2: registrado = alguem lancou presenca/falta; pendente = nada lancado; null = recurso off
+  registro_presenca?: string | null;
   horario_presenca: string | null;
   data_nascimento_aluno?: string;
   email_aluno?: string;
@@ -200,7 +202,7 @@ interface AulaEmusys extends AulaSnapshotEmusys {
   duracao_minutos: number | null;
   sala_id: number | null;
   sala_nome: string | null;
-  professores: Array<EmusysProfessorRef & { nome: string; presenca: string }>;
+  professores: Array<EmusysProfessorRef & { nome: string; presenca: string; registro_presenca?: string | null }>;
   alunos: AlunoEmusys[];
   anotacoes: string | null;
 }
@@ -363,6 +365,7 @@ async function sincronizarMetadadosAulasNoRun(
           ? parseDataHoraEmusys(aula.data_hora_inicio_original)
           : null,
         professor_presenca: aula.professores?.[0]?.presenca ?? null,
+        professor_registro_presenca: aula.professores?.[0]?.registro_presenca ?? null,
         nr_da_aula: aula.nr_da_aula,
         matricula_disciplina_id: aula.matricula_disciplina_id ?? null,
         qtd_aulas_contrato: aula.qtd_aulas_contrato,
@@ -2157,6 +2160,7 @@ serve(async (req: Request) => {
                   ? parseDataHoraEmusys(aula.data_hora_inicio_original)
                   : null,
                 professor_presenca: aula.professores?.[0]?.presenca ?? null,
+                professor_registro_presenca: aula.professores?.[0]?.registro_presenca ?? null,
                 nr_da_aula: aula.nr_da_aula,
                 matricula_disciplina_id: aula.matricula_disciplina_id ?? null,
                 qtd_aulas_contrato: aula.qtd_aulas_contrato,
@@ -2398,6 +2402,7 @@ serve(async (req: Request) => {
                 p_turma_nome: aula.turma_nome,
                 p_sala_nome: aula.sala_nome,
                 p_sincronizado_em: sincronizadoEm,
+                p_registro_presenca: aluno.registro_presenca ?? null,
               });
 
             if (upsertError) {
