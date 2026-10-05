@@ -8,9 +8,23 @@ Problemas/limitações **do lado do Emusys** (API ou plataforma) que afetam noss
 > deste arquivo foi corrigido pelo Emusys no período. O que mudou foi o **valor** de alguns pedidos,
 > pela evolução do nosso lado — reavaliados abaixo, com medição.
 
+> **Revisão em 2026-10-05.** Changelog conferido até **v1.8.3 (05/10/2026)**: **três** itens atendidos —
+> `aula.id` nos webhooks de experimental (v1.8.1, como `aula.aula_id`), presença "não registrada"
+> (v1.8.2, campo `registro_presenca`) e listagem de leads (v1.6.0, `GET /leads`). Itens marcados
+> inline abaixo. Novos webhooks de contrato (`enviado_para_assinatura`/`assinado`, v1.8.0) e de
+> exclusão (`matricula_excluida`/`contrato_excluido`, v1.8.2) não eram pedidos nossos — são
+> oportunidades novas, detalhadas no `emusys-api` SKILL.
+
 ---
 
-## 🚨 [Webhook] `aula.id` NÃO vem nos 3 webhooks de aula experimental — PRIORIDADE MÁXIMA
+## ✅ [Webhook] `aula.id` NÃO vem nos 3 webhooks de aula experimental — ~~PRIORIDADE MÁXIMA~~ RESOLVIDO v1.8.1
+
+> ✅ **Atendido pelo Emusys em 04/10/2026 (v1.8.1):** os 3 webhooks de experimental passaram a trazer
+> `aula.aula_id` (o id real da aula, o mesmo de `GET /aulas`, **estável no reagendamento**) e
+> `aula.data_hora_inicio_original`. O `id` da raiz do payload continua sendo o id do evento.
+> Permite gravar o vínculo certo desde a chegada — o trigger `fn_experimental_recebe_id_da_aula` e as
+> reconciliações passam a ser rede de segurança. ⚠️ Mexe no n8n das experimentais, não no app —
+> adoção pendente do nosso lado.
 
 **Identificado em:** 2026-08-10
 
@@ -49,7 +63,15 @@ schema e não era preenchido; foi reportado e saiu na **v1.4.1 (04/08/2026)**. M
 
 ---
 
-## ⚠️ [API] `presenca` não distingue "não registrada" de "ausente"
+## ✅ [API] `presenca` não distingue "não registrada" de "ausente" — RESOLVIDO v1.8.2 (condicional)
+
+> ✅ **Atendido pelo Emusys em 04/10/2026 (v1.8.2):** `alunos[]`/`professores[]` de `GET /aulas`,
+> `GET /aula` e os PATCHs de presença ganharam `registro_presenca`: `"registrado"` (houve
+> lançamento) | `"pendente"` (nada lançado) | `null` (**a escola não usa o recurso de 3 estados**).
+> Falta lançada = `ausente` + `registrado`. ⚠️ **Condicional:** se as unidades LA não têm o recurso
+> ligado, tudo vem `null` — medir numa chamada real antes de mudar regra. Aulas anteriores à ativação
+> podem vir `pendente` mesmo com falta real; ignorar em `cancelada:true`; professor adicional de
+> turma sempre `null`.
 
 **Identificado em:** 2026-08-10
 
@@ -69,7 +91,12 @@ se "ausente" significa falta ou "ainda não marcaram".
 
 ---
 
-## ⚠️ [API] Não existe GET de histórico/estágio do lead no CRM
+## ⚠️ [API] Não existe GET de histórico/estágio do lead no CRM — PARCIAL v1.6.0
+
+> 🟡 **Parcialmente coberto em 15/09/2026 (v1.6.0):** `GET /leads/por_id`, `GET /leads/por_telefone`
+> e `GET /leads` (com filtro `estagio_id`) trazem o **estágio atual** (`estagio_funil`) e o `status`
+> calculado do lead. O que **continua sem endpoint**: o histórico (mudanças de estágio, anotações,
+> autor e data) — que é o que arbitra os casos ambíguos abaixo.
 
 **Identificado em:** 2026-08-10
 
@@ -101,7 +128,12 @@ como já existe `trancamento_ativo`) ou um `status='aviso_previo'`.
 
 ---
 
-## ⚠️ [API] Não existe listagem de leads
+## ✅ [API] Não existe listagem de leads — RESOLVIDO v1.6.0
+
+> ✅ **Atendido pelo Emusys em 15/09/2026 (v1.6.0):** `GET /leads` lista com paginação por cursor
+> (padrão `/faturas`), filtro `status` (`ativo`/`arquivado`/`abandonado`/`todas`) e `estagio_id`
+> (lista por vírgula). `GET /leads/por_id` e `GET /leads/por_telefone` completam. Viabiliza a
+> conferência periódica "algum lead não chegou?" que faltou no incidente de 11/08 (22 leads).
 
 **Identificado em:** 2026-08-10
 
@@ -330,6 +362,33 @@ Só existe **um** `matricula_alterada` para essa matrícula — não veio um seg
   2026-06-12. O endpoint segue só aceitando email/cpf/telefone, mas **o problema raiz desapareceu**:
   `id_aluno`/`id_lead` passaram a vir direto no `/aulas` (v1.2.0, 21/06) e não precisamos mais
   resolver `id → pessoa`. Removido da lista de pedidos — não vale gastar capital com ele.
+
+### Estado da revisão de 2026-10-05
+
+Changelog conferido até **v1.8.3 (05/10/2026)** — 3 itens atendidos + 1 parcial:
+
+| Item | Como está |
+|---|---|
+| `aula.id` nos webhooks de experimental | ✅ **v1.8.1** — `aula.aula_id` estável no reagendamento + `aula.data_hora_inicio_original`. Adoção no n8n pendente |
+| `presenca` sem "não registrada" | ✅ **v1.8.2** — `registro_presenca` (`registrado`/`pendente`/`null`). ⚠️ Medir se as unidades LA retornam não-`null` |
+| Listagem de leads | ✅ **v1.6.0** — `GET /leads` + `/por_id` + `/por_telefone`, filtro `estagio_id` |
+| GET histórico do lead | 🟡 **Parcial** — v1.6.0 traz estágio ATUAL e `status`; histórico/anotações segue sem endpoint |
+| PULL do aviso prévio | Aberto — webhook existe, consulta não |
+| `responsavel_id` ignorado em silêncio | Aberto, não reverificado |
+| Status turma × individual | Aberto — workaround de dedup segue obrigatório |
+| Troca de curso não propaga | Aberto — exige triagem antes de reportar |
+| `/professores` só id+nome | Aberto (rebaixado) — 95% dos vínculos já têm `emusys_id` |
+| `pessoa_id` não filtra professor | Aberto, não reverificado |
+| Presença sem vínculo `pessoa_id` | Aberto, não reverificado |
+| Nr. Aulas Restantes diverge da tela | Aberto (baixa prioridade) |
+| `matricula_alterada` manda data antiga | Aberto (amostra de 1) |
+
+**Oportunidades novas (não eram pedidos):** webhooks `contrato_enviado_para_assinatura`/
+`contrato_assinado` (v1.8.0) e `matricula_excluida`/`contrato_excluido` (v1.8.2) — ⚠️ precisam ser
+**assinados no cadastro de webhooks de cada unidade** para chegar (foi o que travou o aviso prévio
+até 30/09). Params de agendamento de experimental: `forcar_individual` (v1.2.5),
+`contar_alunos_experimentais` (v1.2.7), `aula_online` (v1.4.3), `filtrar_sala_por_instrumento`
+(v1.8.3) — úteis se a Mila agendar pela API.
 
 ### Estado da revisão de 2026-08-10
 

@@ -162,8 +162,18 @@ A edge faz `switch(evento)`:
 
 - Idempotência por evento; saúde via `_shared/invariantes.ts` (`automacao_log`/`automacao_invariantes`). `verify_jwt: true`: o Emusys chega pelo n8n, que envia o JWT; a função não é um webhook público direto.
 
-### 1.4 Webhook NÃO consumido
-`aula_cancelada` (aula regular) — sem receptor dedicado; o estado da aula é reconciliado pelo sync de `/aulas/`.
+### 1.4 Webhooks NÃO consumidos
+| Evento | Desde | Situação |
+|---|---|---|
+| `aula_cancelada` (aula regular) | — | Sem receptor dedicado; o estado da aula é reconciliado pelo sync de `/aulas/` |
+| `contrato_enviado_para_assinatura` | v1.8.0 (23/09/2026) | Não consumido. Traz `envio` (meio `email`/`whatsapp` + destino) + `contrato` completo. Criaria o estado "enviado, aguardando assinatura" que hoje não existe |
+| `contrato_assinado` | v1.8.0 (23/09/2026) | Não consumido. Dispara na conclusão eletrônica OU na marcação manual na tela. Hoje a assinatura só é vista no pull das 23h — o webhook a tornaria em tempo real |
+| `matricula_excluida` | v1.8.2 (04/10/2026) | Não consumido. Matrícula apagada de vez (≠ `finalizacao` — o `matricula_id` deixa de existir). Traz `exclusao.data_hora` + `exclusao.usuario`. Hoje a exclusão só aparece na varredura completa, que é manual |
+| `contrato_excluido` | v1.8.2 (04/10/2026) | Não consumido. Se o contrato era o único da matrícula, `exclusao.matricula_excluida=true` e `matricula_excluida` é enviado em seguida |
+
+⚠️ **Webhooks novos só chegam se forem marcados no cadastro de webhooks de cada unidade** no Emusys — é a mesma armadilha que deixou `aviso_previo_editado`/`removido` sem chegar até 30/09/2026. Antes de implementar receptor, confirmar a marcação nas 3 unidades.
+
+**Nota v1.8.1 (04/10/2026):** os webhooks de experimental (`criada`/`reagendada`/`cancelada`) passaram a trazer `aula.aula_id` — o id real da aula, estável no reagendamento — e `aula.data_hora_inicio_original`. É a correção da causa-raiz do "fantasma de reagendamento" documentado em 1.2 (o `id` da raiz do payload continua sendo o do evento). Adoção no n8n `Fucq0bQwF4oeuWnv` pendente — quando adotado, reagendamento vira UPDATE na mesma linha e o trigger `fn_experimental_recebe_id_da_aula` vira rede de segurança.
 
 ---
 
@@ -190,6 +200,7 @@ A edge faz `switch(evento)`:
 - **Semântica temporal das experimentais:** `presenca='ausente'` em aula futura significa `agendada`, não falta. Cancelamento sempre prevalece; após o início, `presente`/`matriculado` viram presença, `faltou`/`ausente` viram falta e valores desconhecidos ficam `sem_status`.
 - **Anotações:** `aulas_emusys.anotacoes` pertence ao Emusys. `aulas_emusys.anotacoes_fabio` pertence exclusivamente à RPC do Fábio e não aparece no payload do upsert do sync. A leitura pedagógica pode preferir Fábio e cair no Emusys, mas uma fonte nunca sobrescreve a outra.
 - **Limite semântico:** `professor_presenca='ausente'` não prova falta funcional do professor; pode representar aula sem ocorrência/chamada. Não usar isoladamente em Health Score ou RH.
+- 🆕 **`registro_presenca` (v1.8.2, 04/10/2026) — ainda não consumido pelo sync.** `alunos[]`/`professores[]` de `GET /aulas` passaram a trazer `"registrado"` | `"pendente"` | `null`, distinguindo falta **lançada** de "ninguém marcou" — a ambiguidade documentada no limite semântico acima. Falta lançada = `ausente` + `registrado`. ⚠️ `null` = a escola não usa o recurso de 3 estados; **medir numa chamada real se as 3 unidades LA retornam valores** antes de mudar a régua de presença.
 
 ### 2.2 `GET /v1/professores` → `sync-professores-emusys` (cron semanal)
 - **Quando:** pg_cron Domingo 04:00 BRT.
@@ -258,6 +269,26 @@ A edge faz `switch(evento)`:
   só pode produzir estado de auditoria (`ausente_no_snapshot_corrente`);
   aulas, roster e presença já capturados permanecem nas tabelas históricas.
 
+### 2.4 Endpoints novos disponíveis, ainda não consumidos
+
+Adicionados pela API entre 15/09 e 05/10/2026 (v1.6.0–v1.8.3). Referência
+completa: skill `emusys-api` e `pendencias-emusys.md`.
+
+| Endpoint | Desde | O que habilita |
+|---|---|---|
+| `GET /leads` (+ `/por_id`, `/por_telefone`) | v1.6.0 (15/09) | Varredura de completude do funil — conferir se algum lead não chegou (o incidente de 11/08 perdeu 22 sem aviso). Filtro `estagio_id` cobre a lacuna do `lead_editado`, que não traz o estágio |
+| `GET /aula?aula_id=` | v1.5.0 (13/09) | Consultar uma aula específica sem varrer a agenda |
+| `POST /aulas/anotacao` | v1.5.0 (13/09) | Escrever diário de aula no Emusys — hoje a anotação do LA Teacher fica só do nosso lado (decisão de produto) |
+| `PATCH /aulas/presenca/aluno` e `/professor` | v1.7.0 (23/09) | Escrita de presença — já em uso pelo LA Report |
+| `GET /crm/metricas` | 01/06 | Conferir nossos KPIs comerciais contra o painel oficial do Emusys |
+| `GET /crm/aniversariantes` | v1.3.0 (28/07) | Mensagem automática de aniversário (feature nova, decisão de produto) |
+
+Novos parâmetros de `POST /crm/aula_experimental` / `disponibilidade` (relevante
+se a Mila agendar pela API): `forcar_individual` (v1.2.5), `contar_alunos_experimentais`
+(v1.2.7 — não agenda em turma cheia), `aula_online` (v1.4.3), `filtrar_sala_por_instrumento`
+(v1.8.3 — sala compatível com o instrumento), `como_conheceu_id` na criação do lead
+(v1.4.3 — reduz "origem pendente").
+
 ---
 
 ## 3. UPSTREAM — Mila SDR (produto separado, fora do sistema)
@@ -289,6 +320,7 @@ Quem é: os 3 agentes Mila SDR (CG `aHD4kJdzByLwFXA1`, Recreio `gSHJHYMOYDQZqleW
 | 7 | ➡ sai | `GET /v1/professores` | sync-professores-emusys (semanal) | Sync professores |
 | 8 | ➡ sai | `GET /v1/matriculas` | sync-matriculas-emusys | Estado atual completo e jornada canônica |
 | 9 | ➡ sai | `GET /v1/faturas` | fila única → sync-faturas-emusys | Espelho atual + snapshot financeiro auditável, inclusive competências antigas ainda abertas |
+| 10 | ⬅ entra | `contrato_enviado_para_assinatura`/`contrato_assinado`, `matricula_excluida`, `contrato_excluido` | **não consumidos** (v1.8.0/1.8.2) — precisam ser marcados no cadastro de webhooks de cada unidade | Assinatura em tempo real / exclusão de matrícula e contrato |
 | — | upstream | Mila → Emusys (cadastro/experimental) | fora do sistema | Origina os webhooks (ver seção 3) |
 
 ---
