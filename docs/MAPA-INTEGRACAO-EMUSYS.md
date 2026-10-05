@@ -200,7 +200,7 @@ A edge faz `switch(evento)`:
 - **Semântica temporal das experimentais:** `presenca='ausente'` em aula futura significa `agendada`, não falta. Cancelamento sempre prevalece; após o início, `presente`/`matriculado` viram presença, `faltou`/`ausente` viram falta e valores desconhecidos ficam `sem_status`.
 - **Anotações:** `aulas_emusys.anotacoes` pertence ao Emusys. `aulas_emusys.anotacoes_fabio` pertence exclusivamente à RPC do Fábio e não aparece no payload do upsert do sync. A leitura pedagógica pode preferir Fábio e cair no Emusys, mas uma fonte nunca sobrescreve a outra.
 - **Limite semântico:** `professor_presenca='ausente'` não prova falta funcional do professor; pode representar aula sem ocorrência/chamada. Não usar isoladamente em Health Score ou RH.
-- 🆕 **`registro_presenca` (v1.8.2, 04/10/2026) — ainda não consumido pelo sync.** `alunos[]`/`professores[]` de `GET /aulas` passaram a trazer `"registrado"` | `"pendente"` | `null`, distinguindo falta **lançada** de "ninguém marcou" — a ambiguidade documentada no limite semântico acima. Falta lançada = `ausente` + `registrado`. ⚠️ `null` = a escola não usa o recurso de 3 estados; **medir numa chamada real se as 3 unidades LA retornam valores** antes de mudar a régua de presença.
+- 🆕 **`registro_presenca` (v1.8.2, 04/10/2026) — medido ativo nas 3 unidades em 05/10, ainda não consumido pelo sync.** `alunos[]`/`professores[]` de `GET /aulas` e `GET /aula` passaram a trazer `"registrado"` | `"pendente"` | `null`, distinguindo falta **lançada** de "ninguém marcou" — a ambiguidade documentada no limite semântico acima. Falta lançada = `ausente` + `registrado`. Medição do agente do LA Teacher (GET /aula, uma turma por unidade): aula passada com chamada → `registrado` (vale para presença e para falta); aula futura → `ausente` + `pendente` (aluno e professor); em turma, **cada aluno traz `aula_id` próprio** e a presença dele. ⚠️ `null` = a escola não usa o recurso — não é nosso caso. ⚠️ **Histórico anterior à ativação do recurso pode vir `pendente` mesmo com falta real lançada** — não reler o passado pré-ativação por este campo.
 
 ### 2.2 `GET /v1/professores` → `sync-professores-emusys` (cron semanal)
 - **Quando:** pg_cron Domingo 04:00 BRT.
@@ -278,7 +278,7 @@ completa: skill `emusys-api` e `pendencias-emusys.md`.
 |---|---|---|
 | `GET /leads` (+ `/por_id`, `/por_telefone`) | v1.6.0 (15/09) | Varredura de completude do funil — conferir se algum lead não chegou (o incidente de 11/08 perdeu 22 sem aviso). Filtro `estagio_id` cobre a lacuna do `lead_editado`, que não traz o estágio |
 | `GET /aula?aula_id=` | v1.5.0 (13/09) | Consultar uma aula específica sem varrer a agenda |
-| `POST /aulas/anotacao` | v1.5.0 (13/09) | Escrever diário de aula no Emusys — hoje a anotação do LA Teacher fica só do nosso lado (decisão de produto) |
+| `POST /aulas/anotacao` | v1.5.0 (13/09) | Escrever diário de aula no Emusys — **já em uso pelo Fábio/LA Teacher desde 14/09** (piloto prof. Matheus): worker `fabio_emusys_escrita_worker.py` → `vps/fabio/emusys_anotacao.py` lê com `GET /aula` e grava com trava (só grava se o conteúdo bate), livro em `fabio_emusys_escrita`. Decisão tomada pelo Alf; pendente só ampliar o piloto |
 | `PATCH /aulas/presenca/aluno` e `/professor` | v1.7.0 (23/09) | Escrita de presença — já em uso pelo LA Report |
 | `GET /crm/metricas` | 01/06 | Conferir nossos KPIs comerciais contra o painel oficial do Emusys |
 | `GET /crm/aniversariantes` | v1.3.0 (28/07) | Mensagem automática de aniversário (feature nova, decisão de produto) |
@@ -360,7 +360,7 @@ Lidos na fonte **todos os ~30 workflows n8n ativos** + edge functions. **Tocam E
 Detalhes em `pendencias-emusys.md`. Resumo atualizado:
 - `emusys_id` de professor e demais identidades externas são escopados por unidade, não globais.
 - `horario_presenca` espelha o início da aula e não representa o instante real em que a chamada foi lançada.
-- O payload não permite distinguir retroativamente, com segurança técnica, toda chamada não feita de uma falta real; a camada semântica aplica política de negócio versionada por unidade.
+- `registro_presenca` (v1.8.2, ativo nas 3 unidades) distingue "falta lançada" de "não marcado" **a partir da ativação do recurso**; para o passado anterior à ativação o payload ainda não permite distinguir retroativamente com segurança — a camada semântica continua aplicando política de negócio versionada por unidade.
 - `professor_presenca='ausente'` não pode ser interpretado sozinho como falta do professor.
 
 ---
