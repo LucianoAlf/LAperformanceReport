@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-30 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-05 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — professor
 
-159 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+161 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## anotacoes
 
@@ -488,6 +488,30 @@
 
 **Triggers:**
 - `trg_fabio_barrar_bom_dia_legado → fn_fabio_barrar_bom_dia_legado()`
+
+## fabio_chat_mensagens_bom_dia_legado_arquivo
+
+> Bom-dias no formato antigo ("☆ *Aluno(a):*") tirados do chat do app em 03/10/2026 — guardados, não apagados.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `professor_id` | integer | sim |  |  |
+| `role` | text | não |  |  |
+| `kind` | text | não | 'text'::text |  |
+| `content` | text | sim |  |  |
+| `media_url` | text | sim |  |  |
+| `media_mime` | text | sim |  |  |
+| `media_filename` | text | sim |  |  |
+| `media_extracted_text` | text | sim |  |  |
+| `channel` | text | não | 'app'::text |  |
+| `wa_message_id` | text | sim |  |  |
+| `fabio_seen_at` | timestamp with time zone | sim |  |  |
+| `fabio_done_at` | timestamp with time zone | sim |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `identidade_tipo` | text | não | 'professor'::text |  |
+| `usuario_id` | integer | sim |  |  |
+| `arquivado_em` | timestamp with time zone | não | now() |  |
 
 ## fabio_correcao
 
@@ -1202,6 +1226,27 @@
 **Únicos:**
 - `fabio_sonda_execucao_pkey`
 
+## fabio_texto_para_organizar
+
+> Texto corrido do caderno da aula esperando o Fábio distribuir nas gavetas (03/10/2026, pedido do prof. Leonardo). Não cria ficha: devolve as gavetas para o caderno.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `registro_id` | uuid | não |  | fabio_registros_aula.id |
+| `aula_id` | integer | não |  |  |
+| `professor_id` | integer | não |  |  |
+| `texto` | text | não |  |  |
+| `status` | text | não | 'pendente'::text |  |
+| `tentativas` | integer | não | 0 |  |
+| `resultado` | jsonb | sim |  |  |
+| `erro` | text | sim |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `fabio_texto_para_organizar_pkey`
+
 ## fabio_transcricao_contraponto
 
 > A MESMA gravacao lida por OUTRO motor de STT. Existe porque a alucinacao do Gemini medida em 05/09 e ESTAVEL (3/3 identico): repetir o mesmo motor nao pega, e a transcricao primaria nao pode ser gabarito de si mesma. Regra da casa: quem confere nao pode ser o mesmo modelo que produziu.
@@ -1457,7 +1502,7 @@
 | `id` | uuid | não | gen_random_uuid() |  |
 | `snapshot_metrica_id` | uuid | não |  | health_score_professor_v3_snapshot_metricas.id |
 | `config_meta_segmento_id` | uuid | sim |  | health_score_professor_v3_config_metas_curso_modalidade.id |
-| `unidade_id` | uuid | não |  | unidades.id |
+| `unidade_id` | uuid | não |  | health_score_professor_v3_config_metas_curso_modalidade.unidade_id |
 | `curso_id` | integer | não |  | health_score_professor_v3_config_metas_curso_modalidade.curso_id |
 | `modalidade` | text | não |  | health_score_professor_v3_config_metas_curso_modalidade.modalidade |
 | `pessoas_unicas` | integer | não | 0 |  |

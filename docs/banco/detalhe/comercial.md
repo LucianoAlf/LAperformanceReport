@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-28 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-05 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — comercial
@@ -715,10 +715,12 @@
 | `chamada_por` | integer | sim |  |  |
 | `chamada_status` | text | sim |  |  |
 | `chamada_origem` | text | sim |  |  |
+| `emusys_aula_id_webhook` | integer | sim |  |  |
 
 **Únicos:**
 - `lead_experimentais_pkey`
 - `uq_lead_exp_aula`
+- `uq_lead_exp_aula_webhook`
 - `uq_lead_exp_legado`
 
 **Triggers:**

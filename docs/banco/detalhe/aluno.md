@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-01 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-05 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — aluno
@@ -3657,7 +3657,7 @@
 
 ## vw_jornada_lead_v1
 
-> Jornada do lead. ⚠️ `etapa`: a FONTE CANONICA (lead_experimentais) manda quando existe linha; os flags de `leads` so resgatam quem nao tem nenhuma. Corrigido em 04/09 apos falso positivo reportado pela Daiana: o Marcelo tinha aula `cancelada` na fonte canonica e `experimental_realizada=true` no flag, e o R15 dizia que ele fez a experimental. 10 leads tinham os dois flags contraditorios.
+> Jornada do lead. ⚠️ `etapa`: a FONTE CANONICA (lead_experimentais) manda quando existe linha; os flags de `leads` so resgatam quem nao tem nenhuma. Corrigido em 04/09 apos falso positivo reportado pela Daiana: o Marcelo tinha aula `cancelada` na fonte canonica e `experimental_realizada=true` no flag, e o R15 dizia que ele fez a experimental. 10 leads tinham os dois flags contraditorios. tem_gclid/tem_meta_ctwa_clid: só PRESENÇA do click-id — o valor nunca sai pela view.
 
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
@@ -3704,6 +3704,8 @@
 | `experimentais_canceladas` | bigint | sim |  |  |
 | `experimentais_agendadas` | bigint | sim |  |  |
 | `ultima_experimental_em` | date | sim |  |  |
+| `tem_gclid` | boolean | sim |  |  |
+| `tem_meta_ctwa_clid` | boolean | sim |  |  |
 
 ## vw_jornada_marcos
 

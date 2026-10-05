@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-30 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-05 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — gestao
 
-51 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+53 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## bi_agent_config_lamusic
 
@@ -652,6 +652,36 @@
 - `relatorio_anual_item_palco_pkey`
 
 ## relatorio_anual_revisor
+
+> Compatibilidade: o revisor do professor repetido em cada recital. Gravar em relatorio_anual_revisor_do_professor.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `evento_id` | bigint | sim |  |  |
+| `professor_id` | integer | sim |  |  |
+| `revisor_usuario_id` | integer | sim |  |  |
+| `revisor_professor_id` | integer | sim |  |  |
+| `definido_por_usuario_id` | integer | sim |  |  |
+| `definido_em` | timestamp with time zone | sim |  |  |
+
+## relatorio_anual_revisor_do_professor
+
+> Quem revisa os relatórios do recital de cada professor — vale para TODOS os recitais (Alf, 30/09). Gravado pela Divisão (app_relatorio_anual_salvar_divisao).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `professor_id` | integer | não |  | professores.id |
+| `revisor_usuario_id` | integer | sim |  | usuarios.id |
+| `revisor_professor_id` | integer | sim |  | professores.id |
+| `definido_por_usuario_id` | integer | sim |  | usuarios.id |
+| `definido_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `relatorio_anual_revisor_do_professor_pkey`
+
+## relatorio_anual_revisor_por_recital_ate_20260930
+
+> Desativada em 30/09/2026: o revisor passou a ser do professor (relatorio_anual_revisor_do_professor). Guardada só como histórico.
 
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
