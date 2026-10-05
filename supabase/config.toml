@@ -114,6 +114,11 @@ verify_jwt = false
 # (segredo dedicado validado no proprio codigo, sem JWT).
 verify_jwt = false
 
+[functions.export-financeiro-asaas-extrato]
+# Leitura do espelho do extrato Asaas p/ o Super Folha: mesmo padrao do
+# export-financeiro-lancamentos (segredo dedicado validado no proprio codigo).
+verify_jwt = false
+
 [functions.export-caixa-movimentacoes]
 # Exporta o caixa (Sol + equipe) p/ o Super Folha cruzar extrato -> caixa ->
 # fatura via fatura_id/emusys_fatura_id. Mesmo segredo dedicado no codigo.
@@ -132,6 +137,10 @@ verify_jwt = false
 [functions.sync-financeiro-emusys]
 # Cron envia JWT anon valido mais x-sync-token; a funcao valida o segredo antes
 # de abrir execucao. TRUE impede chamadas sem JWT de chegarem ao codigo.
+verify_jwt = true
+
+[functions.sync-asaas-emusys]
+# Mesmo desenho do sync-financeiro-emusys: cron envia JWT anon + x-sync-token.
 verify_jwt = true
 
 [functions.refresh-contas-receber]
