@@ -390,6 +390,20 @@ até 30/09). Params de agendamento de experimental: `forcar_individual` (v1.2.5)
 `contar_alunos_experimentais` (v1.2.7), `aula_online` (v1.4.3), `filtrar_sala_por_instrumento`
 (v1.8.3) — úteis se a Mila agendar pela API.
 
+**Correções nossas do mesmo dia (05/10, medição do agente do LA Teacher/Fábio):**
+12 das 14 cobranças de chamada do painel eram fantasmas — aula apagada ou aluno removido no Emusys
+seguia na fila. Resolvido em produção (migration `20261005140000`): (a) `vw_presenca_pendencia`
+passou a exigir `aula_alunos_emusys.ativo_operacional` (tirou ~263 linhas mortas: 482→~190);
+(b) `reconciliar_grade_snapshot_emusys_core_v3` deixou de ser só-futuro no cancelamento lógico —
+aula ausente do Emusys dentro da janela de cobrança (45d) é tombada `sync_ausente_emusys`.
+Backfill: 171 aulas mortas tombadas nas 58 datas afetadas das 3 unidades; residual = 0.
+**Gap novo descoberto (para o desenho das 3 gavetas):** presença lançada no Emusys *depois* do sync
+daquele dia fica velha aqui — a revisita `sync-presenca-backlog` cobre só D-14 em fatias de 3d a
+cada 5 dias. Caso medido: Renato, C_Qui_19 01/10 — `presente/registrado` no Emusys, nossa linha
+ficou `ausente` neutra do fetch único de 02/10 até o re-fetch manual. `registro_presenca`
+confirmado **ativo nas 3 unidades** (medido pelo Fábio 05/10) — é o gancho para re-ler só o que
+mudou de `pendente`→`registrado`.
+
 ### Estado da revisão de 2026-08-10
 
 Changelog conferido de 21/06 a 04/08 (v1.4.1): **nenhum** item aberto foi corrigido pelo Emusys.
