@@ -32,6 +32,21 @@ Testei todos os caminhos com os dados carregados (20.599 itens de extrato × 19.
 
 **O que `externalReference` é:** o id interno da *cobrança* no Emusys (o que aparece na listagem "Cobranças" da UI deles) — único por pagamento, repetido no par RECEIVED+FEE, ausente em TRANSFER/refunds. Se o Emusys um dia abrir o endpoint de cobranças, é provavelmente a chave.
 
+## 2b. CAMINHO NOVO — o `paymentId` resolve direto na Asaas (v2 da resposta)
+
+A espec beta do Emusys diz que o extrato é **espelho direto de `GET /v3/financialTransactions` da Asaas**. Na API da Asaas, `GET /v3/payments/{paymentId}` devolve a cobrança inteira:
+
+- **`paymentDate` — a data de liquidação da cobrança = o dia em que o aluno pagou** (o campo que falta);
+- `clientPaymentDate`, `creditDate` (= a data do `PAYMENT_RECEIVED` no extrato), `estimatedCreditDate`;
+- `invoiceNumber` (o "fatura nr. X" da descrição), `externalReference`, `billingType`, `value`, `netValue`, `customer`.
+
+Ou seja: **para saber o dia que o aluno pagou, não é preciso nem ligar à fatura** — resolve o `paymentId` na Asaas. Duas formas:
+
+- **Chave Asaas da própria escola (mais rápido, zero Emusys):** a conta Asaas é da escola — o Emusys só usa a chave dela. O Alf pega/gera a API key no painel Asaas (Minha conta → Integrações). Aí o `paymentId` do espelho resolve em `GET https://api.asaas.com/v3/payments/{id}` direto — podemos espelhar isso no LA Report também (~9,8 mil payments, paginável por `dateCreated`).
+- **Pedir ao Emusys** um proxy de `GET /v3/payments` (mesmo padrão do extrato), ex.: `GET /financeiro/pagamentos_asaas?convenio_id=&payment_id=` ou por `dateCreated`.
+
+⚠️ Isso resolve **a data do pagamento** (a pergunta real). O vínculo cobrança↔faturas do Emusys continua sendo só deles — para saber *quais faturas* cada cobrança cobriu (o que o relatório de repasse traz), ainda vale o pedido do item 3.
+
 ## 3. Vale pedir à Emusys — sim
 
 Eles atenderam o pedido do extrato (`extrato_asaas` + `convenios_asaas` vieram beta sob medida). O relatório de repasse já existe na UI deles — o join cobrança↔faturas é resolvido lá dentro; expor é questão de endpoint.
