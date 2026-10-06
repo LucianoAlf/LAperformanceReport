@@ -1089,7 +1089,7 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
       if (cheque.valor > 0 || docHash || cheque.emitente_nome) {
         try {
           res = await rpc('sol_cheque_resolver_fatura_v1', { p_unidade_id: unidadeId, p_emitente_nome: cheque.emitente_nome,
-            p_valor: cheque.valor, p_bom_para: cheque.bom_para, p_emitente_documento_hash: docHash });
+            p_valor: cheque.valor, p_bom_para: cheque.bom_para || loteData || null, p_emitente_documento_hash: docHash });
         } catch (_) { res = null; }
       }
       cheque.dataRef = loteData || null;
@@ -1467,7 +1467,7 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
     let res = null;
     try {
       res = await rpc('sol_cheque_resolver_fatura_v1', { p_unidade_id: unidadeId, p_emitente_nome: nome,
-        p_valor: it.cheque.valor, p_bom_para: it.cheque.bom_para, p_emitente_documento_hash: null });
+        p_valor: it.cheque.valor, p_bom_para: it.cheque.bom_para || it.cheque.dataRef || null, p_emitente_documento_hash: null });
     } catch (_) { res = null; }
     const esc = escolherFatura(res, it.cheque, lote.loteData);
     if (!esc.fatura) {
@@ -1696,7 +1696,7 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
         it.trilha.push({ acao: 'numero_informado', por: ch.confirmadoPor, ts: agoraFn() });
         try {
           it.res = await rpc('sol_cheque_resolver_fatura_v1', { p_unidade_id: lote.unidadeId, p_emitente_nome: ch.emitente_nome,
-            p_valor: ch.valor, p_bom_para: ch.bom_para, p_emitente_documento_hash: it.docHash || null });
+            p_valor: ch.valor, p_bom_para: ch.bom_para || ch.dataRef || null, p_emitente_documento_hash: it.docHash || null });
         } catch (_) { it.res = null; }
         if (!it.atribuidoPor) { it.multi = null; it.escolha = escolherFatura(it.res, ch, lote.loteData); await tentarFamilia(it, lote.loteData, hojeBRT(agoraFn())); }
         out.push({ cheque: n, ok: true, aviso: `número do cheque ${n} registrado como ${numH}, informado pela equipe` });
@@ -1728,7 +1728,7 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
       // A parcela é procurada de novo com o valor confirmado (o documento já virou hash).
       try {
         it.res = await rpc('sol_cheque_resolver_fatura_v1', { p_unidade_id: lote.unidadeId, p_emitente_nome: ch.emitente_nome,
-          p_valor: ch.valor, p_bom_para: ch.bom_para, p_emitente_documento_hash: it.docHash || null });
+          p_valor: ch.valor, p_bom_para: ch.bom_para || ch.dataRef || null, p_emitente_documento_hash: it.docHash || null });
       } catch (_) { it.res = null; }
       if (!it.atribuidoPor) {
         it.multi = null;
@@ -1779,7 +1779,7 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
           // fora da lista (medido com dado real em 06/10). Quem confere o valor aqui é
           // a combinação (soma no centavo), não o score.
           res = await rpc('sol_cheque_resolver_fatura_v1', { p_unidade_id: lote.unidadeId, p_emitente_nome: nome,
-            p_valor: null, p_bom_para: ch.bom_para, p_emitente_documento_hash: null });
+            p_valor: null, p_bom_para: ch.bom_para || ch.dataRef || null, p_emitente_documento_hash: null });
         } catch (_) { res = null; }
         if (!res || res.ok === false) { falhou = recusaCheque(n, 'fonte_indisponivel', 'não consegui consultar o cadastro agora; tenta de novo em instantes'); break; }
         let cands = (res.candidatas || []).filter((c) => c.la_report_fatura_id);
