@@ -1654,6 +1654,34 @@ function resolverPagamentoItensV1(payload, { url, key } = carregarEnv()) {
   });
 }
 
+// SUGESTÃO DE NOME PARECIDO (06/10/2026). Só leitura, só para PERGUNTAR.
+//
+// 🔴 CG, 05/10: um "z" a mais no primeiro nome derrubou a identidade
+//    (`aluno_nao_encontrado`), a Sol mandou "confere o nome completo" e a
+//    equipe — que via o nome certo — travou 3 vezes e descartou o comprovante.
+//
+// ⚠️ A RPC não resolve nada: devolve até 4 nomes da MESMA unidade e a Sol
+//    pergunta. Qualquer falha (sem credencial, timeout, função ainda não
+//    aplicada no banco -> 404) vira `null` e a mensagem antiga volta a valer.
+//    Sugestão é conveniência; nunca pode virar motivo de não responder.
+function sugerirAlunoParecidoV1(payload, { url, key } = carregarEnv()) {
+  return new Promise((resolve, reject) => {
+    if (!key) return reject(new Error('missing SUPABASE service key'));
+    const body = JSON.stringify({ p_unidade_id: payload.unidade_id, p_nome: payload.nome });
+    const u = new URL(`${url}/rest/v1/rpc/sol_caixa_sugerir_aluno_parecido_v1`);
+    const req = https.request({ hostname: u.hostname, path: u.pathname, method: 'POST', headers: {
+      apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body),
+    }}, (res) => {
+      let data = ''; res.on('data', (c) => { data += c; });
+      res.on('end', () => {
+        if (res.statusCode !== 200) return reject(new Error(`sugerir aluno: HTTP ${res.statusCode}`));
+        try { resolve(data ? JSON.parse(data) : null); } catch (e) { reject(new Error(`resposta invalida (${res.statusCode})`)); }
+      });
+    });
+    req.on('error', reject); req.setTimeout(8000, () => req.destroy(new Error('timeout sugerir aluno'))); req.write(body); req.end();
+  });
+}
+
 function lancarRecebimentoLote(payload, env) {
   return chamarRpcCaixa('sol_caixa_lancar_recebimento_lote_v1', payload, env);
 }
@@ -3746,7 +3774,7 @@ function categoriaEhSaida(categoria) {
   return ['seguranca', 'despesa', 'retirada', 'troco'].includes(String(categoria || '').toLowerCase());
 }
 
-function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, finalizarPreviewV3Fn = finalizarPreviewV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, resolverEnvelopeFn = resolverEnvelopeCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, identificarAlunoNovoFn = identificarAlunoNovo, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, faturasQuitacaoFn = resolverFaturasQuitacao, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, chequesFn = undefined, ingressosConfigFn = undefined, abrirPreviewFn = undefined, log = () => {}, governanceFn = () => Promise.resolve({ ok: false, disabled: true }), janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
+function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, finalizarPreviewV3Fn = finalizarPreviewV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, sugerirAlunoFn = sugerirAlunoParecidoV1, resolverEnvelopeFn = resolverEnvelopeCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, identificarAlunoNovoFn = identificarAlunoNovo, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, faturasQuitacaoFn = resolverFaturasQuitacao, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, chequesFn = undefined, ingressosConfigFn = undefined, abrirPreviewFn = undefined, log = () => {}, governanceFn = () => Promise.resolve({ ok: false, disabled: true }), janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
   // Caixa fechado não é beco sem saída (CG 03/10): quem mandou o comprovante
   // recebe ali mesmo o card OFICIAL de abertura. Só cria preview; abrir continua
   // exigindo "pode" atual nesse card, e o comprovante guardado exige outro "pode".
@@ -5344,6 +5372,102 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     return { acao: 'preview_cheque_enviado', previewId };
   }
 
+  // ---- SUGESTÃO DE NOME PARECIDO (06/10/2026) --------------------------------
+  // Quando o resolver recusa um item por nome (`aluno_nao_encontrado` ou
+  // `aluno_baixa_confianca`), procura alunos PARECIDOS da mesma unidade. Não
+  // escolhe nada: devolve a lista para a Sol perguntar (1) ou listar (2+).
+  // `nome_ambiguo` fica de fora de propósito: lá o primeiro nome BATEU com
+  // várias pessoas e a recusa já lista os homônimos.
+  const MOTIVOS_SUGESTAO_NOME = new Set(['aluno_nao_encontrado', 'aluno_baixa_confianca']);
+  const _nomeNorm = (s) => _normConf(s).replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
+  async function sugestaoDeNomeMulti({ event, grupo, resolvido, intent }) {
+    if (!resolvido || !MOTIVOS_SUGESTAO_NOME.has(resolvido.motivo)) return null;
+    const itens = intent && Array.isArray(intent.itens) ? intent.itens : [];
+    const digitadoRpc = _nomeNorm(resolvido.aluno_nome);
+    if (!itens.length || !digitadoRpc) return null;
+    // O item recusado precisa ser UM só, e o mesmo que a RPC nomeou: pela ordem
+    // (1-based, a do array enviado) e, na falta dela, pelo nome digitado.
+    let indice = Number(resolvido.ordem) - 1;
+    if (!(indice >= 0 && indice < itens.length && _nomeNorm(itens[indice] && itens[indice].aluno_nome) === digitadoRpc)) {
+      const iguais = itens.map((it, i) => (_nomeNorm(it && it.aluno_nome) === digitadoRpc ? i : -1)).filter((i) => i >= 0);
+      if (iguais.length !== 1) return null;
+      indice = iguais[0];
+    }
+    let res = null;
+    try { res = await sugerirAlunoFn({ unidade_id: grupo.unidade_id, nome: itens[indice].aluno_nome }); }
+    catch (e) { log({ acao: 'sugestao_nome_erro', chatId: event.chatId, erro: String(e && e.message) }); return null; }
+    if (!res || res.ok !== true || !Array.isArray(res.candidatos)) return null;
+    // Nunca sugere quem já é OUTRO item do mesmo comprovante: irmãos pagam
+    // juntos, e "É o Gabriel?" para a Gabriela lançaria o Gabriel duas vezes.
+    const outros = itens.filter((_, i) => i !== indice).map((it) => _nomeNorm(it && it.aluno_nome)).filter(Boolean);
+    const _mesmoQueOutro = (nome) => {
+      const n = _nomeNorm(nome); const t = n.split(' ');
+      return outros.some((o) => { const u = o.split(' ');
+        return o === n || (u.length >= 2 && t[0] === u[0] && t[t.length - 1] === u[u.length - 1]); });
+    };
+    const candidatos = res.candidatos
+      .map((c) => String((c && c.aluno_nome) || '').trim())
+      .filter((nome) => nome && _nomeNorm(nome) !== digitadoRpc && !_mesmoQueOutro(nome))
+      .filter((nome, i, arr) => arr.findIndex((x) => _nomeNorm(x) === _nomeNorm(nome)) === i)
+      .slice(0, 4);
+    log({ acao: 'sugestao_nome_candidatos', chatId: event.chatId, motivo: resolvido.motivo, candidatos: candidatos.length });
+    if (!candidatos.length) return null;
+    return { indice, digitado: String(itens[indice].aluno_nome).trim(), candidatos };
+  }
+
+  // A resposta "sim" à pergunta "É Fulana?". Reaproveita a revisão multi que já
+  // existe (`pendentes`, mesma janela, mesmo "descarta"); a pergunta só guarda
+  // o item e o nome sugerido. Devolve o alvo, `{ outroAutor }` ou null.
+  // ⚠️ Só QUEM MANDOU o comprovante confirma — citando a pergunta ou não. "Sim"
+  //    é a palavra mais comum de um grupo; de outra pessoa, sem citar, não é
+  //    sequer olhado (Barra 26/09: "Sim" alheio virou divisão nove vezes).
+  const _ehSimDeSugestao = (txt) => /^(sim|s|isso|isso mesmo|exato|exatamente|correto|confirmo|e (ela|ele|essa|esse)|sim (e|e (ela|ele|essa|esse)|isso|isso mesmo|exato|correto|pode seguir|segue)|pode seguir|segue)$/
+    .test(_normConf(txt).replace(/^@?sol\b\s*[,;:-]?\s*/, '').replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim());
+  function sugestaoNomeDaResposta(event, agora) {
+    if (!event || event.hasMedia) return null;
+    const txt = bodyLimpo(event.body);
+    if (!txt || txt.length > 40 || !_ehSimDeSugestao(txt)) return null;
+    const abertas = limparVelhos(event.chatId, agora)
+      .filter((p) => p.tipoOperacao === 'manual_review_multi_student' && p.sugestaoNome);
+    if (!abertas.length) return null;
+    const falante = String(event.senderPhone || event.senderId || '');
+    const doAutor = (p) => !!falante && [p.autorPhone, p.autorId].some((x) => x && String(x) === falante);
+    if (event.quotedMessageId) {
+      const q = String(event.quotedMessageId);
+      const alvo = abertas.find((p) => p.sugestaoNome.msgId === q
+        || (Array.isArray(p.msgIds) && p.msgIds.includes(q)) || p.origem === q) || null;
+      if (!alvo) return null;
+      return doAutor(alvo) ? { alvo } : { alvo, outroAutor: true };
+    }
+    const minhas = abertas.filter(doAutor);
+    return minhas.length === 1 ? { alvo: minhas[0] } : null;
+  }
+  async function responderSugestaoNome(event, agora) {
+    const r = sugestaoNomeDaResposta(event, agora);
+    if (!r) return null;
+    const { alvo } = r;
+    if (r.outroAutor) {
+      await sendFn(event.chatId, 'Quem confirma o nome é quem mandou o comprovante — fico aguardando o *sim* dele(a).');
+      log({ acao: 'sugestao_nome_sim_de_outro_autor', chatId: event.chatId });
+      return { acao: 'sugestao_nome_sim_de_outro_autor' };
+    }
+    const grp = grupos[event.chatId];
+    const sug = alvo.sugestaoNome;
+    const intent = sug.intent || {};
+    const itens = Array.isArray(intent.itens) ? intent.itens : [];
+    if (!grp || !itens[sug.indice]) return null;
+    // Consome a pergunta ANTES de refazer: um segundo "sim" não reabre nada.
+    pendentes.set(event.chatId, limparVelhos(event.chatId, agora).filter((p) => p !== alvo));
+    const intentConfirmado = { ...intent,
+      itens: itens.map((it, i) => (i === sug.indice ? { ...it, aluno_nome: sug.sugerido } : it)) };
+    log({ acao: 'sugestao_nome_confirmada', chatId: event.chatId, ordem: sug.indice + 1 });
+    // Mesmo caminho do complemento da divisão: o resolver roda de novo, agora
+    // com o nome do CADASTRO, e só um preview + "pode" lança.
+    return abrirFluxoMultiAluno({ event, grupo: grp, textoFonte: alvo.multiTexto,
+      textoHumano: alvo.multiTextoHumano, intent: intentConfirmado, agora,
+      origemMessageId: alvo.origem, evidenceEnvelope: alvo.evidenceEnvelope || null });
+  }
+
   async function abrirFluxoMultiAluno({ event, grupo, textoFonte, textoHumano, intent, agora,
     origemMessageId, resolvidoPronto = null, agentFirstEnvelope = null,
     evidenceEnvelope = null, supersedePreviewId = null, textoPronto = null, tetoItens = null,
@@ -5457,19 +5581,54 @@ _Não lanço nada pela metade._`);
       }
     }
     if (!resolvido || !resolvido.ok || !Array.isArray(resolvido.itens)) {
-      await colocarEmRevisao(resolvido && resolvido.motivo || 'itens_nao_validados');
+      const _revisao = await colocarEmRevisao(resolvido && resolvido.motivo || 'itens_nao_validados');
+      // 🔴 NOME QUASE CERTO NÃO É BECO SEM SAÍDA (06/10/2026, caso CG de 05/10).
+      //    Um "z" a mais no primeiro nome e a Sol só dizia "confere o nome
+      //    completo" — a equipe, que via o nome certo, travou 3x e descartou.
+      //    Com UM aluno parecido na unidade, ela PERGUNTA; o "sim" de quem mandou
+      //    refaz a resolução com o nome do cadastro (mesma régua, mesmo preview,
+      //    mesmo "pode"). Com 2+ parecidos ela lista até 3 e NÃO escolhe.
+      // ⚠️ Só no caminho em que ESTA função chamou o resolver: `resolvidoPronto`
+      //    (agent-first/cheques) e adiantamento têm estado próprio que o "sim"
+      //    não sabe reconstruir — lá a mensagem antiga continua valendo.
+      const _sugestao = (!resolvidoPronto && !adiantamento)
+        ? await sugestaoDeNomeMulti({ event, grupo, resolvido, intent }) : null;
+      if (_sugestao && _sugestao.candidatos.length === 1) {
+        const _n = Array.isArray(intent.itens) ? intent.itens.length : 0;
+        const _seguirCom = _n === 2 ? 'os dois' : (_n > 2 ? `os ${_n}` : 'o lançamento');
+        const _sugerido = _sugestao.candidatos[0];
+        const _idPergunta = await sendFn(event.chatId,
+          `⚠️ Entendi a divisão, mas não achei *${_sugestao.digitado}* no cadastro desta unidade. `
+          + `É *${_sugerido}*?\nResponde *sim* que eu sigo com ${_seguirCom}.\n`
+          + '_Não lanço nada sem você confirmar._');
+        if (Array.isArray(_revisao.msgIds)) _revisao.msgIds.push(_idPergunta);
+        _revisao.sugestaoNome = {
+          indice: _sugestao.indice, digitado: _sugestao.digitado, sugerido: _sugerido,
+          intent: JSON.parse(JSON.stringify(intent)), msgId: _idPergunta || null, ts: agora,
+        };
+        // ⚠️ Log sem nomes: só o motivo e a posição do item.
+        log({ acao: 'sugestao_nome_perguntada', chatId: event.chatId,
+              motivo: resolvido && resolvido.motivo, ordem: _sugestao.indice + 1 });
+        return { acao: 'sugestao_nome_perguntada' };
+      }
       // 02/09: a mesma legenda falhou as 16:23 e passou as 16:50 — o espelho do
       // Emusys ainda nao tinha as faturas como PAGAS (sync a cada 15 min). A
       // mensagem antiga mandava conferir dados que estavam CERTOS. A RPC ja
       // devolve o motivo estruturado; so faltava contar a verdade.
       const _quem = resolvido && resolvido.aluno_nome ? ` do ${resolvido.aluno_nome}` : '';
       const _pedeDivisao = 'me manda a divisão com o valor de cada um: *Nome — R$ valor*';
+      // 2+ parecidos: mostra até 3 e NÃO escolhe — escolher entre parecidos é
+      // o mesmo erro do `limit 1` que já trocou aluno no caixa.
+      const _parecidos = (_sugestao && _sugestao.candidatos.length >= 2)
+        ? ` Os mais parecidos que achei aqui: ${_sugestao.candidatos.slice(0, 3).map((n) => `*${n}*`).join(', ')}`
+          + `${_sugestao.candidatos.length > 3 ? ' (e outros)' : ''} — não escolho por você.`
+        : '';
       const _motivosMulti = {
         alocacao_nao_derivavel: (resolvido && Number(resolvido.candidatas) > 1)
           ? `achei mais de uma fatura paga${_quem} nos últimos dias e não sei qual é esta — ${_pedeDivisao}.`
           : `ainda não vejo a fatura${_quem} como paga na minha cópia do Emusys (ela atualiza a cada 15 min). Se o pagamento acabou de entrar, me reenvia daqui a pouco — ou ${_pedeDivisao}.`,
         sem_fatura_da_categoria: `não encontrei fatura dessa categoria${_quem} na competência — confere a competência, ou ${_pedeDivisao}.`,
-        aluno_nao_encontrado: `não achei${_quem} no cadastro desta unidade — confere o nome completo.`,
+        aluno_nao_encontrado: `não achei${_quem} no cadastro desta unidade — confere o nome completo.${_parecidos}`,
         item_sem_aluno: 'não consegui ler o nome de um dos alunos — ' + _pedeDivisao + '.',
         // 🔴 09/09: a Vitoria mandou "parcela de setembro" com o mes CERTO e
         // ouviu "confere o mes". As faturas entraram no espelho 3min18s depois
@@ -5496,7 +5655,7 @@ _Não lanço nada pela metade._`);
           const visto = enc ? ` A fatura que achei${_quem} é de ${fmtBRL(enc)}.` : '';
           return `o valor que você escreveu${dec ? ` (${fmtBRL(dec)})` : ''} ainda não bate com uma fatura oficial${_quem}.${visto} Se o pagamento acabou de entrar, minha cópia do Emusys pode estar atrasada — me reenvia daqui a pouco. Não criei card aprovável.`;
         })(),
-        aluno_baixa_confianca: `o nome informado não bateu com segurança no cadastro${_quem}. Me manda o nome completo de cada aluno, exatamente como está no sistema. Não criei card aprovável.`,
+        aluno_baixa_confianca: `o nome informado não bateu com segurança no cadastro${_quem}. Me manda o nome completo de cada aluno, exatamente como está no sistema.${_parecidos} Não criei card aprovável.`,
         aluno_sem_nome: 'não consegui ler o nome de um dos alunos — ' + _pedeDivisao + '.',
         sem_fatura_que_bata: `ainda não achei fatura oficial${_quem} que feche com esse valor. Se o pagamento acabou de entrar, minha cópia do Emusys pode estar atrasada — me reenvia daqui a pouco. Não criei card aprovável.`,
         itens_ausentes: 'não entendi a divisão — ' + _pedeDivisao + '.',
@@ -6036,6 +6195,14 @@ _Não lanço nada pela metade._`);
     if (!event.hasMedia && perguntasNatureza.size) {
       const rNat = await responderPerguntaNatureza(event, agora);
       if (rNat) return rNat;
+    }
+    // Resposta "sim" a "Não achei X. É Y?" (06/10/2026). Antes do agent-first e do
+    // "pode": o "sim" citando a pergunta casaria como confirmação frouxa e
+    // bateria na trava da revisão multi ("Não lancei…"), e sem citar iria ao
+    // modelo, que não enxerga a pergunta.
+    if (!event.hasMedia) {
+      const rSug = await responderSugestaoNome(event, agora);
+      if (rSug) return rSug;
     }
     // A foto sai aqui, antes de qualquer coisa consumir pendencia (P2).
     fotografarContextoV4(event, chatId, agora);
@@ -9796,6 +9963,7 @@ _Não lanço nada pela metade._`);
   function deveTratarComplementoDeterministico(event, agora = Date.now()) {
     if (!event || event.hasMedia) return false;
     if (escolhaDaResposta(event, agora)) return true;
+    if (sugestaoNomeDaResposta(event, agora)) return true;
     let draft = rascunhosV4.get(event.chatId) || null;
     if (!draft) return completaCardClassicoIncompleto(event, agora) || corrigeAlunoCardClassico(event, agora);
     if (agora - draft.ts >= janelaMs) {
