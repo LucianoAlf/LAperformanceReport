@@ -231,6 +231,23 @@ const todas = (T) => T.enviadas.join('\n----\n');
       '7: banco com o vendedor; veio ' + JSON.stringify(T.lancados.map((x) => x.descricao)));
   }
 
+  // ── 8. apelido/registro mesclado (06/10, Alf: "Gabriel Leão" é nome do Emusys) ──
+  {
+    const CAD = 'Caio Santos Pereira da Silva';
+    const eq = [{ nome: CAD, prof: true, match: `${CAD} Caio Leão` }, { nome: 'Caio Barbosa Rufino', prof: true }];
+    for (const dit of ['Caio Leão', 'Caio Pereira Leão']) {
+      const T = novo({ equipe: eq });
+      const r = await foto(T, `Venda de caderno para aluno ${ALUNO_CADASTRO} venda prof ${dit} débito R$ 100`);
+      const card = ultimo(T.enviadas);
+      ok(r && r.acao === 'preview_enviado', `8 (${dit}): card de lojinha; veio ` + (r && r.acao));
+      ok(T.resolverCalls.length === 0 && !/soma dos alunos/i.test(todas(T)), `8 (${dit}): sem multi`);
+      ok(card.includes(`· venda prof. ${dit}`), `8 (${dit}): vendedor reconhecido pelo apelido`);
+    }
+    const T2 = novo({ equipe: eq });
+    await foto(T2, `Venda de caderno para aluno ${ALUNO_CADASTRO} venda prof Caio débito R$ 100`);
+    ok(!/· venda prof\. Caio\b/.test(ultimo(T2.enviadas)), '8: "Caio" sozinho (2 Caios) não escolhe vendedor');
+  }
+
   console.log('');
   if (falhas.length) {
     console.log('RESULTADO: FALHOU');

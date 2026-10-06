@@ -2578,12 +2578,26 @@ function descricaoLojinha(item, aluno, vendedor) {
 // Equipe ATIVA (professores + colaboradores) — só leitura, para reconhecer
 // vendedor. Professor aparece nas duas tabelas com o mesmo nome: é UMA pessoa.
 async function listarEquipeAtiva(env = carregarEnv()) {
-  const [profs, colabs] = await Promise.all([
-    _restGetJson('professores?ativo=eq.true&select=nome', env),
+  const [profs, colabs, mesclados] = await Promise.all([
+    _restGetJson('professores?ativo=eq.true&select=id,nome,nome_preferido', env),
     _restGetJson('colaboradores?ativo=eq.true&select=nome,tipo', env),
+    // 06/10 (Alf): "venda prof Gabriel Leão" — "Gabriel Leão" é o nome do Emusys do
+    // Recreio, registro mesclado no professor ativo. Apelido e registro mesclado contam
+    // como nomes da MESMA pessoa; quem decide é o cadastro, não o texto.
+    _restGetJson('professores?mesclado_em_professor_id=not.is.null&select=nome,mesclado_em_professor_id', env).catch(() => []),
   ]);
+  const apelidos = new Map();
+  for (const m of Array.isArray(mesclados) ? mesclados : []) {
+    if (!m || !m.nome || m.mesclado_em_professor_id == null) continue;
+    const k = String(m.mesclado_em_professor_id);
+    apelidos.set(k, [...(apelidos.get(k) || []), String(m.nome)]);
+  }
   const out = [];
-  for (const p of Array.isArray(profs) ? profs : []) if (p && p.nome) out.push({ nome: String(p.nome), prof: true });
+  for (const p of Array.isArray(profs) ? profs : []) {
+    if (!p || !p.nome) continue;
+    const nomes = [String(p.nome), p.nome_preferido ? String(p.nome_preferido) : null, ...(apelidos.get(String(p.id)) || [])].filter(Boolean);
+    out.push({ nome: String(p.nome), prof: true, match: nomes.join(' ') });
+  }
   for (const c of Array.isArray(colabs) ? colabs : []) {
     if (c && c.nome) out.push({ nome: String(c.nome), prof: String(c.tipo || '').toLowerCase() === 'professor' });
   }
@@ -5619,7 +5633,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       if (!c.explicito && !comprador) continue;
       const pessoas = new Map();
       for (const e of equipe) {
-        if (!e || !e.nome || !_casaNomeEquipe(c.declarado, e.nome)) continue;
+        if (!e || !e.nome || !_casaNomeEquipe(c.declarado, e.match || e.nome)) continue;
         const k = _normConf(e.nome).replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
         const ant = pessoas.get(k);
         pessoas.set(k, { nome: e.nome, prof: !!(e.prof || (ant && ant.prof)) });
