@@ -97,6 +97,10 @@
 | `cheque_numero` | text | sim |  |  |
 | `cheque_banco` | text | sim |  |  |
 | `cheque_bom_para` | date | sim |  |  |
+| `cheque_emitente_nome` | text | sim |  |  |
+| `cheque_emitente_documento_hash` | text | sim |  |  |
+| `cheque_agencia` | text | sim |  |  |
+| `cheque_conta` | text | sim |  |  |
 
 **Únicos:**
 - `caixa_movimentacoes_pkey`
