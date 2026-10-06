@@ -324,6 +324,24 @@ const ultima = (t) => t.enviadas[t.enviadas.length - 1].t;
     console.log('CG-D. cheque pré-datado com desconto, malote depois do vencimento → parcela do mês, sem empate com meses antigos — OK');
   }
 
+  // ================================================================== CG-A (06/10 ao vivo)
+  // Dois cheques Itaú nº 000091 de AGÊNCIAS diferentes (famílias diferentes) não são
+  // "repetido".
+  {
+    const alunos = [
+      { nome: 'Davi Rocha Prado', resp: 'Elisa Prado', faturas: [{ n: 71, valor: 397 }] },
+      { nome: 'Joana Pires Lopes', resp: 'Kleber Lopes', faturas: [{ n: 72, valor: 367 }] },
+    ];
+    const a = lido(1, 397, 'ELISA PRADO', { numero: '000091' });
+    const b = lido(2, 367, 'KLEBER LOPES', { numero: '000091' });
+    b.agencia = '0283'; b.cmc7 = cmc7('341', '0283', '018', '000091', '5', String(5000000002).slice(-10));
+    const t = montar({ unidade: 'cg', leituras: [a, b], alunos });
+    await t.h.handle(t.pdf('PDFA', 'MALOTE-CG-A'));
+    const d = t.regs.find((e) => e.acao === 'cheques_lote_decidido').decisoes;
+    assert.ok(!d.includes('repetido'), JSON.stringify(d));
+    console.log('CG-A. mesmo banco e número, agências diferentes → dois cheques — OK');
+  }
+
   // ================================================================== RECREIO
   for (const multiNoLote of [false, true]) {
     process.env.SOL_CHEQUES_LOTE_MULTI_FATURA = multiNoLote ? '1' : '0';

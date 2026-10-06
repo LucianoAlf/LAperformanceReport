@@ -292,7 +292,10 @@ function pagaLongeDoCheque(fatura, ref) {
   return !!(d && ref && dias(d, ref) > JANELA_PAGA_EM_CHEQUE_DIAS);
 }
 // Identidade do cheque: banco + número (a CMC-7 prova os dois).
-const chaveCheque = (c) => `${String(c && c.banco || '').padStart(3, '0')}|${String(c && c.numero || '')}`;
+// Banco + AGÊNCIA + número (CG 06/10/2026: dois cheques Itaú nº 000091 de agências
+// diferentes — famílias diferentes — viraram "repetido"). Sem agência lida, cai no
+// banco + número de antes.
+const chaveCheque = (c) => `${String(c && c.banco || '').padStart(3, '0')}|${c && c.agencia ? String(c.agencia).replace(/\D/g, '').padStart(4, '0') + '|' : ''}${String(c && c.numero || '')}`;
 const hojeBRT = (agora = Date.now()) => new Date(agora - 3 * 3600 * 1000).toISOString().slice(0, 10);
 const hhmm = (ms) => new Date(ms - 3 * 3600 * 1000).toISOString().slice(11, 16);
 
@@ -1690,7 +1693,7 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
       if (it.decisao === 'repetido' && ref.numero != null) {
         const numH = digitos(String(ref.numero)).padStart(6, '0').slice(-6);
         if (!numeroNaFala(String(ref.numero), textoOriginal)) { out.push(recusaCheque(n, 'numero_fora_da_fala', 'o número não está escrito na mensagem da pessoa')); continue; }
-        const colide = lote.itens.some((x) => x !== it && chaveCheque(x.cheque) === chaveCheque({ banco: ch.banco, numero: numH }));
+        const colide = lote.itens.some((x) => x !== it && chaveCheque(x.cheque) === chaveCheque({ banco: ch.banco, agencia: ch.agencia, numero: numH }));
         if (!numH || /^0+$/.test(numH) || colide) { out.push(recusaCheque(n, 'numero_repetido', `o número ${ref.numero} também é de outro cheque do lote — confere no papel`)); continue; }
         ch.numero = numH; ch.confirmadoPor = quem || 'equipe'; ch.numeroInformado = true;
         it.trilha.push({ acao: 'numero_informado', por: ch.confirmadoPor, ts: agoraFn() });
