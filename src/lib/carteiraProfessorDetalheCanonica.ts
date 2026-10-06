@@ -79,6 +79,74 @@ interface ResultadoCarteiraProfessorCanonica {
   alunos: AlunoCarteiraCanonico[];
   distribuicaoCursos: DistribuicaoCursoCanonica[];
   alunosTrancados: AlunoCarteiraCanonico[];
+  // 'fechamento' = nomes gravados no fechamento do mês (mesma foto do total do
+  // cabeçalho); 'atual' = carteira de hoje. Sem período, é sempre 'atual'.
+  origem: 'atual' | 'fechamento';
+  // Diferença entre a lista e o total do fechamento, dita em vez de escondida.
+  aviso: string | null;
+}
+
+type CarteiraAgrupada = Omit<ResultadoCarteiraProfessorCanonica, 'origem' | 'aviso'>;
+
+export interface PeriodoCarteira {
+  ano: number;
+  mes: number;
+  dataInicio: string;
+  dataFim: string;
+}
+
+export interface FechamentoCarteiraProfessor {
+  fechado: boolean;
+  carteira_alunos: number | null;
+  pessoas_regulares: number | null;
+  linhas: JornadaCarteiraProfessor[];
+}
+
+const MESES = [
+  'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro',
+];
+
+function rotuloMes(periodo: PeriodoCarteira): string {
+  return `${MESES[periodo.mes - 1] ?? periodo.mes}/${periodo.ano}`;
+}
+
+// Mesmo critério de v_periodo_mensal em get_carteira_professor_periodo_detalhe_canonico_v1:
+// o total do cabeçalho só vem do fechamento quando o período é exatamente um mês
+// civil. Trimestre e intervalo livre seguem a carteira de hoje.
+export function periodoEhMesUnico(periodo: PeriodoCarteira | null | undefined): boolean {
+  if (!periodo) return false;
+  const mes = String(periodo.mes).padStart(2, '0');
+  const ultimoDia = new Date(Date.UTC(periodo.ano, periodo.mes, 0)).getUTCDate();
+  return periodo.dataInicio === `${periodo.ano}-${mes}-01`
+    && periodo.dataFim === `${periodo.ano}-${mes}-${String(ultimoDia).padStart(2, '0')}`;
+}
+
+// Decide de onde vem a lista e o que dizer sobre ela. 'atual' quando o mês não tem
+// fechamento (mês corrente) ou quando o fechamento não gravou nomes (jun/2026, total
+// lançado pela coordenação) — nesse último caso, avisando, porque a lista de hoje não
+// é a do número que está no cabeçalho.
+export function decidirListaCarteira(
+  fechamento: FechamentoCarteiraProfessor | null,
+  periodo: PeriodoCarteira,
+): { origem: 'atual' | 'fechamento'; aviso: string | null } {
+  if (!fechamento?.fechado) return { origem: 'atual', aviso: null };
+  const mes = rotuloMes(periodo);
+  if (fechamento.linhas.length === 0) {
+    return {
+      origem: 'atual',
+      aviso: `O fechamento de ${mes} não gravou os nomes dos alunos. A lista abaixo é a carteira de hoje, não a de ${mes}.`,
+    };
+  }
+  const total = fechamento.carteira_alunos;
+  const nomes = fechamento.pessoas_regulares;
+  if (total !== null && nomes !== null && Number(total) !== Number(nomes)) {
+    return {
+      origem: 'fechamento',
+      aviso: `O fechamento de ${mes} registrou ${total} alunos, mas gravou ${nomes} nomes (sem contar atividade extra). Fechamento anterior à regra atual da carteira.`,
+    };
+  }
+  return { origem: 'fechamento', aviso: null };
 }
 
 export interface ResumoClassificacaoCarteiraCanonica {
@@ -248,7 +316,7 @@ export function agruparCarteiraProfessorCanonica(
   alunosOperacionais: AlunoOperacionalCarteira[],
   jornadasTrancadas: JornadaCarteiraProfessor[] = [],
   cursosProjeto: Set<number> = new Set<number>(),
-): ResultadoCarteiraProfessorCanonica {
+): CarteiraAgrupada {
   const alunosPorId = new Map(
     alunosOperacionais.map((aluno) => [Number(aluno.id), aluno]),
   );
@@ -385,23 +453,86 @@ export async function buscarJornadasTrancadosProfessorCanonicas({
     .filter((jornada) => unidadeId === 'todos' || jornada.unidade_id === unidadeId);
 }
 
+export async function buscarFechamentoCarteiraProfessor({
+  professorId,
+  unidadeId,
+  periodo,
+}: {
+  professorId: number;
+  unidadeId: UnidadeId | string;
+  periodo: PeriodoCarteira;
+}): Promise<FechamentoCarteiraProfessor> {
+  const { supabase } = await import('@/lib/supabase');
+  const { data, error } = await supabase.rpc('get_carteira_professor_fechamento_alunos_v1', {
+    p_professor_id: professorId,
+    p_ano: periodo.ano,
+    p_mes: periodo.mes,
+    p_unidade_id: unidadeId === 'todos' ? null : unidadeId,
+  });
+  if (error) throw error;
+
+  const resposta = (data || {}) as Record<string, unknown>;
+  const linhas = Array.isArray(resposta.linhas) ? resposta.linhas as Array<Record<string, unknown>> : [];
+  return {
+    fechado: resposta.fechado === true,
+    carteira_alunos: resposta.carteira_alunos === null || resposta.carteira_alunos === undefined
+      ? null
+      : Number(resposta.carteira_alunos),
+    pessoas_regulares: resposta.pessoas_regulares === null || resposta.pessoas_regulares === undefined
+      ? null
+      : Number(resposta.pessoas_regulares),
+    // Status 'ativa' porque é o critério da própria foto: só entrou quem estava
+    // ativo na captura. O status de hoje (ex.: a aluna que saiu depois) não vale aqui.
+    linhas: linhas.map((linha) => ({
+      unidade_id: String(linha.unidade_id),
+      unidade_nome: (linha.unidade_nome as string | null) ?? null,
+      aluno_id: Number(linha.aluno_id),
+      aluno_nome: String(linha.aluno_nome ?? ''),
+      emusys_aluno_id: (linha.emusys_aluno_id as string | null) ?? null,
+      curso_id: linha.curso_id === null || linha.curso_id === undefined ? null : Number(linha.curso_id),
+      curso_nome: (linha.curso_nome as string | null) ?? null,
+      status_matricula: 'ativa',
+      dia_semana: (linha.dia_semana as string | null) ?? null,
+      horario: (linha.horario as string | null) ?? null,
+    })),
+  };
+}
+
 export async function buscarCarteiraProfessorDetalheCanonica({
   professorId,
   unidadeId,
+  periodo,
 }: {
   professorId: number;
   unidadeId: UnidadeId;
+  // Sem período (ou período que não é um mês civil), a lista é a carteira de hoje.
+  periodo?: PeriodoCarteira | null;
 }): Promise<ResultadoCarteiraProfessorCanonica> {
-  const [jornadas, jornadasTrancadas] = await Promise.all([
-    buscarJornadasProfessorCanonicas({ professorId, unidadeId }),
-    buscarJornadasTrancadosProfessorCanonicas({ professorId, unidadeId }),
-  ]);
+  let origem: 'atual' | 'fechamento' = 'atual';
+  let aviso: string | null = null;
+  let jornadas: JornadaCarteiraProfessor[] = [];
+  let jornadasTrancadas: JornadaCarteiraProfessor[] = [];
+
+  if (periodo && periodoEhMesUnico(periodo)) {
+    const fechamento = await buscarFechamentoCarteiraProfessor({ professorId, unidadeId, periodo });
+    ({ origem, aviso } = decidirListaCarteira(fechamento, periodo));
+    // Trancados ficam vazios no fechamento: a foto não guarda quem estava trancado.
+    if (origem === 'fechamento') jornadas = fechamento.linhas;
+  }
+
+  if (origem === 'atual') {
+    [jornadas, jornadasTrancadas] = await Promise.all([
+      buscarJornadasProfessorCanonicas({ professorId, unidadeId }),
+      buscarJornadasTrancadosProfessorCanonicas({ professorId, unidadeId }),
+    ]);
+  }
+
   const alunoIds = [...new Set(
     [...jornadas, ...jornadasTrancadas].map((jornada) => Number(jornada.aluno_id)),
   )].filter(Number.isFinite);
 
   if (alunoIds.length === 0) {
-    return { alunos: [], distribuicaoCursos: [], alunosTrancados: [] };
+    return { alunos: [], distribuicaoCursos: [], alunosTrancados: [], origem, aviso };
   }
 
   const { supabase } = await import('@/lib/supabase');
@@ -435,10 +566,14 @@ export async function buscarCarteiraProfessorDetalheCanonica({
     (cursosProjetoData || []).forEach((curso) => cursosProjeto.add(Number(curso.id)));
   }
 
-  return agruparCarteiraProfessorCanonica(
-    jornadas,
-    (alunosData || []) as AlunoOperacionalCarteira[],
-    jornadasTrancadas,
-    cursosProjeto,
-  );
+  return {
+    ...agruparCarteiraProfessorCanonica(
+      jornadas,
+      (alunosData || []) as AlunoOperacionalCarteira[],
+      jornadasTrancadas,
+      cursosProjeto,
+    ),
+    origem,
+    aviso,
+  };
 }

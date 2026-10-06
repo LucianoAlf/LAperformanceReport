@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — professor
 
-161 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+162 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## anotacoes
 
@@ -174,6 +174,7 @@
 | `cancelada_por_usuario_id` | integer | sim |  | usuarios.id |
 | `cancelada_em` | timestamp with time zone | sim |  |  |
 | `professor_presenca_origem` | text | sim |  |  |
+| `professor_registro_presenca` | text | sim |  |  |
 
 **Únicos:**
 - `aulas_emusys_emusys_id_unidade_id_key`
@@ -1502,9 +1503,9 @@
 | `id` | uuid | não | gen_random_uuid() |  |
 | `snapshot_metrica_id` | uuid | não |  | health_score_professor_v3_snapshot_metricas.id |
 | `config_meta_segmento_id` | uuid | sim |  | health_score_professor_v3_config_metas_curso_modalidade.id |
-| `unidade_id` | uuid | não |  | health_score_professor_v3_config_metas_curso_modalidade.unidade_id |
+| `unidade_id` | uuid | não |  | unidades.id |
 | `curso_id` | integer | não |  | health_score_professor_v3_config_metas_curso_modalidade.curso_id |
-| `modalidade` | text | não |  | health_score_professor_v3_config_metas_curso_modalidade.modalidade |
+| `modalidade` | text | não |  | professor_unidade_curso_modalidade.modalidade |
 | `pessoas_unicas` | integer | não | 0 |  |
 | `vinculos_ativos` | integer | não | 0 |  |
 | `turmas_elegiveis` | integer | não | 0 |  |
@@ -2905,6 +2906,21 @@
 **Únicos:**
 - `programa_matriculador_penalidades_pkey`
 
+## tmp_emusys_registro_45d
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `unidade` | text | sim |  |  |
+| `data` | date | sim |  |  |
+| `sessao_id` | bigint | sim |  |  |
+| `categoria` | text | sim |  |  |
+| `cancelada` | text | sim |  |  |
+| `aula_id_ind` | bigint | sim |  |  |
+| `id_aluno` | bigint | sim |  |  |
+| `presenca` | text | sim |  |  |
+| `registro` | text | sim |  |  |
+| `prof_registro` | text | sim |  |  |
+
 ## turmas
 
 > Turmas de aula - combinação de professor, dia, horário e sala
@@ -3539,7 +3555,7 @@
 
 ## vw_presenca_pendencia
 
-> Governanca operacional (Fase 3): alunos sem presenca FORTE por aula/unidade/dia (fn_presenca_e_forte), roster-gap-aware, janela 45d. Fonte unica p/ Fabio (professor), Sol/Hugo (unidade), coordenacao (dias>=3). Nao e o canon analitico.
+> Fila canonica de chamada pendente por aluno-aula. 2026-10-05: passa a exigir vinculo operacional (r.ativo_operacional) — vinculo tombado pela reconciliacao de roster nao cobra mais chamada.
 
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|

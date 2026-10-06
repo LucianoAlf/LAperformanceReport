@@ -13,6 +13,7 @@ import {
   resumirClassificacaoCarteiraCanonica,
   type AlunoCarteiraCanonico,
   type DistribuicaoCursoCanonica,
+  type PeriodoCarteira,
 } from '@/lib/carteiraProfessorDetalheCanonica';
 
 // Interface para carteira do professor
@@ -37,19 +38,22 @@ interface Props {
   onClose: () => void;
   professor: CarteiraProfessor | null;
   unidadeAtual: UnidadeId;
+  // Mês fechado: a lista sai do fechamento, igual ao total do cabeçalho da aba.
+  periodo?: PeriodoCarteira | null;
 }
 
-export function ModalCarteiraProfessor({ open, onClose, professor, unidadeAtual }: Props) {
+export function ModalCarteiraProfessor({ open, onClose, professor, unidadeAtual, periodo }: Props) {
   const [distribuicaoCursos, setDistribuicaoCursos] = useState<DistribuicaoCursoCanonica[]>([]);
   const [alunosCompletos, setAlunosCompletos] = useState<AlunoCarteiraCanonico[]>([]);
   const [alunosTrancados, setAlunosTrancados] = useState<AlunoCarteiraCanonico[]>([]);
   const [loading, setLoading] = useState(false);
+  const [avisoLista, setAvisoLista] = useState<string | null>(null);
 
   useEffect(() => {
     if (open && professor) {
       carregarDistribuicao();
     }
-  }, [open, professor, unidadeAtual]);
+  }, [open, professor, unidadeAtual, periodo?.dataInicio, periodo?.dataFim]);
 
   const carregarDistribuicao = async () => {
     if (!professor) return;
@@ -59,7 +63,9 @@ export function ModalCarteiraProfessor({ open, onClose, professor, unidadeAtual 
       const detalhe = await buscarCarteiraProfessorDetalheCanonica({
         professorId: professor.id,
         unidadeId: unidadeAtual,
+        periodo,
       });
+      setAvisoLista(detalhe.aviso);
       setAlunosCompletos(detalhe.alunos);
       setDistribuicaoCursos(detalhe.distribuicaoCursos);
       setAlunosTrancados(detalhe.alunosTrancados);
@@ -68,6 +74,7 @@ export function ModalCarteiraProfessor({ open, onClose, professor, unidadeAtual 
       setAlunosCompletos([]);
       setDistribuicaoCursos([]);
       setAlunosTrancados([]);
+      setAvisoLista(null);
     } finally {
       setLoading(false);
     }
@@ -161,6 +168,12 @@ export function ModalCarteiraProfessor({ open, onClose, professor, unidadeAtual 
             </div>
           </div>
         </DialogHeader>
+
+        {avisoLista && (
+          <p className="mt-4 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+            {avisoLista}
+          </p>
+        )}
 
         <div className="space-y-6 mt-4">
           {/* Cards de Métricas */}

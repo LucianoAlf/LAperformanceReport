@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Funções
 
-1778 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
+1786 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
 chamadas diretas ao PostgREST não são visíveis para o gerador.
 
 ## aluno
@@ -772,16 +772,20 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `app_textos_emusys_da_aula(p_aula_id integer)` | ORFA | DEFINER | sem consumidor conhecido |
 | `check_automacao_professor_vinculado()` | ATIVA | INVOKER | trigger:automacao_log.trg_automacao_check_professor |
 | `claim_lia_alerta_privado(p_worker_id uuid, p_alerta_id uuid)` | ATIVA | DEFINER | edge:supabase/functions/processar-alertas-lia/index.ts |
+| `claim_sync_asaas_extrato_job(p_worker_id uuid, p_lease_seconds integer)` | ATIVA | DEFINER | edge:supabase/functions/sync-asaas-emusys/index.ts |
 | `claim_sync_faturas_pagas_mes_job(p_worker_id uuid, p_lease_seconds integer)` | ATIVA | DEFINER | edge:supabase/functions/sync-faturas-emusys/index.ts |
 | `claim_sync_financeiro_emusys_job(p_worker_id uuid, p_lease_seconds integer)` | ATIVA | DEFINER | edge:supabase/functions/sync-financeiro-emusys/index.ts |
+| `complete_sync_asaas_extrato_job(p_job_id uuid, p_worker_id uuid)` | ATIVA | DEFINER | edge:supabase/functions/sync-asaas-emusys/index.ts |
 | `conciliacao_experimentais_v2_sem_cache_20260923(p_unidade_id uuid, p_ano integer, p_mes integer, p_periodo text, p_data date)` | SO-INTERNA | DEFINER | funcao:get_conciliacao_experimentais_v2 |
 | `decidir_professor_divergencia_emusys(p_id bigint, p_decisao text, p_observacao text)` | ATIVA | DEFINER | front:src/hooks/useProfessoresDivergencias.ts |
 | `definir_forma_pagamento_conciliacao_aluno(p_divergencia_id bigint, p_forma_pagamento_id integer, p_decidido_por text)` | ATIVA | DEFINER | front:src/components/App/Alunos/ConciliacaoMatriculas.tsx |
 | `enfileirar_lia_alerta_piloto(p_pesquisa_id uuid, p_tipo text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `enfileirar_lia_followup_piloto(p_pesquisa_id uuid)` | ORFA | DEFINER | sem consumidor conhecido |
+| `enqueue_sync_asaas_extrato_job(p_unidade_codigo text, p_data_inicial date, p_data_final date, p_catalogos boolean, p_trigger_source text, p_convenio_id bigint, p_priority integer, p_max_retries integer, p_next_attempt_at timestamp with time zone)` | ATIVA | DEFINER | edge:supabase/functions/sync-asaas-emusys/index.ts |
 | `enqueue_sync_student_studio()` | ATIVA | DEFINER | trigger:alunos.trg_enqueue_sync_student_studio |
 | `excluir_whatsapp_caixa_admin(p_caixa_id integer)` | ATIVA | DEFINER | front:src/components/App/PreAtendimento/components/chat/CaixasManager.tsx |
 | `expurgar_webhook_diagnosticos_sanitizados()` | ATIVA | DEFINER | cron:expurgar-webhook-diagnosticos-sanitizados |
+| `fail_sync_asaas_extrato_job(p_job_id uuid, p_worker_id uuid, p_error_code text, p_error_detail text, p_http_status integer)` | ATIVA | DEFINER | edge:supabase/functions/sync-asaas-emusys/index.ts |
 | `fn_emusys_escrita_pendentes(p_professores integer[], p_desde timestamp with time zone, p_limite integer)` | ORFA | DEFINER | sem consumidor conhecido |
 | `fn_emusys_escrita_registrar(p_registro_id uuid, p_emusys_aula_id integer, p_unidade text, p_texto text, p_decisao text, p_motivo text, p_anotacao_antes text, p_erro text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `fn_fila_audio_experimental_retomar(p_limite integer)` | ATIVA | DEFINER | cron:fabio-retomar-audio-experimental |
@@ -823,10 +827,12 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `produzir_lia_resumos_followup_72h(p_agora timestamp with time zone)` | ATIVA | DEFINER | edge:supabase/functions/processar-alertas-lia/index.ts |
 | `registrar_espelho_chatwoot_v1(p_itens jsonb)` | ORFA | DEFINER | sem consumidor conhecido |
 | `registrar_saida_automatica_emusys_v1(p_unidade_id uuid, p_aluno_id integer, p_aluno_nome text, p_professor_id integer, p_curso_id integer, p_tipo text, p_data date, p_motivo text, p_motivo_saida_id integer, p_competencia_referencia date, p_emusys_matricula_id text, p_valor_parcela_evasao numeric)` | ATIVA | DEFINER | edge:supabase/functions/processar-matricula-emusys/index.ts |
+| `renew_sync_asaas_extrato_job_lease(p_job_id uuid, p_worker_id uuid, p_lease_seconds integer)` | ATIVA | DEFINER | edge:supabase/functions/sync-asaas-emusys/index.ts |
 | `replace_emusys_cpf_hmac_vinculos(p_unidade_id uuid, p_matriculas jsonb)` | ATIVA | DEFINER | edge:supabase/functions/sync-matriculas-emusys/index.ts |
 | `resolver_conciliacao_lead_qualidade(p_lead_id integer, p_campo text, p_valor_id integer, p_decidido_por text, p_motivo text)` | ATIVA | DEFINER | front:src/components/App/Comercial/ComercialConciliacaoLeads.tsx |
 | `resolver_emusys_cpf_hmac(p_cpf_hmac text)` | ATIVA | DEFINER | edge:supabase/functions/resolver-emusys-cpf-hash/index.ts |
 | `resolver_emusys_cpf_hmac_lote(p_cpfs_hmac text[])` | ORFA | DEFINER | sem consumidor conhecido |
+| `retry_sync_asaas_extrato_job(p_job_id uuid, p_worker_id uuid, p_error_code text, p_error_detail text, p_http_status integer, p_retry_after_seconds integer)` | ATIVA | DEFINER | edge:supabase/functions/sync-asaas-emusys/index.ts |
 | `salvar_whatsapp_caixa_admin(p_id integer, p_nome text, p_numero text, p_uazapi_url text, p_uazapi_token text, p_unidade_id uuid, p_webhook_url text, p_ativo boolean, p_funcao text, p_departamento text, p_provedor text, p_waha_url text, p_waha_session text, p_waha_api_key text)` | ATIVA | DEFINER | front:src/components/App/PreAtendimento/components/chat/CaixasManager.tsx |
 | `sol_hermes_caixa_enqueue(p_caixa_diario_id uuid, p_texto text)` | ATIVA | DEFINER | front:src/components/App/Administrativo/CaixaFinanceiro/CaixaWhatsAppPreview.tsx |
 | `sol_hermes_caixa_validate(p_caixa_diario_id uuid)` | ATIVA | DEFINER | front:src/components/App/Administrativo/CaixaFinanceiro/CaixaWhatsAppPreview.tsx |
@@ -1008,11 +1014,11 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `get_saude_syncs_emusys()` | ATIVA | DEFINER | front:src/hooks/useSaudeCrons.ts |
 | `get_unidade_usuario()` | SO-INTERNA | DEFINER | funcao:fn_realtime_aberto_ao_professor |
 | `get_user_unidade_id()` | ATIVA | DEFINER | front:src/components/App/Agenda/Chamada/ChamadaDrawer.tsx |
-| `get_user_unidade_ids()` | ATIVA | DEFINER | edge:supabase/functions/atualizar-faturas-aluno/index.ts, view:vw_absenteismo_aluno_canonica_v2, view:vw_alunos_sem_fatura_mes, view:vw_contratos_vencendo, view:vw_matriculas_ativas_sem_aluno_local, view:vw_radar_aluno_sinais_canonica_v2, +30 outros |
+| `get_user_unidade_ids()` | ATIVA | DEFINER | edge:supabase/functions/atualizar-faturas-aluno/index.ts, view:vw_absenteismo_aluno_canonica_v2, view:vw_alunos_sem_fatura_mes, view:vw_contratos_vencendo, view:vw_matriculas_ativas_sem_aluno_local, view:vw_radar_aluno_sinais_canonica_v2, +31 outros |
 | `get_vault_secret(secret_name text)` | ATIVA | DEFINER | edge:supabase/functions/ficha-criar-pessoa/index.ts, edge:supabase/functions/ficha-export/index.ts |
 | `hash_jsonb_canonico(p_payload jsonb)` | SO-INTERNA | INVOKER | funcao:aplicar_retificacao_relatorio_admin_mensal_renovacoes_v1, funcao:aplicar_retificacao_relatorio_comercial_matricula_tardia_v1, funcao:aplicar_retificacao_relatorio_comercial_mensal_v1, funcao:aplicar_retificacao_relatorio_gerencial_financeiro_v1, funcao:aplicar_retificacao_relatorio_gerencial_retencao_v1, funcao:capturar_relatorio_coordenacao_canonico_v2, +17 outros |
 | `introspect_schema_lamusic(table_names text[])` | ATIVA | DEFINER | edge:supabase/functions/bi-agent-lamusic/index.ts, edge:supabase/functions/bi-agent-lamusic/tools.ts |
-| `is_admin()` | ATIVA | DEFINER | front:src/components/App/Agenda/Chamada/ChamadaDrawer.tsx, edge:supabase/functions/atualizar-faturas-aluno/index.ts, view:vw_absenteismo_aluno_canonica_v2, view:vw_alunos_sem_fatura_mes, view:vw_contratos_vencendo, view:vw_disponibilidade_professores, +39 outros |
+| `is_admin()` | ATIVA | DEFINER | front:src/components/App/Agenda/Chamada/ChamadaDrawer.tsx, edge:supabase/functions/atualizar-faturas-aluno/index.ts, view:vw_absenteismo_aluno_canonica_v2, view:vw_alunos_sem_fatura_mes, view:vw_contratos_vencendo, view:vw_disponibilidade_professores, +40 outros |
 | `is_admin_usuario()` | SO-INTERNA | DEFINER | funcao:get_financeiro_espelho_status |
 | `la_os_banco_atual()` | ORFA | DEFINER | sem consumidor conhecido |
 | `la_os_banco_coletar_consumo()` | ORFA | DEFINER | sem consumidor conhecido |
@@ -1539,6 +1545,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_presenca_estado_publicacao_periodo_v2(p_unidade_id uuid, p_data_inicio date, p_data_fim date)` | ATIVA | DEFINER | view:vw_absenteismo_aluno_canonica_v2, view:vw_aluno_frequencia_canonica_v1, view:vw_radar_aluno_sinais_canonica_v2, funcao:get_presenca_ocorrencias_periodo_canonico_v2 |
 | `fn_presenca_estado_roster_lock_trigger_v2()` | ATIVA | DEFINER | trigger:aula_roster_sync_estado.trg_presenca_estado_roster_lock_v2 |
 | `fn_presenca_fecha_chamada(p_status_presenca text, p_respondido_por text)` | ATIVA | INVOKER | edge:supabase/functions/_shared/previsualizacao-reconciliacao-grade.ts, view:vw_presenca_pendencia, view:vw_presenca_slot_canonica_v1, funcao:app_registro_completo, funcao:fabio_aulas_candidatas, funcao:fn_sincronizar_gemeos_presenca, +3 outros |
+| `fn_presenca_fecha_chamada(p_status_presenca text, p_respondido_por text, p_emusys_registro_presenca text)` | ATIVA | INVOKER · 🔓 anon | edge:supabase/functions/_shared/previsualizacao-reconciliacao-grade.ts, view:vw_presenca_pendencia, view:vw_presenca_slot_canonica_v1, funcao:app_registro_completo, funcao:fabio_aulas_candidatas, funcao:fn_sincronizar_gemeos_presenca, +3 outros |
 | `fn_presenca_fila_proveniencia_rollout_v1()` | ATIVA | DEFINER | trigger:fila_relatorios_sol_hermes.trg_presenca_fila_proveniencia_rollout |
 | `fn_presenca_fonte_legivel(p_respondido_por text)` | ORFA | INVOKER | sem consumidor conhecido |
 | `fn_presenca_ocorrencia_canonica_escopada_v2(p_unidade_id uuid, p_data_inicio date, p_data_fim date)` | SO-INTERNA | INVOKER | funcao:fn_presenca_ocorrencias_escopo_interno_v2 |
@@ -1598,9 +1605,10 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `get_agenda_dia_v2_sem_cache_20260924(p_data date, p_unidade_id uuid)` | SO-INTERNA | DEFINER | funcao:get_agenda_dia_v2 |
 | `get_agenda_semana(p_data_inicio date, p_unidade_id uuid)` | LEGADO | INVOKER | existe versao maior: get_agenda_semana_v2 — sem consumidor conhecido |
 | `get_agenda_semana_v2(p_data_inicio date, p_unidade_id uuid)` | ATIVA | DEFINER | front:src/hooks/useAgendaSemana.ts |
+| `get_carteira_professor_fechamento_alunos_v1(p_professor_id integer, p_ano integer, p_mes integer, p_unidade_id uuid)` | ATIVA | DEFINER | front:src/lib/carteiraProfessorDetalheCanonica.ts |
 | `get_carteira_professor_periodo_canonica(p_ano integer, p_mes integer, p_unidade_id uuid, p_data_inicio date, p_data_fim date)` | SO-INTERNA | INVOKER | funcao:dash_prof_resumo_sem_cache_20260924, funcao:get_health_score_professor_v3_carteira_periodo, funcao:get_health_score_professor_v3_totais_carteira_canonica_v1, funcao:get_hs_prof_v3_segmentadas_agregadas_base_20260803, funcao:get_hs_prof_v3_segmentadas_agregadas_before_snapshot_20260804, funcao:get_kpis_professor_periodo_canonico_base_20260711, +5 outros |
 | `get_carteira_professor_periodo_composicao_v1(p_ano integer, p_mes integer, p_unidade_id uuid, p_data_inicio date, p_data_fim date)` | ATIVA | DEFINER | front:src/components/App/Professores/TabCarteiraProfessores.tsx, funcao:relatorio_coordenacao_carteira_v4 |
-| `get_carteira_professor_periodo_detalhe_canonico_v1(p_ano integer, p_mes integer, p_unidade_id uuid, p_data_inicio date, p_data_fim date)` | SO-INTERNA | INVOKER | funcao:get_carteira_professor_periodo_canonica, funcao:get_carteira_professor_periodo_composicao_v1, funcao:get_health_score_professor_v3_capacidade_diagnostico, funcao:hs_v3_segmentos_detalhe_base_canonica, funcao:kpis_turmas_canonicos_v2_sem_cache_20260925 |
+| `get_carteira_professor_periodo_detalhe_canonico_v1(p_ano integer, p_mes integer, p_unidade_id uuid, p_data_inicio date, p_data_fim date)` | ATIVA | INVOKER | front:src/lib/carteiraProfessorDetalheCanonica.ts, funcao:get_carteira_professor_periodo_canonica, funcao:get_carteira_professor_periodo_composicao_v1, funcao:get_health_score_professor_v3_capacidade_diagnostico, funcao:hs_v3_segmentos_detalhe_base_canonica, funcao:kpis_turmas_canonicos_v2_sem_cache_20260925 |
 | `get_carteira_professores(p_unidade_id uuid)` | ATIVA | INVOKER | front:src/components/App/Professores/TabCarteiraProfessores.tsx |
 | `get_contagem_trancados_professores(p_unidade_id uuid)` | ATIVA | INVOKER | front:src/components/App/Professores/TabCarteiraProfessores.tsx |
 | `get_dados_relatorio_coordenacao(p_unidade_id uuid, p_ano integer, p_mes integer)` | SO-INTERNA | INVOKER | funcao:gravar_snapshot_fechamento_mensal, funcao:preview_fechamento_mensal |
@@ -1825,7 +1833,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `trg_sincronizar_gemeos_presenca()` | ATIVA | DEFINER | trigger:aluno_presenca.trg_sincronizar_gemeos_presenca |
 | `update_config_health_score_professor_updated_at()` | ATIVA | INVOKER | trigger:config_health_score_professor.trigger_update_config_health_score_professor |
 | `update_pendencias_updated_at()` | ATIVA | INVOKER | trigger:inventario_pendencias.trg_pendencias_updated_at |
-| `upsert_presenca_emusys_bruta(p_aluno_id integer, p_aula_emusys_id integer, p_professor_id integer, p_unidade_id uuid, p_data_aula date, p_horario_aula time without time zone, p_status_origem text, p_curso_nome text, p_turma_nome text, p_sala_nome text, p_sincronizado_em timestamp with time zone)` | ATIVA | DEFINER | edge:supabase/functions/sync-presenca-emusys/index.ts |
+| `upsert_presenca_emusys_bruta(p_aluno_id integer, p_aula_emusys_id integer, p_professor_id integer, p_unidade_id uuid, p_data_aula date, p_horario_aula time without time zone, p_status_origem text, p_curso_nome text, p_turma_nome text, p_sala_nome text, p_sincronizado_em timestamp with time zone, p_registro_presenca text)` | ATIVA | DEFINER · 🔓 anon | edge:supabase/functions/sync-presenca-emusys/index.ts |
 | `validar_token_sync_grade_interno_v1(p_token text)` | ATIVA | DEFINER | edge:supabase/functions/sync-grade-futura-emusys/index.ts |
 | `validar_token_sync_presenca_interno_v1(p_token text)` | ATIVA | DEFINER | edge:supabase/functions/_deploy_escritor/index.ts, edge:supabase/functions/classificar-resposta-evasao/index.ts, edge:supabase/functions/enviar-agradecimento-evasao/index.ts, edge:supabase/functions/presenca-emusys-escritor/index.ts, edge:supabase/functions/processar-fila-repescagem-evasao/index.ts, edge:supabase/functions/sync-presenca-emusys/index.ts |
 | `vincular_professor_emusys_manual_v1(p_divergencia_id bigint, p_professor_id integer)` | ATIVA | DEFINER | front:src/hooks/useProfessoresDivergencias.ts |

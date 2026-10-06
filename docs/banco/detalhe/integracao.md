@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — integracao
 
-68 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+69 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## admin_conversas
 
@@ -1154,6 +1154,40 @@
 
 **Únicos:**
 - `orquestracao_locks_v1_pkey`
+
+## sync_asaas_extrato_queue
+
+> Fila serial da varredura do extrato Asaas (Emusys beta). convenio_id null = todos os ativos da unidade. Cede quando outra fila Emusys está rodando — rate limit é por token.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `unidade_codigo` | text | não |  |  |
+| `convenio_id` | bigint | sim |  |  |
+| `data_inicial` | date | não |  |  |
+| `data_final` | date | não |  |  |
+| `catalogos` | boolean | não | false |  |
+| `trigger_source` | text | não |  |  |
+| `priority` | integer | não | 100 |  |
+| `status` | text | não | 'pending'::text |  |
+| `attempt_count` | integer | não | 0 |  |
+| `max_retries` | integer | não | 3 |  |
+| `next_attempt_at` | timestamp with time zone | não | now() |  |
+| `lease_expires_at` | timestamp with time zone | sim |  |  |
+| `worker_id` | uuid | sim |  |  |
+| `last_http_status` | integer | sim |  |  |
+| `last_error_code` | text | sim |  |  |
+| `last_error_detail` | text | sim |  |  |
+| `last_retry_after_seconds` | integer | sim |  |  |
+| `started_at` | timestamp with time zone | sim |  |  |
+| `completed_at` | timestamp with time zone | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `sync_asaas_extrato_queue_active_range_uniq`
+- `sync_asaas_extrato_queue_one_running_uniq`
+- `sync_asaas_extrato_queue_pkey`
 
 ## sync_faturas_pagas_mes_queue
 
