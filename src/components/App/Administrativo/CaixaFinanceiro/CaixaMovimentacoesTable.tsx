@@ -11,6 +11,7 @@ import {
 import { cn } from '@/lib/utils';
 import { obterNomeCategoriaCaixa, type CaixaCategoria as CaixaCategoriaRecord } from '@/lib/caixaCategorias';
 import { formatarMoedaCaixa } from '@/lib/caixaFinanceiro';
+import { valoresIniciaisDoMovimento } from '@/lib/caixaMobile';
 import type { CaixaMovimentacao, NovaCaixaMovimentacaoInput } from '@/types/caixa';
 import { CaixaMovimentacaoForm } from './CaixaMovimentacaoForm';
 
@@ -164,18 +165,7 @@ export function CaixaMovimentacoesTable({
               description="Revise o lancamento e salve a alteracao."
               submitLabel="Salvar alteracoes"
               disabled={disabled}
-              initialValues={{
-                ambiente: movimentoEditando.ambiente,
-                tipo: movimentoEditando.tipo,
-                forma_pagamento: movimentoEditando.forma_pagamento,
-                categoria: movimentoEditando.categoria,
-                descricao: movimentoEditando.descricao,
-                valor: Number(movimentoEditando.valor),
-                cartao_modalidade: movimentoEditando.cartao_modalidade,
-                cartao_parcelas: movimentoEditando.cartao_parcelas,
-                link_pagamento: movimentoEditando.link_pagamento,
-                responsavel: movimentoEditando.responsavel || undefined,
-              }}
+              initialValues={valoresIniciaisDoMovimento(movimentoEditando)}
               categorias={categorias}
               onCreateCategoria={onCreateCategoria}
               onCancel={() => setMovimentoEditando(null)}

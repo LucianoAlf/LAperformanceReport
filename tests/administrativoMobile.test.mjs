@@ -456,11 +456,12 @@ test('só as abas COM TELA PRÓPRIA estão marcadas como portadas', () => {
   // medida em 919px no Consolidado (contra 4.198px da matriz) e 740px com
   // unidade escolhida. `lojinha` entrou em 29/09, com as cinco sub-abas
   // adaptadas (prova em `tests/lojinhaEstoque.test.mjs`); `farmer` também, com
-  // `DashboardFarmerMobile` (prova em `tests/farmerMobile.test.mjs`). As demais continuam
+  // `DashboardFarmerMobile` (prova em `tests/farmerMobile.test.mjs`); `caixa_financeiro`
+  // em 06/10, com `CaixaMobile` (prova em `tests/caixaMobile.test.mjs`). As demais continuam
   // sendo a tela do computador dentro do shell, e a faixa âmbar delas não
   // pode sair antes da tela existir.
-  assert.match(ABAS, /'\/app\/administrativo':\s*\['lancamentos',\s*'contratos',\s*'fideliza',\s*'lojinha',\s*'farmer'\]/);
-  for (const outra of ['caixa_financeiro', 'caixa_entrada']) {
+  assert.match(ABAS, /'\/app\/administrativo':\s*\['lancamentos',\s*'contratos',\s*'fideliza',\s*'lojinha',\s*'farmer',\s*'caixa_financeiro'\]/);
+  for (const outra of ['caixa_entrada']) {
     assert.doesNotMatch(
       ABAS,
       new RegExp(`'/app/administrativo':[^\\]]*'${outra}'`),

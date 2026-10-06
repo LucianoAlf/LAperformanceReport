@@ -331,7 +331,7 @@ export function CaixaMovimentacaoForm({
             disabled={disabled}
             onClick={() => setAmbiente(option)}
             className={cn(
-              'rounded-md px-3 py-2 text-xs font-medium transition-colors',
+              'rounded-md px-3 py-2 text-xs font-medium transition-colors max-lg:min-h-[44px]',
               ambiente === option ? 'bg-emerald-500 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
             )}
           >
@@ -651,7 +651,7 @@ export function CaixaMovimentacaoForm({
             </>
           )}
           {faturasEscolhidas.length === 0 && (
-            <label className="mt-2 flex items-start gap-2 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-[11px] text-slate-400">
+            <label className="mt-2 flex items-start gap-2 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-[11px] text-slate-400 max-lg:min-h-[44px]">
               <input
                 type="checkbox"
                 checked={semFaturaConfirmada}

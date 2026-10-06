@@ -40,6 +40,15 @@ No lançamento manual do caixa, depois de escolher uma fatura do aluno, o botão
 - **Rastro:** `automacao_log`, `evento = 'faturas_aluno_sob_demanda'`.
 - **Limitação:** a tela identifica o aluno pela fatura escolhida. Aluno sem nenhuma fatura no Report ainda não tem o botão.
 
+### Caixa no celular (Administrativo › Caixa, desde 06/10/2026, LAPE-32)
+
+No celular, a aba Caixa mostra o saldo do cofre em destaque e os lançamentos como um extrato. Lançar, editar, fechar e a mensagem do WhatsApp abrem em folhas com os **mesmos** componentes do computador.
+
+- **O número grande:** "No cofre agora" aparece só no caixa de hoje que está aberto. Num dia fechado, mostra o valor conferido no fechamento e, se houver, a diferença para o previsto. A regra está em `destaqueDoCofre` (`src/lib/caixaMobile.ts`).
+- **Excluir:** pede um segundo toque. No computador continua com um clique só, como sempre foi.
+- **Histórico:** lista própria, com a mesma fonte do computador (`useCaixaHistorico`). Tocar no dia abre aquele dia. Os lançamentos de um dia antigo aparecem depois de abri-lo, e não expandindo a linha.
+- **Nada novo no banco:** o celular chama os mesmos handlers da `CaixaFinanceiroTab`.
+
 ### Lote de cheques para depósito → caixa da Sol (desde 26/09/2026)
 
 A unidade posta no grupo do financeiro o PDF do lote ("2 CH - 20SETEMBRO2026 - C.GRANDE"). A Sol lê cada cheque, acha a parcela e lança o cheque no **caixa da Sol do dia** (forma `cheque`), pelo card e "pode" de sempre. Decisão do Alf (26/09): o Super Folha já puxa o caixa da Sol (`export-caixa-movimentacoes`); a Sol **não** chama o Super Folha.

@@ -129,13 +129,15 @@ test('as abas sem tela própria continuam avisando que são telas de computador'
   // `lojinha` entrou em 29/09 com as cinco sub-abas adaptadas (a prova de
   // cada uma está em `tests/lojinhaEstoque.test.mjs`). `farmer` entrou no
   // mesmo dia, com `DashboardFarmerMobile` (prova em
-  // `tests/farmerMobile.test.mjs`). Caixa e Entrada seguem sendo a tela do computador dentro do shell.
+  // `tests/farmerMobile.test.mjs`). `caixa_financeiro` entrou em 06/10 com
+  // `CaixaMobile` (prova em `tests/caixaMobile.test.mjs`). Entrada segue sendo a
+  // tela do computador dentro do shell.
   const linha = /'\/app\/administrativo':\s*\[([^\]]*)\]/.exec(abas);
   assert.ok(linha, 'a rota sumiu de ABAS_PORTADAS');
   const portadas = [...linha[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
   assert.deepEqual(
     portadas,
-    ['lancamentos', 'contratos', 'fideliza', 'lojinha', 'farmer'],
+    ['lancamentos', 'contratos', 'fideliza', 'lojinha', 'farmer', 'caixa_financeiro'],
     'aba declarada portada precisa de tela própria — colapsar a grade não basta',
   );
 });

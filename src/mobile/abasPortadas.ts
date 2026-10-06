@@ -41,9 +41,8 @@ export const ABAS_PORTADAS: Readonly<Record<string, readonly string[]>> = {
   // desktop, com a faixa âmbar. Marcar a rota inteira apagaria a faixa dele
   // junto — que é exatamente o erro cometido com Alunos em 14/09.
   '/app/agenda': ['professor', 'sala', 'chamada'],
-  // ⚠️ Farmer, Caixa e Entrada seguem abrindo a tela do computador com a
-  // faixa âmbar — e Caixa e Entrada são frentes próprias, com escrita de
-  // dinheiro e conversa de WhatsApp.
+  // ⚠️ Entrada segue abrindo a tela do computador com a faixa âmbar — é
+  // frente própria, com conversa de WhatsApp.
   //
   // ⚠️ `'lojinha'` entra com as CINCO sub-abas adaptadas (29/09/2026) e com
   // RECORTE declarado em Comissões: no celular só as carteiras (saldo e
@@ -68,7 +67,11 @@ export const ABAS_PORTADAS: Readonly<Record<string, readonly string[]>> = {
   // cada bloco do computador numa folha) e o botão de seção no lugar das duas
   // fileiras de abas. As outras 4 sub-abas da Farmer tiveram só ajuste de largura
   // e de alvo (ver `tests/farmerMobile.test.mjs`).
-  '/app/administrativo': ['lancamentos', 'contratos', 'fideliza', 'lojinha', 'farmer'],
+  //
+  // `'caixa_financeiro'` entrou em 06/10 com `CaixaMobile`: saldo do cofre em
+  // destaque, lançamentos como extrato, e lançar/editar/fechar/WhatsApp em
+  // folhas com os MESMOS componentes do computador (ver `tests/caixaMobile.test.mjs`).
+  '/app/administrativo': ['lancamentos', 'contratos', 'fideliza', 'lojinha', 'farmer', 'caixa_financeiro'],
   // Detalhe do evento (06/10/2026): só a Grade foi adaptada — Alunos, Palco, Bilheteria,
   // Revisão e Check-in seguem com a faixa.
   '/app/eventos/*': ['alunos', 'grade', 'palco', 'bilheteria', 'revisao', 'checkin'],
