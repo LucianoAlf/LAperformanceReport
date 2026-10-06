@@ -16,6 +16,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
 import { SecaoGoogleAds } from './SecaoGoogleAds';
+import { SecaoRetornoPixel } from './SecaoRetornoPixel';
 import { CanalOrigemBadge } from '@/components/shared/CanalOrigemBadge';
 
 // ============================================================================
@@ -95,6 +96,11 @@ const PRESETS: { value: Preset; label: string }[] = [
   { value: 'last_90d', label: '90 dias' },
   { value: 'maximum', label: 'Tudo' },
 ];
+
+// Mesmo período para o funil do LA Report (bloco "Retorno ao pixel"): null = todo o histórico.
+const DIAS_DO_PRESET: Record<Preset, number | null> = {
+  last_7d: 7, last_30d: 30, last_90d: 90, maximum: null,
+};
 
 // Meta e Google viram abas em vez de empilhar: as duas metades juntas passariam de
 // 1.500px de rolagem, e ninguém compara plataformas rolando. O período é
@@ -265,6 +271,13 @@ export function TrafegoPagoPage() {
   }, [insights]);
 
   const convertidos = leadsAtribuidos.filter(l => l.converteu === true).length;
+
+  // Retorno ao pixel: gasto por campanha (para o custo por matrícula) e o que o próprio Meta atribuiu.
+  const gastoPorCampanha = useMemo(
+    () => new Map(campanhas.map(c => [c.campaign_name ?? '', c.spendNum] as [string, number])),
+    [campanhas]
+  );
+  const comprasAtribuidasMeta = getAction(conta, 'offline_conversion.purchase');
 
   // ----- Grupo A: reach/frequência + rankings -----
   const alcance = conta?.reach ? Number(conta.reach) : 0;
@@ -646,6 +659,13 @@ export function TrafegoPagoPage() {
           </div>
         </div>
       )}
+
+      {/* Do anúncio à matrícula — o que o LA Report devolve ao PIXEL do Meta (LAPE-62) */}
+      <SecaoRetornoPixel
+        dias={DIAS_DO_PRESET[preset]}
+        gastoPorCampanha={gastoPorCampanha}
+        comprasAtribuidasMeta={comprasAtribuidasMeta}
+      />
 
       {/* Atribuição de leads */}
       <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 overflow-hidden">

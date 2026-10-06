@@ -54,6 +54,32 @@ edge** — este último protege o custo de mídia contra chamada direta à API.
 
 ⚠️ Métricas vivas (gasto) **nunca** são persistidas por lead — sempre consulta na hora.
 
+### Retorno ao pixel do Meta (desde 2026-10-06, LAPE-62)
+
+O LA Report **devolve ao Meta** quem fez a experimental e quem se matriculou. É **pelo pixel**
+("LA Music – Site e Matrículas", ID `1151255353279807`), casando a pessoa pelo **telefone em
+hash** (API de Conversões) — **não** pelo clique do anúncio. O retorno pelo código do clique
+(`ctwa_clid`) não é possível hoje: os números das Milas rodam no WAHA e não estão na Cloud API
+do WhatsApp.
+
+- **O que sai:** `StartTrial` ("Iniciar período de teste" = experimental feita) e `Purchase`
+  ("Compra" = matrícula, valor = passaporte + 12 mensalidades, **estimativa do contrato**, não o
+  que já foi pago). Vale para lead com marca de anúncio **ou** canal Instagram, Facebook ou
+  Status do WhatsApp. Kids e School vão no mesmo pixel (em 06/10: 53 de 64 experimentais e 23 de 29
+  matrículas eram Kids); desde 06/10 cada evento leva `content_category` = `Kids` ou `School`
+  (sem classificação, vai sem marca). Sem custo: a API de Conversões é gratuita.
+- **Quando:** a rotina `enviar-conversoes-meta-diario` roda **todo dia às 8h** (pg_cron). Cada lead
+  vai **uma vez** (`meta_conversoes`, unicidade por lead+tipo); prazo de 60 dias por evento.
+- **O que NÃO faz:** não muda a otimização dos conjuntos atuais (todos otimizam para
+  "conversas"). Entrega relatório de matrículas por campanha e público de matriculados no Meta.
+- **Na página (aba Meta, bloco "Do anúncio à matrícula"):** funil real por campanha (leads,
+  experimentais, matrículas, valor estimado, custo por matrícula), Kids × School, o que o Meta
+  ligou aos anúncios (`offline_conversion.purchase`) e a saúde do envio. Dados vêm da RPC
+  `trafego_meta_retorno_pixel` (só admin). Cada coluna conta pela própria data, e o custo por
+  matrícula é um **teto** (só matrícula com marca de anúncio; gasto da campanha inteira).
+- **Acesso ao pixel:** Gerenciador de Eventos, empresa **GRUPO L.A**, login da empresa. Link e
+  passo a passo na Tabela de Credenciais do Notion ("Meta Pixel - LA Music - Site e Matrículas").
+
 ### Google Ads na aba (desde 2026-09-11)
 
 ⚠️ **`google-ads-insights` ≠ `capturar-google-ads-diario`.** A primeira é proxy ao vivo e

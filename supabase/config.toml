@@ -184,6 +184,14 @@ verify_jwt = true
 # apaga, so se retrata item a item por outra chamada de API.
 verify_jwt = true
 
+[functions.enviar-conversoes-meta]
+# LAPE-62: devolve experimental e matricula ao PIXEL do Meta (API de Conversoes, telefone em hash).
+# So cron (pg_cron `enviar-conversoes-meta-diario`, 8h BRT) e operacao manual; nao ha chamador do app.
+# A autorizacao e feita DENTRO da funcao (x-sync-token ou service_role). Esta publicada com
+# verify_jwt=false; o cron manda tambem o Authorization, entao se um redeploy resetar para true
+# o gateway aceita o JWT e a funcao segue autenticando pelo x-sync-token. O padrao da funcao e DRY RUN.
+verify_jwt = false
+
 [functions.atualizar-inadimplencia-emusys]
 # Endpoint de compatibilidade do botao: navegador manda JWT e servidor pode mandar
 # x-sync-token, ambos validados dentro da funcao. Ele apenas encaminha para a fila unica
