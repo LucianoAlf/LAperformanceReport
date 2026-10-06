@@ -391,6 +391,9 @@ function detectarLojinhaProduto(texto) {
   {
     const mItem = t.match(/\b(palheta|baqueta|capotraste|afinador|cabo|correia|encordoamento|livro|apostila|camiseta|camisa|caderno|bolsa)(?:\s+de\s+([a-zA-ZÀ-ÿ]+))?/i);
     if (mItem) item = tituloNome(mItem[1] + (mItem[2] ? ' de ' + mItem[2] : ''));
+    // "caderno teclas" (Barra 06/10): o "de" some no ditado, o instrumento não.
+    const mSemDe = mItem && !mItem[2] && t.match(/\b(caderno|livro|apostila)\s+(teclas|teclado|piano|guitarra|bateria|baixo|canto|ukulele|partitura|cifras?)\b/i);
+    if (mSemDe) item = tituloNome(mSemDe[1] + ' de ' + mSemDe[2]);
   }
   if (!item) {
     const mCorda = t.match(/\bcorda(?:s)?(?:\s+de\s+([a-zA-ZÀ-ÿ]+))?/i);
@@ -997,7 +1000,7 @@ function descricaoParcelaCoerente(parcela, competencia) {
   return atual === correta ? descricao : descricao.replace(noTexto[0], correta);
 }
 
-function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competencia, parcela, confiancaBaixa, alunoNovoOrigem, responsavelFinanceiro, formaIncerta, cartaoModalidade, cartaoParcelas, multiplas, alunoViaPagador, pagadorNome, candidatosAluno, canonica, duplicata, quitacao, faturaIndisponivel, composto, bloqueiaLancamento, itemLojinha, semAlunoDeclarado, entidade, valorMaiorNaLegenda, valorConflito, valorBaixaConfianca, ingresso }) {
+function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competencia, parcela, confiancaBaixa, alunoNovoOrigem, responsavelFinanceiro, formaIncerta, cartaoModalidade, cartaoParcelas, multiplas, alunoViaPagador, pagadorNome, candidatosAluno, canonica, duplicata, quitacao, faturaIndisponivel, composto, bloqueiaLancamento, itemLojinha, semAlunoDeclarado, entidade, valorMaiorNaLegenda, valorConflito, valorBaixaConfianca, ingresso, descricao, sugestaoNome }) {
   // forma legível
   let formaTxt;
   if (forma === 'cartao') {
@@ -1021,6 +1024,10 @@ function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competenci
   blocos.push([
     ehSaidaPreview ? '*PAGAMENTO (saída)*' : '*RECEBIMENTO*',
     `${valor ? '*' + fmtBRL(valor) + '*' : '❓ valor não identificado'} · ${formaTxt}`,
+    // A descricao que vai para o banco aparece no card (06/10/2026): antes o card
+    // nao mostrava nada, a confirmacao mostrava outra coisa e o banco guardava uma
+    // terceira ("PG Semana Retirada"). Quem aprova precisa ver o que sera gravado.
+    ...(ehSaidaPreview && descricao ? [`📝 ${descricao}`] : []),
     ...(valorMaiorNaLegenda ? [`⚠️ A mensagem cita ${fmtBRL(valorMaiorNaLegenda)} — este card cobre só ${fmtBRL(Number(valor) || 0)}. Se é pagamento de mais de um aluno, manda cada um: *Nome — R$ valor*.`] : []),
     ...(!valor && valorConflito ? [`⚠️ A mensagem diz *${fmtBRL(valorConflito.legenda)}* e o comprovante mostra *${fmtBRL(valorConflito.comprovante)}*. Não vou escolher no chute.`] : []),
     ...(!valor && !valorConflito && valorBaixaConfianca ? ['⚠️ Não consegui ler o valor do comprovante com segurança.'] : []),
@@ -1040,6 +1047,14 @@ function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competenci
       bAluno.push(`Pagou: ${tituloNome(responsavelFinanceiro || pagadorNome)} _(responsável cadastrado)_`);
     }
     if (alunoNovoOrigem) bAluno.push(`🆕 ${alunoNovoOrigem} — ainda não matriculado, identificado pelo funil.`);
+    // Lojinha com grafia diferente do cadastro (06/10/2026): pergunta, não escolhe.
+    if (sugestaoNome && Array.isArray(sugestaoNome.candidatos) && sugestaoNome.candidatos.length === 1) {
+      bAluno.push(`⚠️ Não achei *${sugestaoNome.digitado}* no cadastro desta unidade. É *${sugestaoNome.candidatos[0]}*? Responde *sim* que eu ajusto o card.`);
+    } else if (sugestaoNome && Array.isArray(sugestaoNome.candidatos) && sugestaoNome.candidatos.length > 1) {
+      bAluno.push(`⚠️ Não achei *${sugestaoNome.digitado}* no cadastro desta unidade. Os mais parecidos: `
+        + sugestaoNome.candidatos.slice(0, 3).map((n) => `*${n}*`).join(', ')
+        + `${sugestaoNome.candidatos.length > 3 ? ' (e outros)' : ''} — não escolho por você. Me manda *aluno: Nome completo*.`);
+    }
     if (confiancaBaixa) bAluno.push('⚠️ Não tenho certeza de qual aluno é — confere o nome.');
   } else if (candidatosAluno && candidatosAluno.length) {
     bAluno.push(`❓ Não identifiquei${pagadorNome ? ` — o pagamento veio de *${tituloNome(pagadorNome)}*` : ''}.`);
@@ -1126,6 +1141,8 @@ function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competenci
   } else {
     const b = ['*LANÇAMENTO*', `Categoria: ${categoria || 'parcela'}`];
     if (categoria === 'lojinha' && itemLojinha) b.push(`Item: ${itemLojinha}`);
+    // A descricao que vai para o banco, igual a da confirmacao (fonte unica).
+    if (categoria === 'lojinha' && descricao) b.push(`📝 ${descricao}`);
     if (ingresso && ingresso.descricao) b.push(`Descrição: ${ingresso.descricao}`);
     if (competencia) b.push(`Competência: ${competencia}`);
     if (faturaIndisponivel) b.push('⚠️ Não consegui confirmar a fatura na fonte oficial agora — não vou lançar com *pode* até confirmar.');
@@ -1141,7 +1158,13 @@ function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competenci
 
   // ---- o que eu preciso pra lançar
   const semAluno = !aluno && !!(candidatosAluno && candidatosAluno.length || pagadorNome);
-  if (bloqueiaLancamento) {
+  const _sugestaoAberta = !!(sugestaoNome && Array.isArray(sugestaoNome.candidatos) && sugestaoNome.candidatos.length);
+  if (_sugestaoAberta && !bloqueiaLancamento) {
+    // o "pode" fica travado ate o aluno se resolver — o card nao convida a ele
+    fecho = sugestaoNome.candidatos.length === 1
+      ? `👉 Primeiro o aluno: é *${sugestaoNome.candidatos[0]}*? Responde *sim* (ou *aluno: Nome completo*). Depois disso eu peço o *pode*.`
+      : '👉 Primeiro o aluno: me manda *aluno: Nome completo*. Depois disso eu peço o *pode*.';
+  } else if (bloqueiaLancamento) {
     // O gate deterministico ja recusa o `pode`; o renderer nao pode terminar
     // convidando a equipe a executar uma aprovacao que ele mesmo vai negar.
     fecho = '👉 Me explica a divisão/curso correto antes de lançar.';
@@ -2316,26 +2339,88 @@ function _compradorDeclaradoLojinha(texto) {
   return nome && nome.split(/\s+/).length >= 2 ? nome : null;
 }
 
+// 🔴 DESCRICAO DA SAIDA = O QUE A PESSOA ESCREVEU SOBRE O GASTO (06/10/2026).
+//
+// Caso Vitoria/Recreio 05/10: foto do cupom + "Compra de 3 pós de café e 3 de
+// açúcar\nRetirada do caixa\nR$91,40 - dinheiro". O grupo leu "Lancei a saída…
+// · Compra de pós de café e de açúcar Retirada do caixa" (era o campo ALUNO,
+// lixo do `_alunoFromCaption`), o banco gravou "PG Semana Retirada" e o
+// fechamento mostrou isso. A ADM corrigia a mao no report TODA vez.
+//
+// Duas fontes de verdade causavam isso: esta funcao (ditado por texto) e um
+// bloco copiado no caminho da midia — e ambos jogavam fora a frase inteira
+// quando ela continha a palavra da categoria ("retirada"), alem de arrancar
+// "de"/"do" e deixar o texto ilegivel. Agora e UMA funcao, usada pelo card,
+// pela confirmacao e pelo payload do banco.
+//
+// Regra: tira so o que nao descreve o gasto — valor (R$…), forma de pagamento,
+// mencoes (@…), e trechos que sao SO rotulo ("Retirada do caixa", "saída em
+// dinheiro", "PG segurança semana 25/08"). O resto fica como a pessoa escreveu
+// (acento, preposicao, numero). Sem nada util: `PG Semana <Categoria>`, como antes.
+// ⚠️ "PG semana <cat>" escrito pela pessoa continua no formato antigo
+//    ("PG Semana Seguranca", "PG Semana Despesa - segurança"): e a convencao da
+//    equipe para o pagamento semanal (Mayra/CG 25/08, Jhon/CG 09/09).
+// ⚠️ Lookaround Unicode, nunca `\b`: em JS `\b` e ASCII e parte "saída" em
+//    "saí"+"da" (Mayra/CG 25/08).
+const _semAcentoDesc = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+// palavras que, sozinhas, so ROTULAM a saida (nao dizem com o que se gastou)
+const _ROTULO_SAIDA_DESC = new Set(('teve houve tivemos saida saidas retirada retiradas retirado retirei sangria sangrias '
+  + 'gasto gastos despesa despesas compra uma um hoje pagamento pagamentos pg pgto pago paga semanal semana '
+  + 'comprovante recibo cupom nota fiscal foi no na nos nas de do da dos das em o a os as e com caixa cofre '
+  + 'para pra pro valor referente ref sol segue aqui lancar lanca lancei pode dinheiro especie pix cartao '
+  + 'credito debito transferencia').split(' '));
+// o que pode ser podado nas PONTAS de um trecho util ("Retirada do caixa para
+// compra de café" -> "compra de café"; "café retirada do caixa" -> "café")
+const _PONTA_SAIDA_DESC = new Set(('teve houve tivemos uma um saida saidas retirada retiradas retirado retirei sangria '
+  + 'sangrias do da de dos das no na nos nas em caixa cofre para pra pro hoje foi referente ref valor sol e com '
+  + 'segue aqui').split(' '));
+const _PG_SEMANA_DESC = new Set(['pg', 'pgto', 'pagamento', 'semana', 'semanal']);
+
 function _descricaoSaidaTexto(texto, categoria) {
   const cat = String(categoria || '').toLowerCase();
-  let t = bodyLimpo(texto)
-    .replace(/^sol\s*[,!?:-]?\s*/i, ' ')
-    .replace(/r\$\s*[\d.,]+/ig, ' ')
-    // ANTES da lista abaixo, e com lookaround Unicode em vez de \b: "\b" em JS e ASCII,
-    // entao em "saida" acentuada ele ve fronteira entre "sai" e "da" e o "\bda\b" da
-    // lista arranca o miolo da palavra. Sobrava "sai" na descricao (Mayra/CG 25/08).
-    .replace(/(?<!\p{L})(teve|houve|tivemos|sa[íi]da|retirada|sangria|gasto|despesa|uma?|hoje)(?!\p{L})/giu, ' ')
-    .replace(/\b(pagamento|pg|semanal|semana|comprovante|recibo|dinheiro|pix|cart[ãa]o|transfer[êe]ncia|foi|no|na|de|do|da|em)\b/ig, ' ')
-    .replace(/[^\p{L}\d\s./-]/gu, ' ')
-    // hifen que sobrou depois de tirar as palavras em volta ("dinheiro - PG seguranca")
-    .replace(/(^|\s)-+(?=\s|$)/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (!t || t.length < 3) return `PG Semana ${cap(cat)}`;
-  // sem normalizar acento, "segurança" no texto nunca casa com "seguranca" do enum e a
-  // categoria aparece duas vezes na descricao do caixa.
-  const semAcento = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  return `PG Semana ${cap(cat)}${semAcento(t).includes(semAcento(cat)) ? '' : ' - ' + t}`;
+  const fallback = `PG Semana ${cap(cat)}`;
+  const bruto = bodyLimpo(texto);
+  if (!bruto) return fallback;
+  const catTok = new Set(_semAcentoDesc(cat).split(/[^a-z0-9]+/).filter(Boolean));
+  const norm = (tok) => _semAcentoDesc(tok).replace(/[^\p{L}\p{N}\/]/gu, '');
+  const ehData = (n) => /^\d+(?:[\/.-]\d+)*$/.test(n);
+  const ehRotulo = (n) => !n || _ROTULO_SAIDA_DESC.has(n) || catTok.has(n) || ehData(n);
+  const aparar = (s) => s.replace(/^[\s\-–—:,.;]+|[\s\-–—:,;]+$/g, '').trim();
+  const pgSemana = /(?<!\p{L})(?:pg|pgto|pagamento)(?!\p{L})/iu.test(bruto)
+    && /(?<!\p{L})seman(?:a|al)(?!\p{L})/iu.test(bruto);
+
+  const trechos = bruto
+    .replace(/(^|\n)\s*@?sol\s*[,!?:-]?\s*/gi, '$1')
+    .split(/\r?\n+|\s+[-–—|·;]+\s+|\s*[|·;]\s*/)
+    .map((seg) => String(seg || '')
+      .replace(/@\d{5,}/g, ' ')
+      .replace(/r\$\s*[\d.,]*\d/gi, ' ')
+      .replace(/(?<![\p{L}\p{N}])\d+(?:[.,]\d{1,2})?\s*reais(?!\p{L})/giu, ' ')
+      .replace(/(?<![\p{L}\p{N}.,])\d{1,3}(?:\.\d{3})*,\d{2}(?![\p{N}])/gu, ' ')
+      .replace(/(?<!\p{L})(?:(?:em|no|na|via|pelo|pela)\s+)?(?:dinheiro|esp[ée]cie|pix|cart[ãa]o(?:\s+de)?(?:\s+(?:cr[ée]dito|d[ée]bito))?|transfer[êe]ncia)(?!\p{L})/giu, ' ')
+      .replace(/[^\p{L}\p{N}\s.,:\/()%+&'"-]/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim())
+    .map((seg) => {
+      const toks = seg.split(' ').filter(Boolean);
+      if (!toks.some((t) => !ehRotulo(norm(t)))) return '';           // trecho so de rotulo
+      const poda = (t) => { const n = norm(t); return !n || _PONTA_SAIDA_DESC.has(n) || catTok.has(n); };
+      while (toks.length && poda(toks[0])) toks.shift();
+      while (toks.length && poda(toks[toks.length - 1])) toks.pop();
+      return aparar(toks.join(' '));
+    })
+    .filter((seg) => seg.length >= 2);
+
+  let desc = trechos.join(' - ');
+  if (pgSemana) {
+    // "PG Semana <Cat>" ja diz pg/semana/categoria: o complemento nao repete
+    desc = aparar(desc.split(' ').filter((t) => {
+      const n = norm(t); return n && !_PG_SEMANA_DESC.has(n) && !catTok.has(n) && !ehData(n);
+    }).join(' '));
+    return desc.length >= 2 ? `${fallback} - ${desc}`.slice(0, 160) : fallback;
+  }
+  if (desc.length < 3) return fallback;
+  return (desc.charAt(0).toUpperCase() + desc.slice(1)).slice(0, 160);
 }
 
 function _pareceTesteLancarApagar(texto) {
@@ -2417,6 +2502,106 @@ function _vendedorRotulado(body) {
   if (!m) return null;
   const nome = String(m[1] || '').split(/[\n,;|]/)[0].replace(/\s+/g, ' ').trim();
   return nome || null;
+}
+
+// 🔴 VENDEDOR SEM DOIS-PONTOS (Barra, 06/10/2026 12:05). Foto do PagBank + legenda
+//    "Venda caderno teclas para o aluno <Aluno>\n\nVenda <Professor>\n\nDébito: R$ 100".
+//    O modelo listou as DUAS pessoas como pagamentos, o portão do multi-aluno
+//    abriu e a Sol respondeu "a soma dos alunos não fecha" para UMA venda de
+//    R$ 100. "Venda <Nome>" é a convenção da equipe para QUEM VENDEU (comissão) —
+//    precedente manual de 02/10: "... para aluna X venda prof Y crédito 1x".
+//
+// Esta função só LÊ o texto: devolve os nomes que vêm depois de "venda",
+// "venda prof", "vendido por", "vendedor(a)", "vendeu". Nenhum deles vira
+// vendedor por aqui — quem confirma é o cadastro de professores/colaboradores
+// ATIVOS (`vendedorDaEquipe`, dentro do handler). Nome que não casa = não há
+// vendedor, e o comportamento antigo vale.
+// ⚠️ `explicito`: rótulo inequívoco de vendedor ("vendedor", "vendido por",
+//    "vendeu", "prof", ou "venda:" com dois-pontos). "Venda <Nome>" solto só
+//    vale quando a mesma mensagem declara OUTRO comprador.
+const _PARADA_VENDEDOR = new Set(('para pra pro pros pras no na nos nas em com ao aos a o os as e ou aluno aluna alunos alunas '
+  + 'r reais real valor total cartao debito credito pix dinheiro especie transferencia boleto hoje ontem '
+  + 'parcelado parcelada vista x foi feita feito realizada realizado').split(' '));
+const _CONECTOR_VENDEDOR = new Set(['de', 'da', 'do', 'das', 'dos']);
+function _vendedoresCitados(texto) {
+  const out = [];
+  const semAc = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const re = /(?<!\p{L})(vendid[oa]\s+por|vendedor(?:a)?|vendeu|venda)(?!\p{L})\s*([:\-–—]?)\s*(?:(?:pel[oa]|d[oa])\s+)?(?:(prof(?:essor(?:a)?)?|profª)(?!\p{L})\.?\s*)?([\p{L}'’][\p{L}'’.\s]{1,80})/giu;
+  for (const linha of String(bodyLimpo(texto) || '').split(/\r?\n/)) {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(linha)) !== null) {
+      // o trecho do nome pode engolir um "venda prof X" seguinte: a busca continua
+      // logo depois do rótulo, nunca depois do trecho inteiro
+      re.lastIndex = m.index + m[1].length;
+      const rotulo = semAc(m[1]);
+      const prof = !!m[3];
+      const toks = String(m[4] || '').split(/\s+/).map((t) => t.replace(/[.]+$/, '')).filter(Boolean);
+      const nome = [];
+      for (let i = 0; i < toks.length && nome.length < 6; i++) {
+        const n = semAc(toks[i]).replace(/[^a-z'’]/g, '');
+        if (!n) break;
+        if (_CONECTOR_VENDEDOR.has(n)) { if (!nome.length) break; nome.push(toks[i].toLowerCase()); continue; }
+        if (_PARADA_VENDEDOR.has(n) || PRODUTO_LOJINHA_RE.test(n) || n.length < 2) break;
+        nome.push(toks[i]);
+      }
+      while (nome.length && _CONECTOR_VENDEDOR.has(semAc(nome[nome.length - 1]))) nome.pop();
+      if (!nome.length) continue;
+      const explicito = prof || rotulo !== 'venda' || !!m[2];
+      out.push({ declarado: tituloNome(nome.join(' ')), explicito, prof });
+    }
+  }
+  return out;
+}
+
+// O nome DITADO casa com o nome do CADASTRO da equipe? Mesmo primeiro nome e
+// todo token ditado presente no cadastro (sem acento, sem conectivo). "Rafael
+// Montenegro" casa "Rafael Montenegro Sales Pinto"; "Rafael Moreira" não casa.
+// Fuzzy aqui, não: vendedor errado é comissão errada.
+function _casaNomeEquipe(declarado, cadastro) {
+  const toks = (s) => _normConf(String(s || '')).replace(/[^a-z\s]/g, ' ').split(/\s+/)
+    .filter((t) => t && !_CONECTOR_VENDEDOR.has(t) && t !== 'e');
+  const d = toks(declarado).filter((t) => t.length >= 2);
+  const c = toks(cadastro);
+  if (!d.length || !c.length || d[0] !== c[0]) return false;
+  const set = new Set(c);
+  return d.every((t) => set.has(t));
+}
+
+// Descrição de lojinha: UMA função para card, confirmação e banco.
+function descricaoLojinha(item, aluno, vendedor) {
+  const base = `Lojinha/Venda - ${item || 'Produto'}${aluno ? ' - ' + aluno : ''}`;
+  if (!vendedor || !vendedor.declarado) return base;
+  return `${base} · venda ${vendedor.prof ? 'prof. ' : ''}${vendedor.declarado}`;
+}
+
+// Equipe ATIVA (professores + colaboradores) — só leitura, para reconhecer
+// vendedor. Professor aparece nas duas tabelas com o mesmo nome: é UMA pessoa.
+async function listarEquipeAtiva(env = carregarEnv()) {
+  const [profs, colabs, mesclados] = await Promise.all([
+    _restGetJson('professores?ativo=eq.true&select=id,nome,nome_preferido', env),
+    _restGetJson('colaboradores?ativo=eq.true&select=nome,tipo', env),
+    // 06/10 (Alf): "venda prof Gabriel Leão" — "Gabriel Leão" é o nome do Emusys do
+    // Recreio, registro mesclado no professor ativo. Apelido e registro mesclado contam
+    // como nomes da MESMA pessoa; quem decide é o cadastro, não o texto.
+    _restGetJson('professores?mesclado_em_professor_id=not.is.null&select=nome,mesclado_em_professor_id', env).catch(() => []),
+  ]);
+  const apelidos = new Map();
+  for (const m of Array.isArray(mesclados) ? mesclados : []) {
+    if (!m || !m.nome || m.mesclado_em_professor_id == null) continue;
+    const k = String(m.mesclado_em_professor_id);
+    apelidos.set(k, [...(apelidos.get(k) || []), String(m.nome)]);
+  }
+  const out = [];
+  for (const p of Array.isArray(profs) ? profs : []) {
+    if (!p || !p.nome) continue;
+    const nomes = [String(p.nome), p.nome_preferido ? String(p.nome_preferido) : null, ...(apelidos.get(String(p.id)) || [])].filter(Boolean);
+    out.push({ nome: String(p.nome), prof: true, match: nomes.join(' ') });
+  }
+  for (const c of Array.isArray(colabs) ? colabs : []) {
+    if (c && c.nome) out.push({ nome: String(c.nome), prof: String(c.tipo || '').toLowerCase() === 'professor' });
+  }
+  return out;
 }
 
 function _mesmaPessoa(a, b) {
@@ -3774,7 +3959,7 @@ function categoriaEhSaida(categoria) {
   return ['seguranca', 'despesa', 'retirada', 'troco'].includes(String(categoria || '').toLowerCase());
 }
 
-function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, finalizarPreviewV3Fn = finalizarPreviewV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, sugerirAlunoFn = sugerirAlunoParecidoV1, resolverEnvelopeFn = resolverEnvelopeCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, identificarAlunoNovoFn = identificarAlunoNovo, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, faturasQuitacaoFn = resolverFaturasQuitacao, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, chequesFn = undefined, ingressosConfigFn = undefined, abrirPreviewFn = undefined, log = () => {}, governanceFn = () => Promise.resolve({ ok: false, disabled: true }), janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
+function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, lancarLoteFn = lancarRecebimentoLote, lancarSaidaFn = lancarSaidaCaixa, buscarCorrecaoFn = buscarLancamentoParaCorrecao, buscarMovimentosFn = buscarMovimentosCaixa, corrigirMovimentoFn = corrigirMovimentoCaixa, estornarMovimentoFn = estornarMovimentoCaixa, registrarPreviewV3Fn = registrarPreviewV3, registrarApprovalV3Fn = registrarApprovalV3, finalizarPreviewV3Fn = finalizarPreviewV3, visaoFn = extrairComprovanteVisao, ocrFn = ocrLocal, interpretarFn = interpretarComprovante, interpretarMultiFn = interpretarMultiAluno, resolverMultiFn = resolverPagamentoItensV1, sugerirAlunoFn = sugerirAlunoParecidoV1, equipeFn = listarEquipeAtiva, resolverEnvelopeFn = resolverEnvelopeCaixaV1, casarFn = casarParcela, responsavelFn = buscarResponsavel, pagadorFn = identificarPorPagador, identificarAlunoNovoFn = identificarAlunoNovo, canonicaFn = casarParcelaCanonica, faturasMesFn = buscarCompostoFaturasMes, faturasQuitacaoFn = resolverFaturasQuitacao, duplicataFn = jaLancadoHoje, identidadeFn = identificarPessoa, resumoFn = resumoDoDia, classificarCorrecaoFn = classificarCorrecaoPendencia, listarPreviewsAbertosFn = listarPreviewsAbertosV3, rotearV4Fn = rotearMensagemV4, chequesFn = undefined, ingressosConfigFn = undefined, abrirPreviewFn = undefined, log = () => {}, governanceFn = () => Promise.resolve({ ok: false, disabled: true }), janelaMs = 30 * 60 * 1000, dryRun = (process.env.SOL_CAIXA_DRYRUN === '1') }) {
   // Caixa fechado não é beco sem saída (CG 03/10): quem mandou o comprovante
   // recebe ali mesmo o card OFICIAL de abertura. Só cria preview; abrir continua
   // exigindo "pode" atual nesse card, e o comprovante guardado exige outro "pode".
@@ -5114,12 +5299,16 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     // "Corda - Kailane" em 31/08).
     let idEnviou = null;
     try { idEnviou = await identidadeFn(event.senderPhone, grupo.unidade_id); } catch (e) { /* melhor esforço */ }
+    // "Venda <Professor>" (06/10/2026): mesmo reconhecimento do caminho de foto.
+    const vendedorEquipe = await vendedorDaEquipe(texto, { chatId: event.chatId,
+      comprador: _compradorDeclaradoLojinha(texto) });
     {
       const vendedor = _vendedorRotulado(texto);
       const remetente = idEnviou && idEnviou.identificado ? idEnviou.nome : null;
       const declarado = _alunoRotulado(texto);
       const ehDeclarado = !!(aluno && declarado && _mesmaPessoa(declarado, aluno));
-      if (aluno && ((vendedor && _mesmaPessoa(aluno, vendedor)) || (!ehDeclarado && remetente && _mesmaPessoa(aluno, remetente)))) {
+      if (aluno && ((vendedor && _mesmaPessoa(aluno, vendedor)) || _ehOVendedor(aluno, vendedorEquipe)
+          || (!ehDeclarado && remetente && _mesmaPessoa(aluno, remetente)))) {
         log({ acao: "aluno_descartado_nao_e_aluno", chatId: event.chatId, trilho: "agent_first_lojinha" });
         aluno = null;
       }
@@ -5133,16 +5322,21 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
         }
       } catch (e) { /* melhor esforço: o nome declarado segue */ }
     }
-    const descricao = `Lojinha/Venda - ${itemLojinha}${aluno ? ' - ' + aluno : ''}`;
+    const descricao = descricaoLojinha(itemLojinha, aluno, vendedorEquipe);
+    // Nome que o cadastro não confirmou (rr acima não trocou): mesma pergunta do caminho de foto.
+    const sugestaoLojinha = aluno
+      ? await sugestaoNomeLojinha({ chatId: event.chatId, unidadeId: grupo.unidade_id, aluno, vendedor: vendedorEquipe })
+      : null;
     const textoCard = montarPreview({ unidadeNome: grupo.nome, valor, forma, categoria: 'lojinha', aluno,
       responsavelFinanceiro, cartaoModalidade, cartaoParcelas, formaIncerta: false, multiplas: false,
-      itemLojinha });
+      itemLojinha, descricao, sugestaoNome: sugestaoLojinha });
     const origem = origemMessageId || event.messageId;
     const pendencia = {
       previewId: null, unidade_id: grupo.unidade_id, nome: grupo.nome,
       valor, forma, categoria: 'lojinha', aluno, competencia: null, descricao,
       responsavelFinanceiro, cartaoModalidade, cartaoParcelas, formaIncerta: false, canonica: null,
       itemLojinha, origem, idemKey: `${event.chatId}:${origem}:agent-first-lojinha`,
+      vendedor: vendedorEquipe, sugestaoNomeLojinha: sugestaoLojinha,
       enviadoPor: nomeParaCarimbo(idEnviou, event), ts: agora, agentFirstEnvelope: envelope,
     };
     const seguro = await prepararEPublicarPreviewV4({
@@ -5415,6 +5609,68 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     return { indice, digitado: String(itens[indice].aluno_nome).trim(), candidatos };
   }
 
+  // ---- VENDEDOR DA EQUIPE (06/10/2026, Barra) --------------------------------
+  // "Venda <Nome>" / "venda prof <Nome>" / "vendido por <Nome>" só vira VENDEDOR
+  // quando o nome casa com UMA pessoa ativa de professores/colaboradores e não é
+  // o comprador. Sem cadastro, sem vendedor: nada muda (o caminho antigo vale).
+  let _equipeCache = null;
+  async function _equipeAtiva() {
+    const agora = Date.now();
+    if (_equipeCache && agora - _equipeCache.ts < 10 * 60 * 1000) return _equipeCache.lista;
+    const lista = await equipeFn();
+    if (Array.isArray(lista)) _equipeCache = { ts: agora, lista };
+    return Array.isArray(lista) ? lista : [];
+  }
+  async function vendedorDaEquipe(texto, { chatId = null, comprador = null } = {}) {
+    const citados = _vendedoresCitados(texto);
+    if (!citados.length) return null;
+    let equipe = [];
+    try { equipe = await _equipeAtiva(); }
+    catch (e) { log({ acao: 'vendedor_equipe_erro', chatId, erro: String(e && e.message) }); return null; }
+    for (const c of citados) {
+      if (comprador && _mesmaPessoa(c.declarado, comprador)) continue;
+      // "Venda Fulano" solto, sem comprador declarado, pode ser o próprio comprador.
+      if (!c.explicito && !comprador) continue;
+      const pessoas = new Map();
+      for (const e of equipe) {
+        if (!e || !e.nome || !_casaNomeEquipe(c.declarado, e.match || e.nome)) continue;
+        const k = _normConf(e.nome).replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+        const ant = pessoas.get(k);
+        pessoas.set(k, { nome: e.nome, prof: !!(e.prof || (ant && ant.prof)) });
+      }
+      if (pessoas.size !== 1) {
+        if (pessoas.size > 1) log({ acao: 'vendedor_ambiguo', chatId, candidatos: pessoas.size });
+        continue;
+      }
+      const [p] = [...pessoas.values()];
+      if (comprador && _mesmaPessoa(p.nome, comprador)) continue;
+      const v = { declarado: c.declarado, nome: p.nome, prof: !!(p.prof || c.prof) };
+      log({ acao: 'vendedor_reconhecido', chatId, prof: v.prof });
+      return v;
+    }
+    return null;
+  }
+  const _ehOVendedor = (nome, v) => !!(v && nome && (_mesmaPessoa(nome, v.declarado) || _mesmaPessoa(nome, v.nome)));
+
+  // Lojinha com aluno digitado diferente do cadastro: a mesma RPC da sugestão do
+  // multi (só leitura). 1 candidato = pergunta "É X?"; 2+ = lista sem escolher.
+  // Qualquer falha = null (o card sai como sempre saiu).
+  async function sugestaoNomeLojinha({ chatId, unidadeId, aluno, vendedor }) {
+    if (!aluno || !nomePlausivel(aluno)) return null;
+    let res = null;
+    try { res = await sugerirAlunoFn({ unidade_id: unidadeId, nome: aluno }); }
+    catch (e) { log({ acao: 'sugestao_nome_erro', chatId, erro: String(e && e.message), trilho: 'lojinha' }); return null; }
+    if (!res || res.ok !== true || !Array.isArray(res.candidatos)) return null;
+    const dig = _nomeNorm(aluno);
+    const candidatos = res.candidatos
+      .map((c) => String((c && c.aluno_nome) || '').trim())
+      .filter((n) => n && _nomeNorm(n) !== dig && !_ehOVendedor(n, vendedor))
+      .filter((n, i, arr) => arr.findIndex((x) => _nomeNorm(x) === _nomeNorm(n)) === i)
+      .slice(0, 4);
+    log({ acao: 'sugestao_nome_candidatos', chatId, trilho: 'lojinha', candidatos: candidatos.length });
+    return candidatos.length ? { digitado: String(aluno).trim(), candidatos } : null;
+  }
+
   // A resposta "sim" à pergunta "É Fulana?". Reaproveita a revisão multi que já
   // existe (`pendentes`, mesma janela, mesmo "descarta"); a pergunta só guarda
   // o item e o nome sugerido. Devolve o alvo, `{ outroAutor }` ou null.
@@ -5427,14 +5683,17 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     if (!event || event.hasMedia) return null;
     const txt = bodyLimpo(event.body);
     if (!txt || txt.length > 40 || !_ehSimDeSugestao(txt)) return null;
+    // Lojinha (06/10/2026): o card singular com "É X?" e UM candidato também
+    // espera este "sim" — mesma régua de autor, mesma janela.
     const abertas = limparVelhos(event.chatId, agora)
-      .filter((p) => p.tipoOperacao === 'manual_review_multi_student' && p.sugestaoNome);
+      .filter((p) => (p.tipoOperacao === 'manual_review_multi_student' && p.sugestaoNome)
+        || (!p.tipoOperacao && p.sugestaoNomeLojinha && p.sugestaoNomeLojinha.candidatos.length === 1));
     if (!abertas.length) return null;
     const falante = String(event.senderPhone || event.senderId || '');
     const doAutor = (p) => !!falante && [p.autorPhone, p.autorId].some((x) => x && String(x) === falante);
     if (event.quotedMessageId) {
       const q = String(event.quotedMessageId);
-      const alvo = abertas.find((p) => p.sugestaoNome.msgId === q
+      const alvo = abertas.find((p) => (p.sugestaoNome && p.sugestaoNome.msgId === q) || p.previewId === q
         || (Array.isArray(p.msgIds) && p.msgIds.includes(q)) || p.origem === q) || null;
       if (!alvo) return null;
       return doAutor(alvo) ? { alvo } : { alvo, outroAutor: true };
@@ -5452,6 +5711,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       return { acao: 'sugestao_nome_sim_de_outro_autor' };
     }
     const grp = grupos[event.chatId];
+    if (alvo.sugestaoNomeLojinha) return confirmarSugestaoLojinha(event, alvo, grp, agora);
     const sug = alvo.sugestaoNome;
     const intent = sug.intent || {};
     const itens = Array.isArray(intent.itens) ? intent.itens : [];
@@ -5466,6 +5726,41 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     return abrirFluxoMultiAluno({ event, grupo: grp, textoFonte: alvo.multiTexto,
       textoHumano: alvo.multiTextoHumano, intent: intentConfirmado, agora,
       origemMessageId: alvo.origem, evidenceEnvelope: alvo.evidenceEnvelope || null });
+  }
+
+  // "sim" do autor ao "É X?" da lojinha: troca o aluno pelo do CADASTRO, refaz
+  // descrição e responsável, e manda o card de novo. Só o "pode" lança.
+  async function confirmarSugestaoLojinha(event, alvo, grp, agora) {
+    if (!grp) return null;
+    const sug = alvo.sugestaoNomeLojinha;
+    const sugerido = sug.candidatos[0];
+    alvo.sugestaoNomeLojinha = null;
+    alvo.aluno = sugerido;
+    let responsavelFinanceiro = null;
+    try {
+      const rr = await responsavelFn(alvo.unidade_id, sugerido);
+      if (rr && rr.aluno_nome && !_mesmaPessoa(rr.aluno_nome, sugerido)) {
+        log({ acao: 'responsavel_rejeitado_nome_diverge', chatId: event.chatId });
+      } else if (rr && rr.responsavel_nome && !mesmaPessoa(rr.responsavel_nome, sugerido)) responsavelFinanceiro = rr.responsavel_nome;
+    } catch (e) { /* melhor esforço */ }
+    alvo.responsavelFinanceiro = responsavelFinanceiro;
+    alvo.descricao = descricaoLojinha(alvo.itemLojinha, sugerido, alvo.vendedor || null);
+    alvo.ts = agora;
+    let texto = 'Ajustei o aluno para o nome do cadastro:\n\n' + montarPreview({
+      unidadeNome: alvo.nome, valor: alvo.valor, forma: alvo.forma, categoria: alvo.categoria,
+      aluno: alvo.aluno, competencia: alvo.competencia, responsavelFinanceiro,
+      formaIncerta: alvo.formaIncerta, cartaoModalidade: alvo.cartaoModalidade, cartaoParcelas: alvo.cartaoParcelas,
+      multiplas: false, itemLojinha: alvo.itemLojinha, valorConflito: alvo.valorConflito,
+      valorBaixaConfianca: alvo.valorBaixaConfianca, descricao: alvo.descricao });
+    if (dryRun) texto += '\n\n_(modo teste — nada será gravado no caixa)_';
+    alvo.previewId = await sendFn(event.chatId, texto);
+    (alvo.msgIds = alvo.msgIds || []).push(alvo.previewId);
+    log({ acao: 'sugestao_nome_confirmada', chatId: event.chatId, trilho: 'lojinha' });
+    if (!await vincularPreviewRemontadoV3({ event, grupo: grp, pendencia: alvo, previewId: alvo.previewId, texto,
+      result: { acao: 'preview_aluno_corrigido', aluno: alvo.aluno } })) {
+      return { acao: 'preview_aluno_corrigido_sem_v3', aluno: alvo.aluno };
+    }
+    return { acao: 'sugestao_nome_lojinha_confirmada', aluno: alvo.aluno };
   }
 
   async function abrirFluxoMultiAluno({ event, grupo, textoFonte, textoHumano, intent, agora,
@@ -5980,6 +6275,35 @@ _Não lanço nada pela metade._`);
     const q = event && event.quotedMessageId;
     return !!(q && _idsDaSol.has(String(q)));
   }
+  // 🔴 06/10/2026 (Recreio): no dia seguinte a uma saida lancada, a equipe CONVERSOU
+  //    sobre ela e a Sol se meteu 3x com "Entendi que é saída de …, mas falta o valor":
+  //    (a) a Vitoria citando o "✅ Lancei a saída…" para explicar o problema; (b) a
+  //    gerente citando o FECHAMENTO com "Descrição correta: R$91,40 Compra de…" — lido
+  //    como saida NOVA de R$ 91,40 (um "pode" ali lancava o dinheiro DUAS vezes);
+  //    (c) "Compra de 3 pós de café e 3 de açúcar" respondendo ao dono.
+  // Citar o que a Sol JA CONCLUIU (lancamento confirmado, fechamento/abertura) e falar
+  // SOBRE o passado — nunca abre lancamento novo. Card ABERTO citado continua sendo
+  // correcao/aprovacao (Jhon/CG 09/09) e por isso fica fora daqui.
+  // ⚠️ Nao depende so de `_idsDaSol`/`lancadosRecentes`: sao memoria do processo e o
+  //    fechamento sai do cron (outro processo). O texto citado vem no evento.
+  const _RE_MSG_CONCLUIDA_SOL = /(^|\n)\s*✅\s*(?:\*?\s*)?(?:Lancei|Caixa\s+(?:aberto|fechado))|FECHAMENTO DE CAIXA|Saldo final caixa|lancei (?:a sa[ií]da )?no caixa/i;
+  function _citaConcluidoDaSol(event, chatId) {
+    const q = event && event.quotedMessageId;
+    if (!q) return false;
+    // so LE as pendencias: expirar card aqui mudaria o estado de quem nao e conversa
+    if ((pendentes.get(chatId) || []).some((p) => p.previewId === q || (p.msgIds || []).includes(q))) return false;
+    if ((lancadosRecentes.get(chatId) || []).some((x) => x.confirmMessageId === q)) return true;
+    return _RE_MSG_CONCLUIDA_SOL.test(String((event && (event.quotedBody || event.quotedPreview)) || ''));
+  }
+  // Chamou a Sol PELO NOME ("Sol, …", "@Sol", mencao ao numero dela) ou e comando
+  // da ferramenta. Citar mensagem dela NAO conta aqui: ver `_citaConcluidoDaSol`.
+  function _chamouSolPeloNome(event) {
+    if (event && (event.caixaToolCommand || event.caixaToolTarget || event._sintetico)) return true;
+    const b = _semAcentoDesc(String(event && event.body || ''));
+    if (/^\s*@?sol(?!\p{L})/u.test(b) || /(^|[^\p{L}\p{N}])@?sol\s*[,!?:]/u.test(b)) return true;
+    const bots = new Set((event && event.botIds) || []);
+    return ((event && event.mentionedIds) || []).some((id) => bots.has(id));
+  }
   // LEGENDA TARDIA (29/09/2026, CG 14:36) — ver `midiasSemLegenda`. O card que a
   // própria mídia publicou (por um caminho sem adiamento) e ainda está aberto.
   function _cardDaMidia(chatId, rec, agora) {
@@ -6268,7 +6592,9 @@ _Não lanço nada pela metade._`);
     // dinheiro" caiu no LLM porque nao tinha midia. Isso nao pode acontecer:
     // o bridge monta preview deterministico e o "pode" de qualquer operador
     // autorizado da unidade passa pela RPC auditada.
-    if (!event.hasMedia && !casarPode(event.body).pode) {
+    const _citouConcluido = !event.hasMedia && !casarPode(event.body).pode && _citaConcluidoDaSol(event, chatId);
+    if (_citouConcluido) log({ acao: 'citacao_concluido_da_sol_nao_abre_lancamento', chatId });
+    if (!event.hasMedia && !casarPode(event.body).pode && !_citouConcluido) {
       const texto = bodyLimpo(event.body);
       // ⚠️ Com card aberto, frase de saida e' CORRECAO (tratada mais abaixo), nunca
       // lancamento novo — senao "Sol, foi saida" abre um caso sem valor e mata o
@@ -6386,6 +6712,7 @@ _Não lanço nada pela metade._`);
             _alvoCat.ts = agora;
             let _txtCat = `Ajustei: a categoria é ${categoriaTexto}. Remontei o preview:\n\n` + montarPreview({
               unidadeNome: _alvoCat.nome, valor: _alvoCat.valor, forma: _alvoCat.forma,
+              descricao: _alvoCat.descricao,
               categoria: categoriaTexto, aluno: _alvoCat.aluno, competencia: _alvoCat.competencia,
               parcela: _alvoCat.parcela, confiancaBaixa: false,
               responsavelFinanceiro: _alvoCat.responsavelFinanceiro, formaIncerta: _alvoCat.formaIncerta,
@@ -6408,6 +6735,14 @@ _Não lanço nada pela metade._`);
             log({ acao: 'preview_categoria_saida_corrigida', chatId,
                   categoria: categoriaTexto, valor: _alvoCat.valor });
             return { acao: 'preview_categoria_saida_corrigida' };
+          }
+          // 🔴 06/10/2026: texto SEM valor e SEM anexo que nao chama a Sol e conversa
+          // ("Compra de 3 pós de café…" respondendo ao dono; explicacao com a palavra
+          // "retirada"). Perguntar o valor ali e se meter na conversa. Com "Sol, …"
+          // continua perguntando — ai a pessoa esta mesmo ditando uma saida.
+          if (!_chamouSolPeloNome(event)) {
+            log({ acao: 'saida_texto_sem_valor_conversa', chatId, categoria: categoriaTexto });
+            return { acao: 'saida_texto_sem_valor_conversa' };
           }
           await sendFn(chatId, `Entendi que é saída de ${categoriaTexto}, mas falta o valor. Manda de novo com o valor.`);
           log({ acao: 'saida_texto_sem_valor', chatId, categoria: categoriaTexto });
@@ -6437,7 +6772,7 @@ _Não lanço nada pela metade._`);
         }
         const descricao = _descricaoSaidaTexto(texto, categoriaTexto);
         let textoPreview = montarPreview({
-          unidadeNome: grp.nome, valor, forma, categoria: categoriaTexto,
+          unidadeNome: grp.nome, valor, forma, categoria: categoriaTexto, descricao,
           aluno: null, competencia: null, parcela: null, confiancaBaixa: false,
           responsavelFinanceiro: null, formaIncerta: false, cartaoModalidade: null,
           cartaoParcelas: null, multiplas: false, alunoViaPagador: null,
@@ -7099,6 +7434,24 @@ _Não lanço nada pela metade._`);
       // Ele acerta quando os nomes estao colados no "e" e erra em toda variacao
       // de escrita — parenteses, virgula, "aluno X - 4 cursos". Quem entende
       // prosa e o modelo; o regex fica como atalho barato.
+      // 🔴 VENDEDOR NÃO É ALUNO, NEM NO PORTÃO DO MULTI (Barra 06/10/2026). O
+      //    modelo listou "<Aluno>" e "<Professor>" (de "Venda <Professor>") como
+      //    dois pagamentos; os dois nomes estão na legenda, o portão abriu e a
+      //    Sol disse "a soma dos alunos não fecha" para UMA venda de R$ 100. Só
+      //    em venda (lojinha) e só com o cadastro da equipe confirmando a pessoa.
+      let vendedorEquipe = null;
+      if ((lojinhaInfo || categoria === 'lojinha') && !categoriaEhSaida(categoria)) {
+        vendedorEquipe = await vendedorDaEquipe(legendaEfetiva, { chatId,
+          comprador: _compradorDeclaradoLojinha(legendaEfetiva) });
+        if (vendedorEquipe) {
+          const _antes = pagamentosLLM.length;
+          pagamentosLLM = pagamentosLLM.filter((p) => !_ehOVendedor(p && p.aluno, vendedorEquipe));
+          if (aluno && _ehOVendedor(aluno, vendedorEquipe)) aluno = null;
+          if (_antes !== pagamentosLLM.length) {
+            log({ acao: 'vendedor_fora_dos_pagamentos', chatId, removidos: _antes - pagamentosLLM.length });
+          }
+        }
+      }
       const _pagLLM = pagamentosNaLegenda(pagamentosLLM, legendaEfetiva);
       const _multiPorLLM = _pagLLM.length >= 2;
       if (_multiPorLLM && !detectarContextoMultiAluno(legendaEfetiva)) {
@@ -7540,20 +7893,23 @@ _Não lanço nada pela metade._`);
       }
       const bloqueiaLancamento = deveBloquearLancamento({ composto, parcela, canonica, valor, quitacao, multiplas });
       const saidaCaixa = categoriaEhSaida(categoria);
-      const descricaoSaida = saidaCaixa
-        ? (bodyLimpo(legendaEfetiva)
-          .replace(/r\$\s*[\d.,]+/ig, ' ')
-          .replace(/\b(pagamento|pg|semanal|semana|comprovante|recibo|dinheiro|pix|cart[ãa]o|transfer[êe]ncia)\b/ig, ' ')
-          .replace(/[^\p{L}\d\s./-]/gu, ' ')
-          .replace(/\s+/g, ' ')
-          .trim())
-        : null;
-      const descricao = composto
+      // Saida tem UMA descricao, da mesma funcao do ditado por texto (06/10/2026): o
+      // bloco que existia aqui era copia divergente e gravava "PG Semana Retirada".
+      // 🔴 E saida NAO tem aluno: em 05/10 o `_alunoFromCaption` transformou a
+      // legenda ("Compra de pós de café… Retirada do caixa") em ALUNO, o card
+      // escondeu (saida nao mostra ALUNO), mas a confirmacao exibiu e o payload
+      // gravou esse "aluno". O que o grupo leu nao era o que o banco guardou.
+      if (saidaCaixa) {
+        if (aluno) log({ acao: 'saida_aluno_descartado', chatId });
+        aluno = null; responsavelFinanceiro = null; candidatosAluno = null; alunoViaPagador = null;
+      }
+      const descricaoSaida = saidaCaixa ? _descricaoSaidaTexto(legendaEfetiva, categoria) : null;
+      let descricao = composto
         ? (descricaoDoComposto(composto, aluno) || _descricaoLancamento(categoria, competencia, aluno, parcela))
         : lojinhaInfo
-        ? `Lojinha/Venda - ${lojinhaInfo.item || 'Produto'}${aluno ? ' - ' + aluno : ''}`
+        ? descricaoLojinha(lojinhaInfo.item, aluno, vendedorEquipe)
         : saidaCaixa
-        ? (descricaoSaida && descricaoSaida.length >= 3 ? `PG Semana ${cap(categoria)}${descricaoSaida.toLowerCase().includes(String(categoria).toLowerCase()) ? '' : ' - ' + descricaoSaida}` : `PG Semana ${cap(categoria)}`)
+        ? descricaoSaida
         : (multiplas && quitacao && quitacao.faturas && quitacao.faturas.ok)
         ? (`Parcelas ${quitacao.faturas.inicio} a ${quitacao.faturas.fim}`
            + (quitacao.faturas.curso ? ` do curso de ${quitacao.faturas.curso}` : '')
@@ -7577,6 +7933,7 @@ _Não lanço nada pela metade._`);
         const _alunoDeclarado = _alunoRotulado(legendaEfetiva);
         const _declarado = !!(aluno && _alunoDeclarado && _mesmaPessoa(_alunoDeclarado, aluno));
         const _porQue = (aluno && _vendedor && _mesmaPessoa(aluno, _vendedor)) ? 'rotulo_de_venda'
+          : (aluno && _ehOVendedor(aluno, vendedorEquipe)) ? 'vendedor_da_equipe'
           : (aluno && !_declarado && _remetente && _mesmaPessoa(aluno, _remetente)) ? 'e_quem_enviou'
           : null;
         if (_porQue) {
@@ -7584,6 +7941,16 @@ _Não lanço nada pela metade._`);
           aluno = null; responsavelFinanceiro = null; canonica = null; parcela = null;
           alunoNovoId = null; alunoNovoOrigem = null; alunoViaPagador = null; candidatosAluno = null;
         }
+      }
+      // A descrição da lojinha nasce DEPOIS do descarte acima: antes, "Venda:
+      // Arthur" saía do card mas ficava gravado como "Lojinha/Venda - Camisa - Arthur".
+      if (lojinhaInfo && !composto && !saidaCaixa) descricao = descricaoLojinha(lojinhaInfo.item, aluno, vendedorEquipe);
+      // Lojinha não passa pela resolução de aluno (não há fatura): o nome digitado
+      // ia direto para o banco. Grafia diferente do cadastro vira PERGUNTA (mesma
+      // RPC e mesmo "sim" do multi); o "pode" fica travado até o nome se resolver.
+      let sugestaoLojinha = null;
+      if (lojinhaInfo && aluno && !saidaCaixa && !composto) {
+        sugestaoLojinha = await sugestaoNomeLojinha({ chatId, unidadeId: grp.unidade_id, aluno, vendedor: vendedorEquipe });
       }
       const _bancoEvidencia = canonica && canonica.ok ? {
         fatura: canonica.fatura || null,
@@ -7610,12 +7977,13 @@ _Não lanço nada pela metade._`);
         log({ acao: 'midia_adiada_legenda_tardia', chatId, etapa: 'card' });
         return { acao: 'midia_adiada_legenda_tardia' };
       }
-      let texto = montarPreview({ unidadeNome: grp.nome, valor, forma, categoria, aluno, competencia, parcela, confiancaBaixa, alunoNovoOrigem, responsavelFinanceiro, formaIncerta, cartaoModalidade, cartaoParcelas, multiplas, alunoViaPagador, pagadorNome, candidatosAluno, canonica, duplicata, quitacao, faturaIndisponivel: canonicaIndisponivel || bloqueiaFonteIndisponivel, composto, bloqueiaLancamento, itemLojinha: lojinhaInfo && lojinhaInfo.item, valorMaiorNaLegenda, valorConflito, valorBaixaConfianca });
+      let texto = montarPreview({ unidadeNome: grp.nome, valor, forma, categoria, aluno, competencia, parcela, confiancaBaixa, alunoNovoOrigem, responsavelFinanceiro, formaIncerta, cartaoModalidade, cartaoParcelas, multiplas, alunoViaPagador, pagadorNome, candidatosAluno, canonica, duplicata, quitacao, faturaIndisponivel: canonicaIndisponivel || bloqueiaFonteIndisponivel, composto, bloqueiaLancamento, itemLojinha: lojinhaInfo && lojinhaInfo.item, valorMaiorNaLegenda, valorConflito, valorBaixaConfianca, descricao, sugestaoNome: sugestaoLojinha });
       if (dryRun) texto += '\n\n_(modo teste — nada será gravado no caixa)_';
       const previewId = await sendFn(chatId, texto);
       const arr = limparVelhos(chatId, agora);
       log({ acao: 'identidade_envio', identificado: !!(idEnviou && idEnviou.identificado) });
       const pendencia = { previewId, unidade_id: grp.unidade_id, nome: grp.nome, valor, forma, categoria, aluno, competencia, descricao, parcela, responsavelFinanceiro, cartaoModalidade, cartaoParcelas, formaIncerta, quitacao, multiplas, composto, canonica, alunoNovoId, itemLojinha: lojinhaInfo && lojinhaInfo.item, valorConflito, valorBaixaConfianca, bloqueiaLancamento, faturaIndisponivel: canonicaIndisponivel, bloqueiaFonteIndisponivel, categoriaInterpretada: _categoriaAntesDaFatura || null, enviadoPor: nomeParaCarimbo(idEnviou, event), idemKey, origem: event.messageId, evidenceEnvelope,
+        vendedor: vendedorEquipe, sugestaoNomeLojinha: sugestaoLojinha,
         msgIds: [previewId], autorPhone: event.senderPhone || null, autorId: event.senderId || null,
         toquePor: String(event.senderPhone || event.senderId || ''), toqueTs: agora,
         arquivoBytes: (ocrMeta && ocrMeta.file_bytes) || null, ts: agora };
@@ -7868,7 +8236,7 @@ _Não lanço nada pela metade._`);
             alvoP.cartaoParcelas = corrForma.cartaoParcelas || null;
             alvoP.ts = agora;
             let texto = `Você tem razão: a forma é ${corrForma.forma === 'cartao' ? 'cartão' : corrForma.forma}. Remontei o preview:\n\n` + montarPreview({
-              unidadeNome: alvoP.nome, valor: alvoP.valor, forma: alvoP.forma,
+              unidadeNome: alvoP.nome, valor: alvoP.valor, forma: alvoP.forma, descricao: alvoP.descricao,
               categoria: alvoP.categoria || 'parcela', aluno: alvoP.aluno, competencia: alvoP.competencia,
               parcela: alvoP.parcela, confiancaBaixa: false,
               responsavelFinanceiro: alvoP.responsavelFinanceiro, formaIncerta: false,
@@ -7932,6 +8300,16 @@ _Não lanço nada pela metade._`);
                 log({ acao: 'correcao_forma_citado_sem_match', chatId, motivo: achado.motivo });
               }
             }
+          }
+          // 🔴 06/10/2026 (Recreio): a Vitoria citou o "✅ Lancei a saída… (dinheiro)"
+          //    explicando o problema da descricao ("retirada de dinheiro no caixa…") e
+          //    recebeu "Vou corrigir … R$ 91,40 de dinheiro para dinheiro. Posso?".
+          //    Correcao para a MESMA forma nao corrige nada: e conversa sobre o lancamento.
+          if (alvoL && alvoL.forma && alvoL.forma === corrForma.forma
+              && (corrForma.forma !== 'cartao' || !corrForma.cartaoModalidade
+                  || corrForma.cartaoModalidade === (alvoL.cartaoModalidade || null))) {
+            log({ acao: 'correcao_forma_sem_mudanca', chatId, movimentacao_id: alvoL.movimentacao_id, forma: corrForma.forma });
+            return { acao: 'correcao_forma_sem_mudanca' };
           }
           if (!alvoL) {
             await sendFn(chatId, 'Consigo corrigir, mas preciso saber qual lançamento. Responde citando minha mensagem do lançamento e manda: *Sol, foi pix*.');
@@ -8100,7 +8478,7 @@ _Não lanço nada pela metade._`);
             alvoS.descricao = _descricaoSaidaTexto(alvoS.legenda || txt, _catSaidaCorr) || null;
             alvoS.ts = agora;
             let textoS = 'Corrigi — isso e saida de caixa:\n\n' + montarPreview({
-              unidadeNome: alvoS.nome, valor: alvoS.valor, forma: alvoS.forma,
+              unidadeNome: alvoS.nome, valor: alvoS.valor, forma: alvoS.forma, descricao: alvoS.descricao,
               categoria: alvoS.categoria, aluno: null, competencia: null, parcela: null,
               confiancaBaixa: false, responsavelFinanceiro: null, formaIncerta: alvoS.formaIncerta,
               cartaoModalidade: alvoS.cartaoModalidade, cartaoParcelas: alvoS.cartaoParcelas,
@@ -8237,7 +8615,7 @@ _Não lanço nada pela metade._`);
             alvoVD.bloqueiaLancamento = deveBloquearLancamento({ composto: alvoVD.composto, parcela: alvoVD.parcela, canonica: alvoVD.canonica, valor: alvoVD.valor, quitacao: alvoVD.quitacao, multiplas: alvoVD.multiplas });
             alvoVD.ts = agora;
             let textoVD = 'Corrigi o valor:\n\n' + montarPreview({
-              unidadeNome: alvoVD.nome, valor: alvoVD.valor, forma: alvoVD.forma,
+              unidadeNome: alvoVD.nome, valor: alvoVD.valor, forma: alvoVD.forma, descricao: alvoVD.descricao,
               categoria: alvoVD.categoria, aluno: alvoVD.aluno, competencia: alvoVD.competencia,
               parcela: alvoVD.parcela, confiancaBaixa: false, responsavelFinanceiro: alvoVD.responsavelFinanceiro,
               formaIncerta: alvoVD.formaIncerta, cartaoModalidade: alvoVD.cartaoModalidade,
@@ -8498,7 +8876,7 @@ _Não lanço nada pela metade._`);
             }
             alvoCD.ts = agora;
             let textoCD = 'Troquei a categoria:\n\n' + montarPreview({
-              unidadeNome: alvoCD.nome, valor: alvoCD.valor, forma: alvoCD.forma,
+              unidadeNome: alvoCD.nome, valor: alvoCD.valor, forma: alvoCD.forma, descricao: alvoCD.descricao,
               categoria: alvoCD.categoria, aluno: alvoCD.aluno, competencia: alvoCD.competencia,
               parcela: alvoCD.parcela, confiancaBaixa: false, responsavelFinanceiro: alvoCD.responsavelFinanceiro,
               formaIncerta: alvoCD.formaIncerta, cartaoModalidade: alvoCD.cartaoModalidade,
@@ -8761,6 +9139,12 @@ _Não lanço nada pela metade._`);
           alvoP.bloqueiaFonteIndisponivel = bloqueiaFonteIndisponivel;
           alvoP.responsavelFinanceiro = responsavelFinanceiro;
           alvoP.descricao = descricaoDoComposto(alvoP.composto, alvoP.aluno) || descricaoDaFatura(canonica, alvoP.aluno) || _descricaoLancamento(categoria, competencia, alvoP.aluno, parcela);
+          // Lojinha continua lojinha: item + comprador + vendedor (06/10/2026). E o
+          // nome ditado responde a pergunta "É X?" — a trava do "pode" sai.
+          if (alvoP.sugestaoNomeLojinha) alvoP.sugestaoNomeLojinha = null;
+          if (String(alvoP.categoria || '') === 'lojinha' && alvoP.itemLojinha && !alvoP.composto) {
+            alvoP.descricao = descricaoLojinha(alvoP.itemLojinha, alvoP.aluno, alvoP.vendedor || null);
+          }
           alvoP.ts = agora;
 
           // 03/09 (Mayra/CG, Lucas Nunes): anunciar "Atualizei" reenviando o MESMO
@@ -8787,6 +9171,7 @@ _Não lanço nada pela metade._`);
             alunoViaPagador: null, pagadorNome: null, candidatosAluno: null,
             canonica, duplicata: null, quitacao: alvoP.quitacao, faturaIndisponivel: canonicaIndisponivel,
             composto: alvoP.composto, bloqueiaLancamento: alvoP.bloqueiaLancamento,
+            itemLojinha: alvoP.itemLojinha || null, descricao: alvoP.descricao,
           });
           if (dryRun) texto += '\n\n_(modo teste — nada será gravado no caixa)_';
           alvoP.previewId = await sendFn(chatId, texto);
@@ -9359,6 +9744,17 @@ _Não lanço nada pela metade._`);
         log({ acao: 'bloqueado_divisao_pendente', chatId, partes: alvo.divisao.length });
         return { acao: 'bloqueado_divisao_pendente' };
       }
+      // Lojinha com "É X?" em aberto (06/10/2026): o nome do comprador ainda não
+      // se resolveu — "pode" não grava o nome digitado por cima da pergunta.
+      if (alvo.sugestaoNomeLojinha && Array.isArray(alvo.sugestaoNomeLojinha.candidatos)
+          && alvo.sugestaoNomeLojinha.candidatos.length) {
+        const _c = alvo.sugestaoNomeLojinha.candidatos;
+        await sendFn(chatId, _c.length === 1
+          ? `⚠️ Não lancei: antes me confirma o aluno — é *${_c[0]}*? Responde *sim*, ou manda *aluno: Nome completo*.`
+          : '⚠️ Não lancei: antes me manda o aluno — *aluno: Nome completo*. Não escolho entre os parecidos.');
+        log({ acao: 'pode_bloqueado_sugestao_nome', chatId, candidatos: _c.length });
+        return { acao: 'pode_bloqueado_sugestao_nome' };
+      }
       if (alvo.bloqueiaLancamento) {
         await sendFn(chatId, '⚠️ Não lancei: o valor diverge e o aluno tem mais de uma parcela/curso possível. Me explica a divisão ou responde no preview certo.');
         log({ acao: 'bloqueado_multiplas_sem_divisao', chatId });
@@ -9532,8 +9928,13 @@ _Não lanço nada pela metade._`);
         // Quem confere o caixa pelo grupo precisa saber DE QUEM foi o dinheiro —
         // foi conferindo assim que o Jhon pegou o lote incompleto de 01/09. A
         // confirmacao do lote ja listava nomes; a do unico dizia so "Parcela".
-        const _de = alvo.aluno ? ` · ${alvo.aluno}`
-          : (alvo.descricao ? ` · ${alvo.descricao}` : '');
+        // Saida mostra a DESCRICAO gravada, nunca `aluno` (06/10/2026: o grupo leu a
+        // legenda-como-aluno enquanto o banco guardava "PG Semana Retirada").
+        // Lojinha idem: a descricao gravada (item, comprador e vendedor) e a que o
+        // grupo le — mesma string do card (06/10/2026).
+        const _de = (String(payload.categoria) === 'lojinha' && payload.descricao) ? ` · ${payload.descricao}`
+          : (alvo.aluno && !ehSaida) ? ` · ${alvo.aluno}`
+          : (payload.descricao ? ` · ${payload.descricao}` : '');
         const confirmMessageId = await sendFn(chatId, `✅ ${verbo} no caixa da ${alvo.nome}: ${cap(payload.categoria)} — ${fmtBRL(r.valor)} (${r.forma})${_de}.\n_${quem} · registrei isso no responsável do lançamento._`);
         await governance(event, 'receipt_sent', {
           receipt_ref: confirmMessageId, movement_ref: r.movimentacao_id, preview_ref: alvo.v3PreviewId, outcome: 'ok',
@@ -9992,7 +10393,7 @@ module.exports = {
   _fonteFuturaLateralAoMesDeclarado,
   selecionarFaturasQuitacao, resolverFaturasQuitacao,
   parseBRMoney, lerNumeroMonetarioBR, candidatosMonetariosBR, arbitrarValorComprovante, extrairValorOcrDetalhado, extrairAdiantamentoDeclarado, valorDoModelo, normalizarCompetenciaV4, montarEnvelopeV4, extrairValor, extrairForma, extrairFormaHumana, detectarComprovante, casarPode,
-  _saidaExplicitaFromCaption, categoriaSaidaDoTexto, excedeFaturaUnica, deveBloquearLancamento, _valorLojinhaTexto, _compradorDeclaradoLojinha, _nomeHumanoTardio, extrairValorOcr, _vendedorRotulado, _mesmaPessoa,
+  _saidaExplicitaFromCaption, categoriaSaidaDoTexto, excedeFaturaUnica, deveBloquearLancamento, _valorLojinhaTexto, _compradorDeclaradoLojinha, _nomeHumanoTardio, extrairValorOcr, _vendedorRotulado, _mesmaPessoa, _vendedoresCitados, _casaNomeEquipe, descricaoLojinha,
   _alunoRotulado, _limparAlunoRotulado, _semAlunoDeclarado, extrairCategoriaCorrecao,
   _ehDitadoDeCaixa, classificarCorrecaoPendencia, listarPreviewsAbertosV3, _contestaFatura, rotearMensagemV4,
   montarEnvelopeV4, aplicarCorrecaoEnvelope, _v4CanarioLigado, resolverEnvelopeCaixaV1, valorConfereComTexto,
@@ -10015,5 +10416,5 @@ module.exports = {
   guardaFinanceiraV4,
   ocrLocal,
   extrairCorrecaoForma, extrairLancamentoCitado, extrairComandoMovimento,
-  categoriaEhSaida,
+  categoriaEhSaida, _descricaoSaidaTexto,
 };
