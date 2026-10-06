@@ -146,7 +146,7 @@ export function AppSidebar() {
         {!isCollapsed && (
           <div className="flex items-center">
             <img 
-              src="/logo-sidebar-la-music-report.png" 
+              src="/logo-sidebar-la-music-report.webp" 
               alt="LA Music Report" 
               className="h-12 w-auto"
             />

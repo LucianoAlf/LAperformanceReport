@@ -147,7 +147,7 @@ export function LoginPage() {
         {/* Imagem de fundo */}
         <div 
           className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{ backgroundImage: 'url(/split-screen-krissya.png)' }}
+          style={{ backgroundImage: 'url(/split-screen-krissya.webp)' }}
         />
         
         {/* Overlay gradiente roxo/azul */}
@@ -193,7 +193,7 @@ export function LoginPage() {
             transition={{ duration: 0.6 }}
           >
             <img 
-              src="/logo-sidebar-la-music-report.png" 
+              src="/logo-sidebar-la-music-report.webp" 
               alt="LA Music Report" 
               className="h-12 w-auto"
             />
@@ -288,7 +288,7 @@ export function LoginPage() {
           {/* Logo mobile */}
           <div className="lg:hidden text-center mb-8">
             <img 
-              src="/logo-sidebar-la-music-report.png" 
+              src="/logo-sidebar-la-music-report.webp" 
               alt="LA Music Report" 
               className="h-10 w-auto mx-auto mb-4"
             />

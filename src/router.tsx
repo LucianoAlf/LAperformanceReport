@@ -76,8 +76,9 @@ function CampanhasGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-// Dashboard (página inicial - carrega imediatamente)
-import { DashboardResponsivo } from './components/App/Dashboard/DashboardResponsivo';
+// Dashboard (página inicial). Lazy desde 06/10/2026: importado direto, ele puxava os
+// gráficos (recharts) para o pacote inicial de TODA tela, inclusive Alunos e Agenda.
+const DashboardResponsivo = lazy(() => import('./components/App/Dashboard/DashboardResponsivo').then(m => ({ default: m.DashboardResponsivo })));
 
 // =============================================================================
 // IMPORTS LAZY - Componentes carregados sob demanda
@@ -197,7 +198,7 @@ export const router = createBrowserRouter([
         children: [
           {
             index: true,
-            element: <DashboardResponsivo />,
+            element: <Suspense fallback={<PageLoader />}><DashboardResponsivo /></Suspense>,
           },
           {
             path: 'entrada',
