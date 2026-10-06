@@ -34,6 +34,9 @@ alguém aplicou patch sem versionar — pare e investigue.
 - `~/.hermes/profiles/sol/config.yaml`: `agent.disabled_toolsets: [clarify]` — a ferramenta de
   pergunta com opções do framework saía com rodapé em inglês ("Reply with the number…").
 
+**Deploy na ponte (obrigatório desde 28/09):** backup com sufixo comum (`cp -p X X.bak-<SUFIXO>` em cada arquivo), instalar, e rodar
+`bash vps/la-hq/sol/scripts/fumaca-ponte.sh --reiniciar --rollback-de <SUFIXO>` (na VPS). Ela confere conexão, código no disco = código rodando, três chamadas a `/caixa/tool` recusadas antes de qualquer envio, a ponte de pé depois delas e o log do gateway; se falhar, restaura os `*.bak-<SUFIXO>` e reinicia. Saída 0 = ok.
+
 **Rollback rápido do modo agente:** voltar os dois `.conf` para só o Recreio (ou vazio),
 `systemctl --user -M sol@ daemon-reload && systemctl --user -M sol@ restart hermes-gateway-sol`.
 
