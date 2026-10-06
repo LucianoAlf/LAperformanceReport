@@ -869,3 +869,16 @@ os 34 segundos da classificação, um `pode` concorrente lançou e encerrou o ca
 A guarda antiga respondeu `Não entendi` depois, em cima da conversa humana. O
 teste exige que o fallback compare a mesma geração de pendências ao voltar e
 fique mudo se o card foi lançado, descartado ou remontado — sem regex de frases.
+
+## sugestao-nome-parecido-e2e.cjs
+
+Caso CG (05/10): comprovante de dois alunos com um primeiro nome digitado com uma
+letra a mais. O resolver devolvia `aluno_nao_encontrado` e a Sol só dizia
+"confere o nome completo"; a equipe travou 3x e descartou. Agora, com **um**
+aluno parecido na mesma unidade (`sol_caixa_sugerir_aluno_parecido_v1`), ela
+pergunta "É *Fulana*?"; o `sim` de **quem mandou** refaz a resolução com o nome
+do cadastro e segue para o preview de sempre — só o `pode` lança. O teste trava:
+`sim` de outra pessoa (citando ou não) não vale; `pode` antes do `sim` não lança;
+0 candidatos, RPC fora do ar e candidato que já é o outro item mantêm a mensagem
+antiga; 2+ candidatos listam até 3 sem escolher; `nome_ambiguo` não usa sugestão;
+log sem nome de aluno. Nomes do teste são fictícios.
