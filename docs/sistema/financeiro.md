@@ -201,6 +201,8 @@ Na rota `/app/alunos`, `get_faturas_alunos_financeiro_v1` também entrega o bloc
 contrato próprio. Se o bloco vier ausente ou inválido, a cobrança permanece
 bloqueada; não há fallback para uma leitura menos confiável.
 
+**Custo da leitura (medido 06/10/2026, Consolidado).** `get_faturas_alunos_financeiro_v1` = inadimplência canônica + canônica de faturas (~2 s) + enriquecimento (~0,6 s), atrás de cache por versão **e** TTL de 10 min (`faturas_leitura_cache` / `paginas_rpc_cache`), que cai a cada escrita em `sync_runs` (~16/h) e `emusys_faturas`. A inadimplência levava ~2 s **de CPU** por duas buscas `EXISTS` correlacionadas em `get_inadimplencia_canonica_v3_base`; desde `20261006123611` são `IN` não correlacionado (hash): **2,3 s → 0,09 s**, saída idêntica (19.421 faturas comparadas linha a linha, md5 da função inteira). ⚠️ Forçar índice em `sync_run_items` na canônica de faturas foi testado e **não** ganha com cache quente.
+
 ⚠️ O espelho `emusys_faturas` cobre apenas as competências sincronizadas (a partir de
 jun/2026) — número de faturas vencidas é **piso, não valor exato**. Ver `CLAUDE.md`.
 
