@@ -329,7 +329,9 @@ function suspeitosDe(cands, emitente) {
 // nomes das candidatas como suspeitos para o grupo responder.
 function escolherFatura(res, cheque, loteData) {
   if (!res || res.ok === false) return { fatura: null, motivo: 'resolver_indisponivel', suspeitos: [] };
-  const cands = Array.isArray(res.candidatas) ? res.candidatas : [];
+  const _vistas = new Set();
+  // Mesma fatura repetida (aluno com dois cadastros) conta uma vez.
+  const cands = (Array.isArray(res.candidatas) ? res.candidatas : []).filter((c) => !c || !c.la_report_fatura_id || (!_vistas.has(c.la_report_fatura_id) && _vistas.add(c.la_report_fatura_id)));
   const resolvido = !!(res.emitente && res.emitente.resolvido);
   const nomes = suspeitosDe(cands, cheque.emitente_nome);
   if (!resolvido) return { fatura: null, motivo: 'emitente_desconhecido', suspeitos: nomes };
@@ -939,7 +941,8 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
   async function tentarFamilia(it, loteData, hoje) {
     if (!it.cheque.confiavel || !it.res || !it.res.emitente || !it.res.emitente.resolvido) return false;
     if (it.escolha.motivo !== 'empate') return false;
-    const cands = (it.res.candidatas || []).filter((c) => c.la_report_fatura_id && c.aluno_nome);
+    const _vis = new Set();
+    const cands = (it.res.candidatas || []).filter((c) => c.la_report_fatura_id && c.aluno_nome && !_vis.has(c.la_report_fatura_id) && _vis.add(c.la_report_fatura_id));
     const porAluno = new Map();
     for (const c of cands) { const k = norm(c.aluno_nome); if (!porAluno.has(k)) porAluno.set(k, []); porAluno.get(k).push(c); }
     if (porAluno.size < 2 || porAluno.size > 4) return false;
@@ -1806,6 +1809,9 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
         const doAluno = cands.filter((c) => palavras(c.aluno_nome).some((w) => palavras(nome).includes(w)));
         if (doAluno.length) cands = doAluno;
         if (!cands.length) { falhou = recusaCheque(n, 'aluno_sem_parcela', `não achei parcela de "${nome}" no cadastro desta unidade — confere o nome completo`); break; }
+        // A MESMA fatura vem repetida quando o aluno tem dois cadastros (CG 06/10: a
+        // Clara aparece 2x) — não são duas parcelas possíveis.
+        { const vistas = new Set(); cands = cands.filter((c) => !vistas.has(c.la_report_fatura_id) && vistas.add(c.la_report_fatura_id)); }
         grupos.push(cands);
       }
       if (falhou) { out.push(falhou); continue; }
