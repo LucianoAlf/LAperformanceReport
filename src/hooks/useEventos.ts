@@ -780,8 +780,14 @@ export function useGradeDoEvento(eventoId: number | null) {
   return { blocos, loading, erro, recarregar };
 }
 
-export async function criarBloco(eventoId: number, nome: string, ordem: number) {
-  return supabase.from('evento_bloco').insert({ evento_id: eventoId, nome, ordem });
+export async function criarBloco(
+  eventoId: number,
+  nome: string,
+  ordem: number,
+  /** Dia do bloco; `null` = 1º dia do evento (mesma convencao do seletor do bloco). */
+  data: string | null = null,
+) {
+  return supabase.from('evento_bloco').insert({ evento_id: eventoId, nome, ordem, data });
 }
 
 export async function excluirBloco(blocoId: number) {

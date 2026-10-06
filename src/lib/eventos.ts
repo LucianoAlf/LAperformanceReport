@@ -486,6 +486,17 @@ export function instrumentoDoCurso(cursoNome: string | null | undefined): string
   return INSTRUMENTO_POR_CURSO[chave] ?? null;
 }
 
+/**
+ * Curso de musicalização (Bebês, Infantil, Preparatória) × curso de instrumento.
+ *
+ * Serve ao filtro do seletor da Grade: o recital pode ter bloco só de instrumento (pedido do
+ * Arthur, 06/10). Não existe categoria no cadastro de `cursos`, então a régua é o nome — curso
+ * novo chamado "Musicalização …" entra sozinho.
+ */
+export function ehMusicalizacao(cursoNome: string | null | undefined): boolean {
+  return !!cursoNome && chaveDoItem(cursoNome).startsWith('musicaliza');
+}
+
 export interface ItemConsolidado {
   tipo: TipoItemDePalco;
   /** A grafia mais usada entre as variantes agrupadas — nunca a chave normalizada. */

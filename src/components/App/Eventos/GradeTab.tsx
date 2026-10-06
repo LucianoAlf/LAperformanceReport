@@ -37,6 +37,7 @@ import {
   Check,
   Users,
   GraduationCap,
+  ArrowRightLeft,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -128,7 +129,7 @@ function TempoPadraoApresentacao({
       title="Vale para toda apresentação sem tempo próprio. Para mudar só uma, use o campo de minutos no cartão dela."
     >
       <Clock className="h-3.5 w-3.5 text-slate-500" />
-      Tempo padrão
+      <span className="hidden sm:inline">Tempo padrão</span>
       <Input
         type="number"
         min={1}
@@ -138,9 +139,10 @@ function TempoPadraoApresentacao({
         onKeyDown={(e) => {
           if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
         }}
-        className="h-7 w-14 text-[12.5px]"
+        className="h-8 w-14 text-[16px] sm:h-7 sm:text-[12.5px]"
       />
-      min por apresentação
+      <span className="sm:hidden">min por número</span>
+      <span className="hidden sm:inline">min por apresentação</span>
     </label>
   );
 }
@@ -212,7 +214,7 @@ function FilaTocaJunto({ eventoId, onMudou }: { eventoId: number; onMudou: () =>
               <span className="text-slate-400"> ({p.com_curso_chave})</span>
             </span>
             {p.pedido_por_professor_nome && (
-              <span className="text-[11px] text-slate-500">
+              <span className="text-[12px] sm:text-[11px] text-slate-500">
                 Prof. {p.pedido_por_professor_nome}
               </span>
             )}
@@ -220,7 +222,7 @@ function FilaTocaJunto({ eventoId, onMudou }: { eventoId: number; onMudou: () =>
               <Button
                 size="sm"
                 variant="outline"
-                className="h-6 gap-1 border-emerald-500/40 px-2 text-[11px] text-emerald-300 hover:bg-emerald-500/10"
+                className="h-6 gap-1 border-emerald-500/40 px-2 text-[12px] sm:text-[11px] text-emerald-300 hover:bg-emerald-500/10"
                 disabled={decidindo === p.id}
                 onClick={() => decidir(p, true)}
               >
@@ -230,7 +232,7 @@ function FilaTocaJunto({ eventoId, onMudou }: { eventoId: number; onMudou: () =>
               <Button
                 size="sm"
                 variant="outline"
-                className="h-6 gap-1 border-rose-500/40 px-2 text-[11px] text-rose-300 hover:bg-rose-500/10"
+                className="h-6 gap-1 border-rose-500/40 px-2 text-[12px] sm:text-[11px] text-rose-300 hover:bg-rose-500/10"
                 disabled={decidindo === p.id}
                 onClick={() => decidir(p, false)}
               >
@@ -271,15 +273,15 @@ function LinhaIntegrante({
               {apresentacao.aluno_nome}
             </span>
             {/* Mesmo formato da aba Alunos e do seletor — idade de hoje, não do recital. */}
-            {idade && <span className="text-[11.5px] text-slate-500">{idade}</span>}
-            <span className="rounded bg-amber-500/15 px-1.5 py-px text-[10.5px] text-amber-300">
+            {idade && <span className="text-[12px] sm:text-[11.5px] text-slate-500">{idade}</span>}
+            <span className="rounded bg-amber-500/15 px-1.5 py-px text-[12px] sm:text-[10.5px] text-amber-300">
               {apresentacao.curso_nome}
             </span>
             {/* O selo mostra que o professor já lançou no LA Teacher — a divergência explica
                 QUANDO o conteúdo daqui difere do dele. */}
             {apresentacao.professor?.musica_lancada_em && (
               <span
-                className="rounded bg-sky-500/15 px-1.5 py-px text-[10.5px] text-sky-300"
+                className="rounded bg-sky-500/15 px-1.5 py-px text-[12px] sm:text-[10.5px] text-sky-300"
                 title="Relatório do LA Teacher lançado"
               >
                 prof. lançou
@@ -289,7 +291,7 @@ function LinhaIntegrante({
                 que vale uma conferida antes de aprovar ou imprimir. */}
             {apresentacao.editado_apos_envio_em && (
               <span
-                className="rounded bg-amber-500/15 px-1.5 py-px text-[10.5px] text-amber-300"
+                className="rounded bg-amber-500/15 px-1.5 py-px text-[12px] sm:text-[10.5px] text-amber-300"
                 title={`Editado em ${new Date(apresentacao.editado_apos_envio_em).toLocaleString('pt-BR')}`}
               >
                 editou após envio
@@ -299,7 +301,7 @@ function LinhaIntegrante({
                 tem no cabeçalho e a linha diz para onde a pessoa vai. */}
             {apresentacao.formatura_tipo && (
               <span
-                className="flex items-center gap-0.5 rounded bg-violet-500/15 px-1.5 py-px text-[10.5px] font-medium text-violet-300"
+                className="flex items-center gap-0.5 rounded bg-violet-500/15 px-1.5 py-px text-[12px] sm:text-[10.5px] font-medium text-violet-300"
                 title={apresentacao.formatura_tipo === 'kids' ? 'Passa para a LA Music School' : apresentacao.formatura_tipo === 'bebes' ? 'Passa para a Musicalização Preparatória' : 'Formando'}
               >
                 <GraduationCap className="h-3 w-3" />
@@ -307,7 +309,7 @@ function LinhaIntegrante({
               </span>
             )}
             {apresentacao.certificado_status === 'emitido' && (
-              <span className="rounded bg-emerald-500/15 px-1.5 py-px text-[10.5px] text-emerald-300">
+              <span className="rounded bg-emerald-500/15 px-1.5 py-px text-[12px] sm:text-[10.5px] text-emerald-300">
                 cert. emitido
               </span>
             )}
@@ -315,7 +317,7 @@ function LinhaIntegrante({
           {apresentacao.professor_nome && (
             // "Prof." explícito: sem ele o nome fica solto embaixo do nome do aluno e a
             // programação impressa vira dois nomes sem papel declarado.
-            <p className="text-[11.5px] text-slate-500">Prof. {apresentacao.professor_nome}</p>
+            <p className="text-[12px] sm:text-[11.5px] text-slate-500">Prof. {apresentacao.professor_nome}</p>
           )}
         </div>
 
@@ -324,7 +326,7 @@ function LinhaIntegrante({
             type="button"
             onClick={onSeparar}
             title="Tirar deste número — passa a tocar sozinho, logo depois dele"
-            className="mt-0.5 flex items-center gap-1 rounded px-1 text-[11px] text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-300"
+            className="-my-1 flex min-h-[44px] items-center gap-1 rounded px-1.5 text-[12px] sm:text-[11px] text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-300 sm:my-0 sm:mt-0.5 sm:min-h-0 sm:px-1"
           >
             <Unlink className="h-3.5 w-3.5" />
             separar
@@ -335,7 +337,8 @@ function LinhaIntegrante({
           onClick={onRemover}
           aria-label={`Remover ${apresentacao.aluno_nome} da grade`}
           title="Remover da grade"
-          className="mt-0.5 text-slate-600 transition-colors hover:text-rose-400"
+          // 36px de alvo no celular: o X de 16px ao lado do nome era o toque mais facil de errar.
+          className="-m-2 flex h-11 w-11 shrink-0 items-center justify-center text-slate-600 transition-colors hover:text-rose-400 sm:m-0 sm:mt-0.5 sm:block sm:h-auto sm:w-auto"
         >
           <X className="h-4 w-4" />
         </button>
@@ -344,7 +347,7 @@ function LinhaIntegrante({
       {/* Divergência professor x grade: cada campo que o ADM sobrescreveu depois do professor
           lançar. Informa; nunca bloqueia — o ADM pode ter razão. */}
       {divergencias.length > 0 && (
-        <div className="mt-1.5 rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-[11.5px] text-amber-200/90">
+        <div className="mt-1.5 rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-[12px] sm:text-[11.5px] text-amber-200/90">
           <span className="font-medium">Prof. pediu: </span>
           {divergencias.map((d, i) => (
             <span key={d.campo}>
@@ -389,6 +392,9 @@ function CartaoNumero({
 }) {
   const principal = numero[0];
   const ids = numero.map((a) => a.id);
+  const [ehCelular] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches,
+  );
   const emGrupo = numero.length > 1;
 
   // A alça move o NÚMERO inteiro: o id arrastável é o do primeiro integrante.
@@ -475,8 +481,9 @@ function CartaoNumero({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        'rounded-lg border bg-slate-900/50 p-2.5',
-        emGrupo ? 'border-violet-500/40' : 'border-slate-700/60',
+        // Celular: cartão de roteiro (16px de raio, superfície mais densa, borda discreta).
+        'rounded-2xl border bg-slate-900/80 p-3 shadow-sm shadow-black/20 sm:rounded-lg sm:bg-slate-900/50 sm:p-2.5 sm:shadow-none',
+        emGrupo ? 'border-violet-500/40' : 'border-slate-800 sm:border-slate-700/60',
         isDragging && 'opacity-40',
       )}
     >
@@ -488,22 +495,43 @@ function CartaoNumero({
           {...attributes}
           {...listeners}
           aria-label={`Mover ${numero.map((a) => a.aluno_nome).join(' e ')}`}
-          className="mt-0.5 cursor-grab touch-none text-slate-600 hover:text-slate-400 active:cursor-grabbing"
+          className="mt-0.5 hidden cursor-grab touch-none text-slate-600 hover:text-slate-400 active:cursor-grabbing sm:block"
         >
           <GripVertical className="h-4 w-4" />
         </button>
 
         {/* Início e fim do número: é o que responde "quanto tempo isto ocupa" sem conta. */}
+        {/* No celular o selo sai da coluna da esquerda e vira a 1a linha do conteudo: na
+            coluna ele comia ~90px de 390 e o nome do aluno truncava. */}
         <span
-          className="mt-px shrink-0 rounded bg-slate-800 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-slate-300"
+          className="mt-px hidden shrink-0 rounded bg-slate-800 px-1.5 py-0.5 text-[12px] sm:text-[11px] font-medium tabular-nums text-slate-300 sm:inline"
           title={duracaoMin !== null ? `${duracaoMin} min` : undefined}
         >
           {horario ? `${horario.inicio}–${termina}` : '--:--'}
         </span>
 
         <div className="min-w-0 flex-1 space-y-1.5">
+          {/* Celular: o horário abre o cartão, como numa programação impressa. */}
+          <div className="-mt-1 flex items-center gap-2 sm:hidden">
+            <span className="text-[17px] font-semibold tabular-nums tracking-tight text-amber-300">
+              {horario?.inicio ?? '--:--'}
+            </span>
+            <span className="text-[12px] tabular-nums text-slate-500">
+              até {termina ?? '--:--'}
+              {duracaoMin !== null && ` · ${duracaoMin} min`}
+            </span>
+            <button
+              type="button"
+              {...attributes}
+              {...listeners}
+              aria-label={`Mover ${numero.map((a) => a.aluno_nome).join(' e ')} (celular)`}
+              className="-mr-2 ml-auto flex h-11 w-11 cursor-grab touch-none items-center justify-center rounded-xl text-slate-500 active:bg-slate-800"
+            >
+              <GripVertical className="h-5 w-5" />
+            </button>
+          </div>
           {emGrupo && (
-            <p className="text-[10.5px] font-medium uppercase tracking-wide text-violet-300/80">
+            <p className="text-[12px] sm:text-[10.5px] font-medium uppercase tracking-wide text-violet-300/80">
               sobem juntos · {numero.length} alunos
             </p>
           )}
@@ -519,7 +547,7 @@ function CartaoNumero({
           ))}
 
           {musicaDivergente && (
-            <div className="rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-[11.5px] text-amber-200/90">
+            <div className="rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-[12px] sm:text-[11.5px] text-amber-200/90">
               <span className="font-medium">Músicas diferentes no número: </span>
               {numero
                 .filter((a) => (a.musica ?? '').trim() !== '')
@@ -550,8 +578,10 @@ function CartaoNumero({
                 const mudou = numero.some((a) => (a.musica ?? '') !== valor);
                 if (mudou) salvarNoNumero({ musica: valor || null });
               }}
-              placeholder="Música (ex: Asa Branca)"
-              className="h-7 flex-1 text-[12.5px]"
+              // A 16px (celular) o exemplo não cabe e sai cortado no meio da palavra.
+              placeholder={ehCelular ? 'Música' : 'Música (ex: Asa Branca)'}
+              // Linha inteira no celular; fonte de 16px evita o zoom automatico do iOS no foco.
+              className="h-11 min-w-[140px] flex-1 rounded-xl border-slate-800 bg-slate-950/60 text-[16px] sm:h-7 sm:min-w-0 sm:rounded-md sm:border-input sm:bg-transparent sm:text-[12.5px]"
             />
             <div className="flex items-center gap-1">
               <Clock className="h-3 w-3 text-slate-600" />
@@ -571,10 +601,10 @@ function CartaoNumero({
                   if (mudou) salvarNoNumero({ duracao_segundos: valor });
                 }}
                 placeholder="5"
-                className="h-7 w-14 text-[12.5px]"
+                className="h-11 w-16 rounded-xl border-slate-800 bg-slate-950/60 text-center text-[16px] sm:h-7 sm:w-14 sm:rounded-md sm:border-input sm:bg-transparent sm:text-left sm:text-[12.5px]"
                 title="Duração em minutos (vazio = padrão do evento)"
               />
-              <span className="text-[11px] text-slate-600">min</span>
+              <span className="text-[12px] sm:text-[11px] text-slate-600">min</span>
             </div>
 
             {/* Fonte do playback: link externo abre direto; arquivo do bucket pede a URL
@@ -585,7 +615,7 @@ function CartaoNumero({
                 href={link}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11.5px] text-sky-400 transition-colors hover:bg-sky-500/10"
+                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[12px] sm:text-[11.5px] text-sky-400 transition-colors hover:bg-sky-500/10"
                 title={link}
               >
                 <Link2 className="h-3.5 w-3.5" />
@@ -598,7 +628,7 @@ function CartaoNumero({
                 type="button"
                 onClick={() => abrirPlayback(ap)}
                 disabled={abrindoPlayback === ap.id}
-                className="flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[11.5px] text-emerald-300 transition-colors hover:bg-emerald-500/25"
+                className="flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[12px] sm:text-[11.5px] text-emerald-300 transition-colors hover:bg-emerald-500/25"
                 title={ap.playback_path ?? undefined}
               >
                 <Play className="h-3.5 w-3.5" />
@@ -634,7 +664,7 @@ function CartaoNumero({
                   if (mudou) salvarNoNumero({ musica_link: valor || null });
                 }}
                 placeholder="Link da música (YouTube, Spotify…)"
-                className="h-6 flex-1 text-[11.5px]"
+                className="h-11 flex-1 text-[16px] sm:h-6 sm:text-[11.5px]"
               />
             </div>
           )}
@@ -648,7 +678,7 @@ function CartaoNumero({
                 key={`${item.tipo}-${item.nome}`}
                 title={item.doCurso ? 'veio do curso, ninguém digitou' : undefined}
                 className={cn(
-                  'rounded px-1.5 py-0.5 text-[11.5px]',
+                  'rounded px-1.5 py-0.5 text-[12px] sm:text-[11.5px]',
                   item.tipo === 'instrumento'
                     ? 'bg-amber-500/10 text-amber-300/90'
                     : 'bg-sky-500/10 text-sky-300/90',
@@ -664,11 +694,31 @@ function CartaoNumero({
               type="button"
               onClick={() => setPalcoAberto((v) => !v)}
               aria-expanded={palcoAberto}
-              className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11.5px] text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-300"
+              className="flex min-h-[44px] items-center gap-1.5 rounded-full bg-slate-800/70 px-3.5 py-0.5 text-[12px] text-slate-300 transition-colors hover:bg-slate-800 hover:text-slate-300 sm:min-h-0 sm:gap-1 sm:rounded sm:bg-transparent sm:px-1.5 sm:text-[11.5px] sm:text-slate-500"
             >
               <Settings2 className="h-3.5 w-3.5" />
-              {palcoAberto ? 'fechar palco' : palco.length > 0 ? 'editar palco' : 'palco'}
+              {palcoAberto ? 'fechar palco' : palco.length > 0 ? 'editar palco' : (
+                <>
+                  palco
+                  {/* No celular o convite vazio de observacao some (abaixo); o botao avisa que
+                      o mapa mora aqui dentro. */}
+                  {observacoes.length === 0 && <span className="sm:hidden">e mapa</span>}
+                </>
+              )}
             </button>
+            {/* Celular: "tocar junto" na MESMA linha do palco — empilhados, os dois botões de
+                44px somavam 88px em cada um dos 24 cartões. */}
+            {!adicionando && (
+              <button
+                type="button"
+                onClick={() => setAdicionando(true)}
+                className="flex min-h-[44px] items-center gap-1.5 rounded-full bg-violet-500/10 px-3.5 text-[12px] text-violet-200 transition-colors active:bg-violet-500/20 sm:hidden"
+                title="Colocar outro aluno para tocar junto neste número"
+              >
+                <UserPlus className="h-3.5 w-3.5" />
+                tocar junto
+              </button>
+            )}
           </div>
 
           {/* A observação fica FORA do painel, sempre à vista, como no protótipo do Arthur. É a
@@ -681,7 +731,7 @@ function CartaoNumero({
                   key={ap.id}
                   type="button"
                   onClick={() => setPalcoAberto(true)}
-                  className="flex w-full gap-1.5 rounded px-1.5 py-1 text-left text-[11.5px] text-slate-400 transition-colors hover:bg-slate-800/60"
+                  className="flex w-full gap-1.5 rounded px-1.5 py-1 text-left text-[12px] sm:text-[11.5px] text-slate-400 transition-colors hover:bg-slate-800/60"
                 >
                   <MapPin className="mt-px h-3.5 w-3.5 shrink-0 text-slate-500" />
                   <span className="min-w-0 flex-1">
@@ -694,7 +744,8 @@ function CartaoNumero({
               <button
                 type="button"
                 onClick={() => setPalcoAberto(true)}
-                className="flex items-center gap-1.5 px-1.5 text-[11.5px] text-slate-600 transition-colors hover:text-slate-400"
+                // Convite vazio: no celular ocupava uma linha de 36px em cada um dos 24 cartoes.
+                className="hidden items-center gap-1.5 px-1.5 text-[12px] sm:text-[11.5px] text-slate-600 transition-colors hover:text-slate-400 sm:flex"
               >
                 <MapPin className="h-3.5 w-3.5" />
                 adicionar observação / mapa de palco
@@ -706,7 +757,7 @@ function CartaoNumero({
             numero.map((ap) => (
               <div key={ap.id}>
                 {emGrupo && (
-                  <p className="mt-1 text-[11px] font-medium text-slate-400">
+                  <p className="mt-1 text-[12px] sm:text-[11px] font-medium text-slate-400">
                     Palco de {ap.aluno_nome} · {ap.curso_nome}
                   </p>
                 )}
@@ -730,7 +781,7 @@ function CartaoNumero({
             <button
               type="button"
               onClick={() => setAdicionando(true)}
-              className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11.5px] text-violet-300/80 transition-colors hover:bg-violet-500/10 hover:text-violet-200"
+              className="hidden items-center gap-1 rounded px-1.5 py-0.5 text-[11.5px] text-violet-300/80 transition-colors hover:bg-violet-500/10 hover:text-violet-200 sm:flex"
               title="Colocar outro aluno para tocar junto neste número"
             >
               <UserPlus className="h-3.5 w-3.5" />
@@ -809,12 +860,16 @@ function CartaoBloco({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        'rounded-xl border bg-slate-800/40 transition-colors',
+        // Celular: o bloco é a "seção" do roteiro — sem caixa em volta, o cartão de cada número
+        // já é a superfície; caixa dentro de caixa comia 40px de largura.
+        'transition-colors sm:rounded-xl sm:border sm:bg-slate-800/40',
         isOver && !isDragging ? 'border-violet-500' : 'border-slate-700',
         isDragging && 'opacity-40',
       )}
     >
-      <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-slate-700/60 px-3 py-2.5">
+      {/* No celular: alca, nome, horario e lixeira na 1a linha; dia e inicio manual na 2a
+          (`order`); contagens embaixo. No desktop vale a ordem do codigo, numa faixa so. */}
+      <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-slate-700/60 px-0.5 pb-3 pt-1 sm:px-3 sm:py-2.5">
         {/* A alça move o BLOCO inteiro. Precisa ser só a alça: com os listeners no
             cabeçalho, clicar no campo de hora ou no botão de excluir viraria arrasto. */}
         <button
@@ -823,39 +878,62 @@ function CartaoBloco({
           {...listeners}
           aria-label={`Mover ${bloco.nome}`}
           title="Arraste para trocar a ordem dos blocos"
-          className="cursor-grab touch-none text-slate-600 hover:text-slate-400 active:cursor-grabbing"
+          className="-m-1.5 cursor-grab touch-none p-1.5 text-slate-600 hover:text-slate-400 active:cursor-grabbing sm:m-0 sm:p-0"
         >
           <GripVertical className="h-4 w-4" />
         </button>
-        <h3 className="text-[14px] font-semibold text-white">{bloco.nome}</h3>
+        <h3 className="text-[18px] font-semibold tracking-tight text-white sm:text-[14px]">{bloco.nome}</h3>
 
-        {/* Dia do bloco. Em recital de uma data so o selo seria a mesma data repetida —
-            por isso so aparece quando ha mais de um dia para escolher. */}
-        {dias.length > 1 && (
-          <Select
-            value={bloco.data ?? dataEvento}
-            onValueChange={async (v) => {
-              const { error } = await atualizarBloco(bloco.id, { data: v === dataEvento ? null : v });
-              if (error) toast.error(`Não consegui salvar o dia do bloco: ${error.message}`);
-              else onMudou();
-            }}
-          >
-            <SelectTrigger
-              className="h-7 w-[110px] text-[11.5px]"
-              aria-label={`Dia do ${bloco.nome}`}
+        {/* Dia do bloco = a ABA em que ele está; aqui só se MOVE para outro dia. Um seletor
+            com o dia atual repetia a aba de cima (Hugo, 06/10: "dois botões que fazem a
+            mesma coisa"). Com 2 dias é um botão; com 3+, a lista só dos OUTROS dias. */}
+        {dias.length > 1 && (() => {
+          const diaAtual = bloco.data ?? dataEvento;
+          const outros = dias.filter((d) => d !== diaAtual);
+          const rotulo = (d: string) => `${dias.indexOf(d) + 1}º dia · ${formatarDataCurta(d)}`;
+          const mover = async (v: string) => {
+            const { error } = await atualizarBloco(bloco.id, { data: v === dataEvento ? null : v });
+            if (error) {
+              toast.error(`Não consegui mover o ${bloco.nome}: ${error.message}`);
+              return;
+            }
+            // O bloco sai desta aba e vai para a do outro dia — sem o aviso parece que sumiu.
+            toast.success(`${bloco.nome} foi para o ${rotulo(v)}`, {
+              description: 'Abra a aba desse dia na Grade para vê-lo.',
+            });
+            onMudou();
+          };
+          const classe =
+            'order-5 flex h-11 items-center gap-1.5 rounded-md px-2.5 text-[12px] text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200 sm:order-none sm:h-7 sm:px-2 sm:text-[11.5px]';
+          return outros.length === 1 ? (
+            <button
+              type="button"
+              className={classe}
+              onClick={() => mover(outros[0])}
+              title={`Mover o ${bloco.nome} para o ${rotulo(outros[0])}`}
             >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {dias.map((d) => (
-                <SelectItem key={d} value={d}>
-                  {formatarDataCurta(d)}
-                  {d === dataEvento ? ' (1º dia)' : ''}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
+              <ArrowRightLeft className="h-3.5 w-3.5" />
+              Mover p/ {dias.indexOf(outros[0]) + 1}º dia
+            </button>
+          ) : (
+            <Select value="" onValueChange={mover}>
+              <SelectTrigger
+                className={cn(classe, 'w-auto border-0 bg-transparent')}
+                aria-label={`Mover o ${bloco.nome} para outro dia`}
+              >
+                <ArrowRightLeft className="h-3.5 w-3.5" />
+                <SelectValue placeholder="Mover para…" />
+              </SelectTrigger>
+              <SelectContent>
+                {outros.map((d) => (
+                  <SelectItem key={d} value={d}>
+                    {rotulo(d)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          );
+        })()}
 
         {horario && (
           <span
@@ -870,7 +948,7 @@ function CartaoBloco({
           </span>
         )}
 
-        <span className="text-[12px] text-slate-400">
+        <span className="order-7 text-[12px] text-slate-400 sm:order-none">
           {numeros.length} {numeros.length === 1 ? 'número' : 'números'}
           {numeros.length !== bloco.apresentacoes.length &&
             ` (${bloco.apresentacoes.length} apresentações)`}
@@ -879,7 +957,7 @@ function CartaoBloco({
 
         {formandosDoBloco > 0 && (
           <span
-            className="flex items-center gap-1 rounded bg-violet-500/15 px-2 py-0.5 text-[11px] font-medium text-violet-300"
+            className="order-7 flex items-center gap-1 rounded bg-violet-500/15 px-2 py-0.5 text-[12px] sm:text-[11px] font-medium text-violet-300 sm:order-none"
             title="Formandos neste bloco — passagem de ciclo (ritual da beca)"
           >
             <GraduationCap className="h-3 w-3" />
@@ -888,15 +966,18 @@ function CartaoBloco({
         )}
 
         {horario?.conflitaComAnterior && (
-          <span className="flex items-center gap-1 text-[11.5px] text-rose-300">
+          <span className="order-8 flex items-center gap-1 text-[12px] sm:text-[11.5px] text-rose-300 sm:order-none">
             <AlertTriangle className="h-3.5 w-3.5" />
             começa antes do bloco anterior terminar
           </span>
         )}
 
-        <div className="ml-auto flex items-center gap-2">
-          <span className="flex items-center gap-1.5 text-[11.5px] text-slate-400">
-            Início manual
+        <div className="contents sm:ml-auto sm:flex sm:items-center sm:gap-2">
+          {/* Início do bloco: o horário calculado já aparece na pílula âmbar; aqui só se FIXA
+              um início à mão. "Início manual: automático" lia como contradição (Hugo, 06/10) —
+              agora é uma ação ("Fixar início") ou, fixado, "Início fixo 10:00 ✕". */}
+          <span className="order-6 flex items-center gap-1 text-[12px] text-slate-400 sm:order-none sm:text-[11.5px]">
+            {bloco.horario_inicial && <span className="text-amber-300/80">Início fixo</span>}
             <TimePicker24h
               value={bloco.horario_inicial?.slice(0, 5) ?? ''}
               onChange={async (valor) => {
@@ -907,8 +988,13 @@ function CartaoBloco({
                 if (error) toast.error(`Não consegui salvar o horário: ${error.message}`);
                 else onMudou();
               }}
-              placeholder="automático"
-              className="h-7 w-[112px] text-[12px]"
+              placeholder="Fixar início"
+              className={cn(
+                'h-11 w-auto gap-0 px-2.5 text-[12px] sm:h-7 sm:px-2 sm:text-[11.5px] [&_svg]:mr-1.5 [&_svg]:h-3.5 [&_svg]:w-3.5',
+                bloco.horario_inicial
+                  ? 'border-amber-500/40 bg-amber-500/10 tabular-nums text-amber-200 [&_svg]:text-amber-300'
+                  : 'border-0 bg-transparent text-slate-400 hover:bg-slate-800 [&_svg]:text-slate-400',
+              )}
             />
             {/* Voltar ao encadeamento automático = tirar o horario manual. Sem este
                 botao, quem digitou uma hora nunca mais voltava atras. */}
@@ -925,7 +1011,7 @@ function CartaoBloco({
                   if (error) toast.error(`Não consegui limpar o horário: ${error.message}`);
                   else onMudou();
                 }}
-                className="text-slate-600 transition-colors hover:text-slate-300"
+                className="-m-2 flex h-11 w-11 items-center justify-center text-slate-500 transition-colors hover:text-slate-300 sm:m-0 sm:h-auto sm:w-auto"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -935,14 +1021,14 @@ function CartaoBloco({
             type="button"
             onClick={remover}
             aria-label={`Excluir ${bloco.nome}`}
-            className="text-slate-600 transition-colors hover:text-rose-400"
+            className="order-4 -m-2 ml-auto flex h-11 w-11 items-center justify-center text-slate-600 transition-colors hover:text-rose-400 sm:order-none sm:m-0 sm:block sm:h-auto sm:w-auto"
           >
             <Trash2 className="h-4 w-4" />
           </button>
         </div>
       </header>
 
-      <div className="space-y-2 p-3">
+      <div className="space-y-2.5 py-3 sm:space-y-2 sm:p-3">
         {adicionando ? (
           <SeletorApresentacao
             eventoId={eventoId}
@@ -958,7 +1044,7 @@ function CartaoBloco({
           <Button
             variant="outline"
             size="sm"
-            className="w-full gap-1.5 border-dashed"
+            className="h-12 w-full gap-1.5 rounded-2xl border-dashed text-[14px] sm:h-9 sm:rounded-md sm:text-sm"
             onClick={() => setAdicionando(true)}
           >
             <Plus className="h-4 w-4" />
@@ -1023,6 +1109,15 @@ export function GradeTab({
     () => diasDoEvento(evento.data_evento, evento.data_fim),
     [evento.data_evento, evento.data_fim],
   );
+  /**
+   * Dia aberto na Grade. Cada dia do recital é uma programação própria (pedido do Arthur,
+   * 06/10): a aba mostra só os blocos daquele dia. Bloco sem `data` é do 1º dia.
+   */
+  const [diaAtivo, setDiaAtivo] = useState<string>(evento.data_evento);
+  const diaDoBloco = (b: { data: string | null }) => b.data ?? evento.data_evento;
+  const multiDia = dias.length > 1;
+  const diaVisivel = multiDia && dias.includes(diaAtivo) ? diaAtivo : evento.data_evento;
+  const blocosVisiveis = multiDia ? blocos.filter((b) => diaDoBloco(b) === diaVisivel) : blocos;
 
   /** Releitura manual do canal professor — o automatico ja roda ao abrir a sala. */
   const sincronizar = async () => {
@@ -1216,7 +1311,8 @@ export function GradeTab({
   }
 
   return (
-    <div className="space-y-4">
+    // pb-24 no celular: folga para o botão flutuante "Novo bloco" não cobrir o último número.
+    <div className="space-y-4 pb-24 sm:pb-0">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[12.5px] text-slate-400">
           {totalApresentacoes} na grade
@@ -1231,27 +1327,35 @@ export function GradeTab({
           {' · intervalo de '}
           {formatarDuracao(evento.intervalo_entre_blocos_segundos ?? 2700)} entre blocos
         </p>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
           <TempoPadraoApresentacao evento={evento} onSalvo={onEventoMudou} />
           <Button
             size="sm"
             variant="outline"
-            className="gap-1.5"
+            className="ml-auto gap-1.5 sm:ml-0"
+            aria-label="Sincronizar LA Teacher"
             disabled={sincronizando}
             onClick={sincronizar}
             title="Puxa música, playback e rider que os professores lançaram no LA Teacher"
           >
             <RefreshCw className={cn('h-4 w-4', sincronizando && 'animate-spin')} />
-            {sincronizando ? 'Sincronizando…' : 'Sincronizar LA Teacher'}
+            <span className="sm:hidden">{sincronizando ? '…' : 'LA Teacher'}</span>
+            <span className="hidden sm:inline">
+              {sincronizando ? 'Sincronizando…' : 'Sincronizar LA Teacher'}
+            </span>
           </Button>
           <Button
             size="sm"
-            className="gap-1.5"
+            // Celular: flutua acima da barra inferior, na zona do polegar (TouchFlow).
+            className="fixed bottom-[calc(76px+env(safe-area-inset-bottom))] right-4 z-30 h-14 gap-1.5 rounded-full px-5 text-[15px] shadow-lg shadow-black/40 sm:static sm:z-auto sm:h-9 sm:rounded-md sm:px-3 sm:text-sm sm:shadow-none"
             onClick={async () => {
+              // `ordem` segue global (o horário é calculado sobre todos os blocos, dia a dia);
+              // o nome conta só os blocos do dia aberto.
               const { error } = await criarBloco(
                 evento.id,
-                `Bloco ${blocos.length + 1}`,
-                blocos.length + 1,
+                `Bloco ${blocosVisiveis.length + 1}`,
+                Math.max(0, ...blocos.map((b) => b.ordem)) + 1,
+                multiDia && diaVisivel !== evento.data_evento ? diaVisivel : null,
               );
               if (error) toast.error(`Não consegui criar o bloco: ${error.message}`);
               else recarregar();
@@ -1267,12 +1371,43 @@ export function GradeTab({
           muda a grade embaixo (o juntar). Sem pedido o componente some sozinho. */}
       <FilaTocaJunto eventoId={evento.id} onMudou={recarregar} />
 
+      {multiDia && (
+        <div className="flex gap-1 rounded-2xl bg-slate-900/80 p-1 sm:flex-wrap sm:gap-1.5 sm:rounded-none sm:border-b sm:border-slate-800 sm:bg-transparent sm:p-0 sm:pb-2">
+          {dias.map((d, i) => {
+            const doDia = blocos.filter((b) => diaDoBloco(b) === d);
+            const apresentacoes = doDia.reduce((s, b) => s + b.apresentacoes.length, 0);
+            return (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setDiaAtivo(d)}
+                className={cn(
+                  'flex min-h-[48px] flex-1 flex-col items-center justify-center rounded-xl px-2 py-1 text-[13px] font-medium transition-colors sm:min-h-0 sm:flex-none sm:flex-row sm:rounded-md sm:px-3 sm:py-1.5 sm:text-[12.5px] sm:font-normal',
+                  d === diaVisivel
+                    ? 'bg-violet-600 text-white'
+                    : 'bg-slate-800/60 text-slate-400 hover:bg-slate-800 hover:text-slate-200',
+                )}
+              >
+                {i + 1}º dia · {formatarDataCurta(d)}
+                <span className="text-[12px] opacity-75 sm:ml-2 sm:text-[11px]">
+                  {doDia.length} {doDia.length === 1 ? 'bloco' : 'blocos'} · {apresentacoes}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {loading && blocos.length === 0 ? (
         <p className="p-8 text-center text-sm text-slate-400">Carregando grade…</p>
-      ) : blocos.length === 0 ? (
+      ) : blocosVisiveis.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-700 p-10 text-center">
           <LayoutList className="mx-auto h-8 w-8 text-slate-600" />
-          <p className="mt-3 text-sm text-slate-300">Nenhum bloco criado ainda.</p>
+          <p className="mt-3 text-sm text-slate-300">
+            {multiDia
+              ? `Nenhum bloco em ${formatarDataCurta(diaVisivel)} ainda — use “Novo bloco”.`
+              : 'Nenhum bloco criado ainda.'}
+          </p>
           <p className="mt-1 text-[12.5px] text-slate-500">
             Os blocos organizam a ordem do recital. O horário de cada um é calculado a partir
             do anterior.
@@ -1311,18 +1446,18 @@ export function GradeTab({
               erro, sem aviso. Os SortableContext das apresentações ficam aninhados dentro
               de cada bloco; é o padrão multi-container do dnd-kit. */}
           <SortableContext
-            items={blocos.map((b) => `bloco-${b.id}`)}
+            items={blocosVisiveis.map((b) => `bloco-${b.id}`)}
             strategy={verticalListSortingStrategy}
           >
           <div className="space-y-3">
-            {blocos.map((b, i) => {
+            {blocosVisiveis.map((b, i) => {
               const h = horarios.find((x) => x.blocoId === b.id);
               return (
                 <div key={b.id} className="space-y-3">
                   {/* Separador de intervalo, como no protótipo. Só quando há folga real:
                       "INTERVALO — 0 MIN" seria uma linha que não informa nada. */}
                   {i > 0 && h && h.intervaloAntesSegundos !== null && h.intervaloAntesSegundos > 0 && (
-                    <p className="text-center text-[10.5px] uppercase tracking-wider text-slate-600">
+                    <p className="text-center text-[12px] sm:text-[10.5px] uppercase tracking-wider text-slate-600">
                       intervalo — {formatarDuracao(h.intervaloAntesSegundos)}
                     </p>
                   )}
@@ -1355,7 +1490,7 @@ export function GradeTab({
                 )}
                 <span className="text-[13px] font-medium text-white">{arrastando.rotulo}</span>
                 {arrastando.detalhe && (
-                  <span className="text-[11.5px] text-slate-400">{arrastando.detalhe}</span>
+                  <span className="text-[12px] sm:text-[11.5px] text-slate-400">{arrastando.detalhe}</span>
                 )}
               </div>
             )}
