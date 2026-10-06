@@ -2,6 +2,20 @@
 
 Sistema de gestão operacional e BI para rede de escolas de música. Pipeline comercial, gestão de alunos, metas, retenção, professores, salas e projetos.
 
+## Presença: a gaveta da EQUIPE é a verdade (regra do Alf, não reabrir)
+
+Três gavetas:
+1. Emusys — presente/ausente, justificada, cancelada. NÃO decide nada sozinha. "ausente" do Emusys NUNCA é falta.
+2. Equipe no LA Report (respondido_por = 'agenda_secretaria', via comandos) — É A QUE VALE. A equipe lança 100%, todo dia (o Alf acompanha diariamente).
+3. Professor no LA Teacher (professor_la_teacher / fabio_audio / professor_whatsapp) — vale junto com a da equipe.
+Divergência entre equipe e professor APARECE (tem_divergencia); nada é escolhido em silêncio.
+
+Consequências obrigatórias:
+- A lista do Emusys (roster) NÃO define o que "deveria ter chamada" no passado. Aula em que o professor está ausente e ninguém lançou nada = aula que não aconteceu, não é "furo".
+- Qualquer número de "aula sem lançamento" no passado é, por padrão, ERRO DA MEDIÇÃO. Antes de mostrar a alguém: achar caso a caso onde está o lançamento ou por que a aula não existe (aula não dada, remarcada, cadastro duplo pela mesma pessoa = unidade + emusys_student_id, aluno que já saiu).
+- NUNCA propor cobrança retroativa à equipe nem levar ao Alf "a equipe não lançou".
+- Health Score e Sol contam presença em cima das gavetas 2 e 3. A Sol cobra o dia corrente; o passado está fechado pela equipe.
+
 > **Referência rápida (consultar PRIMEIRO):**
 > - **[`docs/REGRAS-DE-NEGOCIO.md`](docs/REGRAS-DE-NEGOCIO.md)** — **documento único e consolidado** das regras de negócio de todos os âmbitos (alunos, financeiro, retenção, comercial, professores, relatórios), validado contra o banco de produção em 2026-08-08. Use antes de qualquer decisão sobre "o que este número significa".
 > - **[`docs/MAPA-SISTEMA.md`](docs/MAPA-SISTEMA.md)** — **índice** por rota; o conteúdo mora em `docs/sistema/<domínio>.md` (8 domínios: aluno, comercial, professor, financeiro, gestao, operacao, plataforma, integracao). Por página: rota, componentes, hooks, RPCs e edge functions. Use antes de mexer numa página.
