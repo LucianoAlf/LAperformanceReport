@@ -65,17 +65,17 @@ begin
   from (
     select b.nome, b.sim
     from (
-      select distinct on (lower(a.nome_normalizado))
+      select distinct on (lower(unaccent(a.nome_normalizado)))
              a.nome::text as nome,
-             round(similarity(v_in, lower(a.nome_normalizado))::numeric, 2) as sim
+             round(similarity(v_in, lower(unaccent(a.nome_normalizado)))::numeric, 2) as sim
         from public.alunos a
        where a.unidade_id = p_unidade_id
          and a.nome_normalizado is not null
          and public.sol_caixa_aluno_pode_pagar_v1(a.status, a.unidade_id, a.emusys_student_id)
-         and similarity(v_pri, split_part(lower(btrim(a.nome_normalizado)), ' ', 1)) >= 0.5
-         and word_similarity(v_ult, lower(a.nome_normalizado)) >= 0.8
-         and btrim(regexp_replace(lower(a.nome_normalizado), '[^a-z ]', ' ', 'g')) <> v_in
-       order by lower(a.nome_normalizado),
+         and similarity(v_pri, split_part(lower(unaccent(btrim(a.nome_normalizado))), ' ', 1)) >= 0.5
+         and word_similarity(v_ult, lower(unaccent(a.nome_normalizado))) >= 0.8
+         and btrim(regexp_replace(lower(unaccent(a.nome_normalizado)), '[^a-z ]', ' ', 'g')) <> v_in
+       order by lower(unaccent(a.nome_normalizado)),
                 public.sol_caixa_aluno_matriculado_v1(a.status) desc
     ) b
     order by b.sim desc, b.nome
