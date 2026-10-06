@@ -184,6 +184,7 @@ const ultima = (t) => t.enviadas[t.enviadas.length - 1].t;
     assert.ok(/\(atualizado\)/.test(ultima(t)) && /Dono informado por Pessoa da Equipe/.test(ultima(t)));
     console.log('CG-2. "Sol, o Cheque 2 é da X / 5 é do Y / 6 é da Z" citando o card → atribuídos 2 e 5, 6 recusado (repetido), card republicado — OK');
 
+
     // Sem citar, chamando a Sol, com lote aberto: também vai ao agente.
     assert.ok(t.h.chequesConversa(t.ev({ messageId: 'J2', body: 'Sol, e o cheque 6?' }), { chamouASol: true }));
     // Fala de humano para humano citando o card: vai ao agente (que pode ficar calado) —
@@ -231,6 +232,50 @@ const ultima = (t) => t.enviadas[t.enviadas.length - 1].t;
     // Depois do "pode", o lote não é mais assunto: citar o card não vai ao agente.
     assert.strictEqual(t.h.chequesConversa(t.ev({ messageId: 'D1', body: 'Sol, e agora?' }), { chamouASol: true }), null);
     console.log('CG-5. PDF reenviado: card vivo → aponta; vencido → republica sem reler; "pode" lança 7 — OK');
+  }
+
+  // ================================================================== CG-R (06/10 ao vivo)
+  // O cheque 6 saiu REPETIDO (a leitura deu o banco+número do 3), mas é outro cheque,
+  // de outra família. A pessoa diz o número do papel → vale o número dela.
+  {
+    const alunos = [
+      { nome: 'Davi Rocha Prado', resp: 'Elisa Prado', faturas: [{ n: 31, valor: 300 }] },
+      { nome: 'Joana Pires Lopes', resp: 'Kleber Lopes', faturas: [{ n: 36, valor: 300 }] },
+    ];
+    const t = montar({ unidade: 'cg', leituras: [lido(3, 300, 'ELISA PRADO'), lido(3, 300, 'ELISA PRADO')], alunos });
+    await t.h.handle(t.pdf('PDFR', 'MALOTE-CG-R'));
+    const d0 = t.regs.find((e) => e.acao === 'cheques_lote_decidido').decisoes;
+    assert.strictEqual(d0[1], 'repetido', JSON.stringify(d0));
+    const fala = 'Sol, o cheque 2 é outro, número 000666, e é da Joana Pires';
+    const n2 = await t.tool('cheques_confirmar_leitura', { p_texto_original: fala, itens: [{ cheque: 2, numero: '000666', valor: null }] });
+    assert.ok(n2.resultados[0].ok, JSON.stringify(n2));
+    const e2 = await t.tool('cheques_lote_estado');
+    assert.notStrictEqual(e2.lote.cheques[1].situacao, 'repetido', JSON.stringify(e2.lote.cheques[1]));
+    const a2 = await t.tool('cheques_atribuir', { p_texto_original: fala, itens: [{ cheque: 2, alunos: ['Joana Pires'] }] });
+    assert.ok(a2.resultados[0].ok, JSON.stringify(a2.resultados));
+    const bad = await t.tool('cheques_confirmar_leitura', { p_texto_original: 'o número do 1 é 000777', itens: [{ cheque: 1, numero: '000777', valor: null }] });
+    assert.ok(bad.resultados.every((x) => !x.ok || x.ja_estava_confirmada), 'cheque já confiável não troca de número por fala');
+    console.log('CG-R. cheque repetido + número do papel informado pela equipe → deixa de ser repetido e é atribuído — OK');
+  }
+
+  // ================================================================== CG-M (06/10 ao vivo)
+  // "O Cheque 2 é da X … parcela 10/2026 - R$ 387": a 10 está em aberto com outro
+  // valor; a que fecha é a do mês anterior, já paga no Emusys com cheque pré-datado.
+  // A Sol não recusa com "não achei a 10": usa a que fecha e AVISA a troca.
+  {
+    const ant = new Date(Date.parse(COMP) - 15 * 86400e3).toISOString().slice(0, 7) + '-01';
+    const antTxt = `${ant.slice(5, 7)}/${ant.slice(0, 4)}`;
+    const alunos = [{ nome: 'Clara Costa Vidal', resp: 'Rita Vidal', faturas: [
+      { n: 41, valor: 387, comp: ant, compTxt: antTxt, status: 'paga', forma: 'Cheque Pré Datado' },
+      { n: 42, valor: 447 }] }];
+    const t = montar({ unidade: 'cg', leituras: [lido(1, 387, 'PESSOA DESCONHECIDA'), lido(2, 999, 'OUTRA PESSOA')], alunos });
+    await t.h.handle(t.pdf('PDFM', 'MALOTE-CG-M'));
+    const fala = `Sol, o Cheque 1 é da Clara Costa Vidal e é da parcela ${MMAAAA} - valor R$387,00`;
+    const a = await t.tool('cheques_atribuir', { p_texto_original: fala, itens: [{ cheque: 1, alunos: ['Clara Costa Vidal'], competencia: MMAAAA }] });
+    assert.ok(a.resultados[0].ok, JSON.stringify(a.resultados));
+    assert.ok(new RegExp(`mês dito foi ${MMAAAA.replace('/', '\\/')}`).test(a.resultados[0].aviso || ''), JSON.stringify(a.resultados[0]));
+    assert.ok(new RegExp(antTxt.replace('/', '\\/')).test(a.resultados[0].parcelas.join(' ')), JSON.stringify(a.resultados[0]));
+    console.log('CG-M. mês dito não fecha → usa a parcela que fecha (paga em cheque) e avisa a troca — OK');
   }
 
   // ================================================================== RECREIO

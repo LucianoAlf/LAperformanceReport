@@ -971,7 +971,9 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
   const PENDENTES_DE_GENTE = new Set(['sem_parcela', 'forma_indefinida', 'valor', 'leitura', 'lancar']);
   function loteVivo(l) {
     if (!l || l.descartado || l.estado !== 'lido' || agoraFn() - l.ts >= LOTE_VIVO_MS) return false;
-    return (l.itens || []).some((it) => PENDENTES_DE_GENTE.has(it.decisao));
+    // Tudo marcado "só conferência" não mata o lote (Recreio 06/10: a Sol respondeu
+    // "não há lote aberto" logo depois de marcar a conferência que a pessoa pediu).
+    return (l.itens || []).some((it) => PENDENTES_DE_GENTE.has(it.decisao) || it.soConferencia);
   }
   function cardVivo(chatId, l) { return (l.cards || []).some((c) => cardAberto(chatId, c)); }
 
@@ -1599,6 +1601,26 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
       const achado = acharCheque(lote, ref);
       if (!achado) { out.push(recusaCheque(ref && ref.cheque, 'cheque_nao_encontrado', 'não achei esse cheque no lote (confira o número do cheque na lista)')); continue; }
       const { it, n } = achado; const ch = it.cheque; const lt = ch.leituras || {};
+      // Cheque marcado como REPETIDO (a leitura deu o mesmo banco+número de outro
+      // cheque do lote — CG 06/10, cheque 6 = cheque 3). A visão não tem como
+      // provar outro número; vale o número que a pessoa escreveu, se for diferente
+      // do cheque com que colidiu e de todos os outros do lote. Fica registrado quem
+      // informou, e o card ainda pede o "pode".
+      if (it.decisao === 'repetido' && ref.numero != null) {
+        const numH = digitos(String(ref.numero)).padStart(6, '0').slice(-6);
+        if (!numeroNaFala(String(ref.numero), textoOriginal)) { out.push(recusaCheque(n, 'numero_fora_da_fala', 'o número não está escrito na mensagem da pessoa')); continue; }
+        const colide = lote.itens.some((x) => x !== it && chaveCheque(x.cheque) === chaveCheque({ banco: ch.banco, numero: numH }));
+        if (!numH || /^0+$/.test(numH) || colide) { out.push(recusaCheque(n, 'numero_repetido', `o número ${ref.numero} também é de outro cheque do lote — confere no papel`)); continue; }
+        ch.numero = numH; ch.confirmadoPor = quem || 'equipe'; ch.numeroInformado = true;
+        it.trilha.push({ acao: 'numero_informado', por: ch.confirmadoPor, ts: agoraFn() });
+        try {
+          it.res = await rpc('sol_cheque_resolver_fatura_v1', { p_unidade_id: lote.unidadeId, p_emitente_nome: ch.emitente_nome,
+            p_valor: ch.valor, p_bom_para: ch.bom_para, p_emitente_documento_hash: it.docHash || null });
+        } catch (_) { it.res = null; }
+        if (!it.atribuidoPor) { it.multi = null; it.escolha = escolherFatura(it.res, ch, lote.loteData); await tentarFamilia(it, lote.loteData, hojeBRT(agoraFn())); }
+        out.push({ cheque: n, ok: true, aviso: `número do cheque ${n} registrado como ${numH}, informado pela equipe` });
+        continue;
+      }
       if (ch.confiavel && !ch.confirmadoPor) { out.push({ cheque: n, ok: true, ja_estava_confirmada: true }); continue; }
       const numero = ref.numero != null ? String(ref.numero) : null;
       const valor = ref.valor != null && ref.valor !== '' ? Number(ref.valor) : null;
@@ -1658,7 +1680,7 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
       }
       if (it.decisao === 'repetido') {
         const k = chaveCheque(ch); const prim = lote.itens.findIndex((x) => x !== it && x.cheque.confiavel && chaveCheque(x.cheque) === k);
-        out.push(recusaCheque(n, 'cheque_repetido', `o cheque ${n} é o mesmo cheque ${prim >= 0 ? prim + 1 : ''} (mesmo banco e número) — aparece duas vezes no arquivo e conto uma vez só; se forem dois cheques diferentes, mandem uma foto nítida deste`)); continue;
+        out.push(recusaCheque(n, 'cheque_repetido', `o cheque ${n} é o mesmo cheque ${prim >= 0 ? prim + 1 : ''} (mesmo banco e número) — aparece duas vezes no arquivo e conto uma vez só; se forem dois cheques diferentes, peça o número que está no papel deste cheque e use cheques_confirmar_leitura com ele`)); continue;
       }
       if (it.decisao === 'ja_no_caixa') { out.push(recusaCheque(n, 'ja_no_caixa', `o cheque ${n} já está no caixa`)); continue; }
       if (!ch.confiavel) {
@@ -1693,7 +1715,16 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
       const gruposF = grupos.map((g) => g.map(comFatura));
       const competencia = ref.competencia && /^\d{1,2}\/\d{4}$/.test(String(ref.competencia).trim())
         ? String(ref.competencia).trim().padStart(7, '0') : null;
-      const combos = combinacoes(gruposF, ch.valor, { competencia, hoje });
+      let combos = combinacoes(gruposF, ch.valor, { competencia, hoje });
+      // O mês que a pessoa disse não fecha com o valor (CG 06/10: "parcela 10/2026",
+      // mas o cheque de R$ 387 era a 09/2026 já paga no Emusys com cheque
+      // pré-datado; a 10/2026 está em aberto e vencida, R$ 447). Procura nos outros
+      // meses do MESMO aluno e AVISA a troca — quem confirma é o "pode" no card.
+      let mesTrocado = null;
+      if (!combos.length && competencia) {
+        combos = combinacoes(gruposF, ch.valor, { hoje });
+        if (combos.length) mesTrocado = competencia;
+      }
       let escolhida = combos.length === 1 ? combos[0] : (combos.length > 1 ? maisProxima(combos, ch.bom_para || lote.loteData) : null);
       if (!escolhida) {
         if (combos.length > 1) {
@@ -1712,7 +1743,15 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
       it.soConferencia = false;
       it.atribuidoPor = quem || 'equipe';
       it.trilha.push({ acao: 'dono_informado', alunos, por: it.atribuidoPor, ts: agoraFn() });
-      out.push({ cheque: n, ok: true, parcelas: escolhida.map((x) => `${x.fatura.descricao} (${x.cand.aluno_nome})`) });
+      const _r = { cheque: n, ok: true, parcelas: escolhida.map((x) => `${x.fatura.descricao} (${x.cand.aluno_nome})`) };
+      if (mesTrocado) {
+        const f0 = escolhida[0].fatura; const pagaEmCheque = String(f0.status || '').toLowerCase() === 'paga';
+        _r.aviso = `o mês dito foi ${mesTrocado}, mas a parcela que fecha com ${fmtBRL(ch.valor)} é ${escolhida.map((x) => x.fatura.descricao).join(' + ')}`
+          + (pagaEmCheque ? ' (já registrada no Emusys como paga com cheque)' : '')
+          + ' — diga isso à pessoa; o card mostra a parcela e o "pode" confirma';
+        it.trilha.push({ acao: 'mes_trocado', dito: mesTrocado, por: it.atribuidoPor, ts: agoraFn() });
+      }
+      out.push(_r);
     }
     return out;
   }
