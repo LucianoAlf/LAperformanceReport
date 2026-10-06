@@ -761,8 +761,12 @@ async function lerLote(arquivo, modelo) {
 const CTL_NAO = /^(nao|n|cancela|cancelar|cancelado|descarta|descartar|ignora|ignorar|esquece|esquecer|deixa|errado|errada)$/;
 const CTL_PODE = /^(pode|sim|ok|okay|isso|certo|confirmo|confirma|confirmado|autorizo|autorizado|lanca|lancar|beleza|blz|perfeito|manda|aprovado|aprova|s)$/;
 function controleDaResposta(texto) {
+  // "Isso, Sol R$ 423,50" é CONVERSA (traz dado para a Sol conferir), não "pode"/"não"
+  // (Recreio 06/10). Controle é fala curta e sem número.
+  if (/\d/.test(String(texto || ''))) return null;
   const n = norm(texto).replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
   if (!n) return null;
+  if (n.split(' ').length > 4) return null;
   const w = n.split(' ')[0];
   if (CTL_NAO.test(w)) return 'nao';
   if (CTL_PODE.test(w)) return 'pode';
@@ -777,6 +781,8 @@ const AGUARDA_CARD_MS = 2 * 60 * 1000;   // entre "li" e o caixa publicar o card
 // já resolveu — vive o expediente. Conversa citando o lote vale enquanto ele vive, e
 // o card é republicado a partir dele quando vence.
 const LOTE_VIVO_MS = 14 * 3600 * 1000;
+// Falas da equipe sobre o lote que valem como "o que a pessoa disse" (20 min).
+const FALAS_JANELA_MS = 20 * 60 * 1000;
 
 function sha256Arquivo(arquivo) {
   try { return crypto.createHash('sha256').update(fs.readFileSync(arquivo)).digest('hex'); } catch (_) { return null; }
@@ -1590,6 +1596,12 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
     const achado = loteDaConversa(event.chatId, event.quotedMessageId || null);
     if (!achado) return null;
     if (!achado.citou && !chamouASol && !falaCitaChequeDoLote(event.body, achado.lote)) return null;
+    // A conversa sobre o lote é de VÁRIAS mensagens (Recreio 06/10: "o cheque 4 é
+    // 000261 mesmo" … "Isso, R$ 423,50"). Guarda o que a equipe disse para as
+    // ferramentas conferirem número/valor/nome contra a conversa, não só a última fala.
+    const ag = agoraFn();
+    achado.lote.falas = (achado.lote.falas || []).filter((f) => ag - f.ts < FALAS_JANELA_MS).slice(-11);
+    achado.lote.falas.push({ ts: ag, texto: String(event.body || '').slice(0, 2000) });
     return { citou: achado.citou, resumo: resumoParaAgente(event.chatId, achado.lote) };
   }
 
@@ -1869,6 +1881,11 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
     const achado = loteDaConversa(chatId, quotedId);
     if (!achado) return { ok: false, motivo: 'sem_lote_aberto' };
     const lote = achado.lote;
+    {
+      const ag = agoraFn();
+      const antes = (lote.falas || []).filter((f) => ag - f.ts < FALAS_JANELA_MS).map((f) => f.texto);
+      if (antes.length) textoOriginal = [...antes, textoOriginal].join('\n');
+    }
     const r0 = await redecidir(chatId, lote);
     if (!r0.ok) return { ok: false, motivo: r0.motivo };
     if (acao === 'estado') return { ok: true, lote, estado: estadoParaAgente(chatId, lote) };

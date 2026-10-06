@@ -343,6 +343,22 @@ const ultima = (t) => t.enviadas[t.enviadas.length - 1].t;
     console.log('CG-A. mesmo banco e número, agências diferentes → dois cheques — OK');
   }
 
+  // ================================================================== REC-C (06/10 ao vivo)
+  // Confirmação em VÁRIAS mensagens: "o cheque 4 é 000261 mesmo" … "Isso, R$ 423,50".
+  {
+    const alunos = [{ nome: 'Helena Rocha Prado', resp: 'Ursula Rocha', faturas: [{ n: 91, valor: 423.5 }] }];
+    const c4 = lido(1, 423.5, 'URSULA ROCHA', { numPapel: '000288', extensoLido: 400 });
+    const t = montar({ unidade: 'rec', leituras: [c4, lido(2, 999, 'OUTRA PESSOA')], alunos });
+    await t.h.handle(t.pdf('PDFC', 'MALOTE-REC-C'));
+    const f1 = 'Sol o cheque 1 é 100001 mesmo';
+    assert.ok(t.h.chequesConversa(t.ev({ messageId: 'K1', body: f1 }), { chamouASol: true }));
+    const f2 = 'Isso, Sol R$423,50';
+    assert.ok(t.h.chequesConversa(t.ev({ messageId: 'K2', body: f2 }), { chamouASol: true }));
+    const r = await t.tool('cheques_confirmar_leitura', { p_texto_original: f2, itens: [{ cheque: 1, numero: '100001', valor: 423.5 }] });
+    assert.ok(r.resultados[0].ok, JSON.stringify(r.resultados));
+    console.log('REC-C. número numa mensagem e valor na outra → confirmação aceita — OK');
+  }
+
   // ================================================================== REC-P (06/10 ao vivo)
   // Recreio baixa todos os pré-datados no dia em que recebe (Lígia: 10/2026 paga em
   // 08/08 com cheque pré-datado). O cheque do depósito casa com a parcela que VENCE
