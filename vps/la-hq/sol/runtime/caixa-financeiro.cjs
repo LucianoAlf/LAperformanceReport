@@ -7544,7 +7544,24 @@ _Não lanço nada pela metade._`);
         log({ acao: 'multi_visto_pelo_modelo', chatId, itens: _pagLLM.length,
               nomes: _pagLLM.map((p) => p.aluno).slice(0, 4) });
       }
-      if (detectarContextoMultiAluno(legendaEfetiva) || _multiPorLLM) {
+      // 🔴 LOJINHA: PRODUTO NÃO É ALUNO (Barra 06/10/2026). "Caderno cordas +
+      //    chaveiro porta palhetas + mini caixa de som" abriu o portão pelo
+      //    NOMES_LIGADOS (duas palavras + "+" + duas palavras) e a Sol pediu
+      //    "cada aluno com seu valor" para UMA venda de R$ 190. Em venda, quem diz
+      //    se há mais de uma pessoa é o modelo (pagamentos) ou o formato que a
+      //    própria Sol ensina ("Nome — R$ valor" em 2+ linhas); o detector de
+      //    texto livre não decide QUANDO o modelo já leu a venda e devolveu UM
+      //    comprador (ou a legenda rotula um: "para o aluno X"). Sem comprador, o detector segue valendo (caso
+      //    "Pagamento de X e Y" em lojinha, 29/08).
+      const _ehLojinhaMulti = (lojinhaInfo || categoria === 'lojinha') && !categoriaEhSaida(categoria)
+        && !!(aluno || _compradorDeclaradoLojinha(legendaEfetiva)) && _pagLLM.length <= 1;
+      const _multiPorTexto = _ehLojinhaMulti
+        ? extrairItensNomeValor(legendaEfetiva).itens.length >= 2
+        : detectarContextoMultiAluno(legendaEfetiva);
+      if (_ehLojinhaMulti && !_multiPorTexto && detectarContextoMultiAluno(legendaEfetiva)) {
+        log({ acao: 'lojinha_multi_texto_ignorado', chatId });
+      }
+      if (_multiPorTexto || _multiPorLLM) {
         // Divisao no formato ensinado = parse deterministico; LLM so p/ texto livre.
         let multiRaw = null;
         const _det = extrairItensNomeValor(legendaEfetiva);
