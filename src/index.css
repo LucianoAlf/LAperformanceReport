@@ -1,6 +1,3 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
 /* Scrollbar sutil para dark mode */
 .scrollbar-thin {
@@ -488,3 +485,10 @@ input[type="number"] {
     transform: none;
   }
 }
+
+/* Tailwind compilado no build (06/10/2026). As diretivas ficam no FIM de propósito: o Play
+   CDN injetava o CSS dele depois de todas as folhas, então utilitário vencia empate com as
+   regras acima. Manter a mesma ordem é o que garante que nada muda de aparência. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
