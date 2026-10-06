@@ -71,6 +71,9 @@ function configuracao() {
     // 20261006200000 (validador do lote aceita `fatura_ids`). Desligado, o cheque
     // de irmãos sai num card próprio (lançamento simples já aceita `fatura_ids`).
     loteMultiFatura: liga(process.env.SOL_CHEQUES_LOTE_MULTI_FATURA, c.lote_multi_fatura),
+    // Arquivo onde o lote aberto sobrevive a reinício da ponte (06/10/2026). Sem
+    // ele, o lote vive só em memória (comportamento antigo).
+    estadoArquivo: process.env.SOL_CHEQUES_ESTADO_ARQUIVO || c.estado_arquivo || null,
   };
 }
 
@@ -257,6 +260,37 @@ function normalizarCheque(raw) {
 // ------------------------------------------------------------ escolha da parcela
 
 const dias = (a, b) => Math.abs((Date.parse(a) - Date.parse(b)) / 86400000);
+// 🔴 VALOR DA PARCELA NA DATA DO CHEQUE, NÃO DE HOJE (CG 06/10/2026). Famílias pagam
+//    todo mês com cheque pré-datado para o dia do vencimento, no valor COM o desconto
+//    de pontualidade (R$ 387 de uma parcela de R$ 447). O malote chega ao grupo dias
+//    depois; com a régua de "hoje" a parcela já estava vencida (R$ 447) e a Sol
+//    recusava um cheque certo. A data de referência é o bom-para ou a data do
+//    depósito (a que vier), nunca depois de hoje.
+const ISO_DIA = /^\d{4}-\d{2}-\d{2}$/;
+function dataRefCheque(ch, hoje) {
+  const r = ch && (ISO_DIA.test(String(ch.bom_para || '')) ? ch.bom_para : (ISO_DIA.test(String(ch.dataRef || '')) ? ch.dataRef : null));
+  return r && r < hoje ? r : hoje;
+}
+// Só a data do cheque ATÉ o vencimento muda o valor (vale o desconto). Cheque de
+// depois do vencimento segue a régua de hoje (vencida, com multa/juros), como antes.
+function valorParaCheque(f, ref, hoje, valorCheque = null) {
+  const venc = f && f.data_vencimento ? String(f.data_vencimento).slice(0, 10) : null;
+  const naData = ref && ref < hoje && venc && ref <= venc ? valorDoBanco(f, ref) : null;
+  const deHoje = valorDoBanco(f, hoje);
+  // O cheque pode ter vindo com o valor de hoje (com multa) — vale também.
+  if (naData && valorCheque != null && deHoje && Math.abs(Number(deHoje.valor) - Number(valorCheque)) <= 0.01
+      && Math.abs(Number(naData.valor) - Number(valorCheque)) > 0.01) return deHoje;
+  return naData || deHoje;
+}
+// Parcela já paga em cheque só casa com o cheque do malote se foi registrada perto
+// da data dele: as dos meses anteriores (mesmo valor, mesmo pré-datado) são de
+// malotes que já passaram e empatavam com a certa ("mais de uma parcela", CG 06/10).
+const JANELA_PAGA_EM_CHEQUE_DIAS = 20;
+function pagaLongeDoCheque(fatura, ref) {
+  if (!fatura || String(fatura.status || '').toLowerCase() !== 'paga') return false;
+  const d = fatura.data_pagamento ? String(fatura.data_pagamento).slice(0, 10) : null;
+  return !!(d && ref && dias(d, ref) > JANELA_PAGA_EM_CHEQUE_DIAS);
+}
 // Identidade do cheque: banco + número (a CMC-7 prova os dois).
 const chaveCheque = (c) => `${String(c && c.banco || '').padStart(3, '0')}|${String(c && c.numero || '')}`;
 const hojeBRT = (agora = Date.now()) => new Date(agora - 3 * 3600 * 1000).toISOString().slice(0, 10);
@@ -375,7 +409,7 @@ function decidirCheque(it, fatura, jaLigada, hoje = hojeBRT()) {
   if (jaLigada) return 'ja_no_caixa';
   const situ = situacaoDaFatura(fatura, it.formaConfirmada);
   if (situ) return situ;
-  const vb = valorDoBanco(fatura, hoje);
+  const vb = valorParaCheque(fatura, dataRefCheque(it.cheque, hoje), hoje, it.cheque.valor);
   it.valorBanco = vb;
   if (!vb || !(vb.valor > 0) || Math.abs(vb.valor - Number(it.cheque.valor)) > 0.01) return 'valor';
   return 'lancar';
@@ -406,7 +440,7 @@ function decidirMulti(it, hoje) {
     if (m.jaLigada) return 'ja_no_caixa';
     const situ = situacaoDaFatura(m.fatura, it.formaConfirmada);
     if (situ) return situ;
-    m.valorBanco = valorDoBanco(m.fatura, hoje);
+    m.valorBanco = valorParaCheque(m.fatura, dataRefCheque(it.cheque, hoje), hoje);
     if (!m.valorBanco || !(m.valorBanco.valor > 0)) return 'valor';
     soma += m.valorBanco.valor;
   }
@@ -437,6 +471,7 @@ function itemDoCaixa(it) {
       cheque_numero: it.cheque.numero || null,
       cheque_banco: it.cheque.banco || null,
       cheque_bom_para: it.cheque.bom_para || null,
+      cheque_data_ref: dataRefCheque(it.cheque, hojeBRT()),
     };
   }
   const f = it.fatura; const esc = it.escolha.fatura;
@@ -453,6 +488,7 @@ function itemDoCaixa(it) {
     cheque_numero: it.cheque.numero || null,
     cheque_banco: it.cheque.banco || null,
     cheque_bom_para: it.cheque.bom_para || null,
+    cheque_data_ref: dataRefCheque(it.cheque, hojeBRT()),
   };
 }
 
@@ -746,6 +782,48 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
   // Ganchos do caixa (ligarCaixa): quem sabe se um card ainda aceita "pode".
   const caixa = { cardAberto: null, ocr: null };
 
+  // 🔴 O LOTE SOBREVIVE A REINÍCIO (06/10/2026, Recreio/CG). O lote morava só em
+  // memória: um deploy reiniciou a ponte e a Vitória, citando o card, ouviu "não há
+  // lote aberto". Agora o estado dos lotes lidos vai para um arquivo do usuário sol
+  // (0600) a cada mudança (verificado a cada 5 s) e volta no início. O documento do
+  // emitente nunca é gravado (já virou hash antes; o replacer garante).
+  const _repEstado = (k, v) => (k === 'documento' ? undefined : (v instanceof Set ? { __set: [...v] } : v));
+  const _revEstado = (k, v) => (v && typeof v === 'object' && !Array.isArray(v) && Array.isArray(v.__set) && Object.keys(v).length === 1 ? new Set(v.__set) : v);
+  let _estadoSalvo = null;
+  function salvarEstado() {
+    const arq = configuracao().estadoArquivo;
+    if (!arq) return false;
+    try {
+      const ag = agoraFn(); const obj = {};
+      for (const [chat, arr] of lotes) {
+        const vivos = (arr || []).filter((l) => l && l.estado === 'lido' && !l.descartado && ag - l.ts < LOTE_VIVO_MS);
+        if (vivos.length) obj[chat] = vivos;
+      }
+      const txt = JSON.stringify({ v: 1, lotes: obj }, _repEstado);
+      if (txt === _estadoSalvo) return false;
+      const tmp = `${arq}.tmp`;
+      fs.writeFileSync(tmp, txt, { mode: 0o600 });
+      fs.renameSync(tmp, arq);
+      _estadoSalvo = txt;
+      return true;
+    } catch (e) { log({ acao: 'cheques_estado_salvar_erro', erro: String(e && e.message) }); return false; }
+  }
+  (function carregarEstado() {
+    const arq = configuracao().estadoArquivo;
+    if (!arq) return;
+    try {
+      const d = JSON.parse(fs.readFileSync(arq, 'utf8'), _revEstado);
+      const ag = agoraFn(); let n = 0;
+      for (const [chat, arr] of Object.entries((d && d.lotes) || {})) {
+        const vivos = (Array.isArray(arr) ? arr : []).filter((l) => l && ag - l.ts < LOTE_VIVO_MS);
+        if (vivos.length) { lotes.set(chat, vivos); n += vivos.length; }
+      }
+      log({ acao: 'cheques_estado_carregado', lotes: n });
+    } catch (e) { if (!e || e.code !== 'ENOENT') log({ acao: 'cheques_estado_carregar_erro', erro: String(e && e.message) }); }
+  })();
+  const _timerEstado = setInterval(salvarEstado, 5000);
+  if (_timerEstado.unref) _timerEstado.unref();
+
   async function rpc(nome, args) {
     if (rpcFn) return rpcFn(nome, args);
     const { url, key } = carregarEnv();
@@ -804,8 +882,8 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
   // Só parcela que pode receber cheque entra (não cancelada, não paga por outra
   // forma, não ligada ao caixa). `competencia` ("MM/AAAA") restringe; `mesmoMes`
   // exige o mesmo mês em todas (a combinação automática da família).
-  function combinacoes(grupos, valor, { competencia = null, mesmoMes = false, hoje } = {}) {
-    const elegivel = (x) => x.fatura && !x.jaLigada && situacaoDaFatura(x.fatura, 'cheque') == null;
+  function combinacoes(grupos, valor, { competencia = null, mesmoMes = false, hoje, ref = null } = {}) {
+    const elegivel = (x) => x.fatura && !x.jaLigada && situacaoDaFatura(x.fatura, 'cheque') == null && !pagaLongeDoCheque(x.fatura, ref || hoje);
     const gs = grupos.map((g) => g.filter(elegivel)
       .filter((x) => !competencia || mmYYYY(x.fatura.competencia) === competencia));
     if (gs.some((g) => !g.length)) return [];
@@ -819,7 +897,7 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
       for (const x of gs[k]) {
         if (acc.some((a) => a.fatura.id === x.fatura.id)) continue;
         if (mesmoMes && acc.length && mmYYYY(acc[0].fatura.competencia) !== mmYYYY(x.fatura.competencia)) continue;
-        const vb = valorDoBanco(x.fatura, hoje);
+        const vb = valorParaCheque(x.fatura, ref || hoje, hoje);
         if (!vb || !(vb.valor > 0)) continue;
         acc.push(x); passo(k + 1, acc, soma + vb.valor); acc.pop();
       }
@@ -861,7 +939,7 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
     for (let mask = 1; mask < (1 << alunos.length); mask += 1) {
       const sel = alunos.filter((_, i) => mask & (1 << i));
       if (sel.length < 2) continue;
-      todas.push(...combinacoes(sel.map((g) => g.map(comFatura)), it.cheque.valor, { mesmoMes: true, hoje }));
+      todas.push(...combinacoes(sel.map((g) => g.map(comFatura)), it.cheque.valor, { mesmoMes: true, hoje, ref: dataRefCheque(it.cheque, hoje) }));
     }
     // Irmãos pagam o MESMO valor todo mês: out+nov+dez fecham igual. Vale a mesma
     // régua da parcela única — a do mês ESTRITAMENTE mais perto do bom-para/lote
@@ -1014,6 +1092,7 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
             p_valor: cheque.valor, p_bom_para: cheque.bom_para, p_emitente_documento_hash: docHash });
         } catch (_) { res = null; }
       }
+      cheque.dataRef = loteData || null;
       itens[idx] = { cheque, docHash, res, escolha: escolherFatura(res, cheque, loteData), fatura: null, jaLigada: false, decisao: null, trilha: [] };
     };
     await Promise.all([0, 1, 2, 3].map(async () => { while (prox < lido.cheques.length) { const k = prox; prox += 1; await umCheque(k); } }));
@@ -1025,6 +1104,7 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
     if (!noCx.ok) return { ok: false, motivo: 'fonte_caixa_indisponivel' };
     // Os abertos são lidos DEPOIS da leitura (20–90 s): outro envio pode ter
     // aberto card enquanto este lia.
+    for (const it of itens) it.cheque.dataRef = loteData || null;
     decidirTodos(itens, typeof abertos === 'function' ? abertos() : abertos);
     log({ acao: 'cheques_lote_decidido', unidade: sigla, lidos: itens.length, decisoes: itens.map((it) => it.decisao) });
     return { ok: true, itens, loteData, sigla, unidadeNome, semCheque: lista.length > 1 ? semCheque : [] };
@@ -1513,6 +1593,7 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
     if (!fat.ok) return { ok: false, motivo: 'fonte_faturas_indisponivel' };
     const noCx = await marcarNoCaixa(lote.itens, lote.unidadeId);
     if (!noCx.ok) return { ok: false, motivo: 'fonte_caixa_indisponivel' };
+    for (const it of lote.itens) if (!it.cheque.dataRef) it.cheque.dataRef = lote.loteData || null;
     decidirTodos(lote.itens, abertosDoChat(chatId, lote));
     return { ok: true };
   }
@@ -1715,14 +1796,15 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
       const gruposF = grupos.map((g) => g.map(comFatura));
       const competencia = ref.competencia && /^\d{1,2}\/\d{4}$/.test(String(ref.competencia).trim())
         ? String(ref.competencia).trim().padStart(7, '0') : null;
-      let combos = combinacoes(gruposF, ch.valor, { competencia, hoje });
+      const refCh = dataRefCheque(ch, hoje);
+      let combos = combinacoes(gruposF, ch.valor, { competencia, hoje, ref: refCh });
       // O mês que a pessoa disse não fecha com o valor (CG 06/10: "parcela 10/2026",
       // mas o cheque de R$ 387 era a 09/2026 já paga no Emusys com cheque
       // pré-datado; a 10/2026 está em aberto e vencida, R$ 447). Procura nos outros
       // meses do MESMO aluno e AVISA a troca — quem confirma é o "pode" no card.
       let mesTrocado = null;
       if (!combos.length && competencia) {
-        combos = combinacoes(gruposF, ch.valor, { hoje });
+        combos = combinacoes(gruposF, ch.valor, { hoje, ref: refCh });
         if (combos.length) mesTrocado = competencia;
       }
       let escolhida = combos.length === 1 ? combos[0] : (combos.length > 1 ? maisProxima(combos, ch.bom_para || lote.loteData) : null);
@@ -1854,7 +1936,7 @@ function criarCheques({ carregarEnv, sendFn, log = () => {}, lerLoteFn = lerLote
 
   return { tratarMidia, tratarResposta, processarArquivo, vincularMensagem, barrarNoPode, ligarCaixa,
     conversa, ferramenta, cartaoDoLote, cardsDoLote, esquecerCards, registrarLancamento, citaLote, redecidir,
-    _lotes: lotes };
+    _lotes: lotes, _salvarEstado: salvarEstado };
 }
 
 module.exports = {

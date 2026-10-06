@@ -45,8 +45,8 @@ function criarCadastro(alunos) {
   for (const a of alunos) for (const f of a.faturas) {
     const id = U(f.n);
     faturas[id] = { id, emusys_fatura_id: f.n, descricao: `Parcela ${f.compTxt || MMAAAA} do curso de Violão`, status: f.status || 'aberta',
-      valor_pago: f.status === 'paga' ? String(f.valor) : null, valor_original: String(f.valor), desconto_fixo: '0', desconto_condicional: '0',
-      competencia: f.comp || COMP, data_pagamento: f.status === 'paga' ? mais(-2) : null, data_vencimento: f.venc || mais(5), forma: f.forma || null };
+      valor_pago: f.status === 'paga' ? String(f.valor) : null, valor_original: String(f.valor), desconto_fixo: '0', desconto_condicional: String(f.desc || 0),
+      competencia: f.comp || COMP, data_pagamento: f.status === 'paga' ? (f.pago || mais(-2)) : null, data_vencimento: f.venc || mais(5), forma: f.forma || null };
     donos[id] = a;
   }
   const tok = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().split(/\s+/).filter((w) => w.length >= 3);
@@ -133,7 +133,7 @@ function montar({ unidade, leituras, alunos }) {
   const cardsCheque = () => (h._pendentes.get(chat) || []).filter((p) => p.forma === 'cheque');
   const ev = (o) => ({ chatId: chat, senderPhone: '5521900000011', senderId: '5521900000011@lid', hasMedia: false, ...o });
   const pdf = (id, conteudo) => ev({ messageId: id, body: '', hasMedia: true, mediaType: 'document', mediaUrls: [arquivoTemp(conteudo)] });
-  return { h, db, enviadas, lotes, singulares, tool, cardsCheque, ev, pdf, chat, leiturasFeitas: () => leiturasFeitas, regs };
+  return { h, db, enviadas, lotes, singulares, tool, cardsCheque, ev, pdf, chat, leiturasFeitas: () => leiturasFeitas, regs, modCheques };
 }
 
 const ultima = (t) => t.enviadas[t.enviadas.length - 1].t;
@@ -276,6 +276,52 @@ const ultima = (t) => t.enviadas[t.enviadas.length - 1].t;
     assert.ok(new RegExp(`mês dito foi ${MMAAAA.replace('/', '\\/')}`).test(a.resultados[0].aviso || ''), JSON.stringify(a.resultados[0]));
     assert.ok(new RegExp(antTxt.replace('/', '\\/')).test(a.resultados[0].parcelas.join(' ')), JSON.stringify(a.resultados[0]));
     console.log('CG-M. mês dito não fecha → usa a parcela que fecha (paga em cheque) e avisa a troca — OK');
+  }
+
+  // ================================================================== PERSIST (06/10 ao vivo)
+  // Deploy reiniciou a ponte e a Vitória ouviu "não há lote aberto". O lote lido
+  // vai para arquivo e volta no próximo início.
+  {
+    const os = require('os'); const fs = require('fs');
+    const arq = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sol-chq-estado-')), 'lotes.json');
+    process.env.SOL_CHEQUES_ESTADO_ARQUIVO = arq;
+    try {
+      const alunos = [{ nome: 'Davi Rocha Prado', resp: 'Elisa Prado', faturas: [{ n: 51, valor: 300 }] }];
+      const leituras = [lido(1, 300, 'ELISA PRADO'), lido(2, 999, 'PESSOA DESCONHECIDA')];
+      const t1 = montar({ unidade: 'rec', leituras, alunos });
+      await t1.h.handle(t1.pdf('PDFP', 'MALOTE-REC-P'));
+      assert.ok(t1.modCheques._salvarEstado() || fs.existsSync(arq), 'estado salvo');
+      assert.strictEqual(fs.statSync(arq).mode & 0o777, 0o600, 'arquivo só do dono');
+      assert.ok(!/documento/.test(fs.readFileSync(arq, 'utf8')), 'documento nunca vai para o arquivo');
+      // "reinício": módulo novo, mesmo arquivo
+      const t2 = montar({ unidade: 'rec', leituras, alunos });
+      const e = await t2.tool('cheques_lote_estado');
+      assert.strictEqual(e.estado, 'consulta', JSON.stringify(e));
+      assert.strictEqual(e.lote.cheques.length, 2);
+      assert.ok(t2.regs.some((r) => r.acao === 'cheques_estado_carregado' && r.lotes === 1), 'log do carregamento');
+      console.log('PERSIST. lote lido sobrevive a reinício da ponte (arquivo 0600, sem documento) — OK');
+    } finally { delete process.env.SOL_CHEQUES_ESTADO_ARQUIVO; }
+  }
+
+  // ================================================================== CG-D (06/10 ao vivo)
+  // Cheque pré-datado para o vencimento, no valor COM desconto de pontualidade; o malote
+  // chega depois do vencimento. Meses anteriores pagos com cheque do mesmo valor não
+  // podem empatar ("mais de uma parcela").
+  {
+    const alunos = [{ nome: 'Clara Costa Vidal', resp: 'Rita Vidal', faturas: [
+      { n: 61, valor: 447, desc: 60, comp: '2026-07-01', compTxt: '07/2026', status: 'paga', forma: 'Cheque Pré Datado', pago: mais(-90) },
+      { n: 62, valor: 447, desc: 60, comp: '2026-08-01', compTxt: '08/2026', status: 'paga', forma: 'Cheque Pré Datado', pago: mais(-60) },
+      { n: 63, valor: 447, desc: 60, venc: mais(-1) }] }];
+    const c1 = lido(1, 387, 'PESSOA DESCONHECIDA'); c1.bom_para = mais(-1);
+    const t = montar({ unidade: 'cg', leituras: [c1, lido(2, 999, 'OUTRA PESSOA')], alunos });
+    await t.h.handle(t.pdf('PDFD', 'MALOTE-CG-D'));
+    const fala = `Sol, o Cheque 1 é da Clara Costa Vidal, parcela ${MMAAAA} - valor R$387,00`;
+    const a = await t.tool('cheques_atribuir', { p_texto_original: fala, itens: [{ cheque: 1, alunos: ['Clara Costa Vidal'], competencia: MMAAAA }] });
+    assert.ok(a.resultados[0].ok, JSON.stringify(a.resultados));
+    assert.ok(!a.resultados[0].aviso, 'é o mês dito, sem troca: ' + JSON.stringify(a.resultados[0]));
+    const est = await t.tool('cheques_lote_estado');
+    assert.strictEqual(est.lote.cheques[0].situacao, 'lancar', JSON.stringify(est.lote.cheques[0]));
+    console.log('CG-D. cheque pré-datado com desconto, malote depois do vencimento → parcela do mês, sem empate com meses antigos — OK');
   }
 
   // ================================================================== RECREIO

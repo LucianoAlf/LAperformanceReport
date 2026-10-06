@@ -6104,6 +6104,9 @@ _Não lanço nada pela metade._`);
       cheque_numero: item.cheque_numero || null,
       cheque_banco: item.cheque_banco || null,
       cheque_bom_para: item.cheque_bom_para || null,
+      // Data do cheque (bom-para ou depósito): o validador do lote mede o valor da
+      // parcela nela, não hoje (desconto de pontualidade — CG 06/10).
+      cheque_data_ref: item.cheque_data_ref || null,
       sem_vinculo_fatura: !!item.sem_vinculo_fatura, declarado_pelo_humano: !!item.declarado_pelo_humano,
       desconto_negociado_explicito: !!item.sem_vinculo_fatura && !_ehAdiantamentoDeclarado(item)
         && _autorizacaoDesconto.ok && _entradasAutorizadas.has(_chaveItem(item)),
