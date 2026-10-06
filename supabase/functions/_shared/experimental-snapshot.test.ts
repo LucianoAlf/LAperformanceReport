@@ -436,3 +436,24 @@ Deno.test("buscarTodasAulas rejeita o lote inteiro apos JSON invalido", async ()
     "EMUSYS_AULAS_JSON_INVALIDO",
   );
 });
+
+Deno.test("montarLinhasSnapshot leva nome_responsavel do Emusys para a linha", () => {
+  const rows = montarLinhasSnapshot({
+    unidadeId: "barra",
+    execucaoId: "exec-resp",
+    aulas: [
+      aula({
+        alunos: [
+          aluno({ id_lead: 7475, nome_responsavel: "Carmen Lucia da Silva" }),
+          aluno({ id_lead: 7476, nome_responsavel: "   " }),
+          aluno({ id_lead: 7477 }),
+        ],
+      }),
+    ],
+    agora: new Date("2026-07-30T18:00:00Z"),
+  });
+
+  assertEquals(rows[0].responsavel_nome, "Carmen Lucia da Silva");
+  assertEquals(rows[1].responsavel_nome, null);
+  assertEquals(rows[2].responsavel_nome, null);
+});

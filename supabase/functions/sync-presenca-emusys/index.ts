@@ -169,6 +169,8 @@ function normalizarCurso(nome: string): string {
 interface AlunoEmusys extends ExperimentalAluno {
   nome_aluno: string;
   presenca: string;
+  // v1.8.2: registrado = alguem lancou presenca/falta; pendente = nada lancado; null = recurso off
+  registro_presenca?: string | null;
   horario_presenca: string | null;
   data_nascimento_aluno?: string;
   email_aluno?: string;
@@ -200,7 +202,7 @@ interface AulaEmusys extends AulaSnapshotEmusys {
   duracao_minutos: number | null;
   sala_id: number | null;
   sala_nome: string | null;
-  professores: Array<EmusysProfessorRef & { nome: string; presenca: string }>;
+  professores: Array<EmusysProfessorRef & { nome: string; presenca: string; registro_presenca?: string | null }>;
   alunos: AlunoEmusys[];
   anotacoes: string | null;
 }
@@ -363,6 +365,7 @@ async function sincronizarMetadadosAulasNoRun(
           ? parseDataHoraEmusys(aula.data_hora_inicio_original)
           : null,
         professor_presenca: aula.professores?.[0]?.presenca ?? null,
+        professor_registro_presenca: aula.professores?.[0]?.registro_presenca ?? null,
         nr_da_aula: aula.nr_da_aula,
         matricula_disciplina_id: aula.matricula_disciplina_id ?? null,
         qtd_aulas_contrato: aula.qtd_aulas_contrato,
@@ -1455,6 +1458,38 @@ async function reconciliarExperimentaisOrfas(
 }
 
 // Confirmar experimentais: cruzar aulas_emusys (categoria=experimental) com lead_experimentais agendadas
+// Situacao de UMA pessoa (lead do Emusys) numa data, lida da foto do Emusys
+// (`emusys_experimentais_raw`, linha ativa = estado atual da aula: data ja
+// reagendada, presenca e cancelamento). E a unica prova aceita aqui: ate 02/10/2026
+// estes caminhos usavam "existe aula experimental do professor/unidade nesse dia",
+// que nao olha a pessoa, e confirmavam realizada/faltou com a aula de OUTRO lead
+// (Barra set/26: Maria, aula reagendada e cancelada no Emusys, contava como realizada).
+// Duas aulas do lead no mesmo dia sem horario que desempate = null (nao escolhe).
+async function situacaoEmusysDoLead(
+  supabase: any,
+  unidadeId: string,
+  emusysLeadId: number | null,
+  data: string,
+  horario: string | null,
+): Promise<{ situacao: string | null; motivo: string }> {
+  if (!emusysLeadId || emusysLeadId <= 0) return { situacao: null, motivo: 'sem_emusys_lead_id' };
+  const { data: linhas, error } = await supabase
+    .from('emusys_experimentais_raw')
+    .select('emusys_aula_id, horario_aula, situacao_operacional')
+    .eq('snapshot_ativo', true)
+    .eq('unidade_id', unidadeId)
+    .eq('emusys_lead_id', emusysLeadId)
+    .eq('data_aula', data)
+    .limit(5);
+  if (error) return { situacao: null, motivo: `erro_foto_emusys ${error.code ?? ''}: ${error.message}` };
+  if (!linhas?.length) return { situacao: null, motivo: 'sem_aula_do_lead_na_foto_emusys' };
+  if (linhas.length === 1) return { situacao: linhas[0].situacao_operacional, motivo: `aula ${linhas[0].emusys_aula_id}` };
+  const hora = horario ? horario.slice(0, 5) : null;
+  const doHorario = hora ? linhas.filter((l: any) => String(l.horario_aula ?? '').slice(0, 5) === hora) : [];
+  if (doHorario.length === 1) return { situacao: doHorario[0].situacao_operacional, motivo: `aula ${doHorario[0].emusys_aula_id}` };
+  return { situacao: null, motivo: `ambiguo_${linhas.length}_aulas_do_lead_no_dia` };
+}
+
 async function confirmarExperimentais(
   supabase: any,
   _datasProcessar: string[],
@@ -1475,7 +1510,7 @@ async function confirmarExperimentais(
   // não ter alcançado aquele dia; marcar faltou por silêncio gera falta falsa — caso Rodolfo/José).
   const { data: expExpiradas } = await supabase
     .from('lead_experimentais')
-    .select('id, lead_id, nome_aluno, unidade_id, data_experimental')
+    .select('id, lead_id, nome_aluno, unidade_id, data_experimental, horario_experimental, emusys_lead_id')
     .eq('status', 'experimental_agendada')
     .in('unidade_id', unidadesIds)
     .lt('data_experimental', dataAutoFaltou);
@@ -1483,16 +1518,11 @@ async function confirmarExperimentais(
   let autoFaltouCount = 0;
   if (expExpiradas?.length) {
     for (const exp of expExpiradas) {
-      const { data: aulaProva } = await supabase
-        .from('aulas_emusys')
-        .select('id')
-        .eq('data_aula', exp.data_experimental)
-        .eq('unidade_id', exp.unidade_id)
-        .eq('categoria', 'experimental')
-        .eq('cancelada', false)
-        .limit(1)
-        .maybeSingle();
-      if (!aulaProva) continue; // sem prova no Emusys → não marca faltou, deixa 'agendada'
+      // Prova = a PROPRIA pessoa consta como faltou na foto do Emusys naquela data.
+      const prova = await situacaoEmusysDoLead(
+        supabase, exp.unidade_id, exp.emusys_lead_id, exp.data_experimental, exp.horario_experimental,
+      );
+      if (prova.situacao !== 'faltou') continue; // sem prova → não marca faltou, deixa 'agendada'
 
       await supabase.from('lead_experimentais').update({
         status: 'experimental_faltou', updated_at: new Date().toISOString()
@@ -1509,7 +1539,7 @@ async function confirmarExperimentais(
   // Buscar experimentais pendentes dos últimos 14 dias (não mais antigas)
   const { data: expPendentes } = await supabase
     .from('lead_experimentais')
-    .select('id, lead_id, nome_aluno, data_experimental, horario_experimental, professor_experimental_id, unidade_id')
+    .select('id, lead_id, nome_aluno, data_experimental, horario_experimental, professor_experimental_id, unidade_id, emusys_lead_id')
     .eq('status', 'experimental_agendada')
     .in('unidade_id', unidadesIds)
     .gte('data_experimental', dataLimite)
@@ -1562,66 +1592,13 @@ async function confirmarExperimentais(
       continue;
     }
 
-    // Buscar aula experimental no aulas_emusys
-    let { data: aulasMatch } = await supabase
-      .from('aulas_emusys')
-      .select('id, data_hora_inicio, cancelada')
-      .eq('data_aula', exp.data_experimental)
-      .eq('professor_id', exp.professor_experimental_id)
-      .eq('unidade_id', exp.unidade_id)
-      .eq('categoria', 'experimental')
-      .limit(5);
-
-    // Fallback: se não encontrou com professor, buscar por data+unidade+categoria
-    // (professor pode ter mudado no reagendamento)
-    if (!aulasMatch?.length && exp.horario_experimental) {
-      const { data: aulasFallback } = await supabase
-        .from('aulas_emusys')
-        .select('id, data_hora_inicio, cancelada')
-        .eq('data_aula', exp.data_experimental)
-        .eq('unidade_id', exp.unidade_id)
-        .eq('categoria', 'experimental')
-        .limit(10);
-
-      if (aulasFallback?.length) {
-        const horaExp = exp.horario_experimental.slice(0, 5);
-        const matchHorario = aulasFallback.find((a: any) => {
-          const horaAula = new Date(a.data_hora_inicio).toISOString().slice(11, 16);
-          return horaAula === horaExp;
-        });
-        if (matchHorario) aulasMatch = [matchHorario];
-      }
-    }
-
     const unidadeNome = unidadeNomes.get(exp.unidade_id) || exp.unidade_id;
+    const prova = await situacaoEmusysDoLead(
+      supabase, exp.unidade_id, exp.emusys_lead_id, exp.data_experimental, exp.horario_experimental,
+    );
 
-    if (!aulasMatch?.length) {
-      backoffChaves.add(chaveBackoff); // marcar como já logado para próximas iterações do mesmo run
-      logs.push({
-        lead_id: exp.lead_id,
-        lead_nome: exp.nome_aluno || 'Sem nome',
-        unidade: unidadeNome,
-        data: exp.data_experimental,
-        professor: String(exp.professor_experimental_id),
-        status: 'nao_encontrada',
-        motivo: 'Aula experimental não encontrada no Emusys'
-      });
-      continue;
-    }
-
-    // Filtrar por horário
-    let aulaFinal = aulasMatch[0];
-    if (exp.horario_experimental && aulasMatch.length > 1) {
-      const horaExp = exp.horario_experimental.slice(0, 5);
-      const matchHorario = aulasMatch.find((a: any) => {
-        const horaAula = new Date(a.data_hora_inicio).toISOString().slice(11, 16);
-        return horaAula === horaExp;
-      });
-      if (matchHorario) aulaFinal = matchHorario;
-    }
-
-    if (aulaFinal.cancelada) {
-      await supabase
+    if (prova.situacao === 'cancelada') {
+      const { error: cancelError } = await supabase
         .from('lead_experimentais')
         .update({ status: 'cancelada', updated_at: new Date().toISOString() })
         .eq('id', exp.id);
@@ -1631,35 +1608,27 @@ async function confirmarExperimentais(
         unidade: unidadeNome,
         data: exp.data_experimental,
         professor: String(exp.professor_experimental_id),
-        status: 'cancelada',
-        motivo: 'Aula experimental cancelada no Emusys'
+        status: cancelError ? 'erro' : 'cancelada',
+        motivo: cancelError
+          ? `exp ${exp.id}: ${cancelError.code ?? ''} ${cancelError.message}`
+          : `Aula experimental do lead cancelada no Emusys (${prova.motivo})`,
       });
       continue;
     }
 
-    // ⚠️ A aula EXISTIR na grade e nao estar cancelada NAO quer dizer que ela
-    // aconteceu. Ate 04/09/2026 este bloco marcava 'experimental_realizada' so
-    // por isso, e como os crons `sync-presenca-dia-*` rodam 00:43 BRT, o dia
-    // inteiro nascia "realizado": em 04/09 as experimentais das 18h, 19h e 20h
-    // do Recreio ja estavam realizadas as 16h, SEM NENHUMA presenca lancada
-    // (provado: `aluno_presenca` vazia para essas aulas). A Daiana viu isso na
-    // mensagem da Mila e reclamou — com razao.
-    //
-    // Isso tambem produzia o segundo sintoma que ela relatou: aula reagendada
-    // para outro dia ficava "realizada" no dia velho. O reagendamento so chega a
-    // `aulas_emusys` quando a grade sincroniza; ate la a aula ainda aparece na
-    // data antiga e este bloco a confirmava. Com o guard, a janela deixa de
-    // existir — se ainda nao ocorreu, nao ha o que confirmar.
-    const inicioAula = aulaFinal.data_hora_inicio ? new Date(aulaFinal.data_hora_inicio) : null;
-    if (inicioAula && inicioAula.getTime() > Date.now()) {
+    // So confirma com a presenca DA PESSOA no Emusys. A aula existir na grade nao
+    // prova nada: em 04/09 isso confirmava o dia inteiro antes de acontecer, e ate
+    // 02/10 confirmava com a aula de outro lead do mesmo professor.
+    if (prova.situacao !== 'presente') {
+      backoffChaves.add(chaveBackoff);
       logs.push({
         lead_id: exp.lead_id,
         lead_nome: exp.nome_aluno || 'Sem nome',
         unidade: unidadeNome,
         data: exp.data_experimental,
         professor: String(exp.professor_experimental_id),
-        status: 'ainda_nao_ocorreu',
-        motivo: `Aula marcada para ${inicioAula.toISOString()} — ainda nao aconteceu, nao confirmo`
+        status: 'nao_encontrada',
+        motivo: `Sem presenca do lead na foto do Emusys (${prova.situacao ?? prova.motivo}) — nao confirmo`,
       });
       continue;
     }
@@ -2191,6 +2160,7 @@ serve(async (req: Request) => {
                   ? parseDataHoraEmusys(aula.data_hora_inicio_original)
                   : null,
                 professor_presenca: aula.professores?.[0]?.presenca ?? null,
+                professor_registro_presenca: aula.professores?.[0]?.registro_presenca ?? null,
                 nr_da_aula: aula.nr_da_aula,
                 matricula_disciplina_id: aula.matricula_disciplina_id ?? null,
                 qtd_aulas_contrato: aula.qtd_aulas_contrato,
@@ -2432,6 +2402,7 @@ serve(async (req: Request) => {
                 p_turma_nome: aula.turma_nome,
                 p_sala_nome: aula.sala_nome,
                 p_sincronizado_em: sincronizadoEm,
+                p_registro_presenca: aluno.registro_presenca ?? null,
               });
 
             if (upsertError) {

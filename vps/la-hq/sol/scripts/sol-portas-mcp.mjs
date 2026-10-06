@@ -30,6 +30,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
+import { buscarMatriculasEmusys, compararAluno, nomeDoToken } from './sol-conferir-emusys.mjs';
 
 // ⚠️ Os nomes reais no ambiente da Sol, conferidos no host: `gateway.systemd.env`
 //    traz SUPABASE_URL/SUPABASE_SERVICE_KEY e `/opt/LA-Organizer/.env` traz
@@ -86,6 +87,24 @@ const TEL_ENSAIO = process.env.SOL_SOLICITANTE_TELEFONE || '';
 const CAIXA_GOVERNANCA_RUNTIME = process.env.SOL_CAIXA_GOVERNANCA_RUNTIME
   || '/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-governanca-shadow.cjs';
 const BRIDGE_URL = (process.env.SOL_WHATSAPP_BRIDGE_URL || 'http://127.0.0.1:3000').replace(/\/$/, '');
+
+// Tokens do Emusys: lidos SÓ deste arquivo e SÓ as chaves EMUSYS_TOKEN_*.
+// Nunca vão para a resposta da ferramenta nem para o modelo.
+const EMUSYS_ENV = process.env.SOL_EMUSYS_ENV_FILE || '/home/sol/.openclaw/secrets/emusys.env';
+let tokensEmusys = null;
+function tokenEmusys(codigoUnidade) {
+  if (!tokensEmusys) {
+    tokensEmusys = {};
+    try {
+      for (const l of fs.readFileSync(EMUSYS_ENV, 'utf8').split('\n')) {
+        const m = l.trim().match(/^(EMUSYS_TOKEN_[A-Z]+)=(.+)$/);
+        if (m) tokensEmusys[m[1]] = m[2].trim().replace(/^["']|["']$/g, '');
+      }
+    } catch (_) { /* sem arquivo: a ferramenta responde emusys_indisponivel */ }
+  }
+  const nome = nomeDoToken(codigoUnidade);
+  return nome ? tokensEmusys[nome] || null : null;
+}
 
 async function rpc(fn, args) {
   const r = await fetch(`${URL}/rest/v1/rpc/${fn}`, {
@@ -223,6 +242,15 @@ const PORTAS = [
   { name: 'renovacoes', fn: 'sol_porta_renovacoes_v1',
     description: 'Os contratos que terminam nesta competência e quais já renovaram. Use para "quem falta renovar?", "como tá a renovação do mês?". ⚠️ Banda e coral ficam de fora: não contam em retenção. ⚠️ O recesso escolar DESLOCA a competência de propósito — quem renovou em julho pode contar em agosto, porque o que manda é o mês da primeira aula do novo ciclo. Isso é esperado, não erro; já gerou pergunta de "sumiu renovação" que não tinha sumido.',
     schema: { ...U } },
+
+  { name: 'relatorio_mensal', fn: 'sol_porta_relatorio_mensal_v1',
+    description: 'O RELATÓRIO MENSAL ADMINISTRATIVO explicado. `oficial` é a FOTO do fechamento — o mesmo relatório que foi para o grupo, com a hora em que a foto foi tirada; é o ÚNICO número do mês. `por_que_cada_nome` diz, aluno por aluno, por que está ou não está na foto. Use para "por que deu X renovações?", "por que o Fulano não está no relatório?", "qual foi a taxa de renovação do mês?", "o relatório está errado?". Com `p_aluno`, diz em que mês cada renovação daquele aluno conta. 🔴 Caso que originou (03/10/2026): o Jhon/CG refez setembro à mão — 28 renovações contra 15 — sem saber que eram causas diferentes: bolsista e banda ficam FORA do total (regra do Alf, 27/08); a renovação conta no mês da 1ª AULA do novo contrato (Elisa, Levi e Sirley contam em outubro); e André, Sarah, Jullya e Davi foram validados DEPOIS da foto (`validada_depois_do_fechamento`). Explique cada nome pelo campo `situacao` e pelo array `regras` — o objetivo é EDUCAR sobre a regra, nunca dizer que a equipe errou. 🔴 Nunca calcule taxa, total, ticket ou MRR por conta própria e nunca apresente outro número como sendo o do mês: o relatório é a foto. 🔴 Se ficou algo de fora porque esqueceram de validar, ajustar ou lançar antes do fechamento, oriente a pedir ao HUGO, dizendo o que faltou — é ele quem decide gerar o mês de novo. Você não gera relatório nem promete que vai entrar.',
+    schema: { ...U, p_ano: { type: 'integer', description: 'Vazio = mês anterior.' }, p_mes: { type: 'integer' },
+              p_aluno: { type: 'string', description: 'Nome (ou parte, 3+ letras) de um aluno para explicar em que mês cada renovação dele conta.' } } },
+
+  { name: 'conferir_aluno_emusys', auth: 'conferir_emusys',
+    description: 'Confere UM aluno no EMUSYS (a fonte da verdade, consultada agora) contra o LA Report e diz o que bate e o que diverge — contrato novo e mês da 1ª aula, renovação lançada no curso ou no mês errado, renovação que o Emusys não tem, matrícula ativa/trancada/encerrada, bolsista. Use quando alguém contestar o relatório ou um aluno: "a Fulana renovou?", "por que o Fulano não está no relatório?", "valido essa renovação?", "esse aluno saiu mesmo?". Junto com `relatorio_mensal`: aquela diz o que o relatório mostrou e por quê; esta diz se o dado do LA Report bate com o Emusys. 🔴 Caso real (03/10/2026): a renovação do Gabriel Mello de agosto parecia não existir no Emusys — porque estava lançada como Canto, e era do contrato de Teclado que começou em 19/08. Por isso a ligação é pela data da 1ª aula, e isso já vem resolvido aqui: leia `confere` e `divergencias`, não refaça a comparação. 🔴 Se houver divergência: explique cada uma em uma frase, diga que NÃO é para validar, apagar ou corrigir por conta própria, e peça para a pessoa falar com o HUGO. Sem divergência: explique pela regra por que o aluno está (ou não) no relatório daquele mês. ⚠️ `emusys_indisponivel` = o Emusys não respondeu: diga que não deu para conferir agora, nunca conclua que bate ou diverge. ⚠️ Só confere os últimos 6 meses, e só o contrato ATUAL de cada matrícula (o Emusys não expõe os anteriores).',
+    schema: { ...U, p_aluno: { type: 'string', description: 'Nome do aluno como a pessoa falou (3+ letras). Se vier mais de uma pessoa, peça o nome completo.' } } },
 
   { name: 'contratos_vencendo', fn: 'sol_porta_contratos_vencendo_v1',
     description: 'Contratos com a última aula chegando, na janela de dias que você pedir. Use para "quem tá vencendo?", "quantos contratos acabam esse mês?". ⚠️ A coluna de faturas vencidas é PISO, não valor exato — o espelho só cobre as competências sincronizadas, então mostro "≥N". ⚠️ Aulas restantes diverge da tela do Emusys em 1 a 4 aulas (a regra da tela não é exposta pela API); a última aula, essa, bate 100%.',
@@ -363,10 +391,67 @@ async function executarRuntimeCaixa(p, args) {
   }
 }
 
+// Quem está perguntando: crachá assinado (grupo) ou telefone. Fonte única para
+// as portas do banco e para a conferência no Emusys.
+async function resolverSolicitante(args) {
+  const _bruto = String((args && args.p_solicitante_telefone) || TEL_ENSAIO || "").trim();
+  let tel;
+  if (/^SOL1\./.test(_bruto)) {
+    const cracha = _bruto.replace(/[^A-Za-z0-9.]/g, "");
+    const chat = String((args && args.p_chat_id) || '').trim().replace(/[^A-Za-z0-9@._:-]/g, '');
+    // Portas de LEITURA aceitam o crachá do privado também: a assinatura amarra
+    // telefone + chat, então prova quem fala no grupo e no DM; o escopo segue
+    // decidido pelo banco (sol_resolver_escopo_v1). O caixa NÃO passa por aqui —
+    // validarEnvelopeCaixa continua exigindo grupo oficial.
+    if (!/@(g\.us|lid|s\.whatsapp\.net)$/.test(chat)) return { erro: { ok: false, motivo: 'chat_obrigatorio',
+      recado: 'Passe também o `[chat_caixa: ...]` da mensagem, junto com o `[cracha: ...]`.' } };
+    const verificado = await rpc('sol_cracha_verificar_v1', { p_cracha: cracha, p_chat: chat });
+    if (!verificado || !verificado.ok) return { erro: { ok: false, motivo: 'cracha_invalido',
+      detalhe: String((verificado && verificado.motivo) || 'verificacao_falhou').slice(0, 80) } };
+    tel = String(verificado.telefone || '').replace(/\D/g, '');
+  } else {
+    tel = _bruto.replace(/\D/g, '');
+  }
+  if (!tel) return { erro: { ok: false, motivo: 'sem_solicitante',
+    recado: 'Não sei quem está perguntando. Passe o `[cracha: ...]` da mensagem, ou o número de `[telefone_remetente: ...]` — sem isso eu não sei qual unidade mostrar.' } };
+  return { tel };
+}
+
+// Conferência de um aluno: lado do LA Report pela porta (que também resolve o
+// escopo e registra a chamada), lado do Emusys ao vivo, comparação em código.
+async function conferirAlunoEmusys(args) {
+  const quem = await resolverSolicitante(args);
+  if (quem.erro) return j(quem.erro);
+  const lr = await rpc('sol_porta_conferir_aluno_v1', {
+    p_solicitante_telefone: quem.tel, p_aluno: String(args.p_aluno || ''),
+    ...(args.p_unidade ? { p_unidade: args.p_unidade } : {}),
+  });
+  if (!lr || !lr.ok || !lr.encontrado) return j(lr);
+  const ORIENTACAO = 'Divergência: explique cada uma, diga para NÃO validar/apagar/corrigir por conta própria e peça para falar com o Hugo. Sem divergência: explique pela regra do relatório.';
+  const token = tokenEmusys(lr.unidade_codigo);
+  const ids = [...new Set((lr.matriculas || []).map((m) => m.emusys_aluno_id).filter(Boolean))].slice(0, 3);
+  if (!token || !ids.length) {
+    return j({ ok: true, emusys_indisponivel: !token ? 'sem_token_da_unidade' : 'aluno_sem_id_no_emusys',
+      lareport: lr.matriculas, orientacao: 'Não deu para conferir no Emusys agora: NÃO conclua que bate nem que diverge. ' + (ids.length ? '' : 'O cadastro não está ligado ao Emusys — isso é uma divergência: peça para falar com o Hugo.') });
+  }
+  let emusys = [];
+  try {
+    for (const id of ids) emusys.push(...await buscarMatriculasEmusys(id, token));
+  } catch (e) {
+    return j({ ok: true, emusys_indisponivel: String(e && e.message).slice(0, 80), lareport: lr.matriculas,
+      orientacao: 'O Emusys não respondeu: diga que não deu para conferir agora e NÃO conclua nada.' });
+  }
+  const r = compararAluno(lr, emusys, new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10));
+  return j({ ok: true, aluno: lr.matriculas[0] && lr.matriculas[0].nome, unidade: lr.escopo && lr.escopo.unidade_nome,
+    conferido_em: new Date().toISOString(), confere: r.confere, divergencias: r.divergencias,
+    emusys: r.emusys, orientacao: ORIENTACAO });
+}
+
 async function despachar(name, args) {
   const p = PORTAS.find((x) => x.name === name);
   if (!p) return j({ ok: false, motivo: 'porta_desconhecida', porta: name });
   if (p.auth === 'caixa_runtime') return executarRuntimeCaixa(p, args || {});
+  if (p.auth === 'conferir_emusys') return conferirAlunoEmusys(args || {});
   if (p.auth === 'caixa_assinado') {
     const envelope = validarEnvelopeCaixa(args, p.capability || 'agent_first');
     if (!envelope.ok) return j(envelope);
@@ -394,22 +479,9 @@ async function despachar(name, args) {
   //    "SOL1.5521970183684.d2f0f55a..." virou "155219701836842055105...", que
   //    nao resolve ninguem. Foi a propria auditoria (`telefone_alegado`) que
   //    mostrou, porque ela grava o que FOI MANDADO, nao o que eu quis mandar.
-  const _bruto = String((args && args.p_solicitante_telefone) || TEL_ENSAIO || "").trim();
-  let tel;
-  if (/^SOL1\./.test(_bruto)) {
-    const cracha = _bruto.replace(/[^A-Za-z0-9.]/g, "");
-    const chat = String((args && args.p_chat_id) || '').trim().replace(/[^A-Za-z0-9@._:-]/g, '');
-    if (!chat.endsWith('@g.us')) return j({ ok: false, motivo: 'chat_oficial_obrigatorio',
-      recado: 'Esse crachá foi emitido em grupo. Passe também o `[chat_caixa: ...]` da mensagem.' });
-    const verificado = await rpc('sol_cracha_verificar_v1', { p_cracha: cracha, p_chat: chat });
-    if (!verificado || !verificado.ok) return j({ ok: false, motivo: 'cracha_invalido',
-      detalhe: String((verificado && verificado.motivo) || 'verificacao_falhou').slice(0, 80) });
-    tel = String(verificado.telefone || '').replace(/\D/g, '');
-  } else {
-    tel = _bruto.replace(/\D/g, '');
-  }
-  if (!tel) return j({ ok: false, motivo: 'sem_solicitante',
-    recado: 'Não sei quem está perguntando. Passe o `[cracha: ...]` da mensagem, ou o número de `[telefone_remetente: ...]` — sem isso eu não sei qual unidade mostrar.' });
+  const quem = await resolverSolicitante(args);
+  if (quem.erro) return j(quem.erro);
+  const tel = quem.tel;
   const limpos = { p_solicitante_telefone: tel };
   for (const [k, v] of Object.entries(args || {})) {
     if (k !== 'p_solicitante_telefone' && k !== 'p_chat_id'

@@ -869,3 +869,46 @@ os 34 segundos da classificação, um `pode` concorrente lançou e encerrou o ca
 A guarda antiga respondeu `Não entendi` depois, em cima da conversa humana. O
 teste exige que o fallback compare a mesma geração de pendências ao voltar e
 fique mudo se o card foi lançado, descartado ou remontado — sem regex de frases.
+
+## sugestao-nome-parecido-e2e.cjs
+
+Caso CG (05/10): comprovante de dois alunos com um primeiro nome digitado com uma
+letra a mais. O resolver devolvia `aluno_nao_encontrado` e a Sol só dizia
+"confere o nome completo"; a equipe travou 3x e descartou. Agora, com **um**
+aluno parecido na mesma unidade (`sol_caixa_sugerir_aluno_parecido_v1`), ela
+pergunta "É *Fulana*?"; o `sim` de **quem mandou** refaz a resolução com o nome
+do cadastro e segue para o preview de sempre — só o `pode` lança. O teste trava:
+`sim` de outra pessoa (citando ou não) não vale; `pode` antes do `sim` não lança;
+0 candidatos, RPC fora do ar e candidato que já é o outro item mantêm a mensagem
+antiga; 2+ candidatos listam até 3 sem escolher; `nome_ambiguo` não usa sugestão;
+log sem nome de aluno. Nomes do teste são fictícios.
+
+## saida-descricao-humana-e-conversa-e2e.cjs
+
+Caso Recreio (05-06/10): foto do cupom + "Compra de 3 pós de café e 3 de açúcar /
+Retirada do caixa / R$91,40 - dinheiro". O grupo leu na confirmação a legenda
+(que era o campo **aluno**), o banco gravou "PG Semana Retirada" e o fechamento
+mostrou isso. Agora a descrição sai de **uma** função (`_descricaoSaidaTexto`),
+igual no card (`📝 …`), na confirmação e no payload; saída não carrega aluno.
+Trava também a Sol calada em conversa sobre o que ela já concluiu: citar o
+"✅ Lancei…" ou o FECHAMENTO (mesmo com valor) não abre lançamento, e um `pode`
+depois não lança de novo; texto sem valor e sem anexo só pergunta o valor se
+chamar a Sol pelo nome. "PG semana segurança" continua "PG Semana Seguranca".
+Nomes fictícios. Falha contra o runtime 49bfabf8.
+
+## lojinha-vendedor-da-equipe-e2e.cjs
+
+Caso Barra (06/10 12:05): foto PagBank R$ 100 + "Venda caderno teclas para o aluno
+<Aluno> / Venda <Professor> / Débito: R$ 100". O modelo listou as duas pessoas como
+pagamentos e a Sol respondeu "a soma dos alunos não fecha" para UMA venda.
+Agora "venda <Nome>", "venda prof <Nome>", "vendido por", "vendedor(a)", "vendeu"
+viram **vendedor** só quando o nome casa com UMA pessoa ativa de
+`professores`/`colaboradores` (mesmo primeiro nome, todo token ditado no
+cadastro) e não é o comprador; "Venda <Nome>" solto exige comprador declarado.
+O vendedor sai dos pagamentos (sem multi) e entra na descrição — card (`📝 …`),
+confirmação e payload iguais: `Lojinha/Venda - <Item> - <Aluno> · venda prof. <Nome>`.
+Nome fora da equipe ou cadastro fora do ar = comportamento antigo. Lojinha com
+aluno de grafia diferente do cadastro usa a RPC da sugestão do multi: 1 candidato
+pergunta "É …?" (só o "sim" do autor ajusta), 2+ lista sem escolher; o `pode`
+fica travado enquanto a pergunta estiver aberta. Nomes fictícios. Falha contra
+o runtime 34c83001.

@@ -114,6 +114,11 @@ verify_jwt = false
 # (segredo dedicado validado no proprio codigo, sem JWT).
 verify_jwt = false
 
+[functions.export-financeiro-asaas-extrato]
+# Leitura do espelho do extrato Asaas p/ o Super Folha: mesmo padrao do
+# export-financeiro-lancamentos (segredo dedicado validado no proprio codigo).
+verify_jwt = false
+
 [functions.export-caixa-movimentacoes]
 # Exporta o caixa (Sol + equipe) p/ o Super Folha cruzar extrato -> caixa ->
 # fatura via fatura_id/emusys_fatura_id. Mesmo segredo dedicado no codigo.
@@ -132,6 +137,10 @@ verify_jwt = false
 [functions.sync-financeiro-emusys]
 # Cron envia JWT anon valido mais x-sync-token; a funcao valida o segredo antes
 # de abrir execucao. TRUE impede chamadas sem JWT de chegarem ao codigo.
+verify_jwt = true
+
+[functions.sync-asaas-emusys]
+# Mesmo desenho do sync-financeiro-emusys: cron envia JWT anon + x-sync-token.
 verify_jwt = true
 
 [functions.refresh-contas-receber]
@@ -174,6 +183,14 @@ verify_jwt = true
 # secret GOOGLE_ADS_CONVERSION_ACTION_ID configurado. Conversao enviada ao Google nao se
 # apaga, so se retrata item a item por outra chamada de API.
 verify_jwt = true
+
+[functions.enviar-conversoes-meta]
+# LAPE-62: devolve experimental e matricula ao PIXEL do Meta (API de Conversoes, telefone em hash).
+# So cron (pg_cron `enviar-conversoes-meta-diario`, 8h BRT) e operacao manual; nao ha chamador do app.
+# A autorizacao e feita DENTRO da funcao (x-sync-token ou service_role). Esta publicada com
+# verify_jwt=false; o cron manda tambem o Authorization, entao se um redeploy resetar para true
+# o gateway aceita o JWT e a funcao segue autenticando pelo x-sync-token. O padrao da funcao e DRY RUN.
+verify_jwt = false
 
 [functions.atualizar-inadimplencia-emusys]
 # Endpoint de compatibilidade do botao: navegador manda JWT e servidor pode mandar

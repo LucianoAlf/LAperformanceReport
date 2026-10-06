@@ -6,6 +6,7 @@ const filtro = readFileSync('src/components/ui/CompetenciaFilter.tsx', 'utf8');
 const dashboardMobile = readFileSync('src/mobile/telas/DashboardMobile.tsx', 'utf8');
 const mobileLayout = readFileSync('src/mobile/MobileLayout.tsx', 'utf8');
 const seletorMobile = readFileSync('src/mobile/SeletorPeriodoMobile.tsx', 'utf8');
+const folhaMobile = readFileSync('src/mobile/FolhaMobile.tsx', 'utf8');
 const seletorAgenda = readFileSync('src/components/App/Agenda/SeletorPeriodo.tsx', 'utf8');
 const painel = readFileSync('src/components/ui/PainelPeriodo.tsx', 'utf8');
 
@@ -135,9 +136,13 @@ test('o Dashboard mobile chega ao filtro pelo seletor compacto', () => {
 });
 
 test('a folha do seletor fecha no Esc e tem scrim clicavel', () => {
-  assert.match(seletorMobile, /e\.key === 'Escape'/, 'a folha nao fecha no Esc');
-  assert.match(seletorMobile, /aria-label="Fechar seletor de período"/, 'a folha nao tem scrim de fechar');
-  assert.match(seletorMobile, /role="dialog"/, 'a folha nao se anuncia como dialog');
+  // LAPE-32 (06/10) moveu a casca — Esc, scrim, dialog — para a FolhaMobile
+  // compartilhada; o seletor (e as outras folhas) delega para ela. Protegir a
+  // casca protege todas as folhas que a usam.
+  assert.match(seletorMobile, /<FolhaMobile\b/, 'o seletor deixou de usar a FolhaMobile compartilhada');
+  assert.match(folhaMobile, /e\.key === 'Escape'/, 'a folha nao fecha no Esc');
+  assert.match(seletorMobile, /rotuloFechar="Fechar seletor de período"/, 'a folha nao tem scrim de fechar');
+  assert.match(folhaMobile, /role="dialog"/, 'a folha nao se anuncia como dialog');
 });
 
 test('o <main> do shell so rola para o lado em rota NAO portada', () => {

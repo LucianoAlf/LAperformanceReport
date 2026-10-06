@@ -1,11 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import {
     X, ClipboardCheck, Sparkles, Bot,
     Cpu, Shield, ChevronUp
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWidgetsHidden } from '@/contexts/WidgetVisibilityContext';
-import { AuditoriaWidget } from '@/components/App/Alunos/Auditoria/AuditoriaWidget';
+// Carregado só ao abrir o assistente: o widget traz markdown e gráficos (recharts) e, importado
+// direto, entrava no pacote inicial de TODA tela, mesmo para quem nunca abre o assistente.
+const AuditoriaWidget = lazy(() =>
+    import('@/components/App/Alunos/Auditoria/AuditoriaWidget').then((m) => ({ default: m.AuditoriaWidget })),
+);
 
 type ActiveTool = null | 'auditoria';
 
@@ -60,7 +64,11 @@ export function AdminToolsHub() {
 
     // Se uma tool está ativa, renderiza ela
     if (activeTool === 'auditoria') {
-        return <AuditoriaWidget onClose={handleCloseTool} widgetsHidden={widgetsHidden} />;
+        return (
+            <Suspense fallback={null}>
+                <AuditoriaWidget onClose={handleCloseTool} widgetsHidden={widgetsHidden} />
+            </Suspense>
+        );
     }
 
     return (

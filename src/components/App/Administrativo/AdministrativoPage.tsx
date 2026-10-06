@@ -69,7 +69,7 @@ import {
   isCompetenciaNoPeriodo,
   isRenovacaoAntecipada,
 } from '@/lib/renovacoesAntecipadas';
-import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
+import { contaNosKpis, filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
 import { fetchAlunosAtivosAtuaisCanonicos } from '@/lib/estadoOperacionalAlunos';
 import {
   codigoTipoMatriculaAdministrativo,
@@ -1321,6 +1321,18 @@ export function AdministrativoPage() {
     .filter(m => m.tipo === 'renovacao')
     .filter(isLancadaNoPeriodo)
     .filter(m => isRenovacaoAntecipada(m) && competenciaReferenciaMovimento(m) > endDate);
+  // As TABELAS de renovação listam também bolsista e banda, marcadas como "não entra
+  // na taxa" (Jhon/CG, 02/10/2026: os bolsistas estavam no banco, mas a tela os
+  // escondia e a equipe concluiu que faltavam — chegou a criar cópias pelo modal).
+  // Os CONTADORES acima seguem canônicos: a regra do Alf de 27/08 não muda.
+  const renovacoesDaCompetenciaLista = movimentacoes.filter(isRenovacaoDaCompetencia);
+  const renovacoesLista = renovacoesDaCompetenciaLista.filter(m => isRenovacaoConfirmadaOperacional(m));
+  const renovacoesPendentesLista = renovacoesDaCompetenciaLista.filter(m => !isRenovacaoConfirmadaOperacional(m));
+  const renovacoesAntecipadasLista = movimentacoes
+    .filter(m => m.tipo === 'renovacao')
+    .filter(isLancadaNoPeriodo)
+    .filter(m => isRenovacaoAntecipada(m) && competenciaReferenciaMovimento(m) > endDate);
+  const foraDaTaxa = (lista: MovimentacaoAdmin[]) => lista.filter(m => !contaNosKpis(m)).length;
   const avisosPrevios = movimentacoesCanonicas.filter(m => m.tipo === 'aviso_previo');
   // 🔴 Estas duas listas alimentam a ABA Cancelamentos e o contador dela — e eram as
   // ÚNICAS que saíam de `movimentacoes` CRU. O filtro de atividade extra existe desde
@@ -1996,6 +2008,10 @@ export function AdministrativoPage() {
         {/* Tabs */}
         <div className="flex flex-wrap gap-2 mb-4">
           {tabs.map(tab => {
+            const extraForaDaTaxa = tab.id === 'renovacoes' ? foraDaTaxa(renovacoesLista)
+              : tab.id === 'renovacoes_pendentes' ? foraDaTaxa(renovacoesPendentesLista)
+              : tab.id === 'renovacoes_antecipadas' ? foraDaTaxa(renovacoesAntecipadasLista)
+              : 0;
             const count = tab.id === 'renovacoes' ? renovacoes.length
               : tab.id === 'renovacoes_pendentes' ? renovacoesPendentesConfirmacao.length
               : tab.id === 'renovacoes_antecipadas' ? renovacoesAntecipadas.length
@@ -2018,7 +2034,7 @@ export function AdministrativoPage() {
                 )}
               >
                 <Icon className="w-4 h-4" />
-                {tab.label} ({count})
+                {tab.label} ({count}{extraForaDaTaxa > 0 ? ` · +${extraForaDaTaxa} bolsista/banda` : ''})
               </button>
             );
           })}
@@ -2028,14 +2044,14 @@ export function AdministrativoPage() {
         <div className="bg-slate-900/60 rounded-xl border border-slate-700/30 overflow-hidden mt-4">
           {activeTab === 'renovacoes' && (
             <TabelaRenovacoes 
-              data={renovacoes} 
+              data={renovacoesLista}
               onEdit={handleEdit}
               onDelete={handleDeleteMovimentacao}
             />
           )}
           {activeTab === 'renovacoes_pendentes' && (
             <TabelaRenovacoes
-              data={renovacoesPendentesConfirmacao}
+              data={renovacoesPendentesLista}
               onEdit={handleEdit}
               onDelete={handleDeleteMovimentacao}
               onSaveInline={handleSaveRenovacaoInline}
@@ -2046,7 +2062,7 @@ export function AdministrativoPage() {
           )}
           {activeTab === 'renovacoes_antecipadas' && (
             <TabelaRenovacoes
-              data={renovacoesAntecipadas}
+              data={renovacoesAntecipadasLista}
               onEdit={handleEdit}
               onDelete={handleDeleteMovimentacao}
               onSaveInline={handleSaveRenovacaoInline}

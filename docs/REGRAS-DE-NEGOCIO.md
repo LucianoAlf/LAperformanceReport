@@ -688,6 +688,21 @@ taxa_conversao_exp_mat = novas_matriculas / experimentais_realizadas × 100
 taxa_lead_experimental = leads que agendaram/realizaram experimental / total de leads × 100
 ```
 
+✅ **Conversão experimental → matrícula, como é calculada (decisão do Hugo, 02/10/2026):**
+
+```
+numerador   = matrículas COMERCIAIS do mês cuja pessoa fez experimental com PRESENÇA,
+              na mesma unidade, em QUALQUER data até a matrícula (pode ser meses antes)
+denominador = experimentais com presença no Emusys no mês (sem internas e sem decisão humana de exclusão)
+```
+
+- A matrícula conta no **mês da matrícula**, não no da experimental. Ex.: experimental em fevereiro e matrícula em setembro = conversão de setembro.
+- Quem **faltou** ou teve a experimental **cancelada** e matriculou depois é matrícula direta: não conta.
+- Irmãos contam um por criança (§6.7).
+- Consequência declarada: numerador e denominador são de coortes diferentes. Por isso a taxa pode passar de 100% num mês fraco de experimental. **Não é erro.**
+- ⚠️ É diferente da conversão **do professor** (§7.3), que credita a matrícula em até 30 dias depois da experimental.
+- Implementação: `get_conciliacao_experimentais_snapshot_v1` (migration `20261002130000`). A fórmula escrita acima (`novas_matriculas / experimentais_realizadas`) é a forma resumida desta regra: o numerador são só as matrículas que tiveram experimental.
+
 ⚠️ **Taxa de conversão geral do funil segue pendente** — `novas / total_leads` (código) vs. `novas / leads_com_experimental`. Ver §14, pendência P3.
 
 ### 6.5 Matrículas novas — fonte é `alunos` ✅
@@ -734,6 +749,8 @@ O Emusys cria 1 registro por **pessoa**; `matricula.lead_id` identifica o **alun
 Como `leads.telefone` recebe o `telefone_responsavel` e existe UNIQUE `(telefone, unidade_id) WHERE arquivado = false`, **irmãos colapsam em 1 lead** e os filhos extras viram aluno sem lead.
 
 **Efeito:** matrículas de irmãos extras somem do funil e o nome exibido é o do irmão. Ver §14, pendência P4.
+
+✅ **Conversão experimental → matrícula corrigida para irmãos (02/10/2026):** cada criança que fez experimental e matriculou conta como **uma conversão**. A conciliação resolve o aluno da experimental pelo **lead Emusys da própria criança** (`alunos.emusys_lead_id = lead_experimentais.emusys_lead_id`, mesma unidade) **antes** de cair no aluno do lead da família (`leads.aluno_id`, um só por telefone). Antes, os dois irmãos caíam no mesmo aluno e o `count(distinct aluno)` os juntava (Barra set/26: 12 → 14; Recreio set/26: 15 → 17). Matrículas e experimentais com presença não mudam. Migration `20261002120000` (funções `get_conciliacao_experimentais_snapshot_v1` e `..._v2_legacy_p21_20260707`). O lead único por família no funil (P4) **continua**.
 
 ### 6.8 Origem e atribuição de anúncio 📋
 

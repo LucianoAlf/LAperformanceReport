@@ -32,6 +32,7 @@ import qrcode from 'qrcode-terminal';
 import { matchesAllowedUser, parseAllowedUsers } from './allowlist.js';
 import { registerReportSingleMessageRoute } from './report-single-message.js';
 import groupEngagement from './group-engagement.cjs';
+import groupMembroNovo from './group-membro-novo.cjs';
 
 // Parse CLI args
 const args = process.argv.slice(2);
@@ -755,6 +756,38 @@ async function startSocket() {
 
   sock.ev.on('creds.update', () => { saveCreds(); lidToPhone = buildLidMap(); });
 
+  // 🔔 Membro novo num grupo financeiro oficial avisa o Alf (28/09/2026): estar
+  //    no grupo passou a ser permissão financeira (autoriza_qualquer_membro).
+  //    Só avisa. Destino em SOL_CAIXA_ALERTA_MEMBRO_PARA (sem ele, só registra).
+  //    ⚠️ Handler async com try/catch: erro aqui nunca pode derrubar a ponte.
+  let _alertaMembro = null;
+  function alertaMembroNovo() {
+    if (_alertaMembro) return _alertaMembro;
+    const para = String(process.env.SOL_CAIXA_ALERTA_MEMBRO_PARA || '').replace(/D/g, '');
+    _alertaMembro = groupMembroNovo.criarAlertaMembroNovo({
+      gruposFinanceiros: financeGroupMap,
+      destino: para ? para + '@s.whatsapp.net' : null,
+      enviar: async function (jid, texto) {
+        const s2 = await sendWithTimeout(jid, { text: texto });
+        const id = s2 && s2.key && s2.key.id;
+        if (id) recentlySentIds.add(id);
+        return id;
+      },
+      resolverTelefone: resolverTelefoneDoRemetente,
+      nomeDe: async function (tel, grupo) {
+        const mod = (await import('file:///home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs')).default;
+        const r = await mod.identificarPessoa(tel, grupo && grupo.unidade_id);
+        return r && r.identificado ? r.nome : null;
+      },
+      log: _caixaLog,
+    });
+    return _alertaMembro;
+  }
+  sock.ev.on('group-participants.update', async (update) => {
+    try { await alertaMembroNovo().tratar(update); }
+    catch (e) { try { _caixaLog({ step: 'grupo_financeiro_membro_novo_erro', msg: String(e && e.message) }); } catch (_) { /* nunca derruba */ } }
+  });
+
   sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect, qr } = update;
 
@@ -1394,7 +1427,12 @@ async function caixaAbf() {
               // Sol -- menciona o nome dela ou cita um card pendente. Sem isto, uma
               // pendencia travada "envenena" a conversa inteira do grupo: qualquer
               // mensagem de qualquer pessoa, sobre qualquer assunto, levava "nao entendi".
-              const _pareceProSol = !!(groupEngagement.pareceChamarSol && groupEngagement.pareceChamarSol(body));
+              // Responder citando uma mensagem que a PRÓPRIA Sol mandou (card, recusa,
+              // aviso) é falar com ela, mesmo sem o nome (CG 03/10: "Pode abrir sol"
+              // citando "Não lancei: o caixa de hoje ainda não está aberto" ficou mudo).
+              const _citouSol = !!(event.quotedMessageId && recentlySentIds.has(event.quotedMessageId));
+              const _pareceProSol = _citouSol
+                || !!(groupEngagement.pareceChamarSol && groupEngagement.pareceChamarSol(body));
               // Citar o comprovante de uma pessoa nao e falar com a Sol. So uma
               // mensagem que a propria Sol enviou (card/continuacao) aciona esta
               // guarda; a relacao ampla com a origem segue disponivel ao handler
@@ -1447,6 +1485,19 @@ async function caixaAbf() {
                     continue;
                   }
                 }
+              }
+              // Resposta direta a uma mensagem da Sol que nenhum caminho tratou e sem
+              // card aberto: orienta em vez de ficar muda. Com card aberto, o fallback
+              // abaixo já responde. Nunca escreve nem aprova nada.
+              if (!_tratouCaixa && _citouSol && _r && _r.acao === 'nada' && !_cardPendente) {
+                try {
+                  const _sa = await sendWithTimeout(chatId, { text:
+                    'Não entendi essa 🤔. Para abrir o caixa, escreve *Sol, abre o caixa*; '
+                    + 'para fechar, *Sol, fecha o caixa*; para lançar, manda o comprovante.' });
+                  const _said = _sa && _sa.key && _sa.key.id; if (_said) recentlySentIds.add(_said);
+                } catch (e) { _caixaLog({ step: 'orientacao_citou_sol_erro', msg: e.message }); }
+                _caixaLog({ step: 'orientacao_citou_sol', chatId: chatId });
+                _tratouCaixa = true;
               }
               // Nos demais casos, o mesmo roteador continua em shadow. O
               // preflight acima já registrou sua decisão e não chama de novo.

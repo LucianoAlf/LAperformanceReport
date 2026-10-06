@@ -7,6 +7,7 @@
 - **Componentes:** `Alunos/AlunosPage.tsx` (+ `TabelaAlunos`, `GestaoTurmas`, `DistribuicaoAlunos`, `ConciliacaoMatriculas`, `ImportarAlunos`, `TabHistoricoLTV`, `Automacao/TabAutomacao`, sub-módulo `Auditoria/`). Modais: `ModalNovoAluno`, `ModalFichaAluno` (com abas Pesquisas, Aulas e **Histórico Pedagógico**), `ModalNovaTurma`, `ModalPassagensAluno`, etc.
 - **Aba Histórico Pedagógico (`ModalFichaAluno`):** mostra o conteúdo das aulas (`aulas_emusys.anotacoes`, via RPC `get_relatorio_pedagogico_aluno`) e o painel **Relatório Pedagógico com IA** (`RelatorioPedagogicoIA`): seletor de período (mensal/semestral/anual/personalizado) → edge `gerar-relatorio-pedagogico` (Gemini) gera um **rascunho editável** → coordenador ajusta → imprime (template com logo/equipe). Rascunhos salvos em `relatorios_pedagogicos` (histórico + reuso futuro pelo agente Fábio no WhatsApp).
 - **Hooks:** `useCompetenciaFiltro`, `useCompetenciaMensalStatus`, `fetchKPIsAlunosCanonicos`, `Auditoria/useAuditoriaEmusys`, `Auditoria/useAgentChat`
+- **Card Trancadas (2026-10-03):** matrículas com trancamento em vigor (+ nº de alunos), lido de `get_kpis_alunos_admin_operacional` (`totais.matriculas_trancadas`/`alunos_trancados`), mesma fonte dos cards Matrículas/Alunos/Pagantes. Ficam **fora** de Matrículas Ativas; o Emusys as conta como ativas, então **Matrículas Ativas + Trancadas = "Matrículas Ativas (fim do mês)" do Emusys** (exato em ago e set/2026). Sem a fonte operacional mostra `—`, nunca `0`. ⚠️ Como os outros cards, ainda reflete a carteira de HOJE ao trocar de mês — o histórico existe só em `fechamento_mensal_snapshots` (`alunos_admin`, jun–set/2026).
 - **Aba Anamnese (`ModalFichaAluno`) — a anamnese é da PESSOA (desde 2026-09-01, LAPE-19):** a ficha lê pela RPC **`get_anamnese_aluno(p_aluno_id)`**, que resolve a pessoa pelo par `(unidade_id, pessoa_chave)` (fonte da chave: `vw_aluno_pessoa_chave`) e devolve `{anamnese, procedencia, anteriores}`. Quem faz vários cursos preenche **uma vez** e a anamnese aparece nas fichas de todos eles, com faixa de procedência ("respondida em DD/MM, na matrícula de Violão") quando não é a matrícula de origem, e aviso quando existe anamnese anterior (a mais recente vence, a antiga fica no histórico). A mesma procedência entra no texto do botão "Enviar ao professor". `alunos.anamnese_preenchida` virou espelho por pessoa (`fn_sincronizar_anamnese_preenchida_pessoa`), o que faz o filtro da Lista, o filtro de diagnóstico e a pendência `anamnese_pendente` da Conciliação pararem de cobrar quem já respondeu. ⚠️ O aviso ao professor **não mudou**: segue um briefing por anamnese nova, para o professor da matrícula onde foi preenchida (ampliar foi descartado — agosto/26 teve 182 anamneses contra 11 e 14 nos meses anteriores). Spec: `docs/superpowers/specs/2026-09-01-anamnese-por-pessoa-design.md`.
 - **Contrato na Ficha do Aluno:** `ContratoAssinaturaBadge` aparece no cabeçalho e na aba Acadêmico, sempre somente leitura. `get_contrato_assinatura_aluno_v1` entrega o estado por pessoa e por matrícula; início/fim continuam sendo período das aulas e não data de assinatura. `assinado` cobre assinatura manual ou eletrônica; `nao_assinado` não revela se nunca foi enviado ou se aguarda o aluno. A origem é exclusivamente o Emusys. Quando a pessoa tem cadastros locais duplicados, `get_situacao_alunos_v1` procura as matrículas na jornada de todos os `aluno_ids_locais`, mas só aceita a ponte com cobertura acadêmica integral; qualquer lacuna continua conservadoramente `nao_verificado`.
 - **RPCs:** `get_kpis_alunos_canonicos`,
@@ -96,6 +97,39 @@ apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **L
   blocos e apresentações com `@dnd-kit`), **Palco** (`PalcoTab` + `PalcoApresentacao`, rider
   consolidado), **Revisão** (`RevisaoTab`, pendências + documentos) e **Check-in** (`CheckinTab`,
   o dia do recital). `AvisoEmDesenvolvimento` é a fonte única do aviso na lista e no detalhe.
+- **Filtro de curso no seletor da Grade (06/10/2026, pedido do Arthur):** seletor único **"Curso: ▾"** na
+- **Filtro "Família" no seletor da Grade (06/10/2026, pedido do Hugo):** botão **Família** ao lado do "Curso:" mostra só quem tem familiar que também é aluno ativo da unidade, com a família junta na lista e o nome do familiar sob o aluno. Fonte: view **`vw_evento_familia_v1`** (`security_invoker`, RLS de `alunos`), regra = telefone do responsável do aluno é o telefone/WhatsApp de um aluno **adulto** E o primeiro nome do responsável cadastrado é o primeiro nome dele (45 pares nas 3 unidades em 06/10; só telefone dava 143 e misturava irmãos). ⚠️ Pega cônjuge também — por isso "família", nunca "pai e filho". Lida à parte dos candidatos: se falhar, o botão fica desabilitado e o seletor segue funcionando.
+  linha da busca — Todos, Só instrumentos, Só musicalização ou um curso (com quantos ainda estão fora
+  da grade). Começou como fileira de chips e foi trocado: ocupava duas linhas do painel antes do 1º
+  aluno. Não há categoria em `cursos`: a régua é `ehMusicalizacao()` (`src/lib/eventos.ts`, pelo
+  nome). Filtro só de tela; não muda o que a RPC devolve.
+- **Grade por dia (06/10/2026, pedido do Arthur):** em evento de 2+ dias a Grade abre em **abas por dia**
+  (`1º dia · 28/11`, com nº de blocos e apresentações); cada aba mostra só os blocos daquele dia
+  (`evento_bloco.data`, `null` = 1º dia). **Novo bloco** nasce no dia aberto; o dia do bloco é a aba em que
+  ele está — no cabeçalho do bloco só existe **"Mover p/ 2º dia"** (com 3+ dias, "Mover para…" lista só os
+  outros dias), que o leva para a outra aba com aviso. O seletor com o dia atual saiu em 06/10: repetia a aba. `ordem` continua global e o horário segue calculado sobre
+  todos os blocos — a aba é só recorte de exibição.
+- **Celular (06/10/2026):** cabeçalho do evento em 2 linhas (ações viram ícone) e as 6 abas num botão
+  que abre a lista (`PageTabs seletorNoCelular`). Na Grade, abaixo de 640px (`sm:`): o horário do número
+  sai da coluna da esquerda e vira a 1ª linha do cartão, campo de música ocupa a linha inteira com fonte
+  16px (sem zoom do iOS), alvos de toque de 36–44px, cabeçalho do bloco reordenado (`order-*`), e o
+  seletor de alunos põe "Curso:" na linha de baixo e não abre o teclado sozinho. Desktop inalterado.
+  As **6 abas** estão adaptadas desde 06/10 (`ABAS_PORTADAS['/app/eventos/*']`; o `*` casa o id do evento;
+  aba nova nasce com a faixa âmbar). Modal "Editar evento" em coluna única e sem foco automático.
+  - **Alunos:** os 5 indicadores numa faixa compacta (antes, uma tela inteira); cada aluno em duas linhas —
+    nome e cursos em cima, bloco + convidados + Participa/Indefinido/Não (44px) embaixo; o selo fantasma de
+    "marcar formando" some no celular (sem hover, seria toque invisível).
+  - **Check-in:** busca e "Por nome/Por bloco" grudam no topo enquanto a lista rola; nome sem corte; botão
+    "Chegou" com 44px; certificados vão para o fim da página (na porta, a lista vem primeiro).
+  - **Bilheteria:** vendas viram cartões (a tabela de 10 colunas cortava status, conciliação e o menu);
+    Config em coluna única — o grid sem colunas definidas empurrava a página para o lado.
+  - **Revisão:** números em 2×2; "Resolver em …" desce para baixo do título em largura cheia.
+  - **Palco, Revisão e Bilheteria/Config** mostram o dia junto do nome do bloco em evento de 2+ dias
+    (dois "Bloco 3", um por data, ficavam iguais).
+  Medido a 390px nas 6 abas: sem rolagem lateral, nenhum texto < 12px, alvos ≥ 44px (exceto o interruptor e
+  o X dos diálogos, que são globais). Desktop conferido a 1440px.
+- ⚠️ **"Nova venda" nunca abria** (corrigido 06/10): o `SelectItem value=""` de "Aluno vinculado" derrubava a
+  tela inteira (o Radix proíbe valor vazio). Hoje "Nenhum" é o token `nenhum`.
 - **Hooks:** `useEventos` (`src/hooks/useEventos.ts`) — `useEventos`, `useEvento`,
   `useAlunosDoEvento`, `useGradeDoEvento`, `useCheckinDoEvento` + as funções de escrita.
 - **Regras puras:** [`src/lib/eventos.ts`](../../src/lib/eventos.ts) (elegibilidade, cálculo de
@@ -126,15 +160,18 @@ apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **L
   `20260918173000`, `20260919020000`, `20260919030000`, `20260919050000`, `20260928164338`
   (número).
 - **Horário é CALCULADO, nunca persistido** (`calcularHorariosDaGrade`): `inicio(N+1) = fim(N) +
-  intervalo`, com o intervalo configurável por evento (2700s = os 45 min do protótipo). Dentro do
-  bloco, 5 min de troca entre uma apresentação e a seguinte (`INTERVALO_ENTRE_APRESENTACOES_PADRAO_SEGUNDOS`,
-  25/09); o campo opcional `intervalo_entre_apresentacoes_segundos` já é aceito pelo cálculo, mas ainda
-  não existe coluna em `evento`.
+  intervalo`, com o intervalo configurável por evento (2700s = os 45 min do protótipo). **Dentro do
+  bloco não há folga** desde 02/10 (pedido do Arthur): a apresentação seguinte começa quando a
+  anterior termina, e a troca de palco entra no **tempo padrão por apresentação**
+  (`evento.duracao_padrao_segundos` — um recital por unidade, então é o padrão da unidade). Ele é
+  editável na própria Grade (`TempoPadraoApresentacao`, ao lado do botão de sincronizar) e em
+  "Editar evento"; o cartão continua podendo ter tempo próprio (`duracao_segundos`), que vence o
+  padrão. Os 5 min de troca de 25/09 e a linha `TrocaDePalco` de 28/09 saíram;
+  `INTERVALO_ENTRE_APRESENTACOES_PADRAO_SEGUNDOS` vale 0 e o campo opcional
+  `intervalo_entre_apresentacoes_segundos` segue aceito pelo cálculo, sem coluna em `evento`.
   `evento_bloco.horario_inicial` guarda só o que o humano DIGITOU (`inicio_manual`). ⚠️ Persistir o
   derivado daria duas verdades, e qualquer caminho de escrita que esquecesse de recalcular deixaria
-  a programação impressa mentindo. Desde 28/09 a Grade **desenha** a troca entre um cartão e o
-  seguinte (`TrocaDePalco`: "termina 09:03 · 5 min de troca de palco") e cada cartão mostra início e
-  fim — antes os 5 min só apareciam como um salto no horário do cartão de baixo.
+  a programação impressa mentindo. Cada cartão mostra início e fim.
 - **Número — alunos que sobem JUNTOS (28/09/2026, protótipo novo do Arthur).** A Ana no Violão
   acompanhando o Pedro no Canto é **um** número: um horário, uma música, um slot, os dois listados.
   🔴 **A apresentação CONTINUA sendo o par (pessoa, curso)** e a UNIQUE não muda — é nela que moram o
@@ -155,6 +192,13 @@ apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **L
   `trg_evento_apresentacao_grupo_coerente` (**deferida**, conferida no commit): o número inteiro fica
   num bloco só — arrastar move o número, e o front manda todos os integrantes juntos. ⚠️ Número que
   sobra com 1 integrante (alguém foi removido) é tratado como apresentação sozinha, não é erro.
+- 🔴 **O cartão da Grade apagava a música que o LA Teacher acabara de trazer (corrigido 02/10).**
+  Os campos Música/Link guardavam o valor da montagem e não acompanhavam o banco: depois do sync
+  o campo seguia vazio, e entrar e sair dele gravava vazio por cima (Stella/Barra, 02/10 16:24 e
+  16:25 — provado no `audit_log`). Hoje o campo acompanha o banco enquanto não está em edição, e
+  o blur só grava se a pessoa **digitou**; a duração (`defaultValue`) remonta por `key`. ⚠️ Pôr
+  aluno na Grade **não dispara** o sync — a música chega ao abrir a página ou no botão
+  sincronizar.
 - **Idade do aluno** (28/09): ao lado do nome no cartão da Grade, no Check-in (porta e coxia), na
   lista de relatórios da Revisão e na programação/planilha impressas. Regra única em
   `idadeEmAnos`/`idadeHoje` (`src/lib/eventos.ts`): idade de **hoje** em BRT, a mesma da aba Alunos

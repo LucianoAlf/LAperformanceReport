@@ -21,6 +21,8 @@ export const ROTAS_COM_FAIXA_POR_ABA: readonly string[] = [
   '/app/alunos',
   '/app/agenda',
   '/app/administrativo',
+  // Rota com id (`/app/eventos/21`): o `*` casa qualquer segmento final.
+  '/app/eventos/*',
 ];
 
 /**
@@ -67,13 +69,23 @@ export const ABAS_PORTADAS: Readonly<Record<string, readonly string[]>> = {
   // fileiras de abas. As outras 4 sub-abas da Farmer tiveram só ajuste de largura
   // e de alvo (ver `tests/farmerMobile.test.mjs`).
   '/app/administrativo': ['lancamentos', 'contratos', 'fideliza', 'lojinha', 'farmer'],
+  // Detalhe do evento (06/10/2026): só a Grade foi adaptada — Alunos, Palco, Bilheteria,
+  // Revisão e Check-in seguem com a faixa.
+  '/app/eventos/*': ['alunos', 'grade', 'palco', 'bilheteria', 'revisao', 'checkin'],
 };
+
+/** `'/app/eventos/*'` casa `'/app/eventos/21'` (um segmento), nunca `'/app/eventos'`. */
+function casaRota(padrao: string, pathname: string): boolean {
+  if (!padrao.endsWith('/*')) return padrao === pathname;
+  const base = padrao.slice(0, -1);
+  return pathname.startsWith(base) && pathname.length > base.length && !pathname.slice(base.length).includes('/');
+}
 
 export function rotaTemFaixaPorAba(
   pathname: string,
   rotas: readonly string[] = ROTAS_COM_FAIXA_POR_ABA,
 ): boolean {
-  return rotas.includes(pathname);
+  return rotas.some((r) => casaRota(r, pathname));
 }
 
 /**
@@ -86,5 +98,6 @@ export function abaFoiPortada(
   mapa: Readonly<Record<string, readonly string[]>> = ABAS_PORTADAS,
 ): boolean {
   if (!aba) return false;
-  return (mapa[pathname] ?? []).includes(aba);
+  const chave = Object.keys(mapa).find((r) => casaRota(r, pathname));
+  return chave !== undefined && mapa[chave].includes(aba);
 }

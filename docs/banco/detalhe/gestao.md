@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-30 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-06 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — gestao
 
-51 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+56 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## bi_agent_config_lamusic
 
@@ -342,6 +342,73 @@
 **Únicos:**
 - `kpis_comercial_v2_cache_pkey`
 
+## meta_conversoes
+
+> Eventos devolvidos ao Meta (Conversions API, pixel) pela edge enviar-conversoes-meta. Uma linha por lead+tipo, so de envio REAL (o modo teste, com test_event_code, nao grava aqui). enviado_em nulo + ultimo_erro = tentou e falhou.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('meta_conversoes_id_seq'::regclass) |  |
+| `lead_id` | integer | não |  | leads.id |
+| `aluno_id` | integer | sim |  | alunos.id |
+| `tipo` | text | não |  |  |
+| `event_name` | text | não |  |  |
+| `event_id` | text | não |  |  |
+| `valor` | numeric(12,2) | sim |  |  |
+| `ocorrido_em` | timestamp with time zone | não |  |  |
+| `enviado_em` | timestamp with time zone | sim |  |  |
+| `tentativas` | integer | não | 0 |  |
+| `ultimo_erro` | text | sim |  |  |
+| `resposta` | jsonb | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `meta_conversoes_matricula_aluno`
+- `meta_conversoes_pkey`
+- `meta_conversoes_unica`
+
+## meta_conversoes_execucao
+
+> Uma linha por chamada da edge enviar-conversoes-meta. descartes = contagem por motivo; lead_ids = quem foi enviado (ou iria, no dry run). Ultima rodada: select * from meta_conversoes_execucao order by id desc limit 5;
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('meta_conversoes_execucao_id_seq'::regclass) |  |
+| `run_id` | text | não |  |  |
+| `modo` | text | não |  |  |
+| `iniciado_em` | timestamp with time zone | não | now() |  |
+| `terminado_em` | timestamp with time zone | sim |  |  |
+| `na_fila` | integer | sim |  |  |
+| `elegiveis` | integer | sim |  |  |
+| `enviados` | integer | sim |  |  |
+| `falhas` | integer | sim |  |  |
+| `descartes` | jsonb | sim |  |  |
+| `lead_ids` | integer[] | sim |  |  |
+| `resposta_meta` | jsonb | sim |  |  |
+| `desfecho` | text | sim |  |  |
+| `erro` | text | sim |  |  |
+
+**Únicos:**
+- `meta_conversoes_execucao_pkey`
+
+## meta_conversoes_fila
+
+> Experimentais feitas e matriculas de leads do Meta que ainda nao foram devolvidas ao pixel. Fila da edge enviar-conversoes-meta. Sem filtro de janela: a edge conta quem esta fora do prazo do Meta.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `lead_id` | integer | sim |  |  |
+| `aluno_id` | integer | sim |  |  |
+| `tipo` | text | sim |  |  |
+| `event_name` | text | sim |  |  |
+| `ocorrido_em` | timestamp with time zone | sim |  |  |
+| `valor` | numeric | sim |  |  |
+| `nome` | text | sim |  |  |
+| `telefone` | text | sim |  |  |
+| `email` | text | sim |  |  |
+| `marca` | text | sim |  |  |
+
 ## metas
 
 > Metas e OKRs unificados por unidade - mensais, trimestrais e anuais.
@@ -652,6 +719,36 @@
 - `relatorio_anual_item_palco_pkey`
 
 ## relatorio_anual_revisor
+
+> Compatibilidade: o revisor do professor repetido em cada recital. Gravar em relatorio_anual_revisor_do_professor.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `evento_id` | bigint | sim |  |  |
+| `professor_id` | integer | sim |  |  |
+| `revisor_usuario_id` | integer | sim |  |  |
+| `revisor_professor_id` | integer | sim |  |  |
+| `definido_por_usuario_id` | integer | sim |  |  |
+| `definido_em` | timestamp with time zone | sim |  |  |
+
+## relatorio_anual_revisor_do_professor
+
+> Quem revisa os relatórios do recital de cada professor — vale para TODOS os recitais (Alf, 30/09). Gravado pela Divisão (app_relatorio_anual_salvar_divisao).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `professor_id` | integer | não |  | professores.id |
+| `revisor_usuario_id` | integer | sim |  | usuarios.id |
+| `revisor_professor_id` | integer | sim |  | professores.id |
+| `definido_por_usuario_id` | integer | sim |  | usuarios.id |
+| `definido_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `relatorio_anual_revisor_do_professor_pkey`
+
+## relatorio_anual_revisor_por_recital_ate_20260930
+
+> Desativada em 30/09/2026: o revisor passou a ser do professor (relatorio_anual_revisor_do_professor). Guardada só como histórico.
 
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|

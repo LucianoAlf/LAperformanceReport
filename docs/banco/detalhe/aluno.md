@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-01 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-06 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — aluno
 
-164 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+165 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## aluno_acoes
 
@@ -241,6 +241,9 @@
 | `emusys_presenca_bruta_anterior` | text | sim |  |  |
 | `emusys_presenca_alterada_em` | timestamp with time zone | sim |  |  |
 | `espelhado_de_presenca_id` | uuid | sim |  | aluno_presenca.id |
+| `emusys_registro_presenca` | text | sim |  |  |
+| `emusys_registro_presenca_anterior` | text | sim |  |  |
+| `emusys_registro_presenca_alterada_em` | timestamp with time zone | sim |  |  |
 
 **Únicos:**
 - `aluno_presenca_pkey`
@@ -3116,6 +3119,7 @@
 | `revisao_operacional_exigida` | boolean | sim |  |  |
 | `revisao_operacional_status` | text | sim |  |  |
 | `status_presenca` | text | sim |  |  |
+| `emusys_registro_presenca` | text | sim |  |  |
 
 ## vw_aluno_sucesso_lista
 
@@ -3375,6 +3379,18 @@
 | `vendidos_pagos` | bigint | sim |  |  |
 | `pendentes` | bigint | sim |  |  |
 | `livres` | bigint | sim |  |  |
+
+## vw_evento_familia_v1
+
+> Alunos ativos com familiar também aluno ativo na mesma unidade (telefone do responsável = telefone do adulto E primeiro nome bate). Uma linha por (pessoa, familiar), nos dois sentidos. familiar_papel: responsavel = o familiar é o responsável cadastrado desta pessoa; dependente = esta pessoa é a responsável do familiar. Inclui cônjuge: rótulo é família.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `unidade_id` | uuid | sim |  |  |
+| `pessoa_chave` | text | sim |  |  |
+| `familiar_chave` | text | sim |  |  |
+| `familiar_nome` | character varying(200) | sim |  |  |
+| `familiar_papel` | text | sim |  |  |
 
 ## vw_evolucao_alunos
 
@@ -3657,7 +3673,7 @@
 
 ## vw_jornada_lead_v1
 
-> Jornada do lead. ⚠️ `etapa`: a FONTE CANONICA (lead_experimentais) manda quando existe linha; os flags de `leads` so resgatam quem nao tem nenhuma. Corrigido em 04/09 apos falso positivo reportado pela Daiana: o Marcelo tinha aula `cancelada` na fonte canonica e `experimental_realizada=true` no flag, e o R15 dizia que ele fez a experimental. 10 leads tinham os dois flags contraditorios.
+> Jornada do lead. ⚠️ `etapa`: a FONTE CANONICA (lead_experimentais) manda quando existe linha; os flags de `leads` so resgatam quem nao tem nenhuma. Corrigido em 04/09 apos falso positivo reportado pela Daiana: o Marcelo tinha aula `cancelada` na fonte canonica e `experimental_realizada=true` no flag, e o R15 dizia que ele fez a experimental. 10 leads tinham os dois flags contraditorios. tem_gclid/tem_meta_ctwa_clid: só PRESENÇA do click-id — o valor nunca sai pela view.
 
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
@@ -3704,6 +3720,8 @@
 | `experimentais_canceladas` | bigint | sim |  |  |
 | `experimentais_agendadas` | bigint | sim |  |  |
 | `ultima_experimental_em` | date | sim |  |  |
+| `tem_gclid` | boolean | sim |  |  |
+| `tem_meta_ctwa_clid` | boolean | sim |  |  |
 
 ## vw_jornada_marcos
 

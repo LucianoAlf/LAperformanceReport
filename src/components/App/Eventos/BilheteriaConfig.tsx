@@ -5,6 +5,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { diasDoEvento, formatarDataCurta } from '@/lib/eventos';
 import {
   Select,
   SelectContent,
@@ -32,6 +33,7 @@ function parseMoeda(texto: string): number | null {
 
 export function BilheteriaConfig({ evento, dados }: { evento: EventoComResumo; dados: Dados }) {
   const { config, preco, pacotes, blocos, lotacao, recarregar } = dados;
+  const multiDia = diasDoEvento(evento.data_evento, evento.data_fim).length > 1;
   const [ocupado, setOcupado] = useState(false);
 
   const [cota, setCota] = useState(config?.cortesias_por_aluno?.toString() ?? '');
@@ -58,10 +60,12 @@ export function BilheteriaConfig({ evento, dados }: { evento: EventoComResumo; d
   };
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    // grid-cols-1 explícito + min-w-0: sem colunas definidas o grid crescia até caber a linha
+    // de bloco mais larga e empurrava a página inteira para o lado no celular.
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       {/* preco + cota */}
-      <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-800/40 p-4">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <section className="min-w-0 space-y-3 rounded-xl border border-slate-700 bg-slate-800/40 p-4">
+        <h3 className="text-[12px] sm:text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           Preço e cortesias
         </h3>
 
@@ -89,7 +93,7 @@ export function BilheteriaConfig({ evento, dados }: { evento: EventoComResumo; d
             />
           </div>
         </div>
-        <p className="text-[11.5px] text-slate-500">
+        <p className="text-[12px] sm:text-[11.5px] text-slate-500">
           Todos pagam o <strong className="text-slate-300">preço cobrado</strong>. A inteira fica
           como referência no papel/relatório. Mudanças de preço ficam no audit log.
         </p>
@@ -105,7 +109,7 @@ export function BilheteriaConfig({ evento, dados }: { evento: EventoComResumo; d
             placeholder="2"
             className="mt-1 w-32"
           />
-          <p className="mt-1 text-[11.5px] text-slate-500">
+          <p className="mt-1 text-[12px] sm:text-[11.5px] text-slate-500">
             Vazio = sem cota. Acima dela, o restante é ingresso vendido.
           </p>
         </div>
@@ -133,8 +137,8 @@ export function BilheteriaConfig({ evento, dados }: { evento: EventoComResumo; d
       </section>
 
       {/* capacidade por bloco */}
-      <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-800/40 p-4">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <section className="min-w-0 space-y-3 rounded-xl border border-slate-700 bg-slate-800/40 p-4">
+        <h3 className="text-[12px] sm:text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           Capacidade por bloco
         </h3>
         <div className="space-y-2">
@@ -145,8 +149,12 @@ export function BilheteriaConfig({ evento, dados }: { evento: EventoComResumo; d
             const novaCap = capacidades[b.id]?.trim();
             const encolhendo = novaCap !== '' && Number(novaCap) < ocupados;
             return (
-              <div key={b.id} className="flex items-center gap-3">
-                <span className="w-28 truncate text-[13px] text-slate-300">{b.nome}</span>
+              <div key={b.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-slate-700/40 pb-2 last:border-0 sm:flex-nowrap sm:border-0 sm:pb-0">
+                <span className="w-full text-[13px] text-slate-300 sm:w-28 sm:truncate">
+                  {b.nome}
+                  {/* Evento de 2+ dias: dois "Bloco 3" (um por data) só se distinguem pelo dia. */}
+                  {multiDia && <span className="text-slate-500"> · {formatarDataCurta(b.data ?? evento.data_evento)}</span>}
+                </span>
                 <Input
                   type="number"
                   min={1}
@@ -155,19 +163,19 @@ export function BilheteriaConfig({ evento, dados }: { evento: EventoComResumo; d
                     setCapacidades((c) => ({ ...c, [b.id]: e.target.value }))
                   }
                   placeholder="sem teto"
-                  className="h-8 w-28"
+                  className="h-11 w-28 text-[16px] sm:h-8 sm:text-sm"
                   aria-label={`Capacidade do bloco ${b.nome}`}
                 />
-                <span className="text-[11.5px] text-slate-500">{ocupados} ocupados</span>
+                <span className="text-[12px] sm:text-[11.5px] text-slate-500">{ocupados} ocupados</span>
                 {encolhendo && (
-                  <span className="text-[11.5px] text-amber-300">
+                  <span className="text-[12px] sm:text-[11.5px] text-amber-300">
                     abaixo do já vendido — o bloco fica lotado
                   </span>
                 )}
                 <Button
                   size="sm"
                   variant="outline"
-                  className="ml-auto h-8"
+                  className="ml-auto h-11 sm:h-8"
                   disabled={ocupado}
                   onClick={() =>
                     rodar(
@@ -192,8 +200,8 @@ export function BilheteriaConfig({ evento, dados }: { evento: EventoComResumo; d
       </section>
 
       {/* pacotes */}
-      <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-800/40 p-4">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <section className="min-w-0 space-y-3 rounded-xl border border-slate-700 bg-slate-800/40 p-4">
+        <h3 className="text-[12px] sm:text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           Pacotes de desconto
         </h3>
         <div className="space-y-1.5">
@@ -208,7 +216,7 @@ export function BilheteriaConfig({ evento, dados }: { evento: EventoComResumo; d
               <Button
                 size="sm"
                 variant="ghost"
-                className="ml-auto h-7 px-2 text-rose-400 hover:text-rose-300"
+                className="ml-auto h-11 w-11 px-2 text-rose-400 hover:text-rose-300 sm:h-7 sm:w-auto"
                 disabled={ocupado}
                 onClick={() => rodar(() => removerPacote(p.id), 'Pacote removido.')}
                 aria-label={`Remover pacote de ${p.quantidade_minima} ingressos`}
@@ -221,7 +229,7 @@ export function BilheteriaConfig({ evento, dados }: { evento: EventoComResumo; d
             <p className="text-[12.5px] text-slate-500">Nenhum pacote — aplica o melhor sozinho quando a quantidade atingir.</p>
           )}
         </div>
-        <div className="flex items-end gap-2">
+        <div className="flex flex-wrap items-end gap-2">
           <div>
             <Label htmlFor="cfg-pacote-qtd">A partir de</Label>
             <Input
@@ -250,7 +258,7 @@ export function BilheteriaConfig({ evento, dados }: { evento: EventoComResumo; d
           <Button
             size="sm"
             variant="outline"
-            className="gap-1"
+            className="h-11 gap-1 sm:h-9"
             disabled={ocupado || pacoteQtd === '' || pacotePct === ''}
             onClick={() =>
               rodar(
@@ -269,8 +277,8 @@ export function BilheteriaConfig({ evento, dados }: { evento: EventoComResumo; d
       </section>
 
       {/* provedor — etiqueta para a Sol, sem integracao */}
-      <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-800/40 p-4">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <section className="min-w-0 space-y-3 rounded-xl border border-slate-700 bg-slate-800/40 p-4">
+        <h3 className="text-[12px] sm:text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           Onde o dinheiro entra
         </h3>
         <div className="grid grid-cols-2 gap-3">
@@ -297,7 +305,7 @@ export function BilheteriaConfig({ evento, dados }: { evento: EventoComResumo; d
             />
           </div>
         </div>
-        <p className="text-[11.5px] text-slate-500">
+        <p className="text-[12px] sm:text-[11.5px] text-slate-500">
           Só etiqueta para a Sol casar a venda com o relatório da adquirente — sem integração
           automática.
         </p>

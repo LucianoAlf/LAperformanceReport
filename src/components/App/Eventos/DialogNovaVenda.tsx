@@ -53,7 +53,9 @@ export function DialogNovaVenda({ aberto, evento, dados, onFechar, onSalvo }: Pr
   const [forma, setForma] = useState<FormaPagamento>('pix');
   const [pagoAgora, setPagoAgora] = useState(false);
   const [identificador, setIdentificador] = useState('');
-  const [participacaoId, setParticipacaoId] = useState('');
+  // ⚠️ O Radix proíbe `value=""` no SelectItem e derruba a tela inteira ao abrir — por isso
+  // "nenhum" é um token, não a string vazia (era o que impedia o diálogo de abrir).
+  const [participacaoId, setParticipacaoId] = useState('nenhum');
   const [observacao, setObservacao] = useState('');
   const [ocupado, setOcupado] = useState(false);
 
@@ -69,7 +71,7 @@ export function DialogNovaVenda({ aberto, evento, dados, onFechar, onSalvo }: Pr
     setForma('pix');
     setPagoAgora(false);
     setIdentificador('');
-    setParticipacaoId('');
+    setParticipacaoId('nenhum');
     setObservacao('');
   }, [aberto]);
 
@@ -127,7 +129,7 @@ export function DialogNovaVenda({ aberto, evento, dados, onFechar, onSalvo }: Pr
       pacote_id: pacoteAuto?.id ?? null,
       pago_agora: pagoEfetivo,
       pagamento_identificador: pagoEfetivo && precisaId ? identificador.trim() : null,
-      participacao_id: participacaoId === '' ? null : Number(participacaoId),
+      participacao_id: participacaoId === 'nenhum' ? null : Number(participacaoId),
       observacao: observacao.trim() || null,
     });
     setOcupado(false);
@@ -187,7 +189,7 @@ export function DialogNovaVenda({ aberto, evento, dados, onFechar, onSalvo }: Pr
                 </SelectContent>
               </Select>
               {lotado && (
-                <p className="mt-1 flex items-center gap-1 text-[11.5px] text-rose-300">
+                <p className="mt-1 flex items-center gap-1 text-[12px] sm:text-[11.5px] text-rose-300">
                   <CircleAlert className="h-3.5 w-3.5" />
                   Só restam {livresDoBloco} lugar(es) neste bloco.
                 </p>
@@ -206,7 +208,7 @@ export function DialogNovaVenda({ aberto, evento, dados, onFechar, onSalvo }: Pr
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <Label htmlFor="venda-comprador">Comprador</Label>
               <Input
@@ -226,7 +228,7 @@ export function DialogNovaVenda({ aberto, evento, dados, onFechar, onSalvo }: Pr
                 placeholder="Celular ou e-mail"
                 className="mt-1"
               />
-              <p className="mt-1 text-[11px] text-slate-500">
+              <p className="mt-1 text-[12px] sm:text-[11px] text-slate-500">
                 Só pra achar a venda depois — não sai em planilha de professor.
               </p>
             </div>
@@ -247,7 +249,7 @@ export function DialogNovaVenda({ aberto, evento, dados, onFechar, onSalvo }: Pr
                 />
               ))}
             </div>
-            <p className="mt-1 text-[11.5px] text-slate-500">
+            <p className="mt-1 text-[12px] sm:text-[11.5px] text-slate-500">
               Em branco vira “Convidado N de {comprador.trim() || '…'}” — a equipe pode corrigir
               o nome até o dia.
             </p>
@@ -293,7 +295,7 @@ export function DialogNovaVenda({ aberto, evento, dados, onFechar, onSalvo }: Pr
                 <SelectValue placeholder="Nenhum" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Nenhum</SelectItem>
+                <SelectItem value="nenhum">Nenhum</SelectItem>
                 {participantes.map((p) => (
                   <SelectItem key={p.id} value={String(p.id)}>
                     {p.nome}
@@ -301,7 +303,7 @@ export function DialogNovaVenda({ aberto, evento, dados, onFechar, onSalvo }: Pr
                 ))}
               </SelectContent>
             </Select>
-            <p className="mt-1 text-[11.5px] text-slate-500">
+            <p className="mt-1 text-[12px] sm:text-[11.5px] text-slate-500">
               Se a família avisar “sou do fulano”, os convidados aparecem ligados ao aluno.
             </p>
           </div>
@@ -318,7 +320,7 @@ export function DialogNovaVenda({ aberto, evento, dados, onFechar, onSalvo }: Pr
                 disabled={canal === 'porta'}
               />
             </div>
-            <p className="mt-1 text-[11.5px] text-slate-500">
+            <p className="mt-1 text-[12px] sm:text-[11.5px] text-slate-500">
               {canal === 'porta'
                 ? 'Venda de porta nasce paga — o check-in não pode barrar quem acabou de pagar.'
                 : 'No balcão/on-line pode ficar pendente e a Sol cobra depois.'}

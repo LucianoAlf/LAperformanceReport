@@ -187,13 +187,17 @@ export function useEvento(eventoId: number | null) {
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
-  const recarregar = useCallback(async () => {
+  /**
+   * `silencioso`: relê sem passar pelo "Carregando evento…", que desmonta a aba aberta. É o
+   * caso de um ajuste feito de dentro da própria aba (tempo padrão na Grade).
+   */
+  const recarregar = useCallback(async (opcoes?: { silencioso?: boolean }) => {
     if (!eventoId) {
       setEvento(null);
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!opcoes?.silencioso) setLoading(true);
     setErro(null);
     const { data, error } = await supabase
       .from('evento')
@@ -776,8 +780,14 @@ export function useGradeDoEvento(eventoId: number | null) {
   return { blocos, loading, erro, recarregar };
 }
 
-export async function criarBloco(eventoId: number, nome: string, ordem: number) {
-  return supabase.from('evento_bloco').insert({ evento_id: eventoId, nome, ordem });
+export async function criarBloco(
+  eventoId: number,
+  nome: string,
+  ordem: number,
+  /** Dia do bloco; `null` = 1º dia do evento (mesma convencao do seletor do bloco). */
+  data: string | null = null,
+) {
+  return supabase.from('evento_bloco').insert({ evento_id: eventoId, nome, ordem, data });
 }
 
 export async function excluirBloco(blocoId: number) {

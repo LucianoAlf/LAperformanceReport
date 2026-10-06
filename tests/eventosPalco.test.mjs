@@ -259,3 +259,13 @@ test('resumo pluraliza e junta playback e mapa', () => {
 test('playback sozinho aparece — e o que a operacao de som precisa saber', () => {
   assert.equal(resumirPalcoDaApresentacao([], true, false), 'playback');
 });
+
+test('filtro do seletor: os 3 cursos de musicalização caem num lado, instrumento no outro', () => {
+  const { ehMusicalizacao } = lib;
+  for (const nome of ['Musicalização para Bebês', 'Musicalização Infantil', 'Musicalização Preparatória']) {
+    assert.equal(ehMusicalizacao(nome), true, nome);
+  }
+  for (const nome of ['Violão', 'Bateria', 'Canto', 'Teclado', 'Singer Kids', null]) {
+    assert.equal(ehMusicalizacao(nome), false, String(nome));
+  }
+});

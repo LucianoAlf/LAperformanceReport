@@ -154,9 +154,146 @@ Item 3 de "falta criar" retirado. Vocês já têm o gasto por unidade.
 
 **Recomendação:** emitimos `professor_id` + `emusys_professor_id` + `hmac_sha256(telefone_whatsapp)` por linha. O SF tenta o match automático por telefone-HMAC; onde não casar (8 sem telefone), o de-para é manual único na ficha do colaborador (vocês guardam nosso `professor_id`). Se preferirem zero trabalho manual, entregamos **também** a linha agregada unidade×mês sem professor — as duas coisas convivem no mesmo export.
 
-## Ajuste 4 — jan–mai `status_fechamento='legado'` ✅
+## Ajuste 4 — jan–mai `status_fechamento='legado'` → **REVERTIDO em 03/10/2026**
 
-Confirmado, sem reapuração. Export emite exatamente isso.
+~~Confirmado, sem reapuração.~~ **O Alf autorizou em 03/10/2026 a reapuração de
+jan–mai sob a régua corrigida de 08/08** (migration `20261003120000_reapuracao_kpis_alunos_jan_mai_2026`).
+Desde então jan–mai emitem `status_fechamento='fechado'`, `versao=1`, com
+`retificado_em` preenchido: 30 snapshots `fechado` (5 meses × 3 unidades × domínios
+`alunos_admin`+`alunos_executivo`), 15 registros em `fechamento_mensal_retificacoes`
+guardando a linha legada de `dados_mensais` em `evidencias.dados_mensais_anterior`
+(a versão legada **não** foi apagada — está na trilha), e `dados_mensais` atualizado
+com os valores corrigidos. Jan/2026 saiu de `alunos_ativos=0` para 267 BARRA /
+389 CG / 347 REC. Mai precisou de reabertura transacional da competência
+(`fechado` desde 07/06) só para a leitura do canônico vivo — restaurada na mesma tx.
+Detalhe residual: jan–abr emitem `fonte_kpis='preliminar'` (competência nunca foi
+fechada formalmente — exigiria os 6 domínios); mai emite `fonte_kpis='dados_mensais'`.
+Super Folha deve reler jan–mai via `kpis-alunos-sync`.
+
+**Retificação v2 — posição AS-OF (04/10/2026, migrations `20261004120000` +
+`20261004130000`).** A v1 tinha um defeito que a Super Folha apontou na releitura:
+ativos/pagantes/permanência saíam **idênticos nos 5 meses e iguais a out/2026**
+(267/263/13,5 BARRA…), porque o canônico recomputava a posição sobre a base
+atual. A v2 reconstrói a base **como estava no fim de cada mês**
+(`movimentacoes_admin_vigentes` + `data_saida` + `alunos_historico` + bound de
+`updated_at`, mesma régua de pessoa do admin): jan BARRA passa a 224 ativos /
+224 pagantes / perm. 18,2 e os meses variam entre si (CG 475→503, REC 303→341).
+Métricas de fluxo ficam como na v1 (evasões, MRR/faturamento da competência);
+churn/ticket/LTV/permanência foram derivados com o denominador corrigido.
+Referência de fidelidade: CG fev as-of = 489 vs 485 da versão legada que a
+Super Folha guardava (0,8% — a régua pré-08/08 era diferente). Trilha: 30
+snapshots **versão 2** `fechado` + 15 retificações (`payload_v1` preservado em
+`evidencias`) + `dados_mensais` atualizado; a v1 não foi apagada.
+
+**Retificação v3 — ticket contratual + permanência da base viva (04/10/2026,
+migration `20261004140000`).** Segundo defeito apontado pela Super Folha na
+releitura: a v2 dividia o `mrr`/faturamento_previsto do payload v1 (numerador
+de outra régua) pelos pagantes as-of — o ticket crescia mês a mês até encostar
+em junho partindo de ~metade do real; e a permanência media a média das
+passagens **encerradas** com saída ≤ fim do mês — amostra minúscula, pulava
+sem lógica (REC fev 5,68; CG jan 9,35). A v3 é um merge cirúrgico sobre os
+payloads v2: `ticket_medio = mrr_asof / alunos_pagantes` (soma de
+`valor_parcela` das matrículas acadêmicas pagantes vivas no fim do mês —
+a chave `mrr_asof` já existia na v2) e `tempo_permanencia` = tenure médio
+(`fim − data_matricula` da entrada vigente) das pessoas **ativas** no fim do
+mês. `ltv_medio = ticket × permanência`. Ativos, pagantes, novos, evasões,
+churn e `mrr` (faturamento previsto da competência) **ficam como na v2**.
+Resultado: ticket jan BARRA 428,95 / CG 377,36 / REC 429,38 (junho real: 446 /
+391 / 446 — encosta suave); permanência estabiliza ~14,1–14,7 BARRA, ~17,5 CG,
+~19,5–20,2 REC. Trilha: 30 snapshots **versão 3** `fechado` + 15 retificações
+com `payload_v2` inteiro em `evidencias` + `dados_mensais`
+(`ticket_medio`, `ticket_medio_contratual`, `mrr_contratual`,
+`tempo_permanencia`). v2 e v1 intactas.
+
+**Retificação jun–set — permanência na régua as-of (04/10/2026, migration
+`20261004150000`).** Pedido da Super Folha para a série do ano ficar numa
+régua só: jan–mai medem permanência como tenure da base viva (v3), jun–set
+seguiam na permanência canônica antiga (média das passagens encerradas —
+REC 14,9 vs as-of ~19,7). Escopo cirúrgico: **só `alunos_executivo`** (a
+métrica não existe no payload admin), sobrescrevendo
+`tempo_permanencia`/`tempo_permanencia_medio`/`permanencia_metodo`/`ltv`/
+`ltv_medio` (ltv = ticket congelado × permanência nova). 12 snapshots exec
+fechados em nova versão (jun→v3, jul→v2, ago→v3/v3/v8-REC, set→v5/v3/v3) +
+12 retificações com `payload_anterior` e `permanencia_anterior` em
+`evidencias` + `dados_mensais.tempo_permanencia` alinhado. Série final:
+BARRA ~14,0–14,7 o ano todo; CG 17,5 jan → 19,5 set; REC ~19,5–20,2 —
+sem degrau mai→jun. Divergência honesta: a base as-of difere da congelada
+em ±4% nos meses recentes (reativações sem movimentação); registrada em
+`evidencias.ativos_asof`/`ativos_frozen`, sem abortar.
+
+**REVERTIDA em 04/10/2026 (migration `20261004160000`)** — o Alf determinou
+que a régua certa de permanência para jun–set é a canônica antiga
+(`get_tempo_permanencia`, média das passagens encerradas): "estava certo
+antes". Reversão feita por nova versão por caso (jun exec→v4, jul→v3,
+ago→v4/v4/v9-REC, set→v6/v4/v4): cada payload restaura as 5 chaves do
+`payload_anterior` guardado nas evidências (`tempo_permanencia`,
+`tempo_permanencia_medio`, `ltv`, `ltv_medio`, `fonte`; `permanencia_metodo`
+removida por não existir no anterior). `dados_mensais.tempo_permanencia`
+voltou via `evidencias.permanencia_anterior` (o `dados_mensais_anterior`
+das evidências tinha sido capturado pós-update — contém o valor novo).
+12 retificações `reversao_permanencia_jun_set_2026_alf`. Export e tela
+voltaram a: BARRA 13,0/13,5/13,5/13,5 · CG 19,5/19,3/19,0/19,1 ·
+REC 14,9/14,9/15,0/15,1.
+
+**Reversão jan–mai — permanência ao valor legado (04/10/2026, migration
+`20261004170000`).** O mesmo pedido do Alf cobriu jan–mai: a permanência
+volta ao que a **tela mostrava antes da reapuração** — o `tempo_permanencia`
+legado de `dados_mensais`, preservado em
+`retificacoes.evidencias->'dados_mensais_anterior'` da v1 (NÃO o payload exec
+v1, que trazia o canônico vivo da época — ex.: BARRA jan 13,5 × legado 12,6).
+Nova versão nos **dois** domínios (admin vence o merge do export e a v3 tinha
+gravado a chave lá): `tempo_permanencia`(_`_medio`) = legado, `ltv`/`ltv_medio`
+= ticket v3 × legado, `permanencia_metodo='canonico_legado_dados_mensais'`.
+Ativos, pagantes, ticket, churn, novos, evasões, inadimplência e mrr da v3
+**intocados**. 30 snapshots v4 `fechado` (15 admin + 15 exec) + 15
+retificações `reversao_permanencia_jan_mai_2026_alf` com os dois payloads v3
+em `evidencias` + guarda de sanidade (o valor extraído das evidências teve
+que bater com a tabela esperada — passou 15/15). Verificado no export e em
+`dados_mensais`:
+
+| | jan | fev | mar | abr | mai |
+|---|---|---|---|---|---|
+| BARRA | 12,6 | 12,6 | 12,4 | 12,7 | 12,6 |
+| CG | 15,5 | 15,5 | 15,4 | 15,4 | 15,4 |
+| REC | 15,9 | 15,9 | 15,6 | 15,8 | 16,1 |
+
+Estado final da permanência 2026: **jan–mai na régua legada de
+`dados_mensais`, jun–set na canônica `get_tempo_permanencia`** — as duas
+metodologias antigas, por decisão do Alf. O degrau mai→jun de método existe
+(ex.: REC mai 16,1 → jun 14,9) e é esperado.
+
+**Divergência tela × export em jun–ago — RESOLVIDA (04/10, migration
+`20261004180000`).** A tela de KPIs lê `dados_mensais` para meses fechados
+(`get_kpis_alunos_canonicos` → `base_p01q`; nunca lê
+`fechamento_mensal_snapshots`). O export lia o payload congelado desde a
+migration `20261004130000` e divergiu nos pontos apontados pela SF.
+**Decisão do Alf: vale o número da tela.** O export agora emite os campos
+de alunos **direto do `por_unidade` do canônico** — a mesma saída que a
+tela renderiza — sempre que a fonte canônica é `'dados_mensais'` ou
+`'preliminar'` (fechado ou com linha mensal). Emitir o canônico (não
+`dados_mensais` cru) importa: o ticket passa por
+`aplicar_denominador_ticket_kpis_v1` na tela (ago BARRA 446,30 ≠ dm 447,94).
+Metadados do snapshot (`status_fechamento`, `versao`, `payload_hash`,
+`retificado_em`) inalterados; `fonte_kpis` passa a refletir a fonte
+canônica (`'dados_mensais'`/`'preliminar'`/`'vivo'`). Verificação:
+**zero divergências** export×tela em jan–set × 3 unidades × 10 campos
+(ativos, pagantes, novos, evasões, churn, ticket, permanência,
+inadimplência, ltv, mrr). Mudanças no export vs. payload anterior:
+jun evasões BARRA 3→4 / CG 24→25 / REC 14→17, churn jun 1,26→1,81 /
+5,59→5,32 / 4,28→5,26, churn jul 4,47→4,62 / 4,56→4,43 / 2,07→2,14,
+ago CG evasões 31→32 e churn 7,87→8,14, jun REC inadimplência
+0,31→2,68, ltv reemitido na fórmula canônica (REC ago 6782,25→6500,70;
+demais centesimal).
+
+**Mudança de semântica do export (mesmo contrato):** para meses com snapshot
+fechado, os campos de alunos vêm do **payload congelado** (merge
+`alunos_executivo || alunos_admin`), não mais do canônico vivo — `fechado`
+passa a significar "o valor que foi congelado", não "recomputa na hora".
+`fonte_kpis` ganha o valor `'snapshot_fechado'` nesses meses (jan–mai inclusive;
+antes era `'preliminar'`/`'dados_mensais'`). Efeito colateral honesto: jun–set
+podem diferir centesimalmente do que uma releitura viva mostraria — o payload é
+o que foi capturado no fechamento/retificação (ex.: ago CG churn 7,87 congelado
+vs 8,14 que o vivo recomputava). Sem snapshot, nada muda (canônico vivo).
 
 ---
 
@@ -186,7 +323,7 @@ Confirmado, sem reapuração. Export emite exatamente isso.
 
 + linha agregada `{"unidade_codigo":"CG","horas_banda_total":…,"horas_aula_total":…}` por competência (fallback sem professor).
 
-**Regra de `status_fechamento`:** `fechado` (snapshot status fechado, maior versão) · `legado` (jan–mai/2026, só `dados_mensais`, régua pré-08/08) · `aberto` (mês corrente, RPC viva — ticket/permanência/inadimplência calculados com as mesmas funções do fechamento, marcados como preview).
+**Regra de `status_fechamento`:** `fechado` (snapshot não-preview, maior versão — campos de alunos vêm do payload congelado, `fonte_kpis='snapshot_fechado'`) · `legado` (só `dados_mensais`, sem snapshot) · `aberto` (sem snapshot nem `dados_mensais`, RPC viva).
 
 ## Exemplo real — ago/2026 (fechado, de `dados_mensais`+snapshots)
 

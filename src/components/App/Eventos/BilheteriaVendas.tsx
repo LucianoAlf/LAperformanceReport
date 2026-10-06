@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -110,6 +111,77 @@ export function BilheteriaVendas({ evento, dados }: { evento: EventoComResumo; d
     await recarregar();
   };
 
+  const acoesDaVenda = (v: VendaIngresso, classeBotao: string) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={cn(classeBotao, 'text-slate-500 hover:bg-slate-700/50 hover:text-slate-300')}
+          aria-label={`Ações da venda de ${v.comprador_nome}`}
+        >
+          <MoreVertical className="h-4 w-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {v.status === 'pendente' && (
+          <>
+            <DropdownMenuItem onClick={() => setPagando(v)}>
+              <CircleCheck className="mr-2 h-4 w-4 text-emerald-400" />
+              Marcar pago
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setBaixando({ venda: v, status: 'cancelado' })}>
+              <Ban className="mr-2 h-4 w-4 text-rose-400" />
+              Cancelar venda
+            </DropdownMenuItem>
+          </>
+        )}
+        {v.status === 'pago' && (
+          <DropdownMenuItem onClick={() => setBaixando({ venda: v, status: 'reembolsado' })}>
+            <Undo2 className="mr-2 h-4 w-4 text-rose-400" />
+            Reembolsar
+          </DropdownMenuItem>
+        )}
+        {(v.status === 'cancelado' || v.status === 'reembolsado') && (
+          <DropdownMenuItem disabled>Sem ações</DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
+  // Convidados nominais, identificador e conciliação — o mesmo na linha da tabela e no cartão.
+  const detalheDaVenda = (v: VendaIngresso) => (
+    <div className="space-y-1 text-[12px] text-slate-400">
+      <p className="font-medium text-slate-300">Convidados nominais</p>
+      <ul className="flex flex-wrap gap-x-4 gap-y-1">
+        {v.convidados.map((c) => (
+          <li key={c.id} className="flex items-center gap-1.5">
+            <ConvidadoNome convidado={c} onSalvo={recarregar} />
+            {c.checkin_em ? (
+              <span className="text-emerald-400">
+                entrou {format(parseISO(c.checkin_em), 'dd/MM HH:mm')}
+              </span>
+            ) : (
+              <span className="text-slate-500">não entrou</span>
+            )}
+          </li>
+        ))}
+      </ul>
+      {v.pagamento_identificador && (
+        <p>
+          Identificador: <span className="font-mono text-slate-300">{v.pagamento_identificador}</span>
+        </p>
+      )}
+      {v.conciliacao_status === 'divergente' && v.conciliacao_obs && (
+        <p className="text-rose-300">Divergência: {v.conciliacao_obs}</p>
+      )}
+      {v.conciliacao_ref && (
+        <p>
+          Lançamento no caixa: <span className="font-mono text-slate-300">{v.conciliacao_ref}</span>
+        </p>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -117,11 +189,11 @@ export function BilheteriaVendas({ evento, dados }: { evento: EventoComResumo; d
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           placeholder="Buscar comprador…"
-          className="h-8 w-56 text-[13px]"
+          className="h-11 w-full text-[16px] sm:h-8 sm:w-56 sm:text-[13px]"
           aria-label="Buscar por comprador"
         />
         <Select value={filtroBloco} onValueChange={setFiltroBloco}>
-          <SelectTrigger className="h-8 w-40 text-[13px]" aria-label="Filtrar por bloco">
+          <SelectTrigger className="h-11 min-w-0 flex-1 text-[13px] sm:h-8 sm:w-40 sm:flex-none" aria-label="Filtrar por bloco">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -134,7 +206,7 @@ export function BilheteriaVendas({ evento, dados }: { evento: EventoComResumo; d
           </SelectContent>
         </Select>
         <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-          <SelectTrigger className="h-8 w-40 text-[13px]" aria-label="Filtrar por status">
+          <SelectTrigger className="h-11 min-w-0 flex-1 text-[13px] sm:h-8 sm:w-40 sm:flex-none" aria-label="Filtrar por status">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -146,18 +218,76 @@ export function BilheteriaVendas({ evento, dados }: { evento: EventoComResumo; d
             ))}
           </SelectContent>
         </Select>
-        <div className="ml-auto">
-          <Button size="sm" className="gap-1.5" onClick={() => setNovaAberta(true)}>
+        <div className="w-full sm:ml-auto sm:w-auto">
+          <Button size="sm" className="h-11 w-full gap-1.5 sm:h-9 sm:w-auto" onClick={() => setNovaAberta(true)}>
             <Plus className="h-4 w-4" />
             Nova venda
           </Button>
         </div>
       </div>
 
-      <section className="overflow-hidden rounded-xl border border-slate-700">
+      {/* Celular: uma venda por cartão. A tabela tem 10 colunas e, dentro de overflow-hidden,
+          status, conciliação e o menu de ações ficavam cortados fora da tela. */}
+      <ul className="space-y-2 sm:hidden">
+        {visiveis.map((v) => {
+          const aberta = expandida === v.id;
+          return (
+            <li
+              key={v.id}
+              className={cn(
+                'rounded-xl border border-slate-700 bg-slate-800/40 p-3',
+                v.conciliacao_status === 'divergente' && 'border-rose-500/40 bg-rose-500/5',
+              )}
+            >
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[14px] font-medium text-slate-100">{v.comprador_nome}</p>
+                  {v.comprador_contato && <p className="text-[12px] text-slate-500">{v.comprador_contato}</p>}
+                </div>
+                <div className="text-right">
+                  <p className="text-[15px] font-semibold tabular-nums text-white">
+                    {moeda.format(Number(v.valor_final))}
+                  </p>
+                  {v.desconto_pct > 0 && (
+                    <p className="text-[12px] text-emerald-400/80">−{Number(v.desconto_pct)}% pacote</p>
+                  )}
+                </div>
+                {acoesDaVenda(v, '-mr-2 -mt-1 flex h-11 w-11 items-center justify-center rounded-lg')}
+              </div>
+              <p className="mt-1 text-[12px] text-slate-400">
+                {v.quantidade} {v.quantidade === 1 ? 'ingresso' : 'ingressos'} · {v.bloco_nome ?? 'sem bloco'} ·{' '}
+                {FORMA_PAGAMENTO_LABEL[v.forma_pagamento]} · {CANAL_LABEL[v.canal]}
+                {v.pago_em && ` · pago ${format(parseISO(v.pago_em), 'dd/MM HH:mm')}`}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <Badge variant={STATUS_BADGE[v.status]}>{VENDA_STATUS_LABEL[v.status]}</Badge>
+                <Badge variant={CONCILIACAO_BADGE[v.conciliacao_status]}>
+                  {CONCILIACAO_LABEL[v.conciliacao_status]}
+                </Badge>
+                <button
+                  type="button"
+                  onClick={() => setExpandida(aberta ? null : v.id)}
+                  className="ml-auto flex min-h-[44px] items-center gap-1 px-1 text-[12px] text-slate-400"
+                >
+                  {aberta ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  convidados
+                </button>
+              </div>
+              {aberta && <div className="mt-1 border-t border-slate-700/60 pt-2">{detalheDaVenda(v)}</div>}
+            </li>
+          );
+        })}
+        {visiveis.length === 0 && (
+          <li className="rounded-xl border border-slate-700 px-4 py-8 text-center text-[13px] text-slate-500">
+            Nenhuma venda registrada. A primeira sai pelo botão “Nova venda”.
+          </li>
+        )}
+      </ul>
+
+      <section className="hidden overflow-hidden rounded-xl border border-slate-700 sm:block">
         <table className="w-full text-[12.5px]">
           <thead>
-            <tr className="border-b border-slate-700/60 bg-slate-800/60 text-left text-[11px] uppercase tracking-wide text-slate-500">
+            <tr className="border-b border-slate-700/60 bg-slate-800/60 text-left text-[12px] sm:text-[11px] uppercase tracking-wide text-slate-500">
               <th className="w-7 px-3 py-2" />
               <th className="px-3 py-2">Comprador</th>
               <th className="px-3 py-2">Bloco</th>
@@ -193,7 +323,7 @@ export function BilheteriaVendas({ evento, dados }: { evento: EventoComResumo; d
                     <td className="px-3 py-2 font-medium text-slate-200">
                       {v.comprador_nome}
                       {v.comprador_contato && (
-                        <span className="block text-[11px] font-normal text-slate-500">{v.comprador_contato}</span>
+                        <span className="block text-[12px] sm:text-[11px] font-normal text-slate-500">{v.comprador_contato}</span>
                       )}
                     </td>
                     <td className="px-3 py-2">{v.bloco_nome ?? '—'}</td>
@@ -201,7 +331,7 @@ export function BilheteriaVendas({ evento, dados }: { evento: EventoComResumo; d
                     <td className="px-3 py-2 text-right tabular-nums">
                       {moeda.format(Number(v.valor_final))}
                       {v.desconto_pct > 0 && (
-                        <span className="block text-[11px] text-emerald-400/80">
+                        <span className="block text-[12px] sm:text-[11px] text-emerald-400/80">
                           −{Number(v.desconto_pct)}% pacote
                         </span>
                       )}
@@ -221,76 +351,14 @@ export function BilheteriaVendas({ evento, dados }: { evento: EventoComResumo; d
                       </Badge>
                     </td>
                     <td className="px-3 py-2">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            type="button"
-                            className="rounded-md p-1 text-slate-500 hover:bg-slate-700/50 hover:text-slate-300"
-                            aria-label={`Ações da venda de ${v.comprador_nome}`}
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {v.status === 'pendente' && (
-                            <>
-                              <DropdownMenuItem onClick={() => setPagando(v)}>
-                                <CircleCheck className="mr-2 h-4 w-4 text-emerald-400" />
-                                Marcar pago
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => setBaixando({ venda: v, status: 'cancelado' })}>
-                                <Ban className="mr-2 h-4 w-4 text-rose-400" />
-                                Cancelar venda
-                              </DropdownMenuItem>
-                            </>
-                          )}
-                          {v.status === 'pago' && (
-                            <DropdownMenuItem onClick={() => setBaixando({ venda: v, status: 'reembolsado' })}>
-                              <Undo2 className="mr-2 h-4 w-4 text-rose-400" />
-                              Reembolsar
-                            </DropdownMenuItem>
-                          )}
-                          {(v.status === 'cancelado' || v.status === 'reembolsado') && (
-                            <DropdownMenuItem disabled>Sem ações</DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      {acoesDaVenda(v, 'rounded-md p-1')}
                     </td>
                   </tr>
                   {aberta && (
                     <tr key={`${v.id}-exp`} className="bg-slate-800/30">
                       <td />
                       <td colSpan={9} className="px-3 py-2">
-                        <div className="space-y-1 text-[12px] text-slate-400">
-                          <p className="font-medium text-slate-300">Convidados nominais</p>
-                          <ul className="flex flex-wrap gap-x-4 gap-y-1">
-                            {v.convidados.map((c) => (
-                              <li key={c.id} className="flex items-center gap-1.5">
-                                <ConvidadoNome convidado={c} onSalvo={recarregar} />
-                                {c.checkin_em ? (
-                                  <span className="text-emerald-400">
-                                    entrou {format(parseISO(c.checkin_em), 'dd/MM HH:mm')}
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-500">não entrou</span>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                          {v.pagamento_identificador && (
-                            <p>
-                              Identificador: <span className="font-mono text-slate-300">{v.pagamento_identificador}</span>
-                            </p>
-                          )}
-                          {v.conciliacao_status === 'divergente' && v.conciliacao_obs && (
-                            <p className="text-rose-300">Divergência: {v.conciliacao_obs}</p>
-                          )}
-                          {v.conciliacao_ref && (
-                            <p>
-                              Lançamento no caixa: <span className="font-mono text-slate-300">{v.conciliacao_ref}</span>
-                            </p>
-                          )}
-                        </div>
+                        {detalheDaVenda(v)}
                       </td>
                     </tr>
                   )}
@@ -409,7 +477,7 @@ function DialogMarcarPago({
               className="mt-1"
             />
             {precisaId && (
-              <p className="mt-1 text-[11.5px] text-slate-500">
+              <p className="mt-1 text-[12px] sm:text-[11.5px] text-slate-500">
                 Sem o identificador a Sol não consegue casar a venda com o relatório da maquininha.
               </p>
             )}
