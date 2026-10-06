@@ -268,7 +268,8 @@ const ultima = (t) => t.enviadas[t.enviadas.length - 1].t;
     const alunos = [{ nome: 'Clara Costa Vidal', resp: 'Rita Vidal', faturas: [
       { n: 41, valor: 387, comp: ant, compTxt: antTxt, status: 'paga', forma: 'Cheque Pré Datado' },
       { n: 42, valor: 447 }] }];
-    const t = montar({ unidade: 'cg', leituras: [lido(1, 387, 'PESSOA DESCONHECIDA'), lido(2, 999, 'OUTRA PESSOA')], alunos });
+    const cm = lido(1, 387, 'PESSOA DESCONHECIDA'); cm.bom_para = hoje; // o arquivo de teste diz 20/09
+    const t = montar({ unidade: 'cg', leituras: [cm, lido(2, 999, 'OUTRA PESSOA')], alunos });
     await t.h.handle(t.pdf('PDFM', 'MALOTE-CG-M'));
     const fala = `Sol, o Cheque 1 é da Clara Costa Vidal e é da parcela ${MMAAAA} - valor R$387,00`;
     const a = await t.tool('cheques_atribuir', { p_texto_original: fala, itens: [{ cheque: 1, alunos: ['Clara Costa Vidal'], competencia: MMAAAA }] });
@@ -309,8 +310,8 @@ const ultima = (t) => t.enviadas[t.enviadas.length - 1].t;
   // podem empatar ("mais de uma parcela").
   {
     const alunos = [{ nome: 'Clara Costa Vidal', resp: 'Rita Vidal', faturas: [
-      { n: 61, valor: 447, desc: 60, comp: '2026-07-01', compTxt: '07/2026', status: 'paga', forma: 'Cheque Pré Datado', pago: mais(-90) },
-      { n: 62, valor: 447, desc: 60, comp: '2026-08-01', compTxt: '08/2026', status: 'paga', forma: 'Cheque Pré Datado', pago: mais(-60) },
+      { n: 61, valor: 447, desc: 60, comp: '2026-07-01', compTxt: '07/2026', status: 'paga', forma: 'Cheque Pré Datado', pago: mais(-90), venc: mais(-91) },
+      { n: 62, valor: 447, desc: 60, comp: '2026-08-01', compTxt: '08/2026', status: 'paga', forma: 'Cheque Pré Datado', pago: mais(-60), venc: mais(-61) },
       { n: 63, valor: 447, desc: 60, venc: mais(-1) }] }];
     const c1 = lido(1, 387, 'PESSOA DESCONHECIDA'); c1.bom_para = mais(-1);
     const t = montar({ unidade: 'cg', leituras: [c1, lido(2, 999, 'OUTRA PESSOA')], alunos });
@@ -340,6 +341,22 @@ const ultima = (t) => t.enviadas[t.enviadas.length - 1].t;
     const d = t.regs.find((e) => e.acao === 'cheques_lote_decidido').decisoes;
     assert.ok(!d.includes('repetido'), JSON.stringify(d));
     console.log('CG-A. mesmo banco e número, agências diferentes → dois cheques — OK');
+  }
+
+  // ================================================================== REC-P (06/10 ao vivo)
+  // Recreio baixa todos os pré-datados no dia em que recebe (Lígia: 10/2026 paga em
+  // 08/08 com cheque pré-datado). O cheque do depósito casa com a parcela que VENCE
+  // perto dele, mesmo baixada há 60 dias.
+  {
+    const alunos = [{ nome: 'Ligia Freitas Prado', resp: 'Ligia Freitas Prado', faturas: [
+      { n: 81, valor: 431.2, status: 'paga', forma: 'Cheque Pré Datado', pago: mais(-60), venc: mais(-1) }] }];
+    const c1 = lido(1, 431.2, 'LIGIA FREITAS PRADO'); c1.bom_para = mais(-1);
+    const t = montar({ unidade: 'rec', leituras: [c1, lido(2, 999, 'OUTRA PESSOA')], alunos });
+    await t.h.handle(t.pdf('PDFRP', 'MALOTE-REC-P'));
+    const fala = 'Sol, o cheque 1 é da aluna Ligia Freitas Prado';
+    const a = await t.tool('cheques_atribuir', { p_texto_original: fala, itens: [{ cheque: 1, alunos: ['Ligia Freitas Prado'] }] });
+    assert.ok(a.resultados[0].ok, JSON.stringify(a.resultados));
+    console.log('REC-P. parcela baixada no recebimento (pré-datado) casa pelo vencimento — OK');
   }
 
   // ================================================================== RECREIO

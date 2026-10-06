@@ -286,9 +286,13 @@ function valorParaCheque(f, ref, hoje, valorCheque = null) {
 // da data dele: as dos meses anteriores (mesmo valor, mesmo pré-datado) são de
 // malotes que já passaram e empatavam com a certa ("mais de uma parcela", CG 06/10).
 const JANELA_PAGA_EM_CHEQUE_DIAS = 20;
+// A régua é o VENCIMENTO da parcela, não a data em que foi dada baixa: o Recreio
+// baixa todos os pré-datados no dia em que recebe (Lígia: 08/08 para 09, 10 e 11),
+// CG baixa quando compensa. O cheque do dia 05/10 é a parcela que vence perto dele.
 function pagaLongeDoCheque(fatura, ref) {
   if (!fatura || String(fatura.status || '').toLowerCase() !== 'paga') return false;
-  const d = fatura.data_pagamento ? String(fatura.data_pagamento).slice(0, 10) : null;
+  const d = fatura.data_vencimento ? String(fatura.data_vencimento).slice(0, 10)
+    : (fatura.data_pagamento ? String(fatura.data_pagamento).slice(0, 10) : null);
   return !!(d && ref && dias(d, ref) > JANELA_PAGA_EM_CHEQUE_DIAS);
 }
 // Identidade do cheque: banco + número (a CMC-7 prova os dois).
