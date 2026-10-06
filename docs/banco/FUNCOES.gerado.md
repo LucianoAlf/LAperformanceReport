@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Funções
 
-1790 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
+1793 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
 chamadas diretas ao PostgREST não são visíveis para o gerador.
 
 ## aluno
@@ -753,6 +753,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `sol_porta_relatorio_mensal_v1(p_solicitante_telefone text, p_unidade text, p_ano integer, p_mes integer, p_aluno text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `toggle_relatorio_comercial_cron(p_unidade_id uuid, p_ativo boolean)` | ATIVA | DEFINER | front:src/components/App/Comercial/ComercialPage.tsx |
 | `toggle_relatorio_cron(p_unidade_id uuid, p_ativo boolean)` | ATIVA | DEFINER | front:src/components/App/Administrativo/ModalRelatorio.tsx |
+| `trafego_meta_retorno_pixel(p_dias integer)` | ORFA | DEFINER | sem consumidor conhecido |
 | `trg_atualiza_projecao_por_presenca()` | ATIVA | DEFINER | trigger:aluno_presenca.trg_atualiza_projecao_por_presenca |
 | `trg_materializar_projecao_jornada()` | ATIVA | DEFINER | trigger:aluno_jornada_matricula_disciplina.trg_materializar_projecao_jornada |
 | `update_insights_salvos_timestamp()` | ATIVA | INVOKER | trigger:insights_salvos.trigger_update_insights_salvos_timestamp |
@@ -780,6 +781,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `conciliacao_experimentais_v2_sem_cache_20260923(p_unidade_id uuid, p_ano integer, p_mes integer, p_periodo text, p_data date)` | SO-INTERNA | DEFINER | funcao:get_conciliacao_experimentais_v2 |
 | `decidir_professor_divergencia_emusys(p_id bigint, p_decisao text, p_observacao text)` | ATIVA | DEFINER | front:src/hooks/useProfessoresDivergencias.ts |
 | `definir_forma_pagamento_conciliacao_aluno(p_divergencia_id bigint, p_forma_pagamento_id integer, p_decidido_por text)` | ATIVA | DEFINER | front:src/components/App/Alunos/ConciliacaoMatriculas.tsx |
+| `emusys_fatura_source_events_compactar_v1(p_confirmar boolean)` | ATIVA | INVOKER | cron:compactar-source-events-uma-vez |
 | `enfileirar_lia_alerta_piloto(p_pesquisa_id uuid, p_tipo text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `enfileirar_lia_followup_piloto(p_pesquisa_id uuid)` | ORFA | DEFINER | sem consumidor conhecido |
 | `enqueue_sync_asaas_extrato_job(p_unidade_codigo text, p_data_inicial date, p_data_final date, p_catalogos boolean, p_trigger_source text, p_convenio_id bigint, p_priority integer, p_max_retries integer, p_next_attempt_at timestamp with time zone)` | ATIVA | DEFINER | edge:supabase/functions/sync-asaas-emusys/index.ts |
@@ -1019,7 +1021,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `get_vault_secret(secret_name text)` | ATIVA | DEFINER | edge:supabase/functions/ficha-criar-pessoa/index.ts, edge:supabase/functions/ficha-export/index.ts |
 | `hash_jsonb_canonico(p_payload jsonb)` | SO-INTERNA | INVOKER | funcao:aplicar_retificacao_relatorio_admin_mensal_renovacoes_v1, funcao:aplicar_retificacao_relatorio_comercial_matricula_tardia_v1, funcao:aplicar_retificacao_relatorio_comercial_mensal_v1, funcao:aplicar_retificacao_relatorio_gerencial_financeiro_v1, funcao:aplicar_retificacao_relatorio_gerencial_retencao_v1, funcao:capturar_relatorio_coordenacao_canonico_v2, +17 outros |
 | `introspect_schema_lamusic(table_names text[])` | ATIVA | DEFINER | edge:supabase/functions/bi-agent-lamusic/index.ts, edge:supabase/functions/bi-agent-lamusic/tools.ts |
-| `is_admin()` | ATIVA | DEFINER | front:src/components/App/Agenda/Chamada/ChamadaDrawer.tsx, edge:supabase/functions/atualizar-faturas-aluno/index.ts, view:vw_absenteismo_aluno_canonica_v2, view:vw_alunos_sem_fatura_mes, view:vw_contratos_vencendo, view:vw_disponibilidade_professores, +40 outros |
+| `is_admin()` | ATIVA | DEFINER | front:src/components/App/Agenda/Chamada/ChamadaDrawer.tsx, edge:supabase/functions/atualizar-faturas-aluno/index.ts, view:vw_absenteismo_aluno_canonica_v2, view:vw_alunos_sem_fatura_mes, view:vw_contratos_vencendo, view:vw_disponibilidade_professores, +41 outros |
 | `is_admin_usuario()` | SO-INTERNA | DEFINER | funcao:get_financeiro_espelho_status |
 | `la_os_banco_atual()` | ORFA | DEFINER | sem consumidor conhecido |
 | `la_os_banco_coletar_consumo()` | ORFA | DEFINER | sem consumidor conhecido |
@@ -1047,8 +1049,9 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `la_os_historico(p_agente text, p_desde timestamp with time zone)` | ORFA | DEFINER | sem consumidor conhecido |
 | `la_os_hosts()` | ORFA | DEFINER | sem consumidor conhecido |
 | `la_os_investigacao_verificar(p_id uuid, p_veredito text, p_quem text)` | ORFA | DEFINER | sem consumidor conhecido |
+| `la_os_leads_com_origem_no_emusys(p_ids integer[])` | ORFA | DEFINER | sem consumidor conhecido |
 | `la_os_mudancas(p_limite integer)` | ORFA | DEFINER | sem consumidor conhecido |
-| `la_os_preench_jev_estado(p_horas integer)` | ORFA | DEFINER | sem consumidor conhecido |
+| `la_os_preench_jev_estado(p_horas integer, p_campo text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `la_os_preench_jev_listar(p_dias integer)` | ORFA | DEFINER | sem consumidor conhecido |
 | `la_os_preench_jev_resumo(p_dias integer)` | ORFA | DEFINER | sem consumidor conhecido |
 | `la_os_registrar_banco(p jsonb)` | ORFA | DEFINER | sem consumidor conhecido |

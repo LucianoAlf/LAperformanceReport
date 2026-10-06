@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — aluno
 
-164 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+165 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## aluno_acoes
 
@@ -2323,7 +2323,7 @@
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
 | `id` | uuid | não | gen_random_uuid() |  |
-| `pesquisa_id` | uuid | sim |  | pesquisa_evasao.id |
+| `pesquisa_id` | uuid | sim |  | pesquisa_evasao_analises.pesquisa_id |
 | `caixa_id` | integer | não |  | whatsapp_caixas.id |
 | `direcao` | text | não |  |  |
 | `provider_message_id` | text | sim |  |  |
@@ -3379,6 +3379,18 @@
 | `vendidos_pagos` | bigint | sim |  |  |
 | `pendentes` | bigint | sim |  |  |
 | `livres` | bigint | sim |  |  |
+
+## vw_evento_familia_v1
+
+> Alunos ativos com familiar também aluno ativo na mesma unidade (telefone do responsável = telefone do adulto E primeiro nome bate). Uma linha por (pessoa, familiar), nos dois sentidos. familiar_papel: responsavel = o familiar é o responsável cadastrado desta pessoa; dependente = esta pessoa é a responsável do familiar. Inclui cônjuge: rótulo é família.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `unidade_id` | uuid | sim |  |  |
+| `pessoa_chave` | text | sim |  |  |
+| `familiar_chave` | text | sim |  |  |
+| `familiar_nome` | character varying(200) | sim |  |  |
+| `familiar_papel` | text | sim |  |  |
 
 ## vw_evolucao_alunos
 
