@@ -210,6 +210,47 @@ const PORTAS = [
       p_preview_message_id: { type: 'string' },
     } },
 
+  // ── LOTE DE CHEQUES (06/10/2026) ──────────────────────────────────────────
+  // CG 06/10: a equipe respondeu ao card "Sol, o Cheque 2 é da Fulana, o 5 é do
+  // Beltrano, o 6 é da Sicrana" e levou "não entendi". Recreio 06/10: a equipe
+  // digitou a lista inteira (número, valor, aluno), um cheque era de dois irmãos, e
+  // nada foi lançado. Quem entende a fala é você; quem confere é a ferramenta.
+  { name: 'cheques_lote_estado', auth: 'caixa_runtime', action: 'cheques_estado', capability: 'cheques',
+    description: 'Mostra o lote de cheques ABERTO neste grupo (o PDF do malote que a Sol leu hoje): cada cheque pelo número da lista ("Cheque N"), valor, banco, número, emitente, a situação (pronto para o caixa, precisa de dono, leitura não confirmada, retirar do malote, já no caixa, só conferência), as parcelas ligadas e a família sugerida pelo cadastro. Chame SEMPRE antes de responder qualquer coisa sobre cheques/malote, e de novo depois de mudar algo. Só leitura.',
+    schema: { ...C } },
+
+  { name: 'cheques_atribuir', auth: 'caixa_runtime', action: 'cheques_atribuir', capability: 'cheques',
+    description: 'Diz DE QUEM é cada cheque do lote, como a equipe escreveu — em qualquer formato ("o 2 é da Fulana", lista com número/valor/aluno, "esse paga os dois irmãos"). Um cheque pode pagar parcelas de VÁRIOS alunos (irmãos): passe todos em `alunos`; a ferramenta acha uma parcela de cada e só aceita se a soma fechar no centavo com o valor do cheque. Também serve para "a parcela foi paga com este cheque" (`forma_paga`). Pode mandar vários cheques numa chamada. A ferramenta confere no cadastro, recusa o que não fecha (veja `resultados`: motivo de cada cheque, e as parcelas que existem) e republica o card do lote no grupo — não repita o card. Nada é lançado: o lançamento continua sendo o "pode" humano citando o card. Se a leitura do cheque ainda não foi confirmada, chame antes cheques_confirmar_leitura.',
+    schema: { ...C,
+      p_texto_original: { type: 'string', description: 'Mensagem humana EXATA que diz de quem são os cheques. Os nomes que você passar têm de estar nela.' },
+      itens: { type: 'array', description: 'Um item por cheque.', items: { type: 'object', properties: {
+        cheque: { type: 'number', description: 'O número da ordem no card ("Cheque 3" → 3). Se a pessoa citou o NÚMERO impresso do cheque, use `numero_cheque`.' },
+        numero_cheque: { type: 'string', description: 'Número impresso do cheque, como a pessoa escreveu ("SA000170" serve). Alternativa a `cheque`.' },
+        alunos: { type: 'array', items: { type: 'string' }, description: 'Nome(s) do(s) aluno(s) como a pessoa escreveu. Irmãos num cheque só: todos aqui.' },
+        competencia: { type: 'string', description: 'MM/AAAA, só se a pessoa disse o mês.' },
+        forma_paga: { type: 'string', description: 'Só quando a pessoa disse que a parcela foi paga com este cheque ("cheque") ou de outra forma ("pix", "cartão").' },
+      } } },
+    } },
+
+  { name: 'cheques_confirmar_leitura', auth: 'caixa_runtime', action: 'cheques_confirmar_leitura', capability: 'cheques',
+    description: 'Confirma o NÚMERO e/ou o VALOR de um cheque quando a Sol não conseguiu provar a leitura (ex.: "o número no papel e o da linha de baixo não batem"). Use o que a pessoa escreveu olhando o cheque (lista digitada vale). A ferramenta só aceita número/valor que a leitura também viu e que estão escritos na mensagem; registra quem confirmou e republica o card. Zeros e letras de série não importam ("SA000170" = "170").',
+    schema: { ...C,
+      p_texto_original: { type: 'string', description: 'Mensagem humana EXATA com o número/valor.' },
+      itens: { type: 'array', items: { type: 'object', properties: {
+        cheque: { type: 'number', description: 'Ordem no card ("Cheque 1" → 1).' },
+        numero_cheque: { type: 'string', description: 'Alternativa a `cheque`: o número impresso que identifica o cheque.' },
+        numero: { type: 'string', description: 'Número correto do cheque, como a pessoa escreveu.' },
+        valor: { type: 'number', description: 'Valor correto em reais, como a pessoa escreveu.' },
+      } } },
+    } },
+
+  { name: 'cheques_marcar_conferencia', auth: 'caixa_runtime', action: 'cheques_marcar_conferencia', capability: 'cheques',
+    description: 'Marca cheques (ou o lote inteiro, sem lista) como SÓ CONFERÊNCIA: não vão para o caixa. Use só quando a pessoa disser claramente que é só para conferir / não é para lançar. Republica o card.',
+    schema: { ...C,
+      p_texto_original: { type: 'string', description: 'Mensagem humana EXATA.' },
+      cheques: { type: 'array', items: { type: 'number' }, description: 'Ordens no card. Vazio = o lote inteiro.' },
+    } },
+
   { name: 'inadimplencia', fn: 'sol_porta_inadimplencia_v1',
     description: 'Quem está devendo na unidade, com quanto e há quantos dias. Use para "quem tá inadimplente?", "quanto temos a receber atrasado?", "o Fulano pagou?". ⚠️ O espelho de faturas cobre a competência atual e a anterior, então aluno com dívida mais velha aparece com valor MENOR que o real — diga "pelo menos X", nunca "exatamente X". Para a lista de quem tem aula e nenhuma fatura emitida, a irmã é `alunos_sem_fatura`; são coisas diferentes e confundi-las já gerou cobrança indevida.',
     schema: { ...U } },
@@ -312,7 +353,10 @@ function chatFinanceiroOficial(chat) {
 
 function chatComCapacidade(chat, capability = 'agent_first') {
   if (chatNoCanario(chat)) return true;
-  return (capability === 'consulta' || capability === 'operacional')
+  // `cheques`: as ferramentas do lote de cheques valem em todo grupo financeiro
+  // oficial (06/10/2026). O interruptor fino é do runtime (cheques.json `agente`),
+  // conferido pelo executor na ponte; elas não gravam no caixa (só republicam card).
+  return (capability === 'consulta' || capability === 'operacional' || capability === 'cheques')
     && chatFinanceiroOficial(chat);
 }
 
