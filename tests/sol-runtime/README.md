@@ -895,3 +895,20 @@ Trava também a Sol calada em conversa sobre o que ela já concluiu: citar o
 depois não lança de novo; texto sem valor e sem anexo só pergunta o valor se
 chamar a Sol pelo nome. "PG semana segurança" continua "PG Semana Seguranca".
 Nomes fictícios. Falha contra o runtime 49bfabf8.
+
+## lojinha-vendedor-da-equipe-e2e.cjs
+
+Caso Barra (06/10 12:05): foto PagBank R$ 100 + "Venda caderno teclas para o aluno
+<Aluno> / Venda <Professor> / Débito: R$ 100". O modelo listou as duas pessoas como
+pagamentos e a Sol respondeu "a soma dos alunos não fecha" para UMA venda.
+Agora "venda <Nome>", "venda prof <Nome>", "vendido por", "vendedor(a)", "vendeu"
+viram **vendedor** só quando o nome casa com UMA pessoa ativa de
+`professores`/`colaboradores` (mesmo primeiro nome, todo token ditado no
+cadastro) e não é o comprador; "Venda <Nome>" solto exige comprador declarado.
+O vendedor sai dos pagamentos (sem multi) e entra na descrição — card (`📝 …`),
+confirmação e payload iguais: `Lojinha/Venda - <Item> - <Aluno> · venda prof. <Nome>`.
+Nome fora da equipe ou cadastro fora do ar = comportamento antigo. Lojinha com
+aluno de grafia diferente do cadastro usa a RPC da sugestão do multi: 1 candidato
+pergunta "É …?" (só o "sim" do autor ajusta), 2+ lista sem escolher; o `pode`
+fica travado enquanto a pergunta estiver aberta. Nomes fictícios. Falha contra
+o runtime 34c83001.
