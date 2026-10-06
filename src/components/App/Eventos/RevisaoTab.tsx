@@ -17,6 +17,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
+  diasDoEvento,
+  formatarDataCurta,
   formatarDuracao,
   idadeHoje,
   levantarPendencias,
@@ -225,7 +227,7 @@ export function RevisaoTab({
   return (
     <div className="space-y-4">
       {/* ── resumo ── */}
-      <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         <Cartao icone={<Users className="h-4 w-4" />} rotulo="Participantes" valor={resumo.participantes} />
         <Cartao icone={<Music className="h-4 w-4" />} rotulo="Apresentações" valor={resumo.apresentacoes} />
         <Cartao icone={<LayoutList className="h-4 w-4" />} rotulo="Blocos" valor={resumo.blocos} />
@@ -244,7 +246,7 @@ export function RevisaoTab({
       {/* ⚠️ A ressalva anda junto do número, nunca num tooltip: hora de término anunciada
           sem dizer de que ela depende vira promessa para os pais na porta do teatro. */}
       {resumo.semDuracaoPropria > 0 && resumo.apresentacoes > 0 && (
-        <p className="text-[11.5px] text-slate-500">
+        <p className="text-[12px] sm:text-[11.5px] text-slate-500">
           O término é estimativa:{' '}
           <strong className="text-slate-400">
             {resumo.semDuracaoPropria} de {resumo.apresentacoes}
@@ -257,7 +259,7 @@ export function RevisaoTab({
 
       {/* ── relatórios do LA Teacher ── */}
       <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-3">
-        <h3 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <h3 className="flex items-center gap-1.5 text-[12px] sm:text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           <ClipboardList className="h-3.5 w-3.5" />
           Relatórios dos professores
         </h3>
@@ -285,7 +287,7 @@ export function RevisaoTab({
       <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
-            <h3 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <h3 className="flex items-center gap-1.5 text-[12px] sm:text-[11px] font-semibold uppercase tracking-wide text-slate-400">
               <FileText className="h-3.5 w-3.5" />
               Documentos
             </h3>
@@ -298,7 +300,7 @@ export function RevisaoTab({
                 custa menos que abrir uma lista — e o estado escolhido fica à vista. */}
             {blocos.length > 1 && (
               <div className="mt-2 flex flex-wrap items-center gap-1">
-                <span className="mr-1 text-[11px] text-slate-500">Imprimir:</span>
+                <span className="mr-1 text-[12px] sm:text-[11px] text-slate-500">Imprimir:</span>
                 <ChipBloco
                   rotulo="recital inteiro"
                   ativo={blocoEscolhido === null}
@@ -307,7 +309,12 @@ export function RevisaoTab({
                 {blocos.map((b) => (
                   <ChipBloco
                     key={b.id}
-                    rotulo={b.nome}
+                    // Evento de 2+ dias: dois "Bloco 3" (um por data) só se distinguem pelo dia.
+                    rotulo={
+                      diasDoEvento(evento.data_evento, evento.data_fim).length > 1
+                        ? `${b.nome} · ${formatarDataCurta(b.data ?? evento.data_evento)}`
+                        : b.nome
+                    }
                     ativo={blocoEscolhido === b.id}
                     onClick={() => setBlocoEscolhido(b.id)}
                   />
@@ -354,7 +361,7 @@ export function RevisaoTab({
             legítimo — quem monta o recital precisa do papel na mão para conferir com os
             professores. Travar o botão obrigaria a resolver tudo antes de poder olhar. */}
         {impedimentos.length > 0 && resumo.apresentacoes > 0 && (
-          <p className="mt-2 flex items-start gap-1.5 rounded border border-rose-500/30 bg-rose-500/5 px-2 py-1.5 text-[11.5px] text-rose-200/90">
+          <p className="mt-2 flex items-start gap-1.5 rounded border border-rose-500/30 bg-rose-500/5 px-2 py-1.5 text-[12px] sm:text-[11.5px] text-rose-200/90">
             <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0 text-rose-400" />
             <span>
               {impedimentos.length === 1
@@ -375,7 +382,7 @@ export function RevisaoTab({
           </p>
           {/* "Nada a apontar" ≠ "está tudo certo": a revisão só enxerga o que o sistema
               sabe. Dizer o contrário daria uma garantia que ninguém aqui pode dar. */}
-          <p className="mt-1 pl-6 text-[11.5px] text-emerald-200/70">
+          <p className="mt-1 pl-6 text-[12px] sm:text-[11.5px] text-emerald-200/70">
             A revisão confere participação, alocação, música, horário e blocos vazios — não
             substitui conferir o ensaio e o repertório com os professores.
           </p>
@@ -383,11 +390,11 @@ export function RevisaoTab({
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <h3 className="text-[12px] sm:text-[11px] font-semibold uppercase tracking-wide text-slate-400">
               {pendencias.length} {pendencias.length === 1 ? 'pendência' : 'pendências'}
             </h3>
             {impedimentos.length > 0 && (
-              <span className="rounded bg-rose-500/15 px-1.5 py-0.5 text-[11px] text-rose-300">
+              <span className="rounded bg-rose-500/15 px-1.5 py-0.5 text-[12px] sm:text-[11px] text-rose-300">
                 {impedimentos.length} {impedimentos.length === 1 ? 'impede' : 'impedem'} a impressão
               </span>
             )}
@@ -472,7 +479,7 @@ function PainelRelatorios({
               )}
               <span
                 className={cn(
-                  'rounded px-1.5 py-px text-[10.5px]',
+                  'rounded px-1.5 py-px text-[12px] sm:text-[10.5px]',
                   p.apresentacao_id === null
                     ? 'bg-rose-500/15 text-rose-300'
                     : !p.musica_lancada
@@ -509,7 +516,7 @@ function ChipBloco({
       onClick={onClick}
       aria-pressed={ativo}
       className={cn(
-        'rounded px-2 py-0.5 text-[11.5px] transition-colors',
+        'min-h-[44px] rounded px-2.5 py-0.5 text-[12px] transition-colors sm:min-h-0 sm:px-2 sm:text-[11.5px]',
         ativo ? 'bg-amber-500/20 text-amber-200' : 'text-slate-400 hover:bg-slate-700/60',
       )}
     >
@@ -531,12 +538,12 @@ function Cartao({
 }) {
   return (
     <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-3">
-      <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-slate-500">
+      <p className="flex items-center gap-1.5 text-[12px] sm:text-[11px] uppercase tracking-wide text-slate-500">
         {icone}
         {rotulo}
       </p>
       <p className="mt-1 text-[20px] font-semibold tabular-nums text-white">{valor}</p>
-      {rodape && <p className="text-[11px] text-slate-500">{rodape}</p>}
+      {rodape && <p className="text-[12px] sm:text-[11px] text-slate-500">{rodape}</p>}
     </div>
   );
 }
@@ -575,7 +582,8 @@ function CartaoPendencia({
         <button
           type="button"
           onClick={() => onIrPara(pendencia.onde)}
-          className="flex shrink-0 items-center gap-1 rounded bg-slate-700/60 px-2 py-1 text-[11.5px] text-slate-200 transition-colors hover:bg-slate-700"
+          // Celular: desce para a linha de baixo em largura cheia — ao lado, espremia o título.
+          className="order-last flex min-h-[44px] w-full shrink-0 items-center justify-center gap-1 rounded-lg bg-slate-700/60 px-2 py-1 text-[13px] text-slate-200 transition-colors hover:bg-slate-700 sm:order-none sm:min-h-0 sm:w-auto sm:rounded sm:text-[11.5px]"
         >
           Resolver em {pendencia.onde === 'alunos' ? 'Alunos' : 'Grade'}
           <ArrowRight className="h-3 w-3" />
@@ -590,7 +598,7 @@ function CartaoPendencia({
         ))}
         {ocultos > 0 && (
           // Corta a lista, mas nunca esconde o TAMANHO dela — o número já está no título.
-          <li className="text-[11.5px] italic text-slate-500">
+          <li className="text-[12px] sm:text-[11.5px] italic text-slate-500">
             e mais {ocultos} {ocultos === 1 ? 'caso' : 'casos'}
           </li>
         )}

@@ -117,7 +117,7 @@ export function BilheteriaTab({ evento }: { evento: EventoComResumo }) {
 
           <section className="rounded-xl border border-slate-700 bg-slate-800/40">
             <header className="border-b border-slate-700/60 px-4 py-2.5">
-              <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              <h3 className="text-[12px] sm:text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                 Lotação por bloco
               </h3>
             </header>
@@ -136,7 +136,7 @@ export function BilheteriaTab({ evento }: { evento: EventoComResumo }) {
                   <div key={b.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
                     <div className="min-w-32">
                       <p className="text-[13px] font-medium text-slate-200">{b.nome}</p>
-                      <p className="text-[11.5px] text-slate-500">
+                      <p className="text-[12px] sm:text-[11.5px] text-slate-500">
                         {b.data ? format(parseISO(b.data), 'dd/MM') : '—'}
                         {b.horario_inicial ? ` · ${b.horario_inicial.slice(0, 5)}` : ''}
                       </p>
