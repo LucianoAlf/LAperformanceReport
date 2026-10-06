@@ -21,6 +21,9 @@ import { toast } from 'sonner';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { supabase } from '@/lib/supabase';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
+import { AvisoNaoOtimizado } from '@/mobile/AvisoNaoOtimizado';
+import { abaFoiPortada } from '@/mobile/abasPortadas';
+import { useShellMobile } from '@/hooks/useShellMobile';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -78,12 +81,12 @@ function QuadroFaltaAlocar({ eventoId, onAbrir }: { eventoId: number; onAbrir: (
     <button
       type="button"
       onClick={onAbrir}
-      className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-left transition-colors hover:bg-amber-500/15"
+      className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-left sm:px-4 transition-colors hover:bg-amber-500/15"
     >
       <span className="text-[13px] font-medium text-amber-200">
         {total} aluno{total > 1 ? 's' : ''} com trabalho do professor no LA Teacher ainda sem lugar na grade
       </span>
-      <span className="flex items-center gap-3 text-[12px]">
+      <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px]">
         {faixas.musica > 0 && (
           <span className="text-yellow-300">● {faixas.musica} música lançada</span>
         )}
@@ -94,7 +97,7 @@ function QuadroFaltaAlocar({ eventoId, onAbrir }: { eventoId: number; onAbrir: (
           <span className="font-medium text-rose-300">● {faixas.aprovado} aprovado{faixas.aprovado > 1 ? 's' : ''} — só falta cadeira</span>
         )}
       </span>
-      <span className="ml-auto text-[11.5px] text-amber-400/80">abrir a fila →</span>
+      <span className="ml-auto text-[12px] sm:text-[11.5px] text-amber-400/80">abrir a fila →</span>
     </button>
   );
 }
@@ -153,6 +156,7 @@ export function EventoDetalhePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [evento?.id]);
 
+  const ehCelular = useShellMobile() === 'mobile';
   const [searchParams, setSearchParams] = useSearchParams();
   const tabUrl = searchParams.get('tab');
   const [tabAtiva, setTabAtiva] = useState<TabAtiva>(() =>
@@ -217,13 +221,15 @@ export function EventoDetalhePage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* No celular: voltar + ações na 1ª linha, data/local/status na 2ª. As ações viram só
+          ícone (com aria-label) — o texto empurrava a data para uma 3ª linha. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <Button variant="ghost" size="sm" className="gap-1.5 px-2" onClick={() => navigate('/app/eventos')}>
           <ArrowLeft className="h-4 w-4" />
           Eventos
         </Button>
 
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-slate-300">
+        <div className="order-3 flex w-full flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-slate-300 sm:order-none sm:ml-auto sm:w-auto">
           <span className="flex items-center gap-1.5">
             <CalendarDays className="h-3.5 w-3.5 text-slate-500" />
             {evento.data_fim && evento.data_fim !== evento.data_evento
@@ -239,6 +245,8 @@ export function EventoDetalhePage() {
             </span>
           )}
           <Badge variant={STATUS_VARIANT[evento.status]}>{EVENTO_STATUS_LABEL[evento.status]}</Badge>
+        </div>
+        <div className="flex items-center gap-1">
           <Button
             variant="ghost"
             size="sm"
@@ -246,18 +254,20 @@ export function EventoDetalhePage() {
             onClick={atualizarPlanilhas}
             disabled={sincSheets}
             title="Reescreve as planilhas do Drive agora (o cron roda a cada 15 min)"
+            aria-label="Atualizar planilhas"
           >
-            <Sheet className="h-3.5 w-3.5" />
-            {sincSheets ? 'Atualizando…' : 'Atualizar planilhas'}
+            <Sheet className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+            <span className="hidden sm:inline">{sincSheets ? 'Atualizando…' : 'Atualizar planilhas'}</span>
           </Button>
           <Button
             variant="ghost"
             size="sm"
             className="gap-1.5 px-2 text-[12px]"
             onClick={() => setEditando(true)}
+            aria-label="Editar evento"
           >
-            <Pencil className="h-3.5 w-3.5" />
-            Editar
+            <Pencil className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+            <span className="hidden sm:inline">Editar</span>
           </Button>
         </div>
       </div>
@@ -277,7 +287,17 @@ export function EventoDetalhePage() {
         }}
       />
 
-      <PageTabs tabs={tabs} activeTab={tabAtiva} onTabChange={alterarTab} />
+      {/* Seis abas não cabem num trilho de 390px sem esconder metade: no celular vira um
+          botão com a aba atual que abre a lista inteira (mesmo padrão da Agenda/Alunos). */}
+      {/* Faixa por aba: o shell suprime a dele nesta rota (ROTAS_COM_FAIXA_POR_ABA). */}
+      {ehCelular && !abaFoiPortada('/app/eventos/*', tabAtiva) && <AvisoNaoOtimizado />}
+
+      <PageTabs
+        tabs={tabs}
+        activeTab={tabAtiva}
+        onTabChange={alterarTab}
+        seletorNoCelular="Seções do evento"
+      />
 
       {/* `key={syncTick}`: remonta a aba quando o sync gravou algo do professor. Sem ela a
           Grade continuaria mostrando o estado de antes da sincronizacao ate o F5. */}

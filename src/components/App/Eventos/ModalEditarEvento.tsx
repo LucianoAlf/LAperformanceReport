@@ -139,7 +139,14 @@ export function ModalEditarEvento({ aberto, evento, onFechar, onSalvo }: Props) 
 
   return (
     <Dialog open={aberto} onOpenChange={(v) => !v && onFechar()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent
+        className="sm:max-w-lg"
+        // No celular o foco automatico no titulo sobe o teclado e cobre metade do formulario
+        // antes de a pessoa escolher o que vai editar.
+        onOpenAutoFocus={(e) => {
+          if (window.matchMedia('(max-width: 639px)').matches) e.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Editar evento</DialogTitle>
         </DialogHeader>
@@ -178,7 +185,7 @@ export function ModalEditarEvento({ aberto, evento, onFechar, onSalvo }: Props) 
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Abertura da casa</Label>
               <TimePicker24h value={horario} onChange={setHorario} />
@@ -194,9 +201,14 @@ export function ModalEditarEvento({ aberto, evento, onFechar, onSalvo }: Props) 
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          {/* Celular: tempo e intervalo lado a lado, status na linha de baixo — em 3 colunas os
+              rotulos quebravam em tres linhas e o select cortava "Rascunho". */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <div className="space-y-2">
-              <Label htmlFor="edit-duracao">Tempo padrão por apresentação</Label>
+              <Label htmlFor="edit-duracao">
+                <span className="sm:hidden">Tempo por número</span>
+                <span className="hidden sm:inline">Tempo padrão por apresentação</span>
+              </Label>
               <div className="flex items-center gap-1.5">
                 <Input
                   id="edit-duracao"
@@ -221,7 +233,7 @@ export function ModalEditarEvento({ aberto, evento, onFechar, onSalvo }: Props) 
                 <span className="text-[11.5px] text-slate-500">min</span>
               </div>
             </div>
-            <div className="space-y-2">
+            <div className="col-span-2 space-y-2 sm:col-span-1">
               <Label htmlFor="edit-status">Status</Label>
               <Select value={status} onValueChange={(v) => setStatus(v as EventoStatus)}>
                 <SelectTrigger id="edit-status"><SelectValue /></SelectTrigger>
@@ -248,12 +260,12 @@ export function ModalEditarEvento({ aberto, evento, onFechar, onSalvo }: Props) 
             <p className="text-[12px] font-medium text-rose-200">
               Excluir o evento apaga blocos, grade e confirmações junto.
             </p>
-            <div className="mt-2 flex items-center gap-2">
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
               <Input
                 value={confirmacaoExcluir}
                 onChange={(e) => setConfirmacaoExcluir(e.target.value)}
                 placeholder={`Digite "${evento?.titulo ?? ''}" para confirmar`}
-                className="h-8 flex-1 text-[12.5px]"
+                className="h-9 flex-1 text-[16px] sm:h-8 sm:text-[12.5px]"
               />
               <Button
                 variant="outline"

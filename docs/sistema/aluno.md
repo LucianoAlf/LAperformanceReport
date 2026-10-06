@@ -97,6 +97,27 @@ apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **L
   blocos e apresentações com `@dnd-kit`), **Palco** (`PalcoTab` + `PalcoApresentacao`, rider
   consolidado), **Revisão** (`RevisaoTab`, pendências + documentos) e **Check-in** (`CheckinTab`,
   o dia do recital). `AvisoEmDesenvolvimento` é a fonte única do aviso na lista e no detalhe.
+- **Filtro de curso no seletor da Grade (06/10/2026, pedido do Arthur):** seletor único **"Curso: ▾"** na
+- **Filtro "Família" no seletor da Grade (06/10/2026, pedido do Hugo):** botão **Família** ao lado do "Curso:" mostra só quem tem familiar que também é aluno ativo da unidade, com a família junta na lista e o nome do familiar sob o aluno. Fonte: view **`vw_evento_familia_v1`** (`security_invoker`, RLS de `alunos`), regra = telefone do responsável do aluno é o telefone/WhatsApp de um aluno **adulto** E o primeiro nome do responsável cadastrado é o primeiro nome dele (45 pares nas 3 unidades em 06/10; só telefone dava 143 e misturava irmãos). ⚠️ Pega cônjuge também — por isso "família", nunca "pai e filho". Lida à parte dos candidatos: se falhar, o botão fica desabilitado e o seletor segue funcionando.
+  linha da busca — Todos, Só instrumentos, Só musicalização ou um curso (com quantos ainda estão fora
+  da grade). Começou como fileira de chips e foi trocado: ocupava duas linhas do painel antes do 1º
+  aluno. Não há categoria em `cursos`: a régua é `ehMusicalizacao()` (`src/lib/eventos.ts`, pelo
+  nome). Filtro só de tela; não muda o que a RPC devolve.
+- **Grade por dia (06/10/2026, pedido do Arthur):** em evento de 2+ dias a Grade abre em **abas por dia**
+  (`1º dia · 28/11`, com nº de blocos e apresentações); cada aba mostra só os blocos daquele dia
+  (`evento_bloco.data`, `null` = 1º dia). **Novo bloco** nasce no dia aberto; o dia do bloco é a aba em que
+  ele está — no cabeçalho do bloco só existe **"Mover p/ 2º dia"** (com 3+ dias, "Mover para…" lista só os
+  outros dias), que o leva para a outra aba com aviso. O seletor com o dia atual saiu em 06/10: repetia a aba. `ordem` continua global e o horário segue calculado sobre
+  todos os blocos — a aba é só recorte de exibição.
+- **Celular (06/10/2026):** cabeçalho do evento em 2 linhas (ações viram ícone) e as 6 abas num botão
+  que abre a lista (`PageTabs seletorNoCelular`). Na Grade, abaixo de 640px (`sm:`): o horário do número
+  sai da coluna da esquerda e vira a 1ª linha do cartão, campo de música ocupa a linha inteira com fonte
+  16px (sem zoom do iOS), alvos de toque de 36–44px, cabeçalho do bloco reordenado (`order-*`), e o
+  seletor de alunos põe "Curso:" na linha de baixo e não abre o teclado sozinho. Desktop inalterado.
+  Palco, Bilheteria, Revisão e Check-in **não** foram adaptados — a faixa âmbar é por aba
+  (`ABAS_PORTADAS['/app/eventos/*'] = ['grade']`; o `*` casa o id do evento). Medido a 390px: sem rolagem
+  lateral, nenhum texto cortado, cartão do número 330 → 237px. Modal "Editar evento" em coluna única no
+  celular e sem foco automático (o teclado cobria o formulário).
 - **Hooks:** `useEventos` (`src/hooks/useEventos.ts`) — `useEventos`, `useEvento`,
   `useAlunosDoEvento`, `useGradeDoEvento`, `useCheckinDoEvento` + as funções de escrita.
 - **Regras puras:** [`src/lib/eventos.ts`](../../src/lib/eventos.ts) (elegibilidade, cálculo de
