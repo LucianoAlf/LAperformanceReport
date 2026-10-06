@@ -439,3 +439,49 @@ Ao abrir ticket, sempre incluir:
 - Token usado (mascarado, só primeiros 6 chars + última letra)
 - Payload de exemplo retornado vs esperado
 - Impacto no nosso fluxo
+
+---
+
+## Geminação turma↔individual + justificada no nível da aula (auditoria 05/10/2026)
+
+**Estrutura (medido, 45d, as 3 unidades):** toda aula de turma gera uma aula
+`individual` por aluno no Emusys — mesmo (unidade, professor, inicio, fim,
+curso_nome), roster=1, `nr_da_aula=0`, `qtd_aulas_contrato` igual à da turma.
+~97% das individuais têm gêmea turma (Barra 1.690/1.749, CG 2.834/2.908,
+Recreio 2.434/2.541). Não é bug da nossa base — é o modelo do Emusys (a
+"individual" é o registro por aluno da sessão; o professor escreve anotações
+de conteúdo nela — medido: 970 individuais com anotações em 45d CG).
+
+**`justificada` na individual:** subset deliberado (não-automático: 240
+individuais `ausente` sem justificada vs 548 com). Fenômeno CG-concentrado e
+datado: mai 5 / jun 17 / jul 5 / **ago 432 / set 380 / out 0**. Zero correlação
+com `presenca_emusys_escrita` (não é eco nosso). Payload `GET /aula`:
+categoria `normal`, `reagendada=false`, professor `presente`+`registrado`,
+aluno `ausente`, justificada=true — a aula aconteceu; a justificativa é a
+ausência do aluno (falta justificada registrada no Emusys). Conferir na tela:
+Francisco (Bateria T, 15/09 20h, turma 650327 / indiv 687285, prof Gabriel
+Otávio), Neemias (Violino T, 15/09 14h, 537941/653027, prof Joel — com
+anotações), Arthur (MI, 19/09 14h, 747323/654989, prof Caio Tenório).
+
+**Onde já é tratado:** `fn_aula_operacional_id` / `fn_aula_operacional_da_sessao`
+(maior roster → turma primeiro), agenda professor `canonica_v2` (colapsa por
+slot), `vw_registro_pendencia` (âncora turma + lê anotacoes da individual do
+aluno — a individual é a superfície de conteúdo por aluno), bom-dia do Fábio
+(comentários I3/M7 de fixes de gêmea), Sol `fn_presenca_pendencias_do_dia_v2`
+(posicao=1 por slot_key).
+
+**Onde ainda vaza:**
+- `vw_presenca_slot_canonica_v1` <= v1.1: `bool_or` de cancelada/justificada
+  vetava o slot inteiro → apagou ~487 faltas reais de CG. Corrigido v1.2
+  (05/10): vetada ordena por último + resultado = o da linha escolhida.
+- `fn_presenca_pendencias_do_dia_v2` (Sol): `not exists(gêmea cancelada ou
+  justificada)` ainda suprime pendência da aula viva — ~67 aulas sem chamada
+  escondidas da cobrança (Barra 26, CG 19, Recreio 22 em 45d).
+- Health Score presença (`_c95`): conta por aula×aluno, não por slot — gêmea
+  é "esperado" a mais; gêmea justificada nunca classifica → cobertura
+  cai (gate 95%). CG voltou a pontuar: política nova de 05/10 tem
+  `exige_revisao_operacional=false` (a v2-19/07 tinha `true` para CG ago+).
+
+**Pendente de decisão (Alf/Fábio):** justificada na individual = falta
+justificada do aluno no Emusys → hoje a falta humana do LA Report vence;
+alternativa: divergência para a secretaria confirmar justificativa.
