@@ -521,3 +521,31 @@ quem VEIO e quem faltou fica ausente-pendente — se o Alf confirmar,
 ausente+pendente em aula realizada com chamada fechada = falta. **AGUARDANDO
 resposta do Alf antes de qualquer migration.** Sol e HS congelados nesse
 ponto — nada muda sem a decisão.
+
+**RESOLVIDO (06/10, auditoria do Fábio no Emusys): os 8 TODOS tinham
+lançamento — a conta não lia o lugar certo.** Auditoria de set/2026 fecha com
+**ZERO furo de lançamento da equipe**. Terceira correção permanente na
+medição:
+
+3. **O esperado tem que ler TAMBÉM a aula INDIVIDUAL gêmea do aluno
+   (`aulas_emusys.justificada` / `cancelada`), não só a aula da turma.** A
+   equipe lança falta justificada e cancelamento na individual do aluno, e a
+   linha da turma fica `ausente+pendente`. Casos verificados no banco:
+   - **CG, justificada=true na individual:** Miguel (H_Qua_19 23/09), Pedro
+     (B_Qua_19 23/09), Thuanny (C_Seg_17 21/09), Vinícius (PK_Qui_15 10/09 —
+     que no mesmo dia também teve C_Qui_16 com `agenda_secretaria`+ausente
+     registrado em turma E individual).
+   - **Barra, cancelada=true na individual:** Felipe (G_Seg_14 14/09).
+   - **Barra 18/09 19h (Eva, Leticia no C_Sex_19; Raquel no MBS_Sex_19):**
+     chamada feita DIRETO no Emusys, presentes registrados; os três sem
+     marca naquela noite. Nas outras sextas aparecem normalmente (Eva e
+     Leticia presentes; Raquel com faltas lançadas — cadastro trancado hoje).
+
+Decomposição final dos 226 órfãos de set/2026: 118 saída da escola + 21 aula
+não aconteceu + 18 remarcada + 20 fora da janela da disciplina + 37 outra
+turma/slot + 4 saída de turma (ativo_operacional) + 4 justificada na
+individual + 1 cancelada na individual + 3 sem marca em chamada fechada
+(Eva/Leticia/Raquel). Restam abertas, SEM migration: a semântica de
+`ausente+pendente` em aula realizada com chamada fechada (decisão do Alf,
+ver item anterior) e as correções 1-3 aplicadas às contas (esperado lê
+ativo_operacional da turma + gêmea individual + registrado-como-humano).
