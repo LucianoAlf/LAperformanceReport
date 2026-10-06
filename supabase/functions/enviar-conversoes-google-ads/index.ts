@@ -11,6 +11,11 @@
 //   POST {"enviar": true}                -> envia de verdade e grava o que enviou.
 //   POST {"criar_conversion_action": true} -> cria a conversion action na conta. ⚠️ ver abaixo.
 //
+// ⚠️ ACESSO (06/10/2026): so quem leva a senha de operacao (header x-sync-token) ou a chave de
+// servico passa; o resto recebe 401. Antes disso a funcao NAO conferia quem chamava e a chave
+// publica do app (anon) bastava para o gateway deixar entrar -- ou seja, qualquer pessoa com ela
+// poderia mandar `enviar` ou `criar_conversion_action` e alterar a conta de midia.
+//
 // ⚠️ O PADRAO E DRY RUN, E ISSO E DELIBERADO. Conversao enviada ao Google nao se apaga: so se
 // retrata por outra chamada de API, item a item. Um engano aqui nao e "rodar de novo depois" --
 // e ensinar ao algoritmo um fato falso sobre o negocio, com verba atras.
@@ -41,7 +46,7 @@ const LOTE_MAXIMO = 200;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-sync-token',
 };
 
 function json(body: unknown, status = 200) {
@@ -49,6 +54,17 @@ function json(body: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+}
+
+const SYNC_TOKEN = Deno.env.get('SYNC_MATRICULAS_ADMIN_TOKEN')?.trim() || '';
+const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+
+/** So a senha de operacao (x-sync-token) ou a chave de servico. Mesma regra de enviar-conversoes-meta. */
+function autorizado(req: Request): boolean {
+  const sync = req.headers.get('x-sync-token')?.trim() || '';
+  if (SYNC_TOKEN && sync === SYNC_TOKEN) return true;
+  const bearer = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
+  return !!SERVICE_ROLE && !!bearer && bearer === SERVICE_ROLE;
 }
 
 /**
@@ -413,6 +429,11 @@ async function enviar(supabase: SupabaseClient, body: Record<string, any>) {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  if (!autorizado(req)) {
+    // Quem chega aqui sem a senha de operacao nao ve nada da conta: nem o diagnostico.
+    console.warn('[google-ads/conversoes] acesso recusado (sem x-sync-token nem chave de servico)');
+    return json({ ok: false, error: 'acesso negado' }, 401);
+  }
 
   try {
     const supabase = createClient(
