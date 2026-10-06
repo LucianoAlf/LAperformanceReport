@@ -472,7 +472,7 @@
 | `assistente_ia_config` | tabela | plataforma | 4 | 1 | sim (2) | 0 |  |
 | `audit_log` | tabela | plataforma | 11 | 312782 | sim (2) | 0 |  |
 | `auditoria_acesso` | tabela | plataforma | 10 | 3 | sim (2) | 1 | Log de auditoria para ações de acesso e permissões |
-| `cache_versao_log` | tabela | plataforma | 3 | 1368 | sim (0) | 0 | LAPE-42: uma linha por comando de escrita nas tabelas lidas pelos caches de servidor. Versao de cache = count:max:sum dos ids visiveis. Podado por cache_versao_podar_v1. |
+| `cache_versao_log` | tabela | plataforma | 3 | 897 | sim (0) | 0 | LAPE-42: uma linha por comando de escrita nas tabelas lidas pelos caches de servidor. Versao de cache = count:max:sum dos ids visiveis. Podado por cache_versao_podar_v1. |
 | `ficha_tokens` | tabela | plataforma | 8 | 15 | sim (0) | 1 | Token pessoal por colaborador. Uso unico: usado_em preenchido trava o reenvio. RLS sem policy por design — so service_role le; token nunca vai para o client. |
 | `migrations_audit_data_nascimento` | tabela | plataforma | 7 | 80 | sim (3) | 0 |  |
 | `paginas_rpc_cache` | tabela | plataforma | 4 | 9 | não | 0 | Cache generico das RPCs pesadas de pagina (agenda, alunos, administrativo, professores). Chave = recorte logico (+escopo de unidades quando a funcao filtra por usuario). TTL na funcao wrapper. Criado em 2026-09-24. |
