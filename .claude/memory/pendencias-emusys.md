@@ -485,3 +485,39 @@ aluno — a individual é a superfície de conteúdo por aluno), bom-dia do Fáb
 **Pendente de decisão (Alf/Fábio):** justificada na individual = falta
 justificada do aluno no Emusys → hoje a falta humana do LA Report vence;
 alternativa: divergência para a secretaria confirmar justificativa.
+
+## 2026-10-06 — "Furos de lançamento" resolvidos: modelo correto das gavetas
+
+Regra fixada no topo do CLAUDE.md (commit a9518ab3): gaveta da EQUIPE vale;
+Emusys `ausente` sozinho nunca é falta. Investigação dos "esperados sem
+classificação" de set/2026 (226 esperados-órfãos) mostrou que TODO número de
+"aula sem lançamento" é erro de medição até prova. Decomposição:
+
+- 118 resíduo de saida da escola (movimentacoes_admin <= data_aula).
+- 21 aula não aconteceu (professor ausente no Emusys + zero lançamento).
+- 18 remarcada (lançamento no mesmo dia/curso, outro horário).
+- 20 fora da janela da disciplina (data_primeira/ultima_aula da jornada).
+- 37 matriculado em outra turma do curso (dia_semana+horario da jornada
+  ≠ slot da aula — roster carrega a turma antiga).
+- 12 suspeitos → conferidos pelo Fábio no Emusys, um a um: ZERO era furo.
+
+**Duas correções permanentes na medição (validadas pelo Fábio):**
+
+1. **Saída de TURMA ≠ saída da escola.** `aula_alunos_emusys.ativo_operacional`
+   = false / `inativado_em` <= data_aula (motivos `ausente_snapshot_completo`,
+   `roster_vazio_confirmado`) = aluno fora daquela turma, mesmo matriculado na
+   escola. Esperado só conta linha de roster com ativo_operacional. Casos:
+   Gustavo (MP_Qua_11, saiu 02/09), Lara (C_Qua_18, 09/09), Maitê (C_Seg_14,
+   31/08 e 25/09).
+2. **`registro_presenca='registrado'` no Emusys É lançamento da equipe.** A
+   equipe também marca direto no Emusys — `respondido_por='emusys'` com
+   registro registrado conta como gaveta humana (ex.: C_Seg_17 CG 21/09 —
+   Maria/Elisa/Amanda presente+registrado). Só `ausente`+`pendente` é
+   "ninguém marcou".
+
+**Sobraram 8 alunos no mês inteiro** (aula aconteceu, colegas marcados,
+aluno ausente+pendente sem marca nenhuma). Hipótese do Fábio: a equipe marca
+quem VEIO e quem faltou fica ausente-pendente — se o Alf confirmar,
+ausente+pendente em aula realizada com chamada fechada = falta. **AGUARDANDO
+resposta do Alf antes de qualquer migration.** Sol e HS congelados nesse
+ponto — nada muda sem a decisão.
