@@ -114,10 +114,22 @@ apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **L
   sai da coluna da esquerda e vira a 1ª linha do cartão, campo de música ocupa a linha inteira com fonte
   16px (sem zoom do iOS), alvos de toque de 36–44px, cabeçalho do bloco reordenado (`order-*`), e o
   seletor de alunos põe "Curso:" na linha de baixo e não abre o teclado sozinho. Desktop inalterado.
-  Palco, Bilheteria, Revisão e Check-in **não** foram adaptados — a faixa âmbar é por aba
-  (`ABAS_PORTADAS['/app/eventos/*'] = ['grade']`; o `*` casa o id do evento). Medido a 390px: sem rolagem
-  lateral, nenhum texto cortado, cartão do número 330 → 237px. Modal "Editar evento" em coluna única no
-  celular e sem foco automático (o teclado cobria o formulário).
+  As **6 abas** estão adaptadas desde 06/10 (`ABAS_PORTADAS['/app/eventos/*']`; o `*` casa o id do evento;
+  aba nova nasce com a faixa âmbar). Modal "Editar evento" em coluna única e sem foco automático.
+  - **Alunos:** os 5 indicadores numa faixa compacta (antes, uma tela inteira); cada aluno em duas linhas —
+    nome e cursos em cima, bloco + convidados + Participa/Indefinido/Não (44px) embaixo; o selo fantasma de
+    "marcar formando" some no celular (sem hover, seria toque invisível).
+  - **Check-in:** busca e "Por nome/Por bloco" grudam no topo enquanto a lista rola; nome sem corte; botão
+    "Chegou" com 44px; certificados vão para o fim da página (na porta, a lista vem primeiro).
+  - **Bilheteria:** vendas viram cartões (a tabela de 10 colunas cortava status, conciliação e o menu);
+    Config em coluna única — o grid sem colunas definidas empurrava a página para o lado.
+  - **Revisão:** números em 2×2; "Resolver em …" desce para baixo do título em largura cheia.
+  - **Palco, Revisão e Bilheteria/Config** mostram o dia junto do nome do bloco em evento de 2+ dias
+    (dois "Bloco 3", um por data, ficavam iguais).
+  Medido a 390px nas 6 abas: sem rolagem lateral, nenhum texto < 12px, alvos ≥ 44px (exceto o interruptor e
+  o X dos diálogos, que são globais). Desktop conferido a 1440px.
+- ⚠️ **"Nova venda" nunca abria** (corrigido 06/10): o `SelectItem value=""` de "Aluno vinculado" derrubava a
+  tela inteira (o Radix proíbe valor vazio). Hoje "Nenhum" é o token `nenhum`.
 - **Hooks:** `useEventos` (`src/hooks/useEventos.ts`) — `useEventos`, `useEvento`,
   `useAlunosDoEvento`, `useGradeDoEvento`, `useCheckinDoEvento` + as funções de escrita.
 - **Regras puras:** [`src/lib/eventos.ts`](../../src/lib/eventos.ts) (elegibilidade, cálculo de

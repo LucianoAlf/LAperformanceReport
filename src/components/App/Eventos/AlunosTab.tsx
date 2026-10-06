@@ -72,7 +72,7 @@ function SeletorParticipacao({
             disabled={desabilitado && o.id === 'participa'}
             onClick={() => onEscolher(o.id)}
             className={cn(
-              'flex h-8 w-9 items-center justify-center transition-colors',
+              'flex h-11 w-12 items-center justify-center transition-colors sm:h-8 sm:w-9',
               selecionado ? o.ativo : 'text-slate-500 hover:bg-slate-700/60 hover:text-slate-300',
               desabilitado && o.id === 'participa' && 'cursor-not-allowed opacity-30 hover:bg-transparent',
             )}
@@ -88,11 +88,11 @@ function SeletorParticipacao({
 /** Selo de bloco de UM curso. `null` quando aquele curso ainda nao entrou na grade. */
 function SeloBloco({ alocacao }: { alocacao: AlocacaoDoCurso | undefined }) {
   if (!alocacao) {
-    return <span className="text-[11px] text-slate-600">· não alocado</span>;
+    return <span className="text-[12px] sm:text-[11px] text-slate-600">· não alocado</span>;
   }
   return (
     <span
-      className="rounded bg-violet-500/15 px-1.5 py-px text-[10.5px] font-medium text-violet-300"
+      className="rounded bg-violet-500/15 px-1.5 py-px text-[12px] sm:text-[10.5px] font-medium text-violet-300"
       title={alocacao.horario_inicial ? `Início ${alocacao.horario_inicial.slice(0, 5)}` : undefined}
     >
       {alocacao.bloco_nome}
@@ -130,27 +130,29 @@ function LinhaAluno({
   return (
     <div
       className={cn(
-        'group flex items-center gap-3 border-b border-slate-800 px-3 py-2.5 last:border-b-0',
+        // Celular: nome e cursos ocupam a linha inteira; bloco, convidados e o tri-state
+        // descem para a linha de baixo — lado a lado, o nome ficava com 0px.
+        'group flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-slate-800 px-3 py-3 last:border-b-0 sm:flex-nowrap sm:py-2.5',
         aluno.status === 'participa' && 'bg-emerald-500/[0.04]',
         aluno.status === 'nao' && 'opacity-60',
       )}
     >
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 basis-full sm:basis-0">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="truncate text-[13.5px] font-medium text-white">{aluno.nome}</span>
+          <span className="text-[14px] font-medium text-white sm:truncate sm:text-[13.5px]">{aluno.nome}</span>
           {aluno.idade_anos != null && (
-            <span className="text-[11.5px] text-slate-500">{aluno.idade_anos} anos</span>
+            <span className="text-[12px] sm:text-[11.5px] text-slate-500">{aluno.idade_anos} anos</span>
           )}
           {aluno.unidade_origem_nome && (
             <span
-              className="rounded bg-sky-500/15 px-1.5 py-px text-[10.5px] font-medium text-sky-300"
+              className="rounded bg-sky-500/15 px-1.5 py-px text-[12px] sm:text-[10.5px] font-medium text-sky-300"
               title="Aluno de outra unidade que se apresenta neste evento"
             >
               de {aluno.unidade_origem_nome}
             </span>
           )}
           {aluno.faz_banda && (
-            <Badge variant="outline" className="gap-1 text-[10px]">
+            <Badge variant="outline" className="gap-1 text-[12px] sm:text-[10px]">
               <Guitar className="h-2.5 w-2.5" />
               banda
             </Badge>
@@ -166,12 +168,14 @@ function LinhaAluno({
                 : 'Marcar como formando (passa de ciclo este ano)'
             }
             className={cn(
-              'flex items-center gap-1 rounded px-1.5 py-px text-[10.5px] font-medium transition-colors',
+              // Celular: área de toque de 44px por pseudo-elemento — a pílula continua do mesmo tamanho.
+              `relative flex items-center gap-1 rounded px-1.5 py-px text-[12px] font-medium transition-colors after:absolute after:inset-x-0 after:-inset-y-3 after:content-[''] sm:text-[10.5px] sm:after:hidden`,
               aluno.formatura_tipo
                 ? 'bg-violet-500/15 text-violet-300 hover:bg-violet-500/25'
                 : // Marcacao manual e excecao — o botao fantasma so aparece no hover da
                   // linha, senao seria um controle morto em 270 alunos.
-                  'text-slate-600 opacity-0 hover:bg-slate-800 hover:text-slate-400 group-hover:opacity-100',
+                  // No celular não existe hover: o botão invisível seria um toque fantasma.
+                  'hidden text-slate-600 opacity-0 hover:bg-slate-800 hover:text-slate-400 group-hover:opacity-100 sm:flex',
             )}
           >
             <GraduationCap className="h-3 w-3" />
@@ -185,7 +189,7 @@ function LinhaAluno({
           {aluno.relatorio_falta_alocar && (
             <span
               className={cn(
-                'flex items-center gap-1 rounded px-1.5 py-px text-[10.5px] font-medium',
+                'flex items-center gap-1 rounded px-1.5 py-px text-[12px] sm:text-[10.5px] font-medium',
                 aluno.relatorio_falta_alocar === 'aprovado' && 'bg-rose-500/15 text-rose-300',
                 aluno.relatorio_falta_alocar === 'enviado' && 'bg-amber-500/15 text-amber-300',
                 aluno.relatorio_falta_alocar === 'musica' && 'bg-yellow-500/15 text-yellow-300',
@@ -208,7 +212,7 @@ function LinhaAluno({
           )}
         </div>
 
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px] text-slate-400">
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] sm:text-[11.5px] text-slate-400">
           {aluno.cursos.map((c) => (
             <span key={c.curso_id} className="flex items-center gap-1">
               <Music className="h-3 w-3 text-slate-600" />
@@ -235,7 +239,7 @@ function LinhaAluno({
 
       {aluno.cursos_no_recital > 1 && (
         <span
-          className="shrink-0 rounded bg-slate-700/70 px-1.5 py-0.5 text-[10.5px] font-medium tabular-nums text-slate-300"
+          className="shrink-0 rounded bg-slate-700/70 px-1.5 py-0.5 text-[12px] sm:text-[10.5px] font-medium tabular-nums text-slate-300"
           title={`${aluno.cursos_no_recital} cursos = ${aluno.cursos_no_recital} apresentações`}
         >
           {aluno.cursos_no_recital}×
@@ -245,13 +249,13 @@ function LinhaAluno({
       {/* Coluna "Bloco / Horário" do prototipo. Estado unico (`situacao`), nunca condicoes
           soltas: com twMerge a ultima classe conflitante vence, e cartao pintado por flags
           independentes ja contradisse o proprio rotulo no modulo Agenda. */}
-      <div className="w-[116px] shrink-0 text-right">
+      <div className="mr-auto min-w-0 sm:mr-0 sm:w-[116px] sm:shrink-0 sm:text-right">
         {alocacao.situacao === 'completa' && aluno.cursos_no_recital === 1 ? (
           <SeloBloco alocacao={aluno.alocacoes[0]} />
         ) : alocacao.rotulo ? (
           <span
             className={cn(
-              'text-[11.5px]',
+              'text-[12px] sm:text-[11.5px]',
               alocacao.situacao === 'completa' && 'text-violet-300',
               alocacao.situacao === 'parcial' && 'text-amber-400',
               alocacao.situacao === 'nenhuma' && 'text-slate-600',
@@ -266,7 +270,7 @@ function LinhaAluno({
           um input morto em toda linha. */}
       {aluno.status === 'participa' && (
         <label
-          className="flex shrink-0 items-center gap-1 text-[11px] text-slate-500"
+          className="flex shrink-0 items-center gap-1 text-[12px] sm:text-[11px] text-slate-500"
           title="Quantos convidados essa pessoa leva"
         >
           <Users className="h-3 w-3" />
@@ -281,7 +285,7 @@ function LinhaAluno({
               const n = Math.max(0, Math.floor(Number(e.target.value) || 0));
               if (n !== aluno.convidados) onConvidados(n);
             }}
-            className="h-7 w-14 text-[12px] tabular-nums"
+            className="h-11 w-16 text-[16px] tabular-nums sm:h-7 sm:w-14 sm:text-[12px]"
             aria-label={`Convidados de ${aluno.nome}`}
           />
         </label>
@@ -299,7 +303,7 @@ function LinhaAluno({
           onClick={onRemover}
           title="Tirar do evento (aluno de outra unidade)"
           aria-label={`Tirar ${aluno.nome} do evento`}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-rose-500/15 hover:text-rose-300"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-rose-500/15 hover:text-rose-300 sm:h-8 sm:w-8"
         >
           <Trash2 className="h-4 w-4" />
         </button>
@@ -509,7 +513,29 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      {/* Celular: os 5 indicadores numa faixa compacta — em cartões eles ocupavam a
+          primeira tela inteira antes de a lista começar. */}
+      <div className="grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-slate-800 bg-slate-800 sm:hidden">
+        {[
+          { rotulo: 'elegíveis', valor: resumo.total, cor: 'text-white' },
+          { rotulo: 'participam', valor: resumo.participam, cor: 'text-emerald-300' },
+          { rotulo: 'indefinidos', valor: resumo.indefinidos, cor: 'text-amber-300' },
+          {
+            rotulo: `apresentações · ${resumo.apresentacoesAlocadas} na grade`,
+            valor: resumo.apresentacoesPrevistas,
+            cor: 'text-violet-300',
+            largo: true,
+          },
+          { rotulo: 'convidados', valor: resumo.convidadosTotal, cor: 'text-white' },
+        ].map((k) => (
+          <div key={k.rotulo} className={cn('bg-slate-900 px-3 py-2', k.largo && 'col-span-2')}>
+            <p className={cn('text-[18px] font-semibold tabular-nums leading-tight', k.cor)}>{k.valor}</p>
+            <p className="text-[12px] leading-tight text-slate-500">{k.rotulo}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="hidden grid-cols-2 gap-3 sm:grid lg:grid-cols-5">
         <KPICard size="sm" label="Elegíveis" value={resumo.total} icon={Users} variant="default" />
         <KPICard size="sm" label="Participam" value={resumo.participam} icon={Check} variant="emerald" />
         <KPICard size="sm" label="Indefinidos" value={resumo.indefinidos} icon={HelpCircle} variant="amber" />
@@ -536,24 +562,24 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[220px] flex-1">
+        <div className="relative w-full min-w-[220px] flex-1 sm:w-auto">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
           <Input
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             placeholder="Buscar aluno, curso ou professor…"
-            className="pl-8"
+            className="h-11 pl-8 text-[16px] sm:h-10 sm:text-sm"
           />
         </div>
 
-        <div className="flex overflow-hidden rounded-lg border border-slate-700">
+        <div className="flex w-full overflow-hidden rounded-lg border border-slate-700 sm:w-auto">
           {FILTROS.map((f) => (
             <button
               key={f.id}
               type="button"
               onClick={() => setFiltro(f.id)}
               className={cn(
-                'px-3 py-1.5 text-[12.5px] transition-colors',
+                'min-h-[44px] flex-auto whitespace-nowrap px-2 py-1.5 text-[13px] transition-colors sm:min-h-0 sm:flex-none sm:px-3 sm:text-[12.5px]',
                 filtro === f.id
                   ? 'bg-violet-600 text-white'
                   : 'text-slate-400 hover:bg-slate-700/60 hover:text-slate-200',
@@ -568,11 +594,11 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
             instrumento — sem os dois selects a resposta seria digitar nome por nome. */}
         {professores.length > 1 && (
           <Select value={filtroProfessor} onValueChange={setFiltroProfessor}>
-            <SelectTrigger className="h-9 w-[170px] text-[12.5px]">
+            <SelectTrigger className="h-11 min-w-0 flex-1 basis-[45%] text-[13px] sm:h-9 sm:w-[170px] sm:flex-none sm:basis-auto sm:text-[12.5px]">
               <SelectValue placeholder="Professor" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="todos">Todos os professores</SelectItem>
+              <SelectItem value="todos">Professor: todos</SelectItem>
               {professores.map(([id, nome]) => (
                 <SelectItem key={id} value={id}>{nome}</SelectItem>
               ))}
@@ -581,11 +607,11 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
         )}
         {cursos.length > 1 && (
           <Select value={filtroCurso} onValueChange={setFiltroCurso}>
-            <SelectTrigger className="h-9 w-[150px] text-[12.5px]">
+            <SelectTrigger className="h-11 min-w-0 flex-1 basis-[45%] text-[13px] sm:h-9 sm:w-[150px] sm:flex-none sm:basis-auto sm:text-[12.5px]">
               <SelectValue placeholder="Curso" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="todos">Todos os cursos</SelectItem>
+              <SelectItem value="todos">Curso: todos</SelectItem>
               {cursos.map(([id, nome]) => (
                 <SelectItem key={id} value={id}>{nome}</SelectItem>
               ))}
@@ -599,7 +625,7 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
           <Button
             variant={soSemAlocar ? 'default' : 'outline'}
             size="sm"
-            className="gap-1.5"
+            className="h-11 flex-1 gap-1.5 sm:h-9 sm:flex-none"
             onClick={() => setSoSemAlocar((v) => !v)}
           >
             <LayoutList className="h-3.5 w-3.5" />
@@ -612,7 +638,7 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
           <Button
             variant={soRelatorioPronto ? 'default' : 'outline'}
             size="sm"
-            className="gap-1.5"
+            className="h-11 flex-1 gap-1.5 sm:h-9 sm:flex-none"
             onClick={() => setSoRelatorioPronto((v) => !v)}
           >
             <FileCheck className="h-3.5 w-3.5" />
@@ -623,6 +649,7 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
         <Button
           variant="outline"
           size="sm"
+          className="h-11 flex-1 sm:h-9 sm:flex-none"
           disabled={gravando === '__lote__' || visiveis.length === 0}
           onClick={() => {
             const alvos = visiveis.filter((a) => avaliarElegibilidade(a).podeParticipar);
@@ -635,7 +662,7 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
         <Button
           variant="outline"
           size="sm"
-          className="gap-1.5"
+          className="h-11 flex-1 gap-1.5 sm:h-9 sm:flex-none"
           onClick={() => setModalOutraUnidade(true)}
         >
           <UserPlus className="h-3.5 w-3.5" />
