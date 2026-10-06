@@ -16,6 +16,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
 import { SecaoGoogleAds } from './SecaoGoogleAds';
+import { CanalOrigemBadge } from '@/components/shared/CanalOrigemBadge';
 
 // ============================================================================
 // Tipos
@@ -75,6 +76,7 @@ interface LeadAtribuido {
   converteu: boolean | null;
   meta_ad_source_id: string;
   unidades: { codigo: string } | null;
+  canais_origem: { nome: string } | null;
 }
 
 interface AdCache {
@@ -121,14 +123,15 @@ const num = (v: number) => v.toLocaleString('pt-BR');
 
 const PLATAFORMA_LABEL: Record<string, string> = {
   facebook: 'Facebook', instagram: 'Instagram', messenger: 'Messenger',
-  audience_network: 'Audience Network', threads: 'Threads', unknown: 'Outros',
+  audience_network: 'Audience Network', threads: 'Threads', whatsapp: 'WhatsApp', unknown: 'Outros',
 };
 const POSICAO_LABEL: Record<string, string> = {
   feed: 'Feed', story: 'Stories', reels: 'Reels', instagram_reels: 'Reels',
   instagram_stories: 'Stories', instant_article: 'Instant Article', instream_video: 'Vídeo in-stream',
   marketplace: 'Marketplace', video_feeds: 'Feed de vídeo', search: 'Busca',
   explore: 'Explorar', explore_home: 'Explorar', facebook_reels: 'Reels', right_hand_column: 'Coluna lateral',
-  biz_disco_feed: 'Descoberta', profile_feed: 'Feed de perfil', unknown: 'Outros',
+  biz_disco_feed: 'Descoberta', profile_feed: 'Feed de perfil', status: 'Status', whatsapp_status: 'Status',
+  unknown: 'Outros',
 };
 const GENERO_LABEL: Record<string, string> = { male: 'Masculino', female: 'Feminino', unknown: 'Não informado' };
 const cap = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
@@ -213,7 +216,7 @@ export function TrafegoPagoPage() {
       const [{ data: leads }, { data: cache }] = await Promise.all([
         supabase
           .from('leads')
-          .select('id, nome, telefone, data_contato, status, converteu, meta_ad_source_id, unidades:unidade_id(codigo)')
+          .select('id, nome, telefone, data_contato, status, converteu, meta_ad_source_id, unidades:unidade_id(codigo), canais_origem:canal_origem_id(nome)')
           .not('meta_ad_source_id', 'is', null)
           .order('data_contato', { ascending: false })
           .limit(200),
@@ -681,6 +684,7 @@ export function TrafegoPagoPage() {
                   <th className="text-left px-5 py-3 font-medium">Lead</th>
                   <th className="text-left px-4 py-3 font-medium">Anúncio</th>
                   <th className="text-left px-4 py-3 font-medium">Campanha</th>
+                  <th className="text-left px-4 py-3 font-medium" title="Canal de origem do lead (o consultor pode ter corrigido)">Origem</th>
                   <th className="text-center px-4 py-3 font-medium">Unidade</th>
                   <th className="text-center px-4 py-3 font-medium">Data</th>
                   <th className="text-center px-5 py-3 font-medium">Status</th>
@@ -694,6 +698,7 @@ export function TrafegoPagoPage() {
                       <td className="px-5 py-3 text-sm text-white">{lead.nome || '(sem nome)'}</td>
                       <td className="px-4 py-3 text-sm text-slate-300">{ad?.ad_name || lead.meta_ad_source_id}</td>
                       <td className="px-4 py-3 text-sm text-slate-300">{ad?.campaign_name || '—'}</td>
+                      <td className="px-4 py-3 text-sm"><CanalOrigemBadge canal={lead.canais_origem?.nome ?? '-'} /></td>
                       <td className="px-4 py-3 text-sm text-center text-slate-300">{lead.unidades?.codigo || '—'}</td>
                       <td className="px-4 py-3 text-sm text-center text-slate-300">
                         {format(new Date(`${lead.data_contato}T12:00:00`), 'dd/MM/yy', { locale: ptBR })}

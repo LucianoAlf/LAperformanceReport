@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
-import { Phone, Globe, Users, UserPlus, Building2, MapPin } from 'lucide-react';
+import { Phone, Globe, Users, UserPlus, Building2, MapPin, CircleDashed } from 'lucide-react';
 
 interface CanalOrigemBadgeProps {
   canal: string;
@@ -32,6 +32,13 @@ const CANAL_CONFIG: Record<string, {
     bg: 'bg-blue-600/20',
     text: 'text-blue-400',
     border: 'border-blue-500/30',
+  },
+  // Anúncio do Instagram exibido no Status do WhatsApp (source_app=whatsapp na conversa).
+  'Status do WhatsApp': {
+    icon: <CircleDashed className="w-3.5 h-3.5" />,
+    bg: 'bg-[#25D366]/15',
+    text: 'text-[#25D366]',
+    border: 'border-[#25D366]/30',
   },
   'Google': {
     icon: (
