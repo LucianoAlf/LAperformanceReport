@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-05 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-06 -->
 
 <!-- fim do cabecalho gerado -->
 # Funções
 
-1786 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
+1790 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
 chamadas diretas ao PostgREST não são visíveis para o gerador.
 
 ## aluno
@@ -513,8 +513,8 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `sol_caixa_abrir(p_payload jsonb)` | LEGADO | DEFINER | existe versao maior: sol_caixa_abrir_v3 — sem consumidor conhecido |
 | `sol_caixa_abrir_v3(p_payload jsonb)` | ORFA | DEFINER | sem consumidor conhecido |
 | `sol_caixa_aluno_da_fatura_v1(p_unidade_id uuid, p_fatura_id uuid)` | SO-INTERNA | DEFINER | funcao:sol_caixa_casar_parcela, funcao:sol_caixa_parcela_canonica_env_v1 |
-| `sol_caixa_aluno_matriculado_v1(p_status text)` | SO-INTERNA | INVOKER | funcao:sol_caixa_aluno_pode_pagar_v1, funcao:sol_caixa_casar_parcela, funcao:sol_caixa_responsavel_aluno |
-| `sol_caixa_aluno_pode_pagar_v1(p_status text, p_unidade_id uuid, p_emusys_student_id text)` | SO-INTERNA | INVOKER | funcao:sol_caixa_aluno_por_responsavel, funcao:sol_caixa_casar_parcela, funcao:sol_caixa_derivar_valores_multi_aluno_v1, funcao:sol_caixa_identificar_aluno_novo_v1, funcao:sol_caixa_identificar_por_pagador, funcao:sol_caixa_parcela_canonica_env_v1, +3 outros |
+| `sol_caixa_aluno_matriculado_v1(p_status text)` | SO-INTERNA | INVOKER | funcao:sol_caixa_aluno_pode_pagar_v1, funcao:sol_caixa_casar_parcela, funcao:sol_caixa_responsavel_aluno, funcao:sol_caixa_sugerir_aluno_parecido_v1 |
+| `sol_caixa_aluno_pode_pagar_v1(p_status text, p_unidade_id uuid, p_emusys_student_id text)` | SO-INTERNA | INVOKER | funcao:sol_caixa_aluno_por_responsavel, funcao:sol_caixa_casar_parcela, funcao:sol_caixa_derivar_valores_multi_aluno_v1, funcao:sol_caixa_identificar_aluno_novo_v1, funcao:sol_caixa_identificar_por_pagador, funcao:sol_caixa_parcela_canonica_env_v1, +4 outros |
 | `sol_caixa_aluno_por_responsavel(p_unidade_id uuid, p_nome text)` | SO-INTERNA | DEFINER | funcao:sol_caixa_resolver_envelope_v1 |
 | `sol_caixa_ator_ok(p_unidade uuid, p_num text)` | SO-INTERNA | DEFINER | funcao:sol_caixa_abrir, funcao:sol_caixa_fechar, funcao:sol_caixa_lancar_saida |
 | `sol_caixa_ator_operacao_ok(p_unidade uuid, p_num text, p_operacao text)` | SO-INTERNA | DEFINER | funcao:sol_caixa_autorizar_payload_v1 |
@@ -566,6 +566,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `sol_caixa_shadow_registrar(p_payload jsonb)` | ORFA | DEFINER | sem consumidor conhecido |
 | `sol_caixa_shadow_registrar_approval(payload jsonb)` | ORFA | DEFINER | sem consumidor conhecido |
 | `sol_caixa_snapshot_abertura_fechamento_v3(p_unidade_id uuid, p_data_caixa date, p_operacao text)` | SO-INTERNA | DEFINER | funcao:sol_caixa_executar_abertura_fechamento_v3, funcao:sol_caixa_resolver_abertura_v3, funcao:sol_caixa_resolver_fechamento_v3 |
+| `sol_caixa_sugerir_aluno_parecido_v1(p_unidade_id uuid, p_nome text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `sol_caixa_v3_cancelar_preview_v1(p_payload jsonb)` | ORFA | DEFINER | sem consumidor conhecido |
 | `sol_caixa_v3_finalizar_preview_v1(p_payload jsonb)` | ORFA | DEFINER | sem consumidor conhecido |
 | `sol_caixa_v3_validar_approval_v1(p_payload jsonb, p_operacao text)` | SO-INTERNA | DEFINER | funcao:sol_caixa_corrigir_movimento_v1, funcao:sol_caixa_estornar_movimento_v1, funcao:sol_caixa_lancar_recebimento, funcao:sol_caixa_lancar_recebimento_lote_v1, funcao:sol_caixa_lancar_saida |
@@ -936,7 +937,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `app_meu_ponto(p_data_inicio date, p_data_fim date)` | SO-INTERNA | DEFINER | funcao:app_minha_home |
 | `app_meus_registros(p_status text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `app_minha_agenda_mes(p_inicio date, p_fim date)` | ORFA | DEFINER | sem consumidor conhecido |
-| `app_minha_agenda_semana_v1(p_data_inicio date, p_data_fim date)` | SO-INTERNA | DEFINER | funcao:app_minha_home |
+| `app_minha_agenda_semana_v1(p_data_inicio date, p_data_fim date)` | SO-INTERNA | DEFINER | funcao:app_minha_home, funcao:fn_fabio_det_cobrada_fora_da_agenda |
 | `app_minha_agenda_sessao(p_data date)` | SO-INTERNA | DEFINER | funcao:fn_diag_porta_do_professor |
 | `app_minha_agenda_sessao_base_v1(p_data date)` | SO-INTERNA | DEFINER | funcao:app_minha_agenda_sessao_publicacao_legado_v1 |
 | `app_minha_agenda_sessao_base_v1_referencia_lenta(p_data date)` | ORFA | DEFINER | sem consumidor conhecido |
@@ -1352,7 +1353,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_aula_operacional_id(p_aula_id integer)` | ATIVA | DEFINER | view:vw_experimental_pendencia, view:vw_fila_audio_sem_roster, view:vw_presenca_pendencia, view:vw_registro_pendencia, funcao:app_minha_agenda_semana_v1, funcao:app_minha_agenda_sessao_base_v1, +11 outros |
 | `fn_aula_so_de_trancados(p_aula_id integer)` | SO-INTERNA | DEFINER | funcao:app_minha_agenda_semana_v1, funcao:app_minha_agenda_sessao_canonica_v2, funcao:fabio_agenda_periodo, funcao:fabio_briefing_matinal |
 | `fn_aula_tem_dever_de_casa(p_registro_id uuid, p_aluno_id integer)` | SO-INTERNA | INVOKER | funcao:fn_dever_de_casa_sinal_do_aluno, funcao:fn_fabio_laudo |
-| `fn_aulas_da_sessao(p_aula_id integer)` | ATIVA | DEFINER | view:vw_registro_pendencia, funcao:app_minha_agenda_semana_v1, funcao:app_minha_agenda_sessao_canonica_v2, funcao:app_registrar_presencas_aula_canonica_v2_interno, funcao:app_textos_emusys_da_aula, funcao:fabio_lancar_presenca_professor, +2 outros |
+| `fn_aulas_da_sessao(p_aula_id integer)` | ATIVA | DEFINER | view:vw_registro_pendencia, funcao:app_minha_agenda_semana_v1, funcao:app_minha_agenda_sessao_canonica_v2, funcao:app_registrar_presencas_aula_canonica_v2_interno, funcao:app_textos_emusys_da_aula, funcao:fabio_lancar_presenca_professor, +3 outros |
 | `fn_briefing_txt(p_txt text)` | SO-INTERNA | INVOKER | funcao:fabio_briefing_matinal, funcao:fn_onde_parou_fonte |
 | `fn_carteira_fatiada(p_professor_id integer)` | SO-INTERNA | DEFINER | funcao:app_professor_carteira_contagem, funcao:fabio_contexto_professor |
 | `fn_chave_natural_periodo_professor_v1(p_unidade_id uuid, p_pessoa_chave text, p_emusys_matricula_disciplina_id bigint, p_emusys_professor_id bigint, p_evidencias jsonb)` | ATIVA | INVOKER | view:vw_professor_periodos_baseline_v3_sombra, view:vw_professor_periodos_efetivos_v3_sombra, funcao:promover_periodos_professor_ativos_exatos_v2, funcao:promover_troca_de_curso_mesmo_professor_v1, funcao:promover_trocas_confirmadas_pela_jornada_v1 |
@@ -1397,6 +1398,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_fabio_caso_sem_aluno_no_emusys(p_tipo text, p_aula_id bigint)` | SO-INTERNA | INVOKER | funcao:fn_fabio_laudo |
 | `fn_fabio_chama_edge(p_audio_id uuid)` | SO-INTERNA | DEFINER | funcao:fn_fabio_retry_fila, funcao:fn_fila_audio_retomar_esgotado, funcao:fn_fila_audio_retomar_por_roster, funcao:trg_fabio_fila_dispara |
 | `fn_fabio_citacao_confere(p_citacao text, p_texto text)` | SO-INTERNA | INVOKER | funcao:fabio_memoria_propor, funcao:fn_fabio_incidente_de |
+| `fn_fabio_cobradas_suspeitas()` | SO-INTERNA | DEFINER | funcao:fn_fabio_diario_coletar |
 | `fn_fabio_contraponto_pendente(p_limite integer)` | SO-INTERNA | DEFINER | funcao:fn_fabio_contraponto_saude |
 | `fn_fabio_contraponto_registrar(p_audio_id uuid, p_motor text, p_texto text, p_erro text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `fn_fabio_contraponto_saude()` | SO-INTERNA | DEFINER | funcao:fn_fabio_diario_coletar |
@@ -1407,6 +1409,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_fabio_det_aluno_invisivel(p_aula_do_aluno integer, p_aluno_id integer)` | SO-INTERNA | DEFINER | funcao:fn_fabio_diario_fechar |
 | `fn_fabio_det_audio_recusado(p_audio_id uuid)` | SO-INTERNA | DEFINER | funcao:fn_fabio_diario_coletar, funcao:fn_fabio_diario_fechar |
 | `fn_fabio_det_canario_parado(p_nome text)` | SO-INTERNA | DEFINER | funcao:fn_fabio_diario_fechar |
+| `fn_fabio_det_cobrada_fora_da_agenda(p_professor_id integer, p_aula_id integer, p_aluno_id integer)` | SO-INTERNA | DEFINER | funcao:fn_fabio_diario_coletar, funcao:fn_fabio_diario_fechar |
 | `fn_fabio_det_ficha_descartada(p_registro_id uuid)` | SO-INTERNA | DEFINER | funcao:fn_fabio_diario_coletar, funcao:fn_fabio_diario_fechar |
 | `fn_fabio_det_rascunho_parado(p_registro_id uuid)` | SO-INTERNA | DEFINER | funcao:fn_fabio_diario_coletar, funcao:fn_fabio_diario_fechar |
 | `fn_fabio_diario_coletar(p_dia date)` | ATIVA | DEFINER | cron:fabio-diario-coletar |
@@ -1456,6 +1459,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_fabio_texto_da_janela(p_origem text, p_professor_id integer, p_dia date)` | ORFA | DEFINER | sem consumidor conhecido |
 | `fn_fabio_texto_ja_era_do_professor(p_id uuid)` | SO-INTERNA | DEFINER | funcao:fn_fabio_diario_coletar |
 | `fn_fabio_texto_ja_era_do_professor(p_professor_id integer, p_antes jsonb, p_quando timestamp with time zone)` | SO-INTERNA | DEFINER | funcao:fn_fabio_diario_coletar |
+| `fn_fabio_texto_sem_forma(p text)` | SO-INTERNA | INVOKER | funcao:fn_fabio_correcao_direcao |
 | `fn_fabio_tipo_acao(p_tipo text)` | ORFA | INVOKER | sem consumidor conhecido |
 | `fn_fabio_tipo_como_resolver(p_tipo text)` | SO-INTERNA | INVOKER | funcao:fn_fabio_laudo |
 | `fn_fabio_tipo_e_evento(p_tipo text)` | SO-INTERNA | INVOKER | funcao:fn_fabio_laudo, funcao:fn_fabio_texto_ja_era_do_professor, funcao:fn_fabio_triar |
