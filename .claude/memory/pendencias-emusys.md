@@ -549,3 +549,11 @@ individual + 1 cancelada na individual + 3 sem marca em chamada fechada
 `ausente+pendente` em aula realizada com chamada fechada (decisão do Alf,
 ver item anterior) e as correções 1-3 aplicadas às contas (esperado lê
 ativo_operacional da turma + gêmea individual + registrado-como-humano).
+
+**ENCERRADO pelo Fábio (06/10, após conferir os 4 commits no origin/main):
+os 3 de Barra (18/09 19h) estão encerrados** — chamada feita direto no
+Emusys; a pergunta ao Alf ("a equipe marca a falta ou só marca quem veio?")
+foi respondida e **não há nada a mudar**. Sol e Health Score permanecem
+como estão. Auditoria de presença set/2026: ENCERRADA com zero furo de
+lançamento — não reabrir sem nova evidência. As correções de medição
+1-3 acima são conhecimento para a PRÓXIMA conta, não migration pendente.
