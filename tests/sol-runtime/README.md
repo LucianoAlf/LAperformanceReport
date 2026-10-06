@@ -882,3 +882,16 @@ do cadastro e segue para o preview de sempre — só o `pode` lança. O teste tr
 0 candidatos, RPC fora do ar e candidato que já é o outro item mantêm a mensagem
 antiga; 2+ candidatos listam até 3 sem escolher; `nome_ambiguo` não usa sugestão;
 log sem nome de aluno. Nomes do teste são fictícios.
+
+## saida-descricao-humana-e-conversa-e2e.cjs
+
+Caso Recreio (05-06/10): foto do cupom + "Compra de 3 pós de café e 3 de açúcar /
+Retirada do caixa / R$91,40 - dinheiro". O grupo leu na confirmação a legenda
+(que era o campo **aluno**), o banco gravou "PG Semana Retirada" e o fechamento
+mostrou isso. Agora a descrição sai de **uma** função (`_descricaoSaidaTexto`),
+igual no card (`📝 …`), na confirmação e no payload; saída não carrega aluno.
+Trava também a Sol calada em conversa sobre o que ela já concluiu: citar o
+"✅ Lancei…" ou o FECHAMENTO (mesmo com valor) não abre lançamento, e um `pode`
+depois não lança de novo; texto sem valor e sem anexo só pergunta o valor se
+chamar a Sol pelo nome. "PG semana segurança" continua "PG Semana Seguranca".
+Nomes fictícios. Falha contra o runtime 49bfabf8.

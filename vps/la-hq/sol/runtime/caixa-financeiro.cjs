@@ -997,7 +997,7 @@ function descricaoParcelaCoerente(parcela, competencia) {
   return atual === correta ? descricao : descricao.replace(noTexto[0], correta);
 }
 
-function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competencia, parcela, confiancaBaixa, alunoNovoOrigem, responsavelFinanceiro, formaIncerta, cartaoModalidade, cartaoParcelas, multiplas, alunoViaPagador, pagadorNome, candidatosAluno, canonica, duplicata, quitacao, faturaIndisponivel, composto, bloqueiaLancamento, itemLojinha, semAlunoDeclarado, entidade, valorMaiorNaLegenda, valorConflito, valorBaixaConfianca, ingresso }) {
+function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competencia, parcela, confiancaBaixa, alunoNovoOrigem, responsavelFinanceiro, formaIncerta, cartaoModalidade, cartaoParcelas, multiplas, alunoViaPagador, pagadorNome, candidatosAluno, canonica, duplicata, quitacao, faturaIndisponivel, composto, bloqueiaLancamento, itemLojinha, semAlunoDeclarado, entidade, valorMaiorNaLegenda, valorConflito, valorBaixaConfianca, ingresso, descricao }) {
   // forma legível
   let formaTxt;
   if (forma === 'cartao') {
@@ -1021,6 +1021,10 @@ function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competenci
   blocos.push([
     ehSaidaPreview ? '*PAGAMENTO (saída)*' : '*RECEBIMENTO*',
     `${valor ? '*' + fmtBRL(valor) + '*' : '❓ valor não identificado'} · ${formaTxt}`,
+    // A descricao que vai para o banco aparece no card (06/10/2026): antes o card
+    // nao mostrava nada, a confirmacao mostrava outra coisa e o banco guardava uma
+    // terceira ("PG Semana Retirada"). Quem aprova precisa ver o que sera gravado.
+    ...(ehSaidaPreview && descricao ? [`📝 ${descricao}`] : []),
     ...(valorMaiorNaLegenda ? [`⚠️ A mensagem cita ${fmtBRL(valorMaiorNaLegenda)} — este card cobre só ${fmtBRL(Number(valor) || 0)}. Se é pagamento de mais de um aluno, manda cada um: *Nome — R$ valor*.`] : []),
     ...(!valor && valorConflito ? [`⚠️ A mensagem diz *${fmtBRL(valorConflito.legenda)}* e o comprovante mostra *${fmtBRL(valorConflito.comprovante)}*. Não vou escolher no chute.`] : []),
     ...(!valor && !valorConflito && valorBaixaConfianca ? ['⚠️ Não consegui ler o valor do comprovante com segurança.'] : []),
@@ -2316,26 +2320,88 @@ function _compradorDeclaradoLojinha(texto) {
   return nome && nome.split(/\s+/).length >= 2 ? nome : null;
 }
 
+// 🔴 DESCRICAO DA SAIDA = O QUE A PESSOA ESCREVEU SOBRE O GASTO (06/10/2026).
+//
+// Caso Vitoria/Recreio 05/10: foto do cupom + "Compra de 3 pós de café e 3 de
+// açúcar\nRetirada do caixa\nR$91,40 - dinheiro". O grupo leu "Lancei a saída…
+// · Compra de pós de café e de açúcar Retirada do caixa" (era o campo ALUNO,
+// lixo do `_alunoFromCaption`), o banco gravou "PG Semana Retirada" e o
+// fechamento mostrou isso. A ADM corrigia a mao no report TODA vez.
+//
+// Duas fontes de verdade causavam isso: esta funcao (ditado por texto) e um
+// bloco copiado no caminho da midia — e ambos jogavam fora a frase inteira
+// quando ela continha a palavra da categoria ("retirada"), alem de arrancar
+// "de"/"do" e deixar o texto ilegivel. Agora e UMA funcao, usada pelo card,
+// pela confirmacao e pelo payload do banco.
+//
+// Regra: tira so o que nao descreve o gasto — valor (R$…), forma de pagamento,
+// mencoes (@…), e trechos que sao SO rotulo ("Retirada do caixa", "saída em
+// dinheiro", "PG segurança semana 25/08"). O resto fica como a pessoa escreveu
+// (acento, preposicao, numero). Sem nada util: `PG Semana <Categoria>`, como antes.
+// ⚠️ "PG semana <cat>" escrito pela pessoa continua no formato antigo
+//    ("PG Semana Seguranca", "PG Semana Despesa - segurança"): e a convencao da
+//    equipe para o pagamento semanal (Mayra/CG 25/08, Jhon/CG 09/09).
+// ⚠️ Lookaround Unicode, nunca `\b`: em JS `\b` e ASCII e parte "saída" em
+//    "saí"+"da" (Mayra/CG 25/08).
+const _semAcentoDesc = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+// palavras que, sozinhas, so ROTULAM a saida (nao dizem com o que se gastou)
+const _ROTULO_SAIDA_DESC = new Set(('teve houve tivemos saida saidas retirada retiradas retirado retirei sangria sangrias '
+  + 'gasto gastos despesa despesas compra uma um hoje pagamento pagamentos pg pgto pago paga semanal semana '
+  + 'comprovante recibo cupom nota fiscal foi no na nos nas de do da dos das em o a os as e com caixa cofre '
+  + 'para pra pro valor referente ref sol segue aqui lancar lanca lancei pode dinheiro especie pix cartao '
+  + 'credito debito transferencia').split(' '));
+// o que pode ser podado nas PONTAS de um trecho util ("Retirada do caixa para
+// compra de café" -> "compra de café"; "café retirada do caixa" -> "café")
+const _PONTA_SAIDA_DESC = new Set(('teve houve tivemos uma um saida saidas retirada retiradas retirado retirei sangria '
+  + 'sangrias do da de dos das no na nos nas em caixa cofre para pra pro hoje foi referente ref valor sol e com '
+  + 'segue aqui').split(' '));
+const _PG_SEMANA_DESC = new Set(['pg', 'pgto', 'pagamento', 'semana', 'semanal']);
+
 function _descricaoSaidaTexto(texto, categoria) {
   const cat = String(categoria || '').toLowerCase();
-  let t = bodyLimpo(texto)
-    .replace(/^sol\s*[,!?:-]?\s*/i, ' ')
-    .replace(/r\$\s*[\d.,]+/ig, ' ')
-    // ANTES da lista abaixo, e com lookaround Unicode em vez de \b: "\b" em JS e ASCII,
-    // entao em "saida" acentuada ele ve fronteira entre "sai" e "da" e o "\bda\b" da
-    // lista arranca o miolo da palavra. Sobrava "sai" na descricao (Mayra/CG 25/08).
-    .replace(/(?<!\p{L})(teve|houve|tivemos|sa[íi]da|retirada|sangria|gasto|despesa|uma?|hoje)(?!\p{L})/giu, ' ')
-    .replace(/\b(pagamento|pg|semanal|semana|comprovante|recibo|dinheiro|pix|cart[ãa]o|transfer[êe]ncia|foi|no|na|de|do|da|em)\b/ig, ' ')
-    .replace(/[^\p{L}\d\s./-]/gu, ' ')
-    // hifen que sobrou depois de tirar as palavras em volta ("dinheiro - PG seguranca")
-    .replace(/(^|\s)-+(?=\s|$)/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (!t || t.length < 3) return `PG Semana ${cap(cat)}`;
-  // sem normalizar acento, "segurança" no texto nunca casa com "seguranca" do enum e a
-  // categoria aparece duas vezes na descricao do caixa.
-  const semAcento = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  return `PG Semana ${cap(cat)}${semAcento(t).includes(semAcento(cat)) ? '' : ' - ' + t}`;
+  const fallback = `PG Semana ${cap(cat)}`;
+  const bruto = bodyLimpo(texto);
+  if (!bruto) return fallback;
+  const catTok = new Set(_semAcentoDesc(cat).split(/[^a-z0-9]+/).filter(Boolean));
+  const norm = (tok) => _semAcentoDesc(tok).replace(/[^\p{L}\p{N}\/]/gu, '');
+  const ehData = (n) => /^\d+(?:[\/.-]\d+)*$/.test(n);
+  const ehRotulo = (n) => !n || _ROTULO_SAIDA_DESC.has(n) || catTok.has(n) || ehData(n);
+  const aparar = (s) => s.replace(/^[\s\-–—:,.;]+|[\s\-–—:,;]+$/g, '').trim();
+  const pgSemana = /(?<!\p{L})(?:pg|pgto|pagamento)(?!\p{L})/iu.test(bruto)
+    && /(?<!\p{L})seman(?:a|al)(?!\p{L})/iu.test(bruto);
+
+  const trechos = bruto
+    .replace(/(^|\n)\s*@?sol\s*[,!?:-]?\s*/gi, '$1')
+    .split(/\r?\n+|\s+[-–—|·;]+\s+|\s*[|·;]\s*/)
+    .map((seg) => String(seg || '')
+      .replace(/@\d{5,}/g, ' ')
+      .replace(/r\$\s*[\d.,]*\d/gi, ' ')
+      .replace(/(?<![\p{L}\p{N}])\d+(?:[.,]\d{1,2})?\s*reais(?!\p{L})/giu, ' ')
+      .replace(/(?<![\p{L}\p{N}.,])\d{1,3}(?:\.\d{3})*,\d{2}(?![\p{N}])/gu, ' ')
+      .replace(/(?<!\p{L})(?:(?:em|no|na|via|pelo|pela)\s+)?(?:dinheiro|esp[ée]cie|pix|cart[ãa]o(?:\s+de)?(?:\s+(?:cr[ée]dito|d[ée]bito))?|transfer[êe]ncia)(?!\p{L})/giu, ' ')
+      .replace(/[^\p{L}\p{N}\s.,:\/()%+&'"-]/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim())
+    .map((seg) => {
+      const toks = seg.split(' ').filter(Boolean);
+      if (!toks.some((t) => !ehRotulo(norm(t)))) return '';           // trecho so de rotulo
+      const poda = (t) => { const n = norm(t); return !n || _PONTA_SAIDA_DESC.has(n) || catTok.has(n); };
+      while (toks.length && poda(toks[0])) toks.shift();
+      while (toks.length && poda(toks[toks.length - 1])) toks.pop();
+      return aparar(toks.join(' '));
+    })
+    .filter((seg) => seg.length >= 2);
+
+  let desc = trechos.join(' - ');
+  if (pgSemana) {
+    // "PG Semana <Cat>" ja diz pg/semana/categoria: o complemento nao repete
+    desc = aparar(desc.split(' ').filter((t) => {
+      const n = norm(t); return n && !_PG_SEMANA_DESC.has(n) && !catTok.has(n) && !ehData(n);
+    }).join(' '));
+    return desc.length >= 2 ? `${fallback} - ${desc}`.slice(0, 160) : fallback;
+  }
+  if (desc.length < 3) return fallback;
+  return (desc.charAt(0).toUpperCase() + desc.slice(1)).slice(0, 160);
 }
 
 function _pareceTesteLancarApagar(texto) {
@@ -5980,6 +6046,35 @@ _Não lanço nada pela metade._`);
     const q = event && event.quotedMessageId;
     return !!(q && _idsDaSol.has(String(q)));
   }
+  // 🔴 06/10/2026 (Recreio): no dia seguinte a uma saida lancada, a equipe CONVERSOU
+  //    sobre ela e a Sol se meteu 3x com "Entendi que é saída de …, mas falta o valor":
+  //    (a) a Vitoria citando o "✅ Lancei a saída…" para explicar o problema; (b) a
+  //    gerente citando o FECHAMENTO com "Descrição correta: R$91,40 Compra de…" — lido
+  //    como saida NOVA de R$ 91,40 (um "pode" ali lancava o dinheiro DUAS vezes);
+  //    (c) "Compra de 3 pós de café e 3 de açúcar" respondendo ao dono.
+  // Citar o que a Sol JA CONCLUIU (lancamento confirmado, fechamento/abertura) e falar
+  // SOBRE o passado — nunca abre lancamento novo. Card ABERTO citado continua sendo
+  // correcao/aprovacao (Jhon/CG 09/09) e por isso fica fora daqui.
+  // ⚠️ Nao depende so de `_idsDaSol`/`lancadosRecentes`: sao memoria do processo e o
+  //    fechamento sai do cron (outro processo). O texto citado vem no evento.
+  const _RE_MSG_CONCLUIDA_SOL = /(^|\n)\s*✅\s*(?:\*?\s*)?(?:Lancei|Caixa\s+(?:aberto|fechado))|FECHAMENTO DE CAIXA|Saldo final caixa|lancei (?:a sa[ií]da )?no caixa/i;
+  function _citaConcluidoDaSol(event, chatId) {
+    const q = event && event.quotedMessageId;
+    if (!q) return false;
+    // so LE as pendencias: expirar card aqui mudaria o estado de quem nao e conversa
+    if ((pendentes.get(chatId) || []).some((p) => p.previewId === q || (p.msgIds || []).includes(q))) return false;
+    if ((lancadosRecentes.get(chatId) || []).some((x) => x.confirmMessageId === q)) return true;
+    return _RE_MSG_CONCLUIDA_SOL.test(String((event && (event.quotedBody || event.quotedPreview)) || ''));
+  }
+  // Chamou a Sol PELO NOME ("Sol, …", "@Sol", mencao ao numero dela) ou e comando
+  // da ferramenta. Citar mensagem dela NAO conta aqui: ver `_citaConcluidoDaSol`.
+  function _chamouSolPeloNome(event) {
+    if (event && (event.caixaToolCommand || event.caixaToolTarget || event._sintetico)) return true;
+    const b = _semAcentoDesc(String(event && event.body || ''));
+    if (/^\s*@?sol(?!\p{L})/u.test(b) || /(^|[^\p{L}\p{N}])@?sol\s*[,!?:]/u.test(b)) return true;
+    const bots = new Set((event && event.botIds) || []);
+    return ((event && event.mentionedIds) || []).some((id) => bots.has(id));
+  }
   // LEGENDA TARDIA (29/09/2026, CG 14:36) — ver `midiasSemLegenda`. O card que a
   // própria mídia publicou (por um caminho sem adiamento) e ainda está aberto.
   function _cardDaMidia(chatId, rec, agora) {
@@ -6268,7 +6363,9 @@ _Não lanço nada pela metade._`);
     // dinheiro" caiu no LLM porque nao tinha midia. Isso nao pode acontecer:
     // o bridge monta preview deterministico e o "pode" de qualquer operador
     // autorizado da unidade passa pela RPC auditada.
-    if (!event.hasMedia && !casarPode(event.body).pode) {
+    const _citouConcluido = !event.hasMedia && !casarPode(event.body).pode && _citaConcluidoDaSol(event, chatId);
+    if (_citouConcluido) log({ acao: 'citacao_concluido_da_sol_nao_abre_lancamento', chatId });
+    if (!event.hasMedia && !casarPode(event.body).pode && !_citouConcluido) {
       const texto = bodyLimpo(event.body);
       // ⚠️ Com card aberto, frase de saida e' CORRECAO (tratada mais abaixo), nunca
       // lancamento novo — senao "Sol, foi saida" abre um caso sem valor e mata o
@@ -6386,6 +6483,7 @@ _Não lanço nada pela metade._`);
             _alvoCat.ts = agora;
             let _txtCat = `Ajustei: a categoria é ${categoriaTexto}. Remontei o preview:\n\n` + montarPreview({
               unidadeNome: _alvoCat.nome, valor: _alvoCat.valor, forma: _alvoCat.forma,
+              descricao: _alvoCat.descricao,
               categoria: categoriaTexto, aluno: _alvoCat.aluno, competencia: _alvoCat.competencia,
               parcela: _alvoCat.parcela, confiancaBaixa: false,
               responsavelFinanceiro: _alvoCat.responsavelFinanceiro, formaIncerta: _alvoCat.formaIncerta,
@@ -6408,6 +6506,14 @@ _Não lanço nada pela metade._`);
             log({ acao: 'preview_categoria_saida_corrigida', chatId,
                   categoria: categoriaTexto, valor: _alvoCat.valor });
             return { acao: 'preview_categoria_saida_corrigida' };
+          }
+          // 🔴 06/10/2026: texto SEM valor e SEM anexo que nao chama a Sol e conversa
+          // ("Compra de 3 pós de café…" respondendo ao dono; explicacao com a palavra
+          // "retirada"). Perguntar o valor ali e se meter na conversa. Com "Sol, …"
+          // continua perguntando — ai a pessoa esta mesmo ditando uma saida.
+          if (!_chamouSolPeloNome(event)) {
+            log({ acao: 'saida_texto_sem_valor_conversa', chatId, categoria: categoriaTexto });
+            return { acao: 'saida_texto_sem_valor_conversa' };
           }
           await sendFn(chatId, `Entendi que é saída de ${categoriaTexto}, mas falta o valor. Manda de novo com o valor.`);
           log({ acao: 'saida_texto_sem_valor', chatId, categoria: categoriaTexto });
@@ -6437,7 +6543,7 @@ _Não lanço nada pela metade._`);
         }
         const descricao = _descricaoSaidaTexto(texto, categoriaTexto);
         let textoPreview = montarPreview({
-          unidadeNome: grp.nome, valor, forma, categoria: categoriaTexto,
+          unidadeNome: grp.nome, valor, forma, categoria: categoriaTexto, descricao,
           aluno: null, competencia: null, parcela: null, confiancaBaixa: false,
           responsavelFinanceiro: null, formaIncerta: false, cartaoModalidade: null,
           cartaoParcelas: null, multiplas: false, alunoViaPagador: null,
@@ -7540,20 +7646,23 @@ _Não lanço nada pela metade._`);
       }
       const bloqueiaLancamento = deveBloquearLancamento({ composto, parcela, canonica, valor, quitacao, multiplas });
       const saidaCaixa = categoriaEhSaida(categoria);
-      const descricaoSaida = saidaCaixa
-        ? (bodyLimpo(legendaEfetiva)
-          .replace(/r\$\s*[\d.,]+/ig, ' ')
-          .replace(/\b(pagamento|pg|semanal|semana|comprovante|recibo|dinheiro|pix|cart[ãa]o|transfer[êe]ncia)\b/ig, ' ')
-          .replace(/[^\p{L}\d\s./-]/gu, ' ')
-          .replace(/\s+/g, ' ')
-          .trim())
-        : null;
+      // Saida tem UMA descricao, da mesma funcao do ditado por texto (06/10/2026): o
+      // bloco que existia aqui era copia divergente e gravava "PG Semana Retirada".
+      // 🔴 E saida NAO tem aluno: em 05/10 o `_alunoFromCaption` transformou a
+      // legenda ("Compra de pós de café… Retirada do caixa") em ALUNO, o card
+      // escondeu (saida nao mostra ALUNO), mas a confirmacao exibiu e o payload
+      // gravou esse "aluno". O que o grupo leu nao era o que o banco guardou.
+      if (saidaCaixa) {
+        if (aluno) log({ acao: 'saida_aluno_descartado', chatId });
+        aluno = null; responsavelFinanceiro = null; candidatosAluno = null; alunoViaPagador = null;
+      }
+      const descricaoSaida = saidaCaixa ? _descricaoSaidaTexto(legendaEfetiva, categoria) : null;
       const descricao = composto
         ? (descricaoDoComposto(composto, aluno) || _descricaoLancamento(categoria, competencia, aluno, parcela))
         : lojinhaInfo
         ? `Lojinha/Venda - ${lojinhaInfo.item || 'Produto'}${aluno ? ' - ' + aluno : ''}`
         : saidaCaixa
-        ? (descricaoSaida && descricaoSaida.length >= 3 ? `PG Semana ${cap(categoria)}${descricaoSaida.toLowerCase().includes(String(categoria).toLowerCase()) ? '' : ' - ' + descricaoSaida}` : `PG Semana ${cap(categoria)}`)
+        ? descricaoSaida
         : (multiplas && quitacao && quitacao.faturas && quitacao.faturas.ok)
         ? (`Parcelas ${quitacao.faturas.inicio} a ${quitacao.faturas.fim}`
            + (quitacao.faturas.curso ? ` do curso de ${quitacao.faturas.curso}` : '')
@@ -7610,7 +7719,7 @@ _Não lanço nada pela metade._`);
         log({ acao: 'midia_adiada_legenda_tardia', chatId, etapa: 'card' });
         return { acao: 'midia_adiada_legenda_tardia' };
       }
-      let texto = montarPreview({ unidadeNome: grp.nome, valor, forma, categoria, aluno, competencia, parcela, confiancaBaixa, alunoNovoOrigem, responsavelFinanceiro, formaIncerta, cartaoModalidade, cartaoParcelas, multiplas, alunoViaPagador, pagadorNome, candidatosAluno, canonica, duplicata, quitacao, faturaIndisponivel: canonicaIndisponivel || bloqueiaFonteIndisponivel, composto, bloqueiaLancamento, itemLojinha: lojinhaInfo && lojinhaInfo.item, valorMaiorNaLegenda, valorConflito, valorBaixaConfianca });
+      let texto = montarPreview({ unidadeNome: grp.nome, valor, forma, categoria, aluno, competencia, parcela, confiancaBaixa, alunoNovoOrigem, responsavelFinanceiro, formaIncerta, cartaoModalidade, cartaoParcelas, multiplas, alunoViaPagador, pagadorNome, candidatosAluno, canonica, duplicata, quitacao, faturaIndisponivel: canonicaIndisponivel || bloqueiaFonteIndisponivel, composto, bloqueiaLancamento, itemLojinha: lojinhaInfo && lojinhaInfo.item, valorMaiorNaLegenda, valorConflito, valorBaixaConfianca, descricao });
       if (dryRun) texto += '\n\n_(modo teste — nada será gravado no caixa)_';
       const previewId = await sendFn(chatId, texto);
       const arr = limparVelhos(chatId, agora);
@@ -7868,7 +7977,7 @@ _Não lanço nada pela metade._`);
             alvoP.cartaoParcelas = corrForma.cartaoParcelas || null;
             alvoP.ts = agora;
             let texto = `Você tem razão: a forma é ${corrForma.forma === 'cartao' ? 'cartão' : corrForma.forma}. Remontei o preview:\n\n` + montarPreview({
-              unidadeNome: alvoP.nome, valor: alvoP.valor, forma: alvoP.forma,
+              unidadeNome: alvoP.nome, valor: alvoP.valor, forma: alvoP.forma, descricao: alvoP.descricao,
               categoria: alvoP.categoria || 'parcela', aluno: alvoP.aluno, competencia: alvoP.competencia,
               parcela: alvoP.parcela, confiancaBaixa: false,
               responsavelFinanceiro: alvoP.responsavelFinanceiro, formaIncerta: false,
@@ -7932,6 +8041,16 @@ _Não lanço nada pela metade._`);
                 log({ acao: 'correcao_forma_citado_sem_match', chatId, motivo: achado.motivo });
               }
             }
+          }
+          // 🔴 06/10/2026 (Recreio): a Vitoria citou o "✅ Lancei a saída… (dinheiro)"
+          //    explicando o problema da descricao ("retirada de dinheiro no caixa…") e
+          //    recebeu "Vou corrigir … R$ 91,40 de dinheiro para dinheiro. Posso?".
+          //    Correcao para a MESMA forma nao corrige nada: e conversa sobre o lancamento.
+          if (alvoL && alvoL.forma && alvoL.forma === corrForma.forma
+              && (corrForma.forma !== 'cartao' || !corrForma.cartaoModalidade
+                  || corrForma.cartaoModalidade === (alvoL.cartaoModalidade || null))) {
+            log({ acao: 'correcao_forma_sem_mudanca', chatId, movimentacao_id: alvoL.movimentacao_id, forma: corrForma.forma });
+            return { acao: 'correcao_forma_sem_mudanca' };
           }
           if (!alvoL) {
             await sendFn(chatId, 'Consigo corrigir, mas preciso saber qual lançamento. Responde citando minha mensagem do lançamento e manda: *Sol, foi pix*.');
@@ -8100,7 +8219,7 @@ _Não lanço nada pela metade._`);
             alvoS.descricao = _descricaoSaidaTexto(alvoS.legenda || txt, _catSaidaCorr) || null;
             alvoS.ts = agora;
             let textoS = 'Corrigi — isso e saida de caixa:\n\n' + montarPreview({
-              unidadeNome: alvoS.nome, valor: alvoS.valor, forma: alvoS.forma,
+              unidadeNome: alvoS.nome, valor: alvoS.valor, forma: alvoS.forma, descricao: alvoS.descricao,
               categoria: alvoS.categoria, aluno: null, competencia: null, parcela: null,
               confiancaBaixa: false, responsavelFinanceiro: null, formaIncerta: alvoS.formaIncerta,
               cartaoModalidade: alvoS.cartaoModalidade, cartaoParcelas: alvoS.cartaoParcelas,
@@ -8237,7 +8356,7 @@ _Não lanço nada pela metade._`);
             alvoVD.bloqueiaLancamento = deveBloquearLancamento({ composto: alvoVD.composto, parcela: alvoVD.parcela, canonica: alvoVD.canonica, valor: alvoVD.valor, quitacao: alvoVD.quitacao, multiplas: alvoVD.multiplas });
             alvoVD.ts = agora;
             let textoVD = 'Corrigi o valor:\n\n' + montarPreview({
-              unidadeNome: alvoVD.nome, valor: alvoVD.valor, forma: alvoVD.forma,
+              unidadeNome: alvoVD.nome, valor: alvoVD.valor, forma: alvoVD.forma, descricao: alvoVD.descricao,
               categoria: alvoVD.categoria, aluno: alvoVD.aluno, competencia: alvoVD.competencia,
               parcela: alvoVD.parcela, confiancaBaixa: false, responsavelFinanceiro: alvoVD.responsavelFinanceiro,
               formaIncerta: alvoVD.formaIncerta, cartaoModalidade: alvoVD.cartaoModalidade,
@@ -8498,7 +8617,7 @@ _Não lanço nada pela metade._`);
             }
             alvoCD.ts = agora;
             let textoCD = 'Troquei a categoria:\n\n' + montarPreview({
-              unidadeNome: alvoCD.nome, valor: alvoCD.valor, forma: alvoCD.forma,
+              unidadeNome: alvoCD.nome, valor: alvoCD.valor, forma: alvoCD.forma, descricao: alvoCD.descricao,
               categoria: alvoCD.categoria, aluno: alvoCD.aluno, competencia: alvoCD.competencia,
               parcela: alvoCD.parcela, confiancaBaixa: false, responsavelFinanceiro: alvoCD.responsavelFinanceiro,
               formaIncerta: alvoCD.formaIncerta, cartaoModalidade: alvoCD.cartaoModalidade,
@@ -9532,8 +9651,10 @@ _Não lanço nada pela metade._`);
         // Quem confere o caixa pelo grupo precisa saber DE QUEM foi o dinheiro —
         // foi conferindo assim que o Jhon pegou o lote incompleto de 01/09. A
         // confirmacao do lote ja listava nomes; a do unico dizia so "Parcela".
-        const _de = alvo.aluno ? ` · ${alvo.aluno}`
-          : (alvo.descricao ? ` · ${alvo.descricao}` : '');
+        // Saida mostra a DESCRICAO gravada, nunca `aluno` (06/10/2026: o grupo leu a
+        // legenda-como-aluno enquanto o banco guardava "PG Semana Retirada").
+        const _de = (alvo.aluno && !ehSaida) ? ` · ${alvo.aluno}`
+          : (payload.descricao ? ` · ${payload.descricao}` : '');
         const confirmMessageId = await sendFn(chatId, `✅ ${verbo} no caixa da ${alvo.nome}: ${cap(payload.categoria)} — ${fmtBRL(r.valor)} (${r.forma})${_de}.\n_${quem} · registrei isso no responsável do lançamento._`);
         await governance(event, 'receipt_sent', {
           receipt_ref: confirmMessageId, movement_ref: r.movimentacao_id, preview_ref: alvo.v3PreviewId, outcome: 'ok',
@@ -10015,5 +10136,5 @@ module.exports = {
   guardaFinanceiraV4,
   ocrLocal,
   extrairCorrecaoForma, extrairLancamentoCitado, extrairComandoMovimento,
-  categoriaEhSaida,
+  categoriaEhSaida, _descricaoSaidaTexto,
 };
