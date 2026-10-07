@@ -20,6 +20,7 @@ import {
   ATRIBUTO_TIPO_ROTULO,
   STATUS_PAGAMENTO_LABEL,
   chaveAlunoAtributo,
+  correcaoAguardandoSync,
   descricaoAtributo,
   fmtDataCurta,
   fmtStatus,
@@ -46,6 +47,9 @@ interface ConciliacaoItem {
   curso_nome: string | null;
   fonte?: string | null;
   analise_sol?: string | null;
+  aguardando_sync?: boolean | null;
+  cadastro_alterado_em?: string | null;
+  cadastro_alterado_por?: string | null;
 }
 
 interface ConciliacaoPayload {
@@ -1313,10 +1317,11 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                   const candidatos: any[] = item.tipo_divergencia === 'ambiguo' && Array.isArray(item.valor_api?.candidatos) ? item.valor_api.candidatos : [];
                   const homonimo = new Set(candidatos.map(c => c.aluno_id)).size > 1;
                   const isOrfao = item.tipo_divergencia === 'ausente_nosso_sistema';
+                  const jaCorrigido = correcaoAguardandoSync(item);
                   const temDetalhe = candidatos.length > 0 || !!item.analise_sol || isOrfao;
                   return (
                     <Fragment key={item.id}>
-                    <tr className={cn('hover:bg-slate-700/20', selecionados.has(item.id) && 'bg-cyan-500/5', temDetalhe && 'border-b-0')}>
+                    <tr className={cn('hover:bg-slate-700/20', selecionados.has(item.id) && 'bg-cyan-500/5', temDetalhe && 'border-b-0', jaCorrigido && 'opacity-80')}>
                       <td className="px-3 py-3"><Checkbox checked={selecionados.has(item.id)} onCheckedChange={() => toggleSel(item.id)} /></td>
                       <td className="px-4 py-3 text-slate-200">{item.aluno_nome || '—'}</td>
                       <td className="px-4 py-3 text-slate-400">{item.unidade_nome || '—'}</td>
@@ -1342,7 +1347,14 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                       ) : (
                         <>
                           <td className="px-4 py-3 text-slate-300 text-xs">{descreverNosso(item, tiposMap)}</td>
-                          <td className="px-4 py-3 text-slate-400 text-xs">{descreverApi(item, tiposMap, diffLookups)}</td>
+                          <td className="px-4 py-3 text-slate-400 text-xs">
+                            {descreverApi(item, tiposMap, diffLookups)}
+                            {jaCorrigido && (
+                              <span className="mt-1.5 flex items-start gap-1 text-[11px] font-medium text-emerald-300">
+                                <Check className="mt-px h-3 w-3 shrink-0" /> {jaCorrigido}
+                              </span>
+                            )}
+                          </td>
                         </>
                       )}
                       <td className="px-4 py-3">

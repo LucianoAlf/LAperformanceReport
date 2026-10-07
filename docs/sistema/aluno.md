@@ -31,6 +31,14 @@
   professor, dia e horário. Forma/status de pagamento seguem a fila financeira
   de atributos; valor e contrato seguem seus tipos próprios. Decisões manuais
   permanecem auditadas e forma de pagamento escolhida no LA Report é fixada.
+- **Aviso de status já corrigido na ficha (07/10/2026):** quem corrige o status
+  direto no cadastro (ex.: trancado → ativo) não passa pela fila, e o aviso
+  `status_divergente` só fecha no sync da noite (23h–23h40 BRT, limpeza por
+  rodada). `get_conciliacao_matriculas` devolve `aguardando_sync` (o status do
+  cadastro já é o sugerido) + `cadastro_alterado_em/_por`, e ordena esses itens
+  por último; a frase vem de `correcaoAguardandoSync` (`src/lib/conciliacao.ts`),
+  lida pelas telas do computador e do celular. A tela não fecha o aviso: quem
+  fecha é o sync, que confere contra o Emusys.
 - **Saída automática por matrícula (05/09/2026):**
   `processar-matricula-emusys` delega evasão/não renovação à RPC privada
   `registrar_saida_automatica_emusys_v1`, usando unidade + matrícula Emusys e
