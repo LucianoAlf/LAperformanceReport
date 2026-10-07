@@ -210,6 +210,17 @@ const PORTAS = [
       p_preview_message_id: { type: 'string' },
     } },
 
+  // ── VALOR DIVERGENTE NO LOTE (07/10/2026) ─────────────────────────────────
+  // Recreio 07/10: Pix de dois irmãos pago depois do vencimento; a fatura tinha
+  // juros e a escola autorizou sem juros. O card mostra fatura × pago e pede o
+  // motivo; quem entende a explicação é você, quem grava e republica é a ponte.
+  { name: 'caixa_explicar_divergencia', auth: 'caixa_runtime', action: 'explicar_divergencia', capability: 'divergencia',
+    description: 'Registra o MOTIVO que a equipe deu para a diferença de valor de um card de lote (linha `[card_divergencia_aberto: ...]`): fatura de um valor, pagamento de outro. Use quando a mensagem humana EXPLICA a diferença em qualquer forma ("a escola autorizou sem juros, é a última parcela", "desconto combinado com a coordenação", "pagou só a parte dela"). Passe o texto exato da pessoa: ele vira o motivo gravado, sem reescrita. Se a mensagem não explica (dúvida, conversa, "vou ver"), NÃO chame: pergunte o motivo em uma frase. Nunca invente motivo (atraso de sincronização, erro do sistema). A ferramenta republica o card com o motivo e o lançamento continua sendo o "pode" humano no card novo. Nada é gravado no caixa agora.',
+    schema: { ...C,
+      p_texto_original: { type: 'string', description: 'Mensagem humana EXATA que explica a diferença. Não resuma nem reescreva.' },
+      p_preview_message_id: { type: 'string', description: 'ID do card citado, quando a pessoa citou. Vazio só se houver exatamente um card esperando motivo.' },
+    } },
+
   // ── LOTE DE CHEQUES (06/10/2026) ──────────────────────────────────────────
   // CG 06/10: a equipe respondeu ao card "Sol, o Cheque 2 é da Fulana, o 5 é do
   // Beltrano, o 6 é da Sicrana" e levou "não entendi". Recreio 06/10: a equipe
@@ -356,7 +367,10 @@ function chatComCapacidade(chat, capability = 'agent_first') {
   // `cheques`: as ferramentas do lote de cheques valem em todo grupo financeiro
   // oficial (06/10/2026). O interruptor fino é do runtime (cheques.json `agente`),
   // conferido pelo executor na ponte; elas não gravam no caixa (só republicam card).
-  return (capability === 'consulta' || capability === 'operacional' || capability === 'cheques')
+  // `divergencia` (07/10/2026): só registra o motivo e republica o card do lote;
+  // não grava no caixa — o "pode" humano segue no trilho determinístico.
+  return (capability === 'consulta' || capability === 'operacional' || capability === 'cheques'
+    || capability === 'divergencia')
     && chatFinanceiroOficial(chat);
 }
 

@@ -69,6 +69,12 @@ const MOTIVO_HUMANO = {
   cheques_nada_mudou: 'nenhum pedido foi aceito; veja o motivo de cada cheque em `resultados`',
   fonte_faturas_indisponivel: 'não consegui consultar as faturas agora; tentar de novo em instantes',
   fonte_caixa_indisponivel: 'não consegui consultar o caixa agora; tentar de novo em instantes',
+  // valor divergente no lote (07/10/2026)
+  divergencia_sem_card: 'não há card de lote esperando o motivo de diferença de valor neste grupo',
+  divergencia_card_ambiguo: 'há mais de um card esperando motivo; peça para a pessoa citar o card certo',
+  divergencia_card_nao_citado: 'a mensagem citada não é um card que espera motivo de diferença de valor',
+  divergencia_motivo_vazio: 'a mensagem não traz o motivo da diferença',
+  lote_divergencia_sem_motivo: 'o card tem valor diferente da fatura e ainda falta o motivo da equipe; nada foi lançado',
 };
 
 const ORIENTACAO = {
@@ -258,6 +264,13 @@ function criarExecutorCaixaTool({ obterHandler, obterAbf, obterGovernanca, envia
       resultado = await handler.handle({ ...base,
         body: cmd.tipo === 'estornar' ? 'estornar lançamento' : 'corrigir lançamento',
         caixaToolCommand: cmd, caixaToolTarget: alvo });
+    } else if (a === 'explicar_divergencia') {
+      // Valor divergente no lote (07/10/2026): o texto EXATO da pessoa vira o
+      // motivo; o runtime republica o card e só o "pode" nele lança.
+      const textoOriginal = String(args.p_texto_original || '').trim();
+      if (!textoOriginal) return recusa('texto_original_obrigatorio');
+      if (!handler.explicarDivergencia) return recusa('handler_indisponivel');
+      resultado = await handler.explicarDivergencia({ event: { ...base, body: textoOriginal }, textoOriginal });
     } else if (ACOES_CHEQUES[a]) {
       if (!handler.ferramentaCheques) return recusa('handler_indisponivel');
       const textoOriginal = String(args.p_texto_original || '').trim();

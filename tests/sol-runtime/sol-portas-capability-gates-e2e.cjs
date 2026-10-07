@@ -33,6 +33,7 @@ const fs=require('fs'); const LOG=${JSON.stringify(calls)};
 module.exports.criarHandlerFinanceiro=()=>({
   reidratarPendencias:async()=>({ok:true,total:0}), temPendencia:()=>false,
   tratarAgentFirst:async()=>{fs.appendFileSync(LOG,JSON.stringify({tipo:'agent_first'})+'\\n');return {acao:'preview'}},
+  explicarDivergencia:async({event})=>{fs.appendFileSync(LOG,JSON.stringify({tipo:'divergencia',chat:event.chatId})+'\\n');return {acao:'preview_multi_aluno_enviado',previewId:'P2'}},
   handle:async()=>({acao:'handle'})
 });`);
 fs.writeFileSync(abf, `
@@ -121,22 +122,29 @@ const server = http.createServer((req, res) => {
       p_solicitante_telefone: CRACHA, p_chat_id: CHAT_CANARIO,
     } },
   }) + '\n');
+  // Valor divergente (07/10/2026): registrar o motivo republica o card, não grava
+  // — vale em todo grupo financeiro oficial, nunca fora dele.
+  chamar(6, 'caixa_explicar_divergencia', CHAT_BARRA, { p_texto_original: 'a escola autorizou sem juros' });
+  chamar(7, 'caixa_explicar_divergencia', CHAT_FORA, { p_texto_original: 'a escola autorizou sem juros' });
 
   const limite = Date.now() + 5000;
-  while ((out.match(/"jsonrpc"/g) || []).length < 5 && Date.now() < limite) {
+  while ((out.match(/"jsonrpc"/g) || []).length < 7 && Date.now() < limite) {
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   child.kill('SIGTERM');
   const respostas = out.trim().split('\n').filter(Boolean).map(JSON.parse)
     .sort((a, b) => a.id - b.id).map((rpc) => respostaMcp(JSON.stringify(rpc)));
-  assert.strictEqual(respostas.length, 5, out);
+  assert.strictEqual(respostas.length, 7, out);
   assert.strictEqual(respostas[0].ok, true, 'consulta oficial da Barra deve funcionar');
   assert.strictEqual(respostas[1].ok, true, 'preview de abertura da Barra deve funcionar');
   assert.strictEqual(respostas[2].motivo, 'caixa_agent_tools_fora_do_canario');
   assert.strictEqual(respostas[3].motivo, 'caixa_capacidade_fora_do_grupo_oficial');
   assert.strictEqual(respostas[4].ok, true, 'crachá genérico deve ser validado no chat antes da RPC');
+  assert.strictEqual(respostas[5].ok, true, 'motivo da divergência vale no grupo oficial fora do canário');
+  assert.strictEqual(respostas[6].motivo, 'caixa_capacidade_fora_do_grupo_oficial');
   const executadas = fs.readFileSync(calls, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
-  assert.deepStrictEqual(executadas, [{ tipo: 'abertura', chat: CHAT_BARRA }]);
+  assert.deepStrictEqual(executadas.sort((a, b) => a.tipo.localeCompare(b.tipo)),
+    [{ tipo: 'abertura', chat: CHAT_BARRA }, { tipo: 'divergencia', chat: CHAT_BARRA }]);
   console.log('portas Caixa: consulta/operação oficial separadas do canário agent-first — OK');
 })().catch((e) => { console.error(e && e.stack || e); process.exitCode = 1; })
   .finally(() => server.close());

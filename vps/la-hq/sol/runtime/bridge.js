@@ -1343,11 +1343,27 @@ async function caixaAbf() {
                     .map(v => String(v).replace(/:.*@/, '@').replace(/@.*/, '')).filter(Boolean)),
                 }).responder })
               : null;
+            // 🔴 VALOR DIVERGENTE NO LOTE → AGENTE (07/10/2026). O card do lote com
+            //    valor diferente da fatura pede o MOTIVO; a explicação da equipe
+            //    (citando o card, ou do autor do comprovante) vai ao agente com a
+            //    ferramenta `caixa_explicar_divergencia`, em qualquer grupo oficial.
+            //    "pode"/"não" nunca: seguem no trilho determinístico.
+            const _divergenciaConversa = (!_chequesConversa && !event.hasMedia && !_confirmacaoDeterministica && !_complementoDeterministico
+              && _fhPrio && _fhPrio.divergenciaConversa)
+              ? _fhPrio.divergenciaConversa(event, { chamouASol: groupEngagementPolicy.prever({ chatId, texto: body, mentionedIds, senderId,
+                  identidadesProprias: new Set([(sock.user?.id || ''), (sock.user?.lid || '')]
+                    .map(v => String(v).replace(/:.*@/, '@').replace(/@.*/, '')).filter(Boolean)),
+                }).responder })
+              : null;
+            if (_divergenciaConversa) {
+              event.caixaDivergenciaConversa = _divergenciaConversa.resumo;
+              _caixaLog({ step: 'divergencia_conversa_para_agente', chatId: chatId, citou: !!_divergenciaConversa.citou });
+            }
             if (_chequesConversa) {
               event.caixaGovernancaAgentFirstCandidate = true;
               event.caixaChequesConversa = _chequesConversa.resumo;
               _caixaLog({ step: 'cheques_conversa_para_agente', chatId: chatId, citou: !!_chequesConversa.citou });
-            } else if (_textoVaiParaAgentTools) {
+            } else if (_textoVaiParaAgentTools || _divergenciaConversa) {
               // O canário só vira rota agent_first DEPOIS da política de grupo.
               // Antes, mensagens em standby eram marcadas como handoff e ficavam
               // falsamente abertas mesmo sem jamais entrar na sessão/modelo.
@@ -1589,9 +1605,9 @@ async function caixaAbf() {
         // Conversa sobre o lote de cheques vale sem a janela de 3 min (o lote vive o
         // expediente). Não fura dispensa ("não é com você") nem grupo que só registra;
         // fala entre colegas chega ao agente, que pode ficar em silêncio (vazio).
-        if (event.caixaChequesConversa && !decisao.responder
+        if ((event.caixaChequesConversa || event.caixaDivergenciaConversa) && !decisao.responder
             && !['dispensada', 'grupo_so_registra', 'turno_encerrado'].includes(decisao.motivo)) {
-          decisao = { responder: true, motivo: 'cheques_lote' };
+          decisao = { responder: true, motivo: event.caixaChequesConversa ? 'cheques_lote' : 'divergencia_valor' };
         }
         try {
           console.log(JSON.stringify({
@@ -1668,6 +1684,7 @@ async function caixaAbf() {
           const _ep = event.caixaGovernancaEpisode && event.caixaGovernancaEpisode.episode_id;
           if (event.caixaCardsAbertos) event.body = `[card_caixa_aberto: ${event.caixaCardsAbertos}]\n${event.body || ''}`;
           if (event.caixaChequesConversa) event.body = `[lote_cheques_aberto: ${event.caixaChequesConversa}]\n${event.body || ''}`;
+          if (event.caixaDivergenciaConversa) event.body = `[card_divergencia_aberto: ${event.caixaDivergenciaConversa}]\n${event.body || ''}`;
           if (_ep) event.body = `[episode_caixa: ${_ep}]\n${event.body || ''}`;
           const _cr = crachaDoSolicitante(event.senderPhone, chatId);
           if (_cr) {

@@ -1197,6 +1197,47 @@ function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competenci
   return blocos.map(formatarBloco).join('\n\n');
 }
 
+// 🔴 VALOR DIVERGENTE NO LOTE (07/10/2026, Recreio). Pix de dois irmãos pago dois
+//    dias depois do vencimento: cada um casou com a fatura de outubro, só o valor
+//    diferia (perdeu o desconto de pontualidade, entrou juros; a escola autorizou
+//    sem juros). A Sol recusou o lote ("não lanço parcialmente") e ainda chutou
+//    "cópia do Emusys atrasada". Igual ao caminho de UM aluno, o card agora mostra
+//    fatura × pago × diferença, pede o motivo à equipe e só o "pode" lança.
+// ⚠️ O motivo PROVÁVEL sai daqui, das datas e valores da fatura — nunca do modelo.
+//    Sem dado para explicar, diz que não há explicação no sistema.
+function _diaMesBR(iso) {
+  const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}` : null;
+}
+function motivoProvavelDivergencia(item, { hoje = null } = {}) {
+  const pago = Number(item && item.valor);
+  const fat = Number(item && item.valor_fatura);
+  if (!(pago > 0) || !(fat > 0) || Math.abs(pago - fat) < 0.01) return null;
+  const f = (item && item.fatura) || {};
+  const num = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+  if (f.status === 'paga') return `o Emusys registra ${fmtBRL(fat)} pago nessa fatura; o comprovante tem ${fmtBRL(pago)}`;
+  const venc = /^\d{4}-\d{2}-\d{2}/.test(String(f.data_vencimento || '')) ? String(f.data_vencimento).slice(0, 10) : null;
+  const hojeIso = hoje || new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+  const vencida = f.vencida === true || (!!venc && venc < hojeIso);
+  if (vencida && pago < fat) {
+    const comDesc = num(f.valor_com_desconto);
+    const semDesc = num(f.valor_sem_desconto_condicional);
+    const hojeV = num(f.valor_hoje) || fat;
+    const partes = [];
+    if (comDesc && semDesc && semDesc - comDesc >= 0.01) partes.push(`perda do desconto de pontualidade (${fmtBRL(semDesc - comDesc)})`);
+    if (semDesc && hojeV - semDesc >= 0.01) partes.push(`juros/multa (${fmtBRL(hojeV - semDesc)})`);
+    let t = `pago depois do vencimento${venc ? ` (${_diaMesBR(venc)})` : ''}`;
+    t += partes.length ? `: a fatura de hoje soma ${partes.join(' e ')}` : ': a fatura de hoje já inclui encargos de atraso';
+    if (comDesc && Math.abs(pago - comDesc) < 0.01) t += ` — o valor pago é o da parcela com desconto (${fmtBRL(comDesc)})`;
+    else if (comDesc && Math.abs(pago - comDesc) <= 1) t += ` — o valor pago fica perto do da parcela com desconto (${fmtBRL(comDesc)})`;
+    return t;
+  }
+  return pago < fat ? 'pago a menor que a fatura, sem explicação no sistema' : 'pago a maior que a fatura, sem explicação no sistema';
+}
+const _itemDivergente = (i) => !!(i && i.divergencia_valor === true);
+const _divergenciaComMotivo = (i) => _itemDivergente(i) && i.divergencia_aceita === true
+  && String(i.divergencia_motivo || '').trim().length >= 3;
+
 function montarPreviewMultiAluno({ unidadeNome, valorTotal, forma, categoria, itens }) {
   const lista = Array.isArray(itens) ? itens : [];
   // Adiantamento declarado (SOL-134, 29/09/2026) é item sem fatura por definição,
@@ -1219,8 +1260,17 @@ function montarPreviewMultiAluno({ unidadeNome, valorTotal, forma, categoria, it
         ? (item.descricao || `${cap(item.categoria || 'Fatura')}${item.competencia ? ' ' + item.competencia : ''}`)
         : (item.competencia || item.descricao || 'Fatura'))
       : item.aluno_nome;
+    if (_itemDivergente(item)) {
+      const dif = Number(item.valor) - Number(item.valor_fatura);
+      const provavel = motivoProvavelDivergencia(item);
+      return `• ${rotulo} — fatura ${fmtBRL(item.valor_fatura)} · pago *${fmtBRL(item.valor)}* · diferença ${dif < 0 ? '-' : '+'}${fmtBRL(Math.abs(dif))}`
+        + (provavel ? `\n   _provável: ${provavel}_` : '')
+        + (_divergenciaComMotivo(item) ? `\n   Motivo (equipe): "${String(item.divergencia_motivo).trim()}"` : '');
+    }
     return `• ${rotulo} — ${fmtBRL(item.valor)}${item.sem_vinculo_fatura ? ' _(desconto autorizado — sem fatura correspondente no Emusys)_' : ''}`;
   });
+  const divergentes = lista.filter(_itemDivergente);
+  const faltaMotivo = divergentes.some((i) => !_divergenciaComMotivo(i));
   const responsaveis = [...new Set(lista.map((i) => String(i.responsavel_financeiro || '').trim()).filter(Boolean))];
   const linhaResponsavel = responsaveis.length === 1 ? `\n• Resp. financeiro: ${responsaveis[0]}`
     : (responsaveis.length > 1 ? `\n• Resp. financeiros: ${responsaveis.join(' · ')}` : '');
@@ -1249,8 +1299,11 @@ function montarPreviewMultiAluno({ unidadeNome, valorTotal, forma, categoria, it
     `📄 *Comprovante recebido — ${unidadeNome}*`,
     `*RECEBIMENTO*\n\n*${fmtBRL(valorTotal)}* · ${formaTxt}`,
     blocoPessoas,
-    `*FATURA*\n\n• ${faturaTexto}\n• Valor: ${fmtBRL(valorTotal)} ✅ confere\n${linhaStatus}${semVinculo.length ? `\n• ⚠️ ${semVinculo.length} item(ns) sem fatura correspondente, com desconto explicitamente autorizado — confira essa exceção antes de aprovar.` : ''}`,
-    '👉 *Posso lançar o lote completo no caixa de hoje?* Responde *pode*',
+    `*FATURA*\n\n• ${faturaTexto}\n• Valor: ${fmtBRL(valorTotal)} ✅ confere\n${linhaStatus}${semVinculo.length ? `\n• ⚠️ ${semVinculo.length} item(ns) sem fatura correspondente, com desconto explicitamente autorizado — confira essa exceção antes de aprovar.` : ''}`
+      + (divergentes.length ? `\n• ⚠️ ${divergentes.length} item(ns) com valor diferente da fatura: lanço o valor que entrou, vinculado à fatura. A baixa no Emusys fica com a equipe.` : ''),
+    faltaMotivo
+      ? '👉 *Qual o motivo da diferença?* Me explica citando este card (ex.: _a escola autorizou sem juros_). Com o motivo eu atualizo o card e aí é só responder *pode*.'
+      : '👉 *Posso lançar o lote completo no caixa de hoje?* Responde *pode*',
   ].join('\n\n');
 }
 
@@ -5640,6 +5693,73 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     return { ...pub, resultados: r.resultados, estado: r.estado };
   }
 
+  // ---- VALOR DIVERGENTE: MOTIVO DA EQUIPE (07/10/2026) ----------------------
+  // O card do lote com valor diferente da fatura pede o motivo. Quem ENTENDE a
+  // explicação ("a escola autorizou sem juros, é a última parcela") é o agente; a
+  // ferramenta `caixa_explicar_divergencia` só grava o texto EXATO da pessoa como
+  // motivo e republica o card (substitui o anterior no V3). Nada de regex para
+  // interpretar a explicação, e nada lança sem o "pode" no card novo.
+  const _citaPendDiv = (p, id) => !!id && (p.previewId === id || p.origem === id
+    || (Array.isArray(p.msgIds) && p.msgIds.includes(id)));
+  function cardsDivergenciaAbertos(chatId, agora = Date.now()) {
+    return limparVelhos(chatId, agora).filter((p) => p.tipoOperacao === 'lancar_recebimento_lote'
+      && !p.bloqueiaLancamento && Array.isArray(p.itens) && p.itens.some((i) => _itemDivergente(i) && !_divergenciaComMotivo(i)));
+  }
+  function alvoDivergencia(event, agora = Date.now()) {
+    const abertos = cardsDivergenciaAbertos(event.chatId, agora);
+    if (!abertos.length) return { motivo: 'divergencia_sem_card' };
+    const q = event.quotedMessageId ? String(event.quotedMessageId) : null;
+    if (q) {
+      const citado = abertos.find((p) => _citaPendDiv(p, q));
+      return citado ? { alvo: citado, citou: true } : { motivo: 'divergencia_card_nao_citado' };
+    }
+    return abertos.length === 1 ? { alvo: abertos[0], citou: false } : { motivo: 'divergencia_card_ambiguo' };
+  }
+  // Rota (bridge): esta mensagem é conversa sobre o card que espera o motivo?
+  // Citou o card, ou é do AUTOR do comprovante sem valor novo no texto (valor
+  // novo é outro pagamento e segue o caminho de sempre). "pode"/"não" nunca.
+  function divergenciaConversa(event, { chamouASol = false } = {}) {
+    try {
+      if (!event || event.hasMedia) return null;
+      const txt = bodyLimpo(event.body);
+      if (!txt || casarPode(txt, { respondeuPreview: !!event.quotedMessageId }).pode || casarNao(txt)) return null;
+      const r = alvoDivergencia(event);
+      if (!r.alvo) return null;
+      const falante = String(event.senderPhone || event.senderId || '');
+      const doAutor = !!falante && [r.alvo.autorPhone, r.alvo.autorId].some((x) => x && String(x) === falante);
+      if (!r.citou && !doAutor && !chamouASol) return null;
+      if (!r.citou && Number(extrairValor(txt)) > 0) return null;
+      const _limpa = (s) => String(s || '').replace(/[\[\]\n\r]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
+      const linhas = r.alvo.itens.filter(_itemDivergente).map((i) =>
+        `${_limpa(i.aluno_nome)}: fatura ${fmtBRL(i.valor_fatura)}, pago ${fmtBRL(i.valor)}`);
+      return { citou: r.citou, resumo: `card de lote ${fmtBRL(r.alvo.valor)} AGUARDANDO O MOTIVO da diferença de valor -- ${linhas.join(' | ')}. `
+        + 'Se a mensagem explica o motivo, chame caixa_explicar_divergencia com o texto exato; se não explica, pergunte o motivo em uma frase. Nada lança sem o pode no card novo.' };
+    } catch (_) { return null; }
+  }
+  async function explicarDivergencia({ event, textoOriginal }) {
+    const agora = Date.now();
+    const grp = grupos[event.chatId];
+    if (!grp) return { acao: 'divergencia_recusada', motivo: 'grupo_fora_do_caixa' };
+    const motivoTxt = bodyLimpo(String(textoOriginal || '')).replace(/^@?sol\b\s*[,;:-]?\s*/i, '').replace(/\s+/g, ' ').trim().slice(0, 200);
+    if (motivoTxt.length < 3) return { acao: 'divergencia_recusada', motivo: 'divergencia_motivo_vazio' };
+    const r = alvoDivergencia(event, agora);
+    if (!r.alvo) return { acao: 'divergencia_recusada', motivo: r.motivo };
+    const alvo = r.alvo;
+    let quem = null;
+    try { quem = nomeParaCarimbo(await identidadeFn(event.senderPhone, grp.unidade_id), event); } catch (_) { /* melhor esforço */ }
+    const itens = alvo.itens.map((i) => (_itemDivergente(i)
+      ? { ...i, divergencia_aceita: true, divergencia_motivo: motivoTxt, divergencia_por: quem || null } : { ...i }));
+    log({ acao: 'divergencia_motivo_recebido', chatId: event.chatId, itens: itens.filter(_itemDivergente).length, citou: !!r.citou });
+    // Mesmo trilho do lote: preview novo SUBSTITUI o anterior (V3 atômico) e só o
+    // "pode" nele lança. O autor original continua dono da conversa.
+    return abrirFluxoMultiAluno({ event, grupo: grp, textoFonte: null, textoHumano: null, agora,
+      intent: { ok: true, tipo_recebimento: 'multi_aluno', valor_total: alvo.valor, forma: alvo.forma, categoria: alvo.categoria,
+        itens: itens.map((i) => ({ aluno_nome: i.aluno_nome, valor: i.valor, competencia: i.competencia, categoria: i.categoria })) },
+      origemMessageId: alvo.origem, resolvidoPronto: { ok: true, itens },
+      agentFirstEnvelope: alvo.agentFirstEnvelope || null, evidenceEnvelope: alvo.evidenceEnvelope || null,
+      supersedePreviewId: alvo.previewId, divergenciaAutor: { autorPhone: alvo.autorPhone, autorId: alvo.autorId } });
+  }
+
   function chequesConversa(event, opcoes) {
     try { return cheques && cheques.conversa ? cheques.conversa(event, opcoes) : null; } catch (_) { return null; }
   }
@@ -5847,7 +5967,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   async function abrirFluxoMultiAluno({ event, grupo, textoFonte, textoHumano, intent, agora,
     origemMessageId, resolvidoPronto = null, agentFirstEnvelope = null,
     evidenceEnvelope = null, supersedePreviewId = null, textoPronto = null, tetoItens = null,
-    adiantamento = null }) {
+    adiantamento = null, divergenciaAutor = null }) {
     const arr = limparVelhos(event.chatId, agora);
     // Janela de reenvio: OCR lento (frequente, ~45s de timeout) leva a equipe a mandar o
     // MESMO comprovante de novo. Sem isto, cada reenvio empilha outra pendencia MANUAL
@@ -5956,6 +6076,25 @@ _Não lanço nada pela metade._`);
         log({ acao: 'resolver_multi_aluno_erro', chatId: event.chatId, erro: String(e && e.message) });
       }
     }
+    // 🔴 VALOR DIVERGENTE (07/10/2026): o banco casou CADA item com UMA fatura e só
+    //    o valor difere. Vira card com a diferença (o motivo vem da equipe, o "pode"
+    //    lança). Confere de novo aqui o que a trava exige: um item por aluno
+    //    declarado, todos com fatura, e a soma fechando com o comprovante. Qualquer
+    //    falha = recusa de sempre, nunca lançamento parcial.
+    if (resolvido && resolvido.ok === false && resolvido.motivo === 'valor_divergente'
+        && Array.isArray(resolvido.itens)) {
+      const _its = resolvido.itens;
+      const _somaDiv = Number(_its.reduce((s, i) => s + Number(i && i.valor || 0), 0).toFixed(2));
+      const _coerente = _its.length >= 2
+        && _its.length === (Array.isArray(intent.itens) ? intent.itens.length : -1)
+        && _its.every((i) => i && i.canonical_fatura_id && i.sem_vinculo_fatura !== true && Number(i.valor) > 0)
+        && _its.some((i) => _itemDivergente(i) && Number(i.valor_fatura) > 0)
+        && _its.filter(_itemDivergente).every((i) => Number(i.valor_fatura) > 0)
+        && Math.abs(_somaDiv - Number(intent.valor_total)) < 0.01;
+      log({ acao: 'multi_valor_divergente', chatId: event.chatId, itens: _its.length,
+            divergentes: _its.filter(_itemDivergente).length, coerente: _coerente });
+      if (_coerente) resolvido = { ...resolvido, ok: true };
+    }
     if (!resolvido || !resolvido.ok || !Array.isArray(resolvido.itens)) {
       const _revisao = await colocarEmRevisao(resolvido && resolvido.motivo || 'itens_nao_validados');
       // 🔴 NOME QUASE CERTO NÃO É BECO SEM SAÍDA (06/10/2026, caso CG de 05/10).
@@ -6025,12 +6164,19 @@ _Não lanço nada pela metade._`);
           const quantos = n > 1 ? `achei ${n} alunos` : 'achei mais de um aluno';
           return `${quantos} com esse primeiro nome nesta unidade e não escolho por você — me manda o nome completo${_quem ? '' : ' de cada um'}.`;
         })(),
+        // 🔴 07/10/2026: com a fatura ACHADA, o problema é o valor, não a cópia do
+        //    Emusys — o "minha cópia pode estar atrasada" mandava a equipe esperar à toa.
         valor_declarado_nao_bate: (() => {
           const enc = Number(resolvido && resolvido.valor_encontrado);
           const dec = Number(resolvido && resolvido.valor_declarado);
-          const visto = enc ? ` A fatura que achei${_quem} é de ${fmtBRL(enc)}.` : '';
-          return `o valor que você escreveu${dec ? ` (${fmtBRL(dec)})` : ''} ainda não bate com uma fatura oficial${_quem}.${visto} Se o pagamento acabou de entrar, minha cópia do Emusys pode estar atrasada — me reenvia daqui a pouco. Não criei card aprovável.`;
+          if (enc) {
+            return `o valor que você escreveu${dec ? ` (${fmtBRL(dec)})` : ''} não bate com a fatura${_quem} (${fmtBRL(enc)}) e não consegui ligar o pagamento a uma fatura só — confere o valor e o mês de cada um. Não criei card aprovável.`;
+          }
+          return `o valor que você escreveu${dec ? ` (${fmtBRL(dec)})` : ''} ainda não bate com uma fatura oficial${_quem}. Se o pagamento acabou de entrar, minha cópia do Emusys pode estar atrasada — me reenvia daqui a pouco. Não criei card aprovável.`;
         })(),
+        // O banco casou as faturas, mas a conferência daqui não fechou (item a mais
+        // ou a menos, soma diferente do comprovante, fatura sem valor).
+        valor_divergente: 'achei a fatura de cada um, mas os valores não fecham com o comprovante — confere o valor de cada aluno e o total.',
         aluno_baixa_confianca: `o nome informado não bateu com segurança no cadastro${_quem}. Me manda o nome completo de cada aluno, exatamente como está no sistema.${_parecidos} Não criei card aprovável.`,
         aluno_sem_nome: 'não consegui ler o nome de um dos alunos — ' + _pedeDivisao + '.',
         sem_fatura_que_bata: `ainda não achei fatura oficial${_quem} que feche com esse valor. Se o pagamento acabou de entrar, minha cópia do Emusys pode estar atrasada — me reenvia daqui a pouco. Não criei card aprovável.`,
@@ -6111,6 +6257,14 @@ _Não lanço nada pela metade._`);
       desconto_negociado_explicito: !!item.sem_vinculo_fatura && !_ehAdiantamentoDeclarado(item)
         && _autorizacaoDesconto.ok && _entradasAutorizadas.has(_chaveItem(item)),
       ...(_ehAdiantamentoDeclarado(item) ? { adiantamento: true } : {}),
+      // Valor divergente (07/10/2026): o validador do lote só aceita com o motivo
+      // da equipe e com a fatura ainda no valor que o card mostrou.
+      ...(_itemDivergente(item) ? {
+        divergencia_valor: true, valor_fatura: Number(item.valor_fatura),
+        ...(_divergenciaComMotivo(item) ? { divergencia_aceita: true,
+          divergencia_motivo: String(item.divergencia_motivo).trim().slice(0, 200),
+          divergencia_por: item.divergencia_por || null } : {}),
+      } : {}),
     }));
     const texto = textoPronto || montarPreviewMultiAluno({ unidadeNome: grupo.nome, valorTotal: intent.valor_total, forma: intent.forma, categoria: intent.categoria, itens });
     let idEnviou = null;
@@ -6123,6 +6277,12 @@ _Não lanço nada pela metade._`);
       enviadoPor: nomeParaCarimbo(idEnviou, event), ts: agora,
       evidenceEnvelope,
     };
+    // Card com valor divergente: o autor fica para a conversa do motivo (só ele
+    // responde sem citar; quem cita o card também vale).
+    if (itens.some(_itemDivergente)) {
+      pendencia.autorPhone = (divergenciaAutor && divergenciaAutor.autorPhone) || event.senderPhone || null;
+      pendencia.autorId = (divergenciaAutor && divergenciaAutor.autorId) || event.senderId || null;
+    }
     // O envelope faz parte do estado persistido do preview V3. Guardar apenas
     // num Map resolvia o segundo turno ate o primeiro restart; depois o bridge
     // reidratava o card sem os fatos que o LLM tinha estruturado.
@@ -9761,6 +9921,15 @@ _Não lanço nada pela metade._`);
           log({ acao: 'lote_multi_bloqueado_sem_v3', chatId });
           return { acao: 'lote_multi_bloqueado_sem_v3' };
         }
+        // Valor divergente sem o motivo da equipe: o "pode" não lança e o card
+        // continua aberto (o validador do banco recusaria do mesmo jeito).
+        const _semMotivo = alvo.itens.filter((i) => _itemDivergente(i) && !_divergenciaComMotivo(i));
+        if (_semMotivo.length) {
+          await sendFn(chatId, `⚠️ Ainda não lancei: ${_semMotivo.length === 1 ? 'o valor de um aluno difere' : 'o valor de alguns alunos difere'} da fatura e falta o *motivo da diferença*. `
+            + 'Me explica em uma frase citando o card; eu atualizo o card com o motivo e aí você responde *pode*.');
+          log({ acao: 'lote_divergencia_sem_motivo', chatId, itens: _semMotivo.length });
+          return { acao: 'lote_divergencia_sem_motivo' };
+        }
         let idAut = null;
         try { idAut = await identidadeFn(event.senderPhone, alvo.unidade_id); } catch (e) { /* melhor esforço */ }
         const autorizadoPor = nomeParaCarimbo(idAut, event);
@@ -9808,9 +9977,12 @@ _Não lanço nada pela metade._`);
             const rotulo = mesmoAlunoVariasFaturas
               ? (item.descricao || `${cap(item.categoria || 'Fatura')}${item.competencia ? ' ' + item.competencia : ''}`)
               : (m.aluno_nome || item.aluno_nome || 'Item');
-            return `• ${rotulo}: ${fmtBRL(m.valor)}`;
+            return `• ${rotulo}: ${fmtBRL(m.valor)}`
+              + (_divergenciaComMotivo(item) ? ` (fatura ${fmtBRL(item.valor_fatura)} · motivo: ${String(item.divergencia_motivo).trim()})` : '');
           }).join('\n');
-          const reciboLote = await sendFn(chatId, `✅ Lancei o lote no caixa da ${alvo.nome}: ${fmtBRL(alvo.valor)} (${alvo.forma}).\n${linhas}\n_Operação única e auditada; nenhum item foi lançado parcialmente._`);
+          const _avisoBaixa = alvo.itens.some(_itemDivergente)
+            ? '\n_Lancei o valor que entrou, vinculado à fatura; a baixa no Emusys fica com a equipe._' : '';
+          const reciboLote = await sendFn(chatId, `✅ Lancei o lote no caixa da ${alvo.nome}: ${fmtBRL(alvo.valor)} (${alvo.forma}).\n${linhas}\n_Operação única e auditada; nenhum item foi lançado parcialmente._${_avisoBaixa}`);
           await governance(event, 'write_applied', { action: 'lote_lancado', movement_ref: lote.lote_id, approval_ref: approval.approval_id, preview_ref: alvo.v3PreviewId, outcome: 'ok' });
           await governance(event, 'approval_consumed', { approval_ref: approval.approval_id, movement_ref: lote.lote_id, outcome: 'ok' });
           await governance(event, 'receipt_sent', { receipt_ref: reciboLote, movement_ref: lote.lote_id, preview_ref: alvo.v3PreviewId, outcome: 'ok' });
@@ -9839,6 +10011,8 @@ _Não lanço nada pela metade._`);
           snapshot_categoria_mudou: 'a categoria de uma fatura mudou desde o preview',
           snapshot_competencia_mudou: 'a competência de uma fatura mudou desde o preview',
           snapshot_soma_divergente: 'a soma das faturas não confere com o total',
+          snapshot_divergencia_sem_motivo: 'falta o motivo da diferença de valor',
+          snapshot_divergencia_incompleta: 'a diferença de valor não está ligada a uma fatura só',
           fonte_indisponivel: 'a fonte oficial de faturas está indisponível',
         }[motivoLote] || 'a validação final não reproduziu o preview';
         await sendFn(chatId, `⚠️ Não lancei o lote: ${motivoHumano}. Nada foi lançado parcialmente. O card continua aberto por até ${Math.round(janelaMs / 60000)} min desde que foi enviado; depois disso, reenvia o comprovante.`);
@@ -10494,7 +10668,7 @@ _Não lanço nada pela metade._`);
   return { handle, temPendencia, tokenEstadoPendencias, citaAlgumaPendencia, citaCardPendenteDaSol, ehConversaSemComando,
     reidratarPendencias, tratarNaoEntendida, observarRoteadorV4, decidirRoteadorV4, tratarAgentFirst,
     deveTratarConfirmacaoDeterministica, deveTratarComplementoDeterministico, resumoCardsAbertosParaAgente,
-    ferramentaCheques, chequesConversa, citaLoteCheques,
+    ferramentaCheques, chequesConversa, citaLoteCheques, divergenciaConversa, explicarDivergencia,
     _pendentes: pendentes, _envelopesV4: envelopesV4, _rascunhosV4: rascunhosV4, _escolhasMovimento: escolhasMovimento };
 }
 
@@ -10512,7 +10686,7 @@ module.exports = {
   construirEnvelopeEvidenciasV1, mesclarEnvelopesEvidenciasV1,
   compararEnvelopeEvidenciasV1, _evidenciaShadowLigado,
   casarNao, ehConversaSemComando,
-  montarPreview, montarPreviewMultiAluno, descricaoParcelaCoerente, fmtBRL, carregarEnv, lancarRecebimento, lancarRecebimentoLote, resolverMultiAlunoCaixaV1, resolverPagamentoItensV1, resolverCompostoAlunoCaixaV1, lancarSaidaCaixa, buscarLancamentoParaCorrecao,
+  montarPreview, montarPreviewMultiAluno, motivoProvavelDivergencia, descricaoParcelaCoerente, fmtBRL, carregarEnv, lancarRecebimento, lancarRecebimentoLote, resolverMultiAlunoCaixaV1, resolverPagamentoItensV1, resolverCompostoAlunoCaixaV1, lancarSaidaCaixa, buscarLancamentoParaCorrecao,
   buscarMovimentosCaixa, corrigirMovimentoCaixa, estornarMovimentoCaixa, registrarPreviewV3, registrarApprovalV3, finalizarPreviewV3, criarHandlerFinanceiro,
   confirmacaoLimpa, classificarMidia, bodyLimpo, nomeDoAtor, buscarResponsavel, mesmaPessoa, pagamentoMultiplo,
   extrairDivisaoPagamento, extrairSomaAditivaPagamento, extrairAdicionalPagamento, detectarLojinhaProduto, naturezaVendaDoTexto, detectarContextoMultiAluno, validarIntencaoMultiAluno,
