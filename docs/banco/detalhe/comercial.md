@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-18 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-06 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — comercial
@@ -248,6 +248,9 @@
 **Únicos:**
 - `canais_origem_pkey`
 - `uk_canais_nome_normalizado`
+
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 
 ## contatos_bloqueados_campanha
 
@@ -708,15 +711,25 @@
 | `contexto_ia` | jsonb | sim |  |  |
 | `contexto_ia_em` | timestamp with time zone | sim |  |  |
 | `emusys_agendamento_id` | bigint | sim |  |  |
+| `chamada_em` | timestamp with time zone | sim |  |  |
+| `chamada_por` | integer | sim |  |  |
+| `chamada_status` | text | sim |  |  |
+| `chamada_origem` | text | sim |  |  |
+| `emusys_aula_id_webhook` | integer | sim |  |  |
 
 **Únicos:**
 - `lead_experimentais_pkey`
 - `uq_lead_exp_aula`
+- `uq_lead_exp_aula_webhook`
 - `uq_lead_exp_legado`
 
 **Triggers:**
 - `trg_audit → fn_audit_log()`
-- `trg_eventos_operacionais_experimental → trg_eventos_operacionais_experimental()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
+- `trg_eventos_operacionais_experimental_atribuicao → trg_eventos_operacionais_experimental()`
+- `trg_eventos_operacionais_experimental_cancelada → trg_eventos_operacionais_experimental_cancelada()`
+- `trg_eventos_operacionais_experimental_insert → trg_eventos_operacionais_experimental()`
+- `trg_eventos_operacionais_experimental_remarcada → trg_eventos_operacionais_experimental_remarcada()`
 - `trg_experimental_normaliza_referencia_aula → fn_experimental_normaliza_referencia_aula()`
 - `trg_experimental_preenche_curso → trg_experimental_preenche_curso_do_lead()`
 - `trg_propagar_professor_experimental → fn_propagar_professor_experimental()`
@@ -773,6 +786,9 @@
 **Únicos:**
 - `lead_experimentais_decisoes_humanas_pkey`
 - `lead_experimentais_decisoes_humanas_unique`
+
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 
 ## lead_experimental_aulas
 
@@ -982,6 +998,7 @@
 - `tr_sync_experimentais_professor → sync_experimentais_professor()`
 - `tr_sync_experimentais_unidade → sync_experimentais_unidade()`
 - `trg_audit → fn_audit_log()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_calcular_faixa_etaria_lead → trg_calcular_faixa_etaria_lead()`
 - `trg_lead_herda_consultor → trg_lead_herda_consultor_da_unidade()`
 - `update_leads_updated_at → update_updated_at_column()`
@@ -1004,6 +1021,10 @@
 
 **Únicos:**
 - `leads_automacao_log_pkey`
+
+**Triggers:**
+- `trg_eventos_operacionais_log_experimental → trg_eventos_operacionais_log_experimental()`
+- `trg_remover_cpf_leads_automacao_log → remover_cpf_claro_jsonb_trigger()`
 
 ## leads_backup_flags_20260601
 
@@ -1415,7 +1436,7 @@
 
 ## vw_experimental_aula_canonica
 
-> Liga experimental a aula fisica confirmada pelo roster; fallback so aceita mesma unidade, pessoa, data e horario.
+> Experimentais visiveis na Agenda. O caminho principal usa lead_experimental_aulas ativo, reconciliado contra a aula fisica do Emusys; o roster so permanece como fallback legado sem vinculo.
 
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|

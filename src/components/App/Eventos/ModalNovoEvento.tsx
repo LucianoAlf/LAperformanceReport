@@ -1,0 +1,175 @@
+import { useEffect, useState } from 'react';
+import { format } from 'date-fns';
+import { toast } from 'sonner';
+
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { DatePicker } from '@/components/ui/date-picker';
+import { TimePicker24h } from '@/components/ui/time-picker-24h';
+import { criarEvento, useUnidadesParaEvento } from '@/hooks/useEventos';
+
+// ISO 'YYYY-MM-DD' → Date LOCAL. `new Date(iso)` interpreta UTC e devolve o dia
+// anterior no Brasil — a mesma armadilha que o modulo de impressao ja derrubou.
+function isoParaDate(iso: string): Date | undefined {
+  const [a, m, d] = iso.split('-').map(Number);
+  return a && m && d ? new Date(a, m - 1, d) : undefined;
+}
+
+interface Props {
+  aberto: boolean;
+  /** null = consolidado; ai a unidade e escolhida no formulario */
+  unidadeAtual: string | null;
+  onFechar: () => void;
+  onCriado: () => void;
+}
+
+export function ModalNovoEvento({ aberto, unidadeAtual, onFechar, onCriado }: Props) {
+  const unidades = useUnidadesParaEvento();
+  const [unidadeId, setUnidadeId] = useState('');
+  const [titulo, setTitulo] = useState('');
+  const [data, setData] = useState('');
+  const [dataFim, setDataFim] = useState('');
+  const [horario, setHorario] = useState('09:00');
+  const [local, setLocal] = useState('');
+  const [salvando, setSalvando] = useState(false);
+
+  // O evento e SEMPRE de uma unidade. Com filtro ativo ela ja esta decidida; no
+  // consolidado o usuario escolhe, porque "as tres" nao e um evento valido.
+  useEffect(() => {
+    if (aberto) {
+      setUnidadeId(unidadeAtual ?? '');
+      setTitulo('');
+      setData('');
+      setDataFim('');
+      setHorario('09:00');
+      setLocal('');
+    }
+  }, [aberto, unidadeAtual]);
+
+  async function salvar() {
+    if (!unidadeId) {
+      toast.error('Escolha a unidade do evento');
+      return;
+    }
+    if (!titulo.trim()) {
+      toast.error('Dê um título ao evento');
+      return;
+    }
+    if (!data) {
+      toast.error('Informe a data do evento');
+      return;
+    }
+    if (dataFim && dataFim < data) {
+      toast.error('O último dia não pode ser antes do primeiro');
+      return;
+    }
+
+    setSalvando(true);
+    const { error } = await criarEvento({
+      unidade_id: unidadeId,
+      titulo: titulo.trim(),
+      data_evento: data,
+      // Recital de varios dias (Recreio 13–15/11): o bloco escolhe o dia na Grade; aqui o
+      // evento so precisa saber ate quando vai.
+      data_fim: dataFim || null,
+      horario_inicio: horario,
+      local: local.trim() || null,
+    });
+    setSalvando(false);
+
+    if (error) {
+      toast.error('Erro ao criar evento', { description: error.message });
+      return;
+    }
+    onCriado();
+  }
+
+  return (
+    <Dialog open={aberto} onOpenChange={(v) => !v && onFechar()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Novo evento</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {!unidadeAtual && (
+            <div className="space-y-2">
+              <Label>Unidade</Label>
+              <Select value={unidadeId} onValueChange={setUnidadeId}>
+                <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
+                <SelectContent>
+                  {unidades.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[12px] text-slate-500">
+                Cada unidade tem o seu recital, com data própria.
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label htmlFor="evento-titulo">Título</Label>
+            <Input
+              id="evento-titulo"
+              value={titulo}
+              onChange={(e) => setTitulo(e.target.value)}
+              placeholder="Ex.: Recital de Fim de Ano 2026"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Primeiro dia</Label>
+              <DatePicker
+                date={isoParaDate(data)}
+                onDateChange={(d) => setData(d ? format(d, 'yyyy-MM-dd') : '')}
+                placeholder="Primeiro dia"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Último dia (opcional)</Label>
+              <DatePicker
+                date={isoParaDate(dataFim)}
+                onDateChange={(d) => setDataFim(d ? format(d, 'yyyy-MM-dd') : '')}
+                minDate={isoParaDate(data)}
+                placeholder="Um dia só"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Início</Label>
+              <TimePicker24h value={horario} onChange={setHorario} />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="evento-local">Local (opcional)</Label>
+            <Input
+              id="evento-local"
+              value={local}
+              onChange={(e) => setLocal(e.target.value)}
+              placeholder="Ex.: Teatro da unidade"
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onFechar} disabled={salvando}>
+            Cancelar
+          </Button>
+          <Button onClick={salvar} disabled={salvando}>
+            {salvando ? 'Criando…' : 'Criar evento'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

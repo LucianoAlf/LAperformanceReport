@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { aplicarMetricasFidelizaCanonicas } from '@/lib/fidelizaCanonico';
+import { metaLojinhaDaUnidade } from '@/lib/fidelizaMobile';
 
 // Tipos
 export interface ConfigFideliza {
@@ -122,12 +123,9 @@ export interface DadosFideliza {
   experiencias: Experiencia[];
 }
 
-// Mapeamento de UUIDs para metas de lojinha
-const UNIDADE_LOJINHA_MAP: Record<string, string> = {
-  '2ec861f6-023f-4d7b-9927-3960ad8c2a92': 'lojinha_campo_grande',
-  '95553e96-971b-4590-a6eb-0201d013c14d': 'lojinha_recreio',
-  '368d47f5-2d88-4475-bc14-ba084a9a348e': 'lojinha_barra',
-};
+// ⚠️ O mapa UUID→chave de meta de lojinha mora em `@/lib/fidelizaMobile`
+// (`metaLojinhaDaUnidade`), fonte única compartilhada com a tela do celular.
+// Duas tabelas divergiriam no dia em que uma unidade nascesse.
 
 // Hook principal
 export function useFidelizaPrograma(ano: number = 2026, trimestre?: number, unidadeId?: string) {
@@ -146,8 +144,7 @@ export function useFidelizaPrograma(ano: number = 2026, trimestre?: number, unid
     const { metas, pontuacao: pts } = cfg;
     
     // Meta de lojinha específica da unidade
-    const metaLojinhaKey = UNIDADE_LOJINHA_MAP[farmer.unidade_id] as keyof typeof metas;
-    const metaLojinha = metas[metaLojinhaKey] || 3000;
+    const metaLojinha = metaLojinhaDaUnidade(metas, farmer.unidade_id);
 
     // Verificar critérios batidos
     const bateuChurn = metricas.churn_rate <= metas.churn_maximo;

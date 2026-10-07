@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-18 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-28 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — plataforma
 
-24 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+28 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## _auditoria_chave_natural_20260809
 
@@ -97,6 +97,19 @@
 **Únicos:**
 - `auditoria_acesso_pkey`
 
+## cache_versao_log
+
+> LAPE-42: uma linha por comando de escrita nas tabelas lidas pelos caches de servidor. Versao de cache = count:max:sum dos ids visiveis. Podado por cache_versao_podar_v1.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `tabela` | text | não |  |  |
+| `em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `cache_versao_log_pkey`
+
 ## ficha_tokens
 
 > Token pessoal por colaborador. Uso unico: usado_em preenchido trava o reenvio. RLS sem policy por design — so service_role le; token nunca vai para o client.
@@ -132,6 +145,20 @@
 **Únicos:**
 - `migrations_audit_data_nascimento_pkey`
 
+## paginas_rpc_cache
+
+> Cache generico das RPCs pesadas de pagina (agenda, alunos, administrativo, professores). Chave = recorte logico (+escopo de unidades quando a funcao filtra por usuario). TTL na funcao wrapper. Criado em 2026-09-24.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `funcao` | text | não |  |  |
+| `cache_key` | text | não |  |  |
+| `payload` | jsonb | não |  |  |
+| `built_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `paginas_rpc_cache_pkey`
+
 ## perfil_permissoes
 
 > Relacionamento N:N entre perfis e permissoes
@@ -146,6 +173,9 @@
 **Únicos:**
 - `perfil_permissoes_perfil_id_permissao_id_key`
 - `perfil_permissoes_pkey`
+
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 
 ## perfis
 
@@ -188,6 +218,34 @@
 - `permissoes_codigo_key`
 - `permissoes_pkey`
 
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
+
+## porteiro_config
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | boolean | não | true |  |
+| `modo` | text | não |  |  |
+
+**Únicos:**
+- `porteiro_config_pkey`
+
+## porteiro_recusa
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `quando` | timestamp with time zone | não | now() |  |
+| `usuario_id` | integer | sim |  |  |
+| `auth_user_id` | uuid | sim |  |  |
+| `caminho` | text | sim |  |  |
+| `metodo` | text | sim |  |  |
+| `modo` | text | sim |  |  |
+
+**Únicos:**
+- `porteiro_recusa_pkey`
+
 ## rbac_piloto_usuarios
 
 | Coluna | Tipo | Nulo | Default | Referência |
@@ -198,6 +256,9 @@
 
 **Únicos:**
 - `rbac_piloto_usuarios_pkey`
+
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 
 ## sol_governanca_eventos
 
@@ -301,6 +362,7 @@
 **Triggers:**
 - `tr_unidades_updated_at → update_updated_at()`
 - `trg_audit → fn_audit_log()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 
 ## unidades_cursos
 
@@ -372,6 +434,9 @@
 - `idx_usuario_perfis_unique_without_unidade`
 - `usuario_perfis_pkey`
 
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
+
 ## usuarios
 
 > Usuários do sistema com controle de acesso por unidade
@@ -400,7 +465,9 @@
 - `usuarios_pkey`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_usuarios_sincroniza_rbac → fn_usuarios_sincroniza_rbac()`
+- `trg_usuarios_trava_privilegio → fn_usuarios_trava_privilegio()`
 - `update_usuarios_updated_at → update_updated_at_column()`
 
 ## vw_saude_jornada_ciclos

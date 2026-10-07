@@ -1,18 +1,22 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { useTabelaComoCards } from './useTabelaComoCards';
 import { PageTitleProvider } from '@/contexts/PageTitleContext';
 import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 import { useUnidadeFiltro } from '@/hooks/useUnidadeFiltro';
+import { useUnidadesAtivas } from '@/hooks/useUnidadesAtivas';
+import { podeVerEventos } from '@/lib/menuVisibilidade';
 import { supabase } from '@/lib/supabase';
 import { AvisoNaoOtimizado } from './AvisoNaoOtimizado';
 import { MobileBottomNav } from './MobileBottomNav';
 import { MobileHeader } from './MobileHeader';
 import { MobileMaisSheet } from './MobileMaisSheet';
+import { FolhaUnidades } from './FolhaUnidades';
 import { rotaTemFaixaPorAba } from './abasPortadas';
 import { rotaFoiPortada } from './rotasPortadas';
-import { labelDaUnidade } from './unidadeLabel';
+import { labelDaUnidade, opcoesDeUnidade } from './unidadeLabel';
 
 // Copiado de AppSidebar.tsx — mesma lista, mesma consulta.
 // Unificar num useMenuVisibilidade() compartilhado é trabalho da etapa 2 (LAPE-32).
@@ -31,21 +35,30 @@ function iniciaisDoUsuario(nome: string | null | undefined): string {
 }
 
 export function MobileLayout() {
-  const { unidadeSelecionada, setUnidadeSelecionada, filtroAtivo, unidadesDisponiveis } = useUnidadeFiltro();
+  const { unidadeSelecionada, setUnidadeSelecionada, filtroAtivo, canChangeUnidade } =
+    useUnidadeFiltro();
   const competencia = useCompetenciaFiltro();
-  const { usuario, isAdmin } = useAuth();
+  const { usuario, isAdmin, unidadesPermitidas, hasPermission } = useAuth();
   const location = useLocation();
 
   const [periodoLabelOverride, setPeriodoLabelOverride] = useState<string | null>(null);
   const setPeriodoLabel = useCallback((label: string | null) => setPeriodoLabelOverride(label), []);
 
   const [maisAberto, setMaisAberto] = useState(false);
+  const [unidadesAberto, setUnidadesAberto] = useState(false);
+
+  // ⚠️ So consulta a rede para admin: `unidadesPermitidas` vem VAZIA para
+  // ele (vinculo RBAC global), entao a lista dele nao sai do contexto de
+  // autenticacao. Quem nao e admin escolhe entre as unidades dele mesmo.
+  const { unidades: unidadesDaRede, erro: erroUnidades } = useUnidadesAtivas(isAdmin);
+  const opcoesUnidade = opcoesDeUnidade(isAdmin, unidadesPermitidas, unidadesDaRede);
 
   // O "voltar" do Android troca a rota sem passar pelo onClick do NavLink
   // (ou pelo scrim) que fecham a folha — sem isto, ela ficaria por cima da
   // tela nova, porque MobileLayout nao desmonta ao navegar.
   useEffect(() => {
     setMaisAberto(false);
+    setUnidadesAberto(false);
   }, [location.pathname]);
 
   const [campanhasVisivel, setCampanhasVisivel] = useState(false);
@@ -59,13 +72,19 @@ export function MobileLayout() {
     isAdmin,
     campanhasVisivel,
     trafegoPagoVisivel: TRAFEGO_PAGO_EMAILS.includes((usuario?.email ?? '').toLowerCase()),
+    // Eventos nao repete a regra aqui: ela mora em podeVerEventos (LAPE-39) — RBAC desde
+    // 27/09 (`eventos.ver`, concedido na tela de Permissoes).
+    eventosVisivel: podeVerEventos(hasPermission('eventos.ver')),
   };
 
   // "Consolidado" so quando filtroAtivo e' null (rede inteira, escopo de
   // admin) — nunca por ausencia de nome. unidadesDisponiveis e' SEMPRE []
   // para admin (por desenho de useUnidadeFiltro) e `nome` pode ser null pro
   // fallback legado de nao-admin; nenhum dos dois casos e' consolidado.
-  const unidadeLabel = labelDaUnidade(filtroAtivo, unidadeSelecionada, unidadesDisponiveis);
+  // ⚠️ O rotulo le das MESMAS opcoes que a folha oferece. Antes ele recebia
+  // `unidadesDisponiveis`, que e' [] para admin — entao o admin que
+  // escolhesse Campo Grande veria "Unidade" no cabecalho, sem nome.
+  const unidadeLabel = labelDaUnidade(filtroAtivo, unidadeSelecionada, opcoesUnidade);
 
   // Uma leitura so: o aviso e a politica de rolagem sao a MESMA decisao
   // ("esta tela foi adaptada?"), e ler duas vezes deixa as duas livres para
@@ -81,14 +100,21 @@ export function MobileLayout() {
   // overflow-x-hidden cortaria justamente as que dependem da degradacao.
   const faixaPorAba = rotaTemFaixaPorAba(location.pathname);
 
+  // Rotula as celulas das tabelas com o nome da coluna, para o CSS de
+  // tabela-vira-card. Fora do celular o hook sai na primeira linha.
+  const refConteudo = useRef<HTMLElement>(null);
+  useTabelaComoCards(true, refConteudo);
+
   return (
     <PageTitleProvider>
       <div className="flex h-[100dvh] flex-col bg-slate-950">
         <MobileHeader
           unidadeNome={unidadeLabel}
-          // A folha de unidades e' da etapa 2 — enquanto nao existir, o
-          // MobileHeader recebe onAbrirUnidades ausente e renderiza texto,
-          // nao botao (ver MobileHeader.tsx).
+          // Quem so tem uma unidade nao ganha botao: o MobileHeader renderiza
+          // texto quando `onAbrirUnidades` vem ausente. `canChangeUnidade` e a
+          // mesma regra do desktop (admin OU 2+ vinculos), lida do hook
+          // canonico em vez de reescrita aqui.
+          onAbrirUnidades={canChangeUnidade ? () => setUnidadesAberto(true) : undefined}
           iniciais={iniciaisDoUsuario(usuario?.nome ?? usuario?.email ?? null)}
         />
 
@@ -99,7 +125,14 @@ export function MobileLayout() {
             largo demais vira rolagem horizontal em vez de aparecer como o
             defeito de layout que e. Tela portada que rola para o lado nao esta
             portada. */}
+        {/* `data-cards-mobile` liga o CSS que transforma <table> em cards
+            (src/index.css). Tabela nao encolhe — a largura minima dela e a
+            soma das colunas — entao num telefone ela sempre vira arrasto
+            lateral. O card troca o eixo: coluna vira linha rotulada, e a
+            tela cresce para baixo, que e o eixo que sobra. */}
         <main
+          ref={refConteudo}
+          data-cards-mobile=""
           className={`min-h-0 flex-1 overflow-y-auto p-3 ${
             portada ? 'overflow-x-hidden' : 'overflow-x-auto'
           }`}
@@ -109,6 +142,15 @@ export function MobileLayout() {
         </main>
 
         <MobileBottomNav onAbrirMais={() => setMaisAberto(true)} />
+
+        <FolhaUnidades
+          aberto={unidadesAberto}
+          onFechar={() => setUnidadesAberto(false)}
+          opcoes={opcoesUnidade}
+          selecionada={unidadeSelecionada}
+          onEscolher={setUnidadeSelecionada}
+          erro={erroUnidades}
+        />
 
         <MobileMaisSheet
           aberto={maisAberto}

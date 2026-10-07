@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-18 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-06 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — financeiro
 
-40 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+48 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## caixa_categorias
 
@@ -51,6 +51,24 @@
 **Triggers:**
 - `tr_caixa_financeiro_grupos_updated_at → set_updated_at_caixa()`
 
+## caixa_movimentacao_faturas
+
+> Faturas quitadas por uma movimentacao composta (1 pagamento -> N faturas). Movimentacao simples segue em caixa_movimentacoes.fatura_id; composto tem fatura_id NULL e N linhas aqui.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `movimentacao_id` | uuid | não |  | caixa_movimentacoes.id |
+| `fatura_id` | uuid | não |  | emusys_faturas.id |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `created_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `caixa_movimentacao_faturas_pkey`
+
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
+- `trg_cmf_herda_unidade → cmf_herda_unidade()`
+
 ## caixa_movimentacoes
 
 > Lancamentos manuais do caixa diario/cofre. Ambiente cofre afeta saldo fisico em dinheiro; ambiente venda alimenta resumo.
@@ -76,6 +94,9 @@
 | `link_pagamento` | text | sim |  |  |
 | `aluno_id` | integer | sim |  | alunos.id |
 | `fatura_id` | uuid | sim |  | emusys_faturas.id |
+| `cheque_numero` | text | sim |  |  |
+| `cheque_banco` | text | sim |  |  |
+| `cheque_bom_para` | date | sim |  |  |
 
 **Únicos:**
 - `caixa_movimentacoes_pkey`
@@ -83,6 +104,7 @@
 **Triggers:**
 - `tr_caixa_movimentacoes_updated_at → set_updated_at_caixa()`
 - `trg_audit_caixa_movimentacoes → fn_audit_log()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_caixa_movimentacao_recalcula_saldo → trg_caixa_movimentacao_recalcula_saldo()`
 
 ## caixa_reaberturas_log
@@ -167,6 +189,19 @@
 
 **Únicos:**
 - `contrato_assinatura_sync_execucoes_pkey`
+
+## faturas_leitura_cache
+
+> Cache do payload de get_faturas_alunos_financeiro_v1. Chave = md5(params + max(completed_at) dos runs completos + escopo de unidades). Lido/escrito apenas via SECURITY DEFINER.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `cache_key` | text | não |  |  |
+| `payload` | jsonb | não |  |  |
+| `built_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `faturas_leitura_cache_pkey`
 
 ## faturas_pagas_mes
 
@@ -296,6 +331,7 @@
 - `ux_fechamento_mensal_snapshots_competencia_dominio`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_fechamento_mensal_snapshot_imutavel → proteger_fechamento_mensal_snapshot_imutavel_v1()`
 - `trg_relatorio_coordenacao_final_v4 → proteger_relatorio_coordenacao_final_v4()`
 
@@ -325,6 +361,112 @@
 | `created_at` | timestamp with time zone | sim |  |  |
 | `updated_at` | timestamp with time zone | sim |  |  |
 | `backup_em` | timestamp with time zone | sim |  |  |
+
+## financeiro_asaas_convenios
+
+> Catálogo GET /financeiro/convenios_asaas (Emusys beta), completo a cada rodada. A CG tem DOIS convênios ativos (5 Kids CG e 7 LA CG). Só convênio ativo aceita extrato_asaas na origem.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `convenio_id` | bigint | não |  |  |
+| `status` | text | sim |  |  |
+| `conta_emusys_id` | bigint | sim |  |  |
+| `conta_descricao` | text | sim |  |  |
+| `conta_banco` | text | sim |  |  |
+| `conta_agencia` | text | sim |  |  |
+| `conta_numero` | text | sim |  |  |
+| `conta_titular` | text | sim |  |  |
+| `payload` | jsonb | não |  |  |
+| `hash_conteudo` | text | não |  |  |
+| `primeira_vez_visto` | timestamp with time zone | não | now() |  |
+| `ultima_vez_visto` | timestamp with time zone | não | now() |  |
+| `alterado_em` | timestamp with time zone | sim |  |  |
+| `sumiu_em` | timestamp with time zone | sim |  |  |
+
+**Únicos:**
+- `financeiro_asaas_convenios_pkey`
+- `financeiro_asaas_convenios_unidade_id_convenio_id_key`
+
+## financeiro_asaas_extrato
+
+> Espelho item a item de GET /financeiro/extrato_asaas (Emusys beta; cru do financialTransactions da Asaas). Nunca apaga: item que some de varredura completa ganha sumiu_em. Chave única (unidade_id, convenio_id, asaas_id) — convênio é por token e o id Asaas é textual.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `convenio_id` | bigint | não |  |  |
+| `asaas_id` | text | não |  |  |
+| `data` | date | não |  |  |
+| `valor` | numeric(14,2) | não |  |  |
+| `balance` | numeric(14,2) | sim |  |  |
+| `tipo` | text | não |  |  |
+| `descricao` | text | sim |  |  |
+| `payment_id` | text | sim |  |  |
+| `external_reference` | text | sim |  |  |
+| `transfer_id` | text | sim |  |  |
+| `pix_transaction_id` | text | sim |  |  |
+| `split_id` | text | sim |  |  |
+| `anticipation_id` | text | sim |  |  |
+| `bill_id` | text | sim |  |  |
+| `invoice_id` | text | sim |  |  |
+| `payment_dunning_id` | text | sim |  |  |
+| `credit_bureau_report_id` | text | sim |  |  |
+| `posicao_dia` | integer | sim |  |  |
+| `payload` | jsonb | não |  |  |
+| `hash_conteudo` | text | não |  |  |
+| `primeira_vez_visto` | timestamp with time zone | não | now() |  |
+| `ultima_vez_visto` | timestamp with time zone | não | now() |  |
+| `alterado_em` | timestamp with time zone | sim |  |  |
+| `sumiu_em` | timestamp with time zone | sim |  |  |
+
+**Únicos:**
+- `financeiro_asaas_extrato_pkey`
+- `financeiro_asaas_extrato_unidade_id_convenio_id_asaas_id_key`
+
+## financeiro_asaas_varredura_dias
+
+> Um dia só entra como completo quando a janela que o cobre veio inteira E a cadeia de balance não quebrou nele. Status erro nunca vale como vazio.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `unidade_id` | uuid | não |  | unidades.id |
+| `convenio_id` | bigint | não |  |  |
+| `data` | date | não |  |  |
+| `status` | text | não |  |  |
+| `itens` | integer | não | 0 |  |
+| `balance_quebras` | integer | não | 0 |  |
+| `tentativas` | integer | não | 0 |  |
+| `ultimo_erro` | text | sim |  |  |
+| `iniciado_em` | timestamp with time zone | sim |  |  |
+| `concluido_em` | timestamp with time zone | sim |  |  |
+| `ultima_tentativa_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `financeiro_asaas_varredura_dias_pkey`
+
+## financeiro_asaas_varredura_resumo
+
+> Estado da rotina por convênio: janela diária (últimos 10 dias), revarredura mensal do mês anterior e fronteira da carga inicial (a partir de 2024-01-01).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `unidade_id` | uuid | não |  | unidades.id |
+| `convenio_id` | bigint | não |  |  |
+| `janela_inicio` | date | sim |  |  |
+| `janela_fim` | date | sim |  |  |
+| `ultima_varredura_completa_em` | timestamp with time zone | sim |  |  |
+| `ultima_revarredura_mensal_em` | timestamp with time zone | sim |  |  |
+| `carga_inicial_concluida_ate` | date | sim |  |  |
+| `ultima_tentativa_em` | timestamp with time zone | não | now() |  |
+| `dias_pendentes` | integer | não | 0 |  |
+| `ultimo_erro` | text | sim |  |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `financeiro_asaas_varredura_resumo_pkey`
 
 ## financeiro_emusys_contas
 
@@ -399,10 +541,14 @@
 | `ultima_vez_visto` | timestamp with time zone | não | now() |  |
 | `alterado_em` | timestamp with time zone | sim |  |  |
 | `sumiu_em` | timestamp with time zone | sim |  |  |
+| `emusys_fatura_id` | bigint | sim |  |  |
 
 **Únicos:**
 - `financeiro_emusys_lancamentos_pkey`
 - `financeiro_emusys_lancamentos_unidade_id_emusys_lancamento__key`
+
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 
 ## financeiro_emusys_plano_contas
 
@@ -495,6 +641,7 @@
 
 **Triggers:**
 - `financeiro_fatura_reconciliacao_decisao_immutavel → financeiro_fatura_reconciliacao_decisao_immutavel()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 
 ## financeiro_sync_queue
 
@@ -541,6 +688,9 @@
 **Únicos:**
 - `formas_pagamento_pkey`
 - `uk_formas_nome`
+
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 
 ## historico_pagamentos
 
@@ -876,6 +1026,36 @@
 - `sol_caixa_v3_caixa_operacoes__unidade_id_data_caixa_operaca_key`
 - `sol_caixa_v3_caixa_operacoes_v1_idempotency_key_key`
 - `sol_caixa_v3_caixa_operacoes_v1_pkey`
+
+## vw_caixa_movimentacao_fatura_links
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `movimentacao_id` | uuid | sim |  |  |
+| `fatura_id` | uuid | sim |  |  |
+
+## vw_caixa_reconciliacao_entradas
+
+> Relatorio de reconciliacao caixa x Emusys: cada entrada sem fatura_id com classe (match_unico/ambigua/composta_2_faturas/sem_match) e candidatas em jsonb. Match por unidade + data_pagamento +-7d + valor_pago exato + nome rigoroso (sol_nome_mesma_pessoa_v1 / boundary). elegivel_backfill = escopo do reparo aprovado (parcela+pix, unico, nao composto). revisar_superfolha = proxy das linhas ja consumidas pelo Super Folha (validar origem_id do lado de la).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `movimentacao_id` | uuid | sim |  |  |
+| `unidade_id` | uuid | sim |  |  |
+| `unidade_nome` | character varying(100) | sim |  |  |
+| `data_movimento` | date | sim |  |  |
+| `competencia` | date | sim |  |  |
+| `forma_pagamento` | text | sim |  |  |
+| `categoria` | text | sim |  |  |
+| `descricao` | text | sim |  |  |
+| `valor` | numeric(12,2) | sim |  |  |
+| `criado_por` | text | sim |  |  |
+| `mov_aluno_id` | integer | sim |  |  |
+| `nome_extraido` | text | sim |  |  |
+| `classe` | text | sim |  |  |
+| `candidatas` | jsonb | sim |  |  |
+| `elegivel_backfill` | boolean | sim |  |  |
+| `revisar_superfolha` | boolean | sim |  |  |
 
 ## vw_contratos_vencendo
 

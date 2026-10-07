@@ -285,5 +285,21 @@ export function useAgendaDia({ data, unidadeId }: Params) {
     [unidadeId],
   );
 
-  return { aulas, presenca, carregando, erro, frescor, recarregar: buscar, prefetch };
+  /**
+   * Le um dia ja adiantado pelo `prefetch`, sem disparar busca nenhuma.
+   *
+   * O palco do celular monta tres dias lado a lado para que o vizinho apareca
+   * DURANTE o arrasto. Sem esta porta, o painel que entra ficaria em branco
+   * exatamente no instante em que ele e olhado — o dado ja estava em memoria e
+   * nao havia como alcanca-lo de fora.
+   *
+   * Devolve `undefined` quando o dia ainda nao foi adiantado; quem chama mostra
+   * esqueleto. Nunca busca: o custo tem de ser zero para o desktop, que nao usa.
+   */
+  const lerDoCache = useCallback(
+    (dataAlvo: string) => cacheRef.current.get(chaveDoCache(dataAlvo, unidadeId)),
+    [unidadeId],
+  );
+
+  return { aulas, presenca, carregando, erro, frescor, recarregar: buscar, prefetch, lerDoCache };
 }

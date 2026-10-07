@@ -1,5 +1,7 @@
 // supabase/functions/_shared/invariantes.ts
 
+import { removerCpfClaro } from './emusys-cpf-privacy.ts';
+
 export type Severidade = 'critico' | 'aviso';
 
 export type Invariante = {
@@ -69,9 +71,9 @@ export async function gravarLog(supabase: any, params: GravarLogParams): Promise
       aluno_id: params.aluno_id ?? null,
       lead_id: params.lead_id ?? null,
       unidade_nome: params.unidade_nome ?? null,
-      payload_bruto: params.payload_bruto ?? null,
+      payload_bruto: removerCpfClaro(params.payload_bruto ?? null),
       idempotency_key: params.idempotency_key ?? null,
-      detalhes: params.detalhes ?? null,
+      detalhes: removerCpfClaro(params.detalhes ?? null),
       workflow_id: params.workflow_id ?? null,
       execution_id: params.execution_id ?? null,
       status,

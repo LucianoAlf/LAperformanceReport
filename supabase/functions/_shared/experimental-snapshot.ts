@@ -11,6 +11,7 @@ export type ExperimentalAluno = {
   id_aluno?: number | string | null;
   id_lead?: number | string | null;
   nome_aluno?: string | null;
+  nome_responsavel?: string | null;
   email_aluno?: string | null;
   telefone_aluno?: string | null;
   presenca?: string | null;
@@ -45,6 +46,8 @@ export type SnapshotRow = {
   emusys_lead_id: number | null;
   emusys_aluno_id: number | null;
   aluno_nome: string;
+  /** Nome do responsavel como veio do Emusys — alimenta emusys_experimentais_raw.responsavel_nome. */
+  responsavel_nome: string | null;
   data_aula: string;
   horario_aula: string;
   cancelada: boolean;
@@ -343,6 +346,10 @@ export function montarLinhasSnapshot(input: SnapshotInput): SnapshotRow[] {
         emusys_lead_id: emusysLeadId,
         emusys_aluno_id: emusysAlunoId,
         aluno_nome: nome,
+        responsavel_nome: typeof participante.nome_responsavel === "string"
+            && participante.nome_responsavel.trim() !== ""
+          ? participante.nome_responsavel.trim()
+          : null,
         data_aula: dataAula,
         horario_aula: horarioAula,
         cancelada,

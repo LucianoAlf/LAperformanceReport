@@ -50,6 +50,11 @@ import {
   buildJornadaRowsForUpsert,
 } from '../_shared/jornada-canonica.ts';
 import { resolveEmusysMatriculaLifecycle } from '../_shared/emusys-matricula-lifecycle.ts';
+import {
+  extrairMatriculasCpfParaHmac,
+  removerCpfClaro,
+  type EmusysMatriculaCpfParaHmac,
+} from '../_shared/emusys-cpf-privacy.ts';
 import { deveConverterFinalizadaEmNaoRenovacao } from '../_shared/nao-renovacao-canonica.ts';
 import { decidirLeadId } from '../_shared/lead-id-reconciliacao.ts';
 import {
@@ -1243,11 +1248,31 @@ function buildEstadoAtualRows(
       trancamento_motivo: lifecycle.lock?.motivo ?? null,
       trancamento_data_inicial: lifecycle.lock?.dataInicial ?? null,
       trancamento_data_final: lifecycle.lock?.dataFinal ?? null,
-      payload_snapshot: mat,
+      payload_snapshot: removerCpfClaro(mat),
     });
   }
 
   return rows;
+}
+
+async function substituirVinculosCpfHmac(
+  supabase: any,
+  unidadeId: string,
+  linhas: EmusysMatriculaCpfParaHmac[],
+) {
+  let gravadas = 0;
+  for (let i = 0; i < linhas.length; i += 100) {
+    const chunk = linhas.slice(i, i + 100);
+    const { data, error } = await supabase.rpc('replace_emusys_cpf_hmac_vinculos', {
+      p_unidade_id: unidadeId,
+      p_matriculas: chunk,
+    });
+    if (error) {
+      throw new Error(`CPF_HMAC_SYNC_FAILED: ${descreverErroSync(error)}`);
+    }
+    gravadas += Number(data?.vinculos_gravados ?? 0);
+  }
+  return { matriculas_processadas: linhas.length, vinculos_gravados: gravadas };
 }
 
 async function upsertEstadosAtuaisEmLote(supabase: any, u: { id: string }, rows: any[]) {
@@ -1415,6 +1440,13 @@ async function reconciliarEstadosOperacionaisAusentes(
   }
 
   if (matriculasParaReidratar.length) {
+    const vinculosCpf = extrairMatriculasCpfParaHmac(
+      matriculasParaReidratar,
+      opcoes.alunoIdPorMatriculaEmusys,
+      opcoes.alunoIdPorAlunoEmusys,
+    );
+    await substituirVinculosCpfHmac(supabase, unidadeId, vinculosCpf);
+
     const linhas = buildEstadoAtualRows(
       matriculasParaReidratar,
       opcoes.alunoIdPorMatriculaEmusys,
@@ -1851,6 +1883,13 @@ serve(async (req) => {
       const alunoEmusysId = numeroFinitoOuNull(aluno.emusys_student_id);
       if (alunoEmusysId != null) alunoIdPorAlunoEmusys.set(alunoEmusysId, aluno.id);
     }
+
+    const vinculosCpf = extrairMatriculasCpfParaHmac(
+      porId.values(),
+      alunoIdPorMatriculaEmusys,
+      alunoIdPorAlunoEmusys,
+    );
+    resumo.cpf_hmac = await substituirVinculosCpfHmac(supabase, u.id, vinculosCpf);
 
     const linhasEstadoAtual = buildEstadoAtualRows(
       porId.values(),

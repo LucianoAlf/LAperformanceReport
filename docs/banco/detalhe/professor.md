@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-18 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-06 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — professor
 
-150 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+162 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## anotacoes
 
@@ -91,6 +91,7 @@
 **Triggers:**
 - `trg_aula_alunos_emusys_casar_aluno → fn_aula_alunos_emusys_casar_aluno()`
 - `trg_aula_alunos_emusys_reconcilia_chave → fn_aula_alunos_emusys_reconcilia_chave()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_experimental_recebe_id_da_aula → fn_experimental_recebe_id_da_aula()`
 - `trg_presenca_roster_lock_v2 → fn_presenca_roster_lock_trigger_v2()`
 
@@ -173,13 +174,16 @@
 | `cancelada_por_usuario_id` | integer | sim |  | usuarios.id |
 | `cancelada_em` | timestamp with time zone | sim |  |  |
 | `professor_presenca_origem` | text | sim |  |  |
+| `professor_registro_presenca` | text | sim |  |  |
 
 **Únicos:**
 - `aulas_emusys_emusys_id_unidade_id_key`
 - `aulas_emusys_pkey`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_eventos_operacionais_aula_cancelada → trg_eventos_operacionais_aula_cancelada()`
+- `trg_eventos_operacionais_aula_cancelada_insert → trg_eventos_operacionais_aula_cancelada()`
 - `trg_eventos_operacionais_aula_reagendada → trg_eventos_operacionais_aula_reagendada()`
 - `trg_eventos_operacionais_professor_aula → trg_eventos_operacionais_professor_aula()`
 - `trg_presenca_slot_lock_v2 → fn_presenca_slot_lock_trigger_v2()`
@@ -259,6 +263,19 @@
 **Triggers:**
 - `trg_audit → fn_audit_log()`
 - `trigger_update_config_health_score_professor → update_config_health_score_professor_updated_at()`
+
+## dash_prof_resumo_cache
+
+> Cache do resumo de professores do dashboard (5 colunas). TTL 5 min + fingerprint leve. Lido/escrito apenas via SECURITY DEFINER.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `cache_key` | text | não |  |  |
+| `payload` | jsonb | não |  |  |
+| `built_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `dash_prof_resumo_cache_pkey`
 
 ## disponibilidade_professor_propostas
 
@@ -397,10 +414,34 @@
 | `consumido_por_acao` | uuid | sim |  |  |
 | `descartado_em` | timestamp with time zone | sim |  |  |
 | `descartado_motivo` | text | sim |  |  |
+| `limpeza_lease_token` | uuid | sim |  |  |
+| `limpeza_lease_expira_em` | timestamp with time zone | sim |  |  |
+| `storage_removido_em` | timestamp with time zone | sim |  |  |
+| `limpeza_bloqueada_em` | timestamp with time zone | sim |  |  |
 
 **Únicos:**
 - `fabio_audios_parqueados_pkey`
 - `uq_fabio_audio_parqueado_mensagem`
+
+## fabio_bom_dia_legado_barrado
+
+> Tentativas de gravar o bom-dia no formato antigo (☆ Aluno(a):) no canal app, barradas em 30/09/2026. Serve para achar quem ainda manda.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `quando` | timestamp with time zone | não | now() |  |
+| `tabela` | text | não |  |  |
+| `professor_id` | integer | sim |  |  |
+| `usuario_banco` | text | sim |  |  |
+| `aplicacao` | text | sim |  |  |
+| `endereco` | inet | sim |  |  |
+| `consulta` | text | sim |  |  |
+| `jwt_role` | text | sim |  |  |
+| `inicio` | text | sim |  |  |
+
+**Únicos:**
+- `fabio_bom_dia_legado_barrado_pkey`
 
 ## fabio_canario_execucao
 
@@ -445,6 +486,33 @@
 **Únicos:**
 - `fabio_chat_mensagens_pkey`
 - `fcm_wa_msg_uq`
+
+**Triggers:**
+- `trg_fabio_barrar_bom_dia_legado → fn_fabio_barrar_bom_dia_legado()`
+
+## fabio_chat_mensagens_bom_dia_legado_arquivo
+
+> Bom-dias no formato antigo ("☆ *Aluno(a):*") tirados do chat do app em 03/10/2026 — guardados, não apagados.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `professor_id` | integer | sim |  |  |
+| `role` | text | não |  |  |
+| `kind` | text | não | 'text'::text |  |
+| `content` | text | sim |  |  |
+| `media_url` | text | sim |  |  |
+| `media_mime` | text | sim |  |  |
+| `media_filename` | text | sim |  |  |
+| `media_extracted_text` | text | sim |  |  |
+| `channel` | text | não | 'app'::text |  |
+| `wa_message_id` | text | sim |  |  |
+| `fabio_seen_at` | timestamp with time zone | sim |  |  |
+| `fabio_done_at` | timestamp with time zone | sim |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `identidade_tipo` | text | não | 'professor'::text |  |
+| `usuario_id` | integer | sim |  |  |
+| `arquivado_em` | timestamp with time zone | não | now() |  |
 
 ## fabio_correcao
 
@@ -846,6 +914,52 @@
 - `uq_fabio_notif_recorrente_diario`
 - `uq_fabio_notificacoes_registro_recibo_unico`
 
+**Triggers:**
+- `trg_fabio_barrar_bom_dia_legado → fn_fabio_barrar_bom_dia_legado()`
+
+## fabio_novidade_envio
+
+> Trava de duplicata das novidades mandadas pro WhatsApp do professor (por professor_id + evento_id). RLS ligado, sem policy: so service_role e funcoes SECURITY DEFINER acessam.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `professor_id` | integer | não |  |  |
+| `evento_id` | text | não |  |  |
+| `situacao` | text | não |  |  |
+| `lote` | text | sim |  |  |
+| `registrado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `fabio_novidade_envio_pkey`
+
+## fabio_onde_parou
+
+> Fila do cartao "onde o aluno parou" (professor substituto/reposicao). RLS ligado, sem policy: so service_role e funcoes SECURITY DEFINER acessam.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('fabio_onde_parou_id_seq'::regclass) |  |
+| `aula_id` | integer | não |  | aulas_emusys.id |
+| `aluno_id` | integer | não |  | alunos.id |
+| `professor_id` | integer | não |  | professores.id |
+| `professor_anterior` | text | sim |  |  |
+| `data_aula` | date | não |  |  |
+| `fonte` | jsonb | não |  |  |
+| `fonte_hash` | text | não |  |  |
+| `cartao` | jsonb | sim |  |  |
+| `status` | text | não | 'pendente'::text |  |
+| `tentativas` | integer | não | 0 |  |
+| `lease_token` | uuid | sim |  |  |
+| `lease_expira_em` | timestamp with time zone | sim |  |  |
+| `proxima_tentativa_em` | timestamp with time zone | sim |  |  |
+| `last_error` | text | sim |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `gerado_em` | timestamp with time zone | sim |  |  |
+
+**Únicos:**
+- `fabio_onde_parou_aula_id_aluno_id_professor_id_key`
+- `fabio_onde_parou_pkey`
+
 ## fabio_participacao_ocorrencia_eventos
 
 > Ciclo de vida da ocorrencia (append-only). Estado atual = ultimo evento. registrada->candidata na view.
@@ -1030,6 +1144,7 @@
 
 **Triggers:**
 - `trg_fabio_reg_upd → fn_set_atualizado_em()`
+- `trg_presenca_emusys_escritor_ficha → fn_presenca_emusys_escritor_disparar()`
 
 ## fabio_relato_proposto
 
@@ -1111,6 +1226,27 @@
 
 **Únicos:**
 - `fabio_sonda_execucao_pkey`
+
+## fabio_texto_para_organizar
+
+> Texto corrido do caderno da aula esperando o Fábio distribuir nas gavetas (03/10/2026, pedido do prof. Leonardo). Não cria ficha: devolve as gavetas para o caderno.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `registro_id` | uuid | não |  | fabio_registros_aula.id |
+| `aula_id` | integer | não |  |  |
+| `professor_id` | integer | não |  |  |
+| `texto` | text | não |  |  |
+| `status` | text | não | 'pendente'::text |  |
+| `tentativas` | integer | não | 0 |  |
+| `resultado` | jsonb | sim |  |  |
+| `erro` | text | sim |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `fabio_texto_para_organizar_pkey`
 
 ## fabio_transcricao_contraponto
 
@@ -1201,6 +1337,7 @@
 - `health_score_professor_v3_config_metas_curso_modalidade_pkey`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_health_score_professor_v3_config_meta_segmentada_imutavel → fn_health_score_professor_v3_bloquear_config_meta_segmentada()`
 
 ## health_score_professor_v3_config_metricas
@@ -1225,6 +1362,7 @@
 - `health_score_professor_v3_config_metricas_pkey`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_health_score_professor_v3_config_metrica_imutavel → fn_health_score_professor_v3_bloquear_config_metrica()`
 
 ## health_score_professor_v3_config_simulacoes
@@ -1296,6 +1434,7 @@
 - `health_score_v3_config_chave_criacao_governada_uidx`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_health_score_professor_v3_config_versao_imutavel → fn_health_score_professor_v3_bloquear_config_versao()`
 - `trg_health_score_professor_v3_exigir_simulacao_atual → fn_health_score_professor_v3_exigir_simulacao_atual()`
 
@@ -1365,8 +1504,8 @@
 | `snapshot_metrica_id` | uuid | não |  | health_score_professor_v3_snapshot_metricas.id |
 | `config_meta_segmento_id` | uuid | sim |  | health_score_professor_v3_config_metas_curso_modalidade.id |
 | `unidade_id` | uuid | não |  | professor_unidade_curso_modalidade.unidade_id |
-| `curso_id` | integer | não |  | health_score_professor_v3_config_metas_curso_modalidade.curso_id |
-| `modalidade` | text | não |  | health_score_professor_v3_config_metas_curso_modalidade.modalidade |
+| `curso_id` | integer | não |  | cursos.id |
+| `modalidade` | text | não |  | professor_unidade_curso_modalidade.modalidade |
 | `pessoas_unicas` | integer | não | 0 |  |
 | `vinculos_ativos` | integer | não | 0 |  |
 | `turmas_elegiveis` | integer | não | 0 |  |
@@ -1434,6 +1573,7 @@
 - `health_score_professor_v3_snapshot_metricas_pkey`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_health_score_professor_v3_snapshot_metrica_imutavel → fn_health_score_professor_v3_bloquear_metrica_fechada()`
 
 ## health_score_professor_v3_snapshots
@@ -1481,6 +1621,7 @@
 - `ux_health_score_professor_v3_snapshot_unidade_revisao`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_health_score_professor_v3_snapshot_imutavel → fn_health_score_professor_v3_bloquear_snapshot_fechado()`
 - `trg_health_score_v3_bloquear_sem_disponibilidade → fn_health_score_v3_bloquear_sem_disponibilidade()`
 
@@ -1504,6 +1645,19 @@
 - `health_score_v3_experimental_lead_c_unidade_id_evento_chave_key`
 - `health_score_v3_experimental_lead_conciliacoes_pkey`
 
+## health_score_v3_reader_cache
+
+> Cache do leitor de health score v3. Chave = md5(params + count/max(id) das tabelas de snapshot). Lido/escrito apenas via SECURITY DEFINER.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `cache_key` | text | não |  |  |
+| `payload` | jsonb | não |  |  |
+| `built_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `health_score_v3_reader_cache_pkey`
+
 ## la_teacher_coordenacao
 
 > Quem cuida dos professores no LA Teacher. NAO e o mesmo que usuarios.perfil=admin (que e do LA Report e inclui Marketing/Comercial). Entrar aqui e um ato explicito.
@@ -1516,6 +1670,21 @@
 
 **Únicos:**
 - `la_teacher_coordenacao_pkey`
+
+## porteiro_rota_professor
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `rota` | text | não |  |  |
+| `metodos` | text[] | não |  |  |
+| `origem` | text | não |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `porteiro_rota_professor_pkey`
+
+**Triggers:**
+- `trg_porteiro_rota_segura → fn_porteiro_rota_segura()`
 
 ## presenca_acao_eventos
 
@@ -1545,6 +1714,7 @@
 
 **Triggers:**
 - `trg_presenca_acao_eventos_append_only → fn_presenca_comando_eventos_append_only()`
+- `trg_presenca_emusys_escritor_evento → fn_presenca_emusys_escritor_disparar()`
 
 ## presenca_comando_itens
 
@@ -1606,6 +1776,51 @@
 
 **Triggers:**
 - `trg_presenca_comando_arbitrar_insert → fn_presenca_comando_arbitrar_insert()`
+
+## presenca_emusys_escrita
+
+> Livro de bordo do escritor de presenca no Emusys: uma linha por gatilho (evento de aluno ou ficha de professor), com estado antes, decisao, resposta e modo sombra/ativo.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `request_id` | uuid | sim |  |  |
+| `presenca_evento_id` | bigint | sim |  |  |
+| `ficha_id` | uuid | sim |  |  |
+| `unidade_id` | uuid | não |  |  |
+| `aula_emusys_id` | integer | sim |  |  |
+| `aluno_id` | integer | sim |  |  |
+| `professor_id` | integer | sim |  |  |
+| `alvo` | text | não |  |  |
+| `estado_vigente` | text | sim |  |  |
+| `fonte_decisao` | text | sim |  |  |
+| `presente` | boolean | sim |  |  |
+| `estado_antes` | jsonb | sim |  |  |
+| `decisao` | text | não |  |  |
+| `motivo` | text | sim |  |  |
+| `resposta` | jsonb | sim |  |  |
+| `erro` | text | sim |  |  |
+| `modo` | text | não |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `linha_emusys_id` | integer | sim |  |  |
+
+**Únicos:**
+- `presenca_emusys_escrita_evento_uk`
+- `presenca_emusys_escrita_ficha_uk`
+- `presenca_emusys_escrita_pkey`
+
+## presenca_emusys_escritor_lock
+
+> Lease por unidade do escritor de presenca no Emusys: uma execucao por unidade por vez; expira sozinho se o dono morrer.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `unidade_id` | uuid | não |  |  |
+| `dono` | text | não |  |  |
+| `expira_em` | timestamp with time zone | não |  |  |
+
+**Únicos:**
+- `presenca_emusys_escritor_lock_pkey`
 
 ## presenca_politicas_confiabilidade
 
@@ -1862,6 +2077,22 @@
 **Únicos:**
 - `professor_360_ocorrencias_log_pkey`
 
+## professor_acesso_app
+
+> Modo do app por professor. Sem linha = login é app completo (piloto). so_relatorios = só Relatórios do recital, fora da cobrança.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `professor_id` | integer | não |  |  |
+| `so_relatorios` | boolean | não | false |  |
+| `relatorios` | boolean | não | false |  |
+| `completo_desde` | date | sim |  |  |
+| `atualizado_por_usuario_id` | integer | sim |  |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `professor_acesso_app_pkey`
+
 ## professor_acesso_codigos
 
 > Rastro de cada pedido de código de acesso. Serve de auditoria e de base pro limite: sem ele, quem souber o número de um professor enche o WhatsApp dele.
@@ -1946,6 +2177,9 @@
 **Únicos:**
 - `professor_carteira_mensal_canonica_pkey`
 - `professor_carteira_mensal_canonica_unique`
+
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 
 ## professor_carteira_mensal_detalhe
 
@@ -2341,6 +2575,7 @@
 | `whatsapp_confirmado_em` | timestamp with time zone | sim |  |  |
 | `temperamento_codinome` | character varying | sim |  |  |
 | `mesclado_em_professor_id` | integer | sim |  | professores.id |
+| `email_google` | text | sim |  |  |
 
 **Únicos:**
 - `professores_pkey`
@@ -2349,6 +2584,7 @@
 
 **Triggers:**
 - `trg_audit → fn_audit_log()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_professores_updated_at → update_updated_at_column()`
 
 ## professores_cursos
@@ -2467,6 +2703,7 @@
 
 **Triggers:**
 - `set_updated_at_professores_unidades → set_updated_at()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 
 ## programa_fideliza_config
 
@@ -2669,6 +2906,21 @@
 **Únicos:**
 - `programa_matriculador_penalidades_pkey`
 
+## tmp_emusys_registro_45d
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `unidade` | text | sim |  |  |
+| `data` | date | sim |  |  |
+| `sessao_id` | bigint | sim |  |  |
+| `categoria` | text | sim |  |  |
+| `cancelada` | text | sim |  |  |
+| `aula_id_ind` | bigint | sim |  |  |
+| `id_aluno` | bigint | sim |  |  |
+| `presenca` | text | sim |  |  |
+| `registro` | text | sim |  |  |
+| `prof_registro` | text | sim |  |  |
+
 ## turmas
 
 > Turmas de aula - combinação de professor, dia, horário e sala
@@ -2694,6 +2946,9 @@
 **Únicos:**
 - `turmas_pkey`
 - `turmas_unidade_id_professor_id_dia_semana_horario_inicio_key`
+
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 
 ## turmas_alunos
 
@@ -3300,7 +3555,7 @@
 
 ## vw_presenca_pendencia
 
-> Governanca operacional (Fase 3): alunos sem presenca FORTE por aula/unidade/dia (fn_presenca_e_forte), roster-gap-aware, janela 45d. Fonte unica p/ Fabio (professor), Sol/Hugo (unidade), coordenacao (dias>=3). Nao e o canon analitico.
+> Fila canonica de chamada pendente por aluno-aula. 2026-10-05: passa a exigir vinculo operacional (r.ativo_operacional) — vinculo tombado pela reconciliacao de roster nao cobra mais chamada.
 
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|

@@ -2,6 +2,7 @@ import { MoreHorizontal } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
 import { MENU_OPERACIONAL, MENU_PRINCIPAL, ROTAS_BARRA_INFERIOR, type ItemMenu } from '@/lib/menuItems';
+import { CLASSES_TOQUE } from './useFolhaAnimada';
 
 const TODOS: ItemMenu[] = [...MENU_PRINCIPAL, ...MENU_OPERACIONAL];
 
@@ -15,6 +16,9 @@ interface Props {
 }
 
 export function MobileBottomNav({ onAbrirMais }: Props) {
+  // ⚠️ O retorno de toque vale para os CINCO alvos, inclusive o "Mais": a
+  // barra e' um so' vocabulario, e um alvo mudo no meio de quatro que
+  // respondem parece o quebrado.
   return (
     <nav
       className="grid flex-none grid-cols-5 border-t border-slate-800 bg-slate-900 px-1 pt-1.5"
@@ -29,7 +33,7 @@ export function MobileBottomNav({ onAbrirMais }: Props) {
             to={item.path}
             end={item.end}
             className={({ isActive }) =>
-              `flex min-h-[44px] flex-col items-center justify-center gap-0.5 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 ${
+              `flex min-h-[44px] flex-col items-center justify-center gap-0.5 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 ${CLASSES_TOQUE} ${
                 isActive ? 'text-cyan-400' : 'text-slate-500'
               }`
             }
@@ -45,7 +49,7 @@ export function MobileBottomNav({ onAbrirMais }: Props) {
       <button
         type="button"
         onClick={onAbrirMais}
-        className="flex min-h-[44px] flex-col items-center justify-center gap-0.5 rounded-lg text-slate-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+        className={`flex min-h-[44px] flex-col items-center justify-center gap-0.5 rounded-lg text-slate-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 ${CLASSES_TOQUE}`}
       >
         <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
         <span className="text-[9.5px] font-medium leading-none">Mais</span>

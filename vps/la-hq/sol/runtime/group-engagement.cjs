@@ -20,6 +20,9 @@ function pareceChamarSol(texto = '') {
     || /(^|[^a-z0-9])sol\s*[,!?:]/.test(n)
     || /^sol\s+(me|nos|voce|vc|pode|poderia|consegue|ve|olha|manda|traz|qual|quais|quanto|quantos|quando|como|onde|porque|por que|preciso|faz|faca|ajuda|verifica|confere|checa|lista|mostra|tem|para|responde|responder|ta|esta)\b/.test(n)
     || /^pode\s*(?:[,!?:]|\s+ai)?\s+sol\b/.test(n)
+    // "Pode abrir sol" / "abre o caixa sol" (CG 03/10): pedido com o nome NO FIM.
+    // Só verbo de comando no início; "dia de sol" continua não sendo chamada.
+    || /^(pode|por favor|favor|abre|abra|abrir|reabre|reabrir|fecha|feche|fechar|lanca|lance|lancar|confere|confira|ve|veja|manda|mande|olha|ajuda)\b[^.!?\n]{0,60}[\s,]sol\s*[.!?]*$/.test(n)
     || /(^|[^a-z0-9])(oi|ola|opa|bom dia|boa tarde|boa noite|fala|e ai|ei)\s+sol\b/.test(n);
 }
 
@@ -48,6 +51,29 @@ function ehAgradecimento(texto = '') {
   return /(^|[^a-z])(obrigad[ao]|obg|brigad[ao]|valeu|vlw|agradec)/.test(n);
 }
 
+// Dispensa explícita (26/09/2026, Barra): "Sol não to falando ctg não" foi para o
+// agente, que respondeu "Entendi — fico quieta" e a janela seguiu aberta. Como a
+// frase cita "Sol", ela ainda era lida como CHAMADA. Dispensa fecha a janela e não
+// vai ao modelo. ⚠️ Exige a FORMA da dispensa ("falando com você", "fica quieta",
+// "para de responder"): "Sol, para quando é o fechamento?" continua sendo chamada.
+function dispensaSol(texto = '') {
+  const n = normalizarTexto(texto);
+  return /nao\s+(?:to|tou|estou|esto|ta|tava|estava)?\s*falando\s+(?:com\s+(?:voce|vc|ela|a\s+sol)|contigo|ctg)/.test(n)
+    || /nao\s+(?:e|eh|era)\s+(?:com|pra|para)\s+(?:voce|vc|ela|a\s+sol|contigo|ctg)/.test(n)
+    || /\bfica\s+(?:quieta|calada|na\s+sua)\b/.test(n)
+    || /\bpar[ae]\s+de\s+(?:responder|falar)\b/.test(n)
+    || /\bcala\s+a\s+boca\b/.test(n);
+}
+
+// Reação sem pedido (26/09/2026, Barra): "Ih" dentro da janela virou turno do agente
+// ("Pois é 😕"). Risada, interjeição e emoji solto não pedem nada. ⚠️ Resposta curta
+// a uma pergunta da Sol NÃO é reação: "sim", "ok", "2", "pix" e "não" passam.
+function reacaoSemPedido(texto = '') {
+  const n = normalizarTexto(texto).replace(/[^a-z0-9]/g, '');
+  if (!n) return true; // só emoji/pontuação
+  return /^(?:k{2,}|(?:rs)+r?|(?:ha)+h?|(?:he)+h?|(?:hua)+|(?:ks)+k?|ih+|eita|opa|hu+m+|hm+|af+s?|putz|nossa|uau|a+h+|o+h+|x+|vish|misericordia)$/.test(n);
+}
+
 function falaDirecionadaAHumano(texto, mentionedIds, identidadesProprias) {
   const proprias = new Set(Array.from(identidadesProprias || [], chaveIdentidade).filter(Boolean));
   if ((mentionedIds || []).some((id) => {
@@ -62,14 +88,18 @@ function falaDirecionadaAHumano(texto, mentionedIds, identidadesProprias) {
 function createGroupEngagementPolicy({ gruposQueRespondem, janelaMs }) {
   const grupos = gruposQueRespondem instanceof Set ? gruposQueRespondem : new Set(gruposQueRespondem || []);
   const ativoAte = new Map();
-  function abrirJanela({ chatId, senderId = '', motivo = 'unknown', agora = Date.now() }) {
+  function _abrirJanela({ chatId, senderId = '', motivo = 'unknown', agora = Date.now() }) {
     if (!chatId) return null;
     const rec = { until: agora + janelaMs, senderId: String(senderId || '') };
     ativoAte.set(chatId, rec);
     return { ...rec, motivo };
   }
-  function fecharJanela(chatId) { ativoAte.delete(chatId); }
-  function decidir({ chatId, texto, mentionedIds, identidadesProprias, senderId = '', agora = Date.now() }) {
+  function _fecharJanela(chatId) { ativoAte.delete(chatId); }
+  // `simular`: responde o que a política decidiria SEM abrir nem fechar janela.
+  // A ponte pergunta isso antes de escolher o caminho do caixa (28/09/2026).
+  function decidir({ chatId, texto, mentionedIds, identidadesProprias, senderId = '', agora = Date.now() }, { simular = false } = {}) {
+    const abrirJanela = simular ? () => null : _abrirJanela;
+    const fecharJanela = simular ? () => {} : _fecharJanela;
     if (!grupos.has(chatId)) { fecharJanela(chatId); return { responder: false, motivo: 'grupo_so_registra' }; }
     if (encerraTurnoDaSol(texto)) {
       fecharJanela(chatId);
@@ -91,6 +121,10 @@ function createGroupEngagementPolicy({ gruposQueRespondem, janelaMs }) {
       const _cortesia = ehAgradecimento(texto) && (_citaSol || _janelaEraDele);
       return { responder: false, motivo: 'turno_encerrado', cortesia: _cortesia };
     }
+    if (dispensaSol(texto)) {
+      fecharJanela(chatId);
+      return { responder: false, motivo: 'dispensada' };
+    }
     if (mencionaSol(texto, mentionedIds, identidadesProprias)) {
       abrirJanela({ chatId, senderId, motivo: 'chamada', agora });
       return { responder: true, motivo: 'chamada' };
@@ -99,10 +133,23 @@ function createGroupEngagementPolicy({ gruposQueRespondem, janelaMs }) {
     if (!rec || rec.until <= agora) { fecharJanela(chatId); return { responder: false, motivo: 'standby' }; }
     if (rec.senderId && senderId && rec.senderId !== String(senderId)) return { responder: false, motivo: 'janela_de_outro_remetente' };
     if (falaDirecionadaAHumano(texto, mentionedIds, identidadesProprias)) return { responder: false, motivo: 'janela_ignorada_fala_humana' };
-    abrirJanela({ chatId, senderId: rec.senderId || senderId, motivo: 'continuacao', agora });
+    if (reacaoSemPedido(texto)) return { responder: false, motivo: 'reacao_sem_pedido' };
+    // ⚠️ A fala humana NÃO renova a janela (26/09/2026). Renovar aqui fazia a Sol
+    // ficar "na conversa" enquanto a pessoa seguisse falando — com os colegas.
+    // Quem renova é a RESPOSTA da Sol (registrarRespostaDaSol): a janela vale para
+    // continuar o assunto que ela acabou de responder, não para sempre.
     return { responder: true, motivo: 'janela_ativa' };
   }
-  return { abrirJanela, fecharJanela, decidir, ativoAte };
+  // Chamado pela ponte depois de enviar uma resposta ao grupo. Só estende janela que
+  // já existe (e mantém o dono): mensagem da Sol sem ninguém tê-la chamado não abre.
+  function registrarRespostaDaSol({ chatId, agora = Date.now() }) {
+    const rec = ativoAte.get(chatId);
+    if (!rec) return null;
+    rec.until = agora + janelaMs;
+    return { ...rec };
+  }
+  const prever = (entrada) => decidir(entrada, { simular: true });
+  return { abrirJanela: _abrirJanela, fecharJanela: _fecharJanela, decidir, prever, registrarRespostaDaSol, ativoAte };
 }
 
-module.exports = { createGroupEngagementPolicy, ehAgradecimento, encerraTurnoDaSol, pareceChamarSol };
+module.exports = { createGroupEngagementPolicy, ehAgradecimento, encerraTurnoDaSol, pareceChamarSol, dispensaSol, reacaoSemPedido };

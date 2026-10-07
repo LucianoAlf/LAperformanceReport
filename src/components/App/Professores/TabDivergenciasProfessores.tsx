@@ -1,14 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, CalendarClock, Check, Loader2, RefreshCw, ShieldQuestion, X,
+  AlertTriangle, CalendarClock, Check, Link2, Loader2, RefreshCw, Search, ShieldQuestion, UserPlus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
+  buscarProfessoresParecidos,
   useProfessoresDivergencias,
   type DivergenciaProfessor,
+  type ProfessorParecido,
 } from '@/hooks/useProfessoresDivergencias';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 
@@ -57,15 +60,120 @@ function corDaSeveridade(severidade: string) {
   return 'bg-slate-500/20 text-slate-300 border-slate-500/40';
 }
 
+const ROTULO_PARECIDO: Record<string, string> = {
+  exato: 'mesmo nome',
+  parecido: 'nome parecido',
+  contem: 'contém o nome',
+};
+
+/**
+ * "Existe só no Emusys": o sync já vinculou/criou sozinho tudo o que era seguro. O que chega
+ * aqui é dúvida (nome parecido, homônimo, inativo…) — então a ação é escolher o professor, e
+ * ela grava o id de verdade. Os candidatos vêm da mesma régua que o sync usou.
+ */
+function PainelVincular({
+  divergencia,
+  decidindo,
+  onVincular,
+}: {
+  divergencia: DivergenciaProfessor;
+  decidindo: boolean;
+  onVincular: (professorId: number | null) => void;
+}) {
+  const nomeEmusys = divergencia.nome_emusys ?? '';
+  const [busca, setBusca] = useState(nomeEmusys);
+  const [candidatos, setCandidatos] = useState<ProfessorParecido[]>([]);
+  const [buscando, setBuscando] = useState(false);
+
+  useEffect(() => {
+    let cancelado = false;
+    const timer = setTimeout(async () => {
+      setBuscando(true);
+      try {
+        const lista = await buscarProfessoresParecidos(busca);
+        if (!cancelado) setCandidatos(lista);
+      } catch {
+        if (!cancelado) setCandidatos([]);
+      } finally {
+        if (!cancelado) setBuscando(false);
+      }
+    }, 300);
+    return () => {
+      cancelado = true;
+      clearTimeout(timer);
+    };
+  }, [busca]);
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-slate-400">
+        Vincular o id {divergencia.emusys_professor_id} do Emusys a um professor do LA Report:
+      </p>
+      <div className="relative">
+        <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+        <Input
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Buscar professor pelo nome"
+          className="pl-8 h-8 text-sm"
+        />
+      </div>
+      <div className="space-y-1 max-h-56 overflow-y-auto">
+        {buscando && (
+          <p className="text-xs text-slate-500 flex items-center gap-1">
+            <Loader2 className="h-3 w-3 animate-spin" /> Buscando…
+          </p>
+        )}
+        {!buscando && candidatos.length === 0 && (
+          <p className="text-xs text-slate-500">Nenhum professor com nome parecido.</p>
+        )}
+        {candidatos.map((c) => (
+          <div
+            key={c.professor_id}
+            className="flex items-center justify-between gap-2 rounded bg-slate-900/50 px-3 py-1.5"
+          >
+            <div className="min-w-0">
+              <p className="text-sm text-slate-200 truncate">{c.nome}</p>
+              <p className="text-[11px] text-slate-500">
+                {ROTULO_PARECIDO[c.tipo] ?? c.tipo}
+                {c.unidades.length > 0 && ` · ${c.unidades.join(', ')}`}
+                {!c.ativo && ' · inativo'}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={decidindo || !c.ativo}
+              title={c.ativo ? undefined : 'Reative o cadastro antes de vincular'}
+              onClick={() => onVincular(c.professor_id)}
+            >
+              <Link2 className="h-3 w-3 mr-1" /> Vincular
+            </Button>
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-end pt-1">
+        <Button size="sm" disabled={decidindo || !nomeEmusys} onClick={() => onVincular(null)}>
+          {decidindo ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <UserPlus className="h-3 w-3 mr-1" />}
+          Criar professor novo “{nomeEmusys}”
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function CartaoDivergencia({
   divergencia,
   decidindo,
   onDecidir,
+  onVincular,
 }: {
   divergencia: DivergenciaProfessor;
   decidindo: boolean;
   onDecidir: (decisao: string, observacao: string) => void;
+  onVincular: (professorId: number | null) => void;
 }) {
+  const vinculavel = divergencia.tipo_divergencia === 'so_no_emusys' && divergencia.emusys_professor_id != null;
   const [aberto, setAberto] = useState(false);
   const [decisao, setDecisao] = useState('');
   const [observacao, setObservacao] = useState('');
@@ -156,8 +264,16 @@ function CartaoDivergencia({
 
       {aberto && !divergencia.resolvido && (
         <div className="space-y-2 pt-2 border-t border-slate-700/60">
+          {vinculavel && (
+            <>
+              <PainelVincular divergencia={divergencia} decidindo={decidindo} onVincular={onVincular} />
+              <p className="text-xs text-slate-500 pt-2 border-t border-slate-700/40">
+                Ou, se não é para vincular:
+              </p>
+            </>
+          )}
           <div className="flex flex-wrap gap-2">
-            {DECISOES.map((opcao) => (
+            {DECISOES.filter((opcao) => !(vinculavel && opcao.valor === 'vinculo_confirmado')).map((opcao) => (
               <button
                 key={opcao.valor}
                 type="button"
@@ -200,7 +316,7 @@ function CartaoDivergencia({
 
 export function TabDivergenciasProfessores({ unidadeAtual }: Props) {
   const [incluirResolvidas, setIncluirResolvidas] = useState(false);
-  const { divergencias, resumo, carregando, erro, decidindoId, recarregar, decidir } =
+  const { divergencias, resumo, carregando, erro, decidindoId, recarregar, decidir, vincular } =
     useProfessoresDivergencias({
       incluirResolvidas,
       unidadeId: unidadeAtual && unidadeAtual !== 'todos' ? unidadeAtual : null,
@@ -217,6 +333,19 @@ export function TabDivergenciasProfessores({ unidadeAtual }: Props) {
       toast.success('Decisão registrada');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Não foi possível registrar a decisão');
+    }
+  }
+
+  async function handleVincular(id: number, professorId: number | null) {
+    try {
+      const resultado = await vincular(id, professorId);
+      const aulas = resultado?.aulas_corrigidas ?? 0;
+      toast.success(
+        professorId == null ? 'Professor criado e vinculado' : 'Professor vinculado',
+        { description: aulas > 0 ? `${aulas} aulas passaram a apontar para ele.` : undefined },
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não foi possível vincular');
     }
   }
 
@@ -285,7 +414,8 @@ export function TabDivergenciasProfessores({ unidadeAtual }: Props) {
           <Check className="h-8 w-8 text-emerald-400 mx-auto mb-2" />
           <p className="text-slate-300">Nenhuma divergência em aberto</p>
           <p className="text-sm text-slate-500 mt-1">
-            A verificação roda todo dia às 07:00.
+            A verificação roda todo dia às 07h42 e já vincula ou cadastra sozinha o professor novo
+            quando o nome não deixa dúvida.
           </p>
         </div>
       ) : (
@@ -296,6 +426,7 @@ export function TabDivergenciasProfessores({ unidadeAtual }: Props) {
               divergencia={d}
               decidindo={decidindoId === d.id}
               onDecidir={(decisao, observacao) => void handleDecidir(d.id, decisao, observacao)}
+              onVincular={(professorId) => void handleVincular(d.id, professorId)}
             />
           ))}
         </div>

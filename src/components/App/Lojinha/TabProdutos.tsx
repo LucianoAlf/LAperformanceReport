@@ -6,11 +6,16 @@ import {
   AlertTriangle, Check, X
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { filtrarProdutos } from '@/lib/lojinhaMobile';
+import { useShellMobile } from '@/hooks/useShellMobile';
+import { escopoDoEstoque, somarEstoquePorProduto } from '@/lib/lojinhaEstoque';
+import { ProdutosMobile } from '@/mobile/telas/lojinha/ProdutosMobile';
 import type { LojaProduto, LojaCategoria, FiltrosProdutos } from '@/types/lojinha';
 import { ModalProduto } from './ModalProduto';
 import { ModalEntradaLote } from './ModalEntradaLote';
@@ -20,6 +25,7 @@ interface TabProdutosProps {
 }
 
 export function TabProdutos({ unidadeId }: TabProdutosProps) {
+  const ehCelular = useShellMobile() === 'mobile';
   const [loading, setLoading] = useState(true);
   const [produtos, setProdutos] = useState<LojaProduto[]>([]);
   const [categorias, setCategorias] = useState<LojaCategoria[]>([]);
@@ -61,25 +67,32 @@ export function TabProdutos({ unidadeId }: TabProdutosProps) {
         `)
         .order('nome');
 
-      // Calcular estoque total por produto
+      // Estoque total por produto — UMA consulta, somada na memoria (regra em
+      // `@/lib/lojinhaEstoque`). Eram 20 consultas, uma por produto, e no
+      // Consolidado todas pediam a unidade 'todos', que nao existe: falhavam,
+      // e o `|| 0` mostrava a rede inteira sem estoque.
       if (prods) {
-        const produtosComEstoque = await Promise.all(
-          prods.map(async (p) => {
-            const { data: estoque } = await supabase
-              .from('loja_estoque')
-              .select('quantidade')
-              .eq('produto_id', p.id)
-              .eq('unidade_id', unidadeId === 'todos' ? unidadeId : unidadeId);
-            
-            const estoqueTotal = estoque?.reduce((acc, e) => acc + e.quantidade, 0) || 0;
-            return {
-              ...p,
-              estoque_total: estoqueTotal,
-              variacoes_count: p.loja_variacoes?.length || 0,
-            };
-          })
+        const escopo = escopoDoEstoque(unidadeId);
+        let totais = new Map<number, number>();
+        if (escopo.tipo !== 'aguardando') {
+          let estoqueQuery = supabase.from('loja_estoque').select('produto_id, quantidade');
+          if (escopo.tipo === 'unidade') estoqueQuery = estoqueQuery.eq('unidade_id', escopo.unidadeId);
+          const { data: estoque, error: erroEstoque } = await estoqueQuery;
+          if (erroEstoque) {
+            // Falha nao pode virar "estoque zero" em silencio: foi exatamente
+            // o que escondeu este defeito.
+            console.error(`[TabProdutos] estoque (${unidadeId}):`, erroEstoque.message);
+            toast.error('Não consegui carregar o estoque — os números de estoque desta tela não valem agora.');
+          }
+          totais = somarEstoquePorProduto(estoque ?? []);
+        }
+        setProdutos(
+          prods.map((p) => ({
+            ...p,
+            estoque_total: totais.get(p.id) ?? 0,
+            variacoes_count: p.loja_variacoes?.length || 0,
+          })),
         );
-        setProdutos(produtosComEstoque);
       }
     } catch (error) {
       console.error('Erro ao carregar produtos:', error);
@@ -89,25 +102,11 @@ export function TabProdutos({ unidadeId }: TabProdutosProps) {
   }
 
   // Filtrar produtos
-  const produtosFiltrados = produtos.filter((p) => {
-    // Busca
-    if (filtros.busca) {
-      const busca = filtros.busca.toLowerCase();
-      if (!p.nome.toLowerCase().includes(busca) && !p.sku?.toLowerCase().includes(busca)) {
-        return false;
-      }
-    }
-    // Categoria
-    if (filtros.categoria_id && p.categoria_id !== filtros.categoria_id) {
-      return false;
-    }
-    // Status
-    if (filtros.status === 'ativos' && !p.ativo) return false;
-    if (filtros.status === 'inativos' && p.ativo) return false;
-    if (filtros.status === 'estoque_baixo' && (p.estoque_total || 0) >= p.estoque_minimo) return false;
-    
-    return true;
-  });
+  // ⚠️ O predicado mora em `@/lib/lojinhaMobile` (`filtrarProdutos`), fonte
+  // única compartilhada com a tela do celular — que exibe a CONTAGEM nos
+  // chips, o que tornaria qualquer divergência visível na hora. Extraído sem
+  // mudar uma comparação.
+  const produtosFiltrados = filtrarProdutos(produtos, filtros);
 
   // KPIs
   const totalProdutos = produtos.length;
@@ -148,6 +147,25 @@ export function TabProdutos({ unidadeId }: TabProdutosProps) {
 
   return (
     <div className="space-y-6">
+      {/* 🔴 A bifurcacao fica DENTRO do return e os modais ficam FORA dela, no
+          mesmo container: sao os mesmos `ModalProduto` e `ModalEntradaLote` do
+          computador, e o celular os alcanca por `handleEditProduto` /
+          `handleNovoProduto`. Bifurcar antes deles deixaria cada botao mudo no
+          telefone -- o padrao ja usado no `AdministrativoPage`.
+
+          ⚠️ O conteudo do computador segue byte-identico no `else`. */}
+      {ehCelular ? (
+        <ProdutosMobile
+          produtos={produtos}
+          categorias={categorias}
+          onEditar={(id) => {
+            const alvo = produtos.find((p) => p.id === id);
+            if (alvo) handleEditProduto(alvo);
+          }}
+          onNovo={handleNovoProduto}
+        />
+      ) : (
+        <>
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
@@ -182,15 +200,20 @@ export function TabProdutos({ unidadeId }: TabProdutosProps) {
             <Package className="w-4 h-4" />
             Catálogo de Produtos
           </h3>
-          <div className="flex flex-wrap items-center gap-2">
+          {/* ⚠️ No celular isto vira GRADE de 2 colunas, nao `flex-wrap`.
+              As larguras aqui sao FIXAS (w-48/w-44/w-40) porque no computador
+              elas convivem numa linha so; a 390px o wrap as empilhava numa
+              escada com ~130px de vazio por linha, cada controle terminando
+              num lugar diferente. A grade faz cada um preencher sua celula. */}
+          <div className="flex flex-wrap items-center gap-2 max-lg:grid max-lg:grid-cols-2">
             {/* Busca */}
-            <div className="relative">
+            <div className="relative max-lg:col-span-2">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
               <Input
                 placeholder="Buscar produto..."
                 value={filtros.busca}
                 onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })}
-                className="pl-9 w-48"
+                className="pl-9 w-48 max-lg:w-full"
               />
             </div>
             {/* Filtro Categoria */}
@@ -198,7 +221,7 @@ export function TabProdutos({ unidadeId }: TabProdutosProps) {
               value={filtros.categoria_id?.toString() || 'todas'}
               onValueChange={(v) => setFiltros({ ...filtros, categoria_id: v === 'todas' ? null : parseInt(v) })}
             >
-              <SelectTrigger className="w-44">
+              <SelectTrigger className="w-44 max-lg:w-full">
                 <SelectValue placeholder="Todas Categorias" />
               </SelectTrigger>
               <SelectContent>
@@ -215,11 +238,11 @@ export function TabProdutos({ unidadeId }: TabProdutosProps) {
               value={filtros.status}
               onValueChange={(v) => setFiltros({ ...filtros, status: v as FiltrosProdutos['status'] })}
             >
-              <SelectTrigger className="w-40">
+              <SelectTrigger className="w-40 max-lg:w-full">
                 <SelectValue placeholder="Todos Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="todos">� Todos Status</SelectItem>
+                <SelectItem value="todos">⚪ Todos Status</SelectItem>
                 <SelectItem value="ativos">🟢 Ativos</SelectItem>
                 <SelectItem value="inativos">🔴 Inativos</SelectItem>
                 <SelectItem value="estoque_baixo">🟡 Estoque Baixo</SelectItem>
@@ -350,6 +373,9 @@ export function TabProdutos({ unidadeId }: TabProdutosProps) {
           </table>
         </div>
       </div>
+
+        </>
+      )}
 
       {/* Modais */}
       <ModalProduto

@@ -15,6 +15,7 @@ import {
   Activity
 } from 'lucide-react';
 import { MENU_PRINCIPAL as menuItems, MENU_OPERACIONAL as operacional } from '@/lib/menuItems';
+import { podeVerEventos } from '@/lib/menuVisibilidade';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Tooltip } from '../../ui/Tooltip';
@@ -38,6 +39,7 @@ const prefetchMap: Record<string, () => Promise<any>> = {
   '/app/pre-atendimento': () => import('@/components/App/PreAtendimento'),
   '/app/campanhas': () => import('@/components/App/Campanhas'),
   '/app/trafego-pago': () => import('@/components/App/TrafegoPago'),
+  '/app/eventos': () => import('@/components/App/Eventos'),
   '/app/agenda': () => import('@/components/App/Agenda'),
   '/app/administrativo': () => import('@/components/App/Administrativo'),
   '/app/alunos': () => import('@/components/App/Alunos'),
@@ -58,7 +60,7 @@ const prefetchedPages = new Set<string>();
 
 export function AppSidebar() {
   const navigate = useNavigate();
-  const { usuario, isAdmin, signOut } = useAuth();
+  const { usuario, isAdmin, signOut, hasPermission } = useAuth();
 
   // Visibilidade do módulo Campanhas
   const DEV_EMAIL = 'hugo@lamusic.com.br'
@@ -67,6 +69,9 @@ export function AppSidebar() {
   // Visibilidade do módulo Tráfego Pago (custo de mídia sensível): só e-mails fixos
   const TRAFEGO_PAGO_EMAILS = ['hugo@gmail.com', 'lucianoalf.la@gmail.com']
   const trafegoPagoVisivel = TRAFEGO_PAGO_EMAILS.includes((usuario?.email ?? '').toLowerCase())
+
+  // Eventos (recital): a regra mora em podeVerEventos — nao repetir aqui (LAPE-39)
+  const eventosVisivel = podeVerEventos(hasPermission('eventos.ver'))
   const [campanhasVisivel, setCampanhasVisivel] = useState(false)
   useEffect(() => {
     supabase.from('campanhas_config').select('visibilidade_global').single()
@@ -141,7 +146,7 @@ export function AppSidebar() {
         {!isCollapsed && (
           <div className="flex items-center">
             <img 
-              src="/logo-sidebar-la-music-report.png" 
+              src="/logo-sidebar-la-music-report.webp" 
               alt="LA Music Report" 
               className="h-12 w-auto"
             />
@@ -209,7 +214,8 @@ export function AppSidebar() {
         )}
         {operacional.filter(item =>
           (item.path !== '/app/campanhas' || campanhasVisivel) &&
-          (item.path !== '/app/trafego-pago' || trafegoPagoVisivel)
+          (item.path !== '/app/trafego-pago' || trafegoPagoVisivel) &&
+          (item.path !== '/app/eventos' || eventosVisivel)
         ).map((item) => {
           const Icon = item.icon;
           return (

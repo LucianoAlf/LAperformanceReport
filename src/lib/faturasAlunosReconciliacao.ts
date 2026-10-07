@@ -5,11 +5,18 @@ export type ReconciliationDecisionType =
   | 'ultima_parcela_aviso_previo'
   | 'parcela_remarcada'
   | 'conferido_sem_cobranca'
+  | 'duplicata_caixa_confirmada'
   | 'outro';
 
 export type ReconciliationGuidance =
   | {
       kind: 'decision';
+      title: string;
+      instruction: string;
+      options: Array<{ value: ReconciliationDecisionType; label: string }>;
+    }
+  | {
+      kind: 'detected_payment';
       title: string;
       instruction: string;
       options: Array<{ value: ReconciliationDecisionType; label: string }>;
@@ -46,6 +53,11 @@ type ReconciliationGuidanceInput = {
   };
 };
 
+const DUPLICATA_OPTIONS: Array<{ value: ReconciliationDecisionType; label: string }> = [
+  { value: 'duplicata_caixa_confirmada', label: 'Duplicata confirmada — lançamento a mais no caixa' },
+  { value: 'outro', label: 'Outro — descreva na observação' },
+];
+
 const DECISION_OPTIONS: Array<{ value: ReconciliationDecisionType; label: string }> = [
   { value: 'pagamento_confirmado', label: 'Pagamento confirmado pela unidade' },
   { value: 'renovacao', label: 'Renovação / primeira parcela em nova data' },
@@ -68,6 +80,28 @@ export function getReconciliationGuidance(item: ReconciliationGuidanceInput): Re
       title: 'Fora da cobrança operacional',
       instruction: 'Este registro fica no histórico e não entra na fila de cobrança de alunos.',
       options: [],
+    };
+  }
+  // Prova de pagamento ja' existe (baixa no caixa ou lancamento que a Rose
+  // reconciliou no Emusys): a duvida nao e' "o que aconteceu", e' registrar a
+  // decisao que encerra o caso. A evidencia e' renderizada pela pagina.
+  // Duas+ entradas com o mesmo valor apontando a mesma fatura: uma delas e'
+  // lancamento errado no caixa. A prova lista as entradas para a equipe
+  // identificar qual apagar/corrigir.
+  if (motivos.has('duplicata_caixa')) {
+    return {
+      kind: 'decision',
+      title: 'Possível lançamento duplicado no caixa',
+      instruction: 'O caixa tem duas entradas de mesmo valor nesta fatura. Confirme se uma delas foi lançada errado (ou lançada duas vezes) e registre a decisão.',
+      options: DUPLICATA_OPTIONS,
+    };
+  }
+  if (motivos.has('pagamento_detectado_fora_origem') && item.aluno?.id != null) {
+    return {
+      kind: 'detected_payment',
+      title: 'Pagamento já identificado fora do Emusys',
+      instruction: 'A origem ainda não redevolveu a fatura, mas o dinheiro entrou — a prova está abaixo. Confirme a decisão para encerrar sem nova investigação.',
+      options: DECISION_OPTIONS,
     };
   }
   if (motivos.has('source_missing') && item.aluno?.id != null) {

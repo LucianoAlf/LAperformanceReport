@@ -76,6 +76,12 @@ export interface NovaCaixaMovimentacaoInput {
   link_pagamento?: string | null;
   /** Fatura do Emusys que este dinheiro liquida. Nulo = receita sem fatura. */
   fatura_id?: string | null;
+  /**
+   * Pagamento composto: UMA movimentacao quitando N faturas (ex: contrato pago
+   * de uma vez no cartao). Quando presente com 2+ ids, `fatura_id` vai nulo e
+   * os vinculos sao gravados em `caixa_movimentacao_faturas`.
+   */
+  fatura_ids?: string[] | null;
   /** Aluno vinculado ao lancamento, quando ha. */
   aluno_id?: number | null;
   responsavel?: string;

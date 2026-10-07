@@ -17,7 +17,13 @@
  */
 
 /** Rotas que exibem a própria faixa, por aba, em vez da faixa do shell. */
-export const ROTAS_COM_FAIXA_POR_ABA: readonly string[] = ['/app/alunos'];
+export const ROTAS_COM_FAIXA_POR_ABA: readonly string[] = [
+  '/app/alunos',
+  '/app/agenda',
+  '/app/administrativo',
+  // Rota com id (`/app/eventos/21`): o `*` casa qualquer segmento final.
+  '/app/eventos/*',
+];
 
 /**
  * Abas com versão mobile, por rota. Cresce uma linha por aba portada.
@@ -26,14 +32,60 @@ export const ROTAS_COM_FAIXA_POR_ABA: readonly string[] = ['/app/alunos'];
  * faixa. É o contrário de bloquear.
  */
 export const ABAS_PORTADAS: Readonly<Record<string, readonly string[]>> = {
-  '/app/alunos': ['lista'],
+  // ⚠️ `'conciliacao'` entra com RECORTE declarado: no celular ela decide só o
+  // que é binário e nunca em lote — o resto é leitura, com o motivo escrito na
+  // linha (ver `@/lib/conciliacao`). A faixa some porque a tela foi adaptada,
+  // não porque faz tudo o que a do computador faz.
+  '/app/alunos': ['lista', 'historico', 'turmas', 'automacao', 'distribuicao', 'grade', 'conciliacao'],
+  // ⚠️ `'calendario'` continua FORA de propósito: ele segue abrindo a tela do
+  // desktop, com a faixa âmbar. Marcar a rota inteira apagaria a faixa dele
+  // junto — que é exatamente o erro cometido com Alunos em 14/09.
+  '/app/agenda': ['professor', 'sala', 'chamada'],
+  // ⚠️ Farmer, Caixa e Entrada seguem abrindo a tela do computador com a
+  // faixa âmbar — e Caixa e Entrada são frentes próprias, com escrita de
+  // dinheiro e conversa de WhatsApp.
+  //
+  // ⚠️ `'lojinha'` entra com as CINCO sub-abas adaptadas (29/09/2026) e com
+  // RECORTE declarado em Comissões: no celular só as carteiras (saldo e
+  // ações), porque os cartões e o histórico de lá são dados de exemplo
+  // escritos no código (ver `@/lib/lojinhaComissoes`).
+  //
+  // ⚠️ `'fideliza'` entra com RECORTE declarado: no celular a aba responde
+  // "como está a dupla e o que falta", que é a sub-aba Ranking. Histórico
+  // trimestral, penalidades e as regras do programa ficam no computador, e a
+  // tela diz isso por escrito (ver `@/lib/fidelizaMobile`). O histórico sai
+  // por não ter dado: `programa_fideliza_historico` tem ZERO linhas nas três
+  // unidades (medido em 25/09/2026), e a tabela do desktop exibe quatro
+  // linhas de traço mais uma "média anual" que repete o único trimestre vivo.
+  //
+  // ⚠️ `'lancamentos'` entra com RECORTE declarado: no celular a aba responde
+  // "o que lançar e o que já lancei", não "como foi o mês". Motivos de saída,
+  // MRR perdido e LTV ficam no computador, e a tela diz isso por escrito (ver
+  // `@/lib/administrativoMobile`). A faixa some porque a aba foi adaptada, não
+  // porque faz tudo o que a do computador faz.
+  //
+  // `'farmer'` entrou em 29/09 com `DashboardFarmerMobile` (o resumo em linhas,
+  // cada bloco do computador numa folha) e o botão de seção no lugar das duas
+  // fileiras de abas. As outras 4 sub-abas da Farmer tiveram só ajuste de largura
+  // e de alvo (ver `tests/farmerMobile.test.mjs`).
+  '/app/administrativo': ['lancamentos', 'contratos', 'fideliza', 'lojinha', 'farmer'],
+  // Detalhe do evento (06/10/2026): só a Grade foi adaptada — Alunos, Palco, Bilheteria,
+  // Revisão e Check-in seguem com a faixa.
+  '/app/eventos/*': ['alunos', 'grade', 'palco', 'bilheteria', 'revisao', 'checkin'],
 };
+
+/** `'/app/eventos/*'` casa `'/app/eventos/21'` (um segmento), nunca `'/app/eventos'`. */
+function casaRota(padrao: string, pathname: string): boolean {
+  if (!padrao.endsWith('/*')) return padrao === pathname;
+  const base = padrao.slice(0, -1);
+  return pathname.startsWith(base) && pathname.length > base.length && !pathname.slice(base.length).includes('/');
+}
 
 export function rotaTemFaixaPorAba(
   pathname: string,
   rotas: readonly string[] = ROTAS_COM_FAIXA_POR_ABA,
 ): boolean {
-  return rotas.includes(pathname);
+  return rotas.some((r) => casaRota(r, pathname));
 }
 
 /**
@@ -46,5 +98,6 @@ export function abaFoiPortada(
   mapa: Readonly<Record<string, readonly string[]>> = ABAS_PORTADAS,
 ): boolean {
   if (!aba) return false;
-  return (mapa[pathname] ?? []).includes(aba);
+  const chave = Object.keys(mapa).find((r) => casaRota(r, pathname));
+  return chave !== undefined && mapa[chave].includes(aba);
 }

@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-18 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-06 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — gestao
 
-40 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+56 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## bi_agent_config_lamusic
 
@@ -189,6 +189,9 @@
 - `competencias_mensais_pkey`
 - `competencias_mensais_unidade_ano_mes_key`
 
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
+
 ## dados_comerciais_legado
 
 > LEGADO (aposentada 2026-07-05). Agregacao comercial mensal inflada por trigger incremental bugado (3-17x). Substituida por calculo vivo de leads no Dashboard e alerta CONVERSAO_BAIXA. Historico canonico mensal = dados_mensais + fechamento_mensal_snapshots. Nao usar.
@@ -258,6 +261,7 @@
 - `tr_audit_dados_mensais → audit_dados_mensais()`
 - `tr_dados_mensais_updated_at → update_updated_at()`
 - `trg_audit → fn_audit_log()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 
 ## dados_mensais_retificacoes
 
@@ -324,6 +328,86 @@
 
 **Triggers:**
 - `trigger_update_insights_salvos_timestamp → update_insights_salvos_timestamp()`
+
+## kpis_comercial_v2_cache
+
+> Cache de get_kpis_comercial_canonicos_v2 (jsonb). Chave = md5(params+dia+fingerprint das fontes). TTL 30min. Lido/escrito apenas via SECURITY DEFINER.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `cache_key` | text | não |  |  |
+| `payload` | jsonb | não |  |  |
+| `built_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `kpis_comercial_v2_cache_pkey`
+
+## meta_conversoes
+
+> Eventos devolvidos ao Meta (Conversions API, pixel) pela edge enviar-conversoes-meta. Uma linha por lead+tipo, so de envio REAL (o modo teste, com test_event_code, nao grava aqui). enviado_em nulo + ultimo_erro = tentou e falhou.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('meta_conversoes_id_seq'::regclass) |  |
+| `lead_id` | integer | não |  | leads.id |
+| `aluno_id` | integer | sim |  | alunos.id |
+| `tipo` | text | não |  |  |
+| `event_name` | text | não |  |  |
+| `event_id` | text | não |  |  |
+| `valor` | numeric(12,2) | sim |  |  |
+| `ocorrido_em` | timestamp with time zone | não |  |  |
+| `enviado_em` | timestamp with time zone | sim |  |  |
+| `tentativas` | integer | não | 0 |  |
+| `ultimo_erro` | text | sim |  |  |
+| `resposta` | jsonb | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `meta_conversoes_matricula_aluno`
+- `meta_conversoes_pkey`
+- `meta_conversoes_unica`
+
+## meta_conversoes_execucao
+
+> Uma linha por chamada da edge enviar-conversoes-meta. descartes = contagem por motivo; lead_ids = quem foi enviado (ou iria, no dry run). Ultima rodada: select * from meta_conversoes_execucao order by id desc limit 5;
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('meta_conversoes_execucao_id_seq'::regclass) |  |
+| `run_id` | text | não |  |  |
+| `modo` | text | não |  |  |
+| `iniciado_em` | timestamp with time zone | não | now() |  |
+| `terminado_em` | timestamp with time zone | sim |  |  |
+| `na_fila` | integer | sim |  |  |
+| `elegiveis` | integer | sim |  |  |
+| `enviados` | integer | sim |  |  |
+| `falhas` | integer | sim |  |  |
+| `descartes` | jsonb | sim |  |  |
+| `lead_ids` | integer[] | sim |  |  |
+| `resposta_meta` | jsonb | sim |  |  |
+| `desfecho` | text | sim |  |  |
+| `erro` | text | sim |  |  |
+
+**Únicos:**
+- `meta_conversoes_execucao_pkey`
+
+## meta_conversoes_fila
+
+> Experimentais feitas e matriculas de leads do Meta que ainda nao foram devolvidas ao pixel. Fila da edge enviar-conversoes-meta. Sem filtro de janela: a edge conta quem esta fora do prazo do Meta.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `lead_id` | integer | sim |  |  |
+| `aluno_id` | integer | sim |  |  |
+| `tipo` | text | sim |  |  |
+| `event_name` | text | sim |  |  |
+| `ocorrido_em` | timestamp with time zone | sim |  |  |
+| `valor` | numeric | sim |  |  |
+| `nome` | text | sim |  |  |
+| `telefone` | text | sim |  |  |
+| `email` | text | sim |  |  |
+| `marca` | text | sim |  |  |
 
 ## metas
 
@@ -520,6 +604,208 @@
 
 **Únicos:**
 - `projecao_recaculo_log_pkey`
+
+## relatorio_anual
+
+> Relatório Pedagógico Anual: um por (recital, aluno). Fechada; acesso só por funções guardadas (fn_relatorio_anual_papel).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `evento_id` | bigint | não |  |  |
+| `aluno_id` | integer | não |  |  |
+| `unidade_id` | uuid | não |  |  |
+| `professor_id` | integer | sim |  |  |
+| `professor_origem` | text | sim |  |  |
+| `curso` | text | sim |  |  |
+| `classificacao` | text | sim |  |  |
+| `musica_recital` | text | sim |  |  |
+| `status` | text | não | 'sem_voz'::text |  |
+| `secoes` | jsonb | não | '{}'::jsonb |  |
+| `voz_audio_path` | text | sim |  |  |
+| `voz_transcricao` | text | sim |  |  |
+| `voz_transcrita_em` | timestamp with time zone | sim |  |  |
+| `voz_transcritor` | text | sim |  |  |
+| `modelo` | text | sim |  |  |
+| `versao` | integer | não | 0 |  |
+| `gerado_em` | timestamp with time zone | sim |  |  |
+| `enviado_em` | timestamp with time zone | sim |  |  |
+| `devolvido_em` | timestamp with time zone | sim |  |  |
+| `devolucao_motivo` | text | sim |  |  |
+| `aprovado_em` | timestamp with time zone | sim |  |  |
+| `aprovado_por_usuario_id` | integer | sim |  |  |
+| `aprovado_por_professor_id` | integer | sim |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+| `curso_chave` | text | sim | COALESCE(fn_curso_base(curso), ''::text) |  |
+| `regua` | jsonb | sim |  |  |
+| `pendencias` | jsonb | sim |  |  |
+| `musica_artista` | text | sim |  |  |
+| `musica_duracao_segundos` | integer | sim |  |  |
+| `musica_link` | text | sim |  |  |
+| `musica_playback_path` | text | sim |  |  |
+| `musica_lancada_em` | timestamp with time zone | sim |  |  |
+| `musica_ao_vivo` | boolean | não | false |  |
+| `rider` | jsonb | sim |  |  |
+
+**Únicos:**
+- `relatorio_anual_evento_aluno_curso_key`
+- `relatorio_anual_pkey`
+
+## relatorio_anual_aviso
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `chave` | text | não |  |  |
+| `professor_id` | integer | não |  |  |
+| `tipo` | text | não |  |  |
+| `lote` | text | sim |  |  |
+| `avisado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `relatorio_anual_aviso_pkey`
+
+## relatorio_anual_chegada
+
+> Quando cada aluno (por curso) entrou/saiu da lista de relatórios de um recital aberto. Anotada de 10 em 10 min por fn_relatorio_anual_anotar_chegadas. linha_de_base = já estava lá quando a anotação começou (28/09/2026): não é "acabou de confirmar" nem aviso.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `evento_id` | bigint | não |  | evento.id |
+| `aluno_id` | integer | não |  |  |
+| `curso_chave` | text | não |  |  |
+| `curso` | text | sim |  |  |
+| `professor_id` | integer | sim |  |  |
+| `chegou_em` | timestamp with time zone | não | now() |  |
+| `linha_de_base` | boolean | não | false |  |
+| `saiu_em` | timestamp with time zone | sim |  |  |
+
+**Únicos:**
+- `relatorio_anual_chegada_pkey`
+
+## relatorio_anual_historico
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `relatorio_id` | bigint | não |  | relatorio_anual.id |
+| `quando` | timestamp with time zone | não | now() |  |
+| `usuario_id` | integer | sim |  |  |
+| `professor_id` | integer | sim |  |  |
+| `ator` | text | não |  |  |
+| `acao` | text | não |  |  |
+| `secao` | text | sim |  |  |
+| `antes` | jsonb | sim |  |  |
+| `depois` | jsonb | sim |  |  |
+| `motivo` | text | sim |  |  |
+
+**Únicos:**
+- `relatorio_anual_historico_pkey`
+
+## relatorio_anual_item_palco
+
+> Catálogo do palco do recital (rider). id = o que vai em relatorio_anual.rider.itens. Fonte: palco.ts do la-teacher (teste confere). O LA Report lê nome e tipo daqui.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | text | não |  |  |
+| `rotulo` | text | não |  |  |
+| `gaveta` | text | não |  |  |
+| `tipo` | text | não |  |  |
+| `ordem` | integer | não |  |  |
+| `ativo` | boolean | não | true |  |
+
+**Únicos:**
+- `relatorio_anual_item_palco_pkey`
+
+## relatorio_anual_revisor
+
+> Compatibilidade: o revisor do professor repetido em cada recital. Gravar em relatorio_anual_revisor_do_professor.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `evento_id` | bigint | sim |  |  |
+| `professor_id` | integer | sim |  |  |
+| `revisor_usuario_id` | integer | sim |  |  |
+| `revisor_professor_id` | integer | sim |  |  |
+| `definido_por_usuario_id` | integer | sim |  |  |
+| `definido_em` | timestamp with time zone | sim |  |  |
+
+## relatorio_anual_revisor_do_professor
+
+> Quem revisa os relatórios do recital de cada professor — vale para TODOS os recitais (Alf, 30/09). Gravado pela Divisão (app_relatorio_anual_salvar_divisao).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `professor_id` | integer | não |  | professores.id |
+| `revisor_usuario_id` | integer | sim |  | usuarios.id |
+| `revisor_professor_id` | integer | sim |  | professores.id |
+| `definido_por_usuario_id` | integer | sim |  | usuarios.id |
+| `definido_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `relatorio_anual_revisor_do_professor_pkey`
+
+## relatorio_anual_revisor_por_recital_ate_20260930
+
+> Desativada em 30/09/2026: o revisor passou a ser do professor (relatorio_anual_revisor_do_professor). Guardada só como histórico.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `evento_id` | bigint | não |  |  |
+| `professor_id` | integer | não |  |  |
+| `revisor_usuario_id` | integer | sim |  |  |
+| `revisor_professor_id` | integer | sim |  |  |
+| `definido_por_usuario_id` | integer | sim |  |  |
+| `definido_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `relatorio_anual_revisor_pkey`
+
+**Triggers:**
+- `trg_relatorio_anual_revisor_valida → fn_relatorio_anual_revisor_valida()`
+
+## relatorio_anual_toca_junto
+
+> Pedido do professor: estes dois alunos tocam juntos no recital. A coordenação confere no LA Report (relatorio_anual_toca_junto_decidir_v1).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `evento_id` | bigint | não |  | evento.id |
+| `aluno_id` | integer | não |  |  |
+| `curso_chave` | text | não |  |  |
+| `com_aluno_id` | integer | não |  |  |
+| `com_curso_chave` | text | não |  |  |
+| `pedido_por_professor_id` | integer | sim |  | professores.id |
+| `pedido_em` | timestamp with time zone | não | now() |  |
+| `status` | text | não | 'pedido'::text |  |
+| `decidido_por` | text | sim |  |  |
+| `decidido_em` | timestamp with time zone | sim |  |  |
+| `motivo` | text | sim |  |  |
+
+**Únicos:**
+- `relatorio_anual_toca_junto_pkey`
+- `uq_toca_junto_par_aberto`
+
+## relatorio_equipe_unidade
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `unidade_id` | uuid | sim |  |  |
+| `grupo` | text | não |  |  |
+| `nome` | text | não |  |  |
+| `funcao` | text | sim |  |  |
+| `usuario_id` | integer | sim |  |  |
+| `professor_id` | integer | sim |  |  |
+| `ordem` | integer | não | 0 |  |
+| `ativo` | boolean | não | true |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `relatorio_equipe_unidade_pkey`
+- `uq_relatorio_equipe_unidade`
 
 ## relatorios_diarios
 
@@ -967,6 +1253,61 @@
 | `inadimplencia_media` | numeric | sim |  |  |
 | `ticket_medio` | numeric | sim |  |  |
 | `permanencia` | numeric | sim |  |  |
+
+## vw_relatorio_anual_recital_v1
+
+> Contrato v1 LA Teacher -> LA Report (27/09/2026): música, playback, ao vivo, rider e status de cada relatório anual (um por evento×aluno×curso). Casar com evento_apresentacao por evento_id + pessoa do aluno + fn_curso_base(cursos.nome) = curso_chave. rider_itens usa os ids de supabase/functions/_shared/relatorio-anual/palco.ts (repo la-teacher). Fechada: só service_role.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `relatorio_id` | bigint | sim |  |  |
+| `evento_id` | bigint | sim |  |  |
+| `unidade_id` | uuid | sim |  |  |
+| `aluno_id` | integer | sim |  |  |
+| `curso` | text | sim |  |  |
+| `curso_chave` | text | sim |  |  |
+| `professor_id` | integer | sim |  |  |
+| `relatorio_status` | text | sim |  |  |
+| `enviado_em` | timestamp with time zone | sim |  |  |
+| `aprovado_em` | timestamp with time zone | sim |  |  |
+| `musica_titulo` | text | sim |  |  |
+| `musica_artista` | text | sim |  |  |
+| `musica_duracao_segundos` | integer | sim |  |  |
+| `musica_link` | text | sim |  |  |
+| `musica_ao_vivo` | boolean | sim |  |  |
+| `musica_playback_path` | text | sim |  |  |
+| `rider_itens` | text[] | sim |  |  |
+| `rider_outros` | text | sim |  |  |
+| `rider_nada` | boolean | sim |  |  |
+| `musica_lancada_em` | timestamp with time zone | sim |  |  |
+| `atualizado_em` | timestamp with time zone | sim |  |  |
+| `rider_quantidades` | jsonb | sim |  |  |
+| `rider_extras` | jsonb | sim |  |  |
+| `editado_apos_envio_em` | timestamp with time zone | sim |  |  |
+
+## vw_relatorio_anual_toca_junto_v1
+
+> Contrato LA Teacher -> LA Report (30/09): pedidos de "tocam juntos". apresentacao_id/com_apresentacao_id = a apresentação na grade, quando existe. Só service_role.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | sim |  |  |
+| `evento_id` | bigint | sim |  |  |
+| `status` | text | sim |  |  |
+| `aluno_id` | integer | sim |  |  |
+| `aluno_nome` | character varying(200) | sim |  |  |
+| `curso_chave` | text | sim |  |  |
+| `apresentacao_id` | bigint | sim |  |  |
+| `com_aluno_id` | integer | sim |  |  |
+| `com_aluno_nome` | character varying(200) | sim |  |  |
+| `com_curso_chave` | text | sim |  |  |
+| `com_apresentacao_id` | bigint | sim |  |  |
+| `pedido_por_professor_id` | integer | sim |  |  |
+| `pedido_por_professor_nome` | character varying(100) | sim |  |  |
+| `pedido_em` | timestamp with time zone | sim |  |  |
+| `decidido_por` | text | sim |  |  |
+| `decidido_em` | timestamp with time zone | sim |  |  |
+| `motivo` | text | sim |  |  |
 
 ## vw_sazonalidade
 

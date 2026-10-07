@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { addDays, addWeeks, format, isValid, parseISO, startOfWeek, endOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -63,6 +63,23 @@ import { AgendaDrawer } from './AgendaDrawer';
 import { ChamadaView } from './Chamada';
 import { CalendarioEscolar } from './CalendarioEscolar';
 import { cn } from '@/lib/utils';
+import { useShellMobile } from '@/hooks/useShellMobile';
+import { abaFoiPortada } from '@/mobile/abasPortadas';
+import { SeletorSecaoMobile } from '@/mobile/SeletorSecaoMobile';
+import { AvisoNaoOtimizado } from '@/mobile/AvisoNaoOtimizado';
+
+// Lazy: o desktop nao pode pagar o bundle de uma tela que nunca vai montar.
+const AgendaMobile = lazy(() => import('@/mobile/telas/agenda/AgendaMobile'));
+const ChamadaMobile = lazy(() => import('@/mobile/telas/agenda/ChamadaMobile'));
+
+/** Rotulo de cada visao. Fonte unica: o trilho do desktop e a folha do
+ *  celular nao podem chamar a mesma visao por nomes diferentes. */
+const ROTULO_VISAO: Record<string, string> = {
+  professor: 'Professores',
+  sala: 'Salas',
+  chamada: 'Chamada',
+  calendario: 'Calendário',
+};
 
 /**
  * Rotulo do dia tolerante a data invalida. `format` da date-fns lanca
@@ -114,6 +131,7 @@ export default function AgendaPage() {
   const [data, setData] = useState(hoje);
   const [agruparPor, setAgruparPor] = useState<'professor' | 'sala'>('professor');
   const [visao, setVisao] = useState<'professor' | 'sala' | 'chamada' | 'calendario'>('professor');
+  const ehCelular = useShellMobile() === 'mobile';
   const ehChamada = visao === 'chamada';
   const ehCalendario = visao === 'calendario';
   // Sub-visao da Chamada (dia/semana/lista). Quando 'semana', as setas do
@@ -146,7 +164,7 @@ export default function AgendaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inicio, fim, hoje]);
 
-  const { aulas: todasAsAulas, presenca, carregando, erro, frescor, recarregar, prefetch } = useAgendaDia({
+  const { aulas: todasAsAulas, presenca, carregando, erro, frescor, recarregar, prefetch, lerDoCache } = useAgendaDia({
     data,
     unidadeId,
   });
@@ -316,6 +334,58 @@ export default function AgendaPage() {
     irPara(format(addDays(parseISO(data), dias), 'yyyy-MM-dd'));
   }
 
+  /* A visao e' o unico comando do topo sem equivalente na tela nova.
+     Pilula + folha, o mesmo gesto do periodo e das secoes da ficha do aluno —
+     para nao haver um terceiro vocabulario de navegacao na mesma tela.
+     ⚠️ Uma variavel, dois pontos de render: na Agenda mobile ela entra DENTRO
+     do cabecalho da tela (ao lado do resumo), e em Chamada/Calendario, que nao
+     tem tela nova, continua solta no topo da pagina. Duplicar o JSX deixaria os
+     dois livres para divergir. */
+  const seletorVisaoMobile = (
+    <SeletorSecaoMobile ehCelular compacto rotuloAtual={ROTULO_VISAO[visao]} titulo="Visão">
+      <div role="tablist" aria-label="Visão da agenda" className="flex flex-col gap-1">
+        {(['professor', 'sala', 'chamada', 'calendario'] as const).map((v) => (
+          <button
+            key={v}
+            type="button"
+            role="tab"
+            aria-selected={visao === v}
+            onClick={() => {
+              setVisao(v);
+              if (v === 'professor' || v === 'sala') setAgruparPor(v);
+            }}
+            className={cn(
+              'min-h-[44px] rounded-lg px-3 text-left text-sm font-semibold',
+              visao === v ? 'bg-slate-800 text-cyan-400' : 'text-slate-300',
+            )}
+          >
+            {ROTULO_VISAO[v]}
+          </button>
+        ))}
+      </div>
+    </SeletorSecaoMobile>
+  );
+
+  /* Os 7 KPI cards do desktop viram UMA linha aqui. Empilhados num telefone
+     eles empurravam a primeira aula para depois de ~3 telas de rolagem — numa
+     tela cuja pergunta e "o que esta acontecendo agora". Fica o que e
+     acionavel, e so quando ha o que dizer: numero zerado nao ocupa espaco. */
+  const resumoMobile = (
+    <>
+      <span className="font-semibold text-slate-200">
+        {aulas.length} {aulas.length === 1 ? 'aula' : 'aulas'}
+      </span>
+      {filtrando && <span> de {todasAsAulas.length}</span>}
+      {agora.aulas > 0 && (
+        <span className="font-semibold text-emerald-300"> · {agora.aulas} agora</span>
+      )}
+      {(pendenciasChamada ?? 0) > 0 && (
+        <span className="font-semibold text-amber-300"> · {pendenciasChamada} sem destino</span>
+      )}
+      {emRisco > 0 && <span className="text-amber-300"> · {emRisco} em risco</span>}
+    </>
+  );
+
   return (
     <div className="flex min-w-0 flex-col gap-4">
       {/* Barra de comando unica: navegacao do dia a esquerda, periodo a direita.
@@ -329,6 +399,13 @@ export default function AgendaPage() {
           Como a Agenda e diaria, ela funciona como salto: escolher Ago/2026 leva
           ao dia de hoje se ele cair no mes, senao ao dia 1. As setas seguem
           movendo dia a dia. */}
+      {/* A barra de comando NAO renderiza no celular. Ela duplicava duas
+          coisas que a AgendaMobile ja faz: a navegacao de dia (la com
+          arrasto) e o filtro de professor (la como trilho de chips). Alem
+          disso o segmented de 4 opcoes e a busca de 224px fixos nao cabem
+          em 375px. O que sobra do topo — escolher a visao — vira a folha
+          logo abaixo. */}
+      {!ehCelular && (
       <header className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => mover(-1)} aria-label="Dia anterior"
           className="grid h-[30px] w-[30px] place-items-center rounded-md border border-slate-700 text-slate-300 hover:text-white">
@@ -376,12 +453,10 @@ export default function AgendaPage() {
         <span className="mx-1 h-5 w-px bg-slate-700" aria-hidden="true" />
 
         <Grupo
-          opcoes={[
-            { valor: 'professor', rotulo: 'Professores' },
-            { valor: 'sala', rotulo: 'Salas' },
-            { valor: 'chamada', rotulo: 'Chamada' },
-            { valor: 'calendario', rotulo: 'Calendário' },
-          ]}
+          opcoes={(['professor', 'sala', 'chamada', 'calendario'] as const).map((valor) => ({
+            valor,
+            rotulo: ROTULO_VISAO[valor],
+          }))}
           valor={visao}
           onChange={(v) => {
             setVisao(v as 'professor' | 'sala' | 'chamada' | 'calendario');
@@ -427,6 +502,23 @@ export default function AgendaPage() {
           Sincronizado {frescor}
         </span>
       </header>
+      )}
+
+      {/* A faixa e' da VISAO, nao da rota: professor/sala ja tem tela propria,
+          chamada/calendario ainda nao — uma faixa unica mentiria nos dois
+          sentidos. O shell nao sabe qual visao esta aberta — por isso ela
+          mora aqui, e o MobileLayout suprime a dele nesta rota
+          (ROTAS_COM_FAIXA_POR_ABA). */}
+      {ehCelular && !abaFoiPortada('/app/agenda', visao) && <AvisoNaoOtimizado />}
+
+      {/* Chamada e Calendario nao tem tela propria no celular: a visao segue
+          solta no topo. Nas duas portadas ela entra no cabecalho da
+          AgendaMobile, junto da data — quatro faixas de largura total
+          empilhadas comiam metade da tela antes da primeira aula. */}
+      {/* A ChamadaMobile recebe o seletor como SLOT no proprio cabecalho
+          sticky; deixa-lo tambem aqui daria dois seletores na mesma tela. O
+          Calendario segue com a faixa solta, porque nao tem cabecalho proprio. */}
+      {ehCelular && ehCalendario && <div>{seletorVisaoMobile}</div>}
 
       {/* Enquanto o proximo dia carrega, o dia anterior continua na tela
           esmaecido em vez de virar tela em branco: a troca fica continua e
@@ -486,7 +578,7 @@ export default function AgendaPage() {
         </button>
       )}
 
-      {!ehCalendario && (
+      {!ehCalendario && !ehCelular && (
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
         <KPICard
           label="Aulas no dia"
@@ -563,12 +655,71 @@ export default function AgendaPage() {
         </p>
       ) : primeiraCarga ? (
         <p className="p-8 text-center text-sm text-slate-400">Carregando agenda…</p>
+      ) : ehCelular && !ehChamada && !ehCalendario ? (
+        /* ⚠️ ANTES dos dois curto-circuitos de vazio, e nao so do sem-filtro.
+           A AgendaMobile trata o vazio por dentro — e precisa renderizar
+           SEMPRE, porque e ela que carrega o trilho de chips, as setas de dia
+           e o botao de limpar. Quando o ramo do desktop vinha antes, um filtro
+           que nao casava nada deixava a tela SEM SAIDA: so a frase "Nenhuma
+           aula corresponde ao filtro", sem nenhum controle para desfazer. */
+        <Suspense fallback={<div className="p-8 text-center text-sm text-slate-400">Carregando…</div>}>
+          <AgendaMobile
+            aulasDoDia={todasAsAulas}
+            data={data}
+            hoje={hoje}
+            onTrocarDia={irPara}
+            lerDoCache={lerDoCache}
+            filtros={filtros}
+            onFiltrar={setFiltros}
+            onAbrir={setSelecionada}
+            resumo={resumoMobile}
+            seletorVisao={seletorVisaoMobile}
+          />
+          {/* Tocar numa aula nao abria NADA no celular: o painel de detalhe so
+              era montado no ramo do desktop, entao as 158 linhas da lista eram
+              botoes mudos. Mesmo componente, casca de folha. */}
+          {selecionada && (
+            <AgendaDrawer
+              aula={selecionada}
+              data={data}
+              presenca={presenca}
+              onFechar={() => setSelecionada(null)}
+              mostrarUnidade={unidadeId === null}
+              variante="folha"
+            />
+          )}
+        </Suspense>
       ) : aulas.length === 0 && filtrando ? (
         <p className="p-8 text-center text-sm text-slate-400">
           Nenhuma aula corresponde ao filtro.
         </p>
       ) : aulas.length === 0 ? (
         <p className="p-8 text-center text-sm text-slate-400">Nenhuma aula neste dia.</p>
+      ) : ehCelular && ehChamada ? (
+        /* A fila do que falta, no lugar da tela do desktop. O ramo vem ANTES
+           do `ehChamada` do desktop e DEPOIS dos curto-circuitos de vazio, que
+           aqui sao corretos: fila sem aula nenhuma nao tem o que enfileirar. */
+        <Suspense fallback={<div className="p-8 text-center text-sm text-slate-400">Carregando…</div>}>
+          <ChamadaMobile
+            aulas={aulas}
+            data={data}
+            unidadeId={unidadeId}
+            presenca={presenca}
+            recarregar={recarregar}
+            onAbrirAula={setSelecionada}
+            seletorVisao={seletorVisaoMobile}
+          />
+          {selecionada && (
+            <AgendaDrawer
+              aula={selecionada}
+              data={data}
+              presenca={presenca}
+              onFechar={() => setSelecionada(null)}
+              mostrarUnidade={unidadeId === null}
+              variante="folha"
+            />
+          )}
+        </Suspense>
       ) : ehChamada ? (
         <ChamadaView
           data={data}

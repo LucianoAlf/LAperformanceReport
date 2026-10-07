@@ -284,7 +284,8 @@ export function montarPatchReconciliacaoExperimental(input: {
     patch.professor_experimental_id = input.desejado.professorId;
   }
   if (
-    input.atual.emusysAulaId === null && input.desejado.emusysAulaId !== null
+    input.desejado.emusysAulaId !== null &&
+    input.atual.emusysAulaId !== input.desejado.emusysAulaId
   ) {
     patch.emusys_aula_id = input.desejado.emusysAulaId;
   }

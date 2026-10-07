@@ -19,7 +19,8 @@ export type TipoSaida =
   | "interrompido_2_curso"
   | "interrompido_bolsista"
   | "interrompido_banda"
-  | "transferencia";
+  | "transferencia"
+  | "mesma_pessoa";
 
 /** Os quatro tipos que a regra da casa mantém fora do total. */
 const FORA_DO_TOTAL: ReadonlySet<TipoSaida> = new Set<TipoSaida>([
@@ -27,10 +28,28 @@ const FORA_DO_TOTAL: ReadonlySet<TipoSaida> = new Set<TipoSaida>([
   "interrompido_bolsista",
   "interrompido_banda",
   "transferencia",
+  "mesma_pessoa",
 ]);
 
-export function classificarSaida(item: { tipo_evasao?: unknown }): TipoSaida {
+/**
+ * `classificacao_churn` vem do banco (classificar_saidas_churn_v1, desde 01/10/2026) e manda
+ * quando existe: churn conta a PESSOA que saiu da escola. Quem encerrou um curso e segue em
+ * outro é `segue_na_escola` (sai como 2º curso); a segunda saída da mesma pessoa no mês é
+ * `mesma_pessoa`. Snapshot antigo não traz o campo e segue a regra pelo `tipo_evasao`.
+ */
+export function classificarSaida(
+  item: { tipo_evasao?: unknown; classificacao_churn?: unknown },
+): TipoSaida {
   const tipo = String(item?.tipo_evasao ?? "").trim().toLocaleLowerCase("pt-BR");
+  const classe = String(item?.classificacao_churn ?? "").trim();
+  if (classe) {
+    if (classe === "segue_na_escola") return "interrompido_2_curso";
+    if (classe === "mesma_pessoa") return "mesma_pessoa";
+    if (classe === "banda") return "interrompido_banda";
+    if (classe === "bolsista") return "interrompido_bolsista";
+    if (classe === "transferencia") return "transferencia";
+    return tipo.includes("nao_renov") || tipo.includes("não_renov") ? "nao_renovou" : "interrompido";
+  }
   if (tipo.includes("nao_renov") || tipo.includes("não_renov")) return "nao_renovou";
   if (tipo.includes("2_curso") || tipo.includes("segundo")) return "interrompido_2_curso";
   if (tipo.includes("bols")) return "interrompido_bolsista";
@@ -46,6 +65,7 @@ export function entraNoTotal(tipo: TipoSaida): boolean {
 export interface ComposicaoSaidas {
   interrompido: number;
   segundoCurso: number;
+  mesmaPessoa: number;
   bolsista: number;
   banda: number;
   transferencia: number;
@@ -67,13 +87,14 @@ export interface ComposicaoSaidas {
  * duas vezes; vira aviso, para o defeito aparecer em vez de virar número inflado.
  */
 export function composicaoDeSaidas(
-  evasoes: Array<{ tipo_evasao?: unknown }>,
+  evasoes: Array<{ tipo_evasao?: unknown; classificacao_churn?: unknown }>,
   naoRenovacoes: number,
   totalBruto: number,
 ): ComposicaoSaidas {
   const quebra = {
     interrompido: 0,
     segundoCurso: 0,
+    mesmaPessoa: 0,
     bolsista: 0,
     banda: 0,
     transferencia: 0,
@@ -84,6 +105,9 @@ export function composicaoDeSaidas(
     switch (classificarSaida(item)) {
       case "interrompido_2_curso":
         quebra.segundoCurso += 1;
+        break;
+      case "mesma_pessoa":
+        quebra.mesmaPessoa += 1;
         break;
       case "interrompido_bolsista":
         quebra.bolsista += 1;
@@ -102,7 +126,7 @@ export function composicaoDeSaidas(
     }
   }
 
-  const foraDoTotal = quebra.segundoCurso + quebra.bolsista + quebra.banda +
+  const foraDoTotal = quebra.segundoCurso + quebra.mesmaPessoa + quebra.bolsista + quebra.banda +
     quebra.transferencia;
   const totalQueConta = quebra.interrompido + naoRenovacoes;
   const avisos: string[] = [];

@@ -60,17 +60,31 @@ export function EspelhoFinanceiroSaude() {
 
   if (!isAdmin || authLoading) return null;
 
+  // Saudavel ou nao carregado: uma linha de status. O painel detalhado (unidades,
+  // totais por natureza) so abre sob demanda — e telemetria de backend, nao rotina.
+  const unidadesSaudaveis = status?.unidades.filter((u) =>
+    u.dias_pendentes === 0 && !u.ultimo_erro && !(u.catalogos_erro && Object.keys(u.catalogos_erro).length > 0),
+  ).length ?? 0;
+  const totalUnidades = status?.unidades.length ?? 0;
+  const comProblema = status != null && unidadesSaudaveis < totalUnidades;
+
   return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900/60 px-4 py-3.5" aria-live="polite">
+    <section className="rounded-2xl border border-slate-800 bg-slate-900/60 px-4 py-3" aria-live="polite">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="rounded-xl bg-slate-950/40 p-2.5 text-cyan-200"><Database className="h-5 w-5" /></div>
-          <div>
-            <p className="text-sm font-semibold text-slate-100">Espelho do fluxo de caixa (Emusys beta)</p>
-            <p className="mt-0.5 text-xs text-slate-400">
-              Cópia dos lançamentos por unidade, revarrida todo dia (mês corrente + 2 anteriores). Alimenta o Super Folha.
-            </p>
-          </div>
+        <div className="flex items-center gap-2.5 text-xs text-slate-400">
+          <Database className={cn('h-4 w-4', comProblema ? 'text-amber-300' : 'text-slate-500')} />
+          <span>
+            Espelho Emusys:{' '}
+            {erro ? (
+              <span className="text-rose-300">falha ao ler status</span>
+            ) : !status ? (
+              <span>verificando...</span>
+            ) : comProblema ? (
+              <span className="font-medium text-amber-200">{unidadesSaudaveis}/{totalUnidades} unidades saudáveis</span>
+            ) : (
+              <span className="text-slate-300">saudável · varredura diária em dia</span>
+            )}
+          </span>
         </div>
         <button
           onClick={() => setAberto((v) => !v)}
@@ -80,47 +94,52 @@ export function EspelhoFinanceiroSaude() {
         </button>
       </div>
 
-      {erro && <p className="mt-3 text-xs text-rose-300">Falha ao ler o status do espelho: {erro}</p>}
+      {erro && <p className="mt-2 text-xs text-rose-300">Falha ao ler o status do espelho: {erro}</p>}
 
-      {!erro && status && (
-        <div className="mt-3 grid gap-2 md:grid-cols-3">
-          {status.unidades.map((u) => {
-            const catalogoErros = u.catalogos_erro ? Object.keys(u.catalogos_erro) : [];
-            const saudavel = u.dias_pendentes === 0 && !u.ultimo_erro && catalogoErros.length === 0;
-            const Icon = u.dias_pendentes == null ? Clock3 : saudavel ? ShieldCheck : ShieldAlert;
-            return (
-              <div
-                key={u.unidade_id}
-                className={cn(
-                  'rounded-xl border px-3 py-2.5 text-xs',
-                  u.dias_pendentes == null
-                    ? 'border-slate-700 bg-slate-900/50 text-slate-400'
-                    : saudavel
-                      ? 'border-emerald-500/25 bg-emerald-500/[0.06] text-emerald-100'
-                      : 'border-amber-500/25 bg-amber-500/[0.06] text-amber-100',
-                )}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-semibold">{u.unidade_nome}</span>
-                  <Icon className="h-4 w-4 shrink-0" />
+      {aberto && !erro && status && (
+        <>
+          <p className="mt-3 text-[11px] text-slate-500">
+            Cópia dos lançamentos por unidade, revarrida todo dia (mês corrente + 2 anteriores). Alimenta o Super Folha.
+          </p>
+          <div className="mt-3 grid gap-2 md:grid-cols-3">
+            {status.unidades.map((u) => {
+              const catalogoErros = u.catalogos_erro ? Object.keys(u.catalogos_erro) : [];
+              const saudavel = u.dias_pendentes === 0 && !u.ultimo_erro && catalogoErros.length === 0;
+              const Icon = u.dias_pendentes == null ? Clock3 : saudavel ? ShieldCheck : ShieldAlert;
+              return (
+                <div
+                  key={u.unidade_id}
+                  className={cn(
+                    'rounded-xl border px-3 py-2.5 text-xs',
+                    u.dias_pendentes == null
+                      ? 'border-slate-700 bg-slate-900/50 text-slate-400'
+                      : saudavel
+                        ? 'border-emerald-500/25 bg-emerald-500/[0.06] text-emerald-100'
+                        : 'border-amber-500/25 bg-amber-500/[0.06] text-amber-100',
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold">{u.unidade_nome}</span>
+                    <Icon className="h-4 w-4 shrink-0" />
+                  </div>
+                  <div className="mt-1.5 space-y-0.5 opacity-80">
+                    <p>Janela: {u.janela_inicio ?? '—'} → {u.janela_fim ?? '—'}</p>
+                    <p>Dias pendentes: <span className="tabular-nums">{u.dias_pendentes ?? '—'}</span></p>
+                    <p>Última varredura completa: {dataHora(u.ultima_varredura_completa_em)}</p>
+                    {catalogoErros.length > 0 && <p>Catálogo com erro na origem: {catalogoErros.join(', ')}</p>}
+                    {u.ultimo_erro && <p className="truncate" title={u.ultimo_erro}>Último erro: {u.ultimo_erro}</p>}
+                  </div>
                 </div>
-                <div className="mt-1.5 space-y-0.5 opacity-80">
-                  <p>Janela: {u.janela_inicio ?? '—'} → {u.janela_fim ?? '—'}</p>
-                  <p>Dias pendentes: <span className="tabular-nums">{u.dias_pendentes ?? '—'}</span></p>
-                  <p>Última varredura completa: {dataHora(u.ultima_varredura_completa_em)}</p>
-                  {catalogoErros.length > 0 && <p>Catálogo com erro na origem: {catalogoErros.join(', ')}</p>}
-                  {u.ultimo_erro && <p className="truncate" title={u.ultimo_erro}>Último erro: {u.ultimo_erro}</p>}
-                </div>
-              </div>
-            );
-          })}
-          {(status.itens_sumidos > 0 || status.itens_alterados > 0) && (
-            <p className="md:col-span-3 text-[11px] text-slate-500">
-              Controles do espelho: {status.itens_alterados} itens alterados desde a 1ª captura
-              {' · '}{status.itens_sumidos} sumiram da origem (rastro preservado, fora dos totais).
-            </p>
-          )}
-        </div>
+              );
+            })}
+            {(status.itens_sumidos > 0 || status.itens_alterados > 0) && (
+              <p className="md:col-span-3 text-[11px] text-slate-500">
+                Controles do espelho: {status.itens_alterados} itens alterados desde a 1ª captura
+                {' · '}{status.itens_sumidos} sumiram da origem (rastro preservado, fora dos totais).
+              </p>
+            )}
+          </div>
+        </>
       )}
 
       {aberto && status && status.totais_por_mes_natureza.length > 0 && (

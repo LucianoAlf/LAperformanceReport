@@ -62,6 +62,13 @@ verify_jwt = false
 # Operacao privilegiada: o gateway e o codigo exigem JWT; o codigo tambem exige admin ativo.
 verify_jwt = true
 
+[functions.monitor-saude-webhook]
+# Chamada pelo pg_cron (job 23, a cada 10 min) sem JWT: a funcao autentica no codigo por
+# x-sync-token (SYNC_MATRICULAS_ADMIN_TOKEN, lido do vault pelo cron), service_role ou
+# usuario de equipe. Sem esta entrada, um deploy reseta verify_jwt para true e o cron morre
+# em 401 no gateway marcando "succeeded" — a mesma falha silenciosa que a edge vigia.
+verify_jwt = false
+
 [functions.sync-presenca-emusys]
 # O gateway fica aberto apenas para permitir o segredo dedicado dos crons.
 # A funcao valida service_role, x-sync-token ou JWT+permissao antes dos sinks.
@@ -79,7 +86,7 @@ verify_jwt = true
 verify_jwt = false
 
 [functions.gerar-relatorio-pedagogico]
-verify_jwt = false
+verify_jwt = true
 
 [functions.backfill-historico-professor-emusys]
 verify_jwt = true
@@ -107,9 +114,33 @@ verify_jwt = false
 # (segredo dedicado validado no proprio codigo, sem JWT).
 verify_jwt = false
 
+[functions.export-financeiro-asaas-extrato]
+# Leitura do espelho do extrato Asaas p/ o Super Folha: mesmo padrao do
+# export-financeiro-lancamentos (segredo dedicado validado no proprio codigo).
+verify_jwt = false
+
+[functions.export-caixa-movimentacoes]
+# Exporta o caixa (Sol + equipe) p/ o Super Folha cruzar extrato -> caixa ->
+# fatura via fatura_id/emusys_fatura_id. Mesmo segredo dedicado no codigo.
+verify_jwt = false
+
+[functions.export-kpis-mensais]
+# Indicadores canonicos por unidade/mes p/ o Super Folha (CAC/CRC/LTV).
+# Segredo dedicado SUPER_FOLHA_KPIS_SECRET (fallback: contas-receber), validado no codigo.
+verify_jwt = false
+
+[functions.resolver-emusys-cpf-hash]
+# Integracao servidor-servidor com o Super Folha. O codigo valida o segredo
+# compartilhado antes de aceitar o HMAC; nenhum CPF em claro passa por aqui.
+verify_jwt = false
+
 [functions.sync-financeiro-emusys]
 # Cron envia JWT anon valido mais x-sync-token; a funcao valida o segredo antes
 # de abrir execucao. TRUE impede chamadas sem JWT de chegarem ao codigo.
+verify_jwt = true
+
+[functions.sync-asaas-emusys]
+# Mesmo desenho do sync-financeiro-emusys: cron envia JWT anon + x-sync-token.
 verify_jwt = true
 
 [functions.refresh-contas-receber]
@@ -153,6 +184,14 @@ verify_jwt = true
 # apaga, so se retrata item a item por outra chamada de API.
 verify_jwt = true
 
+[functions.enviar-conversoes-meta]
+# LAPE-62: devolve experimental e matricula ao PIXEL do Meta (API de Conversoes, telefone em hash).
+# So cron (pg_cron `enviar-conversoes-meta-diario`, 8h BRT) e operacao manual; nao ha chamador do app.
+# A autorizacao e feita DENTRO da funcao (x-sync-token ou service_role). Esta publicada com
+# verify_jwt=false; o cron manda tambem o Authorization, entao se um redeploy resetar para true
+# o gateway aceita o JWT e a funcao segue autenticando pelo x-sync-token. O padrao da funcao e DRY RUN.
+verify_jwt = false
+
 [functions.atualizar-inadimplencia-emusys]
 # Endpoint de compatibilidade do botao: navegador manda JWT e servidor pode mandar
 # x-sync-token, ambos validados dentro da funcao. Ele apenas encaminha para a fila unica
@@ -163,7 +202,8 @@ verify_jwt = false
 # Webhook chamado direto pelo Emusys, que nao manda Authorization. Com verify_jwt = true o
 # gateway devolve 401 antes do codigo rodar e a funcao para de receber -- sem erro visivel,
 # porque quem chama e o Emusys e ele nao reenvia. A autenticacao propria e o OBSERVADOR_TOKEN
-# (validado DENTRO da funcao, hoje desligado ate sabermos se o Emusys manda header custom).
+# (validado DENTRO da funcao, fail-closed desde 25/09/2026: sem a env configurada, tudo 401;
+# o Emusys manda o token em ?token= na URL, medido em 1.653 entregas/14 dias).
 # Estava faltando aqui ate 06/08/2026: a funcao rodava com false em producao sem nada no repo
 # declarar isso, entao um deploy pelo MCP (que reseta para true) a derrubaria em silencio.
 verify_jwt = false
@@ -245,3 +285,33 @@ verify_jwt = false
 # envio da Caixa de Entrada morreria em 401 no gateway, antes do codigo rodar.
 [functions.enviar-mensagem-admin]
 verify_jwt = false
+
+# Worker interno (cron): escritor de presenca no Emusys. O gateway nao aceita a
+# service key opaca usada entre Edges; a funcao valida o bearer por comparacao
+# constante com SUPABASE_SERVICE_ROLE_KEY antes de qualquer leitura.
+[functions.presenca-emusys-escritor]
+verify_jwt = false
+
+# Assina URL de playback do bucket privado do LA Teacher. So o front autenticado
+# chama; dentro, o JWT do usuario responde a fn_evento_pode_ver antes do service
+# assinar. TRUE impede que chamada sem JWT chegue ao codigo (e o redeploy pelo
+# MCP ja reseta para true, que aqui e o valor correto — mesma armadilha do
+# orquestrar-historico-professor).
+[functions.recital-midia-url]
+verify_jwt = true
+
+# Worker de cron (x-sync-token do Vault) ou service_role — quem chama nao tem JWT de
+# usuario; a porta e a validacao interna, igual ao padrao dos syncs.
+[functions.recital-drive-sync]
+verify_jwt = false
+
+# Cron a cada 15 min sem JWT de usuario (x-sync-token do Vault) + botao "Atualizar
+# planilhas" com JWT de equipe — ambos autenticados DENTRO da funcao (o JWT de equipe
+# e resolvido em usuarios.perfil/unidade antes de qualquer chamada ao Drive).
+[functions.recital-sheets-sync]
+verify_jwt = false
+
+[functions.atualizar-faturas-aluno]
+# Botao "Atualizar faturas deste aluno" do caixa (LAPE-56). O navegador manda o JWT do
+# usuario; a funcao ainda exige perfil admin/unidade e acesso a unidade pedida.
+verify_jwt = true

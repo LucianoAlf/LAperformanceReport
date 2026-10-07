@@ -1,6 +1,3 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
 /* Scrollbar sutil para dark mode */
 .scrollbar-thin {
@@ -24,6 +21,23 @@
 
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background: rgb(51 65 85);
+}
+
+/* 🔴 `scrollbar-hide` era USADA em 2 lugares e NUNCA foi definida — uma
+   promessa vazia. No computador a barra nativa e discreta e ninguem percebeu;
+   a 390px ela vira uma faixa cinza de 12px sob o trilho de abas, em 14 telas.
+
+   ⚠️ Esconder a barra so e aceitavel com OUTRA pista de que ha conteudo alem
+   da dobra (no trilho de abas, o desvanecimento na borda direita). Barra
+   escondida sem substituto e pior que barra feia: o trilho passa a parecer
+   completo e as abas seguintes viram invisiveis. */
+.scrollbar-hide {
+  scrollbar-width: none;          /* Firefox */
+  -ms-overflow-style: none;       /* Edge legado */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;                  /* WebKit: Chrome, Safari, iOS */
 }
 
 /* Estilos customizados para react-day-picker v9 - Dark Mode Premium */
@@ -280,3 +294,201 @@ input[type="number"] {
 .animate-slide-out-right {
   animation: slide-out-right 0.3s ease-in;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   TABELA VIRA CARD NO CELULAR
+   ══════════════════════════════════════════════════════════════════════
+   Pedido do Hugo, e ele tem razao: "se continuar usando tabela, tem que
+   ficar arrastando para o lado, e em dispositivo movel a gente nao tem
+   espaco horizontal".
+
+   Uma tabela nao encolhe: ela tem uma largura minima que e a soma das
+   colunas, e num telefone isso sempre estoura. Card nao tem esse problema
+   porque troca o eixo — o que era coluna vira LINHA rotulada dentro do
+   card, e a tela cresce para baixo, que e o eixo que sobra.
+
+   🔴 Sao 85 arquivos com <table> no app. Converter um a um seria refazer
+   85 telas e deixar a 86a nascendo tabela de novo. Isto age sobre o
+   elemento, dentro do shell mobile, e por isso vale para todas — as que
+   existem e as que vierem.
+
+   ⚠️ Escopo triplo, para nao vazar: `@media (max-width:1023px)` (o
+   `LARGURA_MAXIMA_MOBILE` do app), `main[data-cards-mobile]` (so dentro do
+   shell mobile) e `table:not([data-cards='nao'])` (saida para a tabela em
+   que isto ficar pior que rolar).
+
+   O rotulo de cada celula vem do <thead> por `data-rotulo`, injetado em
+   runtime — ver `useTabelaComoCards`. Sem rotulo, uma data solta nao diz
+   se e "ultima aula" ou "vencimento da fatura".
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width: 1023px) {
+  main[data-cards-mobile] table:not([data-cards='nao']) {
+    display: block;
+    width: 100%;
+  }
+
+  /* O cabecalho vira o rotulo de cada celula; repetido em cima seria lido
+     duas vezes. */
+  main[data-cards-mobile] table:not([data-cards='nao']) thead {
+    display: none;
+  }
+
+  main[data-cards-mobile] table:not([data-cards='nao']) tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  main[data-cards-mobile] table:not([data-cards='nao']) tr {
+    display: block;
+    border: 1px solid rgb(30 41 59);
+    border-radius: 0.75rem;
+    background: rgb(15 23 42 / 0.55);
+    padding: 0.75rem;
+  }
+
+  main[data-cards-mobile] table:not([data-cards='nao']) td {
+    display: flex;
+    align-items: baseline;
+    /* ⚠️ `space-between` aqui SEPARAVA o valor do seu proprio icone: com o
+       `td` virando flex, cada no filho (o texto "4.5%" e o <svg> do ✓/×)
+       vira um item independente, e o navegador espalhava os tres pela
+       linha. Quem empurra e o rotulo, com `margin-right:auto` abaixo —
+       assim tudo que veio do `td` continua junto, do lado direito. */
+    justify-content: flex-end;
+    gap: 0.3rem;
+    padding: 0.3rem 0;
+    text-align: right;
+    border: 0;
+    white-space: normal;
+    /* a linha `sticky` da versao anterior nao faz sentido em card */
+    position: static;
+  }
+
+  main[data-cards-mobile] table:not([data-cards='nao']) td::before {
+    content: attr(data-rotulo);
+    flex: 0 1 auto;
+    min-width: 0;
+    margin-right: auto;
+    padding-right: 0.75rem;
+    text-align: left;
+    font-size: 0.6875rem;
+    line-height: 1.2;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: rgb(100 116 139);
+    font-weight: 500;
+  }
+
+  /* A primeira coluna quase sempre e o NOME da coisa — vira o titulo do
+     card, em cima, sem rotulo. `data-titulo` e decidido em runtime: coluna
+     que so tem caixa de selecao ou icone nao vira titulo. */
+  main[data-cards-mobile] table:not([data-cards='nao']) td[data-titulo='sim'] {
+    display: block;
+    text-align: left;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    padding: 0 0 0.5rem;
+    margin-bottom: 0.35rem;
+    border-bottom: 1px solid rgb(30 41 59);
+  }
+  main[data-cards-mobile] table:not([data-cards='nao']) td[data-titulo='sim']::before {
+    display: none;
+  }
+
+  /* Celula sem conteudo vira linha vazia com rotulo orfao. */
+  main[data-cards-mobile] table:not([data-cards='nao']) td[data-vazia='sim'] {
+    display: none;
+  }
+
+  /* Coluna sem cabecalho (foto do produto, selo, botao de acao) nao e um
+     atributo: ela nao tem nome para servir de rotulo. Fica a esquerda, como
+     enfeite da linha, em vez de exibir um rotulo em branco e empurrar o
+     conteudo para a direita como se fosse um valor. */
+  main[data-cards-mobile] table:not([data-cards='nao']) td[data-semrotulo='sim'] {
+    justify-content: flex-start;
+    text-align: left;
+  }
+  main[data-cards-mobile] table:not([data-cards='nao']) td[data-semrotulo='sim']::before {
+    display: none;
+  }
+
+  /* Rodape de totais nao e um item da lista: fica com o desenho de
+     resumo, nao de card. */
+  main[data-cards-mobile] table:not([data-cards='nao']) tfoot {
+    display: block;
+    margin-top: 0.5rem;
+  }
+  main[data-cards-mobile] table:not([data-cards='nao']) tfoot tr {
+    background: rgb(30 41 59 / 0.55);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Movimento das folhas de baixo (celular) — LAPE-32, 29/09/2026.
+
+   🔴 Por que CSS PROPRIO e nao classes utilitarias do Tailwind: este aplicativo
+   serve o Tailwind pelo Play CDN (<script src="cdn.tailwindcss.com"> no
+   index.html), que gera as regras EM TEMPO DE EXECUCAO varrendo o DOM — o CSS
+   do build sai com as diretivas `@tailwind` cruas e zero utilitarios. Medido em
+   29/09: um elemento montado com uma classe de valor arbitrario inedita ficava
+   SEM a regra no quadro seguinte, e a folha nasceria na posicao ABERTA para so'
+   entao correr ate a fechada. Ou seja, na PRIMEIRA abertura ela desceria em vez
+   de subir. Nome de classe estavel, declarado aqui, nao depende de geracao.
+
+   ⚠️ So `transform` e `opacity`: as duas entram apenas na etapa de COMPOSICAO
+   do quadro. `height`/`top`/`bottom` refariam layout e pintura 60 vezes por
+   segundo. E nada de `backdrop-filter` no veu — e' o efeito mais caro que
+   existe em telefone intermediario.
+   --------------------------------------------------------------------------- */
+
+.folha-veu {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+.folha-veu[data-entrou='1'] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.folha-painel {
+  /* 101% e nao 100%: o 1% cobre o arredondamento de subpixel que deixaria uma
+     fresta da folha visivel encostada na borda de baixo. */
+  transform: translateY(101%);
+  transition: transform 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+.folha-painel[data-entrou='1'] {
+  transform: translateY(0);
+}
+
+.folha-toque {
+  transition: transform 90ms cubic-bezier(0.2, 0, 0, 1);
+}
+.folha-toque:active {
+  transform: scale(0.92);
+}
+
+/* ⚠️ O guard fica ESCOPADO a estas tres classes, nunca no seletor universal.
+   A receita usual (`*, *::before { transition-duration: .01ms !important }`)
+   congelaria os 438 `animate-spin` do aplicativo: para quem tem "reduzir
+   movimento" ligado, toda espera passaria a exibir um circulo PARADO — o que
+   nao e' menos movimento, e' a tela dizendo que travou. E seria mudanca
+   visivel no desktop, que esta frente nao faz. */
+@media (prefers-reduced-motion: reduce) {
+  .folha-veu,
+  .folha-painel,
+  .folha-toque {
+    transition: none;
+  }
+  .folha-toque:active {
+    transform: none;
+  }
+}
+
+/* Tailwind compilado no build (06/10/2026). As diretivas ficam no FIM de propósito: o Play
+   CDN injetava o CSS dele depois de todas as folhas, então utilitário vencia empate com as
+   regras acima. Manter a mesma ordem é o que garante que nada muda de aparência. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

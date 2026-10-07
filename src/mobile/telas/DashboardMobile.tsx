@@ -1,3 +1,5 @@
+import { useNavigate } from 'react-router-dom';
+
 import {
   AlertTriangle,
   Award,
@@ -6,7 +8,6 @@ import {
   DollarSign,
   GraduationCap,
   HeartPulse,
-  Lock,
   Percent,
   Phone,
   RefreshCw,
@@ -48,6 +49,7 @@ import { SecaoKPIs } from './dashboard/SecaoKPIs';
  * tests/mobileDashboardTela.test.mjs compara cartao a cartao com o desktop.
  */
 export function DashboardMobile() {
+  const navigate = useNavigate();
   // Mesma chamada do desktop, e ela e OBRIGATORIA aqui — nao decorativa.
   // useSetPageTitle nao tem cleanup (PageTitleContext.tsx), o MobileLayout
   // nao desmonta ao navegar e o MobileHeader da precedencia ao contexto
@@ -73,7 +75,7 @@ export function DashboardMobile() {
     modalExperimentais, setModalExperimentais, modalConversao, setModalConversao,
     dadosModalMatriculas, dadosModalEvasoes, dadosModalExperimentais,
     dadosModalConversao, carregandoModal, fetchMatriculas, fetchEvasoes,
-    fetchExperimentais,
+    fetchExperimentais, fetchConversao,
   } = useDashboardDados();
 
   if (loading) {
@@ -206,25 +208,35 @@ export function DashboardMobile() {
           size="sm"
         />
         <KPICard
-          icon={taxaExpMatLiberada ? Percent : taxaExpMatSemBase ? Calendar : Lock}
+          icon={taxaExpMatLiberada ? Percent : taxaExpMatSemBase ? Calendar : AlertTriangle}
           label="Taxa Exp→Mat"
           tooltip={
             taxaExpMatLiberada
-              ? 'KPI canônico: matrículas originadas de experimentais confirmadas dividido por experimentais realizadas confirmadas.'
+              ? (dadosComercial?.pendencias_exp_mat ?? 0) > 0
+                ? `KPI canônico: conversões confirmadas / experimentais realizadas confirmadas. ${dadosComercial?.pendencias_exp_mat} pendência(s) de conciliação em aberto — clique para resolver.`
+                : 'KPI canônico: matrículas originadas de experimentais confirmadas dividido por experimentais realizadas confirmadas. Clique para ver o detalhe.'
               : taxaExpMatSemBase
                 ? 'Competencia sem base: ainda nao ha experimentais confirmadas para calcular a taxa.'
-              : 'KPI bloqueado: aguarda regra canônica de vínculo lead → aluno → presença experimental individual.'
+              : 'Taxa ainda não calculada: há experimentais aguardando conciliação. Clique para resolver.'
           }
-          value={!dadosComercial ? '--' : taxaExpMatLiberada ? dadosComercial.taxa_conversao : taxaExpMatSemBase ? 'Sem base' : 'Bloqueada'}
+          value={!dadosComercial ? '--' : taxaExpMatLiberada ? dadosComercial.taxa_conversao : taxaExpMatSemBase ? 'Sem base' : 'Pendente'}
           format={taxaExpMatLiberada ? 'percent' : undefined}
           subvalue={
             taxaExpMatLiberada
-              ? `${dadosComercial.conversoes_exp_mat ?? 0}/${dadosComercial.denominador_exp_mat ?? 0} confirmadas`
+              ? `${dadosComercial.conversoes_exp_mat ?? 0}/${dadosComercial.denominador_exp_mat ?? 0} confirmadas${(dadosComercial?.pendencias_exp_mat ?? 0) > 0 ? ` · ${dadosComercial?.pendencias_exp_mat} pendência(s)` : ''}`
               : taxaExpMatSemBase
                 ? '0 pendencia(s); aguardando experimentais'
-              : `${dadosComercial?.pendencias_exp_mat ?? 0} pendência(s)`
+              : `${dadosComercial?.pendencias_exp_mat ?? 0} pendência(s)${(dadosComercial?.pendencias_exp_mat ?? 0) > 0 ? ' — abrir conciliação' : ''}`
           }
-          variant={taxaExpMatLiberada ? 'emerald' : taxaExpMatSemBase ? 'cyan' : 'amber'}
+          variant={taxaExpMatLiberada ? ((dadosComercial?.pendencias_exp_mat ?? 0) > 0 ? 'amber' : 'emerald') : taxaExpMatSemBase ? 'cyan' : 'amber'}
+          onClick={() => {
+            if ((dadosComercial?.pendencias_exp_mat ?? 0) > 0) {
+              navigate('/app/comercial?tab=conciliacao');
+            } else {
+              fetchConversao();
+              setModalConversao(true);
+            }
+          }}
           size="sm"
         />
         <KPICard
@@ -510,14 +522,14 @@ export function DashboardMobile() {
             ? `Taxa Exp → Mat oficial (${labelPeriodo})`
             : taxaExpMatSemBase
               ? `Taxa Exp → Mat sem base (${labelPeriodo})`
-              : `Taxa Exp → Mat bloqueada (${labelPeriodo})`
+              : `Taxa Exp → Mat pendente (${labelPeriodo})`
         }
         descricao={
           taxaExpMatLiberada
             ? `KPI canônico pela conciliação Emusys v2: conversões confirmadas / experimentais realizadas confirmadas.`
             : taxaExpMatSemBase
               ? `Competencia sem experimentais confirmadas no denominador e sem pendencias de conciliacao.`
-              : `Diagnóstico: não usar como KPI oficial até fechar vínculo lead → aluno → presença experimental individual.`
+              : `Há experimentais aguardando conciliação; a taxa oficial aparece quando houver base confirmada.`
         }
         dados={dadosModalConversao}
         colunas={[
@@ -565,7 +577,7 @@ export function DashboardMobile() {
             },
             {
               label: 'Taxa oficial',
-              valor: taxaLiberada ? `${(dadosComercial?.taxa_conversao ?? 0).toFixed(1)}%` : semBase ? 'Sem base' : 'Bloqueada',
+              valor: taxaLiberada ? `${(dadosComercial?.taxa_conversao ?? 0).toFixed(1)}%` : semBase ? 'Sem base' : 'Pendente',
               icone: <Percent size={14} />,
               cor: taxaLiberada ? 'text-emerald-400' : semBase ? 'text-slate-300' : 'text-yellow-300',
             },

@@ -32,7 +32,25 @@ fs.writeFileSync(abf, `module.exports={
 
 const CHAT = 'canario-teste@g.us';
 const CRACHA = 'SOL1.5521999999999.' + 'a'.repeat(32);
+// A execução mora na ponte: a ponte falsa hospeda o executor real, com o mesmo
+// instrumento de governança (episódio adotado pelo cabeçalho).
+Object.assign(process.env, {
+  SOL_CAIXA_GOVERNANCA_SHADOW: '1', SOL_CAIXA_GOVERNANCA_HMAC_KEY_ID: 'teste',
+  SOL_CAIXA_GOVERNANCA_HMAC_SECRET: 'segredo-de-ensaio-com-mais-de-trinta-e-dois-bytes',
+  SOL_CAIXA_GOVERNANCA_LOG: govlog,
+});
+const govInst = require(path.join(root, 'vps/la-hq/sol/runtime/caixa-governanca-shadow.cjs')).criarInstrumento();
+const { criarPonteFalsa } = require('./_ponte-falsa.cjs');
+const ponte = criarPonteFalsa({ runtime, abf, obterGovernanca: async () => govInst, grupos: {
+  [CHAT]: { unidade_id: '00000000-0000-0000-0000-000000000001', nome: 'Teste' },
+} });
 const server = http.createServer((req, res) => {
+  if (req.url === '/caixa/tool') {
+    let corpo = '';
+    req.on('data', (d) => { corpo += d; });
+    req.on('end', () => ponte(req, res, corpo));
+    return;
+  }
   if (req.url === '/rest/v1/rpc/sol_porta_caixa_contexto_v1') {
     res.setHeader('content-type', 'application/json');
     return res.end(JSON.stringify({ ok: true, quem: 'Teste', nivel: 'lider',
@@ -68,7 +86,7 @@ const server = http.createServer((req, res) => {
       env: { ...process.env,
         LA_REPORT_SUPABASE_URL: `http://127.0.0.1:${port}`,
         LA_REPORT_SERVICE_ROLE_KEY: 'teste', SOL_WHATSAPP_BRIDGE_URL: `http://127.0.0.1:${port}`,
-        SOL_CAIXA_RUNTIME: runtime, SOL_CAIXA_ABF_RUNTIME: abf,
+
         SOL_CAIXA_GOVERNANCA_RUNTIME: path.join(root, 'vps/la-hq/sol/runtime/caixa-governanca-shadow.cjs'),
         SOL_CAIXA_GOVERNANCA_SHADOW: '1', SOL_CAIXA_GOVERNANCA_HMAC_KEY_ID: 'teste',
         SOL_CAIXA_GOVERNANCA_HMAC_SECRET: 'segredo-de-ensaio-com-mais-de-trinta-e-dois-bytes',

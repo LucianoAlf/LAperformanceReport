@@ -1,6 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { ChevronDown } from 'lucide-react';
 
+import { cn } from '@/lib/utils';
+import { CLASSE_PAINEL, CLASSE_VEU, dataEntrou, useFolhaAnimada } from './useFolhaAnimada';
+
 interface Props {
   /** Fora do celular o seletor não existe: o chamador renderiza as abas como sempre. */
   ehCelular: boolean;
@@ -8,6 +11,22 @@ interface Props {
   rotuloAtual: string;
   /** Rótulo da folha — "Seção", "Etapa", conforme a ficha. */
   titulo?: string;
+  /**
+   * Pílula inline em vez da caixa de largura total.
+   *
+   * Na ficha do aluno a seção é o comando principal da tela e merece a faixa
+   * inteira. Na Agenda ela dividia o topo com a data, o resumo e o trilho de
+   * professores — quatro faixas de largura total empilhadas empurravam a
+   * primeira aula para além da metade da tela, e a visão é o que menos se
+   * troca das quatro.
+   */
+  compacto?: boolean;
+  /**
+   * Pílula compacta com alvo de 44px. Na Agenda ela divide a linha com a data e
+   * fica em 32px; no Administrativo o topo tem espaço, e o toque não precisa
+   * encolher.
+   */
+  alvoCheio?: boolean;
   /**
    * A `TabsList` inteira, com os seus gatilhos.
    *
@@ -35,9 +54,27 @@ interface Props {
  * `aria-labelledby` resolve o texto de um elemento oculto, então o painel de
  * conteúdo segue rotulado; desmontar deixaria os 9 `TabsContent` apontando
  * para ids que não existem.
+ *
+ * ⚠️ É por isso que esta folha divide o MOVIMENTO com as outras
+ * (`useFolhaAnimada`) mas **não** a casca da `FolhaMobile`. A lista existe em
+ * dois lugares — dentro da folha e na cópia oculta — e os dois são
+ * mutuamente exclusivos, senão os `id` dos gatilhos aparecem duplicados e o
+ * `aria-labelledby` de cada `TabsContent` passa a apontar para dois
+ * elementos. Com a saída animada, quem sabe a hora exata de trocar um pelo
+ * outro é quem controla o desmonte — e a `FolhaMobile` guarda esse estado
+ * por dentro. Duas cópias do relógio dariam um quadro de desencontro.
  */
-export function SeletorSecaoMobile({ ehCelular, rotuloAtual, titulo = 'Seção', children }: Props) {
+export function SeletorSecaoMobile({
+  ehCelular,
+  rotuloAtual,
+  titulo = 'Seção',
+  compacto = false,
+  alvoCheio = false,
+  children,
+}: Props) {
   const [aberto, setAberto] = useState(false);
+
+  const { montada, entrou } = useFolhaAnimada(aberto);
 
   useEffect(() => {
     if (!aberto) return;
@@ -55,25 +92,42 @@ export function SeletorSecaoMobile({ ehCelular, rotuloAtual, titulo = 'Seção',
         onClick={() => setAberto(true)}
         aria-haspopup="dialog"
         aria-expanded={aberto}
-        className="flex min-h-[44px] w-full flex-shrink-0 items-center justify-between gap-2 rounded-lg border border-slate-700 bg-slate-800/60 px-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-purple-500"
+        className={cn(
+          'flex flex-shrink-0 items-center border border-slate-700 bg-slate-800/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-purple-500',
+          compacto
+            ? cn(alvoCheio ? 'min-h-[44px] px-3' : 'min-h-[32px] px-2.5', 'max-w-[55%] gap-1 rounded-full')
+            : 'min-h-[44px] w-full justify-between gap-2 rounded-lg px-3',
+        )}
       >
-        <span className="truncate text-sm font-semibold text-slate-100">{rotuloAtual}</span>
-        <ChevronDown className="h-4 w-4 flex-none text-slate-500" aria-hidden="true" />
+        <span
+          className={cn(
+            'truncate font-semibold',
+            compacto ? 'text-[12px] text-slate-200' : 'text-sm text-slate-100',
+          )}
+        >
+          {rotuloAtual}
+        </span>
+        <ChevronDown
+          className={cn('flex-none text-slate-500', compacto ? 'h-3.5 w-3.5' : 'h-4 w-4')}
+          aria-hidden="true"
+        />
       </button>
 
-      {aberto ? (
+      {montada ? (
         <>
           <button
             type="button"
             aria-label={`Fechar ${titulo.toLowerCase()}`}
             onClick={() => setAberto(false)}
-            className="fixed inset-0 z-50 bg-slate-950/70"
+            {...dataEntrou(entrou)}
+            className={`fixed inset-0 z-50 bg-slate-950/70 ${CLASSE_VEU}`}
           />
           <div
             role="dialog"
             aria-modal="true"
             aria-label={titulo}
-            className="fixed inset-x-0 bottom-0 z-50 max-h-[84%] overflow-y-auto rounded-t-2xl border-t border-slate-800 bg-slate-900 px-3 pt-2"
+            {...dataEntrou(entrou)}
+            className={`fixed inset-x-0 bottom-0 z-50 max-h-[84%] overflow-y-auto rounded-t-2xl border-t border-slate-800 bg-slate-900 px-3 pt-2 ${CLASSE_PAINEL}`}
             style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
             // Escolher uma secao encerra a decisao: a folha fecha no mesmo
             // toque. Por delegacao, e nao com um `onClick` em cada gatilho —

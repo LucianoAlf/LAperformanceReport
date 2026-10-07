@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Calendar, Building2, Music, Save, Loader2, Phone, Clock, Video, Upload, Trash2, Play } from 'lucide-react';
+import { User, Calendar, Building2, Music, Save, Loader2, Phone, Clock, Video, Upload, Trash2, Play, Mail } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ import {
   normalizarDisponibilidadeSemanal,
   normalizarDisponibilidadesPorUnidade,
 } from './disponibilidadeCanonica';
+import { buscarProfessoresParecidos, type ProfessorParecido } from '@/hooks/useProfessoresDivergencias';
 
 interface ModalProfessorProps {
   open: boolean;
@@ -54,6 +55,29 @@ export function ModalProfessor({
     disponibilidade_por_unidade: {}
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // O sync do Emusys cadastra sozinho o professor novo; criar aqui à mão com nome um pouco
+  // diferente é o caminho para ter o mesmo professor duas vezes. Avisa antes de salvar.
+  const [jaExistentes, setJaExistentes] = useState<ProfessorParecido[]>([]);
+
+  useEffect(() => {
+    if (!open || modo !== 'novo') {
+      setJaExistentes([]);
+      return;
+    }
+    let cancelado = false;
+    const timer = setTimeout(async () => {
+      try {
+        const lista = await buscarProfessoresParecidos(formData.nome);
+        if (!cancelado) setJaExistentes(lista.filter((p) => p.tipo !== 'contem'));
+      } catch {
+        if (!cancelado) setJaExistentes([]);
+      }
+    }, 400);
+    return () => {
+      cancelado = true;
+      clearTimeout(timer);
+    };
+  }, [open, modo, formData.nome]);
 
   // Preencher formulário ao editar
   useEffect(() => {
@@ -75,6 +99,7 @@ export function ModalProfessor({
         observacoes: professor.observacoes || '',
         foto_url: professor.foto_url || '',
         telefone_whatsapp: professor.telefone_whatsapp || '',
+        email_google: professor.email_google || '',
         unidades_ids: professor.unidades?.map(u => u.unidade_id) || [],
         cursos_ids: professor.cursos?.map(c => c.curso_id) || [],
         disponibilidade_por_unidade: dispPorUnidade
@@ -88,6 +113,7 @@ export function ModalProfessor({
         observacoes: '',
         foto_url: '',
         telefone_whatsapp: '',
+        email_google: '',
         unidades_ids: [],
         cursos_ids: [],
         disponibilidade_por_unidade: {}
@@ -319,6 +345,24 @@ export function ModalProfessor({
                   className={errors.nome ? 'border-red-500' : ''}
                 />
                 {errors.nome && <span className="text-xs text-red-400">{errors.nome}</span>}
+                {jaExistentes.length > 0 && (
+                  <div className="mt-2 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200 space-y-1">
+                    <p className="font-medium">Já existe professor com nome igual ou parecido:</p>
+                    <ul className="list-disc pl-4">
+                      {jaExistentes.map((p) => (
+                        <li key={p.professor_id}>
+                          {p.nome}
+                          {p.unidades.length > 0 && ` (${p.unidades.join(', ')})`}
+                          {!p.ativo && ' — inativo'}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-amber-300/80">
+                      Se for a mesma pessoa, edite o cadastro existente em vez de criar outro. O
+                      professor cadastrado no Emusys chega aqui sozinho na manhã seguinte.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Data de Admissão */}
@@ -354,6 +398,23 @@ export function ModalProfessor({
             />
             <p className="text-xs text-slate-500 mt-1">
               Formato: 55 + DDD + número (ex: 5521999999999)
+            </p>
+          </div>
+
+          {/* E-mail Google — destino do compartilhamento da planilha do recital */}
+          <div>
+            <Label className="flex items-center gap-2 mb-2">
+              <Mail className="w-4 h-4 text-sky-400" />
+              E-mail Google
+            </Label>
+            <Input
+              type="email"
+              value={formData.email_google}
+              onChange={(e) => setFormData(prev => ({ ...prev, email_google: e.target.value.trim() }))}
+              placeholder="professor@gmail.com"
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              Conta Google (Gmail/Workspace) — usada pra compartilhar a planilha do recital no Drive
             </p>
           </div>
 

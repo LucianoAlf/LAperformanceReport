@@ -175,7 +175,7 @@ export function CaixaFinanceiroTab({
             <p className="text-sm text-slate-400">{unidadeNome} · {dataLabel}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 max-lg:flex-wrap">
           <Button
             type="button"
             variant="outline"

@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { CalendarRange, ChevronDown } from 'lucide-react';
 
 import { PainelPeriodo, type PainelPeriodoProps } from '@/components/ui/PainelPeriodo';
+import { FolhaMobile } from './FolhaMobile';
 
 type Props = Omit<PainelPeriodoProps, 'layout' | 'onEscolheuValor'>;
 
@@ -31,13 +32,6 @@ type Props = Omit<PainelPeriodoProps, 'layout' | 'onEscolheuValor'>;
 export function SeletorPeriodoMobile(props: Props) {
   const [aberto, setAberto] = useState(false);
 
-  useEffect(() => {
-    if (!aberto) return;
-    const aoTeclar = (e: KeyboardEvent) => { if (e.key === 'Escape') setAberto(false); };
-    window.addEventListener('keydown', aoTeclar);
-    return () => window.removeEventListener('keydown', aoTeclar);
-  }, [aberto]);
-
   return (
     <>
       <button
@@ -52,34 +46,20 @@ export function SeletorPeriodoMobile(props: Props) {
         <ChevronDown className="h-3.5 w-3.5 flex-none text-slate-500" aria-hidden="true" />
       </button>
 
-      {aberto && (
-        <>
-          <button
-            type="button"
-            aria-label="Fechar seletor de período"
-            onClick={() => setAberto(false)}
-            className="fixed inset-0 z-40 bg-slate-950/70"
-          />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Período"
-            className="fixed inset-x-0 bottom-0 z-50 max-h-[84%] overflow-y-auto rounded-t-2xl border-t border-slate-800 bg-slate-900 px-3 pt-2"
-            style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
-          >
-            <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-slate-700" aria-hidden="true" />
-            <div className="mb-3 flex items-baseline justify-between gap-2">
-              <h2 className="font-grotesk text-sm font-bold text-slate-50">Período</h2>
-              <span className="truncate text-[11px] font-medium text-violet-300">{props.range.label}</span>
-            </div>
-
-            {/* Escolher o VALOR fecha a folha: a decisao terminou ali, e um
-                botao "Pronto" depois disso so acrescentaria um toque. Trocar de
-                ESCOPO nao fecha — o proximo toque ainda esta por vir na grade. */}
-            <PainelPeriodo {...props} layout="empilhado" onEscolheuValor={() => setAberto(false)} />
-          </div>
-        </>
-      )}
+      <FolhaMobile
+        aberto={aberto}
+        onFechar={() => setAberto(false)}
+        titulo="Período"
+        rotuloFechar="Fechar seletor de período"
+        acessorioTitulo={
+          <span className="truncate text-[11px] font-medium text-violet-300">{props.range.label}</span>
+        }
+      >
+        {/* Escolher o VALOR fecha a folha: a decisao terminou ali, e um
+            botao "Pronto" depois disso so acrescentaria um toque. Trocar de
+            ESCOPO nao fecha — o proximo toque ainda esta por vir na grade. */}
+        <PainelPeriodo {...props} layout="empilhado" onEscolheuValor={() => setAberto(false)} />
+      </FolhaMobile>
     </>
   );
 }

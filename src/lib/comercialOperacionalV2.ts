@@ -148,6 +148,19 @@ export function normalizarMesRange(mesInicio: number, mesFim: number): number[] 
   return Array.from({ length: fim - inicio + 1 }, (_, index) => inicio + index);
 }
 
+export async function executarEmLotes<T, R>(
+  itens: T[],
+  tamanhoLote: number,
+  executar: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const resultados: R[] = [];
+  for (let i = 0; i < itens.length; i += tamanhoLote) {
+    const lote = itens.slice(i, i + tamanhoLote);
+    resultados.push(...await Promise.all(lote.map(executar)));
+  }
+  return resultados;
+}
+
 export function normalizarUnidadeOperacionalV2(unidadeId: UnidadeOperacionalV2): string | null {
   return !unidadeId || unidadeId === 'todos' ? null : unidadeId;
 }
@@ -292,8 +305,10 @@ export function normalizarPayloadMensalExperimentaisDiagnosticoV2(
     conversoesExpMatCanonicas,
     taxaExpMatCanonica,
     pendenciasTaxaExpMat,
-    taxaExpMatLiberada:
-      resumo?.taxa_exp_mat_liberada === true && pendenciasTaxaExpMat === 0,
+    // Decisão do Alf (set/2026): pendência de conciliação é AVISO, não trava.
+    // A taxa canônica é publicável sempre que a RPC a calculou (denominador > 0);
+    // as pendências seguem visíveis no contador e na fila de conciliação.
+    taxaExpMatLiberada: taxaExpMatCanonica !== null,
     taxaExpMatStatus: resumo?.taxa_exp_mat_status || totais?.taxa_exp_mat_status || 'bloqueada_regra_canonica',
     presencasEmusysExperimentaisPresentes: toComercialNumber(
       totais?.presencas_emusys_experimentais_presentes,
@@ -416,7 +431,8 @@ export function somarSeriesMensaisExperimentaisDiagnosticoV2(
         denominadorTaxaExpMat > 0
           ? (conversoesExpMatCanonicas / denominadorTaxaExpMat) * 100
           : null;
-      const taxaExpMatLiberada = denominadorTaxaExpMat > 0 && pendenciasTaxaExpMat === 0;
+      // Idem ao mensal: pendências não bloqueiam a taxa consolidada.
+      const taxaExpMatLiberada = denominadorTaxaExpMat > 0;
 
       return {
         agendadasEventos: acc.agendadasEventos + mes.agendadasEventos,

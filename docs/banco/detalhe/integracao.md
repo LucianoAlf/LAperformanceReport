@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-18 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-06 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — integracao
 
-58 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+69 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## admin_conversas
 
@@ -160,6 +160,7 @@
 
 **Triggers:**
 - `trg_automacao_check_professor → check_automacao_professor_vinculado()`
+- `trg_remover_cpf_automacao_log → remover_cpf_claro_jsonb_trigger()`
 
 ## automacoes_config
 
@@ -221,6 +222,19 @@
 - `boas_vindas_enviadas_chave_idempotencia_key`
 - `boas_vindas_enviadas_pkey`
 
+## conciliacao_experimentais_v2_cache
+
+> Cache de get_conciliacao_experimentais_v2 (jsonb). Chave = md5(params+dia+fingerprint das fontes). TTL 30min. Auth resolvida antes do cache. Lido/escrito apenas via SECURITY DEFINER.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `cache_key` | text | não |  |  |
+| `payload` | jsonb | não |  |  |
+| `built_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `conciliacao_experimentais_v2_cache_pkey`
+
 ## conversa_estado_whatsapp
 
 | Coluna | Tipo | Nulo | Default | Referência |
@@ -256,6 +270,9 @@
 **Únicos:**
 - `curso_emusys_depara_pkey`
 
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
+
 ## emusys_api_payload
 
 > Espelho de debug do payload bruto da API Emusys. Sem FK e sem vínculo com o sistema. Uso: comparar Emusys x base manualmente. Não alimenta nada.
@@ -277,6 +294,9 @@
 
 **Únicos:**
 - `emusys_api_payload_pkey`
+
+**Triggers:**
+- `trg_remover_cpf_emusys_api_payload → remover_cpf_claro_jsonb_trigger()`
 
 ## emusys_aula_alunos_historico_staging_v1
 
@@ -425,6 +445,7 @@
 - `emusys_experimentais_raw_snapshot_ativo_key_idx`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_emusys_experimentais_raw_updated_at → update_updated_at_column()`
 - `trg_normalizar_payload_emusys_experimental_minimo → normalizar_payload_emusys_experimental_minimo()`
 
@@ -544,6 +565,7 @@
 - `emusys_faturas_unidade_fatura_uniq`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_emusys_faturas_updated_at → touch_emusys_faturas_updated_at()`
 
 ## emusys_historico_backfill_execucoes_v1
@@ -610,6 +632,11 @@
 **Únicos:**
 - `emusys_matriculas_estado_atual_pkey`
 
+**Triggers:**
+- `trg_aluno_trancamento_periodo → fn_aluno_trancamento_periodo_registrar()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
+- `trg_remover_cpf_emusys_matriculas_estado_atual → remover_cpf_claro_jsonb_trigger()`
+
 ## emusys_matriculas_sync_execucoes
 
 > Manifesto auditavel das fotografias Emusys. Somente execucao operacional concluida e fresca pode alimentar KPIs vivos.
@@ -634,12 +661,30 @@
 - `emusys_matriculas_sync_execucoes_pkey`
 - `uq_sync_matriculas_execucao_viva_por_unidade`
 
+## emusys_pessoas_documentos
+
+> Espelho de CPFs de aluno/responsável de GET /matriculas (Emusys), todos os status — inclusive alunos sem linha em `alunos`. Resolve "CPF do pagador do Pix -> aluno" também no histórico.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `unidade_id` | uuid | não |  | unidades.id |
+| `emusys_student_id` | text | não |  |  |
+| `aluno_nome` | text | sim |  |  |
+| `aluno_cpf` | text | sim |  |  |
+| `responsavel_emusys_id` | integer | sim |  |  |
+| `responsavel_nome` | text | sim |  |  |
+| `responsavel_cpf` | text | sim |  |  |
+| `synced_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `emusys_pessoas_documentos_pkey`
+
 ## emusys_professor_disciplinas
 
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
 | `id` | uuid | não | gen_random_uuid() |  |
-| `unidade_id` | uuid | não |  | unidades.id |
+| `unidade_id` | uuid | não |  | emusys_disciplinas_catalogo.unidade_id |
 | `emusys_professor_id` | integer | não |  |  |
 | `emusys_disciplina_id` | integer | não |  | emusys_disciplinas_catalogo.emusys_disciplina_id |
 | `ativo_origem` | boolean | não | true |  |
@@ -1025,6 +1070,9 @@
 - `matriculas_emusys_decisoes_canonicas_pkey`
 - `matriculas_emusys_decisoes_canonicas_unique`
 
+**Triggers:**
+- `trg_remover_cpf_matriculas_decisoes → remover_cpf_claro_jsonb_trigger()`
+
 ## notificacao_config
 
 | Coluna | Tipo | Nulo | Default | Referência |
@@ -1107,6 +1155,107 @@
 **Únicos:**
 - `orquestracao_locks_v1_pkey`
 
+## sync_asaas_extrato_queue
+
+> Fila serial da varredura do extrato Asaas (Emusys beta). convenio_id null = todos os ativos da unidade. Cede quando outra fila Emusys está rodando — rate limit é por token.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `unidade_codigo` | text | não |  |  |
+| `convenio_id` | bigint | sim |  |  |
+| `data_inicial` | date | não |  |  |
+| `data_final` | date | não |  |  |
+| `catalogos` | boolean | não | false |  |
+| `trigger_source` | text | não |  |  |
+| `priority` | integer | não | 100 |  |
+| `status` | text | não | 'pending'::text |  |
+| `attempt_count` | integer | não | 0 |  |
+| `max_retries` | integer | não | 3 |  |
+| `next_attempt_at` | timestamp with time zone | não | now() |  |
+| `lease_expires_at` | timestamp with time zone | sim |  |  |
+| `worker_id` | uuid | sim |  |  |
+| `last_http_status` | integer | sim |  |  |
+| `last_error_code` | text | sim |  |  |
+| `last_error_detail` | text | sim |  |  |
+| `last_retry_after_seconds` | integer | sim |  |  |
+| `started_at` | timestamp with time zone | sim |  |  |
+| `completed_at` | timestamp with time zone | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `sync_asaas_extrato_queue_active_range_uniq`
+- `sync_asaas_extrato_queue_one_running_uniq`
+- `sync_asaas_extrato_queue_pkey`
+
+## sync_faturas_pagas_mes_queue
+
+> Fila duravel de faturas pagas por competencia de pagamento. Evita perder a rotina das 05:00 UTC quando lancamentos ainda estao ativos.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `competencia` | date | não |  |  |
+| `unidade_codigo` | text | não |  |  |
+| `trigger_source` | text | não |  |  |
+| `status` | text | não | 'pending'::text |  |
+| `attempt_count` | integer | não | 0 |  |
+| `max_attempts` | integer | não | 4 |  |
+| `next_attempt_at` | timestamp with time zone | não | now() |  |
+| `lease_expires_at` | timestamp with time zone | sim |  |  |
+| `worker_id` | uuid | sim |  |  |
+| `last_http_status` | integer | sim |  |  |
+| `last_error_code` | text | sim |  |  |
+| `last_error_detail` | text | sim |  |  |
+| `resume_cursor` | text | sim |  |  |
+| `paginas_processadas` | integer | não | 0 |  |
+| `recebidas_api` | integer | não | 0 |  |
+| `pagas_no_mes` | integer | não | 0 |  |
+| `itens_upserted` | integer | não | 0 |  |
+| `started_at` | timestamp with time zone | sim |  |  |
+| `completed_at` | timestamp with time zone | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `sync_faturas_pagas_mes_queue_active_uniq`
+- `sync_faturas_pagas_mes_queue_one_running_uniq`
+- `sync_faturas_pagas_mes_queue_pkey`
+
+## sync_financeiro_emusys_queue
+
+> Fila serial da varredura de lancamentos Emusys. Uma tentativa inicial e no maximo tres retries de 30 minutos.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `unidade_codigo` | text | não |  |  |
+| `data_inicial` | date | não |  |  |
+| `data_final` | date | não |  |  |
+| `catalogos` | boolean | não | false |  |
+| `trigger_source` | text | não |  |  |
+| `priority` | integer | não | 100 |  |
+| `status` | text | não | 'pending'::text |  |
+| `attempt_count` | integer | não | 0 |  |
+| `max_retries` | integer | não | 3 |  |
+| `next_attempt_at` | timestamp with time zone | não | now() |  |
+| `lease_expires_at` | timestamp with time zone | sim |  |  |
+| `worker_id` | uuid | sim |  |  |
+| `last_http_status` | integer | sim |  |  |
+| `last_error_code` | text | sim |  |  |
+| `last_error_detail` | text | sim |  |  |
+| `last_retry_after_seconds` | integer | sim |  |  |
+| `started_at` | timestamp with time zone | sim |  |  |
+| `completed_at` | timestamp with time zone | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `sync_financeiro_emusys_queue_active_range_uniq`
+- `sync_financeiro_emusys_queue_one_running_uniq`
+- `sync_financeiro_emusys_queue_pkey`
+
 ## sync_run_items
 
 > Snapshot imutavel por run/competencia/unidade/fatura, incluindo tombstones de nao confirmacao pela origem.
@@ -1148,6 +1297,89 @@
 **Triggers:**
 - `trg_sync_run_items_append_only → fn_financeiro_snapshot_append_only()`
 
+## sync_run_items_dedup
+
+> LAPE-43 fase 2: sync_run_items deduplicada por conteudo (23 campos). Uma linha por versao distinta de cada fatura, mantendo a ocorrencia mais recente. primeira/ultima_vez_visto preservam o intervalo em que aquela versao esteve vigente. NAO esta em uso -- construida ao lado para validacao antes do swap.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `run_id` | uuid | não |  |  |
+| `canonical_fatura_id` | uuid | não |  |  |
+| `competencia` | date | não |  |  |
+| `unidade_id` | uuid | não |  |  |
+| `unidade_codigo` | text | não |  |  |
+| `emusys_fatura_id` | bigint | não |  |  |
+| `emusys_matricula_id` | bigint | sim |  |  |
+| `emusys_contrato_id` | bigint | sim |  |  |
+| `emusys_student_id` | bigint | sim |  |  |
+| `descricao` | text | não | ''::text |  |
+| `status` | text | não | 'desconhecido'::text |  |
+| `data_vencimento` | date | não |  |  |
+| `data_pagamento` | date | sim |  |  |
+| `valor_original` | numeric(12,2) | não | 0 |  |
+| `valor_pago` | numeric(12,2) | sim |  |  |
+| `juros_e_multa` | numeric(12,2) | não | 0 |  |
+| `desconto_aplicado` | numeric(12,2) | não | 0 |  |
+| `desconto_fixo` | numeric(12,2) | não | 0 |  |
+| `desconto_condicional` | numeric(12,2) | não | 0 |  |
+| `payload` | jsonb | não | '{}'::jsonb |  |
+| `source_missing` | boolean | não | false |  |
+| `source_missing_reason` | text | sim |  |  |
+| `source_last_seen_at` | timestamp with time zone | sim |  |  |
+| `source_missing_detected_at` | timestamp with time zone | sim |  |  |
+| `source_missing_resolved_at` | timestamp with time zone | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `primeira_vez_visto` | timestamp with time zone | sim |  |  |
+| `ultima_vez_visto` | timestamp with time zone | sim |  |  |
+
+**Únicos:**
+- `sync_run_items_dedup_pkey`
+- `sync_run_items_dedup_run_id_competencia_unidade_id_emusys_f_key`
+
+## sync_run_items_historico
+
+> LAPE-43. Historico permanente das faturas vistas pelo sync: uma linha por ILHA (runs contiguos com o mesmo conteudo). Para "o que o Emusys dizia em T": a linha da fatura com primeira_vez_visto <= T <= ultima_vez_visto. Conteudo imutavel; so a ponta (ultima_vez_visto/ultimo_run_id/n_runs) estende. Alimentado so por sync_run_items_consolidar_historico_v1.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `competencia` | date | não |  |  |
+| `unidade_id` | uuid | não |  |  |
+| `emusys_fatura_id` | bigint | não |  |  |
+| `canonical_fatura_id` | uuid | sim |  |  |
+| `unidade_codigo` | text | sim |  |  |
+| `emusys_matricula_id` | bigint | sim |  |  |
+| `emusys_contrato_id` | bigint | sim |  |  |
+| `emusys_student_id` | bigint | sim |  |  |
+| `descricao` | text | sim |  |  |
+| `status` | text | sim |  |  |
+| `data_vencimento` | date | sim |  |  |
+| `data_pagamento` | date | sim |  |  |
+| `valor_original` | numeric | sim |  |  |
+| `valor_pago` | numeric | sim |  |  |
+| `juros_e_multa` | numeric | sim |  |  |
+| `desconto_aplicado` | numeric | sim |  |  |
+| `desconto_fixo` | numeric | sim |  |  |
+| `desconto_condicional` | numeric | sim |  |  |
+| `payload` | jsonb | sim |  |  |
+| `source_missing` | boolean | sim |  |  |
+| `source_missing_reason` | text | sim |  |  |
+| `source_missing_detected_at` | timestamp with time zone | sim |  |  |
+| `source_missing_resolved_at` | timestamp with time zone | sim |  |  |
+| `conteudo_hash` | text | não |  |  |
+| `primeira_vez_visto` | timestamp with time zone | não |  |  |
+| `ultima_vez_visto` | timestamp with time zone | não |  |  |
+| `primeiro_run_id` | uuid | não |  |  |
+| `ultimo_run_id` | uuid | não |  |  |
+| `n_runs` | integer | não |  |  |
+
+**Únicos:**
+- `sync_run_items_historico_pkey`
+
+**Triggers:**
+- `trg_sync_run_items_historico_guard → fn_sync_run_items_historico_guard()`
+
 ## sync_run_overrides
 
 | Coluna | Tipo | Nulo | Default | Referência |
@@ -1168,6 +1400,23 @@
 
 **Triggers:**
 - `trg_sync_run_overrides_append_only → fn_financeiro_snapshot_append_only()`
+
+## sync_run_retencao
+
+> LAPE-43. Uma linha por run ja consolidado em sync_run_items_historico. expurgado_em preenchido = os itens desse run foram podados de sync_run_items (o cabecalho em sync_runs continua). Run expurgado NAO significa "o Emusys devolveu zero faturas".
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `run_id` | uuid | não |  | sync_runs.id |
+| `competencia` | date | não |  |  |
+| `completed_at` | timestamp with time zone | não |  |  |
+| `itens_consolidados` | integer | não |  |  |
+| `consolidado_em` | timestamp with time zone | não | now() |  |
+| `itens_expurgados` | integer | sim |  |  |
+| `expurgado_em` | timestamp with time zone | sim |  |  |
+
+**Únicos:**
+- `sync_run_retencao_pkey`
 
 ## sync_runs
 
@@ -1202,6 +1451,7 @@
 - `sync_runs_pkey`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_sync_runs_guard → fn_financeiro_sync_run_guard()`
 
 ## vcards_unidade
@@ -1225,6 +1475,25 @@
 
 **Triggers:**
 - `trg_vcards_unidade_updated_at → set_updated_at()`
+
+## vw_emusys_historico_aula_aluno_v1
+
+> CONTRATO v1 com o LA Teacher: uma linha por (emusys_aula_id, aluno_id) com a versao mais recente observada. Ligacao aluno resolvida na view; se o staging mudar, manter estas colunas ou publicar _v2.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `unidade_id` | uuid | sim |  |  |
+| `aluno_id` | integer | sim |  |  |
+| `emusys_aula_id` | integer | sim |  |  |
+| `data_hora_inicio` | timestamp with time zone | sim |  |  |
+| `disciplina_nome` | text | sim |  |  |
+| `professor_nome` | text | sim |  |  |
+| `emusys_professor_id` | integer | sim |  |  |
+| `turma_nome` | text | sim |  |  |
+| `categoria` | text | sim |  |  |
+| `cancelada` | boolean | sim |  |  |
+| `presenca` | text | sim |  |  |
+| `anotacoes` | text | sim |  |  |
 
 ## vw_fila_audio_sem_roster
 
@@ -1270,6 +1539,46 @@
 
 **Únicos:**
 - `webhook_debug_log_pkey`
+
+**Triggers:**
+- `trg_remover_cpf_webhook_debug_log → remover_cpf_claro_jsonb_trigger()`
+
+## webhook_diagnosticos_sanitizados
+
+> Diagnosticos operacionais tipados, sem conteudo pessoal, com retencao maxima de sete dias.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `correlation_id` | uuid | não |  |  |
+| `caixa_id` | integer | sim |  | whatsapp_caixas.id |
+| `event_type` | webhook_diagnostic_event_type | não |  |  |
+| `route` | webhook_diagnostic_route | não |  |  |
+| `result` | webhook_diagnostic_result | não |  |  |
+| `http_status` | smallint | sim |  |  |
+| `error_code` | webhook_diagnostic_error_code | sim |  |  |
+| `duration_ms` | bigint | sim |  |  |
+| `provider_message_id_hash` | character(64) | sim |  |  |
+| `occurred_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `webhook_diagnosticos_sanitizados_pkey`
+
+## whatsapp_caixa_webhook_secrets
+
+> Hash SHA-256 do segredo inbound por caixa. O segredo bruto nunca e persistido no banco.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `caixa_id` | integer | não |  | whatsapp_caixas.id |
+| `secret_hash_sha256` | text | não |  |  |
+| `ativo` | boolean | não | true |  |
+| `versao` | integer | não | 1 |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `rotacionado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `whatsapp_caixa_webhook_secrets_pkey`
 
 ## whatsapp_caixas
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { UnidadeComercial } from '../types/comercial';
 import { fetchExperimentaisDiagnosticoComercialV2 } from './useComercialOperacionalResumoV2';
+import { executarEmLotes } from '../lib/comercialOperacionalV2';
 
 interface UnidadeRow {
   id: string;
@@ -134,8 +135,7 @@ export function useComercialResumoV2(ano: number = 2025, unidade: UnidadeComerci
     try {
       const unidadeId = await resolverUnidadeId();
       const [resumosMensais, diagnosticoExperimentais] = await Promise.all([
-        Promise.all(Array.from({ length: 12 }, async (_, index) => {
-          const mes = index + 1;
+        executarEmLotes(Array.from({ length: 12 }, (_, index) => index + 1), 4, async (mes) => {
           const { data, error: rpcError } = await supabase.rpc('get_kpis_comercial_canonicos_v2', {
             p_unidade_id: unidadeId,
             p_ano: ano,
@@ -149,7 +149,7 @@ export function useComercialResumoV2(ano: number = 2025, unidade: UnidadeComerci
           }
 
           return normalizarResumoComercialV2(data as KPIsComercialCanonicosV2Payload | null);
-        })),
+        }),
         fetchExperimentaisDiagnosticoComercialV2({
           unidadeId: unidadeId || 'todos',
           ano,

@@ -107,5 +107,44 @@ export function useProfessoresDivergencias({ incluirResolvidas = false, unidadeI
     };
   }, [divergencias]);
 
-  return { divergencias, resumo, carregando, erro, decidindoId, recarregar: carregar, decidir };
+  /**
+   * Vincula DE VERDADE o id do Emusys da divergência a um professor (grava o id no vínculo e
+   * corrige as aulas órfãs). Sem `professorId`, cria o professor com o nome do Emusys.
+   * `decidir` só fecha a pendência — não liga nada.
+   */
+  const vincular = useCallback(
+    async (id: number, professorId: number | null) => {
+      setDecidindoId(id);
+      const { data, error } = await supabase.rpc('vincular_professor_emusys_manual_v1', {
+        p_divergencia_id: id,
+        p_professor_id: professorId,
+      });
+      setDecidindoId(null);
+
+      if (error) throw new Error(error.message);
+      await carregar();
+      return data as { professor_id: number; aulas_corrigidas: number } | null;
+    },
+    [carregar],
+  );
+
+  return { divergencias, resumo, carregando, erro, decidindoId, recarregar: carregar, decidir, vincular };
+}
+
+export interface ProfessorParecido {
+  professor_id: number;
+  nome: string;
+  ativo: boolean;
+  /** 'exato' | 'parecido' | 'contem' — mesma régua que o sync usa para decidir sozinho. */
+  tipo: string;
+  similaridade: number;
+  unidades: string[];
+}
+
+/** Candidatos por nome — fonte única no banco (`fn_professores_candidatos_por_nome_v1`). */
+export async function buscarProfessoresParecidos(nome: string): Promise<ProfessorParecido[]> {
+  if (nome.trim().length < 3) return [];
+  const { data, error } = await supabase.rpc('buscar_professores_parecidos_v1', { p_nome: nome });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as ProfessorParecido[];
 }

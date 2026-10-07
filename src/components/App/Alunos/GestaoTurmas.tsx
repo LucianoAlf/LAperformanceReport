@@ -4,6 +4,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
 import type { Turma } from './AlunosPage';
+import { useShellMobile } from '@/hooks/useShellMobile';
+import { TurmasMobile } from '@/mobile/telas/alunos/TurmasMobile';
+import { filtrarTurmas, agruparTurmasPorDia, nivelOcupacaoTurma } from '@/lib/turmas';
+import { vincularSalaNaTurma } from '@/lib/turmaSala';
 
 interface GestaoTurmasProps {
   turmas: Turma[];
@@ -50,35 +54,15 @@ export function GestaoTurmas({ turmas, professores, salas, onRecarregar, onEdita
   const [salaIdSelecionada, setSalaIdSelecionada] = useState<number | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [carregandoSalas, setCarregandoSalas] = useState(false);
+  const ehCelular = useShellMobile() === 'mobile';
 
-  // Agrupar turmas por dia
-  const turmasPorDia = useMemo(() => {
-    let turmasFiltradas = [...turmas];
-
-    if (filtros.professor_id) {
-      turmasFiltradas = turmasFiltradas.filter(t => t.professor_id === parseInt(filtros.professor_id));
-    }
-    if (filtros.dia) {
-      turmasFiltradas = turmasFiltradas.filter(t => t.dia_semana === filtros.dia);
-    }
-    if (filtros.ocupacao) {
-      turmasFiltradas = turmasFiltradas.filter(t => {
-        if (filtros.ocupacao === '1') return t.total_alunos === 1;
-        if (filtros.ocupacao === '2') return t.total_alunos === 2;
-        if (filtros.ocupacao === '3+') return t.total_alunos >= 3;
-        if (filtros.ocupacao === '0') return t.total_alunos === 0;
-        return true;
-      });
-    }
-
-    const agrupado: Record<string, Turma[]> = {};
-    DIAS_SEMANA.forEach(dia => {
-      agrupado[dia.valor] = turmasFiltradas
-        .filter(t => t.dia_semana === dia.valor)
-        .sort((a, b) => a.horario_inicio.localeCompare(b.horario_inicio));
-    });
-    return agrupado;
-  }, [turmas, filtros]);
+  // Recorte e agrupamento vivem em `@/lib/turmas`, compartilhados com a lista
+  // do celular: "turma sozinha" nao pode ter duas definicoes numa tela cujo
+  // proprio indicador se chama SOZINHOS.
+  const turmasPorDia = useMemo(
+    () => agruparTurmasPorDia(filtrarTurmas(turmas, filtros)),
+    [turmas, filtros],
+  );
 
   // Carregar salas quando entrar em modo de edição
   useEffect(() => {
@@ -113,67 +97,21 @@ export function GestaoTurmas({ turmas, professores, salas, onRecarregar, onEdita
     if (!turmaDetalhe || !salaIdSelecionada) return;
 
     setSalvando(true);
-    try {
-      const salaSelecionada = salasDisponiveis.find(s => s.id === salaIdSelecionada);
-      
-      // Usar turma_explicita_id da view se disponível, senão buscar por match
-      let turmaExplicitaId = turmaDetalhe.turma_explicita_id || null;
+    // A escrita mora em `@/lib/turmaSala`, a mesma que a folha do celular usa:
+    // a criacao monta oito colunas a mao, e duas versoes divergiriam no
+    // primeiro campo que alguem acrescentasse.
+    const resultado = await vincularSalaNaTurma(turmaDetalhe, salaIdSelecionada, salasDisponiveis);
+    setSalvando(false);
 
-      if (!turmaExplicitaId) {
-        const { data: turmaExistente } = await supabase
-          .from('turmas_explicitas')
-          .select('id')
-          .eq('unidade_id', turmaDetalhe.unidade_id)
-          .eq('professor_id', turmaDetalhe.professor_id)
-          .eq('dia_semana', turmaDetalhe.dia_semana)
-          .eq('horario_inicio', turmaDetalhe.horario_inicio)
-          .maybeSingle();
-        
-        turmaExplicitaId = turmaExistente?.id || null;
-      }
-
-      if (turmaExplicitaId) {
-        // Atualizar turma existente
-        const { error } = await supabase
-          .from('turmas_explicitas')
-          .update({
-            sala_id: salaIdSelecionada,
-            capacidade_maxima: salaSelecionada?.capacidade_maxima || 4,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', turmaExplicitaId);
-
-        if (error) throw error;
-      } else {
-        // Criar nova turma explícita
-        const { error } = await supabase
-          .from('turmas_explicitas')
-          .insert({
-            tipo: 'turma',
-            nome: `${turmaDetalhe.curso_nome} - ${turmaDetalhe.professor_nome}`,
-            professor_id: turmaDetalhe.professor_id,
-            curso_id: turmaDetalhe.curso_id,
-            dia_semana: turmaDetalhe.dia_semana,
-            horario_inicio: turmaDetalhe.horario_inicio,
-            sala_id: salaIdSelecionada,
-            unidade_id: turmaDetalhe.unidade_id,
-            capacidade_maxima: salaSelecionada?.capacidade_maxima || 4,
-            ativo: true
-          });
-
-        if (error) throw error;
-      }
-
-      // Fechar modal e recarregar dados
-      setModoEdicaoSala(false);
-      setTurmaDetalhe(null);
-      onRecarregar();
-    } catch (error) {
-      console.error('Erro ao vincular sala:', error);
-      alert('Erro ao vincular sala. Tente novamente.');
-    } finally {
-      setSalvando(false);
+    if (!resultado.ok) {
+      console.error('Erro ao vincular sala:', resultado.erro);
+      alert(resultado.erro || 'Erro ao vincular sala. Tente novamente.');
+      return;
     }
+
+    setModoEdicaoSala(false);
+    setTurmaDetalhe(null);
+    onRecarregar();
   }
 
   function limparFiltros() {
@@ -198,16 +136,18 @@ export function GestaoTurmas({ turmas, professores, salas, onRecarregar, onEdita
   }
 
   function getBadgeOcupacao(totalAlunos: number, capacidade: number = 4) {
-    const isCheio = totalAlunos >= capacidade;
+    // Quem decide o nivel e a lib; aqui fica so a roupa dele.
+    const nivel = nivelOcupacaoTurma(totalAlunos, capacidade);
+    const isCheio = nivel === 'cheia';
     
-    if (totalAlunos === 1) {
+    if (nivel === 'sozinho') {
       return (
         <span className="bg-red-500/30 text-red-400 px-2 py-0.5 rounded text-xs animate-pulse flex items-center gap-1">
           <AlertTriangle className="w-3 h-3" /> 1/{capacidade} aluno
         </span>
       );
     }
-    if (totalAlunos === 2) {
+    if (nivel === 'dupla') {
       return (
         <span className="bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded text-xs">
           2/{capacidade} alunos
@@ -231,6 +171,23 @@ export function GestaoTurmas({ turmas, professores, salas, onRecarregar, onEdita
   function getEmojiCurso(curso: string | undefined) {
     if (!curso) return '🎵';
     return EMOJIS_CURSO[curso] || '🎵';
+  }
+
+  // No celular a parede de cartoes vira uma lista por dia. A bifurcacao fica
+  // aqui, depois dos hooks e antes do JSX do desktop, que segue intocado.
+  if (ehCelular) {
+    return (
+      <TurmasMobile
+        turmas={turmas}
+        salas={salas}
+        onRecarregar={onRecarregar}
+        onNovaTurma={onNovaTurma}
+        onEditarTurma={onEditarTurma}
+        onExcluirTurma={onExcluirTurma}
+        onAdicionarAlunoTurma={onAdicionarAlunoTurma}
+        onRemoverAlunoTurma={onRemoverAlunoTurma}
+      />
+    );
   }
 
   return (

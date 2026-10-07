@@ -46,6 +46,11 @@ import { PainelFarmer } from './PainelFarmer';
 import { Trophy, ShoppingBag, ClipboardList, MessageSquare, Wallet } from 'lucide-react';
 import { CaixaEntradaTab } from './CaixaEntrada';
 import { CaixaFinanceiroTab } from './CaixaFinanceiro';
+import { useShellMobile } from '@/hooks/useShellMobile';
+import { AdministrativoMobile } from '@/mobile/telas/administrativo/AdministrativoMobile';
+import { AvisoNaoOtimizado } from '@/mobile/AvisoNaoOtimizado';
+import { abaFoiPortada } from '@/mobile/abasPortadas';
+import type { LancamentoId } from '@/lib/administrativoMobile';
 import { ModalPermanenciaDetalhe } from '@/components/GestaoMensal/ModalPermanenciaDetalhe';
 import { ModalDetalheKPI, BadgeUnidade, ValorParcela, TextoCurso } from '@/components/App/Dashboard/ModalDetalheKPI';
 import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
@@ -64,7 +69,7 @@ import {
   isCompetenciaNoPeriodo,
   isRenovacaoAntecipada,
 } from '@/lib/renovacoesAntecipadas';
-import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
+import { contaNosKpis, filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
 import { fetchAlunosAtivosAtuaisCanonicos } from '@/lib/estadoOperacionalAlunos';
 import {
   codigoTipoMatriculaAdministrativo,
@@ -264,6 +269,11 @@ export function AdministrativoPage() {
 
   // Hook de filtro de competência (período)
   const competenciaFiltro = useCompetenciaFiltro();
+
+  // ⚠️ Depois de TODOS os hooks: a bifurcacao e de RENDER, nunca de
+  // montagem. Sair mais cedo mudaria a ordem dos hooks entre os dois
+  // shells, que e o erro que o React nao perdoa.
+  const ehCelular = useShellMobile() === 'mobile';
   const periodoFideliza = getTrimestreLabelFromMes(competenciaFiltro.filtro.mes);
 
   // Estado
@@ -1249,6 +1259,29 @@ export function AdministrativoPage() {
     }
   }
 
+  /**
+   * O celular pede um lancamento pelo nome; quem abre o modal continua sendo
+   * esta pagina, com os MESMOS `setModal*` dos oito cards do computador.
+   *
+   * ⚠️ Nao existe modal proprio do celular. Medidos a 390px, os quatro
+   * principais ja cabem (390px de largura, zero rolagem lateral, 0,7-0,9 tela,
+   * Esc fecha) -- reescreve-los criaria uma segunda versao de cada regra de
+   * escrita do Administrativo, que e a origem das duplicatas de renovacao.
+   */
+  function abrirLancamento(id: LancamentoId) {
+    setEditingItem(null);
+    switch (id) {
+      case 'renovacao': openModalRenovacao('confirmada'); break;
+      case 'renovacao_pendente': openModalRenovacao('pendente_validacao'); break;
+      case 'renovacao_antecipada': openModalRenovacao('antecipada_pendente'); break;
+      case 'nao_renovacao': setModalNaoRenovacao(true); break;
+      case 'aviso_previo': setModalAvisoPrevio(true); break;
+      case 'trancamento': setModalTrancamento(true); break;
+      case 'transferencia': setModalTransferencia(true); break;
+      case 'cancelamento': setModalEvasao(true); break;
+    }
+  }
+
   function handleEdit(item: MovimentacaoAdmin) {
     setEditingItem(item);
     switch (item.tipo) {
@@ -1288,6 +1321,18 @@ export function AdministrativoPage() {
     .filter(m => m.tipo === 'renovacao')
     .filter(isLancadaNoPeriodo)
     .filter(m => isRenovacaoAntecipada(m) && competenciaReferenciaMovimento(m) > endDate);
+  // As TABELAS de renovação listam também bolsista e banda, marcadas como "não entra
+  // na taxa" (Jhon/CG, 02/10/2026: os bolsistas estavam no banco, mas a tela os
+  // escondia e a equipe concluiu que faltavam — chegou a criar cópias pelo modal).
+  // Os CONTADORES acima seguem canônicos: a regra do Alf de 27/08 não muda.
+  const renovacoesDaCompetenciaLista = movimentacoes.filter(isRenovacaoDaCompetencia);
+  const renovacoesLista = renovacoesDaCompetenciaLista.filter(m => isRenovacaoConfirmadaOperacional(m));
+  const renovacoesPendentesLista = renovacoesDaCompetenciaLista.filter(m => !isRenovacaoConfirmadaOperacional(m));
+  const renovacoesAntecipadasLista = movimentacoes
+    .filter(m => m.tipo === 'renovacao')
+    .filter(isLancadaNoPeriodo)
+    .filter(m => isRenovacaoAntecipada(m) && competenciaReferenciaMovimento(m) > endDate);
+  const foraDaTaxa = (lista: MovimentacaoAdmin[]) => lista.filter(m => !contaNosKpis(m)).length;
   const avisosPrevios = movimentacoesCanonicas.filter(m => m.tipo === 'aviso_previo');
   // 🔴 Estas duas listas alimentam a ABA Cancelamentos e o contador dela — e eram as
   // ÚNICAS que saíam de `movimentacoes` CRU. O filtro de atividade extra existe desde
@@ -1321,6 +1366,26 @@ export function AdministrativoPage() {
     );
   }
 
+  // As abas principais, num lugar só: o topo da página e o PainelFarmer (no
+  // celular) desenham a MESMA lista com a MESMA troca.
+  const abasPrincipais = (acessorioNoCelular?: React.ReactNode) => (
+    <PageTabs
+      tabs={[
+        { id: 'lancamentos' as const, label: 'Lançamentos', shortLabel: 'Lanç.', icon: CheckCircle, activeGradient: 'from-purple-500 to-violet-500', activeShadow: 'shadow-purple-500/20' },
+        { id: 'contratos' as const, label: 'Contratos', shortLabel: 'Contratos', icon: CalendarClock, activeGradient: 'from-amber-500 to-orange-500', activeShadow: 'shadow-amber-500/20' },
+        { id: 'fideliza' as const, label: 'Programa Fideliza+ LA', shortLabel: 'Fideliza+', icon: Trophy, activeGradient: 'from-yellow-500 to-orange-500', activeShadow: 'shadow-yellow-500/20' },
+        { id: 'lojinha' as const, label: 'Lojinha', shortLabel: 'Lojinha', icon: ShoppingBag, activeGradient: 'from-sky-500 to-cyan-500', activeShadow: 'shadow-sky-500/20' },
+        { id: 'farmer' as const, label: 'Painel Farmer', shortLabel: 'Farmer', icon: ClipboardList, activeGradient: 'from-violet-500 to-purple-500', activeShadow: 'shadow-violet-500/20' },
+        { id: 'caixa_financeiro' as const, label: 'Caixa', shortLabel: 'Caixa', icon: Wallet, activeGradient: 'from-emerald-500 to-teal-500', activeShadow: 'shadow-emerald-500/20' },
+        { id: 'caixa_entrada' as const, label: 'Entrada', shortLabel: 'Entrada', icon: MessageSquare, activeGradient: 'from-slate-500 to-slate-600', activeShadow: 'shadow-slate-500/20' },
+      ]}
+      activeTab={mainTab}
+      onTabChange={setMainTab}
+      seletorNoCelular="Administrativo"
+      acessorioNoCelular={acessorioNoCelular}
+    />
+  );
+
   return (
     <div className="space-y-6">
       {/* Linha de filtros / ações */}
@@ -1339,31 +1404,38 @@ export function AdministrativoPage() {
               onDataInicioChange={competenciaFiltro.setDataInicio}
               onDataFimChange={competenciaFiltro.setDataFim}
             />
+            {/* ⚠️ No celular ele deixa de ser um botão em gradiente de meia
+                tela. Olhando a tela a 390px: dois gradientes gigantes
+                empilhados — este ciano e o roxo de "Lançar movimentação" —
+                competiam, e o que gritava mais alto era o SECUNDÁRIO. Gerar
+                relatório é uma ação ocasional; lançar movimentação é o motivo
+                de a ADM abrir a tela. O desktop não muda: lá os dois não se
+                empilham, e o gradiente é o padrão da barra de filtros. */}
             <button
               onClick={() => setModalRelatorio(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-cyan-500/20"
+              className={ehCelular
+                ? "flex min-h-[44px] items-center gap-2 rounded-xl border border-slate-700 px-3 text-[13px] font-medium text-slate-300 active:bg-slate-800"
+                : "flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-cyan-500/20"}
             >
               <FileText className="w-4 h-4" />
-              Gerar Relatório WhatsApp
+              {ehCelular ? 'Relatório' : 'Gerar Relatório WhatsApp'}
             </button>
           </>
         )}
       </PageFilterBar>
 
       {/* Tabs Principais */}
-      <PageTabs
-        tabs={[
-          { id: 'lancamentos' as const, label: 'Lançamentos', shortLabel: 'Lanç.', icon: CheckCircle, activeGradient: 'from-purple-500 to-violet-500', activeShadow: 'shadow-purple-500/20' },
-          { id: 'contratos' as const, label: 'Contratos', shortLabel: 'Contratos', icon: CalendarClock, activeGradient: 'from-amber-500 to-orange-500', activeShadow: 'shadow-amber-500/20' },
-          { id: 'fideliza' as const, label: 'Programa Fideliza+ LA', shortLabel: 'Fideliza+', icon: Trophy, activeGradient: 'from-yellow-500 to-orange-500', activeShadow: 'shadow-yellow-500/20' },
-          { id: 'lojinha' as const, label: 'Lojinha', shortLabel: 'Lojinha', icon: ShoppingBag, activeGradient: 'from-sky-500 to-cyan-500', activeShadow: 'shadow-sky-500/20' },
-          { id: 'farmer' as const, label: 'Painel Farmer', shortLabel: 'Farmer', icon: ClipboardList, activeGradient: 'from-violet-500 to-purple-500', activeShadow: 'shadow-violet-500/20' },
-          { id: 'caixa_financeiro' as const, label: 'Caixa', shortLabel: 'Caixa', icon: Wallet, activeGradient: 'from-emerald-500 to-teal-500', activeShadow: 'shadow-emerald-500/20' },
-          { id: 'caixa_entrada' as const, label: 'Entrada', shortLabel: 'Entrada', icon: MessageSquare, activeGradient: 'from-slate-500 to-slate-600', activeShadow: 'shadow-slate-500/20' },
-        ]}
-        activeTab={mainTab}
-        onTabChange={setMainTab}
-      />
+      {/* No celular a fileira vira um botão (LAPE-32). Na Farmer quem desenha
+          esta linha é o PainelFarmer, para o botão dele ficar ao lado deste —
+          a mesma função, então as duas linhas não divergem. */}
+      {!(ehCelular && mainTab === 'farmer') && abasPrincipais()}
+
+      {/* 🔴 A faixa fica AQUI, no nivel da rota, e nao dentro do ramo
+          `lancamentos`: as outras seis abas continuam abrindo a tela do
+          computador, e cada uma precisa do seu aviso. Deixa-la la dentro
+          apagaria a faixa de Contratos, Fideliza+, Lojinha, Farmer, Caixa e
+          Entrada de uma vez -- o erro cometido com Alunos em 14/09. */}
+      {ehCelular && !abaFoiPortada('/app/administrativo', mainTab) && <AvisoNaoOtimizado />}
 
       {/* Conteúdo baseado na tab principal */}
       {mainTab === 'contratos' ? (
@@ -1389,6 +1461,32 @@ export function AdministrativoPage() {
           unidadeId={unidade} 
           ano={competenciaFiltro.filtro.ano}
           mes={competenciaFiltro.filtro.mes}
+          abasPaiNoCelular={ehCelular ? abasPrincipais : undefined}
+        />
+      ) : (
+        <>
+      {/* 🔴 A bifurcacao fica DENTRO do ramo `lancamentos`, e o conteudo do
+          computador segue byte-identico no `else`. Os modais NAO entram aqui:
+          eles vivem logo abaixo, no mesmo fragmento, e o celular os alcanca
+          pelo `abrirLancamento`/`handleEdit`. Bifurcar antes deles deixaria
+          cada botao de lancamento mudo no telefone. */}
+      {ehCelular ? (
+        <AdministrativoMobile
+          listas={{
+            renovacoes,
+            renovacoes_pendentes: renovacoesPendentesConfirmacao,
+            renovacoes_antecipadas: renovacoesAntecipadas,
+            nao_renovacoes: naoRenovacoes,
+            avisos: avisosPrevios,
+            cancelamentos: evasoes,
+            trancamentos,
+            transferencias,
+            alunos_novos: alunosNovos.filter(isNovoAlunoPaganteOperacional),
+          }}
+          resumo={resumo}
+          onLancar={abrirLancamento}
+          onEditar={(mov) => handleEdit(mov as MovimentacaoAdmin)}
+          periodo={competenciaFiltro.range.label}
         />
       ) : (
         <>
@@ -1398,7 +1496,7 @@ export function AdministrativoPage() {
         ano={ano} 
         mes={mes}
         churnRate={resumo?.alunos_pagantes
-          ? ((((resumo?.evasoes_interrompido || 0) + (resumo?.evasoes_nao_renovou || 0)) / resumo.alunos_pagantes) * 100)
+          ? (((resumo?.evasoes_total || 0) / resumo.alunos_pagantes) * 100)
           : 0}
         taxaRenovacao={(() => {
           const totalVenc = (resumo?.renovacoes_realizadas || 0) + (resumo?.nao_renovacoes || 0) + (resumo?.renovacoes_pendentes || 0);
@@ -1406,7 +1504,7 @@ export function AdministrativoPage() {
         })()}
         totalRenovacoes={resumo?.renovacoes_realizadas || 0}
         totalVencimentos={(resumo?.renovacoes_realizadas || 0) + (resumo?.nao_renovacoes || 0) + (resumo?.renovacoes_pendentes || 0)}
-        totalEvasoes={(resumo?.evasoes_interrompido || 0) + (resumo?.evasoes_nao_renovou || 0)}
+        totalEvasoes={resumo?.evasoes_total || 0}
         alunosAtivos={resumo?.alunos_ativos || 0}
       />
 
@@ -1649,10 +1747,10 @@ export function AdministrativoPage() {
               <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
                 <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Churn Rate</p>
                 <p className="text-3xl font-bold text-rose-400">
-                  {resumo?.alunos_pagantes ? ((((resumo?.evasoes_interrompido || 0) + (resumo?.evasoes_nao_renovou || 0)) / resumo.alunos_pagantes) * 100).toFixed(1) : '0.0'}%
+                  {resumo?.alunos_pagantes ? (((resumo?.evasoes_total || 0) / resumo.alunos_pagantes) * 100).toFixed(1) : '0.0'}%
                 </p>
                 <p className="text-xs text-slate-500 mt-1">
-                  {(resumo?.evasoes_interrompido || 0) + (resumo?.evasoes_nao_renovou || 0)} evasões / {resumo?.alunos_pagantes || 0} base
+                  {resumo?.evasoes_total || 0} evasões / {resumo?.alunos_pagantes || 0} base
                 </p>
               </div>
               
@@ -1910,6 +2008,10 @@ export function AdministrativoPage() {
         {/* Tabs */}
         <div className="flex flex-wrap gap-2 mb-4">
           {tabs.map(tab => {
+            const extraForaDaTaxa = tab.id === 'renovacoes' ? foraDaTaxa(renovacoesLista)
+              : tab.id === 'renovacoes_pendentes' ? foraDaTaxa(renovacoesPendentesLista)
+              : tab.id === 'renovacoes_antecipadas' ? foraDaTaxa(renovacoesAntecipadasLista)
+              : 0;
             const count = tab.id === 'renovacoes' ? renovacoes.length
               : tab.id === 'renovacoes_pendentes' ? renovacoesPendentesConfirmacao.length
               : tab.id === 'renovacoes_antecipadas' ? renovacoesAntecipadas.length
@@ -1932,7 +2034,7 @@ export function AdministrativoPage() {
                 )}
               >
                 <Icon className="w-4 h-4" />
-                {tab.label} ({count})
+                {tab.label} ({count}{extraForaDaTaxa > 0 ? ` · +${extraForaDaTaxa} bolsista/banda` : ''})
               </button>
             );
           })}
@@ -1942,14 +2044,14 @@ export function AdministrativoPage() {
         <div className="bg-slate-900/60 rounded-xl border border-slate-700/30 overflow-hidden mt-4">
           {activeTab === 'renovacoes' && (
             <TabelaRenovacoes 
-              data={renovacoes} 
+              data={renovacoesLista}
               onEdit={handleEdit}
               onDelete={handleDeleteMovimentacao}
             />
           )}
           {activeTab === 'renovacoes_pendentes' && (
             <TabelaRenovacoes
-              data={renovacoesPendentesConfirmacao}
+              data={renovacoesPendentesLista}
               onEdit={handleEdit}
               onDelete={handleDeleteMovimentacao}
               onSaveInline={handleSaveRenovacaoInline}
@@ -1960,7 +2062,7 @@ export function AdministrativoPage() {
           )}
           {activeTab === 'renovacoes_antecipadas' && (
             <TabelaRenovacoes
-              data={renovacoesAntecipadas}
+              data={renovacoesAntecipadasLista}
               onEdit={handleEdit}
               onDelete={handleDeleteMovimentacao}
               onSaveInline={handleSaveRenovacaoInline}
@@ -2028,6 +2130,8 @@ export function AdministrativoPage() {
         </div>
         </div>
       </section>
+        </>
+      )}
 
       {/* Modais */}
       <ModalRenovacao
@@ -2098,11 +2202,19 @@ export function AdministrativoPage() {
       />
 
       {/* Plano de Ação Inteligente - IA de Retenção */}
-      <PlanoAcaoRetencao
-        unidadeId={unidade}
-        ano={ano}
-        mes={mes}
-      />
+      {/* ⚠️ Ele mora no bloco dos MODAIS mas é um painel VISÍVEL — foi assim que
+          vazou para a tela do celular mesmo com a bifurcação feita acima, com
+          426px de largura dentro de 354px. Medido no navegador a 390px; nenhum
+          teste teria pego, porque o arquivo está correto do ponto de vista da
+          bifurcação. Fica fora do celular pela mesma régua dos motivos de saída
+          e do LTV: é análise de gestão, que ninguém aciona de pé no balcão. */}
+      {!ehCelular && (
+        <PlanoAcaoRetencao
+          unidadeId={unidade}
+          ano={ano}
+          mes={mes}
+        />
+      )}
 
       {/* Modal de Confirmação de Destrancamento */}
       <ModalConfirmacao

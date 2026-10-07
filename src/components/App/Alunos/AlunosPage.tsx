@@ -3,7 +3,7 @@ import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
-import { normalizarContatos, type ComunidadeWaContato, type ComunidadeWaDeQuem } from '@/lib/comunidadeWaContato';
+import { type ComunidadeWaNomeCadastrado, normalizarContatos, normalizarNomesCadastrados, type ComunidadeWaContato, type ComunidadeWaDeQuem } from '@/lib/comunidadeWaContato';
 import { format } from 'date-fns';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import { ptBR } from 'date-fns/locale';
@@ -59,6 +59,13 @@ import {
   type InadimplenciaCanonicaState,
 } from '@/lib/inadimplenciaCanonica';
 import { criarUrlFaturasAlunos } from '@/lib/faturasAlunosCanonicas';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  chaveCopiaListaAlunos,
+  gravarCopiaListaAlunos,
+  lerCopiaListaAlunos,
+} from '@/lib/alunosListaCopia';
+import '@/lib/alunosListaCopiaSessao';
 import {
   carregarFaturasAlunosFinanceiras,
   FATURAS_FINANCEIRAS_LOADING,
@@ -152,7 +159,7 @@ export interface Aluno {
   // Comunidade WhatsApp (LAPE-33) — leitura de vw_aluno_comunidade_wa_v1,
   // captura diaria (cron 190, 07h BRT). Busca em TODOS os grupos ativos, nao
   // so o da propria unidade — grupo_mesma_unidade=false sinaliza esse caso.
-  comunidade_wa_estado?: 'na_comunidade' | 'fora_da_comunidade' | 'sem_captura' | 'captura_desatualizada' | 'sem_grupo_configurado' | null;
+  comunidade_wa_estado?: 'na_comunidade' | 'fora_da_comunidade' | 'sem_telefone_cadastrado' | 'sem_captura' | 'captura_desatualizada' | 'sem_grupo_configurado' | null;
   comunidade_wa_grupo_nome?: string | null;
   comunidade_wa_mesma_unidade?: boolean | null;
   comunidade_wa_capturado_em?: string | null;
@@ -163,6 +170,8 @@ export interface Aluno {
   comunidade_wa_contato_de_quem?: ComunidadeWaDeQuem | null;
   comunidade_wa_contato_nome?: string | null;
   comunidade_wa_contato_parentesco?: string | null;
+  // TODOS os cadastros daquele numero (o proprio aluno E o responsavel, tipicamente).
+  comunidade_wa_contato_nomes?: ComunidadeWaNomeCadastrado[] | null;
   comunidade_wa_contatos_total?: number | null;
   comunidade_wa_contatos?: ComunidadeWaContato[];
 }
@@ -197,8 +206,12 @@ export interface KPIsAlunos {
   mediaAlunosTurma: number | null;
   mediaAlunosTurmaNumerador: number;
   mediaAlunosTurmaDenominador: number;
-  turmasUmAluno: number;
-  turmasUmAlunoPercentual: number;
+  // null = a fonte canonica nao respondeu. NAO pode ser 0: o card SOZINHOS e' de ALERTA,
+  // entao 0 e' justamente o valor tranquilizador -- ele apagaria o alarme afirmando que
+  // nao ha turma sozinha, na mesma tela em que a aba conta 700. Mesma regua de
+  // mediaAlunosTurma, que ja dizia "Indisponivel" sobre a MESMA resposta que falhou.
+  turmasUmAluno: number | null;
+  turmasUmAlunoPercentual: number | null;
   ticketMedio: number;
   ltvMedio: number;
   totalTurmas: number;
@@ -206,7 +219,20 @@ export interface KPIsAlunos {
   matriculasSegundoCurso?: number;
   matriculasBanda?: number;
   matriculasCoral?: number;
+  // null = a fonte nao respondeu ("—"), nunca 0: zero afirmaria que ninguem esta trancado.
+  matriculasTrancadas: number | null;
+  alunosTrancados: number | null;
+  // De onde vieram os cards de contagem (Matriculas/Alunos/Pagantes/Trancadas).
+  fonteCards: FonteCardsAlunos;
 }
+
+// 'vivo' = carteira de hoje (get_kpis_alunos_admin_operacional), usada no mes corrente.
+// Mes passado le o historico canonico (fechamento, dados_mensais ou preliminar) -- antes os
+// cards mostravam a carteira de HOJE para qualquer mes escolhido.
+type FonteCardsAlunos =
+  | { tipo: 'vivo' }
+  | { tipo: 'historico'; fonte: 'snapshot' | 'dados_mensais' | 'preliminar' | 'vivo'; competencia: string }
+  | { tipo: 'historico_indisponivel'; competencia: string };
 
 interface KPIsAlunosAdminOperacional {
   alunosAtivos: number;
@@ -217,6 +243,55 @@ interface KPIsAlunosAdminOperacional {
   matriculasCoral: number;
   bolsistasIntegrais: number;
   bolsistasParciais: number;
+  matriculasTrancadas: number | null;
+  alunosTrancados: number | null;
+}
+
+const numeroOuNulo = (v: unknown): number | null =>
+  v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v);
+
+// Trancadas de mes passado so existem no fechamento (alunos_admin): a API do Emusys so
+// expoe o trancamento em vigor HOJE, e a canonica devolve null para meses passados.
+// Consolidado = soma das unidades, e so vale com TODAS presentes -- a linha de rede do
+// snapshot nao e confiavel (ago/2026 diverge da soma; set/2026 nem existe).
+async function fetchTrancadasFechamento({
+  unidadeId,
+  ano,
+  mes,
+  unidadesEsperadas,
+}: {
+  unidadeId?: string | 'todos' | null;
+  ano: number;
+  mes: number;
+  unidadesEsperadas: number;
+}): Promise<{ matriculas: number; alunos: number | null } | null> {
+  let query = supabase
+    .from('fechamento_mensal_snapshots')
+    .select('unidade_id, versao, matriculas_trancadas:payload->matriculas_trancadas, alunos_trancados:payload->alunos_trancados')
+    .eq('dominio', 'alunos_admin')
+    .eq('status', 'fechado')
+    .eq('ano', ano)
+    .eq('mes', mes)
+    .not('unidade_id', 'is', null);
+  if (unidadeId && unidadeId !== 'todos') query = query.eq('unidade_id', unidadeId);
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const ultimaPorUnidade = new Map<string, any>();
+  for (const linha of data || []) {
+    const atual = ultimaPorUnidade.get(linha.unidade_id);
+    if (!atual || linha.versao > atual.versao) ultimaPorUnidade.set(linha.unidade_id, linha);
+  }
+  const linhas = Array.from(ultimaPorUnidade.values());
+  const esperadas = unidadeId && unidadeId !== 'todos' ? 1 : unidadesEsperadas;
+  if (linhas.length === 0 || linhas.length < esperadas) return null;
+  if (linhas.some(l => numeroOuNulo(l.matriculas_trancadas) === null)) return null;
+
+  const alunosValores = linhas.map(l => numeroOuNulo(l.alunos_trancados));
+  return {
+    matriculas: linhas.reduce((soma, l) => soma + Number(l.matriculas_trancadas), 0),
+    alunos: alunosValores.some(v => v === null) ? null : alunosValores.reduce((a, b) => a! + b!, 0),
+  };
 }
 
 async function fetchKPIsAlunosAdminOperacional({
@@ -249,7 +324,50 @@ async function fetchKPIsAlunosAdminOperacional({
     matriculasCoral: Number(totais.matriculas_coral) || 0,
     bolsistasIntegrais: Number(totais.bolsistas_integrais) || 0,
     bolsistasParciais: Number(totais.bolsistas_parciais) || 0,
+    matriculasTrancadas: numeroOuNulo(totais.matriculas_trancadas),
+    alunosTrancados: numeroOuNulo(totais.alunos_trancados),
   };
+}
+
+const MESES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+const rotuloCompetencia = (mmAaaa: string) => {
+  const [mm, aaaa] = mmAaaa.split('/');
+  return `${MESES_ABREV[Number(mm) - 1] ?? mm}/${aaaa}`;
+};
+
+// Diz de onde vem o numero dos cards: sem isso, mes passado e mes corrente pareciam iguais.
+function SeloFonteCards({ fonte }: { fonte?: FonteCardsAlunos }) {
+  const base = 'inline-flex max-w-full items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium';
+  if (!fonte || fonte.tipo === 'vivo') {
+    return (
+      <div className={cn(base, 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200')}>
+        <BarChart3 className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate">Dados operacionais — carteira ao vivo</span>
+      </div>
+    );
+  }
+  const mes = rotuloCompetencia(fonte.competencia);
+  if (fonte.tipo === 'historico_indisponivel') {
+    return (
+      <div className={cn(base, 'border-amber-500/40 bg-amber-500/10 text-amber-200')}>
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate">Sem histórico de {mes} — os cards mostram a carteira de hoje</span>
+      </div>
+    );
+  }
+  const texto = fonte.fonte === 'snapshot'
+    ? `Fechamento de ${mes}`
+    : fonte.fonte === 'preliminar'
+      ? `Dado preliminar de ${mes}`
+      : `Histórico de ${mes}`;
+  return (
+    <div className={cn(base, fonte.fonte === 'snapshot'
+      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+      : 'border-amber-500/40 bg-amber-500/10 text-amber-200')}>
+      <Lock className="h-3.5 w-3.5 shrink-0" />
+      <span className="truncate">{texto}</span>
+    </div>
+  );
 }
 
 export interface Filtros {
@@ -326,6 +444,8 @@ export function AlunosPage() {
     competencia: ReturnType<typeof useCompetenciaFiltro>;
   }>();
   const unidadeAtual = context?.unidadeSelecionada || 'todos';
+  const { user } = useAuth();
+  const usuarioId = user?.id ?? null;
   const navigate = useNavigate();
   const [pageSearchParams, setPageSearchParams] = useSearchParams();
   const toast = useToast();
@@ -367,7 +487,7 @@ export function AlunosPage() {
   const [faturasFinanceiras, setFaturasFinanceiras] = useState<FaturasFinanceirasState>(
     FATURAS_FINANCEIRAS_LOADING,
   );
-  const carregarDadosRef = useRef<() => Promise<void>>(async () => undefined);
+  const carregarDadosRef = useRef<(opcoes?: { manterTelaAtual?: boolean }) => Promise<void>>(async () => undefined);
 
   // Sequencia de carregamento: a leitura financeira deixou de bloquear a tela (ela chega
   // ~4s depois da lista), entao a resposta da unidade anterior pode voltar quando o usuario
@@ -394,12 +514,15 @@ export function AlunosPage() {
     mediaAlunosTurma: null,
     mediaAlunosTurmaNumerador: 0,
     mediaAlunosTurmaDenominador: 0,
-    turmasUmAluno: 0,
-    turmasUmAlunoPercentual: 0,
+    turmasUmAluno: null,
+    turmasUmAlunoPercentual: null,
     ticketMedio: 0,
     ltvMedio: 0,
     totalTurmas: 0,
-    turmasSozinhos: 0
+    turmasSozinhos: 0,
+    matriculasTrancadas: null,
+    alunosTrancados: null,
+    fonteCards: { tipo: 'vivo' }
   });
 
   // Estados de filtros
@@ -500,6 +623,13 @@ export function AlunosPage() {
 
   // Estados de UI
   const [loading, setLoading] = useState(true);
+  // Cópia em memória (LAPE-42, src/lib/alunosListaCopia.ts). null = a tela mostra dado desta
+  // carga; preenchido = mostra a última lista vista enquanto a busca nova corre por trás.
+  const [copiaExibida, setCopiaExibida] = useState<{ salvoEm: number; falhou: boolean } | null>(null);
+  // De quem são os dados que ESTÃO no estado. A cópia é gravada com esta chave, nunca com a
+  // da tela: ao trocar de unidade há um render em que a chave já é a nova e a lista ainda é a
+  // velha, e gravar ali guardaria a unidade A sob o nome da B.
+  const [chaveDosDados, setChaveDosDados] = useState<string | null>(null);
   const [confirmRecalcular, setConfirmRecalcular] = useState(false);
   const [recalculando, setRecalculando] = useState(false);
   const [modalNovoAluno, setModalNovoAluno] = useState(false);
@@ -662,13 +792,49 @@ export function AlunosPage() {
 
   carregarDadosRef.current = carregarDados;
 
+  // Grava a copia a cada estado FRESCO da tela — inclusive depois de salvar uma edicao, que
+  // recarrega a lista; assim a copia nunca volta com o dado de antes da edicao. A leitura
+  // financeira e removida dentro de gravarCopiaListaAlunos.
+  useEffect(() => {
+    if (loading || copiaExibida || !chaveDosDados) return;
+    gravarCopiaListaAlunos(chaveDosDados, {
+      alunos, turmas, kpis, professores, cursos, tiposMatricula, salas, horarios,
+    });
+  }, [loading, copiaExibida, chaveDosDados, alunos, turmas, kpis, professores, cursos, tiposMatricula, salas, horarios]);
+
   // Carregar dados iniciais e invalidar imediatamente qualquer leitura da unidade anterior.
   useEffect(() => {
     setInadimplenciaCanonica(INADIMPLENCIA_CANONICA_LOADING);
     setFaturasFinanceiras(FATURAS_FINANCEIRAS_LOADING);
     limparInadimplenciaDerivada();
-    void carregarDadosRef.current();
+
+    // A cópia só preenche o intervalo que seria spinner: a carga abaixo roda SEMPRE.
+    const copia = lerCopiaListaAlunos(chaveCopiaListaAlunos(
+      usuarioId, unidadeAtual, competenciaRange.startDate, competenciaRange.endDate,
+    ));
+    if (copia) {
+      setAlunos(copia.alunos);
+      setTurmas(copia.turmas);
+      setKpis(copia.kpis);
+      setProfessores(copia.professores);
+      setCursos(copia.cursos);
+      setTiposMatricula(copia.tiposMatricula);
+      setSalas(copia.salas);
+      setHorarios(copia.horarios);
+      setCopiaExibida({ salvoEm: copia.salvoEm, falhou: false });
+      setLoading(false);
+    } else {
+      setCopiaExibida(null);
+    }
+
+    void carregarDadosRef.current({ manterTelaAtual: !!copia }).catch((erro) => {
+      console.error('Erro ao atualizar a Lista de Alunos:', erro);
+      // Sem isto a tela ficaria travada em "atualizando" para sempre.
+      setCopiaExibida(prev => prev ? { ...prev, falhou: true } : prev);
+      setLoading(false);
+    });
   }, [
+    usuarioId,
     unidadeAtual,
     competenciaRange.startDate,
     competenciaRange.endDate,
@@ -730,11 +896,16 @@ export function AlunosPage() {
     };
   }, []);
 
-  async function carregarDados() {
-    setLoading(true);
+  async function carregarDados(opcoes?: { manterTelaAtual?: boolean }) {
+    // Com a copia na tela nao ha spinner: ela fica visivel (e travada) ate esta carga terminar.
+    // `=== true` porque este handler tambem e passado direto como onRecarregar/onClick.
+    if (opcoes?.manterTelaAtual !== true) setLoading(true);
 
     // Selo desta carga; a resposta financeira so e aplicada se ainda for a carga corrente.
     const seqCarregamento = ++carregamentoSeqRef.current;
+    const chaveDestaCarga = chaveCopiaListaAlunos(
+      usuarioId, unidadeAtual, competenciaRange.startDate, competenciaRange.endDate,
+    );
 
     // ── FASE 1: disparar TUDO em paralelo ──
 
@@ -813,7 +984,7 @@ export function AlunosPage() {
     // ordenacao estavel, paginar por range pode repetir e pular linha.
     const buildComunidadeWaQuery = () => {
       let q = supabase.from('vw_aluno_comunidade_wa_v1')
-        .select('aluno_id, estado, grupo_nome, grupo_mesma_unidade, capturado_em, contato_telefone, contato_de_quem, contato_nome, contato_parentesco, contatos_no_grupo_total, contatos_no_grupo')
+        .select('aluno_id, estado, grupo_nome, grupo_mesma_unidade, capturado_em, contato_telefone, contato_de_quem, contato_nome, contato_parentesco, contato_nomes, contatos_no_grupo_total, contatos_no_grupo')
         .order('aluno_id');
       if (unidadeAtual && unidadeAtual !== 'todos') q = q.eq('unidade_id', unidadeAtual);
       return q;
@@ -837,6 +1008,109 @@ export function AlunosPage() {
       error: error instanceof Error ? error.message : 'Falha ao consultar faturas financeiras.',
     }));
 
+    // Os dois KPIs canonicos (~4s cada) so dependem de unidade e competencia, mas eram
+    // aguardados um depois do outro DEPOIS da lista montada -- ~8s de spinner com os alunos ja
+    // prontos, porque `loading` so cai no fim. Disparam aqui, correm junto com a lista e sao
+    // aguardados no mesmo ponto de antes: mesmos dados, mesma tela, sem a fila.
+    const kpisAdminOperacionalPromise = fetchKPIsAlunosAdminOperacional({
+      unidadeId: unidadeAtual,
+      ano: competenciaFiltro.ano,
+      mes: competenciaFiltro.mes,
+    }).catch((err) => {
+      console.error('Erro ao buscar KPIs operacionais de alunos:', err);
+      return null;
+    });
+    const [anoHoje, mesHoje] = hojeBrasilia().split('-').map(Number);
+    const ehMesPassado = competenciaFiltro.tipo === 'mensal'
+      && (competenciaFiltro.ano < anoHoje || (competenciaFiltro.ano === anoHoje && competenciaFiltro.mes < mesHoje));
+    const competenciaRotulo = `${String(competenciaFiltro.mes).padStart(2, '0')}/${competenciaFiltro.ano}`;
+    const kpisAlunosCanonicosPromise = fetchKPIsAlunosCanonicos({
+      unidadeId: unidadeAtual,
+      ano: competenciaFiltro.ano,
+      mes: competenciaFiltro.mes,
+    }).catch((err) => {
+      console.error('Erro ao buscar KPIs financeiros canônicos de alunos:', err);
+      return null;
+    });
+    // So mes passado: no corrente as trancadas vem da carteira ao vivo.
+    const trancadasFechamentoPromise = ehMesPassado
+      ? kpisAlunosCanonicosPromise.then(canonicos => fetchTrancadasFechamento({
+          unidadeId: unidadeAtual,
+          ano: competenciaFiltro.ano,
+          mes: competenciaFiltro.mes,
+          unidadesEsperadas: canonicos?.porUnidade.length ?? 0,
+        })).catch((err) => {
+          console.error(`Erro ao buscar trancadas do fechamento ${competenciaRotulo} (unidade ${unidadeAtual}):`, err);
+          return null;
+        })
+      : Promise.resolve(null);
+
+    const alunosPromise = fetchAllAlunos(buildMainQuery);
+    const alunosSaidaPromise = buildSaidaQuery
+      ? fetchAllAlunos(buildSaidaQuery)
+      : Promise.resolve({ data: [] as any[], error: null });
+
+    // A anamnese é da PESSOA: casar por aluno_id deixaria o 2º curso fora do
+    // filtro de diagnóstico. A chave vem da view canônica — remontar o
+    // 'emusys:' aqui criaria uma segunda fonte da mesma regra.
+    // Encadeada na LISTA, não no Promise.all: só depende dos ids dos alunos, e esperar as
+    // outras 8 trilhas (KPI de turmas, LTV, comunidade...) só atrasava a tela.
+    const anamnesePorAlunoPromise = Promise.all([alunosPromise, alunosSaidaPromise])
+      .then(async ([principalR, saidaR]) => {
+        const chavePorAluno = new Map<number, string>();
+        const diagnosticosPorPessoa = new Map<string, string[]>();
+        if (principalR.error) return { chavePorAluno, diagnosticosPorPessoa };
+
+        const alunoIds = [...new Set(
+          [...(principalR.data ?? []), ...(saidaR.data ?? [])]
+            .map((registro: any) => registro.id)
+            .filter(Boolean)
+        )];
+        if (alunoIds.length === 0) return { chavePorAluno, diagnosticosPorPessoa };
+
+        const { data: chavesPessoa } = await supabase
+          .from('vw_aluno_pessoa_chave')
+          .select('aluno_id, unidade_id, pessoa_chave')
+          .in('aluno_id', alunoIds);
+
+        const chavesDistintas = new Set<string>();
+        (chavesPessoa || []).forEach((registro: any) => {
+          chavePorAluno.set(registro.aluno_id, `${registro.unidade_id}|${registro.pessoa_chave}`);
+          chavesDistintas.add(registro.pessoa_chave);
+        });
+
+        const { data: anamnesesLista } = chavesDistintas.size
+          ? await supabase
+              .from('anamneses')
+              .select('unidade_id, pessoa_chave, diagnosticos')
+              .in('pessoa_chave', [...chavesDistintas])
+              .eq('status', 'completa')
+              .order('created_at', { ascending: false })
+          : { data: [] as any[] };
+
+        anamnesesLista?.forEach((registro: any) => {
+          const chave = `${registro.unidade_id}|${registro.pessoa_chave}`;
+          if (diagnosticosPorPessoa.has(chave)) return;   // a mais recente vence
+
+          let diagnosticos: string[] = [];
+          if (Array.isArray(registro.diagnosticos)) {
+            diagnosticos = registro.diagnosticos.map((item: any) => {
+              if (typeof item === 'string') return item;
+              if (item && typeof item === 'object') {
+                return String(item.label || item.nome || item.valor || item.value || '').trim();
+              }
+              return String(item).trim();
+            }).filter(Boolean);
+          } else if (typeof registro.diagnosticos === 'string') {
+            diagnosticos = registro.diagnosticos.split(',').map((item: string) => item.trim()).filter(Boolean);
+          }
+
+          diagnosticosPorPessoa.set(chave, diagnosticos);
+        });
+
+        return { chavePorAluno, diagnosticosPorPessoa };
+      });
+
     // Disparar tudo em paralelo: alunos (paginado), turmas operacionais, KPI canônico,
     // anotações, turmas explícitas, opções e LTV.
     const [
@@ -848,8 +1122,8 @@ export function AlunosPage() {
       comunidadeWaR,
       ...outrosResults
     ] = await Promise.all([
-      fetchAllAlunos(buildMainQuery),
-      buildSaidaQuery ? fetchAllAlunos(buildSaidaQuery) : Promise.resolve({ data: [] as any[], error: null }),
+      alunosPromise,
+      alunosSaidaPromise,
       qTurmasView,
       kpisTurmasPromise,
       // Anotações pendentes — são poucas, buscar TODAS sem .in() de 1000 IDs
@@ -902,52 +1176,7 @@ export function AlunosPage() {
     }
 
     if (!error && alunosMesclados.length > 0) {
-      const alunoIds = alunosMesclados.map((registro: any) => registro.id).filter(Boolean);
-
-      // A anamnese é da PESSOA: casar por aluno_id deixaria o 2º curso fora do
-      // filtro de diagnóstico. A chave vem da view canônica — remontar o
-      // 'emusys:' aqui criaria uma segunda fonte da mesma regra.
-      const { data: chavesPessoa } = await supabase
-        .from('vw_aluno_pessoa_chave')
-        .select('aluno_id, unidade_id, pessoa_chave')
-        .in('aluno_id', alunoIds);
-
-      const chavePorAluno = new Map<number, string>();
-      const chavesDistintas = new Set<string>();
-      (chavesPessoa || []).forEach((registro: any) => {
-        chavePorAluno.set(registro.aluno_id, `${registro.unidade_id}|${registro.pessoa_chave}`);
-        chavesDistintas.add(registro.pessoa_chave);
-      });
-
-      const { data: anamnesesLista } = chavesDistintas.size
-        ? await supabase
-            .from('anamneses')
-            .select('unidade_id, pessoa_chave, diagnosticos')
-            .in('pessoa_chave', [...chavesDistintas])
-            .eq('status', 'completa')
-            .order('created_at', { ascending: false })
-        : { data: [] as any[] };
-
-      const diagnosticosPorPessoa = new Map<string, string[]>();
-      anamnesesLista?.forEach((registro: any) => {
-        const chave = `${registro.unidade_id}|${registro.pessoa_chave}`;
-        if (diagnosticosPorPessoa.has(chave)) return;   // a mais recente vence
-
-        let diagnosticos: string[] = [];
-        if (Array.isArray(registro.diagnosticos)) {
-          diagnosticos = registro.diagnosticos.map((item: any) => {
-            if (typeof item === 'string') return item;
-            if (item && typeof item === 'object') {
-              return String(item.label || item.nome || item.valor || item.value || '').trim();
-            }
-            return String(item).trim();
-          }).filter(Boolean);
-        } else if (typeof registro.diagnosticos === 'string') {
-          diagnosticos = registro.diagnosticos.split(',').map((item: string) => item.trim()).filter(Boolean);
-        }
-
-        diagnosticosPorPessoa.set(chave, diagnosticos);
-      });
+      const { chavePorAluno, diagnosticosPorPessoa } = await anamnesePorAlunoPromise;
 
       const turmasMap = new Map(turmasViewData.map((t: any) => [
         `${t.unidade_id}-${t.professor_id}-${t.dia_semana}-${t.horario_inicio}`,
@@ -966,7 +1195,7 @@ export function AlunosPage() {
       });
 
       // Mapa de comunidade WhatsApp (LAPE-33) — 1 linha por aluno_id na view
-      const comunidadeWaMap = new Map<number, { estado: string; grupo_nome: string | null; grupo_mesma_unidade: boolean | null; capturado_em: string | null; contato_telefone: string | null; contato_de_quem: string | null; contato_nome: string | null; contato_parentesco: string | null; contatos_no_grupo_total: number | null; contatos_no_grupo: unknown }>();
+      const comunidadeWaMap = new Map<number, { estado: string; grupo_nome: string | null; grupo_mesma_unidade: boolean | null; capturado_em: string | null; contato_telefone: string | null; contato_de_quem: string | null; contato_nome: string | null; contato_parentesco: string | null; contato_nomes: unknown; contatos_no_grupo_total: number | null; contatos_no_grupo: unknown }>();
       (comunidadeWaR as any)?.data?.forEach((c: any) => {
         comunidadeWaMap.set(c.aluno_id, {
           estado: c.estado,
@@ -977,6 +1206,7 @@ export function AlunosPage() {
           contato_de_quem: c.contato_de_quem,
           contato_nome: c.contato_nome,
           contato_parentesco: c.contato_parentesco,
+          contato_nomes: c.contato_nomes,
           contatos_no_grupo_total: c.contatos_no_grupo_total,
           contatos_no_grupo: c.contatos_no_grupo,
         });
@@ -1009,6 +1239,7 @@ export function AlunosPage() {
           comunidade_wa_contato_de_quem: (comunidadeWaMap.get(a.id)?.contato_de_quem as ComunidadeWaDeQuem | null) ?? null,
           comunidade_wa_contato_nome: comunidadeWaMap.get(a.id)?.contato_nome ?? null,
           comunidade_wa_contato_parentesco: comunidadeWaMap.get(a.id)?.contato_parentesco ?? null,
+          comunidade_wa_contato_nomes: normalizarNomesCadastrados(comunidadeWaMap.get(a.id)?.contato_nomes),
           comunidade_wa_contatos_total: comunidadeWaMap.get(a.id)?.contatos_no_grupo_total ?? null,
           comunidade_wa_contatos: normalizarContatos(comunidadeWaMap.get(a.id)?.contatos_no_grupo),
         };
@@ -1194,26 +1425,11 @@ export function AlunosPage() {
         console.error('Erro ao buscar média canônica de alunos por turma:', kpisTurmasR.error);
       }
 
-      let kpisAdminOperacional: KPIsAlunosAdminOperacional | null = null;
-      let kpisAlunosCanonicos: Awaited<ReturnType<typeof fetchKPIsAlunosCanonicos>> | null = null;
-      try {
-        kpisAdminOperacional = await fetchKPIsAlunosAdminOperacional({
-          unidadeId: unidadeAtual,
-          ano: competenciaFiltro.ano,
-          mes: competenciaFiltro.mes,
-        });
-      } catch (err) {
-        console.error('Erro ao buscar KPIs operacionais de alunos:', err);
-      }
-      try {
-        kpisAlunosCanonicos = await fetchKPIsAlunosCanonicos({
-          unidadeId: unidadeAtual,
-          ano: competenciaFiltro.ano,
-          mes: competenciaFiltro.mes,
-        });
-      } catch (err) {
-        console.error('Erro ao buscar KPIs financeiros canônicos de alunos:', err);
-      }
+      const [kpisAdminOperacional, kpisAlunosCanonicos, trancadasFechamento]: [
+        KPIsAlunosAdminOperacional | null,
+        Awaited<ReturnType<typeof fetchKPIsAlunosCanonicos>> | null,
+        Awaited<ReturnType<typeof fetchTrancadasFechamento>>,
+      ] = await Promise.all([kpisAdminOperacionalPromise, kpisAlunosCanonicosPromise, trancadasFechamentoPromise]);
 
       const usarKpisAdminOperacional = !!kpisAdminOperacional;
       const kpisFinanceirosCanonicos = kpisAlunosCanonicos?.fonte !== 'indisponivel'
@@ -1222,9 +1438,17 @@ export function AlunosPage() {
           : kpisAlunosCanonicos?.porUnidade.find(row => row.unidade_id === unidadeAtual)
         : null;
       const ticketMedioCanonico = Number(kpisFinanceirosCanonicos?.ticketMedio) || 0;
+      // Mes passado com historico canonico: os cards de contagem saem dele (mesma fonte do
+      // ticket). Sem historico, ficam na carteira ao vivo e o selo DIZ isso.
+      const historicoCards = ehMesPassado ? kpisFinanceirosCanonicos : null;
+      const fonteCards: FonteCardsAlunos = !ehMesPassado
+        ? { tipo: 'vivo' }
+        : historicoCards && kpisAlunosCanonicos && kpisAlunosCanonicos.fonte !== 'indisponivel'
+          ? { tipo: 'historico', fonte: kpisAlunosCanonicos.fonte, competencia: competenciaRotulo }
+          : { tipo: 'historico_indisponivel', competencia: competenciaRotulo };
       const tempoPermanenciaCanonico = Number(kpisFinanceirosCanonicos?.tempoPermanencia) || 0;
 
-      setKpis({
+      const contagensAoVivo = {
         totalAtivos: usarKpisAdminOperacional ? kpisAdminOperacional.alunosAtivos : totalAtivos,
         totalMatriculasAtivas: usarKpisAdminOperacional ? kpisAdminOperacional.matriculasAtivas : totalMatriculasAtivas,
         matriculasSegundoCurso: usarKpisAdminOperacional ? kpisAdminOperacional.matriculasSegundoCurso : matriculasSegundoCurso,
@@ -1234,17 +1458,38 @@ export function AlunosPage() {
         totalBolsistas: usarKpisAdminOperacional
           ? Math.round(kpisAdminOperacional.bolsistasIntegrais + kpisAdminOperacional.bolsistasParciais)
           : totalBolsistas,
+        // Sem a fonte operacional nao ha contagem de trancados: "—", nunca 0.
+        matriculasTrancadas: usarKpisAdminOperacional ? kpisAdminOperacional.matriculasTrancadas : null,
+        alunosTrancados: usarKpisAdminOperacional ? kpisAdminOperacional.alunosTrancados : null,
+      };
+      const contagens = fonteCards.tipo === 'historico' && historicoCards
+        ? {
+            totalAtivos: historicoCards.alunosAtivos,
+            totalMatriculasAtivas: historicoCards.matriculasAtivas,
+            matriculasSegundoCurso: historicoCards.matriculasSegundoCurso,
+            matriculasBanda: historicoCards.matriculasBanda,
+            matriculasCoral: historicoCards.matriculasCoral ?? 0,
+            totalPagantes: historicoCards.alunosPagantes,
+            totalBolsistas: Math.round(historicoCards.bolsistasIntegrais + historicoCards.bolsistasParciais),
+            matriculasTrancadas: trancadasFechamento?.matriculas ?? null,
+            alunosTrancados: trancadasFechamento?.alunos ?? null,
+          }
+        : contagensAoVivo;
+
+      setKpis({
+        ...contagens,
+        fonteCards,
         mediaAlunosTurma: mediaAlunosTurma === null
           ? null
           : Math.round(mediaAlunosTurma * 100) / 100,
         mediaAlunosTurmaNumerador: totaisKpisTurmas?.totalOcupacoes ?? 0,
         mediaAlunosTurmaDenominador: totaisKpisTurmas?.totalTurmas ?? 0,
-        turmasUmAluno: totaisKpisTurmas?.totalTurmasUmAluno ?? 0,
-        turmasUmAlunoPercentual: totaisKpisTurmas?.percentualTurmasUmAluno ?? 0,
+        turmasUmAluno: totaisKpisTurmas?.totalTurmasUmAluno ?? null,
+        turmasUmAlunoPercentual: totaisKpisTurmas?.percentualTurmasUmAluno ?? null,
         ticketMedio: Math.round(ticketMedioCanonico || ticketMedio),
         ltvMedio: Math.round((tempoPermanenciaCanonico || ltvMedio) * 10) / 10,
         totalTurmas,
-        turmasSozinhos
+        turmasSozinhos,
       });
     }
 
@@ -1265,6 +1510,15 @@ export function AlunosPage() {
     setTurmas([...turmasImplicitasMarcadas, ...turmasExplicitasFiltradas]);
 
     setLoading(false);
+    if (seqCarregamento === carregamentoSeqRef.current) {
+      if (error) {
+        // A lista nao veio: se havia copia, ela continua, mas a tela diz que nao atualizou.
+        setCopiaExibida(prev => prev ? { ...prev, falhou: true } : prev);
+      } else {
+        setCopiaExibida(null);
+        setChaveDosDados(chaveDestaCarga);
+      }
+    }
   }
 
   // Busca turmas explícitas e retorna Turma[] (chamada em paralelo por carregarDados)
@@ -1558,8 +1812,11 @@ export function AlunosPage() {
       }
     }
 
-    // Comunidade WhatsApp (LAPE-33) — sem_captura/desatualizada/sem_grupo contam
-    // como "fora", nunca como "dentro" (nao sei != esta dentro).
+    // Comunidade WhatsApp (LAPE-33) — os "nao sei" (sem_captura, desatualizada,
+    // sem_grupo e sem_telefone_cadastrado) contam como "fora" AQUI, nunca como
+    // "dentro": o filtro e de acao -- serve para achar quem precisa ser olhado --,
+    // e "nao sei" != "esta dentro". A COLUNA, essa, nao pode afirmar "Fora" para
+    // eles; quem faz essa distincao e explicarEstadoComunidade().
     if (filtros.comunidade_wa === 'dentro') {
       resultado = resultado.filter(a => a.comunidade_wa_estado === 'na_comunidade');
     }
@@ -2127,7 +2384,8 @@ export function AlunosPage() {
           Faturas de alunos
         </button>
         {/* Badge de Alerta - Alunos sem lançamento de pagamento */}
-        {alertaPagamentos.mostrar && (
+        {/* status_pagamento tambem e dinheiro: da copia, nao se afirma nada. */}
+        {alertaPagamentos.mostrar && !copiaExibida && (
           <button
             onClick={() => {
               setTabAtiva('lista');
@@ -2143,13 +2401,49 @@ export function AlunosPage() {
         )}
       </div>
 
-      <div className="inline-flex max-w-full items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-medium text-cyan-200">
-        <BarChart3 className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate">Dados operacionais — carteira ao vivo</span>
-      </div>
+      {copiaExibida ? (
+        // A tela NAO e "ao vivo" enquanto mostra a copia -- o selo de sempre mentiria.
+        <div
+          role="status"
+          className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-200"
+        >
+          {copiaExibida.falhou ? (
+            <>
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              <span>
+                Não consegui atualizar — mostrando a lista de {format(new Date(copiaExibida.salvoEm), 'HH:mm')}, sem ações
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setCopiaExibida(prev => prev ? { ...prev, falhou: false } : prev);
+                  void carregarDadosRef.current({ manterTelaAtual: true }).catch(() => {
+                    setCopiaExibida(prev => prev ? { ...prev, falhou: true } : prev);
+                  });
+                }}
+                className="rounded border border-amber-400/50 px-2 py-0.5 text-amber-100 hover:bg-amber-500/20"
+              >
+                Tentar de novo
+              </button>
+            </>
+          ) : (
+            <>
+              <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" />
+              <span>
+                Atualizando… mostrando a lista de {format(new Date(copiaExibida.salvoEm), 'HH:mm')} — ações liberam ao terminar
+              </span>
+            </>
+          )}
+        </div>
+      ) : (
+        <SeloFonteCards fonte={kpis.fonteCards} />
+      )}
 
+      {/* Com a copia na tela nada e clicavel: so se age sobre o dado fresco. `inert` tira
+          clique E foco de teclado de uma vez, sem precisar de prop em cada botao. */}
+      <div inert={!!copiaExibida} className={cn('space-y-6', copiaExibida && 'opacity-80')}>
       {/* KPI Cards */}
-      <GradeKPIs data-tour="alunos-kpis" className="grid grid-cols-2 gap-2 md:grid-cols-3 md:gap-4 lg:grid-cols-7">
+      <GradeKPIs data-tour="alunos-kpis" className="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-4">
         <KPICard
           size={ehCelular ? 'sm' : undefined}
           title="Matrículas Ativas"
@@ -2177,6 +2471,17 @@ export function AlunosPage() {
           subvalue={`${kpis.totalBolsistas} bolsistas`}
           icon={DollarSign}
           variant="amber"
+        />
+        <KPICard
+          size={ehCelular ? 'sm' : undefined}
+          title="Trancadas"
+          tooltip="Matriculas com trancamento em vigor. Ficam FORA de Matriculas Ativas; o Emusys as conta como ativas, entao Matriculas Ativas + Trancadas = numero do Emusys."
+          value={kpis.matriculasTrancadas ?? '—'}
+          subvalue={kpis.matriculasTrancadas === null
+            ? (kpis.fonteCards?.tipo === 'historico' ? 'sem registro neste mês' : 'fonte indisponivel')
+            : `${kpis.alunosTrancados ?? '—'} ${kpis.alunosTrancados === 1 ? 'aluno' : 'alunos'}`}
+          icon={Lock}
+          variant="violet"
         />
         <KPICard
           size={ehCelular ? 'sm' : undefined}
@@ -2208,18 +2513,20 @@ export function AlunosPage() {
           variant="green"
           onClick={() => setModalPermanenciaOpen(true)}
         />
-        <div className={`bg-red-900/30 border border-red-500/50 rounded-xl p-4 ${kpis.turmasUmAluno > 0 ? 'animate-pulse' : ''}`}>
+        <div className={`bg-red-900/30 border border-red-500/50 rounded-xl p-4 ${(kpis.turmasUmAluno ?? 0) > 0 ? 'animate-pulse' : ''}`}>
           <div className="flex items-center justify-between mb-2">
             <span className="text-red-400 text-xs font-medium uppercase">Sozinhos</span>
             <div className="w-8 h-8 bg-red-500/20 rounded-lg flex items-center justify-center">
               <AlertTriangle className="w-4 h-4 text-red-400" />
             </div>
           </div>
-          <p className="text-3xl font-bold text-red-400">{kpis.turmasUmAluno}</p>
+          <p className="text-3xl font-bold text-red-400">{kpis.turmasUmAluno ?? '—'}</p>
           <p className="text-xs text-red-300 mt-1">
-            {kpis.mediaAlunosTurmaDenominador > 0
-              ? `${kpis.turmasUmAlunoPercentual.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% das turmas com 1 aluno`
-              : 'turmas com 1 aluno'
+            {kpis.turmasUmAluno === null
+              ? 'fonte canonica indisponivel'
+              : kpis.turmasUmAlunoPercentual !== null && kpis.mediaAlunosTurmaDenominador > 0
+                ? `${kpis.turmasUmAlunoPercentual.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% das turmas com 1 aluno`
+                : 'turmas com 1 aluno'
             }
           </p>
         </div>
@@ -2342,6 +2649,7 @@ export function AlunosPage() {
           )}
         </section>
       )}
+      </div>
  
       {/* Ficha do aluno no celular — a MESMA do desktop, em tela cheia.
           Resolvida pelo id a cada render: assim ela acompanha o recarregar da
@@ -2370,7 +2678,7 @@ export function AlunosPage() {
       {modalNovoAluno && (
         <ModalNovoAluno
           onClose={() => setModalNovoAluno(false)}
-          onSalvar={carregarDados}
+          onSalvar={() => carregarDados()}
           professores={professores}
           cursos={cursos}
           tiposMatricula={tiposMatricula}
@@ -2438,7 +2746,9 @@ export function AlunosPage() {
         open={modalMatriculasAtivas}
         onClose={() => setModalMatriculasAtivas(false)}
         titulo={`Matrículas Ativas (${competenciaRange.label})`}
-        descricao="Cada aluno conta 1x; banda, 2º curso e coral somam como vínculos extras — o total bate com o card."
+        descricao={kpis.fonteCards?.tipo === 'vivo' || !kpis.fonteCards
+          ? 'Cada aluno conta 1x; banda, 2º curso e coral somam como vínculos extras — o total bate com o card.'
+          : `⚠️ Esta lista é a carteira de HOJE. O fechamento de ${kpis.fonteCards.competencia} guardou só os totais, então ela não bate com o card desse mês.`}
         dados={dadosModalMatriculasAtivas}
         colunas={[
           { key: 'nome', label: 'Aluno' },

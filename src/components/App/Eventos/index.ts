@@ -1,0 +1,10 @@
+export { EventosPage } from './EventosPage';
+export { EventoDetalhePage } from './EventoDetalhePage';
+export { AlunosTab } from './AlunosTab';
+export { GradeTab } from './GradeTab';
+export { SeletorApresentacao } from './SeletorApresentacao';
+export { PalcoTab } from './PalcoTab';
+export { PalcoApresentacao } from './PalcoApresentacao';
+export { RevisaoTab } from './RevisaoTab';
+export { CheckinTab } from './CheckinTab';
+export { default } from './EventosPage';

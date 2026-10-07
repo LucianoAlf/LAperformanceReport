@@ -9,6 +9,7 @@ import {
   type AlunoSource,
   type CursoSource,
   type FaturaSource,
+  type MatriculaExportada,
 } from '../_shared/contasReceberExport.ts';
 import { prepararExportacaoInadimplenciaCanonica } from '../_shared/inadimplenciaCanonicaExport.ts';
 
@@ -38,7 +39,7 @@ async function fetchFaturasPagasMes(client: SupabaseClient, competencia: string,
   for (let from = 0; ; from += PAGE_SIZE) {
     let query = client
       .from('faturas_pagas_mes')
-      .select('unidade_id,unidade_codigo,emusys_fatura_id::text,emusys_matricula_id::text,emusys_student_id::text,descricao,status,data_vencimento,data_pagamento,competencia_vencimento,competencia_pagamento,valor_original,valor_pago,juros_e_multa,desconto_aplicado,desconto_fixo,desconto_condicional')
+      .select('unidade_id,unidade_codigo,emusys_fatura_id::text,emusys_matricula_id::text,emusys_student_id::text,descricao,status,data_vencimento,data_pagamento,competencia_vencimento,competencia_pagamento,valor_original,valor_pago,juros_e_multa,desconto_aplicado,desconto_fixo,desconto_condicional,payload')
       .eq('competencia_pagamento', competencia)
       .order('unidade_id', { ascending: true })
       .order('emusys_fatura_id', { ascending: true })
@@ -68,6 +69,7 @@ async function fetchFaturasPagasMes(client: SupabaseClient, competencia: string,
       desconto_aplicado: row.desconto_aplicado as number,
       desconto_fixo: row.desconto_fixo as number,
       desconto_condicional: row.desconto_condicional as number,
+      payload: row.payload,
       source_missing: false,
     } as FaturaSource));
     rows.push(...pageRows);
@@ -81,7 +83,7 @@ async function fetchFaturas(client: SupabaseClient, competencia: string, syncRun
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data, error } = await client
       .from('sync_run_items')
-      .select('id,canonical_fatura_id,run_id,unidade_id,unidade_codigo,emusys_fatura_id::text,emusys_matricula_id::text,emusys_student_id::text,descricao,status,data_vencimento,data_pagamento,competencia,valor_original,valor_pago,juros_e_multa,desconto_aplicado,desconto_fixo,desconto_condicional,source_missing,source_missing_reason,source_last_seen_at,source_missing_detected_at,source_missing_resolved_at')
+      .select('id,canonical_fatura_id,run_id,unidade_id,unidade_codigo,emusys_fatura_id::text,emusys_matricula_id::text,emusys_student_id::text,descricao,status,data_vencimento,data_pagamento,competencia,valor_original,valor_pago,juros_e_multa,desconto_aplicado,desconto_fixo,desconto_condicional,payload,source_missing,source_missing_reason,source_last_seen_at,source_missing_detected_at,source_missing_resolved_at')
       .eq('run_id', syncRunId)
       .eq('competencia', competencia)
       .order('unidade_id', { ascending: true })
@@ -118,6 +120,55 @@ async function fetchAlunos(client: SupabaseClient, faturas: FaturaSource[]) {
       .order('id', { ascending: true });
     if (error) throw error;
     rows.push(...((data ?? []) as AlunoSource[]));
+  }
+  return rows;
+}
+
+// Horizonte da matricula (pedido SF 26/09): o contrato_atual do espelho traz
+// data_primeira_fatura + nr_faturas; a ultima parcela prevista e' inicio +
+// (nr_faturas - 1) meses. data_matricula do Emusys NAO serve — e' a primeira
+// matricula historica do aluno, nao o contrato vigente.
+function addMesesISO(iso: string, meses: number) {
+  const [ano, mes, dia] = iso.split('-').map(Number);
+  const total = ano * 12 + (mes - 1) + meses;
+  const novoAno = Math.floor(total / 12);
+  const novoMes = (total % 12) + 1;
+  const ultimoDia = new Date(Date.UTC(novoAno, novoMes, 0)).getUTCDate();
+  return `${novoAno}-${String(novoMes).padStart(2, '0')}-${String(Math.min(dia, ultimoDia)).padStart(2, '0')}`;
+}
+
+async function fetchMatriculas(client: SupabaseClient, faturas: FaturaSource[]) {
+  const matriculas = [...new Set(faturas
+    .map((row) => String(row.emusys_matricula_id ?? '').trim())
+    .filter(Boolean))];
+  const unidades = [...new Set(faturas.map((row) => row.unidade_id))];
+  const rows: MatriculaExportada[] = [];
+  for (const matriculaChunk of chunks(matriculas, 150)) {
+    const { data, error } = await client
+      .from('emusys_matriculas_estado_atual')
+      .select('unidade_id,emusys_matricula_id::text,status_emusys,payload_snapshot')
+      .in('unidade_id', unidades)
+      .in('emusys_matricula_id', matriculaChunk);
+    if (error) throw error;
+    for (const row of data ?? []) {
+      const contrato = (row.payload_snapshot as Record<string, unknown> | null)?.contrato_atual as
+        | Record<string, unknown>
+        | undefined;
+      const inicio = typeof contrato?.data_primeira_fatura === 'string'
+          && /^\d{4}-\d{2}-\d{2}$/.test(contrato.data_primeira_fatura)
+        ? contrato.data_primeira_fatura
+        : null;
+      const parcelas = Number(contrato?.nr_faturas);
+      const parcelasTotal = Number.isSafeInteger(parcelas) && parcelas > 0 ? parcelas : null;
+      rows.push({
+        unidade_id: String(row.unidade_id),
+        emusys_matricula_id: String(row.emusys_matricula_id),
+        matricula_inicio: inicio,
+        matricula_fim: inicio && parcelasTotal ? addMesesISO(inicio, parcelasTotal - 1) : null,
+        matricula_parcelas_total: parcelasTotal,
+        matricula_situacao: nullableString(row.status_emusys),
+      });
+    }
   }
   return rows;
 }
@@ -213,7 +264,8 @@ async function readSnapshot(
 
   const alunos = await fetchAlunos(client, todasFaturas);
   const cursos = await fetchCursos(client, alunos);
-  const itens = await buildExportRows({ faturas: todasFaturas, alunos, cursos });
+  const matriculas = await fetchMatriculas(client, todasFaturas);
+  const itens = await buildExportRows({ faturas: todasFaturas, alunos, cursos, matriculas });
   const latestAfterRead = await fetchLatestCompleteRun(client, competencia);
   if (requireLatest && run.id !== latestAfterRead.id) {
     throw new Error('run solicitado nao e o ultimo snapshot completo');

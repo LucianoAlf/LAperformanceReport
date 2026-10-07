@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-18 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-06 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — aluno
 
-142 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+165 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## aluno_acoes
 
@@ -45,6 +45,7 @@
 | `parentesco` | character varying(50) | sim |  |  |
 | `principal` | boolean | sim | false |  |
 | `created_at` | timestamp with time zone | sim | now() |  |
+| `telefone_key` | text | sim | fn_normalizar_telefone_br_key((telefone)::text) |  |
 
 **Únicos:**
 - `aluno_contatos_pkey`
@@ -180,6 +181,9 @@
 
 **Triggers:**
 - `trg_aluno_jornada_matricula_disciplina_updated_at → update_updated_at_column()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
+- `trg_eventos_operacionais_experimental_convertida_insert → trg_eventos_operacionais_experimental_convertida()`
+- `trg_eventos_operacionais_experimental_convertida_update → trg_eventos_operacionais_experimental_convertida()`
 - `trg_eventos_operacionais_jornada_matricula → trg_eventos_operacionais_jornada_matricula()`
 - `trg_jornada_ciclo_sucedido → fn_jornada_marca_ciclo_sucedido()`
 - `trg_materializar_projecao_jornada → trg_materializar_projecao_jornada()`
@@ -237,6 +241,9 @@
 | `emusys_presenca_bruta_anterior` | text | sim |  |  |
 | `emusys_presenca_alterada_em` | timestamp with time zone | sim |  |  |
 | `espelhado_de_presenca_id` | uuid | sim |  | aluno_presenca.id |
+| `emusys_registro_presenca` | text | sim |  |  |
+| `emusys_registro_presenca_anterior` | text | sim |  |  |
+| `emusys_registro_presenca_alterada_em` | timestamp with time zone | sim |  |  |
 
 **Únicos:**
 - `aluno_presenca_pkey`
@@ -245,6 +252,7 @@
 
 **Triggers:**
 - `trg_atualiza_projecao_por_presenca → trg_atualiza_projecao_por_presenca()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_professor_presente_quando_aluno_presente → trg_professor_presente_quando_aluno_presente()`
 - `trg_sincronizar_gemeos_presenca → trg_sincronizar_gemeos_presenca()`
 
@@ -412,6 +420,29 @@
 **Triggers:**
 - `trg_atualiza_projecao_por_reposicao → trg_atualiza_projecao_por_reposicao()`
 
+## aluno_trancamento_periodo
+
+> Períodos de trancamento vistos no Emusys (27/09/2026). emusys_matriculas_estado_atual só guarda o trancamento em vigor; este livro guarda o histórico, para a aula do período trancado não voltar como dívida do professor quando o aluno retorna. Alimentado por trg_aluno_trancamento_periodo.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `unidade_id` | uuid | não |  |  |
+| `emusys_trancamento_id` | integer | não |  |  |
+| `emusys_matricula_id` | integer | sim |  |  |
+| `aluno_id` | integer | sim |  |  |
+| `data_inicial` | date | não |  |  |
+| `data_final` | date | sim |  |  |
+| `matricula_disciplina_ids` | integer[] | não | '{}'::integer[] |  |
+| `cursos_base` | text[] | não | '{}'::text[] |  |
+| `encerrado_antes_em` | date | sim |  |  |
+| `primeiro_visto_em` | timestamp with time zone | não | now() |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `aluno_trancamento_periodo_pkey`
+- `aluno_trancamento_periodo_unidade_id_emusys_trancamento_id_key`
+
 ## aluno_transferencias
 
 > Movimentacoes internas de alunos entre unidades. Nao contam como matricula nova comercial nem evasao.
@@ -509,6 +540,12 @@
 | `instagram_nao_possui` | boolean | não | false |  |
 | `instagram_nao_possui_marcado_em` | timestamp with time zone | sim |  |  |
 | `instagram_nao_possui_marcado_por` | text | sim |  |  |
+| `telefone_key` | text | sim | fn_normalizar_telefone_br_key((telefone)::text) |  |
+| `whatsapp_key` | text | sim | fn_normalizar_telefone_br_key((whatsapp)::text) |  |
+| `responsavel_telefone_key` | text | sim | fn_normalizar_telefone_br_key((responsavel_telefone)::text) |  |
+| `aluno_cpf` | text | sim |  |  |
+| `responsavel_cpf` | text | sim |  |  |
+| `responsavel_emusys_id` | integer | sim |  |  |
 
 **Únicos:**
 - `alunos_pkey`
@@ -522,6 +559,7 @@
 - `trg_alunos_valor_parcela_comercial_emusys → fn_alunos_valor_parcela_comercial_emusys()`
 - `trg_alunos_vinculo_emusys_anamnese → fn_alunos_vinculo_emusys_anamnese()`
 - `trg_audit → fn_audit_log()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_costura_vincular_conversa → fn_costura_vincular_conversa_numero()`
 - `trg_enqueue_sync_student_studio → enqueue_sync_student_studio()`
 - `trg_sync_aluno_contatos → sync_aluno_contatos_from_legacy()`
@@ -595,6 +633,9 @@
 | `arquivado_por` | text | sim |  |  |
 | `motivo` | text | sim |  |  |
 
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
+
 ## alunos_health_score_historico
 
 | Coluna | Tipo | Nulo | Default | Referência |
@@ -638,6 +679,7 @@
 - `idx_alunos_historico_aluno_data_saida_uniq`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `update_alunos_historico_updated_at → update_updated_at_column()`
 
 ## alunos_turmas
@@ -686,6 +728,20 @@
 - `anamnese_convites_pkey`
 - `anamnese_convites_prematricula_vivo`
 - `anamnese_convites_token_key`
+
+## anamnese_insights
+
+> Insights Pedagógicos da anamnese (o texto que vai ao professor). origem=recuperado: carga única de 18/09/2026 a partir de fila_anamnese_sol_hermes.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `anamnese_id` | integer | não |  | anamneses.id |
+| `texto` | text | não |  |  |
+| `gerado_em` | timestamp with time zone | não | now() |  |
+| `origem` | text | não |  |  |
+
+**Únicos:**
+- `anamnese_insights_pkey`
 
 ## anamnese_respostas_perfil
 
@@ -759,6 +815,8 @@
 | `share_token` | character varying(64) | sim |  |  |
 | `diagnosticos_outro` | text | sim |  |  |
 | `pessoa_chave` | text | sim |  |  |
+| `share_token_expira_em` | timestamp with time zone | sim |  |  |
+| `share_token_revogado_em` | timestamp with time zone | sim |  |  |
 
 **Únicos:**
 - `anamneses_pkey`
@@ -767,6 +825,7 @@
 **Triggers:**
 - `trg_anamnese_atualiza_aluno → fn_atualizar_aluno_anamnese()`
 - `trg_anamnese_pessoa_chave → fn_anamnese_define_pessoa_chave()`
+- `trg_anamneses_validade_share_token → aplicar_validade_share_token()`
 
 ## aviso_previo_veredito
 
@@ -821,6 +880,9 @@
 **Únicos:**
 - `banda_pkey`
 - `banda_turma_chave_key`
+
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 
 ## banda_curso_depara
 
@@ -1068,6 +1130,430 @@
 | `curso_id` | integer | sim |  |  |
 | `aluno_nome` | character varying(255) | sim |  |  |
 | `telefone_snapshot` | character varying(20) | sim |  |  |
+
+## evento
+
+> Recital de UMA unidade, com data propria. Modulo estanque: nao alimenta frequencia, KPI, carteira nem score do professor. NAO confundir com banda_evento (shows/ensaios de banda) nem com eventos_operacionais (log de sistema).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('evento_id_seq'::regclass) |  |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `tipo` | text | não | 'recital'::text |  |
+| `titulo` | text | não |  |  |
+| `data_evento` | date | não |  |  |
+| `horario_inicio` | time without time zone | não | '09:00:00'::time without time zone |  |
+| `local` | text | sim |  |  |
+| `status` | text | não | 'rascunho'::text |  |
+| `duracao_padrao_segundos` | integer | não | 300 |  |
+| `observacoes` | text | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+| `intervalo_entre_blocos_segundos` | integer | não | 2700 |  |
+| `data_fim` | date | sim |  |  |
+| `cortesias_por_aluno` | integer | sim |  |  |
+| `provedor_pagamento` | text | sim |  |  |
+| `provedor_conta` | text | sim |  |  |
+
+**Únicos:**
+- `evento_pkey`
+
+**Triggers:**
+- `trg_audit_evento → fn_evento_audit_log()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
+- `trg_evento_touch → fn_evento_touch()`
+
+## evento_apresentacao
+
+> Uma apresentacao por (pessoa, curso). A UNIQUE evento_apresentacao_pessoa_curso_unica e quem garante que 2 matriculas do MESMO curso viram 1 apresentacao e 2 cursos DIFERENTES viram 2 — sem nenhum `if` no codigo.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('evento_apresentacao_id_seq'::regclass) |  |
+| `bloco_id` | bigint | não |  | evento_bloco.id |
+| `evento_id` | bigint | não |  | evento.id |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `pessoa_chave` | text | sim |  |  |
+| `aluno_id` | integer | sim |  | alunos.id |
+| `curso_id` | integer | sim |  | cursos.id |
+| `professor_id` | integer | sim |  | professores.id |
+| `ordem` | integer | não | 0 |  |
+| `musica` | text | sim |  |  |
+| `duracao_segundos` | integer | sim |  |  |
+| `tem_playback` | boolean | não | false |  |
+| `observacao_mapa` | text | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+| `certificado_status` | text | não | 'pendente'::text |  |
+| `certificado_em` | timestamp with time zone | sim |  |  |
+| `musica_artista` | text | sim |  |  |
+| `musica_link` | text | sim |  |  |
+| `playback_path` | text | sim |  |  |
+| `detalhes_origem` | text | não | 'adm'::text |  |
+| `professor` | jsonb | sim |  |  |
+| `professor_em` | timestamp with time zone | sim |  |  |
+| `drive_playback_path` | text | sim |  |  |
+| `drive_file_id` | text | sim |  |  |
+| `drive_sincronizado_em` | timestamp with time zone | sim |  |  |
+| `drive_erro` | text | sim |  |  |
+| `grupo_id` | uuid | sim |  |  |
+| `tipo` | text | não | 'aluno'::text |  |
+| `titulo` | text | sim |  |  |
+| `unidade_origem_id` | uuid | sim |  | unidades.id |
+| `professor_palco_id` | integer | sim |  | professores.id |
+| `professor_apoio_id` | integer | sim |  | professores.id |
+| `editado_apos_envio_em` | timestamp with time zone | sim |  |  |
+
+**Únicos:**
+- `evento_apresentacao_pessoa_curso_unica`
+- `evento_apresentacao_pkey`
+
+**Triggers:**
+- `trg_audit_evento_apresentacao → fn_evento_audit_log()`
+- `trg_evento_apresentacao_deriva → fn_evento_apresentacao_deriva()`
+- `trg_evento_apresentacao_grupo_coerente → fn_evento_apresentacao_grupo_coerente()`
+- `trg_evento_apresentacao_origem_adm → fn_evento_apresentacao_origem_adm()`
+- `trg_evento_apresentacao_touch → fn_evento_touch()`
+
+## evento_apresentacao_item
+
+> Instrumentos e equipamentos que a apresentacao precisa no palco.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('evento_apresentacao_item_id_seq'::regclass) |  |
+| `apresentacao_id` | bigint | não |  | evento_apresentacao.id |
+| `tipo` | text | não |  |  |
+| `nome` | text | não |  |  |
+| `quantidade` | integer | não | 1 |  |
+| `observacao` | text | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `origem` | text | não | 'adm'::text |  |
+| `codigo` | text | sim |  |  |
+
+**Únicos:**
+- `evento_apresentacao_item_pkey`
+- `uq_evento_item_codigo`
+
+**Triggers:**
+- `trg_audit_evento_apresentacao_item → fn_evento_audit_log()`
+
+## evento_bloco
+
+> Bloco de apresentacoes. Na pratica dura de 1h a 1h30 (ata de 17/09/2026).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('evento_bloco_id_seq'::regclass) |  |
+| `evento_id` | bigint | não |  | evento.id |
+| `nome` | text | não |  |  |
+| `ordem` | integer | não | 0 |  |
+| `horario_inicial` | time without time zone | sim |  |  |
+| `inicio_manual` | boolean | não | false |  |
+| `observacoes` | text | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+| `data` | date | sim |  |  |
+| `capacidade` | integer | sim |  |  |
+
+**Únicos:**
+- `evento_bloco_pkey`
+
+**Triggers:**
+- `trg_audit_evento_bloco → fn_evento_audit_log()`
+- `trg_evento_bloco_touch → fn_evento_touch()`
+
+## evento_comunicacao
+
+> Cada envio de convite/comunicado a familia e UMA linha — historico, nunca sobrescrito. Ligado a participacao (pessoa no evento), nao a apresentacao.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `participacao_id` | bigint | não |  | evento_participacao.id |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `canal` | text | não |  |  |
+| `texto` | text | sim |  |  |
+| `enviado_em` | timestamp with time zone | não | now() |  |
+| `enviado_por` | uuid | sim |  |  |
+| `origem` | text | sim |  |  |
+
+**Únicos:**
+- `evento_comunicacao_pkey`
+
+**Triggers:**
+- `trg_audit_evento_comunicacao → fn_evento_audit_log()`
+- `trg_evento_comunicacao_deriva → fn_evento_comunicacao_deriva()`
+
+## evento_convidado
+
+> Convidado NOMINAL do evento — cortesia ou ingresso vendido (tipo_entrada, M9). Pertence ao evento; o vinculo com quem o convidou fica na ponte evento_convidado_participacao — irmaos dividem a mesma linha de convidado.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `evento_id` | bigint | não |  | evento.id |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `nome` | text | não |  |  |
+| `documento` | text | sim |  |  |
+| `observacao` | text | sim |  |  |
+| `tipo_entrada` | text | não | 'cortesia'::text |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+| `venda_id` | bigint | sim |  | evento_ingresso_venda.id |
+| `meia_entrada` | boolean | não | false |  |
+| `bloco_id` | bigint | sim |  | evento_bloco.id |
+
+**Únicos:**
+- `evento_convidado_pkey`
+
+**Triggers:**
+- `trg_audit_evento_convidado → fn_evento_audit_log()`
+- `trg_evento_convidado_deriva → fn_evento_convidado_deriva()`
+- `trg_evento_convidado_touch → fn_evento_touch()`
+
+## evento_convidado_checkin
+
+> Chegada do convidado por bloco/dia — a Barra tem 2 dias, o mesmo convidado entra nos dois.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `convidado_id` | bigint | não |  | evento_convidado.id |
+| `bloco_id` | bigint | não |  | evento_bloco.id |
+| `checkin_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `evento_convidado_checkin_pkey`
+
+**Triggers:**
+- `trg_audit_evento_convidado_checkin → fn_evento_audit_log()`
+- `trg_evento_convidado_checkin_deriva → fn_evento_convidado_checkin_deriva()`
+
+## evento_convidado_participacao
+
+> Quem convidou quem. Dois irmaos apontam para o MESMO convidado — credenciamento conta a pessoa uma vez, e a lista mostra a familia inteira.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `convidado_id` | bigint | não |  | evento_convidado.id |
+| `participacao_id` | bigint | não |  | evento_participacao.id |
+
+**Únicos:**
+- `evento_convidado_participacao_pkey`
+
+**Triggers:**
+- `trg_audit_evento_convidado_participacao → fn_evento_audit_log()`
+- `trg_evento_convidado_cortesia → fn_evento_convidado_cortesia()`
+- `trg_evento_convidado_herda_bloco → fn_evento_convidado_herda_bloco()`
+- `trg_evento_convidado_participacao_deriva → fn_evento_convidado_participacao_deriva()`
+
+## evento_ingresso_pacote
+
+> Pacotes de desconto por evento: a partir de N ingressos, X% off (ex.: 10+ -> 20%).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `evento_id` | bigint | não |  | evento.id |
+| `quantidade_minima` | integer | não |  |  |
+| `desconto_pct` | numeric(5,2) | não |  |  |
+
+**Únicos:**
+- `evento_ingresso_pacote_evento_id_quantidade_minima_key`
+- `evento_ingresso_pacote_pkey`
+
+**Triggers:**
+- `trg_audit_evento_ingresso_pacote → fn_evento_audit_log()`
+
+## evento_ingresso_preco
+
+> Preco do ingresso por evento. Decisao do Alf (28/09): todos pagam meia — ex.: unitario R$100, meia R$50 cobrada de todos. Os dois campos ficam para o papel/relatorio mostrar os dois valores.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `evento_id` | bigint | não |  | evento.id |
+| `preco_unitario` | numeric(10,2) | não |  |  |
+| `preco_meia` | numeric(10,2) | sim |  |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `evento_ingresso_preco_pkey`
+
+**Triggers:**
+- `trg_audit_evento_ingresso_preco → fn_evento_audit_log()`
+
+## evento_ingresso_venda
+
+> Toda venda de ingresso, registrada pela equipe (link enviado a mao, maquininha, Pix, dinheiro). A Sol concilia cada venda paga com o que caiu no banco e lanca no caixa diario do Super Folha — o LA Report so expoe a lista e recebe o veredito.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `evento_id` | bigint | não |  | evento.id |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `bloco_id` | bigint | não |  | evento_bloco.id |
+| `participacao_id` | bigint | sim |  | evento_participacao.id |
+| `pacote_id` | bigint | sim |  | evento_ingresso_pacote.id |
+| `comprador_nome` | text | não |  |  |
+| `comprador_contato` | text | sim |  |  |
+| `quantidade` | integer | não |  |  |
+| `meia_entrada` | integer | não | 0 |  |
+| `valor_unitario` | numeric(10,2) | não |  |  |
+| `valor_meia` | numeric(10,2) | sim |  |  |
+| `desconto_pct` | numeric(5,2) | não | 0 |  |
+| `valor_bruto` | numeric(10,2) | sim | ((((quantidade - meia_entrada))::numeric * valor_unitario) + ((meia_entrada)::numeric * COALESCE(valor_meia, (0)::numeric))) |  |
+| `valor_final` | numeric(10,2) | não |  |  |
+| `forma_pagamento` | text | não |  |  |
+| `canal` | text | não |  |  |
+| `provedor` | text | sim |  |  |
+| `status` | text | não | 'pendente'::text |  |
+| `pago_em` | timestamp with time zone | sim |  |  |
+| `pagamento_identificador` | text | sim |  |  |
+| `conciliacao_status` | text | não | 'pendente'::text |  |
+| `conciliado_em` | timestamp with time zone | sim |  |  |
+| `conciliacao_ref` | text | sim |  |  |
+| `conciliacao_obs` | text | sim |  |  |
+| `observacao` | text | sim |  |  |
+| `registrado_por` | uuid | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `evento_ingresso_venda_pkey`
+
+**Triggers:**
+- `trg_audit_evento_ingresso_venda → fn_evento_audit_log()`
+- `trg_evento_ingresso_venda_deriva → fn_evento_ingresso_venda_deriva()`
+- `trg_evento_ingresso_venda_touch → fn_evento_touch()`
+
+## evento_participacao
+
+> Quem entra no evento, por PESSOA (nao por matricula). Check-in e certificado moram aqui: quem toca em 2 cursos faz UM check-in.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('evento_participacao_id_seq'::regclass) |  |
+| `evento_id` | bigint | não |  | evento.id |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `pessoa_chave` | text | não |  |  |
+| `aluno_id` | integer | não |  | alunos.id |
+| `status` | text | não | 'indefinido'::text |  |
+| `checkin_em` | timestamp with time zone | sim |  |  |
+| `observacoes` | text | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+| `convidados` | integer | não | 0 |  |
+| `confirmado_em` | timestamp with time zone | sim |  |  |
+| `confirmado_origem` | text | sim |  |  |
+| `unidade_origem_id` | uuid | sim |  | unidades.id |
+| `formatura` | boolean | não | false |  |
+| `formatura_tipo` | text | sim |  |  |
+| `formatura_origem` | text | sim |  |  |
+
+**Únicos:**
+- `evento_participacao_pessoa_unica`
+- `evento_participacao_pkey`
+
+**Triggers:**
+- `trg_audit_evento_participacao → fn_evento_audit_log()`
+- `trg_evento_participacao_confirmado_em → fn_evento_participacao_confirmado_em()`
+- `trg_evento_participacao_deriva → fn_evento_participacao_deriva()`
+- `trg_evento_participacao_touch → fn_evento_touch()`
+
+## evento_sheets_corrida
+
+> Uma linha por ciclo do recital-sheets-sync — auditoria operacional da equipe (a audit_log cobre dado de aluno; isto cobre a saude do sync em si).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `evento_id` | bigint | não |  | evento.id |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `origem` | text | não | 'cron'::text |  |
+| `iniciado_em` | timestamp with time zone | não | now() |  |
+| `duracao_ms` | integer | sim |  |  |
+| `planilhas_escritas` | integer | não | 0 |  |
+| `professores_ok` | integer | não | 0 |  |
+| `divergencias_lidas` | integer | não | 0 |  |
+| `erros` | jsonb | não | '[]'::jsonb |  |
+
+**Únicos:**
+- `evento_sheets_corrida_pkey`
+
+## evento_sheets_destino
+
+> Configuracao do espelho Sheets por evento: pasta "Recital 2026" da unidade + e-mails da equipe que recebem a planilha geral. A edge recital-sheets-sync so espelha eventos com uma linha aqui.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `evento_id` | bigint | não |  | evento.id |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `pasta_recital_id` | text | sim |  |  |
+| `emails_equipe` | text[] | não | '{}'::text[] |  |
+| `planilha_geral_id` | text | sim |  |  |
+| `ativo` | boolean | não | true |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `evento_sheets_destino_evento_id_key`
+- `evento_sheets_destino_pkey`
+
+**Triggers:**
+- `trg_audit_evento_sheets_destino → fn_evento_audit_log()`
+- `trg_evento_sheets_destino_touch → fn_evento_touch()`
+
+## evento_sheets_professor
+
+> Estado do espelho por professor: pasta/planilha criadas, e-mail do share e o ultimo erro. sem_email = professor sem usuarios.email vinculado — a equipe cadastra e a proxima corrida resolve.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `evento_id` | bigint | não |  | evento.id |
+| `professor_id` | integer | não |  | professores.id |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `pasta_id` | text | sim |  |  |
+| `planilha_id` | text | sim |  |  |
+| `email` | text | sim |  |  |
+| `status` | text | não | 'pendente'::text |  |
+| `ultimo_erro` | text | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `evento_sheets_professor_evento_id_professor_id_key`
+- `evento_sheets_professor_pkey`
+
+**Triggers:**
+- `trg_audit_evento_sheets_professor → fn_evento_audit_log()`
+- `trg_evento_sheets_professor_touch → fn_evento_touch()`
+
+## evento_staff
+
+> Escala de staff do evento. bloco_id null = funcao do evento inteiro (credenciamento, boas-vindas); preenchido = funcao daquele bloco (roadie de palco do bloco 2).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `evento_id` | bigint | não |  | evento.id |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `staff_unidade_id` | uuid | não |  | staff_unidade.id |
+| `funcao` | text | não |  |  |
+| `funcao_outra` | text | sim |  |  |
+| `bloco_id` | bigint | sim |  | evento_bloco.id |
+| `observacao` | text | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `evento_staff_pkey`
+
+**Triggers:**
+- `trg_audit_evento_staff → fn_evento_audit_log()`
+- `trg_evento_staff_deriva → fn_evento_staff_deriva()`
+- `trg_evento_staff_touch → fn_evento_touch()`
 
 ## farmer_checklist_contatos
 
@@ -1335,6 +1821,20 @@
 **Únicos:**
 - `jornada_curso_resolucao_log_pkey`
 
+## kpis_alunos_cache
+
+> LAPE-42. Cache por versao dos KPIs de alunos. Chave = funcao + usuario + parametros + data BRT + impressao digital das tabelas lidas (kpis_alunos_cache_impressao_v1). Lido/escrito so pelas funcoes *_cache_v1.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `cache_key` | text | não |  |  |
+| `funcao` | text | não |  |  |
+| `payload` | jsonb | não |  |  |
+| `built_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `kpis_alunos_cache_pkey`
+
 ## motivos_arquivamento
 
 > Motivos para arquivamento de leads que não converteram
@@ -1431,6 +1931,7 @@
 - `movimentacoes_pkey`
 
 **Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `update_movimentacoes_updated_at → update_updated_at_column()`
 
 ## movimentacoes_admin
@@ -1485,6 +1986,7 @@
 **Triggers:**
 - `trg_audit → fn_audit_log()`
 - `trg_bloqueia_delete_movimentacao_admin → fn_bloqueia_delete_movimentacao_admin()`
+- `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_capturar_telefone_snapshot_movimentacao_retencao → capturar_telefone_snapshot_movimentacao_retencao()`
 - `trg_eventos_operacionais_aviso_previo → trg_eventos_operacionais_aviso_previo()`
 - `trg_preencher_campos_retencao_movimentacoes_admin → preencher_campos_retencao_movimentacoes_admin()`
@@ -2327,6 +2829,9 @@
 - `tipos_matricula_pkey`
 - `uk_tipos_matricula_codigo`
 
+**Triggers:**
+- `trg_cache_versao → cache_versao_registrar_trg()`
+
 ## tipos_saida
 
 | Coluna | Tipo | Nulo | Default | Referência |
@@ -2410,7 +2915,7 @@
 
 ## vw_aluno_comunidade_wa_v1
 
-> LAPE-33: estado de comunidade WhatsApp por aluno (matricula). Busca em TODOS os grupos ativos, nao so o da propria unidade -- ver grupo_mesma_unidade para distinguir. Fonte: comunidade_wa_participantes (captura diaria, cron 190, 07h BRT). Nao confundir com aluno_comunidade_estado_v1(), que so olha o grupo da propria unidade e e a usada pelos agentes (Mila/Sol).
+> Estado do aluno na comunidade WhatsApp. Le alunos.telefone_key/whatsapp_key/responsavel_telefone_key e aluno_contatos.telefone_key (colunas geradas) -- NAO chamar fn_normalizar_telefone_br_key aqui, era o gargalo (1.104 ms -> 65 ms). contato_nomes declara TODOS os cadastros daquele numero (tipicamente o proprio aluno e o responsavel); contato_nome e so o primeiro, deterministico. Nunca exibir telefone_key: ela descarta o 9o digito.
 
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
@@ -2429,6 +2934,7 @@
 | `contato_parentesco` | text | sim |  |  |
 | `contatos_no_grupo_total` | integer | sim |  |  |
 | `contatos_no_grupo` | jsonb | sim |  |  |
+| `contato_nomes` | jsonb | sim |  |  |
 
 ## vw_aluno_estado_operacional_canonico
 
@@ -2613,6 +3119,7 @@
 | `revisao_operacional_exigida` | boolean | sim |  |  |
 | `revisao_operacional_status` | text | sim |  |  |
 | `status_presenca` | text | sim |  |  |
+| `emusys_registro_presenca` | text | sim |  |  |
 
 ## vw_aluno_sucesso_lista
 
@@ -2841,6 +3348,49 @@
 | `motivo_mudanca` | bigint | sim |  |  |
 | `motivo_desinteresse` | bigint | sim |  |  |
 | `motivo_inadimplencia` | bigint | sim |  |  |
+
+## vw_evento_aluno_elegivel_v1
+
+> Candidatos ao recital por PESSOA (unidade_id, pessoa_chave), derivada de alunos ativos. Banda filtra CURSO, nunca pessoa, e nunca e a matricula de referencia quando ha outra. motivo_sem_curso separa a regra (so_atividade_extra) do defeito (curso_nao_cadastrado). security_invoker: herda a RLS de alunos.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `unidade_id` | uuid | sim |  |  |
+| `pessoa_chave` | text | sim |  |  |
+| `aluno_id_referencia` | integer | sim |  |  |
+| `nome` | character varying | sim |  |  |
+| `data_nascimento` | date | sim |  |  |
+| `idade_anos` | integer | sim |  |  |
+| `cursos_no_recital` | bigint | sim |  |  |
+| `cursos` | jsonb | sim |  |  |
+| `faz_banda` | boolean | sim |  |  |
+| `motivo_sem_curso` | text | sim |  |  |
+
+## vw_evento_bloco_lotacao
+
+> Lugares por bloco. Convidado sem bloco_id (ainda nao credenciado) nao conta em bloco nenhum. livres NULL = sem teto. Cancelado/reembolsado libera o lugar na hora.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `bloco_id` | bigint | sim |  |  |
+| `evento_id` | bigint | sim |  |  |
+| `capacidade` | integer | sim |  |  |
+| `cortesias` | bigint | sim |  |  |
+| `vendidos_pagos` | bigint | sim |  |  |
+| `pendentes` | bigint | sim |  |  |
+| `livres` | bigint | sim |  |  |
+
+## vw_evento_familia_v1
+
+> Alunos ativos com familiar também aluno ativo na mesma unidade (telefone do responsável = telefone do adulto E primeiro nome bate). Uma linha por (pessoa, familiar), nos dois sentidos. familiar_papel: responsavel = o familiar é o responsável cadastrado desta pessoa; dependente = esta pessoa é a responsável do familiar. Inclui cônjuge: rótulo é família.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `unidade_id` | uuid | sim |  |  |
+| `pessoa_chave` | text | sim |  |  |
+| `familiar_chave` | text | sim |  |  |
+| `familiar_nome` | character varying(200) | sim |  |  |
+| `familiar_papel` | text | sim |  |  |
 
 ## vw_evolucao_alunos
 
@@ -3123,7 +3673,7 @@
 
 ## vw_jornada_lead_v1
 
-> Jornada do lead. ⚠️ `etapa`: a FONTE CANONICA (lead_experimentais) manda quando existe linha; os flags de `leads` so resgatam quem nao tem nenhuma. Corrigido em 04/09 apos falso positivo reportado pela Daiana: o Marcelo tinha aula `cancelada` na fonte canonica e `experimental_realizada=true` no flag, e o R15 dizia que ele fez a experimental. 10 leads tinham os dois flags contraditorios.
+> Jornada do lead. ⚠️ `etapa`: a FONTE CANONICA (lead_experimentais) manda quando existe linha; os flags de `leads` so resgatam quem nao tem nenhuma. Corrigido em 04/09 apos falso positivo reportado pela Daiana: o Marcelo tinha aula `cancelada` na fonte canonica e `experimental_realizada=true` no flag, e o R15 dizia que ele fez a experimental. 10 leads tinham os dois flags contraditorios. tem_gclid/tem_meta_ctwa_clid: só PRESENÇA do click-id — o valor nunca sai pela view.
 
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
@@ -3170,6 +3720,8 @@
 | `experimentais_canceladas` | bigint | sim |  |  |
 | `experimentais_agendadas` | bigint | sim |  |  |
 | `ultima_experimental_em` | date | sim |  |  |
+| `tem_gclid` | boolean | sim |  |  |
+| `tem_meta_ctwa_clid` | boolean | sim |  |  |
 
 ## vw_jornada_marcos
 
@@ -3544,6 +4096,20 @@
 | `detector_da_regra` | text | sim |  |  |
 | `rodada_referencia` | timestamp with time zone | sim |  |  |
 | `vigencia` | text | sim |  |  |
+
+## vw_recital_passagem_de_ciclo_v1
+
+> Contrato LA Teacher -> LA Report (30/09): formandos de cada recital aberto (tipo kids_para_school \| bebes_para_preparatoria), um por aluno+curso. Só service_role.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `evento_id` | bigint | sim |  |  |
+| `aluno_id` | integer | sim |  |  |
+| `pessoa_chave` | text | sim |  |  |
+| `curso` | text | sim |  |  |
+| `curso_chave` | text | sim |  |  |
+| `data_nascimento` | date | sim |  |  |
+| `tipo` | text | sim |  |  |
 
 ## vw_renovacao_ciclos
 

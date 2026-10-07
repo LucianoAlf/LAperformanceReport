@@ -4,6 +4,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.89.0';
 import {
   coletarFaturasUnidade,
+  coletarPaginaFaturasPagasPorJanela,
   coletarFaturasPagasPorJanela,
   GlobalRateLimiter,
   type UnidadeSyncConfig,
@@ -20,6 +21,18 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const SUPABASE_PROJECT_REF = new URL(SUPABASE_URL).hostname.split('.')[0] ?? '';
 const EMUSYS_API = 'https://api.emusys.com.br/v1';
+const EMUSYS_FETCH_TIMEOUT_MS = 30000;
+const WORKER_BUDGET_MS = 100 * 1000;
+const MAX_PAGAS_PAGES_PER_CLAIM = 25;
+
+const fetchComPrazo = (deadlineMs: number): typeof fetch => (async (input, init) => {
+  const restante = deadlineMs - Date.now();
+  if (restante <= 0) throw new Error('SYNC_FATURAS_WORKER_TIMEOUT');
+  return await fetch(input, {
+    ...init,
+    signal: AbortSignal.timeout(Math.min(EMUSYS_FETCH_TIMEOUT_MS, restante)),
+  });
+}) as typeof fetch;
 
 const requiredEnv = (name: string) => {
   const value = Deno.env.get(name)?.trim();
@@ -86,6 +99,20 @@ type QueueRpcResult = Record<string, unknown> & {
 type ProcessResult = {
   status: number;
   body: Record<string, unknown>;
+};
+
+type PagasMesQueueJob = {
+  id: string;
+  competencia: string;
+  unidade_codigo: string | null;
+  trigger_source: string;
+  attempt_count: number;
+  max_attempts: number;
+  resume_cursor: string | null;
+  paginas_processadas: number;
+  recebidas_api: number;
+  pagas_no_mes: number;
+  itens_upserted: number;
 };
 
 async function validarAcessoSync(req: Request): Promise<AccessResult> {
@@ -164,6 +191,7 @@ function priorityForFinanceiroTrigger(triggerSource: string) {
   switch (triggerSource) {
     case 'manual':
     case 'internal_refresh':
+    case 'backfill_super_folha_dre_2026':
       return 50;
     case 'cron_financeiro_current_15m':
       return 100;
@@ -204,6 +232,26 @@ async function rpcOrThrow<T>(
   return data as T;
 }
 
+const rpcFilaPagasAusente = (erro: unknown): boolean => {
+  const codigo = erro && typeof erro === 'object' && 'code' in erro ? String(erro.code) : '';
+  const mensagem = syncErrorMessage(erro);
+  return codigo === 'PGRST202'
+    || codigo === '42883'
+    || /sync_faturas_pagas_mes[\s\S]*(does not exist|schema cache|nao existe)/i.test(mensagem);
+};
+
+async function varreduraFinanceiroEmusysAtiva(supabase: ServiceClient): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('sync_financeiro_emusys_queue')
+    .select('id')
+    .in('status', ['pending', 'running', 'retry_wait'])
+    .limit(1);
+  // Compatibilidade durante o rollout: a Edge nova pode entrar antes da migration.
+  if (error?.code === '42P01' || error?.code === 'PGRST205') return false;
+  if (error) throw error;
+  return (data?.length ?? 0) > 0;
+}
+
 function queueStateFromEnqueues(enqueues: QueueRpcResult[]) {
   const jobs = enqueues.flatMap((result) => Array.isArray(result.jobs) ? result.jobs : []);
   const statusOrder = ['running', 'retry_wait', 'pending'];
@@ -236,12 +284,14 @@ async function processarPagasNoMes(
   const pagFim = new Date(Date.UTC(ano, mes, 0)).toISOString().slice(0, 10);
 
   const limiter = new GlobalRateLimiter();
+  const fetchFn = fetchComPrazo(Date.now() + WORKER_BUDGET_MS);
   const unidades = unidadeCodigo
     ? { [unidadeCodigo]: UNIDADES[unidadeCodigo] }
     : UNIDADES;
 
   const resultado: Record<string, unknown> = { competencia, pagamento_janela: { inicio: pagInicio, fim: pagFim } };
   const resumoUnidades: Record<string, unknown> = {};
+  const falhas: unknown[] = [];
 
   for (const [codigo, unidade] of Object.entries(unidades)) {
     if (!unidade) throw new Error(`unidade desconhecida: ${codigo}`);
@@ -253,6 +303,7 @@ async function processarPagasNoMes(
         unidadeCodigo: codigo,
         unidade,
         limiter,
+        fetchFn,
       });
 
       // Filtra: só fica quem tem data_pagamento dentro do mês M
@@ -304,16 +355,212 @@ async function processarPagasNoMes(
         upserted,
       };
     } catch (erro) {
+      falhas.push(erro);
       resumoUnidades[codigo] = { erro: erro instanceof Error ? erro.message : String(erro) };
       console.error(`[sync-faturas] pagas_no_mes ${codigo}:`, erro);
     }
   }
 
   resultado.unidades = resumoUnidades;
+  if (falhas.length) throw falhas[0];
   return resultado;
 }
 
+async function processarPagasNoMesComCheckpoint(
+  supabase: ServiceClient,
+  job: PagasMesQueueJob,
+  workerId: string,
+): Promise<ProcessResult> {
+  const codigo = job.unidade_codigo;
+  if (!codigo || !Object.hasOwn(UNIDADES, codigo)) {
+    throw new Error(`unidade desconhecida na fila pagas_no_mes: ${codigo ?? 'null'}`);
+  }
+  const unidade = UNIDADES[codigo];
+  const competencia = job.competencia;
+  const ano = Number(competencia.slice(0, 4));
+  const mes = Number(competencia.slice(5, 7));
+  const inicioVenc = new Date(Date.UTC(ano, mes - 13, 1)).toISOString().slice(0, 10);
+  const fimVenc = new Date(Date.UTC(ano, mes + 11, 0)).toISOString().slice(0, 10);
+  const pagInicio = competencia;
+  const pagFim = new Date(Date.UTC(ano, mes, 0)).toISOString().slice(0, 10);
+  const limiter = new GlobalRateLimiter();
+  const fetchFn = fetchComPrazo(Date.now() + WORKER_BUDGET_MS);
+  let cursor = job.resume_cursor;
+
+  for (let indice = 0; indice < MAX_PAGAS_PAGES_PER_CLAIM; indice += 1) {
+    const pagina = await coletarPaginaFaturasPagasPorJanela({
+      apiBaseUrl: EMUSYS_API,
+      dataVencimentoInicial: inicioVenc,
+      dataVencimentoFinal: fimVenc,
+      unidade,
+      limiter,
+      cursor,
+      fetchFn,
+    });
+    const pagasNoMes = pagina.rawItems.filter((item) => {
+      const dataPagamento = String(item.data_pagamento ?? '').trim();
+      return dataPagamento >= pagInicio && dataPagamento <= pagFim;
+    });
+    const linhas = pagasNoMes.map((item) => {
+      const dataVencimento = String(item.data_vencimento ?? '').trim();
+      const dataPagamento = String(item.data_pagamento ?? '').trim();
+      return {
+        unidade_id: unidade.id,
+        unidade_codigo: codigo,
+        emusys_fatura_id: Number(item.id),
+        emusys_matricula_id: item.matricula_id != null ? Number(item.matricula_id) : null,
+        emusys_contrato_id: item.contrato_id != null ? Number(item.contrato_id) : null,
+        emusys_student_id: item.aluno_id != null ? Number(item.aluno_id) : null,
+        descricao: String(item.descricao ?? ''),
+        status: 'paga',
+        data_vencimento: dataVencimento,
+        data_pagamento: dataPagamento,
+        competencia_vencimento: `${dataVencimento.slice(0, 7)}-01`,
+        competencia_pagamento: competencia,
+        valor_original: Number(item.valor_original ?? 0),
+        valor_pago: item.valor_pago != null ? Number(item.valor_pago) : null,
+        juros_e_multa: Number(item.juros_e_multa ?? 0),
+        desconto_aplicado: Number(item.desconto_aplicado ?? 0),
+        desconto_fixo: Number(item.desconto_fixo ?? 0),
+        desconto_condicional: Number(item.desconto_condicional ?? 0),
+        payload: item as unknown as Record<string, unknown>,
+      };
+    });
+    if (linhas.length > 0) {
+      const { error } = await supabase
+        .from('faturas_pagas_mes')
+        .upsert(linhas, { onConflict: 'unidade_id,emusys_fatura_id' });
+      if (error) throw error;
+    }
+
+    const release = pagina.temMais && indice + 1 >= MAX_PAGAS_PAGES_PER_CLAIM;
+    const fila = await rpcOrThrow<QueueRpcResult>(
+      supabase,
+      'checkpoint_sync_faturas_pagas_mes_job',
+      {
+        p_job_id: job.id,
+        p_worker_id: workerId,
+        p_next_cursor: pagina.proximoCursor,
+        p_tem_mais: pagina.temMais,
+        p_release: release,
+        p_recebidas: pagina.rawItems.length,
+        p_pagas_no_mes: pagasNoMes.length,
+        p_upserted: linhas.length,
+        p_lease_seconds: 900,
+      },
+    );
+
+    if (!pagina.temMais) {
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          mode: 'pagas_no_mes',
+          queued: false,
+          queue_status: 'succeeded',
+          competencia,
+          unidade: codigo,
+          progresso: fila,
+        },
+      };
+    }
+    cursor = pagina.proximoCursor;
+    if (release) {
+      return {
+        status: 202,
+        body: {
+          ok: true,
+          mode: 'pagas_no_mes',
+          queued: true,
+          queue_status: 'pending',
+          competencia,
+          unidade: codigo,
+          progresso: fila,
+        },
+      };
+    }
+  }
+  throw new Error('SYNC_FATURAS_PAGAS_CHECKPOINT_AUSENTE');
+}
+
+async function processarProximoPagasMes(supabase: ServiceClient): Promise<ProcessResult | null> {
+  const workerId = crypto.randomUUID();
+  let job: PagasMesQueueJob | null;
+  try {
+    job = await rpcOrThrow<PagasMesQueueJob | null>(
+      supabase,
+      'claim_sync_faturas_pagas_mes_job',
+      { p_worker_id: workerId, p_lease_seconds: 900 },
+    );
+  } catch (erro) {
+    // Compatibilidade de rollout: a Edge nova entra antes da migration para que
+    // o worker existente continue drenando a fila sem um minuto de interrupcao.
+    if (rpcFilaPagasAusente(erro)) return null;
+    throw erro;
+  }
+  if (!job) return null;
+
+  try {
+    return await processarPagasNoMesComCheckpoint(supabase, job, workerId);
+  } catch (erro) {
+    const classificado = classifyFinanceiroSyncError(erro);
+    if (classificado.retryable) {
+      const fila = await rpcOrThrow<QueueRpcResult>(
+        supabase,
+        'retry_sync_faturas_pagas_mes_job',
+        {
+          p_job_id: job.id,
+          p_worker_id: workerId,
+          p_error_code: classificado.code,
+          p_error_detail: classificado.detail,
+          p_http_status: classificado.httpStatus,
+        },
+      );
+      const aguardando = fila.status === 'retry_wait';
+      return {
+        status: aguardando ? 202 : 502,
+        body: {
+          ok: false,
+          mode: 'pagas_no_mes',
+          queued: aguardando,
+          queue_status: fila.status ?? 'failed',
+          next_attempt_at: fila.next_attempt_at ?? null,
+          competencia: job.competencia,
+          erro_codigo: classificado.code,
+          erro: classificado.detail,
+        },
+      };
+    }
+
+    const fila = await rpcOrThrow<QueueRpcResult>(
+      supabase,
+      'fail_sync_faturas_pagas_mes_job',
+      {
+        p_job_id: job.id,
+        p_worker_id: workerId,
+        p_error_code: classificado.code,
+        p_error_detail: classificado.detail,
+        p_http_status: classificado.httpStatus,
+      },
+    );
+    return {
+      status: classificado.code === 'SYNC_VALIDATION_ERROR' ? 400 : 502,
+      body: {
+        ok: false,
+        mode: 'pagas_no_mes',
+        queued: false,
+        queue_status: fila.status ?? 'failed',
+        competencia: job.competencia,
+        erro_codigo: classificado.code,
+        erro: classificado.detail,
+      },
+    };
+  }
+}
+
 async function executarProbe(competencia: string, unidadeCodigo: string) {
+  const unidade = UNIDADES[unidadeCodigo];
+  if (!unidade) throw new Error(`unidade desconhecida: ${unidadeCodigo}`);
   const collected = await coletarFaturasUnidade({
     apiBaseUrl: EMUSYS_API,
     competencia,
@@ -363,6 +610,7 @@ async function processarQueueJob(
     }));
 
     const limiter = new GlobalRateLimiter();
+    const fetchFn = fetchComPrazo(Date.now() + WORKER_BUDGET_MS);
     const allRows: unknown[] = [];
     const unitsSummary: unknown[] = [];
     for (const [unidadeCodigo, unidade] of Object.entries(UNIDADES)) {
@@ -372,6 +620,7 @@ async function processarQueueJob(
         unidadeCodigo,
         unidade,
         limiter,
+        fetchFn,
       });
       allRows.push(...collected.rows);
       unitsSummary.push(collected.resumo);
@@ -514,11 +763,37 @@ serve(async (req) => {
       const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
         auth: { persistSession: false, autoRefreshToken: false },
       });
-      const resultados = [];
-      for (const comp of competencias) {
-        resultados.push(await processarPagasNoMes(supabase, comp, unidadeCodigo));
+      let enfileirado: QueueRpcResult;
+      try {
+        enfileirado = await rpcOrThrow<QueueRpcResult>(
+          supabase,
+          'enqueue_sync_faturas_pagas_mes_jobs',
+          {
+            p_competencias: competencias,
+            p_unidade_codigo: unidadeCodigo,
+            p_trigger_source: String(body.trigger_source ?? 'cron_faturas_pagas_no_mes').trim()
+              || 'cron_faturas_pagas_no_mes',
+          },
+        );
+      } catch (erro) {
+        if (!rpcFilaPagasAusente(erro)) throw erro;
+        const resultados = [];
+        for (const competencia of competencias) {
+          resultados.push(await processarPagasNoMes(supabase, competencia, unidadeCodigo));
+        }
+        return json({ ok: true, mode: 'pagas_no_mes', rollout_fallback: true, resultados });
       }
-      return json({ ok: true, mode: 'pagas_no_mes', resultados });
+      const processado = await processarProximoPagasMes(supabase);
+      if (processado) {
+        return json({ ...processado.body, jobs: enfileirado.jobs ?? [] }, processado.status);
+      }
+      return json({
+        ok: true,
+        mode: 'pagas_no_mes',
+        queued: true,
+        queue_status: 'pending',
+        jobs: enfileirado.jobs ?? [],
+      }, 202);
     }
 
     if (mode === 'probe') {
@@ -583,6 +858,23 @@ serve(async (req) => {
           p_requested_by: access.requestedBy,
         }));
       }
+    }
+
+    if (mode === 'worker') {
+      const pagas = await processarProximoPagasMes(supabase);
+      if (pagas) return json(pagas.body, pagas.status);
+    }
+
+    if (await varreduraFinanceiroEmusysAtiva(supabase)) {
+      const queueState = queueStateFromEnqueues(enqueues);
+      return json({
+        ok: true,
+        queued: true,
+        queue_status: 'blocked_by_financeiro_emusys',
+        next_attempt_at: queueState.nextAttemptAt,
+        sync_run_id: null,
+        jobs: queueState.jobs,
+      }, 202);
     }
 
     const workerId = crypto.randomUUID();

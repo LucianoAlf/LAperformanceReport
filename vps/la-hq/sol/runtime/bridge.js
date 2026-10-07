@@ -32,6 +32,7 @@ import qrcode from 'qrcode-terminal';
 import { matchesAllowedUser, parseAllowedUsers } from './allowlist.js';
 import { registerReportSingleMessageRoute } from './report-single-message.js';
 import groupEngagement from './group-engagement.cjs';
+import groupMembroNovo from './group-membro-novo.cjs';
 
 // Parse CLI args
 const args = process.argv.slice(2);
@@ -409,7 +410,11 @@ function resolverTelefoneDoRemetente(senderId) {
 // Por que aqui e nao no AGENTS.md: sem esse filtro, TODA mensagem dos grupos
 // autorizados viraria uma chamada de LLM so pra decidir "isso e comigo?" --
 // caro, lento e desnecessario.
-const GRUPO_JANELA_ATIVA_MS = parseInt(process.env.WHATSAPP_GROUP_ACTIVE_WINDOW_MS || '480000', 10); // 8 min
+// 26/09/2026: 8 min -> 3 min, contados a partir da ULTIMA RESPOSTA da Sol (ver
+// registrarRespostaDaSol em group-engagement.cjs). Com 8 min renovados a cada fala
+// humana, a Sol ficava "na conversa" enquanto a pessoa conversasse com os colegas
+// (Barra, 17:21-17:24: cinco mensagens seguidas foram ao agente).
+const GRUPO_JANELA_ATIVA_MS = parseInt(process.env.WHATSAPP_GROUP_ACTIVE_WINDOW_MS || '180000', 10); // 3 min
 const GRUPOS_QUE_RESPONDEM = new Set(
   String(process.env.WHATSAPP_GROUP_RESPONSE_CHAT_IDS || '')
     .split(/[\s,]+/)
@@ -432,6 +437,15 @@ function abrirJanelaGrupo(chatId, senderId, motivo = 'unknown') {
 }
 
 function decidirEngajamentoNoGrupo(args) { return groupEngagementPolicy.decidir(args); }
+
+// A janela de continuacao conta a partir da resposta da Sol, nao da fala humana.
+function registrarRespostaDaSolNoGrupo(chatId) {
+  if (!String(chatId || '').endsWith('@g.us')) return;
+  try {
+    const rec = groupEngagementPolicy.registrarRespostaDaSol({ chatId });
+    if (rec) console.log(JSON.stringify({ event: 'group_continuation_window', chatId, senderId: rec.senderId, motivo: 'resposta_da_sol', until: new Date(rec.until).toISOString(), ttlMs: GRUPO_JANELA_ATIVA_MS }));
+  } catch {}
+}
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -712,6 +726,11 @@ function typingStop(chatId) {
   try { const p = sock && sock.sendPresenceUpdate('paused', chatId); if (p && p.catch) p.catch(() => {}); } catch (e) {}
 }
 let connectionState = 'disconnected';
+// 🔴 O código do caixa mora DENTRO de startSocket() (escopo da conexão), e as
+//    rotas HTTP ficam no módulo. A rota /caixa/tool alcança o executor por este
+//    gancho, que startSocket() preenche a cada (re)conexão. Sem ele a rota lia
+//    variável fora de escopo e o ReferenceError derrubava a ponte (28/09/2026).
+let _caixaToolRota = null;
 
 async function startSocket() {
   const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
@@ -736,6 +755,38 @@ async function startSocket() {
   });
 
   sock.ev.on('creds.update', () => { saveCreds(); lidToPhone = buildLidMap(); });
+
+  // 🔔 Membro novo num grupo financeiro oficial avisa o Alf (28/09/2026): estar
+  //    no grupo passou a ser permissão financeira (autoriza_qualquer_membro).
+  //    Só avisa. Destino em SOL_CAIXA_ALERTA_MEMBRO_PARA (sem ele, só registra).
+  //    ⚠️ Handler async com try/catch: erro aqui nunca pode derrubar a ponte.
+  let _alertaMembro = null;
+  function alertaMembroNovo() {
+    if (_alertaMembro) return _alertaMembro;
+    const para = String(process.env.SOL_CAIXA_ALERTA_MEMBRO_PARA || '').replace(/D/g, '');
+    _alertaMembro = groupMembroNovo.criarAlertaMembroNovo({
+      gruposFinanceiros: financeGroupMap,
+      destino: para ? para + '@s.whatsapp.net' : null,
+      enviar: async function (jid, texto) {
+        const s2 = await sendWithTimeout(jid, { text: texto });
+        const id = s2 && s2.key && s2.key.id;
+        if (id) recentlySentIds.add(id);
+        return id;
+      },
+      resolverTelefone: resolverTelefoneDoRemetente,
+      nomeDe: async function (tel, grupo) {
+        const mod = (await import('file:///home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs')).default;
+        const r = await mod.identificarPessoa(tel, grupo && grupo.unidade_id);
+        return r && r.identificado ? r.nome : null;
+      },
+      log: _caixaLog,
+    });
+    return _alertaMembro;
+  }
+  sock.ev.on('group-participants.update', async (update) => {
+    try { await alertaMembroNovo().tratar(update); }
+    catch (e) { try { _caixaLog({ step: 'grupo_financeiro_membro_novo_erro', msg: String(e && e.message) }); } catch (_) { /* nunca derruba */ } }
+  });
 
   sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect, qr } = update;
@@ -831,21 +882,69 @@ async function classificadorV3Shadow() {
   }
   return _classificadorV3Shadow;
 }
+// Executor das ferramentas de caixa (28/09/2026): o MCP não tem mais caixa
+// próprio; ele valida o crachá e chama POST /caixa/tool, que roda aqui, com o
+// MESMO handler que atende as mensagens do grupo. Um estado só.
+let _caixaToolMod = null;
+async function caixaToolMod() {
+  if (_caixaToolMod) return _caixaToolMod;
+  try {
+    _caixaToolMod = (await import('file:///home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-tool-executor.cjs')).default;
+  } catch (e) {
+    _caixaLog({ step: 'caixa_tool_load_erro', msg: e.message });
+    _caixaToolMod = null;
+  }
+  return _caixaToolMod;
+}
+let _caixaToolExec = null;
+async function caixaToolExecutor() {
+  if (_caixaToolExec) return _caixaToolExec;
+  const mod = await caixaToolMod();
+  if (!mod) return null;
+  _caixaToolExec = mod.criarExecutorCaixaTool({
+    obterHandler: financeHandler,
+    obterAbf: caixaAbf,
+    obterGovernanca: caixaGovernanca,
+    grupos: financeGroupMap,
+    enviar: async function (cid, txt) {
+      const s2 = await sendWithTimeout(cid, { text: txt });
+      const id = s2 && s2.key && s2.key.id;
+      if (id) recentlySentIds.add(id);
+      return id;
+    },
+    fecharEpisodio: async function (episodio, chatId, detalhes) {
+      if (_agentFirstCorrelation && episodio && episodio.episode_id) {
+        const r = await _agentFirstCorrelation.closeByEpisode({ episodeId: episodio.episode_id, chatId, details: detalhes });
+        if (r && r.ok) return r;
+      }
+      const gov = await caixaGovernanca();
+      return gov ? gov.record(episodio, 'episode_closed', detalhes) : null;
+    },
+    log: _caixaLog,
+  });
+  return _caixaToolExec;
+}
+_caixaToolRota = { executor: caixaToolExecutor, live: SOL_CAIXA_LIVE };
+
 async function financeHandler() {
   if (!SOL_CAIXA_LIVE) return null;
   if (_caixaHandler) return _caixaHandler;
   try {
+    await caixaToolMod();
     const mod = (await import('file:///home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs')).default;
     const grupos = financeGroupMap();
     _caixaHandler = mod.criarHandlerFinanceiro({
       grupos: grupos,
       sendFn: async function (chatId, text) {
+        // Conta para a ferramenta em curso NESTE contexto (se houver); a
+        // mensagem de outra pessoa processada em paralelo não entra na conta.
+        if (_caixaToolMod) _caixaToolMod.registrarEnvio(text);
         const sent = await sendWithTimeout(chatId, { text: text });
         const id = sent && sent.key && sent.key.id;
         if (id) recentlySentIds.add(id);
         return id;
       },
-      log: function (o) { _caixaLog(o); },
+      log: function (o) { if (_caixaToolMod) _caixaToolMod.registrarEvento(o); _caixaLog(o); },
       governanceFn: function (event, eventType, details) {
         const episodio = event && event.caixaGovernancaEpisode;
         if (!_caixaGovernanca || !episodio) return Promise.resolve({ ok: false, sem_episodio: true });
@@ -1250,14 +1349,37 @@ async function caixaAbf() {
             const _complementoDeterministico = !!(_fhPrio
               && _fhPrio.deveTratarComplementoDeterministico
               && _fhPrio.deveTratarComplementoDeterministico(event));
-            const _textoVaiParaAgentTools = SOL_CAIXA_TOOLS_GROUPS.has(chatId)
-              && !event.hasMedia && !_confirmacaoDeterministica && !_complementoDeterministico;
+            // 🔴 SÓ VAI AO AGENTE O TEXTO QUE CHAMA A SOL (28/09/2026). Com as
+            //    ferramentas ligadas nas 3 unidades, "PG pix parcela 09/2026 aluno
+            //    Fulano R$ 456,00" — ditado sem "Sol", várias vezes por dia em CG —
+            //    seria descartado pela regra de grupo, que só responde a quem chama.
+            //    Texto que não chama segue pelo caminho automático (que já tem a V4
+            //    dentro: o roteador lê e monta o card, ou cai no parser antigo),
+            //    exatamente como CG e Barra funcionam hoje. `prever` não mexe na
+            //    janela: a decisão de verdade continua mais abaixo.
+            const _chamouASol = SOL_CAIXA_TOOLS_GROUPS.has(chatId) && !event.hasMedia
+              && groupEngagementPolicy.prever({ chatId, texto: body, mentionedIds, senderId,
+                identidadesProprias: new Set([(sock.user?.id || ''), (sock.user?.lid || '')]
+                  .map(v => String(v).replace(/:.*@/, '@').replace(/@.*/, '')).filter(Boolean)),
+              }).responder;
+            const _textoVaiParaAgentTools = _chamouASol
+              && !_confirmacaoDeterministica && !_complementoDeterministico;
             if (_textoVaiParaAgentTools) {
               // O canário só vira rota agent_first DEPOIS da política de grupo.
               // Antes, mensagens em standby eram marcadas como handoff e ficavam
               // falsamente abertas mesmo sem jamais entrar na sessão/modelo.
               event.caixaGovernancaAgentFirstCandidate = true;
-              _caixaLog({ step: 'agent_first_text_candidate_pos_abf', chatId: chatId });
+              // O card do comprovante sai do handler direto para o WhatsApp e
+              // nunca entra na sessao do Hermes. Sem esta linha o agente nao sabe
+              // que ha card aberto e "adivinha" pelo historico (Recreio 25/09:
+              // respondeu sobre um passaporte de 16/09). So contexto, nao autoriza.
+              try {
+                const _resumoCards = _fhPrio && _fhPrio.resumoCardsAbertosParaAgente
+                  && _fhPrio.resumoCardsAbertosParaAgente(chatId);
+                if (_resumoCards) event.caixaCardsAbertos = _resumoCards;
+              } catch (_) { /* contexto e' reforco; nunca derruba a mensagem */ }
+              _caixaLog({ step: 'agent_first_text_candidate_pos_abf', chatId: chatId,
+                cards_abertos: !!event.caixaCardsAbertos || undefined });
             } else {
             if (_confirmacaoDeterministica) {
               _govRecord('route_decided', { route: 'legacy', engine: 'legacy_parser', action: 'confirmacao_preview' });
@@ -1305,19 +1427,36 @@ async function caixaAbf() {
               // Sol -- menciona o nome dela ou cita um card pendente. Sem isto, uma
               // pendencia travada "envenena" a conversa inteira do grupo: qualquer
               // mensagem de qualquer pessoa, sobre qualquer assunto, levava "nao entendi".
-              const _pareceProSol = !!(groupEngagement.pareceChamarSol && groupEngagement.pareceChamarSol(body));
-              const _citouCard = !!(event.quotedMessageId && _fh.citaAlgumaPendencia
-                && _fh.citaAlgumaPendencia(chatId, event.quotedMessageId));
+              // Responder citando uma mensagem que a PRÓPRIA Sol mandou (card, recusa,
+              // aviso) é falar com ela, mesmo sem o nome (CG 03/10: "Pode abrir sol"
+              // citando "Não lancei: o caixa de hoje ainda não está aberto" ficou mudo).
+              const _citouSol = !!(event.quotedMessageId && recentlySentIds.has(event.quotedMessageId));
+              const _pareceProSol = _citouSol
+                || !!(groupEngagement.pareceChamarSol && groupEngagement.pareceChamarSol(body));
+              // Citar o comprovante de uma pessoa nao e falar com a Sol. So uma
+              // mensagem que a propria Sol enviou (card/continuacao) aciona esta
+              // guarda; a relacao ampla com a origem segue disponivel ao handler
+              // deterministico para correcoes explicitamente reconhecidas.
+              const _citouCard = !!(event.quotedMessageId && _fh.citaCardPendenteDaSol
+                && _fh.citaCardPendenteDaSol(chatId, event.quotedMessageId));
               let _v4JaRegistrou = false;
               // Pré-flight operacional V4: frase inédita dirigida à Sol pode
               // escolher apenas os executores determinísticos de ABERTURA ou
               // FECHAMENTO. Ambos criam preview e ainda exigem um "pode" humano
               // atual. Não aprovam, não escrevem e não ampliam o agent-first.
               // Switch separado: permite rollback sem desligar o shadow/D2.
+              // IMPASSE (26/09/2026, Barra): o card do passaporte ficou pendente
+              // porque o caixa estava FECHADO, e "Sol, abre o caixa" era barrado
+              // aqui justamente por haver card pendente -- o card esperava o caixa,
+              // o caixa esperava o card, e a resposta era "nao entendi". Com card
+              // pendente, ABRIR segue permitido: so cria preview, e o "pode" sem
+              // citacao continua indo para o comprovante (GUARDA 2 de
+              // tratarConfirmacao). FECHAR continua exigindo nenhum card pendente:
+              // fechar com recebimento nao lancado perde dinheiro de vista.
+              const _cardPendente = !!(_fh.temPendencia && _fh.temPendencia(chatId));
               if (!_tratouCaixa && _pareceProSol && _r && _r.acao === 'nada'
                   && process.env.SOL_CAIXA_V4_OPERATIONAL_PREFLIGHT === '1'
-                  && _abf && _sendCaixa && _fh.decidirRoteadorV4
-                  && !(_fh.temPendencia && _fh.temPendencia(chatId))) {
+                  && _abf && _sendCaixa && _fh.decidirRoteadorV4) {
                 let _decOperacional = null;
                 try {
                   _v4JaRegistrou = true;
@@ -1326,7 +1465,8 @@ async function caixaAbf() {
                   _caixaLog({ step: 'roteador_v4_operacional_erro', msg: e && e.message });
                 }
                 const _intencaoOperacional = _decOperacional && _decOperacional.intencao;
-                if ((_intencaoOperacional === 'abrir_caixa' || _intencaoOperacional === 'fechar_caixa')
+                if ((_intencaoOperacional === 'abrir_caixa'
+                     || (_intencaoOperacional === 'fechar_caixa' && !_cardPendente))
                     && Number(_decOperacional.confianca || 0) >= 0.9) {
                   const _acaoOperacional = _intencaoOperacional === 'abrir_caixa' ? 'abertura' : 'fechamento';
                   const _tratadorOperacional = _intencaoOperacional === 'abrir_caixa'
@@ -1346,6 +1486,19 @@ async function caixaAbf() {
                   }
                 }
               }
+              // Resposta direta a uma mensagem da Sol que nenhum caminho tratou e sem
+              // card aberto: orienta em vez de ficar muda. Com card aberto, o fallback
+              // abaixo já responde. Nunca escreve nem aprova nada.
+              if (!_tratouCaixa && _citouSol && _r && _r.acao === 'nada' && !_cardPendente) {
+                try {
+                  const _sa = await sendWithTimeout(chatId, { text:
+                    'Não entendi essa 🤔. Para abrir o caixa, escreve *Sol, abre o caixa*; '
+                    + 'para fechar, *Sol, fecha o caixa*; para lançar, manda o comprovante.' });
+                  const _said = _sa && _sa.key && _sa.key.id; if (_said) recentlySentIds.add(_said);
+                } catch (e) { _caixaLog({ step: 'orientacao_citou_sol_erro', msg: e.message }); }
+                _caixaLog({ step: 'orientacao_citou_sol', chatId: chatId });
+                _tratouCaixa = true;
+              }
               // Nos demais casos, o mesmo roteador continua em shadow. O
               // preflight acima já registrou sua decisão e não chama de novo.
               if (!_v4JaRegistrou && _fh.observarRoteadorV4) {
@@ -1359,10 +1512,24 @@ async function caixaAbf() {
                 // a mensagem para a gramatica canonica. Nunca escreve, nunca
                 // aprova dinheiro; falha => segue para o "nao entendi".
                 let _llmTratou = null;
+                const _tokenPendenciasAntes = _fh.tokenEstadoPendencias
+                  ? _fh.tokenEstadoPendencias(chatId) : null;
                 try { _llmTratou = _fh.tratarNaoEntendida ? await _fh.tratarNaoEntendida(event) : null; }
                 catch (e) { _caixaLog({ step: 'fallback_llm_erro', msg: e.message }); }
+                const _tokenPendenciasDepois = _fh.tokenEstadoPendencias
+                  ? _fh.tokenEstadoPendencias(chatId) : null;
+                const _estadoAindaEOMesmo = _tokenPendenciasAntes !== null
+                  ? !!_tokenPendenciasDepois && _tokenPendenciasDepois === _tokenPendenciasAntes
+                  : !!(_fh.temPendencia && _fh.temPendencia(chatId));
                 if (_llmTratou && _llmTratou.tratou) {
                   _caixaLog({ step: 'fallback_llm_tratou', acao: _llmTratou.acao, intencao: _llmTratou.intencao });
+                  _tratouCaixa = true;
+                } else if (!_estadoAindaEOMesmo) {
+                  // A resposta nasceu para um card que já foi lançado,
+                  // descartado ou corrigido enquanto o fallback aguardava.
+                  // Silêncio aqui evita que uma guarda atrasada interrompa a
+                  // conversa humana do grupo.
+                  _caixaLog({ step: 'fallback_llm_estado_obsoleto_bridge', chatId: chatId });
                   _tratouCaixa = true;
                 } else {
                 try {
@@ -1500,6 +1667,7 @@ async function caixaAbf() {
       if (event.senderPhone) {
         try {
           const _ep = event.caixaGovernancaEpisode && event.caixaGovernancaEpisode.episode_id;
+          if (event.caixaCardsAbertos) event.body = `[card_caixa_aberto: ${event.caixaCardsAbertos}]\n${event.body || ''}`;
           if (_ep) event.body = `[episode_caixa: ${_ep}]\n${event.body || ''}`;
           const _cr = crachaDoSolicitante(event.senderPhone, chatId);
           if (_cr) {
@@ -1588,6 +1756,8 @@ app.post('/send', async (req, res) => {
       }
     }
 
+    registrarRespostaDaSolNoGrupo(chatId);
+
     if (replyTo && _agentFirstCorrelation) {
       await closeAgentFirstByReplySafely({
         messageId: replyTo,
@@ -1635,6 +1805,32 @@ app.post('/governance/agent-first/close', async (req, res) => {
   }
   return res.json(result);
 });
+// Ferramentas de caixa do agente. Só localhost: o MCP já validou o crachá na
+// RPC de contexto; aqui confere-se de novo que o grupo é financeiro e que a
+// unidade do crachá é a do grupo.
+app.post('/caixa/tool', async (req, res) => {
+  const origem = String((req.socket && req.socket.remoteAddress) || '');
+  if (!/^(::ffff:)?127\.0\.0\.1$|^::1$/.test(origem)) return res.status(403).json({ ok: false, motivo: 'origem_nao_local' });
+  // ⚠️ Rota async sem try/catch derruba o processo inteiro num erro — e o
+  //    processo é o WhatsApp da Sol. Todo erro vira resposta, nunca queda.
+  try {
+    if (!_caixaToolRota || !_caixaToolRota.live) {
+      return res.status(503).json({ ok: false, estado: 'nada_aconteceu', motivo: 'caixa_desligado' });
+    }
+    if (!sock || connectionState !== 'connected') {
+      return res.status(503).json({ ok: false, estado: 'nada_aconteceu', motivo: 'whatsapp_desconectado' });
+    }
+    const exec = await _caixaToolRota.executor();
+    if (!exec) return res.status(503).json({ ok: false, estado: 'nada_aconteceu', motivo: 'executor_indisponivel' });
+    const out = await exec.executar(req.body || {});
+    return res.json(out);
+  } catch (e) {
+    try { console.error('caixa_tool_rota_erro', e && e.stack); } catch (_) {}
+    return res.status(500).json({ ok: false, estado: 'desconhecido', motivo: 'erro_na_ponte',
+      orientacao: 'Não sei se algo foi publicado. Não afirme nada; peça para conferirem o grupo.' });
+  }
+});
+
 registerReportSingleMessageRoute({
   app,
   getSocket: () => sock,

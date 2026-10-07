@@ -1,4 +1,123 @@
 // Geometria da timeline da Agenda. Sem React, sem Supabase: tudo testavel isoladamente.
+import { format, isValid, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+
+/**
+ * Rotulo curto do dia para telas estreitas: "Segunda, 21/09".
+ *
+ * ⚠️ Existe para o locale nao ser esquecido. `format(d, "EEEE, dd/MM")` sem o
+ * terceiro argumento devolve INGLES — e foi exatamente o que chegou ao
+ * celular: o cabecalho da Agenda dizia "Monday, 21/09". O default do date-fns
+ * e en-US e nada avisa; o erro so aparece lendo a tela.
+ *
+ * "-feira" sai: ocupa quatro caracteres numa barra de 375px e nao acrescenta
+ * nada que "Segunda" ja nao diga. Mesma decisao do `rotuloDoDia` do desktop.
+ *
+ * Data invalida devolve a string crua em vez de lancar: `format` estoura com
+ * RangeError, e no corpo de um componente isso derruba a pagina inteira.
+ */
+export function rotuloDiaCurto(data: string): string {
+  const d = parseISO(data);
+  if (!isValid(d)) return data;
+  const bruto = format(d, 'EEEE, dd/MM', { locale: ptBR }).replace('-feira', '');
+  // O ptBR devolve o dia em minuscula ("segunda"). Aqui o rotulo abre uma
+  // linha e e o titulo do dia, entao vai capitalizado.
+  return bruto.charAt(0).toUpperCase() + bruto.slice(1);
+}
+
+/**
+ * Professores do dia, do que tem mais aula para o que tem menos.
+ *
+ * O trilho do celular mostra tres ou quatro chips de cada vez; o resto fica
+ * atras de rolagem horizontal. Em ordem alfabetica — que e o que
+ * `opcoesDoCampo` devolve — quem aparece primeiro e quem tem nome comecando em
+ * A, o que nao tem relacao nenhuma com a chance de ser procurado. Por volume,
+ * os primeiros chips respondem a maior parte do dia.
+ *
+ * Desempate alfabetico para a ordem ser estavel: sem ele, dois professores com
+ * a mesma contagem trocariam de lugar entre renderizacoes.
+ *
+ * ⚠️ Aula cancelada CONTA. Ela ainda esta na agenda do professor, e tira-la
+ * esconderia justamente o dia que deu errado.
+ */
+export function professoresPorVolume(
+  aulas: Array<{ professor_nome: string | null }>,
+): Array<{ nome: string; qtd: number }> {
+  const contagem = new Map<string, number>();
+  for (const aula of aulas) {
+    if (!aula.professor_nome) continue;
+    contagem.set(aula.professor_nome, (contagem.get(aula.professor_nome) ?? 0) + 1);
+  }
+  return [...contagem.entries()]
+    .map(([nome, qtd]) => ({ nome, qtd }))
+    .sort((a, b) => b.qtd - a.qtd || a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+/**
+ * As aulas em ordem cronologica.
+ *
+ * 🔴 A Agenda do celular troca o eixo do desktop: la a hora e POSICAO numa
+ * grade, aqui ela e ORDEM numa lista. O que a RPC devolve, porem, vem agrupado
+ * por professor — cada grupo cronologico por dentro, o conjunto nao. A tela
+ * mapeava o array como veio, entao a lista parecia certa nas primeiras linhas
+ * (as do primeiro professor) e voltava no tempo mais abaixo: 20:00 acima de
+ * 15:00. No desktop isso nunca apareceu porque `alocarFaixas` ordena por conta
+ * propria antes de posicionar.
+ *
+ * ⚠️ Nao e so estetica: a regua do "agora" e `findIndex(inicio > agora)`, que
+ * so tem sentido em lista ordenada — numa lista fora de ordem ela cai na
+ * primeira aula futura que aparecer, em qualquer ponto da tela.
+ *
+ * O desempate e completo de proposito (duracao, professor, chave): com
+ * criterio parcial, duas aulas do mesmo horario trocariam de lugar entre
+ * renderizacoes, e a lista dancaria a cada atualizacao do relogio.
+ */
+export function ordenarPorHora<
+  T extends { hora_inicio: string; duracao_minutos: number; professor_nome: string | null; chave: string },
+>(aulas: T[]): T[] {
+  return [...aulas].sort(
+    (a, b) =>
+      minutosDeHHMM(a.hora_inicio) - minutosDeHHMM(b.hora_inicio) ||
+      a.duracao_minutos - b.duracao_minutos ||
+      (a.professor_nome ?? '').localeCompare(b.professor_nome ?? '', 'pt-BR') ||
+      a.chave.localeCompare(b.chave),
+  );
+}
+
+/**
+ * As aulas em blocos de mesmo horario de inicio.
+ *
+ * A lista do celular tinha uma coluna de hora de 50px repetindo "09:00" em
+ * quatro linhas seguidas. Com o padding do <main>, o da linha e a coluna, o
+ * texto ficava com 272px num telefone de 390 — por isso o nome do curso
+ * truncava. Levando a hora para um cabecalho de bloco, a linha recupera ~30% de
+ * largura e o horario vira ancora, nao carimbo.
+ *
+ * ⚠️ Agrupa CONSECUTIVOS, nao por chave. A entrada e a lista ja passada por
+ * `ordenarPorHora`; agrupar por chave global "consertaria" silenciosamente uma
+ * lista fora de ordem — e uma lista fora de ordem e um defeito que precisa
+ * aparecer, nao ser escondido (foi exatamente o que aconteceu ate 21/09).
+ *
+ * `duracaoComum` e a duracao quando TODAS as aulas do bloco tem a mesma — o
+ * caso normal da casa, onde quase tudo dura 50 min. Divergindo, vem `null` e
+ * cada linha declara a sua: e justamente quando a duracao deixa de ser obvia.
+ */
+export function agruparPorHora<T extends { hora_inicio: string; duracao_minutos: number }>(
+  aulas: T[],
+): Array<{ hora: string; duracaoComum: number | null; aulas: T[] }> {
+  const grupos: Array<{ hora: string; duracaoComum: number | null; aulas: T[] }> = [];
+  for (const aula of aulas) {
+    const hora = aula.hora_inicio.slice(0, 5);
+    const ultimo = grupos[grupos.length - 1];
+    if (ultimo !== undefined && ultimo.hora === hora) ultimo.aulas.push(aula);
+    else grupos.push({ hora, duracaoComum: null, aulas: [aula] });
+  }
+  for (const grupo of grupos) {
+    const duracoes = new Set(grupo.aulas.map((a) => a.duracao_minutos));
+    grupo.duracaoComum = duracoes.size === 1 ? grupo.aulas[0].duracao_minutos : null;
+  }
+  return grupos;
+}
 
 export const AGENDA_HORA_INICIO = 8;
 export const AGENDA_HORA_FIM = 22;
@@ -651,4 +770,58 @@ export function formatarDataCalculo(calculadoEm: string | null): string {
   const dia = String(data.getUTCDate()).padStart(2, '0');
   const mes = String(data.getUTCMonth() + 1).padStart(2, '0');
   return `${dia}/${mes}`;
+}
+
+export type AulaColidivel = {
+  chave: string;
+  sala_nome: string | null;
+  hora_inicio: string;
+  duracao_minutos: number;
+  cancelada: boolean;
+};
+
+/**
+ * Aulas que disputam a MESMA sala no mesmo horario, com o texto pronto para a
+ * linha.
+ *
+ * Existe porque a grade do desktop nao mostra este caso: agrupada por
+ * professor, a aula de Teclado da Bia e a de Guitarra do Ramon — as duas na
+ * Sala 2 as 11:00 — ficam em trilhos separados, cada uma sozinha no seu, e
+ * `resumoSobreposicao` (que opera DENTRO de um trilho) nao ve nada. A colisao
+ * so aparece ao trocar o agrupamento para Sala, ou seja, depende do modo em
+ * que a pessoa esta. Na lista do celular nao ha modo: ela e dita em toda linha.
+ *
+ * ⚠️ Nao usar `resumoSobreposicao` para isto. Ela responde "quantas aulas
+ * simultaneas ha neste conjunto", e sobre o dia inteiro devolveria 4 as 11:00
+ * — a escola funcionando, nao um problema.
+ */
+export function colisoesDeSala(aulas: AulaColidivel[]): Map<string, string> {
+  // Quem OCUPA uma sala. Cancelada sai — ela nao ocupa nada, mesmo criterio
+  // que `resumoSobreposicao` ja usa. Sala nula sai porque "sem sala" nao e uma
+  // sala: duas aulas sem sala nao disputam coisa alguma.
+  //
+  // ⚠️ Aula SEM ALUNO vinculado FICA, de proposito. O horario segue reservado,
+  // e ela e justamente a que alguem vai querer remanejar ao descobrir o
+  // conflito — some-la esconderia a saida mais obvia do problema.
+  const ocupantes = aulas.filter((a) => !a.cancelada && a.sala_nome !== null);
+
+  const marcadas = new Map<string, string>();
+
+  for (const a of ocupantes) {
+    const inicioA = minutosDeHHMM(a.hora_inicio);
+    const fimA = inicioA + a.duracao_minutos;
+
+    const colide = ocupantes.some((b) => {
+      if (b.chave === a.chave) return false;
+      if (b.sala_nome !== a.sala_nome) return false;
+      const inicioB = minutosDeHHMM(b.hora_inicio);
+      // Estrito nas duas pontas: terminar as 09:50 e comecar as 09:50 e o
+      // intervalo normal entre aulas, nao um conflito.
+      return inicioA < inicioB + b.duracao_minutos && inicioB < fimA;
+    });
+
+    if (colide) marcadas.set(a.chave, `${a.sala_nome} tem outra aula neste horário`);
+  }
+
+  return marcadas;
 }

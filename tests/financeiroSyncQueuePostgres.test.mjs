@@ -167,17 +167,22 @@ test('Checkpoint 3: fila financeira serializa worker, persiste backoff e descobr
       'job-nao-financeiro',
     );
 
-    jsonFrom(asRole(container, 'service_role', `
+    const initialEnqueue = jsonFrom(asRole(container, 'service_role', `
       select public.enqueue_financeiro_sync_competencias(
         array[date '2026-06-01', date '2026-07-01', date '2026-06-01'],
         'teste_idempotencia', 'fixture', 50
       )::text;
     `), 'enqueue inicial');
-    jsonFrom(asRole(container, 'service_role', `
+    const repeatedEnqueue = jsonFrom(asRole(container, 'service_role', `
       select public.enqueue_financeiro_sync_competencias(
         array[date '2026-06-01'], 'teste_repetido', 'fixture', 40
       )::text;
     `), 'enqueue repetido');
+    assert.equal(
+      repeatedEnqueue.jobs[0].id,
+      initialEnqueue.jobs.find((job) => job.competencia === '2026-06-01').id,
+      'enqueue repetido deve devolver o id do job ativo ja existente',
+    );
     assert.equal(
       Number(scalar(psql(container, `
         select count(*) from public.financeiro_sync_queue

@@ -97,3 +97,7 @@ outputs/comparacao-canonica.json
 .local/
 # backups locais gerados por teste de patch — a historia vive na VPS
 vps/la-hq/sol/runtime/*.bak-*
+
+# artefatos temporarios de conciliacao/auditoria (dados sensiveis, nunca commitar)
+.tmp_conciliacao/
+.tmp_*.json

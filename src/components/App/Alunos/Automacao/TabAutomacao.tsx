@@ -7,6 +7,16 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { ACOES_SOMBRA_IN } from '@/lib/automacaoSombra';
+import { useShellMobile } from '@/hooks/useShellMobile';
+import { AutomacaoMobile } from '@/mobile/telas/alunos/AutomacaoMobile';
+import {
+  ESTILOS_ACAO_OBSERVADOR,
+  ESTILOS_ACAO_OPERACAO,
+  ROTULOS_EVENTO,
+  estiloDaAcao,
+  filtrarRegistrosLog,
+  formatarDetalhesLog,
+} from '@/lib/automacaoLog';
 
 interface AutomacaoLogItem {
   id: number;
@@ -21,36 +31,13 @@ interface AutomacaoLogItem {
   created_at: string;
 }
 
-const acaoStyles: Record<string, { bg: string; text: string; label: string }> = {
-  inserido: { bg: 'bg-emerald-500/20', text: 'text-emerald-400', label: 'Novo Aluno' },
-  atualizado: { bg: 'bg-blue-500/20', text: 'text-blue-400', label: 'Atualizado' },
-  status_ativo: { bg: 'bg-cyan-500/20', text: 'text-cyan-400', label: 'Renovado' },
-  status_trancado: { bg: 'bg-amber-500/20', text: 'text-amber-400', label: 'Trancado' },
-  status_evadido: { bg: 'bg-rose-500/20', text: 'text-rose-400', label: 'Evadido' },
-  segundo_curso: { bg: 'bg-violet-500/20', text: 'text-violet-400', label: '2º Curso' },
-  nao_encontrado: { bg: 'bg-amber-500/20', text: 'text-amber-400', label: 'Não Encontrado' },
-  erro_aluno_nao_encontrado: { bg: 'bg-rose-500/20', text: 'text-rose-400', label: 'Erro: Não Encontrado' },
-  evento_ignorado: { bg: 'bg-slate-500/20', text: 'text-slate-400', label: 'Ignorado' },
-};
-
-// Ações do observador em dry-run. Ficam FORA de `acaoStyles` de propósito: aquele mapa
-// também gera os cartões de contagem no topo, e sombra não é métrica de operação.
-// Sem estas entradas elas caíam no fallback e apareciam como "Atualizado" — parecendo
-// alteração real de aluno, quando nada foi escrito.
-const acaoStylesObservador: Record<string, { bg: string; text: string; label: string }> = {
-  processado_sombra: { bg: 'bg-slate-600/30', text: 'text-slate-300', label: 'Sombra (teste)' },
-  webhook_observado_direto: { bg: 'bg-slate-600/30', text: 'text-slate-300', label: 'Sombra (payload)' },
-  processado: { bg: 'bg-teal-500/20', text: 'text-teal-300', label: 'Processado (Emusys)' },
-  erro_processamento: { bg: 'bg-rose-500/20', text: 'text-rose-400', label: 'Erro no processamento' },
-};
-
-const eventoLabels: Record<string, string> = {
-  matricula_nova: 'Matrícula Nova',
-  matricula_renovacao: 'Renovação',
-  matricula_trancamento: 'Trancamento',
-  matricula_finalizacao: 'Finalização',
-  sync_presenca: 'Sync Presença',
-};
+// Os tres mapas vivem em `@/lib/automacaoLog`, compartilhados com a lista do
+// celular: a MESMA linha de log nao pode sair como "Renovado" aqui e
+// "Atualizado" la. A separacao entre operacao e observador segue valendo, e o
+// motivo dela esta escrito na lib.
+const acaoStyles = ESTILOS_ACAO_OPERACAO;
+const acaoStylesObservador = ESTILOS_ACAO_OBSERVADOR;
+const eventoLabels = ROTULOS_EVENTO;
 
 interface TabAutomacaoProps {
   unidadeAtual: string;
@@ -65,6 +52,7 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
   const [busca, setBusca] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [mostrarSombra, setMostrarSombra] = useState(false);
+  const ehCelular = useShellMobile() === 'mobile';
 
   useEffect(() => {
     carregarRegistros();
@@ -132,32 +120,11 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
     return format(date, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
   };
 
-  const formatarDetalhes = (item: AutomacaoLogItem): string => {
-    const detalhes = item.detalhes || {};
-    const partes: string[] = [];
+  const formatarDetalhes = formatarDetalhesLog;
 
-    if (item.evento === 'sync_presenca') {
-      if (detalhes.data) partes.push(detalhes.data);
-      if (detalhes.curso) partes.push(detalhes.curso);
-      if (detalhes.professor) partes.push(`Prof. ${detalhes.professor}`);
-      return partes.join(' · ');
-    }
-
-    if (detalhes.curso) partes.push(detalhes.curso);
-    if (detalhes.professor) partes.push(`Prof. ${detalhes.professor}`);
-    if (detalhes.dia && detalhes.horario) partes.push(`${detalhes.dia} ${detalhes.horario}`);
-
-    return partes.length > 0 ? partes.join(' · ') : '';
-  };
-
-  const registrosFiltrados = registros.filter(r => {
-    if (filtroEvento === 'sem_professor' && r.detalhes?.sem_professor !== true) return false;
-    if (busca.trim()) {
-      const termo = busca.toLowerCase();
-      if (!r.aluno_nome?.toLowerCase().includes(termo)) return false;
-    }
-    return true;
-  });
+  // O recorte local (busca por aluno + o pseudo-evento `sem_professor`) mora na
+  // lib: e o mesmo que a lista do celular aplica.
+  const registrosFiltrados = filtrarRegistrosLog(registros, { busca, evento: filtroEvento });
 
   const totalPorAcao = registrosFiltrados.reduce((acc, r) => {
     acc[r.acao] = (acc[r.acao] || 0) + 1;
@@ -165,6 +132,18 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
   }, {} as Record<string, number>);
 
   const totalSemProfessor = registros.filter(r => r.detalhes?.sem_professor === true).length;
+
+  // No celular a tabela de 7 colunas (1.796px) vira uma lista. A bifurcacao
+  // fica depois dos hooks e antes do JSX do desktop, que segue intocado.
+  if (ehCelular) {
+    return (
+      <AutomacaoMobile
+        registros={registros}
+        filtroEvento={filtroEvento}
+        carregando={loading}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -309,7 +288,7 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
               </thead>
               <tbody>
                 {registrosFiltrados.map((registro) => {
-                  const style = acaoStyles[registro.acao] || acaoStylesObservador[registro.acao] || acaoStyles.atualizado;
+                  const style = estiloDaAcao(registro.acao);
                   const detalhesStr = formatarDetalhes(registro);
                   const semProfessor = registro.detalhes?.sem_professor === true;
                   const isExpanded = expandedId === registro.id;

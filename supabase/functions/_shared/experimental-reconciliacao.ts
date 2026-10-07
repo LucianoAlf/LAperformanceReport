@@ -20,8 +20,6 @@ export interface ExperimentalCandidate {
   cursoId?: number | null;
 }
 
-const MAX_FALLBACK_MINUTES = 30;
-
 function normalizarData(value: string | null | undefined): string | null {
   if (!value) return null;
   return String(value).slice(0, 10);
@@ -60,13 +58,25 @@ function camposEstaveisCorrespondem(
   return identidade.emusysLeadId != null || identidade.emusysAlunoId != null;
 }
 
+function horarioCorrespondeExatamente(
+  identidade: ExperimentalIdentity,
+  candidato: ExperimentalCandidate,
+): boolean {
+  const horarioIdentidade = horarioEmMinutos(identidade.horario);
+  const horarioCandidato = horarioEmMinutos(candidato.horarioBanco);
+  return horarioIdentidade !== null &&
+    horarioCandidato !== null &&
+    horarioIdentidade === horarioCandidato;
+}
+
 /**
  * Seleciona uma linha sem usar nome como identidade.
  *
  * A aula externa e a chave mais forte: quando existe um unico candidato no
  * escopo da unidade, horario, data, curso e nome nao podem impedir o match.
- * Sem essa chave, o fallback exige identidade de lead/aluno e data; somente
- * linhas legadas sem aula_id aceitam uma tolerancia de 30 minutos.
+ * Sem essa chave, o fallback exige identidade de lead/aluno, data e horario
+ * exatos. Um reagendamento pode manter a mesma pessoa no mesmo dia, mas nunca
+ * pode ligar uma aula das 09h a outra das 10h.
  */
 export function selecionarCandidatoExperimental(
   identidade: ExperimentalIdentity,
@@ -85,19 +95,9 @@ export function selecionarCandidatoExperimental(
   }
 
   const porIdentidade = escopo.filter((candidato) =>
-    camposEstaveisCorrespondem(identidade, candidato)
+    camposEstaveisCorrespondem(identidade, candidato) &&
+    horarioCorrespondeExatamente(identidade, candidato)
   );
   if (porIdentidade.length === 1) return porIdentidade[0];
-  if (porIdentidade.length > 1) return null;
-
-  const horaDesejada = horarioEmMinutos(identidade.horario);
-  if (horaDesejada == null) return null;
-  const porJanela = escopo.filter((candidato) => {
-    if (candidato.emusysAulaId != null) return false;
-    if (!camposEstaveisCorrespondem(identidade, candidato)) return false;
-    const horaCandidata = horarioEmMinutos(candidato.horarioBanco);
-    return horaCandidata != null &&
-      Math.abs(horaCandidata - horaDesejada) <= MAX_FALLBACK_MINUTES;
-  });
-  return porJanela.length === 1 ? porJanela[0] : null;
+  return null;
 }

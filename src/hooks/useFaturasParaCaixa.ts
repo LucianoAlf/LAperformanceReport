@@ -16,13 +16,21 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
   carregarFaturasAlunosFinanceiras,
-  type FaturasFinanceirasItem,
+  type FaturaFinanceiraItem,
 } from '@/lib/faturasAlunosFinanceiras';
+import {
+  avisoDaAtualizacao,
+  type AvisoFaturas,
+  type RespostaAtualizarFaturas,
+} from '@/lib/atualizarFaturasAluno';
 
 export interface FaturaParaCaixa {
   /** Chave composta "<unidade>:<emusys_fatura_id>" — identifica na lista, NAO e a FK. */
   chave: string;
   emusysFaturaId: string;
+  /** UUID real da linha em `emusys_faturas` — preenchido quando a opcao veio do espelho direto. */
+  faturaId?: string | null;
+  emusysStudentId: string | null;
   alunoId: number | null;
   alunoNome: string;
   cursoNome: string | null;
@@ -40,10 +48,23 @@ export function filtrarFaturasPorBusca(faturas: FaturaParaCaixa[], busca: string
   return faturas.filter((f) => semAcento(f.alunoNome).includes(termo)).slice(0, 12);
 }
 
-function paraOpcao(item: FaturasFinanceirasItem): FaturaParaCaixa {
+/**
+ * Sugestao por valor: quem paga no balcao costuma pagar o valor exato da parcela
+ * aberta. So em aberto — fatura paga nao e candidata. Centavos tem que bater:
+ * sugestao frouxa ensina link errado, e link errado e' pior que nenhum.
+ */
+export function sugerirFaturasPorValor(faturas: FaturaParaCaixa[], valor: number): FaturaParaCaixa[] {
+  if (!valor || valor <= 0) return [];
+  return faturas
+    .filter((f) => f.valor !== null && Math.abs(f.valor - valor) < 0.005 && f.status === 'aberta')
+    .slice(0, 12);
+}
+
+function paraOpcao(item: FaturaFinanceiraItem): FaturaParaCaixa {
   return {
     chave: item.canonical_fatura_id,
     emusysFaturaId: String(item.emusys_fatura_id),
+    emusysStudentId: item.emusys_student_id ?? null,
     alunoId: item.aluno?.id ?? null,
     alunoNome: item.aluno?.nome ?? '',
     cursoNome: item.aluno?.curso_nome ?? null,
@@ -55,6 +76,42 @@ function paraOpcao(item: FaturasFinanceirasItem): FaturaParaCaixa {
 }
 
 /**
+ * Todas as faturas do aluno no espelho, sem janela de competencia — e' o que
+ * permite vincular pagamento composto (ex: contrato inteiro pago no cartao,
+ * com parcelas de competencias futuras que a janela_3 nao alcanca).
+ * Leitura via RPC security definer: `emusys_faturas` e' service-only (RLS),
+ * select direto volta vazio para usuario autenticado.
+ */
+export async function buscarFaturasDoAluno(
+  unidadeId: string,
+  emusysStudentId: string,
+  alunoNome: string,
+): Promise<FaturaParaCaixa[]> {
+  const { data, error } = await supabase.rpc('caixa_faturas_do_aluno_v1', {
+    p_unidade_id: unidadeId,
+    p_emusys_student_id: Number(emusysStudentId),
+  });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Record<string, unknown>[]).map((row) => {
+    const valorOriginal = Number(row.valor_original ?? 0);
+    const liquido = valorOriginal - Number(row.desconto_fixo ?? 0) - Number(row.desconto_condicional ?? 0);
+    return {
+      chave: String(row.id),
+      emusysFaturaId: String(row.emusys_fatura_id),
+      faturaId: String(row.id),
+      emusysStudentId,
+      alunoId: null,
+      alunoNome,
+      cursoNome: null,
+      competencia: String(row.competencia ?? ''),
+      dataVencimento: row.data_vencimento ? String(row.data_vencimento) : null,
+      status: String(row.status ?? ''),
+      valor: row.valor_pago != null ? Number(row.valor_pago) : liquido,
+    };
+  });
+}
+
+/**
  * Resolve a FK real (`emusys_faturas.id`) a partir do par natural, que e unico:
  * 5.334 faturas, 5.334 pares distintos, zero duplicado (medido em 08/09/2026).
  * A RPC canonica so devolve a chave composta, que nao serve para FK.
@@ -63,14 +120,12 @@ export async function resolverFaturaId(
   unidadeId: string,
   emusysFaturaId: string,
 ): Promise<string | null> {
-  const { data, error } = await supabase
-    .from('emusys_faturas')
-    .select('id')
-    .eq('unidade_id', unidadeId)
-    .eq('emusys_fatura_id', emusysFaturaId)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc('caixa_fatura_resolver_id_v1', {
+    p_unidade_id: unidadeId,
+    p_emusys_fatura_id: Number(emusysFaturaId),
+  });
   if (error) throw new Error(error.message);
-  return (data as { id?: string } | null)?.id ?? null;
+  return (data as string | null) ?? null;
 }
 
 export function useFaturasParaCaixa(unidadeId?: string | null) {
@@ -96,7 +151,7 @@ export function useFaturasParaCaixa(unidadeId?: string | null) {
         situacao: 'todas',
         asOfDate: hoje.toISOString().slice(0, 10),
       });
-      if (estado.erro) throw new Error(estado.erro);
+      if (estado.error) throw new Error(estado.error);
       setFaturas(estado.items.map(paraOpcao));
     } catch (err: unknown) {
       // Falhar aqui nao pode travar o caixa: sem a lista o lancamento segue sem
@@ -116,4 +171,34 @@ export function useFaturasParaCaixa(unidadeId?: string | null) {
     () => ({ faturas, carregando, erro, recarregar: carregar }),
     [carregando, carregar, erro, faturas],
   );
+}
+
+/**
+ * Busca no Emusys, na hora, todas as faturas deste aluno e grava no espelho
+ * (edge `atualizar-faturas-aluno`, LAPE-56). Existe porque a competencia +2 em
+ * diante so' e' sincronizada 1x/dia: fatura criada hoje (matricula nova,
+ * credito, adiantamento) nao aparecia para o caixa ate o dia seguinte.
+ * Nunca lanca: todo desfecho volta como aviso para a tela.
+ */
+export async function atualizarFaturasDoAlunoNoEmusys(
+  unidadeId: string,
+  emusysStudentId: string,
+  alunoNome: string,
+): Promise<AvisoFaturas> {
+  try {
+    const { data, error } = await supabase.functions.invoke('atualizar-faturas-aluno', {
+      method: 'POST',
+      body: { unidade_id: unidadeId, emusys_student_id: emusysStudentId, aluno_nome: alunoNome },
+    });
+    if (!error) return avisoDaAtualizacao(200, data as RespostaAtualizarFaturas);
+
+    const contexto = (error as { context?: unknown }).context;
+    if (contexto instanceof Response) {
+      const corpo = await contexto.clone().json().catch(() => null) as RespostaAtualizarFaturas | null;
+      return avisoDaAtualizacao(contexto.status, corpo);
+    }
+    return avisoDaAtualizacao(null, null, error.message);
+  } catch (erro) {
+    return avisoDaAtualizacao(null, null, erro instanceof Error ? erro.message : String(erro));
+  }
 }

@@ -434,7 +434,7 @@ export function ChecklistDetail({ checklistId, unidadeId, onVoltar }: ChecklistD
       </div>
 
       {/* Sub-tabs internas (mesmo padrão do PainelFarmer) */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 overflow-x-auto scrollbar-hide [mask-image:linear-gradient(to_right,black_calc(100%-20px),transparent)] lg:mask-none">
         {subTabs.map(tab => (
           <button
             key={tab.id}
@@ -615,7 +615,7 @@ export function ChecklistDetail({ checklistId, unidadeId, onVoltar }: ChecklistD
               />
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="text-xs font-medium text-slate-400 mb-1.5 block">Periodicidade</label>
                 <Select value={editPeriodicidade} onValueChange={setEditPeriodicidade}>
@@ -990,11 +990,11 @@ function TarefasSubTab({ items, isConcluido, onToggle, onToggleBatch, onAddItem,
                           )}
                           {/* Botões editar/excluir subtarefa */}
                           {!isConcluido && (
-                            <div className="flex items-center gap-1 opacity-0 group-hover/sub:opacity-100 transition-opacity">
-                              <button onClick={() => iniciarEdicao(sub)} className="text-slate-500 hover:text-violet-400 p-0.5">
+                            <div className="flex items-center gap-1 opacity-0 group-hover/sub:opacity-100 transition-opacity max-lg:opacity-100">
+                              <button onClick={() => iniciarEdicao(sub)} className="text-slate-500 hover:text-violet-400 p-0.5 max-lg:p-3.5">
                                 <Pencil className="w-3 h-3" />
                               </button>
-                              <button onClick={() => onDeleteItem(sub.id)} className="text-slate-500 hover:text-rose-400 p-0.5">
+                              <button onClick={() => onDeleteItem(sub.id)} className="text-slate-500 hover:text-rose-400 p-0.5 max-lg:p-3.5">
                                 <Trash2 className="w-3 h-3" />
                               </button>
                             </div>
@@ -1049,7 +1049,7 @@ function TarefasSubTab({ items, isConcluido, onToggle, onToggleBatch, onAddItem,
                       {/* Botão editar */}
                       <button
                         onClick={() => iniciarEdicao(item)}
-                        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-violet-400 p-1 transition-opacity"
+                        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-violet-400 p-1 transition-opacity max-lg:opacity-100 max-lg:p-3"
                         title="Editar tarefa"
                       >
                         <Pencil className="w-3.5 h-3.5" />
@@ -1057,7 +1057,7 @@ function TarefasSubTab({ items, isConcluido, onToggle, onToggleBatch, onAddItem,
                       {/* Botão adicionar subtarefa */}
                       <button
                         onClick={() => iniciarAddSub(item.id)}
-                        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-emerald-400 p-1 transition-opacity"
+                        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-emerald-400 p-1 transition-opacity max-lg:opacity-100 max-lg:p-3"
                         title="Adicionar subtarefa"
                       >
                         <Plus className="w-3.5 h-3.5" />
@@ -1065,7 +1065,7 @@ function TarefasSubTab({ items, isConcluido, onToggle, onToggleBatch, onAddItem,
                       {/* Botão excluir */}
                       <button
                         onClick={() => onDeleteItem(item.id)}
-                        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-400 p-1 transition-opacity"
+                        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-400 p-1 transition-opacity max-lg:opacity-100 max-lg:p-3"
                         title="Excluir tarefa"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -1289,7 +1289,7 @@ function CarteiraSubTab({ contatos, onAtualizarContato, cursosUnidade, professor
       </div>
 
       {/* Cards resumo (wireframe L435-436) */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-slate-800/50 border border-slate-700/20 rounded-xl p-3 text-center">
           <p className="text-xl font-bold text-white">{filtrados.length}</p>
           <p className="text-[10px] text-slate-500 mt-0.5">Meus Alunos</p>
@@ -1615,7 +1615,7 @@ function SucessoSubTab({
       {totalContatos > 0 && (
         <div className="bg-slate-800/30 rounded-xl border border-slate-700/30 p-5">
           <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">Resumo Geral</h4>
-          <div className="grid grid-cols-3 gap-6 text-center">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center">
             <div>
               <p className={cn('text-2xl font-bold', taxaSucesso >= 80 ? 'text-emerald-400' : taxaSucesso >= 50 ? 'text-amber-400' : 'text-rose-400')}>
                 {taxaSucesso}%

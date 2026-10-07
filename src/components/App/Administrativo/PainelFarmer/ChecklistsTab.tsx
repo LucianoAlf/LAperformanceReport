@@ -395,7 +395,7 @@ export function ChecklistsTab({ unidadeId, departamentoFixo }: ChecklistsTabProp
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between max-lg:flex-wrap max-lg:gap-3">
         <div>
           <h3 className="text-lg font-semibold text-white">Checklists</h3>
           <p className="text-sm text-slate-400">Gerencie seus checklists e tarefas</p>
@@ -431,7 +431,7 @@ export function ChecklistsTab({ unidadeId, departamentoFixo }: ChecklistsTabProp
               key={f.id}
               onClick={() => setFiltroStatus(f.id)}
               className={cn(
-                'px-3 py-1.5 text-xs font-medium rounded-lg transition-all',
+                'px-3 py-1.5 text-xs font-medium rounded-lg transition-all max-lg:min-h-[44px]',
                 filtroStatus === f.id
                   ? 'bg-violet-600 text-white'
                   : 'text-slate-400 hover:text-white'
@@ -442,13 +442,13 @@ export function ChecklistsTab({ unidadeId, departamentoFixo }: ChecklistsTabProp
           ))}
         </div>
         {!departamentoFixo && (
-          <div className="flex gap-1.5">
+          <div className="flex gap-1.5 max-lg:flex-wrap">
             {(['todos_dept', 'administrativo', 'comercial', 'pedagogico'] as const).map((d) => (
               <button
                 key={d}
                 onClick={() => setFiltroDepartamento(d)}
                 className={cn(
-                  'px-3 py-1.5 text-xs font-medium rounded-lg border transition-all',
+                  'px-3 py-1.5 text-xs font-medium rounded-lg border transition-all max-lg:min-h-[44px]',
                   filtroDepartamento === d
                     ? 'bg-slate-700/50 text-white border-slate-600/50'
                     : 'text-slate-400 hover:text-white border-transparent hover:border-slate-600/50'
@@ -548,7 +548,7 @@ export function ChecklistsTab({ unidadeId, departamentoFixo }: ChecklistsTabProp
             </div>
 
             {/* Periodicidade + Departamento + Prioridade */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="text-xs font-medium text-slate-400 mb-1.5 block">Periodicidade</label>
                 <Select value={periodicidade} onValueChange={(v: typeof periodicidade) => setPeriodicidade(v)}>

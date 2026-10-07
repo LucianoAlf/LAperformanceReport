@@ -56,7 +56,7 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { DatePickerNascimento } from '@/components/ui/date-picker-nascimento';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { rotuloDeQuem, nomeDoContato } from '@/lib/comunidadeWaContato';
+import { rotuloDeQuem, nomeDoContato, explicarEstadoComunidade, rotuloEstadoComunidade } from '@/lib/comunidadeWaContato';
 import { avaliarPerfilTemperamento, textoPerfilAusenteWhatsapp } from '@/lib/perfilTemperamento';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -1993,7 +1993,17 @@ export function ModalFichaAluno({
                       {aluno.comunidade_wa_mesma_unidade === false && ' (outra unidade)'}
                     </span>
                   ) : aluno.comunidade_wa_estado === 'fora_da_comunidade' ? (
-                    <span className="bg-slate-600/20 text-slate-400 px-2 py-0.5 rounded text-xs font-medium">Fora</span>
+                    <span className="bg-slate-600/20 text-slate-400 px-2 py-0.5 rounded text-xs font-medium">{rotuloEstadoComunidade(aluno.comunidade_wa_estado)}</span>
+                  ) : aluno.comunidade_wa_estado === 'sem_telefone_cadastrado' ? (
+                    // "Fora" afirmaria que ela nao esta no grupo; sem telefone cadastrado
+                    // nao ha numero para procurar. O motivo vem da fonte unica, a mesma
+                    // que a coluna da Lista usa.
+                    <span
+                      className="bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded text-xs font-medium"
+                      title={explicarEstadoComunidade(aluno.comunidade_wa_estado)?.motivo ?? ''}
+                    >
+                      {explicarEstadoComunidade(aluno.comunidade_wa_estado)?.rotulo ?? 'Sem telefone'}
+                    </span>
                   ) : aluno.comunidade_wa_estado ? (
                     <span className="text-slate-500 text-xs">Sem verificação recente</span>
                   ) : (

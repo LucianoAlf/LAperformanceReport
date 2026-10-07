@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   buildComercialOperacionalRpcParamsV2,
+  executarEmLotes,
   type ComercialOperacionalMesV2,
   type ComercialOperacionalPayloadV2,
   type ComercialOperacionalResumoDadosV2,
@@ -41,7 +42,7 @@ export async function fetchComercialOperacionalResumoV2({
 }: FetchLeadsComercialV2Params): Promise<ComercialOperacionalResumoDadosV2> {
   const meses = normalizarMesRange(mesInicio, mesFim);
 
-  const seriesMensais: ComercialOperacionalMesV2[] = await Promise.all(meses.map(async (mes) => {
+  const seriesMensais: ComercialOperacionalMesV2[] = await executarEmLotes(meses, 4, async (mes) => {
     const { data, error } = await supabase.rpc(
       'get_kpis_comercial_canonicos_v2',
       buildComercialOperacionalRpcParamsV2({
@@ -58,7 +59,7 @@ export async function fetchComercialOperacionalResumoV2({
     }
 
     return normalizarPayloadMensalComercialV2(mes, data as ComercialOperacionalPayloadV2 | null);
-  }));
+  });
 
   return somarSeriesMensaisComercialV2(seriesMensais);
 }
@@ -78,7 +79,7 @@ export async function fetchExperimentaisDiagnosticoComercialV2({
 }: FetchLeadsComercialV2Params): Promise<ExperimentaisDiagnosticoResumoV2> {
   const meses = normalizarMesRange(mesInicio, mesFim);
 
-  const seriesMensais: ExperimentaisDiagnosticoMesV2[] = await Promise.all(meses.map(async (mes) => {
+  const seriesMensais: ExperimentaisDiagnosticoMesV2[] = await executarEmLotes(meses, 4, async (mes) => {
     const { data, error } = await supabase.rpc(
       'get_conciliacao_experimentais_v2',
       buildComercialOperacionalRpcParamsV2({
@@ -98,7 +99,7 @@ export async function fetchExperimentaisDiagnosticoComercialV2({
       mes,
       data as ExperimentaisDiagnosticoPayloadV2 | null,
     );
-  }));
+  });
 
   return somarSeriesMensaisExperimentaisDiagnosticoV2(seriesMensais);
 }

@@ -4,6 +4,7 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { autorizarEquipe } from "../_shared/equipeAuthorization.ts";
 import {
   avaliarCoberturaWebhook,
   type CaixaWebhookMonitorada,
@@ -13,6 +14,7 @@ import {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const SYNC_ADMIN_TOKEN = Deno.env.get("SYNC_MATRICULAS_ADMIN_TOKEN")?.trim() ?? "";
 const NUMERO_ALERTA = "5521966583325";
 
 function json(body: unknown, status = 200) {
@@ -25,6 +27,28 @@ function json(body: unknown, status = 200) {
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok");
 
+  // 25/09/2026: o endpoint era aberto — qualquer chamada disparava a inspeção dos
+  // provedores e, havendo problema, um alerta no WhatsApp do admin. Agora exige
+  // x-sync-token do cron, service_role ou usuario de equipe (admin/unidade).
+  const authClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  const acesso = await autorizarEquipe(req, {
+    syncAdminToken: SYNC_ADMIN_TOKEN,
+    serviceRoleKey: SUPABASE_SERVICE_ROLE_KEY,
+    getUser: async (token) => {
+      const { data, error } = await authClient.auth.getUser(token);
+      return error || !data.user ? null : { id: data.user.id };
+    },
+    buscarUsuario: async (authUserId) => {
+      const { data } = await authClient
+        .from("usuarios")
+        .select("perfil, ativo")
+        .eq("auth_user_id", authUserId)
+        .maybeSingle();
+      return data;
+    },
+  });
+  if (acesso.ok === false) return json({ ok: false, erro: acesso.erro }, acesso.status);
+
   const healthToken = Deno.env.get("WEBHOOK_HEALTH_TOKEN")?.trim() ?? "";
   if (!healthToken) {
     return json({ ok: false, code: "health_auth_unavailable" }, 503);
@@ -34,7 +58,7 @@ serve(async (req: Request) => {
   const { data: caixas, error: caixasError } = await supabase
     .from("whatsapp_caixas")
     .select(
-      "id, nome, provedor, ativo, uazapi_url, uazapi_token, waha_url, waha_session, waha_api_key",
+      "id, nome, provedor, ativo, uazapi_url, uazapi_token, waha_url, waha_session, waha_api_key, webhook_url",
     )
     .order("id");
   if (caixasError) return json({ ok: false, code: "boxes_unavailable" }, 503);

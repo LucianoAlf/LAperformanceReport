@@ -120,6 +120,26 @@ test('refresh propaga estado da fila e nao chama retry_wait de sucesso', () => {
   assert.match(refresh, /payload\.ok\s*===\s*true/);
 });
 
+test('refresh reaproveita snapshot fresco, corta backlog de mes fechado e devolve job ativo', () => {
+  const refresh = readIfPresent(refreshUrl);
+
+  assert.match(refresh, /fetchFreshCompleteSnapshot/);
+  assert.match(refresh, /\.from\('sync_runs'\)/);
+  assert.match(refresh, /\.eq\('snapshot_complete',\s*true\)/);
+  assert.match(refresh, /\.order\('completed_at',\s*\{\s*ascending:\s*false\s*\}\)/);
+  assert.doesNotMatch(
+    refresh,
+    /\.gte\('stale_after'/,
+    'o ultimo snapshot completo deve ser escolhido antes de avaliar frescor',
+  );
+  assert.match(refresh, /freshSnapshotPayload/);
+  assert.match(refresh, /resolveIncludeBacklog/);
+  assert.match(refresh, /fetchActiveQueueJob/);
+  assert.match(refresh, /\.from\('financeiro_sync_queue'\)/);
+  assert.match(refresh, /pending[\s\S]*running[\s\S]*retry_wait/);
+  assert.match(refresh, /activeQueuePayload/);
+});
+
 test('export publica o ultimo run completo e honra require_latest', () => {
   const exporter = readIfPresent(exportUrl);
   const sharedExport = readIfPresent(sharedExportUrl);

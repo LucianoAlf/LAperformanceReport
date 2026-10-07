@@ -20,6 +20,7 @@ export interface FaturaSource {
   desconto_aplicado: number | string;
   desconto_fixo: number | string;
   desconto_condicional: number | string;
+  payload?: unknown | null;
   synced_at?: string | null;
   updated_at?: string | null;
   source_missing?: boolean;
@@ -54,10 +55,40 @@ export interface CursoSource {
   nome: string;
 }
 
+export interface MatriculaExportada {
+  unidade_id: string;
+  emusys_matricula_id: number | string;
+  matricula_inicio: string | null;
+  matricula_fim: string | null;
+  matricula_parcelas_total: number | null;
+  matricula_situacao: string | null;
+}
+
 const money = (value: unknown) => {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : 0;
 };
+
+function camposTransacao(payload: unknown) {
+  const dados = payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? payload as Record<string, unknown>
+    : null;
+  const forma = dados?.forma_pagamento_transacao;
+  const liquido = dados?.valor_liquido_recebido;
+
+  return {
+    // O Emusys fornece este texto como classificacao operacional. Preservar a
+    // string original, inclusive acentos e espacos, para o consumidor normalizar.
+    forma_pagamento_transacao: typeof forma === 'string' ? forma : null,
+    // Zero e' o sentinela do Emusys para "nao informado". Nao arredondar nem
+    // converter outros tipos: ausente, nulo e invalido permanecem desconhecidos.
+    valor_liquido_recebido: typeof liquido === 'number'
+      && Number.isFinite(liquido)
+      && liquido !== 0
+      ? liquido
+      : null,
+  };
+}
 
 const normalizeUnit = (value: unknown) => {
   const unit = String(value ?? '').trim().toLowerCase();
@@ -117,6 +148,8 @@ function rowHashPayload(row: Record<string, unknown>) {
     desconto_fixo: row.desconto_fixo,
     desconto_condicional: row.desconto_condicional,
     valor_liquido: row.valor_liquido,
+    forma_pagamento_transacao: row.forma_pagamento_transacao,
+    valor_liquido_recebido: row.valor_liquido_recebido,
     source_missing: row.source_missing,
     source_missing_reason: row.source_missing_reason,
   };
@@ -126,13 +159,18 @@ export async function buildExportRows({
   faturas,
   alunos,
   cursos,
+  matriculas,
 }: {
   faturas: FaturaSource[];
   alunos: AlunoSource[];
   cursos: CursoSource[];
+  matriculas?: MatriculaExportada[];
 }) {
   const courseById = new Map(cursos.map((course) => [course.id, course.nome]));
   const candidatesByKey = new Map<string, AlunoSource[]>();
+  const matriculaByKey = new Map(
+    (matriculas ?? []).map((m) => [`${m.unidade_id}:${String(m.emusys_matricula_id ?? '').trim()}`, m]),
+  );
 
   for (const aluno of alunos) {
     const matricula = String(aluno.emusys_matricula_id ?? '').trim();
@@ -158,9 +196,13 @@ export async function buildExportRows({
     const matchStatus: CadastroMatchStatus = candidates.length === 1
       ? 'unico'
       : candidates.length === 0 ? 'nao_encontrado' : 'duplicado';
+    // Horizonte da matricula (pedido SF 26/09): vem do contrato_atual do
+    // espelho; fora do row_hash porque e' atributo da matricula, nao da fatura.
+    const matriculaInfo = matricula ? matriculaByKey.get(`${fatura.unidade_id}:${matricula}`) : undefined;
     const valorOriginal = money(fatura.valor_original);
     const juros = money(fatura.juros_e_multa);
     const descontoAplicado = money(fatura.desconto_aplicado);
+    const transacao = camposTransacao(fatura.payload);
     const row: Record<string, unknown> = {
       la_report_fatura_id: fatura.canonical_fatura_id,
       sync_run_id: fatura.sync_run_id,
@@ -182,7 +224,13 @@ export async function buildExportRows({
       desconto_fixo: money(fatura.desconto_fixo),
       desconto_condicional: money(fatura.desconto_condicional),
       valor_liquido: Number((valorOriginal + juros - descontoAplicado).toFixed(2)),
+      forma_pagamento_transacao: transacao.forma_pagamento_transacao,
+      valor_liquido_recebido: transacao.valor_liquido_recebido,
       cadastro_match_status: matchStatus,
+      matricula_inicio: matriculaInfo?.matricula_inicio ?? null,
+      matricula_fim: matriculaInfo?.matricula_fim ?? null,
+      matricula_parcelas_total: matriculaInfo?.matricula_parcelas_total ?? null,
+      matricula_situacao: matriculaInfo?.matricula_situacao ?? null,
       aluno_nome: matchStatus === 'unico' ? candidates[0].nome : null,
       curso_nome: matchStatus === 'unico' && candidates[0].curso_id != null
         ? (courseById.get(candidates[0].curso_id) ?? null)
@@ -198,6 +246,33 @@ export async function buildExportRows({
     };
     row.row_source_hash = await sha256(rowHashPayload(row));
     rows.push(row);
+  }
+
+  // Chave da cobranca agrupada (pedido SF 27/09): quando um unico pagamento
+  // Asaas (boleto/Pix) cobre varias faturas da mesma familia, o Emusys repete
+  // em cada fatura o valor_liquido_recebido DA COBRANCA INTEIRA. Sem uma chave,
+  // o consumidor nao sabe quais faturas dividem a mesma taxa. A API nao expoe
+  // id de cobranca, entao derivamos: mesma (unidade, data_pagamento, forma,
+  // liquido) = mesma cobranca. Deterministica e sem competencia na chave: um
+  // pagamento que cobre parcelas de meses diferentes produz o mesmo id nos
+  // exports de cada competencia. Colisao honesta possivel: duas familias que
+  // paguem o mesmo liquido no mesmo dia e meio viram um lote so — o consumidor
+  // valida por soma(valor_pago) ~= liquido + taxa unica.
+  const lotes = new Map<string, { chave: string; faturas: number }>();
+  for (const row of rows) {
+    if (row.status_origem !== 'paga' || row.valor_liquido_recebido == null) continue;
+    const chave = `${row.la_report_unidade_id}|${row.data_recebimento}|${row.forma_pagamento_transacao}|${row.valor_liquido_recebido}`;
+    const lote = lotes.get(chave) ?? { chave, faturas: 0 };
+    lote.faturas += 1;
+    lotes.set(chave, lote);
+  }
+  for (const row of rows) {
+    const chave = `${row.la_report_unidade_id}|${row.data_recebimento}|${row.forma_pagamento_transacao}|${row.valor_liquido_recebido}`;
+    const lote = row.status_origem === 'paga' && row.valor_liquido_recebido != null
+      ? lotes.get(chave)
+      : undefined;
+    row.cobranca_lote_id = lote ? `cobranca:${(await sha256(lote.chave)).slice(0, 24)}` : null;
+    row.cobranca_lote_faturas = lote?.faturas ?? null;
   }
 
   rows.sort((left, right) => (

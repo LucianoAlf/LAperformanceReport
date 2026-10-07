@@ -11,6 +11,7 @@
 - **Autorização:** segredo interno dedicado no header `x-super-folha-sync-secret`; não aceita sessão de navegador nem expõe a service role do LA Report.
 - **Contrato:** `emusys_faturas` continua como espelho canônico atual; `sync_run_items` congela cada competência e seus tombstones. `la_report_fatura_id` é o UUID estável da linha canônica, nunca o UUID técnico do snapshot.
 - **Consistência:** um mutex parcial global permite só um run `running`; as 3 unidades são coletadas antes de uma RPC de publicação atômica. O export nunca lê a tabela mutável: aceita um `sync_run_id` live completo, valida o mais recente com `require_latest`, ou seleciona o último completo para fallback read-only.
+- **Refresh sob demanda:** uma competência com snapshot live completo e `stale_after` vigente responde 200 com o run existente. Mês fechado específico não expande `include_backlog`; job já ativo responde 202 com o mesmo UUID da fila.
 - **Hash:** usa apenas unidade UUID, ID Emusys, competência, dados financeiros e estado/motivo de ausência; IDs de run/item e timestamps operacionais ficam fora.
 - **Cron:** competências atual e anterior, sequenciais, com segredo lido do Vault.
 >
@@ -28,6 +29,30 @@
 > [`../handoffs/2026-09-14-espelho-financeiro-emusys-superfolha.md`](../handoffs/2026-09-14-espelho-financeiro-emusys-superfolha.md).
 >
 > Última atualização: 2026-09-14.
+
+### Buscar as faturas de um aluno no Emusys na hora (caixa, desde 29/09/2026, LAPE-56)
+
+No lançamento manual do caixa, depois de escolher uma fatura do aluno, o botão **"Não achou a parcela? Buscar as faturas deste aluno no Emusys agora"** traz todas as faturas daquela pessoa direto do Emusys e grava no espelho.
+
+- **Por que existe:** meses a partir do +2 só são sincronizados uma vez por dia. Uma fatura criada hoje (matrícula nova, crédito, adiantamento) não aparecia para o caixa até o dia seguinte. Parcela não se lança sem fatura, porque sem fatura o dinheiro contaria como receita nova e depois de novo pelo sync.
+- **O que ele NÃO faz:** não abre rodada do sync e não mexe no que os relatórios canônicos leem (eles leem as rodadas). A fatura trazida aparece no caixa na hora e nos relatórios na próxima rodada daquele mês.
+- **Retorno para a tela:** quantas faturas novas vieram, "nada novo", Emusys limitando (`429`), Emusys sem resposta, aluno sem id do Emusys, sem permissão ou falha ao gravar. Toda falha diz que nada foi alterado.
+- **Rastro:** `automacao_log`, `evento = 'faturas_aluno_sob_demanda'`.
+- **Limitação:** a tela identifica o aluno pela fatura escolhida. Aluno sem nenhuma fatura no Report ainda não tem o botão.
+
+### Lote de cheques para depósito → caixa da Sol (desde 26/09/2026)
+
+A unidade posta no grupo do financeiro o PDF do lote ("2 CH - 20SETEMBRO2026 - C.GRANDE"). A Sol lê cada cheque, acha a parcela e lança o cheque no **caixa da Sol do dia** (forma `cheque`), pelo card e "pode" de sempre. Decisão do Alf (26/09): o Super Folha já puxa o caixa da Sol (`export-caixa-movimentacoes`); a Sol **não** chama o Super Folha.
+
+- **Runtime:** `vps/la-hq/sol/runtime/caixa-cheques.cjs` (desvio no início do `handle` do caixa, antes de agente e comprovante) + `cheques-lote-cli.cjs` para ler um lote fora do grupo (só leitura e decisão). Modo em `caixa-ingestao/cheques.json` (`off` | `sombra` | `grupo`, sem reinício).
+- **Leitura:** visão (`gemini-3.8-flash` pelo OpenCode Zen, API `generateContent`). O PDF é escaneado, então `pdftotext` não serve. A leitura só vale se for **provada por código**: os 3 dígitos verificadores da CMC-7, CMC-7 batendo com banco/agência/número impressos e valor numérico batendo com o extenso. Leitura não provada vira ❓ e **não entra no caixa**.
+- **Parcela:** RPC `sol_cheque_resolver_fatura_v1` (emitente → pessoa → fatura). CPF/CNPJ vira HMAC em `sol_cheque_documento_hash_v1` (só `service_role`, não grava) e só o hash segue.
+- **Decisão por cheque, com a fatura real (`emusys_faturas`) e os vínculos do caixa (`vw_caixa_movimentacao_fatura_links`):** ✅ vai para o caixa (paga em cheque, ou em aberto, com o valor batendo) · ⚠️ retirar do malote (paga por outra forma, ou cancelada) · ❓ não entra (fatura já no caixa, valor diverge, emitente desconhecido/empate, leitura não provada). Dois cheques na mesma parcela: nenhum entra.
+- **Lançamento:** 2+ ✅ = um card de lote (`abrirFluxoMultiAluno` com os itens já resolvidos → `sol_caixa_lancar_recebimento_lote_v1`); 1 ✅ = lançamento simples (`sol_caixa_lancar_recebimento`). As RPCs de lote exigem 2 itens, por isso a bifurcação. O número do cheque vai na descrição ("· cheque Santander nº 000212") pelo campo `complemento_descricao`, que a RPC do lote anexa (`20260927000000`).
+- **No grupo:** UMA mensagem organizada, que é o próprio card (preview V3): cabeçalho do lote, placar, seções ✅ VAI PARA O CAIXA / ⚠️ RETIRAR DO MALOTE / ❓ PRECISA DE VOCÊ e um bloco por cheque (banco e nº, emitente, aluno, resp. financeiro, parcela). "pode" citando ela lança os ✅; "3 é da Fulana" citando ela resolve um ❓ e abre o card daquele cheque.
+- **Escala:** lotes reais de 10-15 cheques. Até 20 páginas, 3 páginas lidas em paralelo; o teto de 12 alunos do lote de Pix não vale para cheques (`tetoItens: 60` — ele protege o resolvedor de Pix, que o lote de cheques não usa); 15 cheques ≈ 3,6 mil caracteres.
+- **Handoff completo:** [`../handoffs/2026-09-27-sol-caixa-incidentes-e-cheques.md`](../handoffs/2026-09-27-sol-caixa-incidentes-e-cheques.md).
+- **Contrato original (Super Folha):** `Docs/handoffs/2026-09-26-sol-cheques-lote-deposito.md` no repositório do Super Folha — o trecho de `conferir/registrar` direto foi substituído pela decisão do Alf acima. Teste: `tests/sol-runtime/cheques-lote-e2e.cjs` (dados inventados).
 
 ## Fechamento mensal (histórico canônico)
 
@@ -57,7 +82,7 @@ RPCs leem o estado **atual** do banco, não o de então.
   `aprovado` — nunca fechou nada, e não incluía os dois documentos mensais. Junho foi
   gravado à mão em 30/06 23:05 e julho em 31/07 21:12.
 - **Automação completa (02/09/2026, LAPE-14):** cron **`fechamento-mensal-dia1`**
-  (jobid 189, `15 12 1 * *` = 09:15 BRT) → **`fechar_competencia_mensal_dia1_v1()`**, que
+  (jobid 189, `0 1 1 * *` = 22h BRT do último dia do mês desde 01/10/2026 — o dia 1º recebe matrícula e mudança de status que a equipe lê como do mês passado; no último dia fecha o mês corrente, rerun manual no dia 1º fecha o anterior) → **`fechar_competencia_mensal_dia1_v1()`**, que
   por unidade, em bloco protegido: valida a fonte financeira →
   **`garantir_bloco_financeiro_gerencial_v1`** → `capturar_relatorios_mensais_canonicos_v1`
   → **`fechar_competencia_mensal_canonica_v2`** (fecha **uma** unidade). Placar em
@@ -153,6 +178,7 @@ há apenas `dados_mensais` (~12 campos).
 - **Contratos (`TabContratosVencendo.tsx`):** hook `useContratosVencendo`. Replica a aba "Matrículas Vencendo" do Emusys. **RPC:** nenhuma — leitura direta da view. **View:** `vw_contratos_vencendo` (join `vw_jornada_aluno_atual` + `alunos` por `unidade_id, emusys_matricula_id`).
 - **Hooks (demais abas):** `useCompetenciaFiltro`, `useFidelizaPrograma`, `fetchKPIsAlunosCanonicos`, PainelFarmer (`useRotinas`, `useChecklists`, `useChecklistDetail`, `useDashboardStats`, `useAlertas`, `useFeedbackPendente`, `useSucessoAlunoAlertas`), CaixaEntrada (`useAdminConversas`, `useAdminMensagens`)
 - **Inadimplência do Farmer (16/08/2026):** `useAlertas` não consulta mais `vw_farmer_inadimplentes`; chama `get_inadimplencia_canonica`, cruza por `(unidade_id, emusys_matricula_id)` e agrega faturas por um único vínculo ativo. Somente `status='ok'` habilita o botão manual de cobrança. `stale`, `incomplete` e erro exibem bloqueio explícito; nenhuma automação ou envio nasce desse hook.
+- **Renovações de bolsista e banda APARECEM, marcadas (03/10/2026):** as abas Renovações, Pendentes e Antecipadas listam também bolsista e banda, com selo "Bolsista/Banda · não entra na taxa". Antes elas sumiam (`filtrarRetencaoCanonica`) e a equipe de CG concluiu que faltavam, chegando a criar cópias pelo modal. **Os números não mudam:** contador da aba ("N · +M bolsista/banda"), cards, taxa e o rodapé da tabela (reajuste, soma de parcelas) continuam pela regra do Alf de 27/08. Fonte única: `motivoForaDosKpis` em `src/lib/atividadesExtras.ts`, da qual `contaNosKpis` passou a derivar — as duas não podem divergir (travado por `tests/renovacaoBolsistaVisivel.test.mjs`). O relatório mensal ainda não lista essas linhas (próxima etapa: bloco "não entram no total").
 - **Ciclo atual:** `get_kpis_alunos_admin_operacional` separa **Ativos agora**
   de **Trancados agora**. A aba de movimentações mantém **Trancamentos no
   período** como evento histórico distinto.
@@ -174,6 +200,10 @@ Na rota `/app/alunos`, `get_faturas_alunos_financeiro_v1` também entrega o bloc
 `get_inadimplencia_canonica` uma segunda vez. A rota `/app/faturas` conserva seu
 contrato próprio. Se o bloco vier ausente ou inválido, a cobrança permanece
 bloqueada; não há fallback para uma leitura menos confiável.
+
+**Custo da leitura (medido 06/10/2026, Consolidado).** `get_faturas_alunos_financeiro_v1` = inadimplência canônica + canônica de faturas (~2 s) + enriquecimento (~0,6 s), atrás de cache por versão **e** TTL de 10 min (`faturas_leitura_cache` / `paginas_rpc_cache`), que cai a cada escrita em `sync_runs` (~16/h) e `emusys_faturas`. A inadimplência levava ~2 s **de CPU** por duas buscas `EXISTS` correlacionadas em `get_inadimplencia_canonica_v3_base`; desde `20261006123611` são `IN` não correlacionado (hash): **2,3 s → 0,09 s**, saída idêntica (19.421 faturas comparadas linha a linha, md5 da função inteira). ⚠️ Forçar índice em `sync_run_items` na canônica de faturas foi testado e **não** ganha com cache quente.
+
+**Retenção de `emusys_fatura_source_events` (06/10/2026, `20261006214128`).** A trilha que `publish_financeiro_sync_run` grava (uma linha por fatura a cada execução, 94% `confirmed`) não tinha retenção: 10,6 mi de linhas, 3,7 GB, 38% do banco. **Ninguém lê** (contadores do Postgres zerados desde 28/09; Super Folha confirmou pelo código que não usa). Desde então a rotina que já existia (`sync_run_items_expurgar_v1`, cron 304) apaga também os `confirmed` de cada execução que expurga — só quando existe o índice `emusys_fatura_source_events_run_idx`. O acumulado sai UMA vez por `emusys_fatura_source_events_compactar_v1(true)` (TRUNCATE + reinserção do que fica, devolvendo o disco na hora), agendada para 07/10 07h05 BRT com o worker financeiro parado (job `compactar-source-events-uma-vez`, que se desagenda). Ensaio: apaga 10.013.864, mantém 591.077 (todas as transições `missing_*` e os `confirmed` de execuções ainda não expurgadas). Rastro em `automacao_log` (`evento=retencao_financeira`).
 
 ⚠️ O espelho `emusys_faturas` cobre apenas as competências sincronizadas (a partir de
 jun/2026) — número de faturas vencidas é **piso, não valor exato**. Ver `CLAUDE.md`.

@@ -122,6 +122,7 @@ function statusTone(item: FaturaFinanceiraItem, dataCorte: string) {
 function motivoReconciliacao(motivo: string) {
   const labels: Record<string, string> = {
     source_missing: 'Fatura não observada na origem',
+    pagamento_detectado_fora_origem: 'Pagamento detectado fora da origem',
     identidade_invalida: 'Matrícula ou aluno sem vínculo exato',
     status_desconhecido: 'Status de fatura não reconhecido',
     validacao_origem: 'Metadado inválido recebido da origem',
@@ -129,6 +130,7 @@ function motivoReconciliacao(motivo: string) {
     contato_pendente: 'Contato local ainda não resolvido',
     registro_nao_aluno: 'Lançamento financeiro sem aluno',
     historico_ex_aluno: 'Histórico de ex-aluno',
+    duplicata_caixa: 'Lançamento duplicado no caixa',
   };
   return labels[motivo] ?? motivo.replaceAll('_', ' ');
 }
@@ -293,14 +295,10 @@ function OperationalViewButton({
 function LeituraNotice({ state }: {
   state: FaturasFinanceirasState;
 }) {
-  const info = state.status === 'ok'
-    ? {
-      Icon: ShieldCheck,
-      className: 'border-emerald-500/25 bg-emerald-500/[0.08] text-emerald-100',
-      title: 'Leitura canônica confirmada',
-      description: 'O histórico e os totais vêm do último snapshot completo das três unidades.',
-    }
-    : state.status === 'partial'
+  // Tudo certo = silencio. Banner verde "confirmado" e' ruido para o time
+  // operacional; o aviso so aparece quando ha algo para agir.
+  if (state.status === 'ok') return null;
+  const info = state.status === 'partial'
       ? {
         Icon: FileWarning,
         className: 'border-amber-500/20 bg-slate-900/65 text-amber-100',
@@ -606,28 +604,13 @@ export function FaturasAlunosFinanceirasPage() {
         </PageFilterBar>
       )}
 
-      <section className="overflow-hidden rounded-2xl border border-cyan-500/20 bg-slate-900/70 shadow-2xl shadow-slate-950/25">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-[radial-gradient(circle_at_top_right,rgba(6,182,212,0.12),transparent_34%),linear-gradient(110deg,rgba(15,23,42,0.95),rgba(2,6,23,0.85))] px-5 py-3.5">
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <span className="inline-flex items-center gap-1.5 font-medium text-cyan-200"><Landmark className="h-3.5 w-3.5" /> Leitura canônica</span>
-            <span className="text-slate-600">•</span>
-            <span>Emusys → snapshot completo</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500">
-            <span>Atual: 15 min</span>
-            <span>Anteriores: 60 min</span>
-            <span>Backlog: 2 h</span>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
-          <p className="text-sm text-slate-300">
-            Corte em <span className="font-semibold text-slate-100">{formatarData(dataCorte)}</span>
-            <span className="mx-2 text-slate-600">•</span>
-            competência {formatarCompetencia(`${ano}-${String(mes).padStart(2, '0')}-01`)}
-          </p>
-          <p className="text-xs text-slate-500">Fonte: {state.source ?? 'aguardando leitura'}</p>
-        </div>
-      </section>
+      <p className="text-xs text-slate-500">
+        Corte em <span className="font-medium text-slate-300">{formatarData(dataCorte)}</span>
+        <span className="mx-1.5 text-slate-700">•</span>
+        competência {formatarCompetencia(`${ano}-${String(mes).padStart(2, '0')}-01`)}
+        <span className="mx-1.5 text-slate-700">•</span>
+        dados do Emusys
+      </p>
 
       {carregando ? <LoadingState /> : state.status === 'error' ? (
         <section role="alert" className="rounded-2xl border border-rose-500/30 bg-rose-500/[0.08] p-5 text-rose-100">
@@ -658,15 +641,17 @@ export function FaturasAlunosFinanceirasPage() {
               tone="amber"
               onClick={() => selecionarSituacao('reconciliacao')}
             />
-            <OperationalViewButton
-              label="Canceladas — histórico"
-              count={totaisDaVisao.canceladas.quantidade}
-              description="Fora dos totais desta competência"
-              Icon={ReceiptText}
-              active={situacao === 'canceladas'}
-              tone="slate"
-              onClick={() => selecionarSituacao('canceladas')}
-            />
+            {(totaisDaVisao.canceladas.quantidade > 0 || situacao === 'canceladas') && (
+              <OperationalViewButton
+                label="Canceladas — histórico"
+                count={totaisDaVisao.canceladas.quantidade}
+                description="Fora dos totais desta competência"
+                Icon={ReceiptText}
+                active={situacao === 'canceladas'}
+                tone="slate"
+                onClick={() => selecionarSituacao('canceladas')}
+              />
+            )}
           </section>
 
           {mostrarReconciliacao ? (
@@ -758,12 +743,21 @@ function LoadingState() {
   );
 }
 
+const FATURAS_POR_PAGINA = 80;
+
 function InvoicesTable({ items, dataCorte, unidadeNome, onDetail }: {
   items: FaturaFinanceiraItem[];
   dataCorte: string;
   unidadeNome: ReadonlyMap<string, string>;
   onDetail: (item: FaturaFinanceiraItem) => void;
 }) {
+  // Renderizacao progressiva: 1.100 linhas de uma vez congelam o navegador
+  // (pior em dev). Renderiza em blocos; o "mostrar mais" revela o restante.
+  const [limite, setLimite] = useState(FATURAS_POR_PAGINA);
+  useEffect(() => { setLimite(FATURAS_POR_PAGINA); }, [items]);
+  const itensVisiveis = items.slice(0, limite);
+  const restantes = items.length - itensVisiveis.length;
+
   if (items.length === 0) {
     return <div className="flex flex-col items-center justify-center px-6 py-16 text-center"><div className="rounded-2xl border border-slate-700 bg-slate-800/70 p-4"><ReceiptText className="h-8 w-8 text-slate-500" /></div><h2 className="mt-4 font-semibold text-slate-200">Nenhuma fatura nesta visão</h2><p className="mt-1 max-w-lg text-sm text-slate-500">Altere os filtros ou consulte outra competência para revisar o histórico financeiro.</p></div>;
   }
@@ -772,7 +766,7 @@ function InvoicesTable({ items, dataCorte, unidadeNome, onDetail }: {
       <table className="min-w-[1480px] w-full text-left text-sm">
         <thead className="border-b border-slate-700/70 bg-slate-950/45 text-[11px] uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3 font-medium">Aluno / curso</th><th className="px-3 py-3 font-medium">Tipo da fatura</th><th className="px-3 py-3 font-medium">Situação</th><th className="px-3 py-3 font-medium">Vencimento</th><th className="px-3 py-3 font-medium">Forma de pagamento</th><th className="px-3 py-3 text-right font-medium">Valor base</th><th className="px-3 py-3 text-right font-medium">Sem desconto condicional</th><th className="px-3 py-3 text-right font-medium">Valor atualizado / pago</th><th className="sticky right-0 z-10 bg-slate-950 px-4 py-3 text-right font-medium">Detalhe</th></tr></thead>
         <tbody className="divide-y divide-slate-800">
-          {items.map((item) => {
+          {itensVisiveis.map((item) => {
             const valorPrincipal = valorPrincipalDaFatura(item);
             const FormaPagamentoIcon = iconeFormaPagamento(item.forma_pagamento.nome);
             const parcela = item.tipo_fatura === 'parcela';
@@ -793,6 +787,24 @@ function InvoicesTable({ items, dataCorte, unidadeNome, onDetail }: {
           })}
         </tbody>
       </table>
+      {restantes > 0 && (
+        <div className="flex items-center justify-center gap-3 border-t border-slate-800 bg-slate-950/40 px-4 py-3">
+          <button
+            type="button"
+            onClick={() => setLimite((valor) => valor + FATURAS_POR_PAGINA)}
+            className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-700 px-4 text-sm text-slate-300 transition hover:bg-slate-800 hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"
+          >
+            Mostrar mais {Math.min(FATURAS_POR_PAGINA, restantes)} de {restantes} faturas
+          </button>
+          <button
+            type="button"
+            onClick={() => setLimite(items.length)}
+            className="text-xs text-slate-500 transition hover:text-slate-300"
+          >
+            Mostrar todas ({items.length})
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -820,10 +832,12 @@ function ReconciliationPanelV2({
   const [formas, setFormas] = useState<Record<string, string>>({});
   const cards = [
     ['Faturas não observadas', state.reconciliation.sourceMissing, 'Confirme o caso informado pela unidade'],
+    ['Pagamento detectado', state.reconciliation.pagamentoDetectado, 'Baixa já existe no caixa ou no Emusys'],
     ['Vínculo local', state.reconciliation.identidadeInvalida, 'Requer vínculo exato por unidade e matrícula'],
     ['Dados da origem', state.reconciliation.validacoesOrigem, 'Metadado recebido incompleto'],
     ['Forma de pagamento', state.reconciliation.formaPagamentoAusente, 'Escolha a forma usada pelo aluno'],
     ['Contato local', state.reconciliation.contatoPendente, 'Contato único ainda não resolvido'],
+    ['Duplicata no caixa', state.reconciliation.duplicataCaixa, 'Entradas repetidas apontando a mesma fatura'],
   ];
 
   return (
@@ -839,7 +853,7 @@ function ReconciliationPanelV2({
         </div>
         <span className="rounded-full border border-amber-500/25 bg-slate-950/35 px-3 py-1 text-sm font-semibold text-amber-100">{state.reconciliation.total} pendências</span>
       </div>
-      <div className="grid gap-px bg-slate-800 sm:grid-cols-2 xl:grid-cols-5">{cards.map(([label, count, description]) => <div key={String(label)} className="bg-slate-900/90 p-4"><p className="text-xs uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 text-2xl font-semibold text-slate-100">{count}</p><p className="mt-1 text-xs text-slate-500">{description}</p></div>)}</div>
+      <div className="grid gap-px bg-slate-800 sm:grid-cols-2 xl:grid-cols-7">{cards.map(([label, count, description]) => <div key={String(label)} className="bg-slate-900/90 p-4"><p className="text-xs uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 text-2xl font-semibold text-slate-100">{count}</p><p className="mt-1 text-xs text-slate-500">{description}</p></div>)}</div>
       <div className="flex flex-wrap gap-3 border-b border-slate-800 bg-slate-950/25 px-5 py-3 text-xs text-slate-400">
         <span><span className="font-semibold text-slate-200">Fora da operação:</span> {state.reconciliation.foraOperacao.total} histórico/avulso</span>
         <span><span className="font-semibold text-emerald-200">Resolvidas aqui:</span> {state.reconciliation.resolvidasManualmente}</span>
@@ -877,7 +891,14 @@ function ReconciliationPanelV2({
               <div><label className="mb-1.5 block text-xs font-medium text-cyan-100" htmlFor={`forma-${key}`}>Forma usada pelo aluno</label><Select value={formaSelecionada} onValueChange={(value) => setFormas((current) => ({ ...current, [key]: value }))}><SelectTrigger id={`forma-${key}`} className="bg-slate-950/60"><SelectValue placeholder="Selecione a forma de pagamento" /></SelectTrigger><SelectContent>{formasPagamento.map((option) => <SelectItem key={option.id} value={String(option.id)}>{option.nome}{option.sigla ? ` (${option.sigla})` : ''}</SelectItem>)}</SelectContent></Select></div>
               <Button type="button" size="sm" disabled={!forma || salvando} onClick={() => forma && void onResolve(item, 'forma_pagamento_manual', `Forma de pagamento conferida pela equipe: ${forma.nome}.`, forma.id)}>{salvando ? <Loader2 className="animate-spin" /> : <BadgeCheck />} Salvar forma</Button>
             </div>}
-            {guidance.kind === 'decision' && <div className="mt-4 space-y-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-4">
+            {(guidance.kind === 'detected_payment' || item.motivos.includes('duplicata_caixa')) && <div className="mt-4 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.05] p-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-emerald-200">{item.motivos.includes('duplicata_caixa') ? 'Entradas no caixa apontando esta fatura' : 'Prova de pagamento já registrada'}</p>
+              <ul className="mt-2 space-y-1 text-xs text-emerald-100/90">
+                {item.prova_pagamento.caixa.map((p, i) => <li key={`cx-${i}`}>Caixa {p.forma ? `(${p.forma})` : ''} — <span className="font-semibold tabular-nums">{moeda(p.valor)}</span> em {formatarData(p.data)}</li>)}
+                {item.prova_pagamento.lancamentos.map((p, i) => <li key={`lc-${i}`}>Lançamento Emusys {p.forma ? `(${p.forma})` : ''} — <span className="font-semibold tabular-nums">{moeda(p.valor)}</span> em {formatarData(p.data)}</li>)}
+              </ul>
+            </div>}
+            {(guidance.kind === 'decision' || guidance.kind === 'detected_payment') && <div className="mt-4 space-y-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-4">
               <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]"><div><label className="mb-1.5 block text-xs font-medium text-amber-100" htmlFor={`decisao-${key}`}>O que foi conferido?</label><Select value={decisao} onValueChange={(value) => setDecisoes((current) => ({ ...current, [key]: value as ReconciliationDecisionType }))}><SelectTrigger id={`decisao-${key}`} className="bg-slate-950/60"><SelectValue placeholder="Selecione a decisão" /></SelectTrigger><SelectContent>{guidance.options.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select></div><div><label className="mb-1.5 block text-xs font-medium text-amber-100" htmlFor={`observacao-${key}`}>Observação da equipe</label><Textarea id={`observacao-${key}`} value={observacao} onChange={(event) => setObservacoes((current) => ({ ...current, [key]: event.target.value }))} placeholder="Ex.: aluno pagou via Pix; renovação alterou a primeira parcela..." className="min-h-10 bg-slate-950/60" /></div></div>
               <div className="flex justify-end"><Button type="button" size="sm" disabled={!decisao || !observacao.trim() || salvando} onClick={() => decisao && void onResolve(item, decisao as ReconciliationDecisionType, observacao)}>{salvando ? <Loader2 className="animate-spin" /> : <BadgeCheck />} Registrar decisão</Button></div>
             </div>}
@@ -892,15 +913,17 @@ function ReconciliationPanelV2({
 function ReconciliationPanel({ state, unidadeNome }: { state: FaturasFinanceirasState; unidadeNome: ReadonlyMap<string, string> }) {
   const cards = [
     ['Faturas na origem', state.reconciliation.sourceMissing, 'Aguardando observação em novo snapshot'],
+    ['Pagamento detectado', state.reconciliation.pagamentoDetectado, 'Baixa já existe no caixa ou no Emusys'],
     ['Identidade inválida', state.reconciliation.identidadeInvalida, 'Matrícula ou aluno sem vínculo exato'],
     ['Validações de origem', state.reconciliation.validacoesOrigem, 'Metadados recebidos em quarentena'],
     ['Forma ausente', state.reconciliation.formaPagamentoAusente, 'Informe a forma antes de depender dela'],
     ['Contato pendente', state.reconciliation.contatoPendente, 'Fatura confirmada sem contato único'],
+    ['Duplicata no caixa', state.reconciliation.duplicataCaixa, 'Entradas repetidas na mesma fatura'],
   ];
   return (
     <section className="overflow-hidden rounded-2xl border border-rose-500/25 bg-slate-900/55 shadow-xl shadow-slate-950/20">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rose-500/20 bg-rose-500/[0.07] px-5 py-4"><div><p className="font-semibold text-rose-100">Reconciliação financeira</p><p className="mt-1 text-sm text-rose-100/70">Resolva as pendências aqui. Elas não compõem os totais de cobrança.</p></div><span className="rounded-full border border-rose-500/25 bg-slate-950/30 px-3 py-1 text-sm font-semibold text-rose-100">{state.reconciliation.total} pendências</span></div>
-      <div className="grid gap-px bg-slate-800 sm:grid-cols-2 xl:grid-cols-5">{cards.map(([label, count, description]) => <div key={String(label)} className="bg-slate-900/90 p-4"><p className="text-xs uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 text-2xl font-semibold text-slate-100">{count}</p><p className="mt-1 text-xs text-slate-500">{description}</p></div>)}</div>
+      <div className="grid gap-px bg-slate-800 sm:grid-cols-2 xl:grid-cols-7">{cards.map(([label, count, description]) => <div key={String(label)} className="bg-slate-900/90 p-4"><p className="text-xs uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 text-2xl font-semibold text-slate-100">{count}</p><p className="mt-1 text-xs text-slate-500">{description}</p></div>)}</div>
       {state.reconciliation.items.length === 0 ? <div className="p-8 text-center text-sm text-slate-500">Nenhuma pendência no recorte atual.</div> : <div className="divide-y divide-slate-800">{state.reconciliation.items.map((item) => <div key={`${item.unidade_id}|${item.canonical_fatura_id}`} className="flex flex-wrap items-center justify-between gap-4 px-5 py-4"><div><p className="font-medium text-slate-100">{item.aluno.nome}</p><p className="mt-0.5 text-xs text-slate-500">{unidadeNome.get(item.unidade_id) ?? item.unidade_codigo ?? 'Unidade'} • fatura {item.emusys_fatura_id} • venc. {formatarData(item.data_vencimento)}</p><div className="mt-2 flex flex-wrap gap-1.5">{item.motivos.map((motivo) => <span key={motivo} className="rounded-md border border-rose-500/20 bg-rose-500/[0.08] px-2 py-1 text-[11px] text-rose-200">{motivoReconciliacao(motivo)}</span>)}</div></div><div className="text-right text-xs text-slate-500"><p>{item.forma_pagamento.nome ?? 'Forma não informada'}</p><p className="mt-1">Sync: {formatarDataHora(item.sync_completed_at)}</p></div></div>)}</div>}
     </section>
   );

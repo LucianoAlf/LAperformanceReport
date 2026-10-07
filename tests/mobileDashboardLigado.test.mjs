@@ -15,7 +15,9 @@ const rotas = le('../src/mobile/rotasPortadas.ts');
 test('a rota index passou a apontar para o DashboardResponsivo', () => {
   // Ancorado no par index:true + element:<DashboardResponsivo/>, nao em qualquer
   // mencao solta a DashboardResponsivo no arquivo (poderia ser so um import nao usado).
-  assert.match(router, /index:\s*true,\s*element:\s*<DashboardResponsivo\s*\/>/);
+  // Desde 06/10/2026 o DashboardResponsivo e lazy (tirou recharts do pacote inicial), entao
+  // o element vem embrulhado em <Suspense>; o que importa segue sendo o par index:true -> ele.
+  assert.match(router, /index:\s*true,\s*element:\s*(?:<Suspense fallback=\{<PageLoader\s*\/>\}>\s*)?<DashboardResponsivo\s*\/>/);
 });
 
 test('DashboardResponsivo importa o DashboardPage por import direto (nao lazy)', () => {

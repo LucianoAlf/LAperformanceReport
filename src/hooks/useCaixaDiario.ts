@@ -116,13 +116,15 @@ export function useCaixaDiario({ unidadeId, dataCaixa }: UseCaixaDiarioParams) {
 
     setSaving(true);
     try {
+      // fatura_ids e' trilha paralela (caixa_movimentacao_faturas), nao coluna.
+      const { fatura_ids: faturaIds, ...inputLinha } = input;
       const { data, error: insertError } = await supabase
         .from('caixa_movimentacoes')
         .insert({
           caixa_diario_id: caixa.id,
           unidade_id: unidadeId,
           data_movimento: dataCaixa,
-          ...input,
+          ...inputLinha,
           responsavel: input.responsavel || null,
           criado_por: input.criado_por || null,
         })
@@ -130,6 +132,22 @@ export function useCaixaDiario({ unidadeId, dataCaixa }: UseCaixaDiarioParams) {
         .single();
 
       if (insertError) throw insertError;
+
+      const movimentoId = (data as CaixaMovimentacao).id;
+      if (faturaIds && faturaIds.length > 0) {
+        const { error: filhasError } = await supabase
+          .from('caixa_movimentacao_faturas')
+          .insert(
+            faturaIds.map((faturaId) => ({
+              movimentacao_id: movimentoId,
+              fatura_id: faturaId,
+              unidade_id: unidadeId,
+            })),
+          );
+        // Se as filhas falharem, o lancamento fica sem identidade — melhor
+        // avisar do que deixar um composto pela metade em silencio.
+        if (filhasError) throw filhasError;
+      }
 
       const nextMovimentos = [...movimentos, data as CaixaMovimentacao];
       setMovimentos(nextMovimentos);

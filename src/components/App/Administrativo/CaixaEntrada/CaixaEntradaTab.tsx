@@ -9,6 +9,9 @@ import { AdminInboxList } from './AdminInboxList';
 import { AdminChatPanel } from './AdminChatPanel';
 import { NovaConversaModal } from './NovaConversaModal';
 import { mesmoTelefone } from '@/lib/normalizarTelefone';
+import { useShellMobile } from '@/hooks/useShellMobile';
+import { cn } from '@/lib/utils';
+import { ChevronLeft } from 'lucide-react';
 import type { AdminConversa, AlunoInbox, FiltroAdminInbox } from './types';
 import type { ContatoInbox } from './NovaConversaModal';
 
@@ -40,6 +43,7 @@ export function CaixaEntradaTab({ unidadeId, departamento = 'administrativo', mu
   const { usuario } = useAuth();
   const sentinelRef = useWidgetOverlapSentinel();
   const [conversaSelecionada, setConversaSelecionada] = useState<AdminConversa | null>(null);
+  const ehCelular = useShellMobile() === 'mobile';
   // Esconde o widget flutuante (Assistente IA) enquanto uma conversa estiver aberta — ele sobrepõe o input do chat.
   useForceHideWidgets(!!conversaSelecionada);
   const [filtro, setFiltro] = useState<FiltroAdminInbox>('todas');
@@ -147,9 +151,22 @@ export function CaixaEntradaTab({ unidadeId, departamento = 'administrativo', mu
   }
 
   return (
-    <div ref={sentinelRef} className="flex flex-col -mx-6 -mt-2" style={{ height: 'calc(100vh - 220px)' }}>
+    <div
+      ref={sentinelRef}
+      className="flex flex-col -mx-6 -mt-2 max-lg:-mx-3 h-[calc(100vh-220px)] max-lg:h-[calc(100dvh-230px)]"
+    >
       {/* Split Panel: Inbox + Chat */}
-      <div className="flex flex-1 overflow-hidden rounded-xl border border-slate-700/50">
+      <div className={cn(
+        "flex flex-1 overflow-hidden rounded-xl border border-slate-700/50",
+        // A lista tem `w-[300px]` fixo por dentro; no celular ela e a tela.
+        ehCelular && "[&>*:first-child]:!w-full",
+        // Com conversa aberta, a lista sai de cena e o chat empilha sob a
+        // barra de voltar.
+        // ⚠️ `min-h-0` no painel do chat: sem ele o `flex-1` mede a altura de
+        // todas as mensagens, a rolagem sai do painel e vai para o split, e o
+        // botao de voltar sobe junto para fora da tela (medido: top -1247px).
+        ehCelular && conversaSelecionada && "flex-col [&>*:first-child]:!hidden [&>*:last-child]:min-h-0",
+      )}>
         {/* Coluna 1: Inbox */}
         <AdminInboxList
           conversas={conversas}
@@ -173,6 +190,19 @@ export function CaixaEntradaTab({ unidadeId, departamento = 'administrativo', mu
           }}
         />
 
+        {/* Voltar para a lista — no celular a lista sai de cena, entao sem
+            este botao a conversa vira um beco sem saida. */}
+        {ehCelular && conversaSelecionada && (
+          <button
+            type="button"
+            onClick={() => setConversaSelecionada(null)}
+            className="flex min-h-[44px] shrink-0 items-center gap-1 border-b border-slate-700/50 bg-slate-900 px-3 text-sm font-medium text-slate-300"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Conversas
+          </button>
+        )}
+
         {/* Coluna 2: Chat */}
         {conversaSelecionada ? (
           <AdminChatPanel
@@ -192,7 +222,7 @@ export function CaixaEntradaTab({ unidadeId, departamento = 'administrativo', mu
             onNumeroCorrigido={handleNumeroCorrigido}
           />
         ) : (
-          <div className="flex-1 flex items-center justify-center" style={{ background: 'linear-gradient(180deg, #0f172a 0%, #0d1424 100%)' }}>
+          <div className="flex-1 flex items-center justify-center max-lg:hidden" style={{ background: 'linear-gradient(180deg, #0f172a 0%, #0d1424 100%)' }}>
             <div className="text-center animate-in fade-in duration-500">
               <div className="w-20 h-20 rounded-full bg-violet-500/10 border border-violet-500/10 flex items-center justify-center mx-auto mb-5">
                 <MessageSquare className="w-9 h-9 text-violet-400/50" />

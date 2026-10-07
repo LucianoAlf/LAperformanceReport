@@ -18,6 +18,7 @@ export interface LancamentoEmusys {
   plano_contas: { id: number | string | null; nome: string | null } | null;
   forma_pagamento: { id: number | string | null; descricao: string | null } | null;
   descricao: string | null;
+  fatura_id?: number | string | null;
 }
 
 export interface LancamentoEspelhado {
@@ -34,6 +35,7 @@ export interface LancamentoEspelhado {
   forma_pagamento_emusys_id: number | null;
   forma_pagamento_descricao: string | null;
   descricao: string | null;
+  emusys_fatura_id: number | null;
   payload: unknown;
   hash_conteudo: string;
 }
@@ -87,6 +89,7 @@ export function hashLancamento(payload: {
   forma_pagamento_emusys_id: number | null;
   forma_pagamento_descricao: string | null;
   descricao: string | null;
+  emusys_fatura_id: number | null;
 }) {
   return sha256(payload);
 }
@@ -108,6 +111,9 @@ export async function mapearLancamento(
     forma_pagamento_emusys_id: idOpcional(cru.forma_pagamento?.id),
     forma_pagamento_descricao: textoOpcional(cru.forma_pagamento?.descricao),
     descricao: textoOpcional(cru.descricao),
+    // fatura que a conciliacao da Rose vinculou a este lancamento (23/09/2026):
+    // entra no hash — quando ela reconcilia um lancamento antigo, alterado_em marca
+    emusys_fatura_id: idOpcional(cru.fatura_id),
   };
   if (!Number.isFinite(linha.valor)) {
     throw new Error(`valor invalido no lancamento ${cru.id}: ${String(cru.valor)}`);
@@ -124,6 +130,51 @@ export async function mapearLancamento(
 export interface LinhaCatalogo {
   hash_conteudo: string;
   payload: unknown;
+}
+
+export type EstadoAnteriorVarreduraDia = {
+  status: 'completo' | 'erro';
+  concluido_em: string | null;
+} | null;
+
+export type DecisaoPersistenciaFalhaDia =
+  | {
+    modo: 'preservar_completo';
+    atualizacao: { ultimo_erro: string };
+  }
+  | {
+    modo: 'registrar_erro';
+    registro: {
+      status: 'erro';
+      itens: 0;
+      ultimo_erro: string;
+      tentativas: number;
+      iniciado_em: string;
+    };
+  };
+
+export function decidirPersistenciaFalhaDia(
+  anterior: EstadoAnteriorVarreduraDia,
+  mensagem: string,
+  tentativa: { tentativas: number; iniciado_em: string },
+): DecisaoPersistenciaFalhaDia {
+  const ultimoErro = mensagem.slice(0, 400);
+  if (anterior?.status === 'completo') {
+    return {
+      modo: 'preservar_completo',
+      atualizacao: { ultimo_erro: ultimoErro },
+    };
+  }
+  return {
+    modo: 'registrar_erro',
+    registro: {
+      status: 'erro',
+      itens: 0,
+      ultimo_erro: ultimoErro,
+      tentativas: tentativa.tentativas,
+      iniciado_em: tentativa.iniciado_em,
+    },
+  };
 }
 
 export async function mapearCatalogo(valores: Record<string, unknown>, cru: unknown): Promise<LinhaCatalogo> {
@@ -149,11 +200,62 @@ export function resumoJanela(inicio: string, fim: string): string[] {
   return dias;
 }
 
+const dataUtc = (data: string): Date => {
+  if (!DATA_PATTERN.test(data)) throw new Error(`data invalida: ${data}`);
+  const valor = new Date(`${data}T00:00:00Z`);
+  if (Number.isNaN(valor.getTime()) || valor.toISOString().slice(0, 10) !== data) {
+    throw new Error(`data invalida: ${data}`);
+  }
+  return valor;
+};
+
+const isoData = (data: Date): string => data.toISOString().slice(0, 10);
+
 export function janelaRotinaDiaria(hojeBrt: string): { inicio: string; fim: string } {
-  if (!DATA_PATTERN.test(hojeBrt)) throw new Error(`hojeBrt invalido: ${hojeBrt}`);
-  const [ano, mes] = hojeBrt.split('-').map(Number);
-  const inicio = new Date(Date.UTC(ano, mes - 3, 1)); // mês corrente + 2 anteriores
-  return { inicio: inicio.toISOString().slice(0, 10), fim: hojeBrt };
+  const hoje = dataUtc(hojeBrt);
+  const fim = new Date(hoje);
+  fim.setUTCDate(fim.getUTCDate() - 1);
+  const inicio = new Date(hoje);
+  inicio.setUTCDate(inicio.getUTCDate() - 10);
+  return { inicio: isoData(inicio), fim: isoData(fim) };
+}
+
+export function janelaRevarreduraSemanal(hojeBrt: string): { inicio: string; fim: string } {
+  const hoje = dataUtc(hojeBrt);
+  const fim = new Date(hoje);
+  fim.setUTCDate(fim.getUTCDate() - 1);
+  const inicio = new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth() - 1, 1));
+  return { inicio: isoData(inicio), fim: isoData(fim) };
+}
+
+export function validarJanelaEncerrada(
+  inicio: string,
+  fim: string,
+  hojeBrt: string,
+): { inicio: string; fim: string } {
+  dataUtc(hojeBrt);
+  resumoJanela(inicio, fim);
+  if (fim >= hojeBrt) {
+    throw new Error(`DIA_CORRENTE_NAO_ENCERRADO: data_final ${fim} deve ser anterior a ${hojeBrt}`);
+  }
+  return { inicio, fim };
+}
+
+export function dividirJanela(
+  inicio: string,
+  fim: string,
+  tamanhoMaximo = 10,
+): Array<{ inicio: string; fim: string }> {
+  if (!Number.isInteger(tamanhoMaximo) || tamanhoMaximo < 1) {
+    throw new Error(`tamanho de bloco invalido: ${tamanhoMaximo}`);
+  }
+  const dias = resumoJanela(inicio, fim);
+  const blocos: Array<{ inicio: string; fim: string }> = [];
+  for (let indice = 0; indice < dias.length; indice += tamanhoMaximo) {
+    const bloco = dias.slice(indice, indice + tamanhoMaximo);
+    blocos.push({ inicio: bloco[0], fim: bloco.at(-1)! });
+  }
+  return blocos;
 }
 
 export { canonicalStringify, sha256 };

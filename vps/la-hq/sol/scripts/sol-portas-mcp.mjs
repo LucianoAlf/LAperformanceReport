@@ -30,6 +30,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
+import { buscarMatriculasEmusys, compararAluno, nomeDoToken } from './sol-conferir-emusys.mjs';
 
 // ⚠️ Os nomes reais no ambiente da Sol, conferidos no host: `gateway.systemd.env`
 //    traz SUPABASE_URL/SUPABASE_SERVICE_KEY e `/opt/LA-Organizer/.env` traz
@@ -83,13 +84,27 @@ const KEY = process.env.LA_REPORT_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVI
 //    o processo MCP recebe env estatico e e UM so para todas as conversas, entao
 //    fixar o numero aqui faria toda conversa se passar pela mesma pessoa.
 const TEL_ENSAIO = process.env.SOL_SOLICITANTE_TELEFONE || '';
-const CAIXA_RUNTIME = process.env.SOL_CAIXA_RUNTIME
-  || '/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs';
-const CAIXA_ABF_RUNTIME = process.env.SOL_CAIXA_ABF_RUNTIME
-  || '/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-abertura-fechamento.cjs';
 const CAIXA_GOVERNANCA_RUNTIME = process.env.SOL_CAIXA_GOVERNANCA_RUNTIME
   || '/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-governanca-shadow.cjs';
 const BRIDGE_URL = (process.env.SOL_WHATSAPP_BRIDGE_URL || 'http://127.0.0.1:3000').replace(/\/$/, '');
+
+// Tokens do Emusys: lidos SÓ deste arquivo e SÓ as chaves EMUSYS_TOKEN_*.
+// Nunca vão para a resposta da ferramenta nem para o modelo.
+const EMUSYS_ENV = process.env.SOL_EMUSYS_ENV_FILE || '/home/sol/.openclaw/secrets/emusys.env';
+let tokensEmusys = null;
+function tokenEmusys(codigoUnidade) {
+  if (!tokensEmusys) {
+    tokensEmusys = {};
+    try {
+      for (const l of fs.readFileSync(EMUSYS_ENV, 'utf8').split('\n')) {
+        const m = l.trim().match(/^(EMUSYS_TOKEN_[A-Z]+)=(.+)$/);
+        if (m) tokensEmusys[m[1]] = m[2].trim().replace(/^["']|["']$/g, '');
+      }
+    } catch (_) { /* sem arquivo: a ferramenta responde emusys_indisponivel */ }
+  }
+  const nome = nomeDoToken(codigoUnidade);
+  return nome ? tokensEmusys[nome] || null : null;
+}
 
 async function rpc(fn, args) {
   const r = await fetch(`${URL}/rest/v1/rpc/${fn}`, {
@@ -140,7 +155,9 @@ const PORTAS = [
       p_cartao_parcelas: { type: 'number', description: 'Número de parcelas (1 a 24). Só quando a pessoa declarou.' },
       p_pagador: { type: 'string', description: 'Nome do pagador, se foi informado.' },
       p_itens: { type: 'array', description: 'Alunos/cursos citados. Não invente item.', items: { type: 'object', properties: {
-        aluno: { type: 'string' }, categorias: { type: 'array', items: { type: 'string' } },
+        aluno: { type: 'string' },
+        categorias: { type: 'array', items: { type: 'string' },
+          description: 'parcela | passaporte | lojinha. Venda de produto (corda, palheta, baqueta, capotraste, caderno, livro, camiseta…) é SEMPRE "lojinha": não tem fatura no Emusys e não leva competência.' },
         competencias: { type: 'array', items: { type: 'string' } },
       } } },
     } },
@@ -226,6 +243,15 @@ const PORTAS = [
     description: 'Os contratos que terminam nesta competência e quais já renovaram. Use para "quem falta renovar?", "como tá a renovação do mês?". ⚠️ Banda e coral ficam de fora: não contam em retenção. ⚠️ O recesso escolar DESLOCA a competência de propósito — quem renovou em julho pode contar em agosto, porque o que manda é o mês da primeira aula do novo ciclo. Isso é esperado, não erro; já gerou pergunta de "sumiu renovação" que não tinha sumido.',
     schema: { ...U } },
 
+  { name: 'relatorio_mensal', fn: 'sol_porta_relatorio_mensal_v1',
+    description: 'O RELATÓRIO MENSAL ADMINISTRATIVO explicado. `oficial` é a FOTO do fechamento — o mesmo relatório que foi para o grupo, com a hora em que a foto foi tirada; é o ÚNICO número do mês. `por_que_cada_nome` diz, aluno por aluno, por que está ou não está na foto. Use para "por que deu X renovações?", "por que o Fulano não está no relatório?", "qual foi a taxa de renovação do mês?", "o relatório está errado?". Com `p_aluno`, diz em que mês cada renovação daquele aluno conta. 🔴 Caso que originou (03/10/2026): o Jhon/CG refez setembro à mão — 28 renovações contra 15 — sem saber que eram causas diferentes: bolsista e banda ficam FORA do total (regra do Alf, 27/08); a renovação conta no mês da 1ª AULA do novo contrato (Elisa, Levi e Sirley contam em outubro); e André, Sarah, Jullya e Davi foram validados DEPOIS da foto (`validada_depois_do_fechamento`). Explique cada nome pelo campo `situacao` e pelo array `regras` — o objetivo é EDUCAR sobre a regra, nunca dizer que a equipe errou. 🔴 Nunca calcule taxa, total, ticket ou MRR por conta própria e nunca apresente outro número como sendo o do mês: o relatório é a foto. 🔴 Se ficou algo de fora porque esqueceram de validar, ajustar ou lançar antes do fechamento, oriente a pedir ao HUGO, dizendo o que faltou — é ele quem decide gerar o mês de novo. Você não gera relatório nem promete que vai entrar.',
+    schema: { ...U, p_ano: { type: 'integer', description: 'Vazio = mês anterior.' }, p_mes: { type: 'integer' },
+              p_aluno: { type: 'string', description: 'Nome (ou parte, 3+ letras) de um aluno para explicar em que mês cada renovação dele conta.' } } },
+
+  { name: 'conferir_aluno_emusys', auth: 'conferir_emusys',
+    description: 'Confere UM aluno no EMUSYS (a fonte da verdade, consultada agora) contra o LA Report e diz o que bate e o que diverge — contrato novo e mês da 1ª aula, renovação lançada no curso ou no mês errado, renovação que o Emusys não tem, matrícula ativa/trancada/encerrada, bolsista. Use quando alguém contestar o relatório ou um aluno: "a Fulana renovou?", "por que o Fulano não está no relatório?", "valido essa renovação?", "esse aluno saiu mesmo?". Junto com `relatorio_mensal`: aquela diz o que o relatório mostrou e por quê; esta diz se o dado do LA Report bate com o Emusys. 🔴 Caso real (03/10/2026): a renovação do Gabriel Mello de agosto parecia não existir no Emusys — porque estava lançada como Canto, e era do contrato de Teclado que começou em 19/08. Por isso a ligação é pela data da 1ª aula, e isso já vem resolvido aqui: leia `confere` e `divergencias`, não refaça a comparação. 🔴 Se houver divergência: explique cada uma em uma frase, diga que NÃO é para validar, apagar ou corrigir por conta própria, e peça para a pessoa falar com o HUGO. Sem divergência: explique pela regra por que o aluno está (ou não) no relatório daquele mês. ⚠️ `emusys_indisponivel` = o Emusys não respondeu: diga que não deu para conferir agora, nunca conclua que bate ou diverge. ⚠️ Só confere os últimos 6 meses, e só o contrato ATUAL de cada matrícula (o Emusys não expõe os anteriores).',
+    schema: { ...U, p_aluno: { type: 'string', description: 'Nome do aluno como a pessoa falou (3+ letras). Se vier mais de uma pessoa, peça o nome completo.' } } },
+
   { name: 'contratos_vencendo', fn: 'sol_porta_contratos_vencendo_v1',
     description: 'Contratos com a última aula chegando, na janela de dias que você pedir. Use para "quem tá vencendo?", "quantos contratos acabam esse mês?". ⚠️ A coluna de faturas vencidas é PISO, não valor exato — o espelho só cobre as competências sincronizadas, então mostro "≥N". ⚠️ Aulas restantes diverge da tela do Emusys em 1 a 4 aulas (a regra da tela não é exposta pela API); a última aula, essa, bate 100%.',
     schema: { ...U, p_dias: { type: 'integer', description: '1 a 90. Padrão 30.' } } },
@@ -250,12 +276,24 @@ const PORTAS = [
     schema: { ...U, p_data: { type: 'string', description: 'YYYY-MM-DD. Vazio = hoje.' } } },
 ];
 
+// Contrato da resposta das ferramentas que executam no caixa. Vai em TODAS elas,
+// num lugar só: foi a falta dele que deixou o agente anunciar lançamento que não
+// existia (28/09/2026).
+const CONTRATO_RESPOSTA = ' 🔴 LEIA A RESPOSTA ANTES DE FALAR: o campo `estado` diz o que ACONTECEU. '
+  + '`executado` = gravado no caixa (só então diga "lancei"/"estornei"/"fechei"); '
+  + '`card_publicado` = saiu o card, nada gravado, aguarde o "pode"; '
+  + '`mensagem_publicada` = saiu pergunta/recusa (texto em `mensagens_publicadas`), nada gravado; '
+  + '`nada_aconteceu` = nada saiu e nada foi gravado — diga isso com o `motivo_humano` e peça o que falta. '
+  + '`desconhecido` = a ferramenta não obteve resposta — não afirme nada, peça para conferirem o grupo. '
+  + 'Nunca afirme lançamento, recibo ou card que a resposta não confirma.';
+
 // ── protocolo MCP ───────────────────────────────────────────────────────────
 const j = (o) => ({ content: [{ type: 'text', text: JSON.stringify(o) }] });
 
-const gruposCaixa = {};
-let handlerCaixa = null;
-let abfCaixa = null;
+// 🔴 O MCP NÃO TEM MAIS CAIXA PRÓPRIO (28/09/2026). Até aqui este processo
+//    instanciava o handler do caixa: dois processos, dois estados em memória.
+//    Hoje ele valida o crachá e pede à ponte (/caixa/tool) que execute, com o
+//    handler único dela. Ver runtime/caixa-tool-executor.cjs.
 let governancaCaixa = null;
 
 function chatNoCanario(chat) {
@@ -299,16 +337,6 @@ async function contextoCaixa(args, capability = 'agent_first') {
   return { ...(ctx || {}), _chat: chat, _cracha: cracha, _episode_id: String((args && args.p_episode_id) || '').trim() };
 }
 
-async function enviarPeloBridge(chatId, texto) {
-  const r = await fetch(`${BRIDGE_URL}/send`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Host: 'localhost' },
-    body: JSON.stringify({ chatId, message: texto }),
-  });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok || !data.success) throw new Error(`bridge_send_${r.status}`);
-  return data.messageId || (data.messageIds || []).at(-1) || null;
-}
-
 async function fecharEpisodioAgentFirst(episodio, chatId, detalhes) {
   if (!episodio || !episodio.episode_id || !governancaCaixa) return { ok: false, sem_episodio: true };
   try {
@@ -335,158 +363,95 @@ function carregarGovernancaCaixa() {
   return governancaCaixa;
 }
 
-function carregarRuntimeCaixa() {
-  if (handlerCaixa && abfCaixa) return;
-  const fin = require(CAIXA_RUNTIME);
-  abfCaixa = require(CAIXA_ABF_RUNTIME);
-  carregarGovernancaCaixa();
-  handlerCaixa = fin.criarHandlerFinanceiro({
-    grupos: gruposCaixa,
-    sendFn: enviarPeloBridge,
-    log: (evento) => {
-      const limpo = { ...(evento || {}) };
-      delete limpo.chatId; delete limpo.senderId; delete limpo.senderPhone;
-      process.stderr.write(JSON.stringify({ origem: 'sol_caixa_tool', ...limpo }) + '\n');
-    },
-    governanceFn: (event, eventType, details) => {
-      if (!governancaCaixa || !event || !event.caixaGovernancaEpisode) return Promise.resolve({ ok: false, sem_episodio: true });
-      return governancaCaixa.record(event.caixaGovernancaEpisode, eventType, details);
-    },
-  });
-}
-
-function textoContemValor(texto, valor) {
-  const alvo = Math.round(Number(valor) * 100);
-  if (!Number.isFinite(alvo) || alvo <= 0) return false;
-  const encontrados = String(texto || '').match(/\d{1,3}(?:\.\d{3})*(?:,\d{1,2})|\d+(?:[.,]\d{1,2})?/g) || [];
-  return encontrados.some((bruto) => {
-    const n = Number(bruto.includes(',') ? bruto.replace(/\./g, '').replace(',', '.') : bruto);
-    return Number.isFinite(n) && Math.round(n * 100) === alvo;
-  });
-}
-function idMensagem(ctx, action, args) {
-  return 'tool-' + crypto.createHash('sha256').update([
-    ctx._chat, action, JSON.stringify(args || {}), Math.floor(Date.now() / 30000),
-  ].join('|')).digest('hex').slice(0, 24);
-}
-
 async function executarRuntimeCaixa(p, args) {
   const ctx = await contextoCaixa(args, p.capability || 'agent_first');
   if (!ctx.ok) return j(ctx);
-  carregarRuntimeCaixa();
-  gruposCaixa[ctx._chat] = { unidade_id: ctx.unidade_id, nome: ctx.unidade_nome || 'unidade' };
-  await handlerCaixa.reidratarPendencias();
-  const syntheticMessageId = idMensagem(ctx, p.action, args);
-  let episodio = governancaCaixa && governancaCaixa.adoptEpisode(ctx._episode_id, {
-    unitName: ctx.unidade_nome, source: 'whatsapp_group', messageKind: 'text',
-  });
-  if (!episodio && governancaCaixa) {
-    episodio = governancaCaixa.beginEpisode({ chatId: ctx._chat, messageId: syntheticMessageId,
-      unitName: ctx.unidade_nome, hasMedia: false, source: 'agent_tool_uncorrelated' });
-    if (episodio) void governancaCaixa.record(episodio, 'correlation_gap', {
-      correlation_status: 'missing_episode_header', engine: 'agent_tools', outcome: 'inconclusive',
-    });
+  const limpos = {};
+  for (const [k, v] of Object.entries(args || {})) {
+    if (k !== 'p_cracha' && k !== 'p_chat_id') limpos[k] = v;
   }
-  if (episodio && governancaCaixa) void governancaCaixa.record(episodio, 'tool_selected', {
-    tool_name: p.name, action: p.action, engine: 'agent_tools', tool_call_ref: syntheticMessageId,
-  });
-  const base = {
-    chatId: ctx._chat, senderPhone: ctx._ator_numero, senderId: ctx._ator_numero + '@s.whatsapp.net',
-    senderName: ctx.quem || 'Equipe', hasMedia: false, mediaUrls: [],
-    messageId: syntheticMessageId, quotedMessageId: args.p_preview_message_id || null,
-    caixaGovernancaEpisode: episodio,
-  };
-  const governanceFn = (event, eventType, details) => (governancaCaixa && event && event.caixaGovernancaEpisode)
-    ? governancaCaixa.record(event.caixaGovernancaEpisode, eventType, details || {})
-    : Promise.resolve({ ok: false, sem_episodio: true });
-  let resultado;
-  if (p.action === 'preparar_lancamento') {
-    const texto = String(args.p_texto_original || '').trim();
-    const valor = Number(args.p_valor_total);
-    if (!texto || !(valor > 0)) return j({ ok: false, motivo: 'texto_e_total_declarado_obrigatorios' });
-    if (!textoContemValor(texto, valor)) return j({ ok: false, motivo: 'valor_total_nao_aparece_no_texto_original' });
-    resultado = await handlerCaixa.tratarAgentFirst({ ...base, body: texto, caixaToolDecision: {
-      intencao: Array.isArray(args.p_itens) && args.p_itens.length > 1
-        ? 'lancamento_multi_aluno' : 'lancamento_por_texto',
-      valor_total: valor, forma: args.p_forma || null, pagador: args.p_pagador || null,
-      cartao_modalidade: args.p_cartao_modalidade || null,
-      cartao_parcelas: Number(args.p_cartao_parcelas) || null,
-      itens: Array.isArray(args.p_itens) ? args.p_itens : [],
-    } }, gruposCaixa[ctx._chat], Date.now());
-  } else if (p.action === 'preparar_saida') {
-    const valor = Number(args.p_valor);
-    const categoria = String(args.p_categoria || '').trim().toLowerCase();
-    const forma = String(args.p_forma || '').trim().toLowerCase();
-    const descricao = String(args.p_descricao || '').trim();
-    const textoOriginal = String(args.p_texto_original || '').trim();
-    if (!(valor > 0) || !['seguranca', 'despesa', 'retirada', 'troco'].includes(categoria)
-        || !forma || !descricao || !textoOriginal) {
-      return j({ ok: false, motivo: 'saida_incompleta' });
-    }
-    // A escolha foi da ferramenta. A frase abaixo e apenas o adaptador canonico
-    // do schema para o runtime legado que continua montando o mesmo preview V3.
-    const body = `saída ${categoria} R$ ${valor.toFixed(2).replace('.', ',')} ${forma} ${descricao}`;
-    resultado = await handlerCaixa.handle({ ...base, body });
-  } else if (p.action === 'preparar_abertura') {
-    resultado = await abfCaixa.postarAbertura(
-      { chat_id: ctx._chat, unidade_id: ctx.unidade_id, nome: ctx.unidade_nome },
-      { sendFn: enviarPeloBridge, event: base, governanceFn });
-  } else if (p.action === 'preparar_fechamento') {
-    resultado = await abfCaixa.tratarPedidoDiretoFechamento(
-      { ...base, body: 'Sol, vamos fechar o caixa agora' },
-      { grupo: gruposCaixa[ctx._chat], sendFn: enviarPeloBridge, governanceFn });
-  } else if (p.action === 'aprovar_preview') {
-    const texto = String(args.p_aprovacao || '').trim();
-    if (!/^(pode(?:\s+sim)?|confirmo|autorizo|pode\s+(?:lançar|corrigir|estornar|abrir|fechar))\b/i.test(texto)) {
-      return j({ ok: false, motivo: 'aprovacao_explicita_obrigatoria' });
-    }
-    const ev = { ...base, body: texto };
-    const abf = await abfCaixa.tratarConfirmacao(ev, { sendFn: enviarPeloBridge, governanceFn,
-      temComprovantePendente: (cid) => handlerCaixa.temPendencia(cid) });
-    resultado = abf ? { acao: 'abertura_fechamento_tratado' } : await handlerCaixa.handle(ev);
-  } else if (p.action === 'descartar_preview') {
-    const texto = String(args.p_recusa || '').trim();
-    if (!/^(não|nao|cancela|cancelar|descarta|descartar)\b/i.test(texto)) return j({ ok: false, motivo: 'recusa_explicita_obrigatoria' });
-    resultado = await handlerCaixa.handle({ ...base, body: texto });
+  try {
+    const r = await fetch(`${BRIDGE_URL}/caixa/tool`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Host: 'localhost' },
+      body: JSON.stringify({
+        tool: { name: p.name, action: p.action },
+        ctx: { ok: true, _chat: ctx._chat, _ator_numero: ctx._ator_numero, quem: ctx.quem || null,
+          unidade_id: ctx.unidade_id || null, unidade_nome: ctx.unidade_nome || null, _episode_id: ctx._episode_id || '' },
+        args: limpos,
+      }),
+      signal: AbortSignal.timeout(110000),
+    });
+    const data = await r.json().catch(() => null);
+    if (!r.ok || !data || typeof data.estado !== 'string') throw new Error(`ponte_${r.status}`);
+    return j(data);
+  } catch (e) {
+    // Sem resposta da ponte não se sabe se algo saiu: a ferramenta NÃO afirma nada.
+    return j({ ok: false, estado: 'desconhecido', motivo: 'ponte_sem_resposta', erro: String(e && e.message).slice(0, 120),
+      orientacao: 'Não sei se algo foi publicado. NÃO diga que lançou nem que preparou card: peça à pessoa que confira o grupo.' });
+  }
+}
+
+// Quem está perguntando: crachá assinado (grupo) ou telefone. Fonte única para
+// as portas do banco e para a conferência no Emusys.
+async function resolverSolicitante(args) {
+  const _bruto = String((args && args.p_solicitante_telefone) || TEL_ENSAIO || "").trim();
+  let tel;
+  if (/^SOL1\./.test(_bruto)) {
+    const cracha = _bruto.replace(/[^A-Za-z0-9.]/g, "");
+    const chat = String((args && args.p_chat_id) || '').trim().replace(/[^A-Za-z0-9@._:-]/g, '');
+    // Portas de LEITURA aceitam o crachá do privado também: a assinatura amarra
+    // telefone + chat, então prova quem fala no grupo e no DM; o escopo segue
+    // decidido pelo banco (sol_resolver_escopo_v1). O caixa NÃO passa por aqui —
+    // validarEnvelopeCaixa continua exigindo grupo oficial.
+    if (!/@(g\.us|lid|s\.whatsapp\.net)$/.test(chat)) return { erro: { ok: false, motivo: 'chat_obrigatorio',
+      recado: 'Passe também o `[chat_caixa: ...]` da mensagem, junto com o `[cracha: ...]`.' } };
+    const verificado = await rpc('sol_cracha_verificar_v1', { p_cracha: cracha, p_chat: chat });
+    if (!verificado || !verificado.ok) return { erro: { ok: false, motivo: 'cracha_invalido',
+      detalhe: String((verificado && verificado.motivo) || 'verificacao_falhou').slice(0, 80) } };
+    tel = String(verificado.telefone || '').replace(/\D/g, '');
   } else {
-    const alvo = {
-      movimentacao_id: String(args.p_movimentacao_id || '').trim(),
-      unidade_id: ctx.unidade_id,
-      valor: Number(args.p_valor_atual),
-      forma_pagamento: String(args.p_forma_atual || ''),
-      categoria: String(args.p_categoria_atual || ''),
-    };
-    if (!alvo.movimentacao_id || !(alvo.valor > 0)) return j({ ok: false, motivo: 'alvo_exato_obrigatorio' });
-    let cmd;
-    if (p.action === 'preparar_estorno') {
-      const motivo = String(args.p_motivo || '').trim();
-      if (!motivo) return j({ ok: false, motivo: 'motivo_obrigatorio' });
-      cmd = { tipo: 'estornar', motivo, correcoes: {} };
-    } else {
-      const correcoes = {};
-      if (args.p_novo_valor != null) correcoes.valor = Number(args.p_novo_valor);
-      if (args.p_nova_forma) correcoes.forma_pagamento = String(args.p_nova_forma);
-      if (args.p_nova_categoria) correcoes.categoria = String(args.p_nova_categoria);
-      if (!Object.keys(correcoes).length) return j({ ok: false, motivo: 'correcao_vazia' });
-      cmd = { tipo: 'corrigir', motivo: String(args.p_motivo || 'correção solicitada no grupo'), correcoes };
-    }
-    resultado = await handlerCaixa.handle({ ...base,
-      body: cmd.tipo === 'estornar' ? 'estornar lançamento' : 'corrigir lançamento',
-      caixaToolCommand: cmd, caixaToolTarget: alvo,
-    });
+    tel = _bruto.replace(/\D/g, '');
   }
-  if (episodio && governancaCaixa) await fecharEpisodioAgentFirst(episodio, ctx._chat, {
-    terminal_state: (resultado && resultado.acao) || 'tool_completed',
-    action: (resultado && resultado.acao) || p.action,
-    outcome: (resultado && /^erro|recus|bloquead/.test(String(resultado.acao || ''))) ? 'refused' : 'ok',
+  if (!tel) return { erro: { ok: false, motivo: 'sem_solicitante',
+    recado: 'Não sei quem está perguntando. Passe o `[cracha: ...]` da mensagem, ou o número de `[telefone_remetente: ...]` — sem isso eu não sei qual unidade mostrar.' } };
+  return { tel };
+}
+
+// Conferência de um aluno: lado do LA Report pela porta (que também resolve o
+// escopo e registra a chamada), lado do Emusys ao vivo, comparação em código.
+async function conferirAlunoEmusys(args) {
+  const quem = await resolverSolicitante(args);
+  if (quem.erro) return j(quem.erro);
+  const lr = await rpc('sol_porta_conferir_aluno_v1', {
+    p_solicitante_telefone: quem.tel, p_aluno: String(args.p_aluno || ''),
+    ...(args.p_unidade ? { p_unidade: args.p_unidade } : {}),
   });
-  return j({ ok: true, ja_publicado_no_grupo: true, resultado });
+  if (!lr || !lr.ok || !lr.encontrado) return j(lr);
+  const ORIENTACAO = 'Divergência: explique cada uma, diga para NÃO validar/apagar/corrigir por conta própria e peça para falar com o Hugo. Sem divergência: explique pela regra do relatório.';
+  const token = tokenEmusys(lr.unidade_codigo);
+  const ids = [...new Set((lr.matriculas || []).map((m) => m.emusys_aluno_id).filter(Boolean))].slice(0, 3);
+  if (!token || !ids.length) {
+    return j({ ok: true, emusys_indisponivel: !token ? 'sem_token_da_unidade' : 'aluno_sem_id_no_emusys',
+      lareport: lr.matriculas, orientacao: 'Não deu para conferir no Emusys agora: NÃO conclua que bate nem que diverge. ' + (ids.length ? '' : 'O cadastro não está ligado ao Emusys — isso é uma divergência: peça para falar com o Hugo.') });
+  }
+  let emusys = [];
+  try {
+    for (const id of ids) emusys.push(...await buscarMatriculasEmusys(id, token));
+  } catch (e) {
+    return j({ ok: true, emusys_indisponivel: String(e && e.message).slice(0, 80), lareport: lr.matriculas,
+      orientacao: 'O Emusys não respondeu: diga que não deu para conferir agora e NÃO conclua nada.' });
+  }
+  const r = compararAluno(lr, emusys, new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10));
+  return j({ ok: true, aluno: lr.matriculas[0] && lr.matriculas[0].nome, unidade: lr.escopo && lr.escopo.unidade_nome,
+    conferido_em: new Date().toISOString(), confere: r.confere, divergencias: r.divergencias,
+    emusys: r.emusys, orientacao: ORIENTACAO });
 }
 
 async function despachar(name, args) {
   const p = PORTAS.find((x) => x.name === name);
   if (!p) return j({ ok: false, motivo: 'porta_desconhecida', porta: name });
   if (p.auth === 'caixa_runtime') return executarRuntimeCaixa(p, args || {});
+  if (p.auth === 'conferir_emusys') return conferirAlunoEmusys(args || {});
   if (p.auth === 'caixa_assinado') {
     const envelope = validarEnvelopeCaixa(args, p.capability || 'agent_first');
     if (!envelope.ok) return j(envelope);
@@ -514,22 +479,9 @@ async function despachar(name, args) {
   //    "SOL1.5521970183684.d2f0f55a..." virou "155219701836842055105...", que
   //    nao resolve ninguem. Foi a propria auditoria (`telefone_alegado`) que
   //    mostrou, porque ela grava o que FOI MANDADO, nao o que eu quis mandar.
-  const _bruto = String((args && args.p_solicitante_telefone) || TEL_ENSAIO || "").trim();
-  let tel;
-  if (/^SOL1\./.test(_bruto)) {
-    const cracha = _bruto.replace(/[^A-Za-z0-9.]/g, "");
-    const chat = String((args && args.p_chat_id) || '').trim().replace(/[^A-Za-z0-9@._:-]/g, '');
-    if (!chat.endsWith('@g.us')) return j({ ok: false, motivo: 'chat_oficial_obrigatorio',
-      recado: 'Esse crachá foi emitido em grupo. Passe também o `[chat_caixa: ...]` da mensagem.' });
-    const verificado = await rpc('sol_cracha_verificar_v1', { p_cracha: cracha, p_chat: chat });
-    if (!verificado || !verificado.ok) return j({ ok: false, motivo: 'cracha_invalido',
-      detalhe: String((verificado && verificado.motivo) || 'verificacao_falhou').slice(0, 80) });
-    tel = String(verificado.telefone || '').replace(/\D/g, '');
-  } else {
-    tel = _bruto.replace(/\D/g, '');
-  }
-  if (!tel) return j({ ok: false, motivo: 'sem_solicitante',
-    recado: 'Não sei quem está perguntando. Passe o `[cracha: ...]` da mensagem, ou o número de `[telefone_remetente: ...]` — sem isso eu não sei qual unidade mostrar.' });
+  const quem = await resolverSolicitante(args);
+  if (quem.erro) return j(quem.erro);
+  const tel = quem.tel;
   const limpos = { p_solicitante_telefone: tel };
   for (const [k, v] of Object.entries(args || {})) {
     if (k !== 'p_solicitante_telefone' && k !== 'p_chat_id'
@@ -554,7 +506,7 @@ process.stdin.on('data', async (chunk) => {
                   serverInfo: { name: 'sol-portas', version: '1.0.0' } });
     } else if (req.method === 'tools/list') {
       responder({ tools: PORTAS.map((p) => ({
-        name: p.name, description: p.description,
+        name: p.name, description: p.auth === 'caixa_runtime' ? p.description + CONTRATO_RESPOSTA : p.description,
         inputSchema: { type: 'object', properties: p.schema || {} } })) });
     } else if (req.method === 'tools/call') {
       responder(await despachar(req.params?.name, req.params?.arguments));

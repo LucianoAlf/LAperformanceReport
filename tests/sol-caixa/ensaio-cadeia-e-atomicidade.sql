@@ -45,6 +45,7 @@ declare
   v_unidade uuid := '11111111-1111-1111-1111-111111111111';
   v_falhas  text[] := '{}';
   v_itens   jsonb;
+  v_env     jsonb;
   v_r       jsonb;
   v_snap    jsonb;
   v_total   numeric;
@@ -70,35 +71,64 @@ begin
   -- ⚠️ O VALOR DECLARADO É OBRIGATÓRIO na fixture: sem ele a composta recusa
   --    com `valor_total_invalido`, a cascata cai na canônica e o caso N×M —
   --    que é o ponto do ensaio — nunca acontece.
+  -- A fixture precisa declarar o mesmo valor que o contrato canônico expõe.
+  -- Ler `valor_original` direto da tabela fica errado assim que a fatura vence:
+  -- o resolver passa a usar `valor_hoje` com os acréscimos válidos e rejeita,
+  -- corretamente, o número antigo como `valor_declarado_nao_bate`.
+  v_env := public.sol_faturas_alunos_v1(
+    v_unidade, extract(year from v_hoje)::int, extract(month from v_hoje)::int,
+    'janela_3', 'todas', v_hoje);
+  if coalesce(v_env->>'status','') not in ('ok','partial') then
+    raise exception 'FIXTURE AUSENTE: envelope de faturas indisponivel (status=%)',
+      coalesce(v_env->>'status','<nulo>');
+  end if;
+
   select jsonb_agg(jsonb_build_object('aluno_nome', nome, 'valor', soma)) into v_itens
     from (
-      (select a.nome,
-              (select sum(coalesce(f.valor_pago, f.valor_original))
-                 from public.emusys_faturas f
-                where f.emusys_student_id = a.emusys_student_id::bigint
-                  and f.competencia = date_trunc('month', v_hoje)::date
-                  and f.status = 'aberta') as soma
-         from public.alunos a
-        where a.unidade_id = v_unidade and a.is_segundo_curso is not true
-          and (select count(*) from public.emusys_faturas f
-                where f.emusys_student_id = a.emusys_student_id::bigint
-                  and f.competencia = date_trunc('month', v_hoje)::date
-                  and f.status = 'aberta') >= 2
-        order by a.id limit 1)
+      (select a.nome, x.soma
+         from (select i->>'emusys_student_id' as sid,
+                      count(*) as n,
+                      sum(coalesce(nullif(i->'valores'->>'valor_pago','')::numeric,
+                                   nullif(i->'valores'->>'valor_hoje','')::numeric, 0)) as soma
+                 from jsonb_array_elements(v_env->'items') i
+                where coalesce(i->>'tipo_fatura','') in ('parcela', 'passaporte_taxa_matricula')
+                  and coalesce(i->>'status','') = 'aberta'
+                  and nullif(i->>'emusys_student_id','') is not null
+                  and (i->>'competencia')::date = date_trunc('month', v_hoje)::date
+                group by 1) x
+         join public.alunos a
+           on a.unidade_id = v_unidade and a.emusys_student_id = x.sid
+         cross join lateral (
+           select public.sol_caixa_resolver_composto_aluno_env_v1(
+             v_env,
+             jsonb_build_object(
+               'unidade_id', v_unidade,
+               'aluno_nome', a.nome,
+               'competencia', date_trunc('month', v_hoje)::date,
+               'valor_total', x.soma)) resultado) prova
+        where x.n >= 2 and x.soma > 0
+          and coalesce((prova.resultado->>'ok')::boolean, false)
+          and jsonb_array_length(coalesce(prova.resultado->'itens', '[]'::jsonb)) >= 2
+          and abs(coalesce((prova.resultado->>'soma_itens')::numeric, 0) - x.soma) <= 0.01
+        order by x.n desc, x.soma desc, a.id
+        limit 1)
       union all
-      (select a.nome,
-              (select sum(coalesce(f.valor_pago, f.valor_original))
-                 from public.emusys_faturas f
-                where f.emusys_student_id = a.emusys_student_id::bigint
-                  and f.competencia = date_trunc('month', v_hoje)::date
-                  and f.status = 'paga') as soma
-         from public.alunos a
-        where a.unidade_id = v_unidade and a.is_segundo_curso is not true
-          and (select count(*) from public.emusys_faturas f
-                where f.emusys_student_id = a.emusys_student_id::bigint
-                  and f.competencia = date_trunc('month', v_hoje)::date
-                  and f.status = 'paga') = 1
-        order by a.id limit 1)) x;
+      (select a.nome, x.soma
+         from (select i->>'emusys_student_id' as sid,
+                      count(*) as n,
+                      sum(coalesce(nullif(i->'valores'->>'valor_pago','')::numeric,
+                                   nullif(i->'valores'->>'valor_hoje','')::numeric, 0)) as soma
+                 from jsonb_array_elements(v_env->'items') i
+                where coalesce(i->>'tipo_fatura','') = 'parcela'
+                  and coalesce(i->>'status','') = 'paga'
+                  and nullif(i->>'emusys_student_id','') is not null
+                  and (i->>'competencia')::date = date_trunc('month', v_hoje)::date
+                group by 1) x
+         join public.alunos a
+           on a.unidade_id = v_unidade and a.emusys_student_id = x.sid
+        where x.n = 1 and x.soma > 0
+        order by a.id
+        limit 1)) escolhidos;
 
   if v_itens is null or jsonb_array_length(v_itens) < 2 then
     raise exception 'FIXTURE AUSENTE: preciso de um aluno composto e um simples';

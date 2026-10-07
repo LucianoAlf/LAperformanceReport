@@ -18,15 +18,33 @@
 // então cobre os três casos acima sem depender de mensagem nenhuma.
 //
 // ESCOPO DE ESCRITA (deliberadamente estreito)
-// Toca `leads.meta_ad_source_id`, `leads.meta_ctwa_clid` e `leads.canal_origem_id` — cada um
-// só quando está VAZIO. Não empurra nada para o Emusys.
+// Toca `leads.meta_ad_source_id` e `leads.meta_ctwa_clid` direto no LA Report, cada um só quando
+// está VAZIO — o Emusys não tem campo para eles.
 //
-// Sobre `canal_origem_id`: o `upsert_lead` faz `COALESCE(v_canal_id, canal_origem_id)`, ou seja,
-// só sobrescreve quando o Emusys MANDA um canal; se vier vazio, o valor daqui é preservado.
-// Preencher aqui vale a pena: sem isso o lead recuperado pela varredura fica com o anúncio
-// identificado mas aparece como "sem origem" no funil — medido em 01/08, 6 dos 11 leads da
-// primeira execução ficaram nesse estado, contra 0/dia historicamente (o fluxo n8n em tempo real
-// grava os dois). O canal vem do `source_app` da conversa; se não soubermos mapear, não escreve.
+// ORIGEM (canal) VAI PELO EMUSYS desde a v25 (05/10/2026, decisão do Hugo, FISC-85): a varredura
+// NÃO grava mais `canal_origem_id`. Ela faz PATCH do "Como conheceu" no Emusys
+// (`/crm/leads/por_telefone`, só `numero` + `como_conheceu_id`), o Emusys dispara o webhook de lead
+// editado e o `upsert_lead` grava o canal — o mesmo caminho do curso preenchido pelo Jev. Assim
+// Emusys e LA Report contam a mesma origem.
+//
+// ⚠️ NÃO ATROPELAR (regra do Hugo): a varredura é a ÚLTIMA rede, só tapa buraco. Já marcam origem,
+// antes dela: o n8n 5lRs2UVCB9xl0RCP (grava no Emusys ~2 min após a mensagem pronta do anúncio), a
+// Mila (pergunta "como conheceu") e o consultor (palavra final). Por isso só envia quando TUDO vale:
+//   1. a conversa tem prova de anúncio e o app tem opção mapeada;
+//   2. o lead está sem canal no LA Report E nenhum webhook do Emusys trouxe origem para ele
+//      (`leads_automacao_log` evento 'emusys' com `detalhes.canal` preenchido) — cobre a opção do
+//      Emusys que não tem canal no LA Report, como "INDICAÇÃO ALUNO" da Barra;
+//   3. a conversa tem pelo menos ESPERA_ORIGEM_MIN minutos (dá tempo aos mecanismos acima).
+// Nunca troca origem preenchida. Cada envio/falha fica em `leads_automacao_log` (evento meta_ads).
+//
+// STATUS DO WHATSAPP (source_app = 'whatsapp'): é o anúncio do Instagram exibido no Status do
+// WhatsApp, sempre sem `ctwa_clid` e sem a mensagem pronta — o n8n nunca dispara para ele (0 de 7
+// na semana de 28/09). Vai para a opção "STATUS DO WHATSAPP" do Emusys (canal 13) e a conversa
+// ganha a etiqueta `status-whatsapp` no Chatwoot (merge: o POST /labels SUBSTITUI a lista).
+// ⚠️ Nunca mandar a opção "WHATSAPP" (26): o `upsert_lead` a traduz para Facebook.
+//
+// v26 (05/10/2026): telefone que é lead em mais de uma unidade desempata pela CAIXA de entrada
+// da conversa (`UNIDADE_POR_INBOX`), e o detalhe do log guarda `desempate_pela_caixa`.
 //
 // FIRST-TOUCH: a trava `meta_ad_source_id IS NULL` no UPDATE garante que, se o mesmo lead clicar
 // em dois anúncios ao longo do tempo, fica registrado o PRIMEIRO. A trava é aplicada na cláusula
@@ -44,17 +62,52 @@
 // ninguém notar. O cron deste job manda x-sync-token E Authorization, por precaução.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { autorizarEquipe } from '../_shared/equipeAuthorization.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const SYNC_ADMIN_TOKEN = Deno.env.get('SYNC_MATRICULAS_ADMIN_TOKEN')?.trim() || '';
 
-// `additional_attributes.source_app` -> canais_origem.id. Fora deste mapa não escrevemos canal:
-// preferimos deixar vazio a chutar a origem.
+// `additional_attributes.source_app` -> canais_origem.id. Fora deste mapa não enviamos origem:
+// preferimos deixar vazio a chutar.
 const CANAL_POR_SOURCE_APP: Record<string, number> = {
   instagram: 1,
   facebook: 2,
+  whatsapp: 13, // "Status do WhatsApp"
 };
+
+// Opção "Como conheceu" do Emusys para cada app. O `upsert_lead` traduz o nome de volta no canal
+// acima (INSTAGRAM->Instagram, FACEBOOK->Facebook, STATUS DO WHATSAPP->Status do WhatsApp).
+// ⚠️ O id é resolvido por NOME, por unidade, a cada execução: não é igual entre unidades
+// (STATUS DO WHATSAPP é 36 na Barra e 33 em CG e Recreio).
+const OPCAO_EMUSYS_POR_APP: Record<string, string> = {
+  instagram: 'INSTAGRAM',
+  facebook: 'FACEBOOK',
+  whatsapp: 'STATUS DO WHATSAPP',
+};
+
+const UNIDADES_EMUSYS: Record<string, { nome: string; tokenEnv: string }> = {
+  '2ec861f6-023f-4d7b-9927-3960ad8c2a92': { nome: 'Campo Grande', tokenEnv: 'EMUSYS_TOKEN_CG' },
+  '95553e96-971b-4590-a6eb-0201d013c14d': { nome: 'Recreio', tokenEnv: 'EMUSYS_TOKEN_RECREIO' },
+  '368d47f5-2d88-4475-bc14-ba084a9a348e': { nome: 'Barra', tokenEnv: 'EMUSYS_TOKEN_BARRA' },
+};
+
+// Caixa de entrada do Chatwoot -> unidade. Desempata o telefone que é lead em mais de uma
+// unidade (v26, 05/10/2026): medido, as 23 conversas "ambíguas" de 65 dias eram TODAS o mesmo
+// telefone em unidades diferentes. Caixa fora do mapa (ex.: ADM Recreio) mantém o comportamento
+// antigo: 2+ leads = não escolhe.
+const UNIDADE_POR_INBOX: Record<number, string> = {
+  155: '2ec861f6-023f-4d7b-9927-3960ad8c2a92', // Mila_CG
+  180: '2ec861f6-023f-4d7b-9927-3960ad8c2a92', // LA_Secretaria_CG
+  148: '95553e96-971b-4590-a6eb-0201d013c14d', // Mila_Recreio
+  168: '95553e96-971b-4590-a6eb-0201d013c14d', // LA_Secretaria_Recreio
+  147: '368d47f5-2d88-4475-bc14-ba084a9a348e', // Mila_Barra
+  179: '368d47f5-2d88-4475-bc14-ba084a9a348e', // LA_secretaria_Barra
+};
+
+const EMUSYS_API = 'https://api.emusys.com.br/v1';
+const ESPERA_ORIGEM_MIN = 60; // tempo dado ao n8n, à Mila e ao consultor antes de a varredura agir
+const ETIQUETA_STATUS = 'status-whatsapp';
 
 const DIAS_PADRAO = 3;   // sobreposição generosa: um órfão é re-tentado por 3 dias antes de desistir
 const DIAS_MAX = 60;     // teto para chamadas manuais de backfill
@@ -84,17 +137,59 @@ function candidatosTelefone(raw: string): string[] {
   return [...set];
 }
 
+// O Emusys espera DDD + número, sem o 55.
+function numeroEmusys(tel: string | null): string {
+  const d = (tel || '').replace(/\D/g, '');
+  return d.length > 11 && d.startsWith('55') ? d.slice(2) : d;
+}
+
+// Header `token` em minúsculas: o Emusys lê o nome exato (com `Token` responde "token invalido!").
+async function emusysReq(metodo: string, caminho: string, token: string, corpo?: unknown): Promise<unknown> {
+  const resp = await fetch(EMUSYS_API + caminho, {
+    method: metodo,
+    headers: {
+      token,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'User-Agent': 'lareport-varrer-atribuicao-meta-ads/26',
+    },
+    body: corpo === undefined ? undefined : JSON.stringify(corpo),
+  });
+  const txt = await resp.text();
+  if (!resp.ok) throw new Error(`HTTP ${resp.status} ${metodo} ${caminho}: ${txt.slice(0, 300)}`);
+  try {
+    return txt ? JSON.parse(txt) : null;
+  } catch {
+    throw new Error(`resposta não é JSON em ${metodo} ${caminho}: ${txt.slice(0, 200)}`);
+  }
+}
+
+// 25/09/2026: ate aqui bastava QUALQUER usuario logado (verify_jwt=false no gateway e a
+// chave anon e publica) — um professor autenticado disparava a varredura que grava em
+// leads.meta_ad_source_id/meta_ctwa_clid. Agora exige usuario ATIVO com perfil
+// admin/unidade, no mesmo padrao de enviar-mensagem-admin. Cron (x-sync-token) e
+// service_role seguem.
 async function validarAcesso(req: Request): Promise<Response | null> {
-  const syncToken = req.headers.get('x-sync-token')?.trim() || '';
-  if (SYNC_ADMIN_TOKEN && syncToken && syncToken === SYNC_ADMIN_TOKEN) return null;
-
-  const token = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
-  if (!token) return json({ ok: false, erro: 'nao autenticado' }, 401);
-  if (token === SUPABASE_SERVICE_ROLE_KEY) return null;
-
   const authClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-  const { data, error } = await authClient.auth.getUser(token);
-  if (error || !data.user) return json({ ok: false, erro: 'token invalido' }, 401);
+  const resultado = await autorizarEquipe(req, {
+    syncAdminToken: SYNC_ADMIN_TOKEN,
+    serviceRoleKey: SUPABASE_SERVICE_ROLE_KEY,
+    getUser: async (token) => {
+      const { data, error } = await authClient.auth.getUser(token);
+      return error || !data.user ? null : { id: data.user.id };
+    },
+    buscarUsuario: async (authUserId) => {
+      const { data } = await authClient
+        .from('usuarios')
+        .select('perfil, ativo')
+        .eq('auth_user_id', authUserId)
+        .maybeSingle();
+      return data;
+    },
+  });
+  if (resultado.ok === false) {
+    return json({ ok: false, erro: resultado.erro }, resultado.status);
+  }
   return null;
 }
 
@@ -176,7 +271,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── 2. Só as de anúncio, dentro da janela fina ──────────────────────────────
-    type Alvo = { conversaId: number; sourceId: string; ctwaClid: string | null; sourceApp: string | null; telefone: string; candidatos: string[]; criadaEm: number };
+    type Alvo = { conversaId: number; inboxId: number | null; sourceId: string; ctwaClid: string | null; sourceApp: string | null; telefone: string; candidatos: string[]; criadaEm: number };
     const alvos: Alvo[] = [];
     let semTelefone = 0;
 
@@ -198,6 +293,7 @@ Deno.serve(async (req: Request) => {
 
       alvos.push({
         conversaId: Number(c.id),
+        inboxId: typeof c.inbox_id === 'number' ? c.inbox_id : null,
         sourceId: sourceId!,
         ctwaClid,
         sourceApp: aa.source_app ? String(aa.source_app) : null,
@@ -212,7 +308,7 @@ Deno.serve(async (req: Request) => {
         ok: true, dry_run: dryRun,
         janela: { desde: new Date(desdeSeg * 1000).toISOString(), ate: new Date(ateSeg * 1000).toISOString(), dias },
         conversas_lidas: conversas.length, conversas_anuncio: 0,
-        vinculados: 0, canais_preenchidos: 0, ja_completos: 0, ambiguos: 0,
+        versao: 26, vinculados: 0, ja_completos: 0, ambiguos: 0,
         nao_encontrados: 0, sem_telefone: semTelefone,
         truncado,
       });
@@ -270,20 +366,76 @@ Deno.serve(async (req: Request) => {
       if (a.sourceApp && !appPorAnuncio.has(a.sourceId)) appPorAnuncio.set(a.sourceId, a.sourceApp);
     }
 
+    // ── 4c. Quem já recebeu origem pelo Emusys (regra "não atropelar") ─────────
+    //
+    // Canal vazio no LA Report não prova que o Emusys esteja vazio: o consultor pode ter marcado
+    // uma opção sem canal correspondente aqui (ex.: "INDICAÇÃO ALUNO" da Barra), e o `upsert_lead`
+    // então mantém o canal vazio. O log de cada webhook guarda o nome recebido em `detalhes.canal`.
+    const idsSemCanal = [...new Set([...porTelefone.values()].flat().filter(l => l.canal_origem_id === null).map(l => l.id))];
+    const origemNoEmusys = new Set<number>();
+    // ⚠️ O PostgREST corta em 1.000 linhas SEM avisar. Corte aqui = lead com origem no Emusys
+    // tratado como vazio = atropelar o consultor. Por isso o filtro vai no banco, o lote é pequeno
+    // e bater no teto derruba a rodada em vez de seguir com a lista incompleta.
+    for (let i = 0; i < idsSemCanal.length; i += 25) {
+      const { data, error } = await supabase
+        .from('leads_automacao_log')
+        .select('lead_id, canal:detalhes->>canal')
+        .eq('evento', 'emusys')
+        .in('lead_id', idsSemCanal.slice(i, i + 25))
+        .not('detalhes->>canal', 'is', null)
+        .neq('detalhes->>canal', '')
+        .limit(1000);
+      if (error) throw error;
+      if ((data ?? []).length >= 1000) throw new Error(`origem no Emusys: lote ${i} bateu 1.000 linhas, lista incompleta`);
+      for (const r of (data ?? []) as { lead_id: number; canal: string | null }[]) {
+        if (String(r.canal ?? '').trim()) origemNoEmusys.add(r.lead_id);
+      }
+    }
+
+    // Opções "Como conheceu" por unidade, lidas uma vez por execução e só se forem necessárias.
+    const opcoesPorUnidade = new Map<string, Map<string, number>>();
+    async function idOpcaoEmusys(unidadeId: string, nomeOpcao: string): Promise<number> {
+      const u = UNIDADES_EMUSYS[unidadeId];
+      const token = Deno.env.get(u.tokenEnv)?.trim();
+      if (!token) throw new Error(`segredo ${u.tokenEnv} ausente`);
+      if (!opcoesPorUnidade.has(unidadeId)) {
+        const r = await emusysReq('GET', '/crm/opcoes_como_conheceu', token) as { como_conheceu_opcoes?: { id: number; nome: string }[] } | null;
+        const lista = r?.como_conheceu_opcoes;
+        if (!Array.isArray(lista)) throw new Error(`opcoes_como_conheceu sem lista em ${u.nome}`);
+        opcoesPorUnidade.set(unidadeId, new Map(lista.map(o => [String(o.nome).trim().toUpperCase(), Number(o.id)])));
+      }
+      const id = opcoesPorUnidade.get(unidadeId)!.get(nomeOpcao);
+      if (!id) throw new Error(`opção "${nomeOpcao}" não existe no Emusys de ${u.nome}`);
+      return id;
+    }
+
     // ── 5. Decide e aplica ─────────────────────────────────────────────────────
-    let vinculados = 0, canaisPreenchidos = 0, jaCompletos = 0, ambiguos = 0, naoEncontrados = 0;
-    let appInferidos = 0;
+    let vinculados = 0, jaCompletos = 0, ambiguos = 0, naoEncontrados = 0;
+    let appInferidos = 0, desempatesPelaCaixa = 0;
+    let origensEnviadas = 0, origensFalhas = 0, origensAguardando = 0, origensEmusysJaTinha = 0, origensJaEnviadas = 0, origensSemUnidade = 0;
     const pendentesRevisao: { conversa_id: number; telefone: string; lead_ids: number[] }[] = [];
+    const planejado: Record<string, unknown>[] = [];
+    const tocados: { lead_id: number; acao: string }[] = [];
     const logs: Record<string, unknown>[] = [];
+    const conversasStatus: number[] = [];
 
     for (const a of alvos) {
       const encontrados = a.candidatos.flatMap(c => porTelefone.get(c) ?? []);
-      const unicos = [...new Map(encontrados.map(l => [l.id, l])).values()];
+      const todosDoTelefone = [...new Map(encontrados.map(l => [l.id, l])).values()];
+      // Mesmo telefone em 2+ unidades: fica só o lead da unidade da caixa onde a conversa entrou.
+      // Sem isso a varredura recusava (ambíguo) ou, quando só o lead da OUTRA unidade estava
+      // incompleto, gravava o anúncio no cadastro errado.
+      const unidadeDaCaixa = a.inboxId != null ? UNIDADE_POR_INBOX[a.inboxId] ?? null : null;
+      const daUnidade = unidadeDaCaixa ? todosDoTelefone.filter(l => l.unidade_id === unidadeDaCaixa) : [];
+      const desempatouPelaCaixa = todosDoTelefone.length > 1 && daUnidade.length >= 1 && daUnidade.length < todosDoTelefone.length;
+      const unicos = desempatouPelaCaixa ? daUnidade : todosDoTelefone;
       // App da conversa; se veio vazio, cai no app conhecido do MESMO anúncio (ver 4b).
       const appInferido = !a.sourceApp ? appPorAnuncio.get(a.sourceId) ?? null : null;
-      const sourceAppEfetivo = a.sourceApp ?? appInferido;
-      const canalId = sourceAppEfetivo ? CANAL_POR_SOURCE_APP[sourceAppEfetivo.toLowerCase()] ?? null : null;
+      const sourceAppEfetivo = (a.sourceApp ?? appInferido)?.toLowerCase() ?? null;
+      const canalId = sourceAppEfetivo ? CANAL_POR_SOURCE_APP[sourceAppEfetivo] ?? null : null;
       if (appInferido && canalId !== null) appInferidos++;
+      if (sourceAppEfetivo === 'whatsapp') conversasStatus.push(a.conversaId);
+      if (desempatouPelaCaixa) desempatesPelaCaixa++;
 
       // "Incompleto" = falta a atribuição OU falta o canal de origem (quando sabemos mapeá-lo).
       // O critério é esse, e não só a atribuição, porque um lead já atribuído pelo fluxo n8n
@@ -305,6 +457,8 @@ Deno.serve(async (req: Request) => {
         canal_origem_id: canalId,
         conversa_criada_em: new Date(a.criadaEm * 1000).toISOString(),
         matches: unicos.length,
+        inbox_id: a.inboxId,
+        desempate_pela_caixa: desempatouPelaCaixa ? { leads_do_telefone: todosDoTelefone.map(l => l.id), ficou: unicos.map(l => l.id) } : null,
       };
 
       // (a) nenhum lead com esse telefone — órfão; re-tentado enquanto estiver na janela
@@ -341,18 +495,44 @@ Deno.serve(async (req: Request) => {
       // (d) exatamente 1 lead incompleto — preenche o que falta nele
       const alvo = incompletos[0];
       const gravaAtribuicao = !alvo.meta_ad_source_id;
-      const gravaCanal = canalId !== null && alvo.canal_origem_id === null;
+      const faltaCanal = canalId !== null && alvo.canal_origem_id === null;
+      const opcaoEmusys = sourceAppEfetivo ? OPCAO_EMUSYS_POR_APP[sourceAppEfetivo] ?? null : null;
+
+      // Decisão da origem — cada motivo de NÃO enviar é contado e devolvido (carimbo).
+      let decisaoOrigem: string | null = null;
+      if (faltaCanal) {
+        const idadeMin = (agoraSeg - a.criadaEm) / 60;
+        if (!opcaoEmusys) decisaoOrigem = 'sem_opcao_emusys';
+        else if (origemNoEmusys.has(alvo.id)) decisaoOrigem = 'emusys_ja_tem_origem';
+        else if (jaLogado.has(`${a.conversaId}:origem_enviada_emusys`)) decisaoOrigem = 'ja_enviada_aguardando_webhook';
+        else if (idadeMin < ESPERA_ORIGEM_MIN) decisaoOrigem = 'aguardando_outros_mecanismos';
+        else if (!alvo.unidade_id || !UNIDADES_EMUSYS[alvo.unidade_id]) decisaoOrigem = 'unidade_sem_emusys';
+        else decisaoOrigem = 'enviar';
+      }
+      if (decisaoOrigem === 'emusys_ja_tem_origem') origensEmusysJaTinha++;
+      if (decisaoOrigem === 'ja_enviada_aguardando_webhook') origensJaEnviadas++;
+      if (decisaoOrigem === 'aguardando_outros_mecanismos') origensAguardando++;
+      if (decisaoOrigem === 'unidade_sem_emusys' || decisaoOrigem === 'sem_opcao_emusys') origensSemUnidade++;
 
       if (dryRun) {
         if (gravaAtribuicao) vinculados++;
-        if (gravaCanal) canaisPreenchidos++;
+        let opcaoId: number | string | null = null;
+        if (decisaoOrigem === 'enviar') {
+          // Leitura só (GET): mostra o id que seria enviado, e já denuncia opção faltando.
+          try { opcaoId = await idOpcaoEmusys(alvo.unidade_id!, opcaoEmusys!); } catch (e) { opcaoId = `ERRO: ${e instanceof Error ? e.message : e}`; }
+        }
+        planejado.push({
+          lead_id: alvo.id, nome: alvo.nome, unidade: alvo.unidade_id ? UNIDADES_EMUSYS[alvo.unidade_id]?.nome ?? alvo.unidade_id : null,
+          conversa_id: a.conversaId, app: sourceAppEfetivo, app_inferido: !!appInferido,
+          grava_atribuicao: gravaAtribuicao, origem: decisaoOrigem, opcao_emusys: opcaoEmusys, opcao_id: opcaoId,
+          desempate_pela_caixa: desempatouPelaCaixa ? todosDoTelefone.map(l => l.id) : null,
+        });
         continue;
       }
 
-      let mexeu = false;
-
       // Atribuição do anúncio. A trava IS NULL fica no WHERE do UPDATE (first-touch, segura
       // mesmo com duas execuções cruzadas). 0 linhas = outra execução chegou antes.
+      let vinculouAgora = false;
       if (gravaAtribuicao) {
         const { data: upd, error: upErr } = await supabase
           .from('leads')
@@ -361,34 +541,77 @@ Deno.serve(async (req: Request) => {
           .is('meta_ad_source_id', null)
           .select('id');
         if (upErr) throw upErr;
-        if (upd && upd.length > 0) { vinculados++; mexeu = true; }
+        if (upd && upd.length > 0) { vinculados++; vinculouAgora = true; }
+      }
+      if (vinculouAgora) {
+        tocados.push({ lead_id: alvo.id, acao: 'vinculado' });
+        logs.push({
+          lead_nome: alvo.nome ?? '(sem nome)', lead_id: alvo.id, unidade_nome: alvo.unidade_id,
+          evento: 'meta_ads', acao: 'vinculado',
+          detalhes: { ...detalhesBase, acao_varredura: 'vinculado', gravou_atribuicao: true, decisao_origem: decisaoOrigem },
+        });
       }
 
-      // Canal de origem, em UPDATE separado: as duas travas IS NULL são independentes, e num
-      // update só a que já estivesse preenchida bloquearia a gravação da outra.
-      if (gravaCanal) {
-        const { data: upd, error: canalErr } = await supabase
-          .from('leads')
-          .update({ canal_origem_id: canalId })
-          .eq('id', alvo.id)
-          .is('canal_origem_id', null)
-          .select('id');
-        if (canalErr) throw canalErr;
-        if (upd && upd.length > 0) { canaisPreenchidos++; mexeu = true; }
+      // Origem pelo Emusys. Falha NÃO derruba a varredura: fica no log com o erro original e a
+      // próxima rodada (de hora em hora, por DIAS_PADRAO dias) tenta de novo.
+      if (decisaoOrigem === 'enviar') {
+        try {
+          const opcaoId = await idOpcaoEmusys(alvo.unidade_id!, opcaoEmusys!);
+          const token = Deno.env.get(UNIDADES_EMUSYS[alvo.unidade_id!].tokenEnv)!.trim();
+          const r = await emusysReq('PATCH', '/crm/leads/por_telefone', token, {
+            numero: numeroEmusys(alvo.telefone), como_conheceu_id: opcaoId,
+          }) as { status?: number } | null;
+          if (!r || r.status !== 200) throw new Error(`resposta inesperada do PATCH: ${JSON.stringify(r).slice(0, 200)}`);
+          origensEnviadas++;
+          tocados.push({ lead_id: alvo.id, acao: 'origem_enviada_emusys' });
+          logs.push({
+            lead_nome: alvo.nome ?? '(sem nome)', lead_id: alvo.id, unidade_nome: alvo.unidade_id,
+            evento: 'meta_ads', acao: 'origem_enviada_emusys',
+            detalhes: { ...detalhesBase, acao_varredura: 'origem_enviada_emusys', opcao_emusys: opcaoEmusys, opcao_id: opcaoId },
+          });
+        } catch (e) {
+          origensFalhas++;
+          const erro = e instanceof Error ? e.message : String(e);
+          console.error(`[varrer-meta-ads] lead ${alvo.id} (conversa ${a.conversaId}): origem não enviada ao Emusys: ${erro}`);
+          logs.push({
+            lead_nome: alvo.nome ?? '(sem nome)', lead_id: alvo.id, unidade_nome: alvo.unidade_id,
+            evento: 'meta_ads', acao: 'origem_falhou_emusys',
+            detalhes: { ...detalhesBase, acao_varredura: 'origem_falhou_emusys', opcao_emusys: opcaoEmusys, erro },
+          });
+        }
       }
 
-      if (!mexeu) { jaCompletos++; continue; }
+      if (!vinculouAgora && decisaoOrigem !== 'enviar') jaCompletos++;
+    }
 
-      logs.push({
-        lead_nome: alvo.nome ?? '(sem nome)', lead_id: alvo.id, unidade_nome: alvo.unidade_id,
-        evento: 'meta_ads', acao: gravaAtribuicao ? 'vinculado' : 'canal_preenchido',
-        detalhes: {
-          ...detalhesBase,
-          acao_varredura: gravaAtribuicao ? 'vinculado' : 'canal_preenchido',
-          gravou_atribuicao: gravaAtribuicao,
-          gravou_canal: gravaCanal,
-        },
-      });
+    // ── 6. Etiqueta `status-whatsapp` nas conversas do Status (merge, nunca substitui) ──
+    let etiquetasStatus = 0, etiquetasJaTinham = 0;
+    const etiquetasFalhas: { conversa_id: number; erro: string }[] = [];
+    const etiquetadas: number[] = [];
+    for (const cid of [...new Set(conversasStatus)]) {
+      if (dryRun) { etiquetasStatus++; continue; }
+      try {
+        const urlLabels = `${baseUrl}/api/v1/accounts/${accountId}/conversations/${cid}/labels`;
+        const g = await fetch(urlLabels, { headers });
+        if (!g.ok) throw new Error(`GET labels ${g.status}: ${(await g.text().catch(() => '')).slice(0, 200)}`);
+        const atuais: string[] = ((await g.json())?.payload ?? []).map((x: unknown) => String(x));
+        if (atuais.includes(ETIQUETA_STATUS)) { etiquetasJaTinham++; continue; }
+        const p = await fetch(urlLabels, { method: 'POST', headers, body: JSON.stringify({ labels: [...atuais, ETIQUETA_STATUS] }) });
+        if (!p.ok) throw new Error(`POST labels ${p.status}: ${(await p.text().catch(() => '')).slice(0, 200)}`);
+        etiquetasStatus++;
+        etiquetadas.push(cid);
+      } catch (e) {
+        const erro = e instanceof Error ? e.message : String(e);
+        console.error(`[varrer-meta-ads] conversa ${cid}: etiqueta ${ETIQUETA_STATUS} não gravada: ${erro}`);
+        etiquetasFalhas.push({ conversa_id: cid, erro });
+        if (!jaLogado.has(`${cid}:etiqueta_falhou`)) {
+          logs.push({
+            lead_nome: '(conversa)', lead_id: null, unidade_nome: null,
+            evento: 'meta_ads', acao: 'etiqueta_falhou',
+            detalhes: { origem: 'varredura', chatwoot_conversation_id: cid, acao_varredura: 'etiqueta_falhou', etiqueta: ETIQUETA_STATUS, erro },
+          });
+        }
+      }
     }
 
     if (!dryRun && logs.length > 0) {
@@ -398,21 +621,33 @@ Deno.serve(async (req: Request) => {
 
     const resumo = {
       ok: true,
+      versao: 26,
       dry_run: dryRun,
       janela: { desde: new Date(desdeSeg * 1000).toISOString(), ate: new Date(ateSeg * 1000).toISOString(), dias },
       conversas_lidas: conversas.length,
       conversas_anuncio: alvos.length,
       vinculados,
-      canais_preenchidos: canaisPreenchidos,
       canais_por_app_inferido: appInferidos,
+      desempates_pela_caixa: desempatesPelaCaixa,
+      origens: {
+        enviadas_emusys: origensEnviadas,
+        falhas: origensFalhas,
+        emusys_ja_tinha: origensEmusysJaTinha,
+        ja_enviadas_aguardando_webhook: origensJaEnviadas,
+        aguardando_outros_mecanismos: origensAguardando,
+        sem_unidade_ou_opcao: origensSemUnidade,
+      },
+      etiqueta_status: { gravadas: etiquetasStatus, ja_tinham: etiquetasJaTinham, falhas: etiquetasFalhas, conversas: etiquetadas },
       ja_completos: jaCompletos,
       ambiguos,
       nao_encontrados: naoEncontrados,
       sem_telefone: semTelefone,
       pendentes_revisao: pendentesRevisao,
+      tocados,
+      ...(dryRun ? { planejado } : {}),
       truncado,
     };
-    console.log('[varrer-meta-ads]', JSON.stringify({ ...resumo, pendentes_revisao: pendentesRevisao.length }));
+    console.log('[varrer-meta-ads]', JSON.stringify({ ...resumo, pendentes_revisao: pendentesRevisao.length, planejado: planejado.length }));
     return json(resumo);
   } catch (e) {
     console.error('[varrer-atribuicao-meta-ads]', e);
