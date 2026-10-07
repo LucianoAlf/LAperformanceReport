@@ -11,6 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getStatusPagamentoOperacional, isMatriculaAtivaParaInadimplencia } from '@/lib/alunosStatus';
 import { rotuloDeQuem, rotuloDeQuemCurto, nomeDoContato, explicarEstadoComunidade, rotuloEstadoComunidade } from '@/lib/comunidadeWaContato';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { SONORAMENTE_ICONE_URL, DESTINO_SONORAMENTE } from '@/lib/sonoramente';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 import { useToast } from '@/hooks/useToast';
 import { ModalFichaAluno } from './ModalFichaAluno';
@@ -1732,6 +1733,7 @@ export function TabelaAlunos({
               <SelectItem value="trancado">Trancado</SelectItem>
               <SelectItem value="inativo">Inativo</SelectItem>
               <SelectItem value="evadido">Evadido</SelectItem>
+              <SelectItem value={DESTINO_SONORAMENTE}>Sonoramente</SelectItem>
             </SelectContent>
           </Select>
 
@@ -2295,7 +2297,8 @@ export function TabelaAlunos({
             {alunosPaginados.map((aluno, index) => (
               <React.Fragment key={aluno.id}>
                 <tr
-                  className="transition hover:bg-slate-700/30"
+                  className={`transition hover:bg-slate-700/30 ${aluno.transferido_sonoramente_em ? 'opacity-50 hover:opacity-80' : ''}`}
+                  title={aluno.transferido_sonoramente_em ? 'Transferido para o Sonoramente' : undefined}
                 >
                   {/* Checkbox de seleção */}
                   <td className="px-2 py-3">
@@ -2350,6 +2353,14 @@ export function TabelaAlunos({
                       >
                         {aluno.nome || '-'}
                       </button>
+                      {aluno.transferido_sonoramente_em && (
+                        <Tooltip content={`Transferido para o Sonoramente em ${new Date(`${aluno.transferido_sonoramente_em}T00:00:00`).toLocaleDateString('pt-BR')}. Nao conta como evasao.`}>
+                          <span className="flex items-center gap-1 rounded-full bg-violet-500/20 px-2 py-0.5 text-xs font-medium text-violet-200 flex-shrink-0">
+                            <img src={SONORAMENTE_ICONE_URL} alt="Sonoramente" className="h-3.5 w-3.5 rounded-sm" />
+                            Sonoramente
+                          </span>
+                        </Tooltip>
+                      )}
                       {getBadgeAnamnese(aluno)}
                       {/* Badge de múltiplos cursos */}
                       {aluno.outros_cursos && aluno.outros_cursos.length > 0 && (

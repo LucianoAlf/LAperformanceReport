@@ -8,11 +8,19 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AutocompleteAluno, type Aluno } from '@/components/ui/AutocompleteAluno';
 import { supabase } from '@/lib/supabase';
+import {
+  DESTINO_SONORAMENTE,
+  SONORAMENTE_ICONE_URL,
+  SONORAMENTE_NOME,
+  type DestinoExterno,
+} from '@/lib/sonoramente';
 
 export interface TransferenciaPayload {
   aluno: Aluno;
   unidadeOrigemId: string;
+  /** Vazio quando o destino é externo (Sonoramente). */
   unidadeDestinoId: string;
+  destinoExterno?: DestinoExterno;
   dataTransferencia: string;
   observacao?: string;
 }
@@ -88,16 +96,20 @@ export function ModalTransferencia({
     }
   }
 
+  const destinoSonoramente = unidadeDestinoId === DESTINO_SONORAMENTE;
+  const destinoInvalido = !destinoSonoramente && unidadeOrigemId === unidadeDestinoId;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!alunoSelecionado || !unidadeOrigemId || !unidadeDestinoId || !dataTransferencia) return;
-    if (unidadeOrigemId === unidadeDestinoId) return;
+    if (destinoInvalido) return;
 
     setLoading(true);
     const sucesso = await onSave({
       aluno: alunoSelecionado,
       unidadeOrigemId,
-      unidadeDestinoId,
+      unidadeDestinoId: destinoSonoramente ? '' : unidadeDestinoId,
+      destinoExterno: destinoSonoramente ? DESTINO_SONORAMENTE : undefined,
       dataTransferencia,
       observacao: observacao.trim() || undefined,
     });
@@ -123,8 +135,9 @@ export function ModalTransferencia({
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-4">
             <p className="text-sm text-sky-200">
-              Registra a transferencia interna com origem e destino. A unidade de origem nao perde
-              aluno por evasao e a unidade de destino nao ganha matricula nova comercial.
+              {destinoSonoramente
+                ? 'Para o Sonoramente: escolha o aluno que saiu da unidade (ele chega evadido do Emusys). Ele continua na Lista de Alunos, apagado e com o icone do Sonoramente, e a saida nao conta como evasao nem churn.'
+                : 'Registra a transferencia interna com origem e destino. A unidade de origem nao perde aluno por evasao e a unidade de destino nao ganha matricula nova comercial.'}
             </p>
           </div>
 
@@ -192,12 +205,18 @@ export function ModalTransferencia({
                       {unidade.codigo} - {unidade.nome}
                     </SelectItem>
                   ))}
+                  <SelectItem value={DESTINO_SONORAMENTE}>
+                    <span className="flex items-center gap-2">
+                      <img src={SONORAMENTE_ICONE_URL} alt="" className="h-4 w-4 rounded" />
+                      {SONORAMENTE_NOME}
+                    </span>
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
 
-          {unidadeOrigemId && unidadeDestinoId && unidadeOrigemId === unidadeDestinoId && (
+          {unidadeOrigemId && unidadeDestinoId && destinoInvalido && (
             <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
               Origem e destino precisam ser unidades diferentes.
             </div>
@@ -230,11 +249,15 @@ export function ModalTransferencia({
               || !unidadeOrigemId
               || !unidadeDestinoId
               || !dataTransferencia
-              || unidadeOrigemId === unidadeDestinoId
+              || destinoInvalido
             }
             className="w-full bg-gradient-to-r from-sky-500 to-blue-500 hover:from-sky-400 hover:to-blue-400"
           >
-            {loading ? 'Salvando...' : 'Registrar transferencia interna'}
+            {loading
+              ? 'Salvando...'
+              : destinoSonoramente
+              ? 'Registrar transferencia para o Sonoramente'
+              : 'Registrar transferencia interna'}
           </Button>
         </form>
       </DialogContent>

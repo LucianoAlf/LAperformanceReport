@@ -488,6 +488,7 @@ Evasão = movimentacoes_admin.tipo IN ('evasao', 'nao_renovacao')
 - **Aviso prévio NÃO é evasão.**
 - **Trancamento NÃO é evasão.**
 - **Transferência interna entre unidades NÃO é evasão nem churn global da LA Music.** Para análise por unidade pode aparecer como saída da origem e entrada no destino, mas separada de evasão.
+- **Transferência para o Sonoramente (núcleo de inclusão, fora do Emusys) também NÃO é evasão nem churn** (07/10/2026). O aluno chega evadido da unidade; a equipe registra em Administrativo → card "Transferência" com destino **Sonoramente**. A unidade perde o aluno da base ativa, mas a saída fica com `tipo_evasao='transferencia'`, sai de evasão/churn (KPI ao vivo, `dados_mensais`, pesquisa de evasão, score do professor) e o aluno segue na Lista de Alunos apagado, com o ícone do Sonoramente. Fonte única: `movimentacao_saida_e_transferencia_v1`.
 - **Deduplicação:** `DISTINCT ON (lower(trim(aluno_nome)), unidade_id, ano, mês)`.
 - **Saída automática do Emusys é por matrícula, não por nome/mês:** o writer usa
   `(unidade_id, emusys_matricula_id)` e grava `origem_registro='webhook_emusys'`.
