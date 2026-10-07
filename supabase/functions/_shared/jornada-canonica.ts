@@ -26,6 +26,9 @@ export interface JornadaDisciplinaInput {
 export interface JornadaMatriculaInput {
   unidadeId: string;
   fonte: string;
+  // Campo curto, permitido no feed operacional. Diferente de `raw`, nunca
+  // replica observacoes livres nem o payload completo do webhook.
+  alteracaoDescricaoEmusys?: string | null;
   statusMatricula: string | null;
   estadoEmusysPresente: boolean;
   lifecycle: EmusysMatriculaLifecycleResolution | null;
@@ -109,6 +112,16 @@ function textOrNull(value: unknown): string | null {
   if (value == null) return null;
   const text = String(value).trim();
   return text.length > 0 ? text : null;
+}
+
+function descricaoOperacionalOuNula(value: unknown): string | null {
+  const texto = textOrNull(value);
+  if (texto == null) return null;
+
+  // O Emusys entrega a descricao em HTML. A projecao operacional so leva texto
+  // curto; nao repassa markup ao app ou ao WhatsApp.
+  const semHtml = texto.replace(/<[^>]*>/gu, ' ').replace(/\s+/gu, ' ').trim();
+  return semHtml.length > 0 ? semHtml.slice(0, 500) : null;
 }
 
 function hasOwn(value: unknown, key: string): boolean {
@@ -205,6 +218,15 @@ function buildLifecycleFields(input: JornadaMatriculaInput): Record<string, unkn
   };
 }
 
+function buildAlteracaoFields(input: JornadaMatriculaInput): Record<string, unknown> {
+  // Um GET de reconciliação posterior não pode apagar a descrição que veio no
+  // webhook. Ela só é escrita quando o evento original foi matrícula alterada.
+  if (!input.fonte.startsWith('webhook:matricula_alterada')) return {};
+  return {
+    alteracao_descricao_emusys: input.alteracaoDescricaoEmusys ?? null,
+  };
+}
+
 function calcularProximaAula(passadas: number | null, futuras: number | null): number | null {
   if (passadas == null) return null;
   if ((futuras ?? 0) <= 0) return null;
@@ -264,6 +286,9 @@ export function buildJornadaInputFromWebhook(
   return {
     unidadeId,
     fonte,
+    alteracaoDescricaoEmusys: fonte.startsWith('webhook:matricula_alterada')
+      ? descricaoOperacionalOuNula(body?.alteracao?.descricao)
+      : null,
     statusMatricula: textOrNull(matricula.status ?? body?.evento),
     estadoEmusysPresente: lifecycle.presente,
     lifecycle: lifecycle.resolution,
@@ -299,6 +324,7 @@ export function buildJornadaInputFromMatriculaApi(
   return {
     unidadeId,
     fonte,
+    alteracaoDescricaoEmusys: null,
     statusMatricula: textOrNull(mat.status ?? contrato.status),
     estadoEmusysPresente: lifecycle.presente,
     lifecycle: lifecycle.resolution,
@@ -441,6 +467,7 @@ export function buildJornadaRowsForUpsert(
           ? buildLifecycleFields(input)
           : {}
       ),
+      ...buildAlteracaoFields(input),
       qtd_contratos: input.qtdContratos,
       nr_faturas: input.nrFaturas,
       data_primeira_fatura: input.dataPrimeiraFatura,
@@ -513,6 +540,7 @@ export async function upsertJornadaMatriculaDisciplina(
           ? buildLifecycleFields(input)
           : {}
       ),
+      ...buildAlteracaoFields(input),
       qtd_contratos: input.qtdContratos,
       ...buildContratoFields(input),
       nr_aulas_contratadas: disciplina.nrAulasContratadas,

@@ -44,7 +44,7 @@ test('interrupcao permanece evadido e evasao', () => {
 
 test('finalizacao ambigua somente registra auditoria', () => {
   const handler = source.match(
-    /async function handleFinalizacaoAmbigua[\s\S]*?\n}\n\nasync function/,
+    /async function handleFinalizacaoAmbigua[\s\S]*?\r?\n}\r?\n\r?\nasync function/,
   )?.[0] ?? '';
 
   assert.ok(handler, 'handler de finalizacao ambigua nao localizado');
