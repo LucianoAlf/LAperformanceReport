@@ -341,7 +341,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_experimental_recado_seguro(p_texto text)` | SO-INTERNA | INVOKER | funcao:app_experimental_do_professor |
 | `fn_experimental_recebe_id_da_aula()` | ATIVA | INVOKER | edge:supabase/functions/debug-webhook-emusys-observador/index.ts, trigger:aula_alunos_emusys.trg_experimental_recebe_id_da_aula |
 | `fn_experimental_tem_registro(p_aula_local_id bigint)` | SO-INTERNA | DEFINER | funcao:app_minha_agenda_sessao_canonica_v2, funcao:fn_sessao_tem_registro |
-| `fn_lead_estado_pauta_v1(p_lead_id bigint)` | SO-INTERNA | DEFINER | funcao:radar_detectar_sinais_comercial_v1 |
+| `fn_lead_estado_pauta_v1(p_lead_id bigint)` | SO-INTERNA | DEFINER | funcao:radar_detectar_sinais_comercial_v1, funcao:registrar_espelho_chatwoot_v1 |
 | `fn_matriculas_trancadas_do_professor(p_professor_id integer)` | SO-INTERNA | INVOKER | funcao:fabio_contexto_professor |
 | `fn_normalizar_telefone_br_key(p_telefone text)` | ATIVA | INVOKER | front:src/lib/eventos.ts, edge:supabase/functions/sincronizar-comunidade-whatsapp/index.ts, view:vw_jornada_lead_v1, funcao:aluno_comunidade_estado_v1, funcao:buscar_anamneses_pendentes, funcao:exec_normalizar_telefone_atendimento, +6 outros |
 | `fn_propagar_professor_experimental()` | ATIVA | DEFINER | trigger:lead_experimentais.trg_propagar_professor_experimental |
@@ -753,7 +753,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `sol_porta_relatorio_mensal_v1(p_solicitante_telefone text, p_unidade text, p_ano integer, p_mes integer, p_aluno text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `toggle_relatorio_comercial_cron(p_unidade_id uuid, p_ativo boolean)` | ATIVA | DEFINER | front:src/components/App/Comercial/ComercialPage.tsx |
 | `toggle_relatorio_cron(p_unidade_id uuid, p_ativo boolean)` | ATIVA | DEFINER | front:src/components/App/Administrativo/ModalRelatorio.tsx |
-| `trafego_meta_retorno_pixel(p_dias integer)` | ORFA | DEFINER | sem consumidor conhecido |
+| `trafego_meta_retorno_pixel(p_dias integer)` | ATIVA | DEFINER | front:src/components/App/TrafegoPago/SecaoRetornoPixel.tsx |
 | `trg_atualiza_projecao_por_presenca()` | ATIVA | DEFINER | trigger:aluno_presenca.trg_atualiza_projecao_por_presenca |
 | `trg_materializar_projecao_jornada()` | ATIVA | DEFINER | trigger:aluno_jornada_matricula_disciplina.trg_materializar_projecao_jornada |
 | `update_insights_salvos_timestamp()` | ATIVA | INVOKER | trigger:insights_salvos.trigger_update_insights_salvos_timestamp |

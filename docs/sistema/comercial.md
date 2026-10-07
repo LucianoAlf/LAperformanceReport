@@ -119,3 +119,5 @@ o total fecha **exato** contra a soma das campanhas. Não é bug; não "conserta
 
 ⚠️ A aba do Meta **só consulta quando está à vista** (`plataforma !== 'meta'` sai do efeito):
 cada chamada custa requisição na Graph API.
+
+**Espelho do Chatwoot no lead (06/10/2026, `20261006235201`).** `registrar_espelho_chatwoot_v1` (script `varrer-conversas-chatwoot.py` da la-hq, ~40 min) passou a gravar só o lead cujo espelho mudou — ou que está há mais de 6 h sem renovar (a pauta `fn_lead_estado_pauta_v1` trata espelho com mais de 2 dias como "não sei") — num único `UPDATE` por chamada. Antes regravava todo lead do lote a cada rodada (15.799 updates em 2 dias contra ~600 mudanças reais), cada um com linha de `audit_log` e invalidação dos caches do Comercial. Casamento por telefone calculado uma vez por chamada: 1,2 s → 0,25 s. Estado final idêntico ao da versão antiga (teste em transação desfeita, 200 leads). Retorno ganhou `gravados`; `tocados` mantém o sentido.
