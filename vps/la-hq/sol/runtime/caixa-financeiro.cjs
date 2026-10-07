@@ -1197,6 +1197,21 @@ function montarPreview({ unidadeNome, valor, forma, categoria, aluno, competenci
   return blocos.map(formatarBloco).join('\n\n');
 }
 
+// RASTRO DE QUEM PEDIU E QUEM APROVOU (28/09/2026, pedido do Alfredo). O card
+// mostra quem pediu; o ledger V3 da aprovação guarda os dois e marca
+// "autoaprovado" quando é a mesma pessoa — SEM bloquear (decisão do Alf).
+function _idPessoaCaixa(x) {
+  const d = String(x || '').replace(/@.*/, '').replace(/\D/g, '');
+  return d.length >= 8 ? d.slice(-11) : null;
+}
+function comPedidoPor(texto, nome) {
+  const t = String(texto || '');
+  if (!nome || /Pedido por:/.test(t)) return t;
+  const linha = `_Pedido por: ${String(nome).replace(/[_*]/g, '').slice(0, 60)}_`;
+  const i = t.lastIndexOf('\n👉');
+  return i >= 0 ? t.slice(0, i) + '\n' + linha + t.slice(i) : t + '\n\n' + linha;
+}
+
 function montarPreviewMultiAluno({ unidadeNome, valorTotal, forma, categoria, itens }) {
   const lista = Array.isArray(itens) ? itens : [];
   // Adiantamento declarado (SOL-134, 29/09/2026) é item sem fatura por definição,
@@ -4085,6 +4100,11 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   async function registrarPreviewPublicoV3({ event, grupo, previewId, texto, pendencia, result,
     previewStatus = 'public_preview_sent', previewHashFixo = null,
     publicPreviewSent = true, eventStatus = 'public_preview_sent', mode = 'v3_production_public_preview' }) {
+    // Quem pediu fica na pendência desde o 1º registro (remontagem não troca).
+    if (pendencia && event && !pendencia.autorPhone && !pendencia.autorId) {
+      pendencia.autorPhone = event.senderPhone || null;
+      pendencia.autorId = event.senderId || null;
+    }
     if (!v3LedgerAtivo) return null;
     const previewJson = {
       public_preview_sent: !!publicPreviewSent,
@@ -4173,6 +4193,14 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     await governance(event, 'approval_observed', { preview_ref: alvo.v3PreviewId, action: decision, outcome: 'pending' });
     const approvalEventHash = sha256(event.messageId);
     const actorIdHash = sha256(event.senderId || event.senderPhone || '');
+    const _pedinte = _idPessoaCaixa(alvo.autorPhone || alvo.autorId);
+    const _aprovador = _idPessoaCaixa(event.senderPhone || event.senderId);
+    // null = não sei quem pediu (pendência antiga/reidratada sem autor): não afirma.
+    const _autoaprovado = _pedinte && _aprovador ? _pedinte === _aprovador : null;
+    if (decision === 'approved' && _autoaprovado === true) {
+      log({ acao: 'autoaprovado', chatId: event.chatId, pedido_por: alvo.enviadoPor || null,
+        valor: alvo.valor || null, categoria: alvo.categoria || null });
+    }
     const payload = {
       preview_id: alvo.v3PreviewId,
       approval_event_hash: approvalEventHash,
@@ -4180,6 +4208,10 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       decision,
       decision_json: {
         source: 'sol_caixa_whatsapp_production',
+        pedido_por: alvo.enviadoPor || null,
+        requester_id_hash: _pedinte ? sha256(_pedinte) : null,
+        aprovador_id_hash: _aprovador ? sha256(_aprovador) : null,
+        autoaprovado: _autoaprovado,
         message_id_sha256: sha256(event.messageId),
         chat_id_hash: md5(event.chatId),
         preview_message_id: alvo.previewId || null,
@@ -5199,6 +5231,7 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
   async function prepararEPublicarPreviewV4({ event, grupo, texto, pendencia, result, previewStatus }) {
     if (!v3LedgerAtivo) return { ok: false, motivo: 'v3_indisponivel' };
     _carimbarAutor(pendencia, event);
+    texto = comPedidoPor(texto, pendencia && pendencia.enviadoPor);
     const origem = pendencia.origem || event.messageId;
     const previewHash = sha256(JSON.stringify({
       tipo: pendencia.tipoOperacao || 'lancamento_singular', chat: md5(event.chatId),
@@ -7978,6 +8011,7 @@ _Não lanço nada pela metade._`);
         return { acao: 'midia_adiada_legenda_tardia' };
       }
       let texto = montarPreview({ unidadeNome: grp.nome, valor, forma, categoria, aluno, competencia, parcela, confiancaBaixa, alunoNovoOrigem, responsavelFinanceiro, formaIncerta, cartaoModalidade, cartaoParcelas, multiplas, alunoViaPagador, pagadorNome, candidatosAluno, canonica, duplicata, quitacao, faturaIndisponivel: canonicaIndisponivel || bloqueiaFonteIndisponivel, composto, bloqueiaLancamento, itemLojinha: lojinhaInfo && lojinhaInfo.item, valorMaiorNaLegenda, valorConflito, valorBaixaConfianca, descricao, sugestaoNome: sugestaoLojinha });
+      texto = comPedidoPor(texto, nomeParaCarimbo(idEnviou, event));
       if (dryRun) texto += '\n\n_(modo teste — nada será gravado no caixa)_';
       const previewId = await sendFn(chatId, texto);
       const arr = limparVelhos(chatId, agora);
@@ -9859,6 +9893,11 @@ _Não lanço nada pela metade._`);
         cheque_bom_para: alvo.cheque_bom_para || null,
         enviado_por: alvo.enviadoPor || null, autorizado_por: autorizadoPor,
         responsavel_financeiro: alvo.responsavelFinanceiro || null,
+        autoaprovado: (() => {
+          const a = _idPessoaCaixa(alvo.autorPhone || alvo.autorId);
+          const b = _idPessoaCaixa(event.senderPhone || event.senderId);
+          return a && b ? a === b : null;
+        })(),
       };
       // Vinculo estruturado: a RPC valida os dois contra a unidade e ignora o que nao
       // bater, entao mandar e seguro; o que nao pode e mandar id CHUTADO (ver derivarVinculo).
