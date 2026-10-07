@@ -8,7 +8,6 @@ export const DESTINO_SONORAMENTE = 'sonoramente' as const;
 export type DestinoExterno = typeof DESTINO_SONORAMENTE;
 
 export const SONORAMENTE_NOME = 'Sonoramente';
-export const SONORAMENTE_ICONE_URL = '/sonoramente-icon.png';
 
 export function isDestinoSonoramente(destinoExterno?: string | null): boolean {
   return String(destinoExterno || '').trim().toLowerCase() === DESTINO_SONORAMENTE;

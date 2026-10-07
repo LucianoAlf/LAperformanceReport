@@ -11,7 +11,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getStatusPagamentoOperacional, isMatriculaAtivaParaInadimplencia } from '@/lib/alunosStatus';
 import { rotuloDeQuem, rotuloDeQuemCurto, nomeDoContato, explicarEstadoComunidade, rotuloEstadoComunidade } from '@/lib/comunidadeWaContato';
 import { Tooltip } from '@/components/ui/Tooltip';
-import { SONORAMENTE_ICONE_URL, DESTINO_SONORAMENTE } from '@/lib/sonoramente';
+import { DESTINO_SONORAMENTE } from '@/lib/sonoramente';
+import { SonoramenteIcon } from '@/components/ui/SonoramenteIcon';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 import { useToast } from '@/hooks/useToast';
 import { ModalFichaAluno } from './ModalFichaAluno';
@@ -2356,7 +2357,7 @@ export function TabelaAlunos({
                       {aluno.transferido_sonoramente_em && (
                         <Tooltip content={`Transferido para o Sonoramente em ${new Date(`${aluno.transferido_sonoramente_em}T00:00:00`).toLocaleDateString('pt-BR')}. Nao conta como evasao.`}>
                           <span className="flex items-center gap-1 rounded-full bg-violet-500/20 px-2 py-0.5 text-xs font-medium text-violet-200 flex-shrink-0">
-                            <img src={SONORAMENTE_ICONE_URL} alt="Sonoramente" className="h-3.5 w-3.5 rounded-sm" />
+                            <SonoramenteIcon className="h-3.5 w-5" />
                             Sonoramente
                           </span>
                         </Tooltip>

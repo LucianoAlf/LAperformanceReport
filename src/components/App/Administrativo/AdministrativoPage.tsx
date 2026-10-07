@@ -1115,7 +1115,7 @@ export function AdministrativoPage() {
 
       if (error) throw error;
 
-      const { error: transferenciaError } = await supabase
+      const { data: transferenciaSalva, error: transferenciaError } = await supabase
         .from('aluno_transferencias')
         .upsert({
           aluno_id: aluno.id,
@@ -1125,7 +1125,9 @@ export function AdministrativoPage() {
           observacao: observacao || null,
         }, {
           onConflict: 'aluno_id,unidade_destino_id,data_transferencia',
-        });
+        })
+        .select('id')
+        .maybeSingle();
 
       if (transferenciaError) {
         if (['PGRST205', '42P01'].includes((transferenciaError as any)?.code)) {
@@ -1139,9 +1141,32 @@ export function AdministrativoPage() {
         throw transferenciaError;
       }
 
+      // A evasao da ORIGEM tambem nao conta: marca a que ja existe (a que chegar depois e
+      // marcada pelo gatilho trg_marcar_evasao_como_transferencia). Falha aqui nao desfaz a
+      // transferencia, mas aparece para quem registrou e no console com o id.
+      let evasoesMarcadas = 0;
+      if (transferenciaSalva?.id) {
+        const { data: marcacao, error: marcacaoError } = await supabase.rpc(
+          'marcar_evasao_origem_transferencia_v1',
+          { p_transferencia_id: transferenciaSalva.id }
+        );
+        if (marcacaoError) {
+          console.error(`Transferencia ${transferenciaSalva.id} (${aluno.nome}): falha ao marcar evasao da origem:`, marcacaoError);
+          toastError(
+            'Transferencia registrada, mas a evasao da origem nao foi marcada',
+            `${aluno.nome}: ${marcacaoError.message}`
+          );
+          await loadData();
+          return true;
+        }
+        evasoesMarcadas = Number((marcacao as any)?.evasoes_marcadas ?? 0);
+      }
+
       toastSuccess(
         'Transferencia registrada',
-        `${aluno.nome} foi registrado como transferencia interna entre unidades.`
+        evasoesMarcadas > 0
+          ? `${aluno.nome}: transferencia interna registrada; ${evasoesMarcadas} saida(s) da origem deixaram de contar como evasao.`
+          : `${aluno.nome} foi registrado como transferencia interna entre unidades.`
       );
       await loadData();
       return true;

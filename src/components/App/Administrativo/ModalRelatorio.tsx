@@ -39,6 +39,7 @@ import {
   isAlunoNovoForaComercial,
   isAlunoNovoPaganteAdministrativo,
   isAlunoTransferenciaAdministrativa,
+  isSaidaTransferencia,
   transferenciaPertenceAUnidade,
   transferenciaRecebidaNaUnidade,
 } from '@/lib/administrativoTransferencias';
@@ -227,7 +228,7 @@ function classificarTipoEvasaoMovimentacao(e: any): string {
   const tipoMovimento = String(e?.tipo || '').trim();
   const motivo = String(e?.motivo || '').toLowerCase();
 
-  if (tipoMovimento === 'transferencia' || motivo.includes('transfer')) return 'transferencia';
+  if (tipoMovimento === 'transferencia' || isSaidaTransferencia(null, motivo)) return 'transferencia';
   if (tipoMovimento === 'nao_renovacao') return 'nao_renovou';
   if (tipoMatriculaId === 5) return 'interrompido_banda';
   if (isSegundoCurso || tipoMatriculaId === 2) return 'interrompido_2_curso';
