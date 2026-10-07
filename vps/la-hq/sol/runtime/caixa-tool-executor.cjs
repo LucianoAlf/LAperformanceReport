@@ -49,6 +49,7 @@ const MOTIVO_HUMANO = {
   fonte_indisponivel: 'a cópia das faturas do Emusys está atualizando; tentar de novo em alguns minutos',
   valor_total_nao_aparece_no_texto_original: 'o total não aparece no texto da pessoa',
   texto_e_total_declarado_obrigatorios: 'faltou o texto original ou o total',
+  texto_original_obrigatorio: 'faltou a mensagem exata da pessoa (p_texto_original)',
   aprovacao_explicita_obrigatoria: 'a mensagem não é uma aprovação explícita ("pode")',
   recusa_explicita_obrigatoria: 'a mensagem não é um descarte explícito ("não", "cancela")',
   ja_aberto: 'o caixa de hoje já está aberto',
@@ -61,6 +62,13 @@ const MOTIVO_HUMANO = {
   unidade_divergente: 'o grupo não corresponde à unidade do crachá',
   grupo_fora_do_caixa: 'este grupo não é um grupo financeiro da Sol',
   handler_indisponivel: 'o caixa da Sol não está carregado agora',
+  cheques_lista_republicada: 'a lista do lote foi republicada com a mudança; ainda não há cheque pronto para o caixa',
+  sem_lote_aberto: 'não há lote de cheques aberto neste grupo hoje',
+  cheques_agente_desligado: 'a conversa sobre cheques pelo agente está desligada; use o caminho antigo (citar a lista: "N é da Fulana")',
+  cheques_desligado: 'o lote de cheques está desligado neste momento',
+  cheques_nada_mudou: 'nenhum pedido foi aceito; veja o motivo de cada cheque em `resultados`',
+  fonte_faturas_indisponivel: 'não consegui consultar as faturas agora; tentar de novo em instantes',
+  fonte_caixa_indisponivel: 'não consegui consultar o caixa agora; tentar de novo em instantes',
 };
 
 const ORIENTACAO = {
@@ -68,7 +76,13 @@ const ORIENTACAO = {
   card_publicado: 'Card publicado no grupo. NADA foi gravado ainda: aguarde o "pode" humano citando o card. Não diga que lançou.',
   mensagem_publicada: 'A ferramenta publicou a mensagem abaixo no grupo (pergunta ou recusa). NADA foi gravado e NENHUM card aprovável saiu. Não diga que lançou nem que preparou card; não repita a mensagem.',
   nada_aconteceu: 'NADA foi enviado e NADA foi gravado. Diga isso à pessoa com o motivo, sem afirmar sucesso, e peça o que falta.',
+  consulta: 'Só leitura: nada foi publicado nem gravado. Use o estado para decidir a próxima ferramenta; não cole o estado no grupo.',
 };
+
+// Ferramentas do LOTE DE CHEQUES (06/10/2026): a conversa sobre o lote aberto é do
+// agente; validar, mudar o estado e republicar o card é do caixa (handler único).
+const ACOES_CHEQUES = { cheques_estado: 'estado', cheques_atribuir: 'atribuir',
+  cheques_confirmar_leitura: 'confirmar_leitura', cheques_marcar_conferencia: 'conferencia' };
 
 // Estados, do mais forte ao mais fraco. Só os dois primeiros são sucesso.
 function classificarDesfecho({ resultado, envios = [], eventos = [] }) {
@@ -244,10 +258,34 @@ function criarExecutorCaixaTool({ obterHandler, obterAbf, obterGovernanca, envia
       resultado = await handler.handle({ ...base,
         body: cmd.tipo === 'estornar' ? 'estornar lançamento' : 'corrigir lançamento',
         caixaToolCommand: cmd, caixaToolTarget: alvo });
+    } else if (ACOES_CHEQUES[a]) {
+      if (!handler.ferramentaCheques) return recusa('handler_indisponivel');
+      const textoOriginal = String(args.p_texto_original || '').trim();
+      if (a !== 'cheques_estado' && !textoOriginal) return recusa('texto_original_obrigatorio');
+      resultado = await handler.ferramentaCheques(ACOES_CHEQUES[a], { event: base, quem: ctx.quem || 'Equipe',
+        args: { ...args, p_texto_original: textoOriginal } });
+      if (a === 'cheques_estado' && resultado && resultado.acao === 'cheques_estado') {
+        return { ok: true, estado: 'consulta', acao: 'cheques_estado', gravou_no_caixa: false, publicou_no_grupo: false,
+          mensagens_publicadas: [], lote: resultado.estado, orientacao: ORIENTACAO.consulta };
+      }
     } else {
       return recusa('acao_desconhecida');
     }
     const desfecho = classificarDesfecho({ resultado, envios: cap.envios, eventos: cap.eventos });
+    // Cheques: card só conta se ESTA chamada abriu um preview aprovável (previewId).
+    // A republicação fecha o preview antigo (evento "v3_preview_finalizado"), que a
+    // régua genérica leria como card novo — e o agente diria "card pronto" sem card.
+    if (ACOES_CHEQUES[a] && !desfecho.gravou_no_caixa) {
+      const estado = resultado && resultado.previewId ? 'card_publicado' : (cap.envios.length ? 'mensagem_publicada' : 'nada_aconteceu');
+      Object.assign(desfecho, { estado, ok: estado === 'card_publicado' || (estado === 'mensagem_publicada' && !!(resultado && resultado.acao === 'cheques_lista_republicada')),
+        orientacao: ORIENTACAO[estado] });
+      if (estado === 'card_publicado') { desfecho.motivo = null; desfecho.motivo_humano = null; }
+    }
+    if (resultado && Array.isArray(resultado.resultados)) desfecho.resultados = resultado.resultados;
+    if (resultado && resultado.estado && typeof resultado.estado === 'object') desfecho.lote = resultado.estado;
+    if (resultado && resultado.motivo && !desfecho.ok) {
+      desfecho.motivo = resultado.motivo; desfecho.motivo_humano = MOTIVO_HUMANO[resultado.motivo] || desfecho.motivo_humano;
+    }
     if (episodio && fecharEpisodio) {
       try {
         await fecharEpisodio(episodio, ctx._chat, {

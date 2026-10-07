@@ -271,7 +271,7 @@ const tres = [chequeLido(1), chequeLido(2), chequeLido(3)];
 
     // Cheque do valor COM desconto numa parcela aberta e VENCIDA → ❓ com a diferença, sem card.
     const VENC = U(31);
-    const t = montar({ leituras: [chequeLido(31, { valor: 367 })],
+    const t = montar({ leituras: [chequeLido(31, { valor: 367, bom_para: '2026-09-25' })],
       banco: { faturas: { [VENC]: F.faturaPadrao(VENC, { status: 'aberta', forma: null, valor_pago: null, valor_original: '447.00',
         desconto_condicional: '80.00', data_vencimento: '2026-09-20', data_pagamento: null }) } } });
     const r = await t.h.handle(midia('L1', arquivoTemp('D3')));

@@ -4,8 +4,8 @@
     {
       "class": "bridge",
       "mode": "0644",
-      "sha256": "358c1d5af25dac503983956d263affd9dc4a4d42fae69120bbb8177a596236e1",
-      "size": 91708,
+      "sha256": "874038ce8a8a5dc129268cab8bd4e424f92621ad4eba0acc7913d5f3749065ef",
+      "size": 94416,
       "source": "vps/la-hq/sol/runtime/bridge.js",
       "target": "/home/sol/.hermes/hermes-agent/scripts/whatsapp-bridge/bridge.js"
     },
@@ -28,8 +28,8 @@
     {
       "class": "caixa-runtime",
       "mode": "0644",
-      "sha256": "d40e1c2be12a8f181f6cc365d6ec56fecdca9c3843bccf667ede871f059d9e77",
-      "size": 625589,
+      "sha256": "ffee77a9169c9ad8954e207ba603490944340422d738ab7c1dc7408951294022",
+      "size": 631911,
       "source": "vps/la-hq/sol/runtime/caixa-financeiro.cjs",
       "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs"
     },
@@ -44,8 +44,8 @@
     {
       "class": "caixa-runtime",
       "mode": "0644",
-      "sha256": "2852d74f48520f4f084da56d615cf492c6c4f3f5f9759c59885815aa5cf312f6",
-      "size": 16654,
+      "sha256": "400046f119a90c265c892ebc787cab13226dc81913bb19ba14b360990a0d5549",
+      "size": 19881,
       "source": "vps/la-hq/sol/runtime/caixa-tool-executor.cjs",
       "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-tool-executor.cjs"
     },
@@ -68,16 +68,16 @@
     {
       "class": "mcp-runtime",
       "mode": "0644",
-      "sha256": "2c83c9b144646dec155992f8b18e99c26cfee37259ed2663bb01af9649ac5e8d",
-      "size": 34794,
+      "sha256": "62328386b6afb86db2d7f80b465326487901593d0ea74831075851cf6fe30425",
+      "size": 47023,
       "source": "vps/la-hq/sol/scripts/sol-portas-mcp.mjs",
       "target": "/home/sol/.openclaw/workspace/scripts/sol-portas-mcp.mjs"
     },
     {
       "class": "caixa-runtime",
       "mode": "0644",
-      "sha256": "d591439cb917b8481d9fbe2571e7727814dfa5879d199013d210cda7d4b52840",
-      "size": 71136,
+      "sha256": "05e4d7cd5e6c2e42b1e522fc11550d446ea5ab473de7f43b7ac6e5ede35eb0ff",
+      "size": 113616,
       "source": "vps/la-hq/sol/runtime/caixa-cheques.cjs",
       "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-cheques.cjs"
     },
@@ -88,6 +88,14 @@
       "size": 2287,
       "source": "vps/la-hq/sol/runtime/cheques-lote-cli.cjs",
       "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/cheques-lote-cli.cjs"
+    },
+    {
+      "class": "caixa-runtime",
+      "mode": "0644",
+      "sha256": "5076ea61ad2a636528381af0f71130b31136803957dfc64440e90b5c68db454a",
+      "size": 7896,
+      "source": "vps/la-hq/sol/runtime/cheques-sombra-cli.cjs",
+      "target": "/home/sol/.hermes/profiles/sol/caixa-ingestao/cheques-sombra-cli.cjs"
     },
     {
       "class": "caixa-runtime",

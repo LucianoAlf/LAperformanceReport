@@ -1364,7 +1364,23 @@ async function caixaAbf() {
               }).responder;
             const _textoVaiParaAgentTools = _chamouASol
               && !_confirmacaoDeterministica && !_complementoDeterministico;
-            if (_textoVaiParaAgentTools) {
+            // 🔴 CONVERSA SOBRE O LOTE DE CHEQUES → AGENTE (06/10/2026). Citar o card
+            //    do lote (enquanto o lote vive, sem a janela de 3 min), chamar a Sol
+            //    com lote aberto, ou escrever o número de um cheque do lote vai ao
+            //    agente com as ferramentas `cheques_*`. "pode"/"não" nunca: seguem
+            //    no trilho determinístico (o módulo devolve null para eles).
+            //    Independe do canário do caixa: interruptor `agente` em cheques.json.
+            const _chequesConversa = (!event.hasMedia && !_confirmacaoDeterministica && _fhPrio && _fhPrio.chequesConversa)
+              ? _fhPrio.chequesConversa(event, { chamouASol: groupEngagementPolicy.prever({ chatId, texto: body, mentionedIds, senderId,
+                  identidadesProprias: new Set([(sock.user?.id || ''), (sock.user?.lid || '')]
+                    .map(v => String(v).replace(/:.*@/, '@').replace(/@.*/, '')).filter(Boolean)),
+                }).responder })
+              : null;
+            if (_chequesConversa) {
+              event.caixaGovernancaAgentFirstCandidate = true;
+              event.caixaChequesConversa = _chequesConversa.resumo;
+              _caixaLog({ step: 'cheques_conversa_para_agente', chatId: chatId, citou: !!_chequesConversa.citou });
+            } else if (_textoVaiParaAgentTools) {
               // O canário só vira rota agent_first DEPOIS da política de grupo.
               // Antes, mensagens em standby eram marcadas como handoff e ficavam
               // falsamente abertas mesmo sem jamais entrar na sessão/modelo.
@@ -1489,7 +1505,16 @@ async function caixaAbf() {
               // Resposta direta a uma mensagem da Sol que nenhum caminho tratou e sem
               // card aberto: orienta em vez de ficar muda. Com card aberto, o fallback
               // abaixo já responde. Nunca escreve nem aprova nada.
-              if (!_tratouCaixa && _citouSol && _r && _r.acao === 'nada' && !_cardPendente) {
+              // Citar mensagem de um lote de cheques não é pedido de abrir/fechar caixa:
+              // a orientação genérica abaixo era a resposta errada (Recreio/CG 06/10).
+              const _citouLoteCheques = !!(event.quotedMessageId && _fh.citaLoteCheques
+                && _fh.citaLoteCheques(chatId, event.quotedMessageId));
+              // Sem resposta genérica: a fala segue para a política de grupo (se chamou
+              // a Sol, o agente responde com as ferramentas de consulta; senão, silêncio).
+              if (!_tratouCaixa && _citouLoteCheques && _r && _r.acao === 'nada') {
+                _caixaLog({ step: 'cheques_citacao_sem_resposta_generica', chatId: chatId });
+              }
+              if (!_tratouCaixa && _citouSol && !_citouLoteCheques && _r && _r.acao === 'nada' && !_cardPendente) {
                 try {
                   const _sa = await sendWithTimeout(chatId, { text:
                     'Não entendi essa 🤔. Para abrir o caixa, escreve *Sol, abre o caixa*; '
@@ -1505,7 +1530,7 @@ async function caixaAbf() {
                 _fh.observarRoteadorV4(event, _r && _r.acao)
                   .catch(function (e) { _caixaLog({ step: 'roteador_v4_shadow_erro', msg: e && e.message }); });
               }
-              if (!_tratouCaixa && (_pareceProSol || _citouCard) && _r && _r.acao === 'nada'
+              if (!_tratouCaixa && !_citouLoteCheques && (_pareceProSol || _citouCard) && _r && _r.acao === 'nada'
                   && _fh.temPendencia && _fh.temPendencia(chatId)) {
                 // Fallback de dialogo (31/08, OK do Luciano): antes do "nao
                 // entendi", o classificador LLM de saida restrita tenta mapear
@@ -1591,9 +1616,16 @@ async function caixaAbf() {
             .map(v => String(v).replace(/:.*@/, '@').replace(/@.*/, ''))
             .filter(Boolean)
         );
-        const decisao = decidirEngajamentoNoGrupo({
+        let decisao = decidirEngajamentoNoGrupo({
           chatId, texto: body, mentionedIds, identidadesProprias, senderId,
         });
+        // Conversa sobre o lote de cheques vale sem a janela de 3 min (o lote vive o
+        // expediente). Não fura dispensa ("não é com você") nem grupo que só registra;
+        // fala entre colegas chega ao agente, que pode ficar em silêncio (vazio).
+        if (event.caixaChequesConversa && !decisao.responder
+            && !['dispensada', 'grupo_so_registra', 'turno_encerrado'].includes(decisao.motivo)) {
+          decisao = { responder: true, motivo: 'cheques_lote' };
+        }
         try {
           console.log(JSON.stringify({
             event: 'group_engagement_decision', chatId,
@@ -1668,6 +1700,7 @@ async function caixaAbf() {
         try {
           const _ep = event.caixaGovernancaEpisode && event.caixaGovernancaEpisode.episode_id;
           if (event.caixaCardsAbertos) event.body = `[card_caixa_aberto: ${event.caixaCardsAbertos}]\n${event.body || ''}`;
+          if (event.caixaChequesConversa) event.body = `[lote_cheques_aberto: ${event.caixaChequesConversa}]\n${event.body || ''}`;
           if (_ep) event.body = `[episode_caixa: ${_ep}]\n${event.body || ''}`;
           const _cr = crachaDoSolicitante(event.senderPhone, chatId);
           if (_cr) {

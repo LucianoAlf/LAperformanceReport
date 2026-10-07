@@ -3867,7 +3867,7 @@ async function buscarCompostoFaturasMes(unidadeId, aluno, competencia, valor, en
 //
 // Fica NULL sem constrangimento quando nao da para afirmar: e melhor movimento sem
 // vinculo do que vinculo mentiroso -- ninguem reconcilia por cima de dado errado.
-function derivarVinculo({ canonica, parcela, composto, alunoNovoId, multiplas, quitacao } = {}) {
+function derivarVinculo({ canonica, parcela, composto, alunoNovoId, multiplas, quitacao, faturaIdsCheque } = {}) {
   const num = (v) => { const n = Number(v); return Number.isInteger(n) && n > 0 ? n : null; };
   const uuid = (v) => (typeof v === 'string'
     && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)) ? v : null;
@@ -3880,6 +3880,13 @@ function derivarVinculo({ canonica, parcela, composto, alunoNovoId, multiplas, q
     const unico = (ids[0] !== null && ids.every((x) => x === ids[0])) ? ids[0] : null;
     return { aluno_id: unico, fatura_id: null,
       fonte: unico ? 'composto_mesma_matricula' : 'composto_multiplas_matriculas' };
+  }
+  // 1a) CHEQUE DE VÁRIAS PARCELAS (06/10/2026): um cheque de irmãos pagando N
+  //     faturas = UMA movimentação ligada às N (`fatura_ids`). Os ids vêm do módulo
+  //     de cheques, conferidos pela fatura real e pela soma no centavo.
+  if (Array.isArray(faturaIdsCheque) && faturaIdsCheque.length >= 2) {
+    const ids = faturaIdsCheque.map(uuid).filter(Boolean);
+    if (ids.length === faturaIdsCheque.length) return { aluno_id: null, fatura_id: null, fatura_ids: ids, fonte: 'cheque_multi_fatura' };
   }
   // 1b) QUITACAO: varias competencias pagas de uma vez (25/09/2026). Com as N
   //     faturas do periodo resolvidas, vai `fatura_ids` (1 movimentacao, N filhas).
@@ -5546,7 +5553,8 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
       parcela: null, responsavelFinanceiro: it.responsavel_financeiro || null, cartaoModalidade: null, cartaoParcelas: null,
       formaIncerta: false, quitacao: null, multiplas: false, composto: null, itemLojinha: null, bloqueiaLancamento: false,
       faturaIndisponivel: false, bloqueiaFonteIndisponivel: false,
-      canonica: { ok: true, fatura: { canonical_fatura_id: it.canonical_fatura_id } },
+      canonica: it.canonical_fatura_id ? { ok: true, fatura: { canonical_fatura_id: it.canonical_fatura_id } } : null,
+      faturaIdsCheque: Array.isArray(it.fatura_ids) && it.fatura_ids.length >= 2 ? it.fatura_ids.slice() : null,
       enviadoPor: nomeParaCarimbo(idEnviou, event), idemKey: `${event.chatId}:${event.messageId}:cheque`,
       origem: event.messageId, msgIds: [previewId], autorPhone: event.senderPhone || null, autorId: event.senderId || null,
       toquePor: String(event.senderPhone || event.senderId || ''), toqueTs: agora, ts: agora,
@@ -5564,6 +5572,79 @@ function criarHandlerFinanceiro({ grupos, sendFn, lancarFn = lancarRecebimento, 
     pendentes.set(event.chatId, arr);
     log({ acao: 'preview_cheque_enviado', chatId: event.chatId, valor: it.valor });
     return { acao: 'preview_cheque_enviado', previewId };
+  }
+
+  // Publica o card de um lote de cheques: o principal (lote ou simples) e os extras
+  // (cheque de várias parcelas fora do lote). Sem ✅ no principal, a lista sai como
+  // mensagem comum. Toda mensagem fica ligada ao lote (respostas e citações).
+  async function publicarCartaoCheques({ event, grp, lote, agora, cartao, acaoBase = 'cheques_lote_lido' }) {
+    let principal = null;
+    if (cartao.itensCaixa.length) {
+      principal = await abrirCardCheques({ event, grp, itens: cartao.itensCaixa, agora, textoPronto: cartao.texto });
+      if (principal && principal.previewId && cheques.vincularMensagem) cheques.vincularMensagem(lote, principal.previewId);
+    } else {
+      const id = await sendFn(event.chatId, cartao.texto);
+      if (id && cheques.vincularMensagem) cheques.vincularMensagem(lote, id, null);
+      if (lote) lote.pendenteCard = null;
+    }
+    for (const ex of cartao.extras || []) {
+      const r = await abrirCardCheques({ event: { ...event, messageId: `${event.messageId}:x${ex.itens[0].cheque_numero}` },
+        grp, itens: ex.itens, agora, textoPronto: ex.texto });
+      if (r && r.previewId && cheques.vincularMensagem) cheques.vincularMensagem(lote, r.previewId, ex.chaves);
+      if (!principal) principal = r;
+    }
+    return { acao: (principal && principal.acao) || acaoBase, previewId: principal && principal.previewId };
+  }
+
+  // 🔴 REPUBLICAR O CARD DO LOTE (06/10/2026). Toda mudança no lote (a equipe disse
+  //    de quem é um cheque, confirmou número/valor, marcou conferência), o PDF
+  //    reenviado e o "pode" num card vencido republicam o card a partir do ESTADO.
+  //    Os cards antigos do lote morrem ANTES (preview V3 'rejected' + fora das
+  //    pendências): nunca há dois cards aprováveis com o mesmo cheque.
+  async function republicarLoteCheques({ event, grp, lote, aviso = null, agora = Date.now() }) {
+    const r0 = await cheques.redecidir(event.chatId, lote);
+    if (!r0.ok) {
+      await sendFn(event.chatId, '⚠️ Não consegui conferir as faturas agora, então não refiz o card dos cheques. Nada foi lançado; tenta de novo em instantes.');
+      log({ acao: 'cheques_republicar_fonte_indisponivel', chatId: event.chatId, motivo: r0.motivo });
+      return { acao: 'cheques_republicar_fonte_indisponivel' };
+    }
+    const ids = new Set(cheques.cardsDoLote(lote));
+    const arr = limparVelhos(event.chatId, agora);
+    const velhas = arr.filter((p) => ids.has(p.previewId));
+    for (const v of velhas) {
+      await finalizarPreviewSeguroV3({ alvo: v, status: 'rejected', motivo: 'cheques_card_atualizado' });
+      arr.splice(arr.indexOf(v), 1);
+    }
+    pendentes.set(event.chatId, arr);
+    cheques.esquecerCards(lote);
+    const cartao = cheques.cartaoDoLote(lote, { avisos: aviso ? [aviso] : [],
+      cabecalho: `🧾 *Lote de cheques — ${grp.nome}* (atualizado)` });
+    if (cartao.chaves.size) lote.pendenteCard = { chaves: cartao.chaves, ts: agora };
+    log({ acao: 'cheques_card_republicado', chatId: event.chatId, cards_antigos: velhas.length,
+      decisoes: lote.itens.map((it) => it.decisao) });
+    return publicarCartaoCheques({ event, grp, lote, agora, cartao, acaoBase: 'cheques_lista_republicada' });
+  }
+
+  // Porta das ferramentas `cheques_*` (executor da ponte → aqui). O módulo valida e
+  // muda o estado; aqui o card é republicado. Devolve o que a ferramenta mostra ao
+  // agente (estado do lote + resultado de cada pedido, com motivo humano).
+  async function ferramentaCheques(acao, { event, args = {}, quem = null }) {
+    const grp = grupos[event.chatId];
+    if (!cheques || !cheques.ferramenta) return { acao: 'cheques_indisponivel', motivo: 'cheques_indisponivel' };
+    const r = await cheques.ferramenta(acao, { chatId: event.chatId, quotedId: event.quotedMessageId || null,
+      args, quem, textoOriginal: String(args.p_texto_original || '') });
+    if (!r.ok) return { acao: 'cheques_ferramenta_recusada', motivo: r.motivo, resultados: r.resultados || [] };
+    if (acao === 'estado') return { acao: 'cheques_estado', estado: r.estado };
+    if (!r.mudou) return { acao: 'cheques_nada_mudou', motivo: 'cheques_nada_mudou', resultados: r.resultados, estado: r.estado };
+    const pub = await republicarLoteCheques({ event, grp, lote: r.lote, agora: Date.now() });
+    return { ...pub, resultados: r.resultados, estado: r.estado };
+  }
+
+  function chequesConversa(event, opcoes) {
+    try { return cheques && cheques.conversa ? cheques.conversa(event, opcoes) : null; } catch (_) { return null; }
+  }
+  function citaLoteCheques(chatId, quotedId) {
+    try { return !!(cheques && cheques.citaLote && cheques.citaLote(chatId, quotedId)); } catch (_) { return false; }
   }
 
   // ---- SUGESTÃO DE NOME PARECIDO (06/10/2026) --------------------------------
@@ -6016,9 +6097,16 @@ _Não lanço nada pela metade._`);
       // devolve a descrição da fatura e a RPC do lote anexa este complemento.
       // cheque_numero/banco/bom_para viram colunas da movimentação (pedido SF).
       complemento_descricao: item.complemento_descricao || null,
+      // Só o cheque de VÁRIAS parcelas (irmãos) traz: UMA movimentação ligada às N
+      // faturas. Exige o validador do lote com `fatura_ids` (migration 20261006200000).
+      ...(Array.isArray(item.fatura_ids) && item.fatura_ids.length >= 2
+        ? { fatura_ids: item.fatura_ids.slice(), faturas: item.faturas || null } : {}),
       cheque_numero: item.cheque_numero || null,
       cheque_banco: item.cheque_banco || null,
       cheque_bom_para: item.cheque_bom_para || null,
+      // Data do cheque (bom-para ou depósito): o validador do lote mede o valor da
+      // parcela nela, não hoje (desconto de pontualidade — CG 06/10).
+      cheque_data_ref: item.cheque_data_ref || null,
       sem_vinculo_fatura: !!item.sem_vinculo_fatura, declarado_pelo_humano: !!item.declarado_pelo_humano,
       desconto_negociado_explicito: !!item.sem_vinculo_fatura && !_ehAdiantamentoDeclarado(item)
         && _autorizacaoDesconto.ok && _entradasAutorizadas.has(_chaveItem(item)),
@@ -6499,13 +6587,14 @@ _Não lanço nada pela metade._`);
           ? await cheques.tratarMidia(event, grp)
           : (event.quotedMessageId ? await cheques.tratarResposta(event, { unidadeId: grp.unidade_id }) : null);
         if (rc && rc.tratou) {
+          // Card do lote vencido / mesmo PDF de hoje: republica do estado, sem reler.
+          if (rc.republicar) return republicarLoteCheques({ event, grp, lote: rc.republicar, aviso: rc.aviso, agora });
           // Cheques ✅ entram no CAIXA DA SOL pelo card de sempre (decisão do Alf, 26/09).
-          if (Array.isArray(rc.itensCaixa) && rc.itensCaixa.length) {
+          if ((Array.isArray(rc.itensCaixa) && rc.itensCaixa.length) || (Array.isArray(rc.extras) && rc.extras.length)) {
             // A mensagem organizada do lote É o card (preview V3): um "pode"
-            // citando ela lança os ✅; "N é da Fulana" citando ela resolve um ❓.
-            const rCard = await abrirCardCheques({ event, grp, itens: rc.itensCaixa, agora, textoPronto: rc.texto });
-            if (rCard && rCard.previewId && cheques.vincularMensagem) cheques.vincularMensagem(rc.lote, rCard.previewId);
-            return { acao: (rCard && rCard.acao) || rc.acao, previewId: rCard && rCard.previewId };
+            // citando ela lança os ✅; a conversa citando ela resolve os ❓.
+            return publicarCartaoCheques({ event, grp, lote: rc.lote, agora,
+              cartao: { texto: rc.texto, itensCaixa: rc.itensCaixa || [], extras: rc.extras || [] }, acaoBase: rc.acao });
           }
           // "comprovante" em resposta a "essa foto é de cheque?": a foto volta ao caminho de sempre.
           if (rc.reprocessar) return _handleInterno(rc.reprocessar, agora);
@@ -7458,7 +7547,24 @@ _Não lanço nada pela metade._`);
         log({ acao: 'multi_visto_pelo_modelo', chatId, itens: _pagLLM.length,
               nomes: _pagLLM.map((p) => p.aluno).slice(0, 4) });
       }
-      if (detectarContextoMultiAluno(legendaEfetiva) || _multiPorLLM) {
+      // 🔴 LOJINHA: PRODUTO NÃO É ALUNO (Barra 06/10/2026). "Caderno cordas +
+      //    chaveiro porta palhetas + mini caixa de som" abriu o portão pelo
+      //    NOMES_LIGADOS (duas palavras + "+" + duas palavras) e a Sol pediu
+      //    "cada aluno com seu valor" para UMA venda de R$ 190. Em venda, quem diz
+      //    se há mais de uma pessoa é o modelo (pagamentos) ou o formato que a
+      //    própria Sol ensina ("Nome — R$ valor" em 2+ linhas); o detector de
+      //    texto livre não decide QUANDO o modelo já leu a venda e devolveu UM
+      //    comprador (ou a legenda rotula um: "para o aluno X"). Sem comprador, o detector segue valendo (caso
+      //    "Pagamento de X e Y" em lojinha, 29/08).
+      const _ehLojinhaMulti = (lojinhaInfo || categoria === 'lojinha') && !categoriaEhSaida(categoria)
+        && !!(aluno || _compradorDeclaradoLojinha(legendaEfetiva)) && _pagLLM.length <= 1;
+      const _multiPorTexto = _ehLojinhaMulti
+        ? extrairItensNomeValor(legendaEfetiva).itens.length >= 2
+        : detectarContextoMultiAluno(legendaEfetiva);
+      if (_ehLojinhaMulti && !_multiPorTexto && detectarContextoMultiAluno(legendaEfetiva)) {
+        log({ acao: 'lojinha_multi_texto_ignorado', chatId });
+      }
+      if (_multiPorTexto || _multiPorLLM) {
         // Divisao no formato ensinado = parse deterministico; LLM so p/ texto livre.
         let multiRaw = null;
         const _det = extrairItensNomeValor(legendaEfetiva);
@@ -9714,6 +9820,7 @@ _Não lanço nada pela metade._`);
             readbackMovimento(event, grupos[chatId], mov.movimentacao_id, mov.valor,
               alvo.forma, item.categoria || alvo.categoria);
           }
+          if (cheques && cheques.registrarLancamento && alvo.forma === 'cheque') cheques.registrarLancamento(chatId, alvo.previewId);
           log({ acao: 'lote_multi_lancado', chatId, lote_id: lote.lote_id, itens: alvo.itens.length });
           return { acao: 'lote_multi_lancado', lote_id: lote.lote_id };
         }
@@ -9955,6 +10062,9 @@ _Não lanço nada pela metade._`);
             ? 'comprovante' + (p.valor ? ' de ' + fmtBRL(p.valor) : '') + ' em revisão (falta a divisão por aluno)'
             : (p.aluno || p.descricao || cap(p.categoria || 'lançamento')) + (p.valor ? ' — ' + fmtBRL(p.valor) : ''))).join(' · ') + '. Responde citando o card.');
         }
+        // CHEQUES (06/10): o lote fica sabendo que esses cheques entraram — não
+        // voltam a ser assunto da conversa nem do próximo card do mesmo lote.
+        if (cheques && cheques.registrarLancamento && alvo.forma === 'cheque') cheques.registrarLancamento(chatId, alvo.previewId);
         log({ acao: ehSaida ? 'saida_lancada' : 'lancado', chatId,
               movimentacao_id: r.movimentacao_id, valor: r.valor });
         return { acao: ehSaida ? 'saida_lancada' : 'lancado', movimentacao_id: r.movimentacao_id };
@@ -10384,6 +10494,7 @@ _Não lanço nada pela metade._`);
   return { handle, temPendencia, tokenEstadoPendencias, citaAlgumaPendencia, citaCardPendenteDaSol, ehConversaSemComando,
     reidratarPendencias, tratarNaoEntendida, observarRoteadorV4, decidirRoteadorV4, tratarAgentFirst,
     deveTratarConfirmacaoDeterministica, deveTratarComplementoDeterministico, resumoCardsAbertosParaAgente,
+    ferramentaCheques, chequesConversa, citaLoteCheques,
     _pendentes: pendentes, _envelopesV4: envelopesV4, _rascunhosV4: rascunhosV4, _escolhasMovimento: escolhasMovimento };
 }
 

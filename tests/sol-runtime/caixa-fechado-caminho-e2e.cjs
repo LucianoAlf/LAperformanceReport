@@ -72,8 +72,10 @@ function novo(overrides = {}) {
   const iPre = src.indexOf("process.env.SOL_CAIXA_V4_OPERATIONAL_PREFLIGHT === '1'");
   const iOri = src.indexOf("_caixaLog({ step: 'orientacao_citou_sol', chatId: chatId });");
   ok(iPre > 0 && iOri > iPre, 'orientação tem que vir DEPOIS do pré-roteamento (abrir/fechar têm prioridade)');
-  ok(src.includes("if (!_tratouCaixa && _citouSol && _r && _r.acao === 'nada' && !_cardPendente)"),
-    'orientação só sem card aberto (com card, o fallback de diálogo responde)');
+  // 06/10/2026: citar mensagem de LOTE DE CHEQUES também não recebe a orientação
+  // genérica ("para abrir o caixa…") — era a resposta errada em Recreio/CG.
+  ok(src.includes("if (!_tratouCaixa && _citouSol && !_citouLoteCheques && _r && _r.acao === 'nada' && !_cardPendente)"),
+    'orientação só sem card aberto (com card, o fallback de diálogo responde) e fora de lote de cheques');
 
   // ── 1. recusa vira caminho ──────────────────────────────────────────────────
   const A = novo();
