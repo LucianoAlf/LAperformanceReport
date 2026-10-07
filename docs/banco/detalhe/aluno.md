@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-06 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-07 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — aluno
@@ -452,15 +452,17 @@
 | `id` | bigint | não | nextval('aluno_transferencias_id_seq'::regclass) |  |
 | `aluno_id` | bigint | não |  | alunos.id |
 | `unidade_origem_id` | uuid | sim |  | unidades.id |
-| `unidade_destino_id` | uuid | não |  | unidades.id |
+| `unidade_destino_id` | uuid | sim |  | unidades.id |
 | `data_transferencia` | date | não | CURRENT_DATE |  |
 | `observacao` | text | sim |  |  |
 | `created_by` | uuid | sim |  |  |
 | `created_at` | timestamp with time zone | não | now() |  |
 | `updated_at` | timestamp with time zone | não | now() |  |
+| `destino_externo` | text | sim |  |  |
 
 **Únicos:**
 - `aluno_transferencias_pkey`
+- `aluno_transferencias_unica_externa`
 - `aluno_transferencias_unica_por_competencia`
 
 ## alunos
@@ -1989,6 +1991,7 @@
 - `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_capturar_telefone_snapshot_movimentacao_retencao → capturar_telefone_snapshot_movimentacao_retencao()`
 - `trg_eventos_operacionais_aviso_previo → trg_eventos_operacionais_aviso_previo()`
+- `trg_marcar_evasao_como_transferencia → fn_marcar_evasao_como_transferencia()`
 - `trg_preencher_campos_retencao_movimentacoes_admin → preencher_campos_retencao_movimentacoes_admin()`
 - `trg_resolver_motivo_saida_movimentacao_admin → fn_resolver_motivo_saida_movimentacao_admin()`
 - `trg_sync_evasao_dados_mensais → sync_evasao_to_dados_mensais()`
@@ -2323,7 +2326,7 @@
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
 | `id` | uuid | não | gen_random_uuid() |  |
-| `pesquisa_id` | uuid | sim |  | pesquisa_evasao_analises.pesquisa_id |
+| `pesquisa_id` | uuid | sim |  | pesquisa_evasao.id |
 | `caixa_id` | integer | não |  | whatsapp_caixas.id |
 | `direcao` | text | não |  |  |
 | `provider_message_id` | text | sim |  |  |

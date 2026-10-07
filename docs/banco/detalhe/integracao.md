@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-06 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-07 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — integracao
@@ -807,6 +807,7 @@
 - `idx_fila_sol_hermes_dia_tipo`
 
 **Triggers:**
+- `tr_sol_sincronizar_radar_entrega_da_fila_v1 → sol_sincronizar_radar_entrega_da_fila_v1()`
 - `tr_sync_caixa_envio_from_fila_sol_hermes → sync_caixa_envio_from_fila_sol_hermes()`
 - `trg_presenca_fila_proveniencia_rollout → fn_presenca_fila_proveniencia_rollout_v1()`
 

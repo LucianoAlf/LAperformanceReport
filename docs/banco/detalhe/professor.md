@@ -1,5 +1,5 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-06 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-07 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — professor
@@ -57,6 +57,8 @@
 | `terminais` | integer | não | 0 |  |
 | `mais_antigo` | timestamp with time zone | sim |  |  |
 | `atualizado_em` | timestamp with time zone | não | now() |  |
+| `aulas_terminais` | integer[] | sim |  |  |
+| `vinculos_terminais` | integer[] | sim |  |  |
 
 **Únicos:**
 - `app_audio_preso_no_aparelho_pkey`
@@ -1503,8 +1505,8 @@
 | `id` | uuid | não | gen_random_uuid() |  |
 | `snapshot_metrica_id` | uuid | não |  | health_score_professor_v3_snapshot_metricas.id |
 | `config_meta_segmento_id` | uuid | sim |  | health_score_professor_v3_config_metas_curso_modalidade.id |
-| `unidade_id` | uuid | não |  | health_score_professor_v3_config_metas_curso_modalidade.unidade_id |
-| `curso_id` | integer | não |  | cursos.id |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `curso_id` | integer | não |  | health_score_professor_v3_config_metas_curso_modalidade.curso_id |
 | `modalidade` | text | não |  | health_score_professor_v3_config_metas_curso_modalidade.modalidade |
 | `pessoas_unicas` | integer | não | 0 |  |
 | `vinculos_ativos` | integer | não | 0 |  |
