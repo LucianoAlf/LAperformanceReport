@@ -3,6 +3,7 @@ import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+import { indexarTransferenciasSonoramente, DESTINO_SONORAMENTE } from '@/lib/sonoramente';
 import { type ComunidadeWaNomeCadastrado, normalizarContatos, normalizarNomesCadastrados, type ComunidadeWaContato, type ComunidadeWaDeQuem } from '@/lib/comunidadeWaContato';
 import { format } from 'date-fns';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
@@ -174,6 +175,8 @@ export interface Aluno {
   comunidade_wa_contato_nomes?: ComunidadeWaNomeCadastrado[] | null;
   comunidade_wa_contatos_total?: number | null;
   comunidade_wa_contatos?: ComunidadeWaContato[];
+  /** Data (AAAA-MM-DD) em que a pessoa foi transferida para o Sonoramente; null = não foi. */
+  transferido_sonoramente_em?: string | null;
 }
 
 export interface Turma {
@@ -1046,6 +1049,20 @@ export function AlunosPage() {
       : Promise.resolve(null);
 
     const alunosPromise = fetchAllAlunos(buildMainQuery);
+
+    // Transferidos para o Sonoramente: poucas linhas, lidas inteiras (o aluno fica na lista
+    // apagado e com o icone). Falha aqui nao derruba a lista: o aluno so aparece sem o selo.
+    const transferenciasSonoramentePromise = supabase
+      .from('aluno_transferencias')
+      .select('aluno_id, data_transferencia, destino_externo')
+      .eq('destino_externo', DESTINO_SONORAMENTE)
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('Transferencias Sonoramente indisponiveis (lista segue sem o selo):', error);
+          return new Map<number, string>();
+        }
+        return indexarTransferenciasSonoramente(data);
+      });
     const alunosSaidaPromise = buildSaidaQuery
       ? fetchAllAlunos(buildSaidaQuery)
       : Promise.resolve({ data: [] as any[], error: null });
@@ -1178,6 +1195,22 @@ export function AlunosPage() {
     if (!error && alunosMesclados.length > 0) {
       const { chavePorAluno, diagnosticosPorPessoa } = await anamnesePorAlunoPromise;
 
+      // A transferencia e gravada numa matricula; a pessoa pode ter outras (2o curso).
+      // Propaga pela chave de pessoa (unidade + pessoa_chave), a mesma da anamnese.
+      const sonoramentePorAluno = await transferenciasSonoramentePromise;
+      const sonoramentePorPessoa = new Map<string, string>();
+      sonoramentePorAluno.forEach((data, alunoId) => {
+        const chave = chavePorAluno.get(alunoId);
+        if (chave && (!sonoramentePorPessoa.has(chave) || data > sonoramentePorPessoa.get(chave)!)) {
+          sonoramentePorPessoa.set(chave, data);
+        }
+      });
+      const transferidoSonoramenteEm = (alunoId: number): string | null => (
+        sonoramentePorAluno.get(alunoId)
+        ?? sonoramentePorPessoa.get(chavePorAluno.get(alunoId) || '')
+        ?? null
+      );
+
       const turmasMap = new Map(turmasViewData.map((t: any) => [
         `${t.unidade_id}-${t.professor_id}-${t.dia_semana}-${t.horario_inicio}`,
         t
@@ -1242,6 +1275,7 @@ export function AlunosPage() {
           comunidade_wa_contato_nomes: normalizarNomesCadastrados(comunidadeWaMap.get(a.id)?.contato_nomes),
           comunidade_wa_contatos_total: comunidadeWaMap.get(a.id)?.contatos_no_grupo_total ?? null,
           comunidade_wa_contatos: normalizarContatos(comunidadeWaMap.get(a.id)?.contatos_no_grupo),
+          transferido_sonoramente_em: transferidoSonoramenteEm(a.id),
         };
       });
 
@@ -1695,8 +1729,12 @@ export function AlunosPage() {
     if (filtros.horario_aula) {
       resultado = resultado.filter(a => a.horario_aula?.startsWith(filtros.horario_aula));
     }
-    if (filtros.status) {
-      resultado = resultado.filter(a => a.status === filtros.status);
+    if (filtros.status === DESTINO_SONORAMENTE) {
+      resultado = resultado.filter(a => Boolean(a.transferido_sonoramente_em));
+    } else if (filtros.status) {
+      // "Evadido" mostra so evasao de verdade: quem foi para o Sonoramente tem filtro proprio.
+      resultado = resultado.filter(a => a.status === filtros.status
+        && !(filtros.status === 'evadido' && a.transferido_sonoramente_em));
     }
     if (filtros.tipo_matricula_id) {
       const tipoId = parseInt(filtros.tipo_matricula_id);

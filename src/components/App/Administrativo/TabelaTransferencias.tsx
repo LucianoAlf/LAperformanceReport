@@ -1,6 +1,7 @@
 import { ArrowRightLeft } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
+import { SONORAMENTE_ICONE_URL, isDestinoSonoramente } from '@/lib/sonoramente';
 
 interface AlunoTransferencia {
   id: number;
@@ -19,6 +20,7 @@ interface AlunoTransferencia {
     unidade_destino_nome?: string | null;
     unidade_destino_codigo?: string | null;
     observacao?: string | null;
+    destino_externo?: string | null;
     direcao?: 'recebida' | 'enviada' | 'interna' | 'fora';
   } | null;
 }
@@ -97,11 +99,16 @@ export function TabelaTransferencias({ data }: TabelaTransferenciasProps) {
                       </span>
                       <ArrowRightLeft className="w-3.5 h-3.5 text-sky-400" />
                       <span className={cn(
-                        'px-2 py-1 rounded text-xs font-medium',
-                        aluno.unidades?.codigo
+                        'px-2 py-1 rounded text-xs font-medium inline-flex items-center gap-1.5',
+                        isDestinoSonoramente(aluno.transferencia?.destino_externo)
+                          ? 'bg-violet-500/20 text-violet-200'
+                          : aluno.unidades?.codigo
                           ? 'bg-sky-500/20 text-sky-300'
                           : 'bg-slate-600/30 text-slate-300',
                       )}>
+                        {isDestinoSonoramente(aluno.transferencia?.destino_externo) && (
+                          <img src={SONORAMENTE_ICONE_URL} alt="" className="h-3.5 w-3.5 rounded-sm" />
+                        )}
                         {labelUnidade(
                           aluno.transferencia?.unidade_destino_nome,
                           aluno.transferencia?.unidade_destino_codigo || aluno.unidades?.codigo,
@@ -132,7 +139,9 @@ export function TabelaTransferencias({ data }: TabelaTransferenciasProps) {
                     'inline-flex rounded-full px-2.5 py-1 text-xs font-medium',
                     classeRegra(aluno.transferencia?.direcao),
                   )}>
-                    {labelRegra(aluno.transferencia?.direcao)}
+                    {isDestinoSonoramente(aluno.transferencia?.destino_externo)
+                      ? 'foi para o Sonoramente'
+                      : labelRegra(aluno.transferencia?.direcao)}
                   </span>
                 </td>
               </tr>

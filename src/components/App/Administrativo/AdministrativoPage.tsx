@@ -35,6 +35,7 @@ import { TabelaNaoRenovacoes } from './TabelaNaoRenovacoes';
 import { TabelaTrancamentos } from './TabelaTrancamentos';
 import { TabelaAlunosNovos } from './TabelaAlunosNovos';
 import { TabelaTransferencias } from './TabelaTransferencias';
+import { SONORAMENTE_NOME, isDestinoSonoramente } from '@/lib/sonoramente';
 import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
 import { AlertasRetencao } from './AlertasRetencao';
 import { PlanoAcaoRetencao } from './PlanoAcaoRetencao';
@@ -694,7 +695,7 @@ export function AdministrativoPage() {
       try {
         let transferenciasQuery = supabase
           .from('aluno_transferencias')
-          .select('id, aluno_id, unidade_origem_id, unidade_destino_id, data_transferencia, observacao')
+          .select('id, aluno_id, unidade_origem_id, unidade_destino_id, destino_externo, data_transferencia, observacao')
           .gte('data_transferencia', startDate)
           .lte('data_transferencia', endDate)
           .order('data_transferencia', { ascending: false });
@@ -737,8 +738,12 @@ export function AdministrativoPage() {
             ...t,
             unidade_origem_nome: unidadesTransferenciaMap.get(String(t.unidade_origem_id))?.nome || null,
             unidade_origem_codigo: unidadesTransferenciaMap.get(String(t.unidade_origem_id))?.codigo || null,
-            unidade_destino_nome: unidadesTransferenciaMap.get(String(t.unidade_destino_id))?.nome || null,
-            unidade_destino_codigo: unidadesTransferenciaMap.get(String(t.unidade_destino_id))?.codigo || null,
+            unidade_destino_nome: isDestinoSonoramente(t.destino_externo)
+              ? SONORAMENTE_NOME
+              : unidadesTransferenciaMap.get(String(t.unidade_destino_id))?.nome || null,
+            unidade_destino_codigo: isDestinoSonoramente(t.destino_externo)
+              ? null
+              : unidadesTransferenciaMap.get(String(t.unidade_destino_id))?.codigo || null,
           },
         ])
       );
@@ -1051,7 +1056,40 @@ export function AdministrativoPage() {
     }
   }
 
+  async function handleSaveTransferenciaSonoramente(payload: TransferenciaPayload) {
+    const { aluno, dataTransferencia, observacao } = payload;
+    // A transferencia para o Sonoramente marca a EVASAO da origem (o Sonoramente nao esta no
+    // Emusys, entao nao ha matricula de destino). Regra no banco: registrar_transferencia_sonoramente_v1.
+    const { data, error } = await supabase.rpc('registrar_transferencia_sonoramente_v1', {
+      p_aluno_id: aluno.id,
+      p_data: dataTransferencia,
+      p_observacao: observacao || null,
+    });
+
+    if (error) {
+      console.error(`Transferencia Sonoramente do aluno ${aluno.id} (${aluno.nome}) falhou:`, error);
+      toastError(
+        'Erro ao registrar transferencia para o Sonoramente',
+        `${aluno.nome}: ${error.message}`
+      );
+      return false;
+    }
+
+    const marcadas = Number((data as any)?.evasoes_marcadas ?? 0);
+    toastSuccess(
+      'Transferido para o Sonoramente',
+      marcadas > 0
+        ? `${aluno.nome}: ${marcadas} saida(s) deixaram de contar como evasao.`
+        : `${aluno.nome}: a saida sera marcada como transferencia assim que chegar do Emusys.`
+    );
+    await loadData();
+    return true;
+  }
+
   async function handleSaveTransferencia(payload: TransferenciaPayload) {
+    if (isDestinoSonoramente(payload.destinoExterno)) {
+      return handleSaveTransferenciaSonoramente(payload);
+    }
     try {
       const { aluno, unidadeOrigemId, unidadeDestinoId, dataTransferencia, observacao } = payload;
       const { data: tipoTransferencia, error: tipoError } = await supabase
