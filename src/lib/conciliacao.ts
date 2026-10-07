@@ -35,6 +35,34 @@ export interface MatriculaParaConciliar {
   valor_api: any;
   sugestao: any;
   severidade: string | null;
+  /** O cadastro já tem o valor que a divergência sugere; só falta o sync confirmar. */
+  aguardando_sync?: boolean | null;
+  cadastro_alterado_em?: string | null;
+  cadastro_alterado_por?: string | null;
+}
+
+/**
+ * Aviso que a equipe JÁ resolveu fora da Conciliação e que só o sync da noite fecha.
+ *
+ * Caso de 07/10/2026: o Arthur corrigiu na ficha o status de três alunos
+ * (trancado → ativo) e os avisos continuaram na fila, iguais aos não resolvidos.
+ * Quem decide se já está corrigido é o banco (`get_conciliacao_matriculas`,
+ * campo `aguardando_sync`); aqui só se monta a frase. Nada é fechado pela tela:
+ * fechar é do sync, que confere contra o Emusys.
+ */
+export function correcaoAguardandoSync(
+  item: Pick<MatriculaParaConciliar, 'aguardando_sync' | 'cadastro_alterado_em' | 'cadastro_alterado_por'>,
+): string | null {
+  if (item.aguardando_sync !== true) return null;
+  const por = String(item.cadastro_alterado_por || '');
+  const quem = por.includes('@') ? ` por ${por.split('@')[0]}` : '';
+  const data = item.cadastro_alterado_em ? new Date(item.cadastro_alterado_em) : null;
+  const quando = data && !Number.isNaN(data.getTime())
+    ? ` em ${data.toLocaleString('pt-BR', {
+        timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+      }).replace(', ', ' às ')}`
+    : '';
+  return `Já corrigido no cadastro${quem}${quando}. O aviso sai sozinho no sync da noite (entre 23h e 23h40).`;
 }
 
 /** Rótulo e grupo de cada tipo de divergência de atributo. */

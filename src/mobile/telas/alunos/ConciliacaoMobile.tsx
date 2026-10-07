@@ -7,6 +7,7 @@ import {
   ATRIBUTO_TIPO_ROTULO,
   EXPLICACAO_SEM_DECISAO,
   chaveAlunoAtributo,
+  correcaoAguardandoSync,
   decisaoDeAtributoNoCelular,
   decisaoDeMatriculaNoCelular,
   descricaoAtributo,
@@ -258,6 +259,7 @@ function LinhaDivergencia({
     selecionado.tipo === 'atributo'
       ? descricaoAtributo(selecionado.item)
       : ladosDaMatricula(selecionado.item, tiposMatricula);
+  const jaCorrigido = selecionado.tipo === 'matricula' ? correcaoAguardandoSync(selecionado.item) : null;
 
   return (
     <button
@@ -274,6 +276,9 @@ function LinhaDivergencia({
         <p className="mt-0.5 truncate text-[11px] leading-tight text-slate-500">
           {lados.nosso} → {lados.emusys}
         </p>
+        {jaCorrigido && (
+          <p className="mt-1 text-[11px] font-medium leading-snug text-emerald-300">{jaCorrigido}</p>
+        )}
       </div>
       {salvando ? (
         <Loader2 className="mt-1 h-4 w-4 flex-none animate-spin text-cyan-400" aria-hidden="true" />
