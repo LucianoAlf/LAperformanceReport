@@ -5,6 +5,7 @@ import {
   isRenovacaoAntecipada,
   type RenovacaoStatusOperacional,
 } from '@/lib/renovacoesAntecipadas';
+import { isSaidaTransferencia } from '@/lib/administrativoTransferencias';
 
 export type TipoMovimentacaoRetencao =
   | 'renovacao'
@@ -387,7 +388,7 @@ export function calcularRetencaoOperacionalCanonica({
 
       const tipoEvasao = String(mov.tipo_evasao || '').toLowerCase();
       const motivo = motivoSaida(mov);
-      if (tipoEvasao.includes('transfer') || motivo.toLowerCase().includes('transfer')) {
+      if (isSaidaTransferencia(tipoEvasao, motivo)) {
         transferenciasMap.set(key, mov);
       }
 

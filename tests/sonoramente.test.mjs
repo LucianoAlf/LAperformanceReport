@@ -63,3 +63,13 @@ test('migration mantém as peças que tiram a transferência da conta de evasão
   // A RPC do botão não fica exposta para anon.
   assert.match(sql, /registrar_transferencia_sonoramente_v1\(bigint, date, text\) from public, anon/);
 });
+
+test('transferência entre unidades: "Troca de Unidade" (Emusys) é transferência, no banco e no front', () => {
+  const sql = readFileSync('supabase/migrations/20261007170000_transferencia_entre_unidades_nao_e_evasao.sql', 'utf8');
+  assert.match(sql, /ilike '%troca de unidade%'/);
+  // O relatório mensal deixa de ter régua própria.
+  assert.match(sql, /classificar_saidas_churn_v1: ancora esperava 1 ocorrencia/);
+  assert.match(sql, /trg_marcar_evasao_como_transferencia/);
+  const ts = readFileSync('src/lib/administrativoTransferencias.ts', 'utf8');
+  assert.match(ts, /troca de unidade/);
+});

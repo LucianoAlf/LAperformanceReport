@@ -1,7 +1,8 @@
 import { ArrowRightLeft } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
-import { SONORAMENTE_ICONE_URL, isDestinoSonoramente } from '@/lib/sonoramente';
+import { isDestinoSonoramente } from '@/lib/sonoramente';
+import { SonoramenteIcon } from '@/components/ui/SonoramenteIcon';
 
 interface AlunoTransferencia {
   id: number;
@@ -107,7 +108,7 @@ export function TabelaTransferencias({ data }: TabelaTransferenciasProps) {
                           : 'bg-slate-600/30 text-slate-300',
                       )}>
                         {isDestinoSonoramente(aluno.transferencia?.destino_externo) && (
-                          <img src={SONORAMENTE_ICONE_URL} alt="" className="h-3.5 w-3.5 rounded-sm" />
+                          <SonoramenteIcon className="h-3.5 w-5" />
                         )}
                         {labelUnidade(
                           aluno.transferencia?.unidade_destino_nome,

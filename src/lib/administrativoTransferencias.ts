@@ -55,6 +55,18 @@ export function isTransferenciaMovimentacaoInterna(row: TransferenciaAdministrat
     || Boolean(row?.aluno_id && row?.unidade_origem_id && row?.unidade_destino_id);
 }
 
+/**
+ * Espelho de movimentacao_saida_e_transferencia_v1 (banco): a saida e transferencia
+ * quando tipo_evasao ou motivo dizem "transfer", ou o motivo e "Troca de Unidade" (o
+ * motivo que o Emusys usa quando o aluno muda de unidade). Transferencia nao e evasao.
+ * Mudou aqui, muda la (supabase/migrations/20261007170000_transferencia_entre_unidades_nao_e_evasao.sql).
+ */
+export function isSaidaTransferencia(tipoEvasao?: string | null, motivo?: string | null): boolean {
+  const tipo = String(tipoEvasao || '').toLowerCase();
+  const texto = String(motivo || '').toLowerCase();
+  return tipo.includes('transfer') || texto.includes('transfer') || texto.includes('troca de unidade');
+}
+
 export function transferenciaContaComoMatriculaNovaAdministrativa(
   row: TransferenciaAdministrativaLike
 ): boolean {

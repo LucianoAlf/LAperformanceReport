@@ -8,9 +8,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AutocompleteAluno, type Aluno } from '@/components/ui/AutocompleteAluno';
 import { supabase } from '@/lib/supabase';
+import { SonoramenteIcon } from '@/components/ui/SonoramenteIcon';
 import {
   DESTINO_SONORAMENTE,
-  SONORAMENTE_ICONE_URL,
   SONORAMENTE_NOME,
   type DestinoExterno,
 } from '@/lib/sonoramente';
@@ -207,7 +207,7 @@ export function ModalTransferencia({
                   ))}
                   <SelectItem value={DESTINO_SONORAMENTE}>
                     <span className="flex items-center gap-2">
-                      <img src={SONORAMENTE_ICONE_URL} alt="" className="h-4 w-4 rounded" />
+                      <SonoramenteIcon className="h-4 w-6 text-violet-300" />
                       {SONORAMENTE_NOME}
                     </span>
                   </SelectItem>
