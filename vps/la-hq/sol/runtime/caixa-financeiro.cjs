@@ -2069,12 +2069,25 @@ function baseDaFaturaCanonica(can) {
 //    na fatura de R$ 500. Comprovante MAIOR que a única fatura casada significa
 //    outros itens ou excedente: o card explica e pergunta, nunca pede aprovação.
 //    Menor que a fatura (parcial/negociação) continua como antes.
+// 🔴 07/10/2026 (CG, 18:37): Pix de R$ 474,59 da parcela 09 vencida em 20/09. O
+//    Emusys cobrou R$ 447,00 + R$ 27,59 de encargos; o meu cálculo de "hoje com
+//    multa/mora" deu R$ 458,47. A sobra de R$ 16,12 virou "mais de uma
+//    parcela/curso possível" e o card travou num laço mesmo depois de a equipe
+//    dizer curso e parcela. Sobra MENOR que meia parcela numa fatura VENCIDA é
+//    encargo calculado diferente, não outra parcela: segue o caminho do valor
+//    divergente (card avisa "difere — confere" e o "pode" lança). Sobra de meia
+//    parcela ou mais, ou fatura em dia, continua travando (caso SOL-135: R$ 900
+//    numa fatura de R$ 500).
 function excedeFaturaUnica({ canonica, valor, composto, quitacao, multiplas } = {}) {
   if (composto || multiplas || quitacao) return false;
   const base = baseDaFaturaCanonica(canonica);
   const v = Number(valor);
   if (base === null || !(v > 0)) return false;
-  return v - base > 0.01;
+  const sobra = v - base;
+  if (!(sobra > 0.01)) return false;
+  const f = canonica && canonica.fatura;
+  if (f && f.status !== 'paga' && f.vencida && sobra < base * 0.5) return false;
+  return true;
 }
 
 function deveBloquearLancamento({ composto, parcela, canonica, valor, quitacao, multiplas } = {}) {
@@ -10037,7 +10050,7 @@ _Não lanço nada pela metade._`);
         return { acao: 'pode_bloqueado_sugestao_nome' };
       }
       if (alvo.bloqueiaLancamento) {
-        await sendFn(chatId, '⚠️ Não lancei: o valor diverge e o aluno tem mais de uma parcela/curso possível. Me explica a divisão ou responde no preview certo.');
+        await sendFn(chatId, '⚠️ Não lancei: o comprovante é bem maior que a fatura casada e pode incluir outra parcela ou outro item. Me manda a divisão (*Nome — item — R$ valor*) ou responde no preview certo.');
         log({ acao: 'bloqueado_multiplas_sem_divisao', chatId });
         return { acao: 'bloqueado_multiplas_sem_divisao' };
       }
