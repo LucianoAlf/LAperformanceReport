@@ -51,3 +51,18 @@ test('export do caixa seleciona e emite os 4 campos por movimento', () => {
     assert.match(exportCaixa, new RegExp(`${campo}: i\\.${campo} \\?\\? null`));
   }
 });
+
+// Pedido SF (07/10): bloco "fechamentos" com o fechamento diario do caixa
+// (caixas_diarios) — a soma acumulada de lancamentos diverge da gaveta real.
+test('export emite bloco fechamentos lendo caixas_diarios no mesmo periodo', () => {
+  assert.match(exportCaixa, /\.from\('caixas_diarios'\)/);
+  assert.match(exportCaixa, /saldo_inicial_cofre/);
+  assert.match(exportCaixa, /saldo_final_conferido/);
+  assert.match(exportCaixa, /fechamentos: caixasDiarios\.map/);
+  // diferenca_contagem = conferido - calculado, null sem conferencia.
+  assert.match(exportCaixa, /diferenca_contagem: calculado != null && conferido != null/);
+  // nomes canonicos no shape emitido
+  for (const campo of ['data', 'status', 'saldo_inicial', 'saldo_final', 'conferido_por', 'conferido_em']) {
+    assert.match(exportCaixa, new RegExp(`${campo}: `));
+  }
+});

@@ -183,6 +183,27 @@ serve(async (request) => {
       for (const a of data ?? []) alunos.set(a.id as number, String(a.nome ?? ''));
     }
 
+    // Fechamento diario do caixa (pedido SF 07/10): a soma acumulada de
+    // movimentacoes diverge da gaveta real (retiradas/depositos nem sempre
+    // viram lancamento de saida). A fonte canonica do "dinheiro em caixa" e
+    // caixas_diarios: saldo_final_conferido e a contagem fisica do dia.
+    const caixasDiarios: Record<string, unknown>[] = [];
+    for (let from = 0; ; from += PAGE_SIZE) {
+      let query = client
+        .from('caixas_diarios')
+        .select('id,unidade_id,data_caixa,status,saldo_inicial_cofre,saldo_final_calculado,saldo_final_conferido,aberto_em,aberto_por,fechado_em,fechado_por,observacoes')
+        .gte('data_caixa', inicio)
+        .lte('data_caixa', fim)
+        .order('data_caixa', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1);
+      if (unidadeId) query = query.eq('unidade_id', unidadeId);
+      // deno-lint-ignore no-explicit-any
+      const { data, error } = await query as any;
+      if (error) throw error;
+      caixasDiarios.push(...((data ?? []) as Record<string, unknown>[]));
+      if ((data?.length ?? 0) < PAGE_SIZE) break;
+    }
+
     const totaisChave = new Map<string, { quantidade: number; valor_total: number }>();
     for (const item of itens) {
       const chave = `${item.unidade_id}|${item.tipo}`;
@@ -210,8 +231,32 @@ serve(async (request) => {
       periodo: { inicio, fim },
       gerado_em: new Date().toISOString(),
       totais_por_tipo: totais,
+      fechamentos: caixasDiarios.map((c) => {
+        const unidade = unidades.get(String(c.unidade_id)) as { codigo?: string } | undefined;
+        const calculado = c.saldo_final_calculado == null ? null : Number(c.saldo_final_calculado);
+        const conferido = c.saldo_final_conferido == null ? null : Number(c.saldo_final_conferido);
+        return {
+          caixa_diario_id: c.id,
+          unidade_id: c.unidade_id,
+          unidade_codigo: unidade?.codigo ?? null,
+          data: c.data_caixa,
+          status: c.status,
+          saldo_inicial: c.saldo_inicial_cofre == null ? null : Number(c.saldo_inicial_cofre),
+          saldo_final_calculado: calculado,
+          saldo_final: conferido,
+          diferenca_contagem: calculado != null && conferido != null
+            ? Number((conferido - calculado).toFixed(2))
+            : null,
+          aberto_por: c.aberto_por ?? null,
+          aberto_em: c.aberto_em ?? null,
+          conferido_por: c.fechado_por ?? null,
+          conferido_em: c.fechado_em ?? null,
+          observacoes: c.observacoes ?? null,
+        };
+      }),
       controle: {
         itens: itens.length,
+        fechamentos: caixasDiarios.length,
         com_fatura: itens.filter((i) => (linksPorMov.get(String(i.id)) ?? []).length > 0).length,
         sem_fatura_entrada: itens.filter((i) => (linksPorMov.get(String(i.id)) ?? []).length === 0 && i.tipo === 'entrada').length,
       },
