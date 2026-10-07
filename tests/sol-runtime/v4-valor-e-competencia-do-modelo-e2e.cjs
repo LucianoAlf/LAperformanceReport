@@ -19,9 +19,12 @@ const path = require('path');
 const mod = require('./_alvo.cjs');
 
 // --- Raiz 1 ---------------------------------------------------------------
-assert.strictEqual(mod.parseBRMoney(String(402.5)), 4025, 'pré-condição: o leitor brasileiro lê "402.5" como milhar');
-assert.strictEqual(mod.valorConfereComTexto(mod.parseBRMoney(String(402.5)), 'Parcela de Setembro - R$402,50').ok, false,
-  'pré-condição: o caminho antigo recusava o valor certo');
+// Até 02/10/2026 o leitor brasileiro lia "402.5" como milhar (4025). Desde o
+// leitor estrito, um ponto com UMA casa é ambíguo e não vira valor nenhum —
+// nem 4025, nem 402,5. Número de modelo continua indo por valorDoModelo.
+assert.strictEqual(mod.parseBRMoney(String(402.5)), null, 'leitor brasileiro não chuta "402.5"');
+assert.strictEqual(mod.valorConfereComTexto(4025, 'Parcela de Setembro - R$402,50').ok, false,
+  'a leitura antiga (4025) continua reprovada pela guarda');
 
 for (const [entrada, esperado] of [[402.5, 402.5], ['402.5', 402.5], ['402.50', 402.5], [2034.9, 2034.9],
   ['402,50', 402.5], ['1.500', 1500], ['R$ 1.397,00', 1397], [null, null], [0, null], ['abc', null]]) {

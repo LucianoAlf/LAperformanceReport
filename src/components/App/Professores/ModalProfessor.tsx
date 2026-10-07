@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Calendar, Building2, Music, Save, Loader2, Phone, Clock, Video, Upload, Trash2, Play } from 'lucide-react';
+import { User, Calendar, Building2, Music, Save, Loader2, Phone, Clock, Video, Upload, Trash2, Play, Mail } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
@@ -99,6 +99,7 @@ export function ModalProfessor({
         observacoes: professor.observacoes || '',
         foto_url: professor.foto_url || '',
         telefone_whatsapp: professor.telefone_whatsapp || '',
+        email_google: professor.email_google || '',
         unidades_ids: professor.unidades?.map(u => u.unidade_id) || [],
         cursos_ids: professor.cursos?.map(c => c.curso_id) || [],
         disponibilidade_por_unidade: dispPorUnidade
@@ -112,6 +113,7 @@ export function ModalProfessor({
         observacoes: '',
         foto_url: '',
         telefone_whatsapp: '',
+        email_google: '',
         unidades_ids: [],
         cursos_ids: [],
         disponibilidade_por_unidade: {}
@@ -396,6 +398,23 @@ export function ModalProfessor({
             />
             <p className="text-xs text-slate-500 mt-1">
               Formato: 55 + DDD + número (ex: 5521999999999)
+            </p>
+          </div>
+
+          {/* E-mail Google — destino do compartilhamento da planilha do recital */}
+          <div>
+            <Label className="flex items-center gap-2 mb-2">
+              <Mail className="w-4 h-4 text-sky-400" />
+              E-mail Google
+            </Label>
+            <Input
+              type="email"
+              value={formData.email_google}
+              onChange={(e) => setFormData(prev => ({ ...prev, email_google: e.target.value.trim() }))}
+              placeholder="professor@gmail.com"
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              Conta Google (Gmail/Workspace) — usada pra compartilhar a planilha do recital no Drive
             </p>
           </div>
 

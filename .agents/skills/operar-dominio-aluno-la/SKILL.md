@@ -205,6 +205,7 @@ Relatar o que foi validado e o que permaneceu sem cobertura.
 - Tratar **aulas_emusys.professor_presenca = 'ausente'** apenas como sinal operacional bruto de que a aula não ocorreu ou não foi registrada corretamente no Emusys.
 - Nunca converter esse campo isolado em falta do professor, métrica de RH, penalidade ou componente do Health Score.
 - Antes de classificar um caso, deduplicar o evento de turma e cruzar presença dos alunos, professor atribuído, cancelamento e existência de relatório da aula.
+- 🆕 **API Emusys v1.8.2 (04/10/2026)** passou a entregar `registro_presenca` em `alunos[]`/`professores[]` de `GET /aulas`: `"registrado"` = alguém lançou (presença ou falta), `"pendente"` = nada lançado, `null` = a escola não usa o recurso. Falta lançada = `presenca='ausente'` **e** `registro_presenca='registrado'`. Enquanto não for medido que as unidades LA retornam valores não-`null`, **a regra acima não muda** e o campo novo não entra em nenhuma decisão.
 
 ### Renovação e ciclo de vida
 

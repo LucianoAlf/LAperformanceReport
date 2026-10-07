@@ -45,7 +45,15 @@ test('o padrao continua sendo o painel de 296px do desktop', () => {
 });
 
 test('a folha tem saida por toque fora e rola por dentro', () => {
-  const folha = drawer.match(/if \(variante === 'folha'\) \{[\s\S]*?\n  \}/u);
+  // A casca saiu de dentro do `if` e virou componente proprio
+  // (`FolhaDetalheAula`) para o ramo do PAINEL — o do desktop — nao passar
+  // pelo hook do movimento. O requisito e' o mesmo; mudou so' onde ele mora.
+  const folha = drawer.match(/function FolhaDetalheAula\([\s\S]*?\n\}/u);
+  assert.match(
+    drawer,
+    /if \(variante === 'folha'\) \{\s*return <FolhaDetalheAula/u,
+    'o ramo da folha precisa continuar levando a esta casca',
+  );
   assert.ok(folha, 'a casca de folha sumiu');
   assert.match(folha[0], /role="dialog"/u);
   assert.match(folha[0], /aria-modal="true"/u);

@@ -124,6 +124,24 @@ Deno.test('professor humano preserva fonte horario e recibo', () => {
   assertEquals(estado.requestId, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
 });
 
+Deno.test('professor presente deduzido do aluno tem fonte propria, nao "sem decisao"', () => {
+  const estado = adaptarPresencaProfessorCanonica({
+    professorId: 7,
+    aulaIds: [20],
+    envelope: {
+      dados_status: 'atualizados', sincronizado_em: '2026-09-29T19:00:00Z',
+      regra_versao: 'presenca-v2', ocorrencias: [],
+      professores_ocorrencias: [{
+        aula_emusys_id: 20, professor_id: 7, estado: 'presente',
+        fonte: 'aluno_presente', decidido_em: '2026-09-29T19:17:00Z',
+        request_id: 'cccccccc-cccc-cccc-cccc-cccccccccccc', recibo_status: 'concluido',
+      }],
+    },
+  });
+  assertEquals(estado.fonte, 'aluno_presente');
+  assertEquals(rotuloPresencaFonte(estado.fonte), 'Aluno presente na aula');
+});
+
 Deno.test('resumo de aula usa somente o envelope e bloqueia pendencia estrutural', () => {
   const aula = {
     cancelada: false,

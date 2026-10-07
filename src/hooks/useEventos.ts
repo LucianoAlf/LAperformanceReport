@@ -187,13 +187,17 @@ export function useEvento(eventoId: number | null) {
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
-  const recarregar = useCallback(async () => {
+  /**
+   * `silencioso`: relê sem passar pelo "Carregando evento…", que desmonta a aba aberta. É o
+   * caso de um ajuste feito de dentro da própria aba (tempo padrão na Grade).
+   */
+  const recarregar = useCallback(async (opcoes?: { silencioso?: boolean }) => {
     if (!eventoId) {
       setEvento(null);
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!opcoes?.silencioso) setLoading(true);
     setErro(null);
     const { data, error } = await supabase
       .from('evento')
@@ -280,6 +284,14 @@ export interface AlunoElegivel {
   /** Quantos convidados a pessoa leva. Por PESSOA, como o check-in. 0 = ninguem informou. */
   convidados: number;
   /**
+   * Selo de formando (passagem de ciclo), por PESSOA. 'kids' = 12 anos no ano → LA
+   * Music School; 'bebes' = 2 anos no ano estando em Musicalização para Bebês →
+   * Preparatória. A regra mora no LA Teacher; aqui chega pronta pela rotina.
+   */
+  formatura_tipo: 'kids' | 'bebes' | 'la' | null;
+  /** 'manual' = a coordenação decidiu à mão e a rotina automática não sobrescreve. */
+  formatura_origem: 'auto' | 'manual' | null;
+  /**
    * Alocacoes por CURSO, nao por pessoa.
    *
    * O grao e (pessoa, curso) porque a UNIQUE de `evento_apresentacao` e essa: quem faz 2
@@ -288,6 +300,14 @@ export interface AlunoElegivel {
   alocacoes: AlocacaoDoCurso[];
   /** Atalho de `alocacoes.length`, para a contagem nao ter de percorrer o array. */
   cursos_alocados: number;
+  /**
+   * O professor ja trabalhou o relatorio do LA Teacher mas a pessoa ainda nao tem
+   * apresentacao na grade — o conteudo so entra quando ela for alocada. A faixa diz
+   * a urgencia: 'musica' (lancou a musica), 'enviado' (mandou p/ revisao) ou
+   * 'aprovado' (revisor ja aprovou — o mais urgente, so falta cadeira). Selo de
+   * prioridade para a coordenacao: e quem "ja fez a licao e falta cadeira".
+   */
+  relatorio_falta_alocar: 'musica' | 'enviado' | 'aprovado' | null;
   /**
    * Preenchido so para aluno de OUTRA unidade que se apresenta neste evento (nome da unidade
    * de origem). `null`/ausente = aluno da casa.
@@ -307,7 +327,7 @@ export interface AlunoDeOutraUnidade {
 }
 
 interface VisitantesDoEvento {
-  pessoas: (Omit<AlunoElegivel, 'status' | 'convidados' | 'alocacoes' | 'cursos_alocados'> & {
+  pessoas: (Omit<AlunoElegivel, 'status' | 'convidados' | 'alocacoes' | 'cursos_alocados' | 'relatorio_falta_alocar'> & {
     unidade_origem_nome: string;
   })[];
   /** aluno_id -> nome de toda matricula de outra unidade que o evento referencia. */
@@ -385,7 +405,7 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
     setLoading(true);
     setErro(null);
 
-    const [elegiveis, participacoes, apresentacoes, visitantes] = await Promise.all([
+    const [elegiveis, participacoes, apresentacoes, visitantes, relatorios] = await Promise.all([
       supabase
         .from('vw_evento_aluno_elegivel_v1')
         .select('*')
@@ -393,7 +413,7 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
         .order('nome'),
       supabase
         .from('evento_participacao')
-        .select('pessoa_chave, status, convidados')
+        .select('pessoa_chave, status, convidados, formatura_tipo, formatura_origem')
         .eq('evento_id', eventoId),
       // O embed do bloco depende da FK `bloco_id -> evento_bloco`, que existe desde a
       // migration de criacao — foi a FK AUSENTE de `evento_id` que derrubou a lista antes.
@@ -402,6 +422,12 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
         .select('pessoa_chave, curso_id, bloco_id, evento_bloco(nome, ordem, horario_inicial)')
         .eq('evento_id', eventoId),
       lerVisitantes(eventoId),
+      // Relatorio enviado sem apresentacao = "falta alocar". Nao pode derrubar a lista
+      // inteira se a RPC falhar: o selo e auxiliar, a fila principal e a participacao.
+      supabase
+        .rpc('evento_relatorios_v1', { p_evento_id: eventoId })
+        .then((r) => r)
+        .catch(() => ({ data: null, error: null })),
     ]);
 
     const falha = elegiveis.error ?? participacoes.error ?? apresentacoes.error ?? visitantes.error;
@@ -419,6 +445,15 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
       (participacoes.data ?? []).map((p) => [
         p.pessoa_chave as string,
         (p.convidados as number) ?? 0,
+      ]),
+    );
+    const formaturaPorChave = new Map(
+      (participacoes.data ?? []).map((p) => [
+        p.pessoa_chave as string,
+        {
+          tipo: (p.formatura_tipo as AlunoElegivel['formatura_tipo']) ?? null,
+          origem: (p.formatura_origem as AlunoElegivel['formatura_origem']) ?? null,
+        },
       ]),
     );
 
@@ -441,11 +476,31 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
       alocacoesPorChave.set(linha.pessoa_chave, lista);
     }
 
+    // Relatorio que ainda nao casou com apresentacao nenhuma — o professor ja mexeu
+    // no LA Teacher e falta cadeira na grade. Tres faixas de urgencia, contadas por
+    // PESSOA (a chave do relatorio e a mesma da participacao), guardando a mais alta:
+    // musica lancada < enviado < aprovado. Rascunho sem musica nao entra — o professor
+    // ainda nao fez nada de fato.
+    const PESO_FAIXA = { musica: 1, enviado: 2, aprovado: 3 } as const;
+    const relatorioProntoPorChave = new Map<string, 'musica' | 'enviado' | 'aprovado'>();
+    for (const r of (relatorios.data ?? []) as RelatorioDoProfessor[]) {
+      if (r.apresentacao_id !== null) continue;
+      const faixa = r.aprovado_em || r.relatorio_status === 'aprovado' ? 'aprovado' as const
+        : r.enviado_em || r.relatorio_status === 'enviado' ? 'enviado' as const
+        : r.musica_lancada ? 'musica' as const
+        : null;
+      if (!faixa) continue;
+      const atual = relatorioProntoPorChave.get(r.pessoa_chave);
+      if (!atual || PESO_FAIXA[faixa] > PESO_FAIXA[atual]) {
+        relatorioProntoPorChave.set(r.pessoa_chave, faixa);
+      }
+    }
+
     // Visitantes depois dos da casa: a lista e da unidade, e quem vem de fora e excecao.
     const base = [
       ...((elegiveis.data ?? []) as unknown as Omit<
         AlunoElegivel,
-        'status' | 'alocacoes' | 'cursos_alocados'
+        'status' | 'alocacoes' | 'cursos_alocados' | 'relatorio_falta_alocar'
       >[]),
       ...visitantes.visitantes.pessoas,
     ];
@@ -458,8 +513,11 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
           cursos: (a.cursos ?? []) as CursoDoAluno[],
           status: porChave.get(a.pessoa_chave) ?? 'indefinido',
           convidados: convidadosPorChave.get(a.pessoa_chave) ?? 0,
+          formatura_tipo: formaturaPorChave.get(a.pessoa_chave)?.tipo ?? null,
+          formatura_origem: formaturaPorChave.get(a.pessoa_chave)?.origem ?? null,
           alocacoes,
           cursos_alocados: alocacoes.length,
+          relatorio_falta_alocar: relatorioProntoPorChave.get(a.pessoa_chave) ?? null,
         };
       }),
     );
@@ -585,8 +643,12 @@ export interface ApresentacaoDaGrade {
   playback_path: string | null;
   /** Quem escreveu os campos de detalhe por ultimo. Ver a regra de posse no banco. */
   detalhes_origem: 'adm' | 'professor';
+  /** Selo de formando da PESSOA (vem de evento_participacao, cruzado por pessoa_chave). */
+  formatura_tipo: 'kids' | 'bebes' | 'la' | null;
   professor: SnapshotDoProfessor | null;
   professor_em: string | null;
+  /** Professor mexeu na música ou no palco depois de enviar — a grade mostra o selo. */
+  editado_apos_envio_em: string | null;
   observacao_mapa: string | null;
   /** Um certificado por CURSO (decisao do Alf, 27/09): o grao e a apresentacao. */
   certificado_status: 'pendente' | 'emitido';
@@ -621,7 +683,7 @@ export function useGradeDoEvento(eventoId: number | null) {
     setLoading(true);
     setErro(null);
 
-    const [resBlocos, resApresentacoes, resVisitantes] = await Promise.all([
+    const [resBlocos, resApresentacoes, resVisitantes, resFormaturas] = await Promise.all([
       supabase
         .from('evento_bloco')
         .select('id, evento_id, nome, ordem, data, horario_inicial, inicio_manual, observacoes')
@@ -635,8 +697,10 @@ export function useGradeDoEvento(eventoId: number | null) {
         .select(
           'id, bloco_id, aluno_id, pessoa_chave, curso_id, ordem, grupo_id, musica, musica_artista,' +
             ' duracao_segundos, tem_playback, musica_link, playback_path, detalhes_origem,' +
-            ' professor, professor_em, certificado_status, certificado_em,' +
-            ' observacao_mapa, alunos(nome, data_nascimento), cursos(nome), professores(nome),' +
+            ' professor, professor_em, editado_apos_envio_em,' +
+            ' certificado_status, certificado_em,' +
+            ' observacao_mapa, alunos(nome, data_nascimento), cursos(nome),' +
+            ' professores!evento_apresentacao_professor_id_fkey(nome),' +
             // Itens embutidos em vez de uma segunda leitura: aqui a FK existe
             // (`apresentacao_id -> evento_apresentacao`), entao o PostgREST resolve o embed —
             // ao contrario da participacao, que cruza com uma VIEW e por isso vai separada.
@@ -645,9 +709,16 @@ export function useGradeDoEvento(eventoId: number | null) {
         .eq('evento_id', eventoId)
         .order('ordem'),
       lerVisitantes(eventoId),
+      // Formando é da PESSOA (evento_participacao), não da apresentação — o cruzamento
+      // é por pessoa_chave, a mesma identidade que a aba Alunos usa.
+      supabase
+        .from('evento_participacao')
+        .select('pessoa_chave, formatura_tipo')
+        .eq('evento_id', eventoId)
+        .not('formatura_tipo', 'is', null),
     ]);
 
-    const falha = resBlocos.error ?? resApresentacoes.error ?? resVisitantes.error;
+    const falha = resBlocos.error ?? resApresentacoes.error ?? resVisitantes.error ?? resFormaturas.error;
     // Aluno de outra unidade: a RLS esconde o embed `alunos(...)`, o nome vem da RPC.
     const nomeDeFora = resVisitantes.visitantes.nomes;
     if (falha) {
@@ -667,11 +738,19 @@ export function useGradeDoEvento(eventoId: number | null) {
       evento_apresentacao_item: ItemDaApresentacao[] | null;
     };
 
+    const formaturaPorChave = new Map<string, ApresentacaoDaGrade['formatura_tipo']>(
+      (resFormaturas.data ?? []).map((p) => [
+        p.pessoa_chave as string,
+        (p.formatura_tipo as ApresentacaoDaGrade['formatura_tipo']) ?? null,
+      ]),
+    );
+
     const porBloco = new Map<number, ApresentacaoDaGrade[]>();
     for (const linha of (resApresentacoes.data ?? []) as unknown as LinhaAp[]) {
       const lista = porBloco.get(linha.bloco_id) ?? [];
       lista.push({
         ...linha,
+        formatura_tipo: formaturaPorChave.get(linha.pessoa_chave) ?? null,
         aluno_nome:
           linha.alunos?.nome ?? nomeDeFora[String(linha.aluno_id)]?.nome ?? '(aluno removido)',
         aluno_data_nascimento:
@@ -701,8 +780,14 @@ export function useGradeDoEvento(eventoId: number | null) {
   return { blocos, loading, erro, recarregar };
 }
 
-export async function criarBloco(eventoId: number, nome: string, ordem: number) {
-  return supabase.from('evento_bloco').insert({ evento_id: eventoId, nome, ordem });
+export async function criarBloco(
+  eventoId: number,
+  nome: string,
+  ordem: number,
+  /** Dia do bloco; `null` = 1º dia do evento (mesma convencao do seletor do bloco). */
+  data: string | null = null,
+) {
+  return supabase.from('evento_bloco').insert({ evento_id: eventoId, nome, ordem, data });
 }
 
 export async function excluirBloco(blocoId: number) {
@@ -1024,6 +1109,15 @@ export interface ResultadoSyncRecital {
   apresentacoes_atualizadas: number;
   itens_professor: number;
   codigos_sem_mapa: string[];
+  /** Contadores da rotina de formandos que anda junto (M12). */
+  formandos?: {
+    formandos_na_view: number;
+    inseridos: number;
+    marcados: number;
+    desmarcados: number;
+    manuais_preservados: number;
+    erro?: string;
+  } | null;
   sincronizado_em: string;
 }
 
@@ -1097,6 +1191,86 @@ export function useRelatoriosDoEvento(eventoId: number | null) {
   return { relatorios, loading, erro, recarregar };
 }
 
+/* ─── toca junto (pedido do professor no LA Teacher, decisao da coordenacao) ─── */
+
+/** Um pedido de "toca junto" — a linha da `evento_toca_junto_lista_v1`. */
+export interface PedidoTocaJunto {
+  id: number;
+  status: 'pedido' | 'confirmado' | 'recusado' | 'cancelado';
+  aluno_id: number;
+  aluno_nome: string;
+  curso_chave: string;
+  /** null = a apresentacao do aluno ainda nao existe na grade. */
+  apresentacao_id: number | null;
+  com_aluno_id: number;
+  com_aluno_nome: string;
+  com_curso_chave: string;
+  com_apresentacao_id: number | null;
+  pedido_por_professor_id: number | null;
+  pedido_por_professor_nome: string | null;
+  pedido_em: string;
+  decidido_por: string | null;
+  decidido_em: string | null;
+  motivo: string | null;
+}
+
+/** Pedidos do evento, todos os status — a grade filtra 'pedido' na hora de exibir. */
+export function useTocaJunto(eventoId: number | null) {
+  const [pedidos, setPedidos] = useState<PedidoTocaJunto[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const recarregar = useCallback(async () => {
+    if (!eventoId) {
+      setPedidos([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const { data, error } = await supabase.rpc('evento_toca_junto_lista_v1', {
+      p_evento_id: eventoId,
+    });
+    if (!error) setPedidos((data ?? []) as PedidoTocaJunto[]);
+    setLoading(false);
+  }, [eventoId]);
+
+  useEffect(() => {
+    recarregar();
+  }, [recarregar]);
+
+  return { pedidos, loading, recarregar };
+}
+
+/**
+ * Decide um pedido. Aprovar junta na grade PRIMEIRO (`evento_apresentacao_juntar_v1`)
+ * e só confirma no LA Teacher se a junção funcionar — a RPC é atômica, uma falha
+ * desfaz os dois lados e o pedido continua 'pedido'. Recusar exige motivo.
+ */
+export async function decidirTocaJunto(pedidoId: number, aprovar: boolean, motivo?: string) {
+  return supabase.rpc('evento_toca_junto_decidir_v1', {
+    p_pedido_id: pedidoId,
+    p_aprovar: aprovar,
+    p_motivo: motivo ?? null,
+  });
+}
+
+/**
+ * Coordenação marca (`tipo`) ou desmarca (null) o selo de formando à mão.
+ * Grava formatura_origem='manual' — a rotina automática nunca sobrescreve.
+ */
+export async function definirFormando(
+  eventoId: number,
+  pessoaChave: string,
+  alunoId: number,
+  tipo: 'kids' | 'bebes' | null,
+) {
+  return supabase.rpc('evento_formando_definir_v1', {
+    p_evento_id: eventoId,
+    p_pessoa_chave: pessoaChave,
+    p_aluno_id: alunoId,
+    p_tipo: tipo,
+  });
+}
+
 /**
  * Signed URL do playback — o bucket `recital-playback` e do LA Teacher e a policy dele
  * nao conhece o ADM; a edge `recital-midia-url` assina com service_role depois de
@@ -1135,5 +1309,476 @@ export async function marcarCertificadosEmitidos(apresentacaoIds: number[]) {
       },
     };
   }
+  return { error: null };
+}
+
+/* ─────────── bilheteria (M9) — venda registrada pela equipe, conciliacao da Sol ─────────── */
+
+export type VendaStatus = 'pendente' | 'pago' | 'cancelado' | 'reembolsado';
+export type ConciliacaoStatus = 'pendente' | 'conciliado' | 'divergente' | 'estornado';
+export type FormaPagamento = 'pix' | 'cartao_credito' | 'cartao_debito' | 'dinheiro' | 'outro';
+export type CanalVenda = 'online' | 'balcao' | 'porta';
+
+export const VENDA_STATUS_LABEL: Record<VendaStatus, string> = {
+  pendente: 'Pendente',
+  pago: 'Pago',
+  cancelado: 'Cancelado',
+  reembolsado: 'Reembolsado',
+};
+export const CONCILIACAO_LABEL: Record<ConciliacaoStatus, string> = {
+  pendente: 'A conciliar',
+  conciliado: 'Conciliado',
+  divergente: 'Divergente',
+  estornado: 'Estornado',
+};
+export const FORMA_PAGAMENTO_LABEL: Record<FormaPagamento, string> = {
+  pix: 'Pix',
+  cartao_credito: 'Cartão de crédito',
+  cartao_debito: 'Cartão de débito',
+  dinheiro: 'Dinheiro',
+  outro: 'Outro',
+};
+export const CANAL_LABEL: Record<CanalVenda, string> = {
+  online: 'Online',
+  balcao: 'Balcão',
+  porta: 'Porta',
+};
+
+export interface ConvidadoDaVenda {
+  id: number;
+  nome: string;
+  /** checkin_em do bloco credenciado — null = ainda nao entrou */
+  checkin_em: string | null;
+}
+
+export interface VendaIngresso {
+  id: number;
+  bloco_id: number;
+  bloco_nome: string | null;
+  comprador_nome: string;
+  comprador_contato: string | null;
+  quantidade: number;
+  valor_unitario: number;
+  valor_meia: number | null;
+  desconto_pct: number;
+  valor_bruto: number;
+  valor_final: number;
+  forma_pagamento: FormaPagamento;
+  canal: CanalVenda;
+  provedor: string | null;
+  status: VendaStatus;
+  pagamento_identificador: string | null;
+  pago_em: string | null;
+  conciliacao_status: ConciliacaoStatus;
+  conciliacao_obs: string | null;
+  conciliacao_ref: string | null;
+  created_at: string;
+  convidados: ConvidadoDaVenda[];
+}
+
+export interface LotacaoBloco {
+  bloco_id: number;
+  capacidade: number | null;
+  cortesias: number;
+  vendidos_pagos: number;
+  pendentes: number;
+  livres: number | null;
+}
+
+export interface PrecoEvento {
+  preco_unitario: number;
+  preco_meia: number | null;
+}
+
+export interface PacoteEvento {
+  id: number;
+  quantidade_minima: number;
+  desconto_pct: number;
+}
+
+export interface BlocoBilheteria {
+  id: number;
+  nome: string;
+  ordem: number;
+  data: string | null;
+  horario_inicial: string | null;
+  capacidade: number | null;
+}
+
+export interface ConfigBilheteria {
+  cortesias_por_aluno: number | null;
+  provedor_pagamento: string | null;
+  provedor_conta: string | null;
+}
+
+export interface ParticipanteParaVenda {
+  id: number;
+  aluno_id: number;
+  nome: string;
+}
+
+export function useBilheteria(eventoId: number | null) {
+  const [vendas, setVendas] = useState<VendaIngresso[]>([]);
+  const [lotacao, setLotacao] = useState<LotacaoBloco[]>([]);
+  const [preco, setPreco] = useState<PrecoEvento | null>(null);
+  const [pacotes, setPacotes] = useState<PacoteEvento[]>([]);
+  const [blocos, setBlocos] = useState<BlocoBilheteria[]>([]);
+  const [config, setConfig] = useState<ConfigBilheteria | null>(null);
+  const [cortesiasUsadas, setCortesiasUsadas] = useState(0);
+  const [participantes, setParticipantes] = useState<ParticipanteParaVenda[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const recarregar = useCallback(async () => {
+    if (!eventoId) {
+      setVendas([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setErro(null);
+
+    const [rVendas, rLotacao, rPreco, rPacotes, rBlocos, rEvento, rCortesias] = await Promise.all([
+      supabase
+        .from('evento_ingresso_venda')
+        .select(
+          'id, bloco_id, comprador_nome, comprador_contato, quantidade, valor_unitario,' +
+            ' valor_meia, desconto_pct, valor_bruto, valor_final, forma_pagamento, canal,' +
+            ' provedor, status, pagamento_identificador, pago_em, conciliacao_status,' +
+            ' conciliacao_obs, conciliacao_ref, created_at,' +
+            ' evento_bloco(nome),' +
+            ' evento_convidado(id, nome)',
+        )
+        .eq('evento_id', eventoId)
+        .order('created_at', { ascending: false }),
+      supabase.from('vw_evento_bloco_lotacao').select('*').eq('evento_id', eventoId),
+      supabase
+        .from('evento_ingresso_preco')
+        .select('preco_unitario, preco_meia')
+        .eq('evento_id', eventoId)
+        .maybeSingle(),
+      supabase
+        .from('evento_ingresso_pacote')
+        .select('id, quantidade_minima, desconto_pct')
+        .eq('evento_id', eventoId)
+        .order('quantidade_minima'),
+      supabase
+        .from('evento_bloco')
+        .select('id, nome, ordem, data, horario_inicial, capacidade')
+        .eq('evento_id', eventoId)
+        .order('ordem'),
+      supabase
+        .from('evento')
+        .select('cortesias_por_aluno, provedor_pagamento, provedor_conta')
+        .eq('id', eventoId)
+        .single(),
+      // cortesias em uso (convidados cortesia credenciados ou nao)
+      supabase
+        .from('evento_convidado')
+        .select('id', { count: 'exact', head: true })
+        .eq('evento_id', eventoId)
+        .eq('tipo_entrada', 'cortesia'),
+    ]);
+
+    // participantes do evento (vinculo opcional da venda com o aluno da familia)
+    const { data: rPart } = await supabase
+      .from('evento_participacao')
+      .select('id, aluno_id, alunos(nome)')
+      .eq('evento_id', eventoId)
+      .order('aluno_id');
+    const listaPart: ParticipanteParaVenda[] = ((rPart ?? []) as any[]).map((p) => ({
+      id: p.id,
+      aluno_id: p.aluno_id,
+      nome: p.alunos?.nome ?? `Aluno #${p.aluno_id}`,
+    }));
+
+    const falha =
+      rVendas.error ?? rLotacao.error ?? rPreco.error ?? rPacotes.error ?? rBlocos.error ?? rEvento.error;
+    if (falha) {
+      setErro(falha.message);
+      setVendas([]);
+      setLoading(false);
+      return;
+    }
+
+    // check-in dos convidados de cada venda (tabela separada, PK composta)
+    const convIds = ((rVendas.data ?? []) as any[]).flatMap((v) =>
+      (v.evento_convidado ?? []).map((c: any) => c.id),
+    );
+    const checkins = new Map<number, string>();
+    if (convIds.length > 0) {
+      const { data: cks } = await supabase
+        .from('evento_convidado_checkin')
+        .select('convidado_id, checkin_em')
+        .in('convidado_id', convIds);
+      for (const ck of cks ?? []) checkins.set(ck.convidado_id, ck.checkin_em);
+    }
+
+    setVendas(
+      ((rVendas.data ?? []) as any[]).map((v) => ({
+        ...v,
+        bloco_nome: v.evento_bloco?.nome ?? null,
+        convidados: ((v.evento_convidado ?? []) as any[])
+          .map((c) => ({ id: c.id, nome: c.nome, checkin_em: checkins.get(c.id) ?? null }))
+          .sort((a, b) => a.id - b.id),
+      })),
+    );
+    setLotacao((rLotacao.data ?? []) as LotacaoBloco[]);
+    setPreco((rPreco.data as PrecoEvento | null) ?? null);
+    setPacotes((rPacotes.data ?? []) as PacoteEvento[]);
+    setBlocos((rBlocos.data ?? []) as BlocoBilheteria[]);
+    setConfig(rEvento.data as ConfigBilheteria);
+    setCortesiasUsadas(rCortesias.count ?? 0);
+    setParticipantes(listaPart);
+    setLoading(false);
+  }, [eventoId]);
+
+  useEffect(() => {
+    recarregar();
+  }, [recarregar]);
+
+  return { vendas, lotacao, preco, pacotes, blocos, config, cortesiasUsadas, participantes, loading, erro, recarregar };
+}
+
+export interface NovaVendaInput {
+  evento_id: number;
+  bloco_id: number;
+  comprador_nome: string;
+  /** contato do comprador (telefone/e-mail) — necessidade operacional, nao sai pra planilha de professor */
+  comprador_contato?: string | null;
+  quantidade: number;
+  forma_pagamento: FormaPagamento;
+  canal: CanalVenda;
+  convidados: { nome?: string; documento?: string }[];
+  /** pacote que a tela previu; null = a RPC escolhe o melhor sozinha */
+  pacote_id?: number | null;
+  /** pago na hora (porta/balcao): marca 'pago' + pago_em + identificador na mesma gravacao */
+  pago_agora: boolean;
+  pagamento_identificador?: string | null;
+  participacao_id?: number | null;
+  observacao?: string | null;
+}
+
+/**
+ * Registra a venda pela RPC com lock de bloco — duas recepcionistas simultaneas nunca
+ * furam a lotacao. O erro ja vem pronto do banco ("Bloco lotado: 0 livres, 1 pedidos").
+ */
+export async function venderIngresso(input: NovaVendaInput) {
+  const { data, error } = await supabase.rpc('evento_bilheteria_vender_v1', {
+    p_evento_id: input.evento_id,
+    p_bloco_id: input.bloco_id,
+    p_comprador_nome: input.comprador_nome,
+    p_quantidade: input.quantidade,
+    p_forma_pagamento: input.forma_pagamento,
+    p_canal: input.canal,
+    p_comprador_contato: input.comprador_contato ?? null,
+    p_convidados: input.convidados,
+    p_pacote_id: input.pacote_id ?? null,
+    p_marcar_pago: input.pago_agora,
+    p_pagamento_identificador: input.pagamento_identificador ?? null,
+    p_participacao_id: input.participacao_id ?? null,
+    p_observacao: input.observacao ?? null,
+  });
+  return { vendaId: (data as number | null) ?? null, error };
+}
+
+/**
+ * Marca a venda como PAGA. O CHECK do banco exige identificador (NSU/autorizacao ou
+ * comprovante Pix) para tudo que nao e dinheiro — a tela valida antes, mas o banco
+ * e quem decide.
+ */
+export async function marcarVendaPaga(
+  vendaId: number,
+  formaPagamento: FormaPagamento,
+  identificador: string | null,
+) {
+  const { data, error } = await supabase
+    .from('evento_ingresso_venda')
+    .update({
+      status: 'pago',
+      forma_pagamento: formaPagamento,
+      pagamento_identificador: identificador,
+      pago_em: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', vendaId)
+    .eq('status', 'pendente')
+    .select('id');
+  if (error) return { error };
+  if ((data ?? []).length === 0) {
+    return { error: { message: 'A venda não estava pendente ou não é da sua unidade.' } };
+  }
+  return { error: null };
+}
+
+/** Cancelar/reembolsar libera o lugar na hora (a view so conta pendente+pago). */
+export async function mudarStatusVenda(vendaId: number, status: 'cancelado' | 'reembolsado') {
+  const { data, error } = await supabase
+    .from('evento_ingresso_venda')
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq('id', vendaId)
+    .select('id');
+  if (error) return { error };
+  if ((data ?? []).length === 0) {
+    return { error: { message: 'Venda não encontrada ou fora da sua unidade.' } };
+  }
+  return { error: null };
+}
+
+/* ── configuracao da bilheteria do evento ── */
+
+/** preco_unitario = referencia (inteira); preco_meia = preco COBRADO de todos. */
+export async function salvarPrecoEvento(
+  eventoId: number,
+  precoUnitario: number,
+  precoCobrado: number | null,
+) {
+  return supabase
+    .from('evento_ingresso_preco')
+    .upsert(
+      { evento_id: eventoId, preco_unitario: precoUnitario, preco_meia: precoCobrado, updated_at: new Date().toISOString() },
+      { onConflict: 'evento_id' },
+    )
+    .select('evento_id');
+}
+
+export async function criarPacote(eventoId: number, quantidadeMinima: number, descontoPct: number) {
+  return supabase
+    .from('evento_ingresso_pacote')
+    .insert({ evento_id: eventoId, quantidade_minima: quantidadeMinima, desconto_pct: descontoPct })
+    .select('id');
+}
+
+export async function removerPacote(pacoteId: number) {
+  return supabase.from('evento_ingresso_pacote').delete().eq('id', pacoteId).select('id');
+}
+
+export async function salvarCapacidadeBloco(blocoId: number, capacidade: number | null) {
+  const { data, error } = await supabase
+    .from('evento_bloco')
+    .update({ capacidade, updated_at: new Date().toISOString() })
+    .eq('id', blocoId)
+    .select('id');
+  if (error) return { error };
+  if ((data ?? []).length === 0) return { error: { message: 'Bloco não é da sua unidade.' } };
+  return { error: null };
+}
+
+export async function salvarConfigBilheteria(eventoId: number, campos: Partial<ConfigBilheteria>) {
+  return supabase
+    .from('evento')
+    .update({ ...campos, updated_at: new Date().toISOString() })
+    .eq('id', eventoId)
+    .select('id');
+}
+
+/* ── convidados nominais na porta (check-in por bloco) ── */
+
+export interface ConvidadoDaPorta {
+  id: number;
+  nome: string;
+  tipo_entrada: 'cortesia' | 'vendido';
+  bloco_id: number | null;
+  venda_status: VendaStatus | null;
+  checkin_em: string | null;
+  alunos: string[];
+}
+
+/** Lista nominal da porta: cortesia + vendido, com o bloco credenciado e quem ja entrou. */
+export function useConvidadosDoEvento(eventoId: number | null) {
+  const [convidados, setConvidados] = useState<ConvidadoDaPorta[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const recarregar = useCallback(async () => {
+    if (!eventoId) {
+      setConvidados([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setErro(null);
+    const [rConv, rPonte, rCheck] = await Promise.all([
+      supabase
+        .from('evento_convidado')
+        .select('id, nome, tipo_entrada, bloco_id, venda_id, evento_ingresso_venda(status)')
+        .eq('evento_id', eventoId)
+        .order('nome'),
+      // quem o convidado veio ver (ponte com participacao → nome do aluno)
+      supabase
+        .from('evento_convidado_participacao')
+        .select('convidado_id, participacao_id, evento_participacao(aluno_id, alunos(nome))'),
+      supabase
+        .from('evento_convidado_checkin')
+        .select('convidado_id, checkin_em'),
+    ]);
+    const falha = rConv.error ?? rPonte.error ?? rCheck.error;
+    if (falha) {
+      setErro(falha.message);
+      setConvidados([]);
+      setLoading(false);
+      return;
+    }
+    const alunosPorConv = new Map<number, string[]>();
+    for (const p of (rPonte.data ?? []) as any[]) {
+      const nome = p.evento_participacao?.alunos?.nome;
+      if (!nome) continue;
+      alunosPorConv.set(p.convidado_id, [...(alunosPorConv.get(p.convidado_id) ?? []), nome]);
+    }
+    const checkinPorConv = new Map<number, string>();
+    for (const ck of rCheck.data ?? []) checkinPorConv.set(ck.convidado_id, ck.checkin_em);
+
+    setConvidados(
+      ((rConv.data ?? []) as any[]).map((c) => ({
+        id: c.id,
+        nome: c.nome,
+        tipo_entrada: c.tipo_entrada,
+        bloco_id: c.bloco_id,
+        venda_status: c.evento_ingresso_venda?.status ?? null,
+        checkin_em: checkinPorConv.get(c.id) ?? null,
+        alunos: alunosPorConv.get(c.id) ?? [],
+      })),
+    );
+    setLoading(false);
+  }, [eventoId]);
+
+  useEffect(() => {
+    recarregar();
+  }, [recarregar]);
+
+  return { convidados, loading, erro, recarregar };
+}
+
+/** Renomeia o convidado nominal — o placeholder "Convidado N de X" se corrige ate o dia. */
+export async function renomearConvidado(convidadoId: number, nome: string) {
+  const limpo = nome.trim();
+  if (limpo === '') return { error: { message: 'O nome não pode ficar vazio.' } };
+  const { data, error } = await supabase
+    .from('evento_convidado')
+    .update({ nome: limpo, updated_at: new Date().toISOString() })
+    .eq('id', convidadoId)
+    .select('id');
+  if (error) return { error };
+  if ((data ?? []).length === 0) return { error: { message: 'Convidado fora da sua unidade.' } };
+  return { error: null };
+}
+
+/** Check-in do convidado no bloco credenciado. Desfazer = apagar a linha. */
+export async function marcarCheckinConvidado(convidadoId: number, blocoId: number, entrou: boolean) {
+  if (entrou) {
+    const { error } = await supabase
+      .from('evento_convidado_checkin')
+      .insert({ convidado_id: convidadoId, bloco_id: blocoId })
+      .select('convidado_id');
+    return { error };
+  }
+  const { data, error } = await supabase
+    .from('evento_convidado_checkin')
+    .delete()
+    .eq('convidado_id', convidadoId)
+    .eq('bloco_id', blocoId)
+    .select('convidado_id');
+  if (error) return { error };
+  if ((data ?? []).length === 0) return { error: { message: 'Check-in não encontrado.' } };
   return { error: null };
 }

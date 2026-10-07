@@ -468,6 +468,7 @@ export function ProfessoresPage() {
         observacoes: data.observacoes || null,
         foto_url: data.foto_url || null,
         telefone_whatsapp: data.telefone_whatsapp || null,
+        email_google: data.email_google?.trim() || null,
         ativo: true
       };
 

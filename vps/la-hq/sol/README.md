@@ -13,6 +13,7 @@ O arquivo `runtime/deploy-manifest.json` fixa SHA-256, tamanho, modo e destino d
 - runtime financeiro;
 - abertura/fechamento determinístico;
 - ledger shadow e Auditor/Conformidade do Caixa;
+- lote de cheques e venda de ingresso;
 - MCP `sol-portas`.
 
 A bridge final agora é versionada diretamente em `runtime/bridge.js`. Os patches
@@ -33,6 +34,30 @@ produtiva continua exigindo backup, gate explícito, aplicação atômica e read
 O manifesto representa o estado desejado versionado. O readback separa artefatos
 já promovidos de itens ainda pendentes e não altera permissões, arquivos ou
 serviços. Em 2026-09-18, o conjunto passou a incluir também o Auditor do CP3.
+
+## Venda de ingresso: evento e lote sem deploy
+
+`runtime/caixa-ingressos.cjs` decide se uma venda é ingresso (sinal explícito:
+"ingresso", alias do evento, setor) e calcula a quantidade pelo lote vigente.
+Evento, aliases, setores e preço do lote **não** moram no código: ficam em
+`/home/sol/.hermes/profiles/sol/caixa-ingestao/ingressos-eventos.json` (config,
+fora do manifesto, dono `sol`, modo 0644). Modelo comentado:
+`runtime/ingressos-eventos.example.json`.
+
+Trocar o lote ou cadastrar evento = editar esse JSON. A Sol relê quando o arquivo
+muda (mtime), sem deploy e sem restart. Antes de salvar, valide:
+
+```bash
+sudo -u sol node -e "const c=require('/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-ingressos.cjs');console.log(JSON.stringify(c.carregarConfigIngressos()))"
+```
+
+JSON inválido ou ausente → nenhum evento configurado: a Sol continua reconhecendo
+ingresso, só não deduz quantidade (falha fechada para preço). Guarde a versão
+anterior (`cp -p … ingressos-eventos.json.bak-AAAAMMDDTHHMMZ`) antes de editar.
+
+Evolução prevista: o módulo Bilheteria do LA Report (`evento`,
+`evento_ingresso_preco`) é a fonte natural desses preços, mas hoje só aceita
+`tipo = 'recital'` (CHECK no banco). Migrar para lá exige DDL + tela, com gate.
 
 ## Origem da bridge baseline
 

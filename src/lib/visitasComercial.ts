@@ -157,3 +157,40 @@ export function textoComposicaoVisitas(r: ResumoVisitas): string {
   if (r.agendadas > 0) partes.push(`${r.confirmadas} de ${r.agendadas} agendadas confirmadas`);
   return partes.join(' · ');
 }
+
+/**
+ * Etapa "Visita Agendada" do pipeline (`crm_pipeline_etapas.id = 6`).
+ *
+ * Mover um lead para ela NÃO registra visita: a contagem lê a tabela `visitas`, que
+ * precisa de dia e hora. Por isso todo caminho de tela que leva o lead para esta etapa
+ * (arrasto do Kanban, "Mover etapa") passa pelo `ModalAgendar`, que grava a etapa E a
+ * linha em `visitas` — a mesma regra do funil do Comercial (`ETAPA_VISITA`).
+ */
+export const ETAPA_PIPELINE_VISITA = 6;
+
+export interface VisitaAgendadaDoLead {
+  id: string;
+  /** `YYYY-MM-DD`, dia da visita. */
+  data: string;
+  horario: string | null;
+  status: string | null;
+}
+
+/**
+ * A visita agendada do lead que ainda não passou (a mais próxima), ou `null`.
+ *
+ * Existe para não duplicar: a Mila agenda e move o card sozinha, e quem arrasta um
+ * lead que já tem visita marcada não pode criar uma segunda para a mesma pessoa. Visita
+ * de HOJE ainda vale; a que já passou sem confirmação não — aí é um novo agendamento.
+ * `hojeBrt` vem do chamador (data civil em America/Sao_Paulo), nunca de `new Date()`
+ * aqui dentro, para a regra ser testável e não virar o dia às 21h BRT (UTC).
+ */
+export function visitaAgendadaVigente(
+  visitas: VisitaAgendadaDoLead[],
+  hojeBrt: string,
+): VisitaAgendadaDoLead | null {
+  const vigentes = visitas
+    .filter((v) => v.status === 'agendada' && typeof v.data === 'string' && v.data >= hojeBrt)
+    .sort((a, b) => (a.data + (a.horario ?? '')).localeCompare(b.data + (b.horario ?? '')));
+  return vigentes[0] ?? null;
+}

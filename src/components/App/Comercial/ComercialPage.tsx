@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
-import { useNavigate, useOutletContext } from 'react-router-dom';
+import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { 
   Smartphone, 
   Guitar, 
@@ -16,7 +16,6 @@ import {
   BarChart3,
   Clock,
   Target,
-  Lock,
   ArrowRight,
   Zap,
   Users,
@@ -297,8 +296,11 @@ const buscarTaxaExpMatCanonica = async (
   }
 
   const resumo = (payload as any)?.resumo || {};
+  // Decisão do Alf (set/2026): pendência de conciliação não bloqueia a taxa —
+  // liberada = a RPC conseguiu calculá-la (denominador > 0). As pendências
+  // seguem visíveis no contador para o time resolver.
   return {
-    liberada: resumo.taxa_exp_mat_liberada === true,
+    liberada: resumo.taxa_exp_mat_canonica !== null && resumo.taxa_exp_mat_canonica !== undefined,
     taxa: numeroResumo(resumo.taxa_exp_mat_canonica),
     denominador: numeroResumo(resumo.denominador_taxa_exp_mat),
     conversoes: numeroResumo(resumo.conversoes_exp_mat_canonicas),
@@ -376,10 +378,11 @@ const numVisitas = (v: number | null): string => (v === null ? '?' : String(v));
 
 const textoTaxaExpMat = (taxa: TaxaExpMatCanonica) =>
   taxa.liberada
-    ? `*${taxa.taxa.toFixed(1)}%* (${taxa.conversoes}/${taxa.denominador})`
+    ? `*${taxa.taxa.toFixed(1)}%* (${taxa.conversoes}/${taxa.denominador})` +
+      (taxa.pendencias > 0 ? ` — ${taxa.pendencias} pendencia(s) de conciliacao em aberto` : '')
     : taxa.denominador === 0 && taxa.pendencias === 0
       ? '*SEM BASE* (0 pendencia(s); aguardando experimentais confirmadas)'
-    : `*BLOQUEADA* (${taxa.pendencias} pendencia(s) de conciliacao)`;
+    : `*PENDENTE* (${taxa.pendencias} pendencia(s) de conciliacao)`;
 
 // Cards de Quick Input
 const quickInputCards = [
@@ -560,7 +563,21 @@ export function ComercialPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [confirmouDuplicataLote, setConfirmouDuplicataLote] = useState(false);
-  const [abaPrincipal, setAbaPrincipal] = useState<'lancamentos' | 'conciliacao' | 'programa' | 'tarefas'>('lancamentos');
+  // Deep-link: ?tab=conciliacao abre direto na aba (usado pelo card Taxa
+  // Exp→Mat do Dashboard, que manda o usuário para a fila de pendências).
+  const [pageSearchParams] = useSearchParams();
+  const abaParam = pageSearchParams.get('tab');
+  const ABAS_PRINCIPAIS = ['lancamentos', 'conciliacao', 'programa', 'tarefas'] as const;
+  type AbaPrincipal = (typeof ABAS_PRINCIPAIS)[number];
+  const abaInicial: AbaPrincipal = (ABAS_PRINCIPAIS as readonly string[]).includes(abaParam ?? '')
+    ? (abaParam as AbaPrincipal)
+    : 'lancamentos';
+  const [abaPrincipal, setAbaPrincipal] = useState<AbaPrincipal>(abaInicial);
+  useEffect(() => {
+    if ((ABAS_PRINCIPAIS as readonly string[]).includes(abaParam ?? '')) {
+      setAbaPrincipal(abaParam as AbaPrincipal);
+    }
+  }, [abaParam]);
   const [modalOpen, setModalOpen] = useState<'lead' | 'matricula' | 'experimental' | null>(null);
   const [relatorioOpen, setRelatorioOpen] = useState(false);
   const [tipoRelatorio, setTipoRelatorio] = useState<'diario' | 'semanal' | 'mensal' | 'matriculas' | 'comparativo_mensal' | 'comparativo_anual' | null>(null);
@@ -3970,20 +3987,24 @@ export function ComercialPage() {
                 </div>
               </Tooltip>
 
-              {/* Experimental → Matrícula */}
+              {/* Experimental → Matrícula — pendência de conciliação não bloqueia (decisão Alf set/2026) */}
               <Tooltip
                 content={resumo.taxaExpMatLiberada
-                  ? 'KPI canonico: conversoes / experimentais realizadas confirmadas por presenca ou decisao humana.'
+                  ? (resumo.pendenciasExpMat || 0) > 0
+                    ? `KPI canonico: conversoes / experimentais realizadas confirmadas por presenca ou decisao humana. ${resumo.pendenciasExpMat} pendencia(s) de conciliacao em aberto — ver aba Conciliação.`
+                    : 'KPI canonico: conversoes / experimentais realizadas confirmadas por presenca ou decisao humana.'
                   : (resumo.denominadorExpMat || 0) === 0 && (resumo.pendenciasExpMat || 0) === 0
                     ? 'Competencia sem base de experimentais confirmadas e sem pendencias de conciliacao.'
-                  : 'Bloqueada ate a conciliacao de presenca/vinculo ficar completa.'
+                  : 'Taxa ainda não calculada: há experimentais aguardando conciliação — ver aba Conciliação.'
                 }
                 side="bottom"
               >
                 <div className={cn(
                   'bg-slate-900/60 rounded-xl p-4 border cursor-help',
                   resumo.taxaExpMatLiberada
-                    ? 'border-emerald-500/30'
+                    ? (resumo.pendenciasExpMat || 0) > 0
+                      ? 'border-amber-500/30'
+                      : 'border-emerald-500/30'
                     : (resumo.denominadorExpMat || 0) === 0 && (resumo.pendenciasExpMat || 0) === 0
                       ? 'border-cyan-500/30'
                       : 'border-amber-500/30'
@@ -4005,6 +4026,11 @@ export function ComercialPage() {
                       <p className="text-xs text-slate-400 mt-2">
                         {resumo.conversoesExpMat}/{resumo.denominadorExpMat} confirmadas.
                       </p>
+                      {(resumo.pendenciasExpMat || 0) > 0 && (
+                        <p className="text-xs text-amber-300 mt-1">
+                          {resumo.pendenciasExpMat} pendencia(s) de conciliacao em aberto — não bloqueiam a taxa.
+                        </p>
+                      )}
                     </>
                   ) : (
                     <div className={cn(
@@ -4016,10 +4042,10 @@ export function ComercialPage() {
                       {(resumo.denominadorExpMat || 0) === 0 && (resumo.pendenciasExpMat || 0) === 0 ? (
                         <Clock className="w-4 h-4" />
                       ) : (
-                        <Lock className="w-4 h-4" />
+                        <AlertTriangle className="w-4 h-4" />
                       )}
                       <p className="text-2xl font-bold">
-                        {(resumo.denominadorExpMat || 0) === 0 && (resumo.pendenciasExpMat || 0) === 0 ? 'Sem base' : 'Bloqueada'}
+                        {(resumo.denominadorExpMat || 0) === 0 && (resumo.pendenciasExpMat || 0) === 0 ? 'Sem base' : 'Pendente'}
                       </p>
                     </div>
                   )}

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Award, CheckCircle2, Clock, ListOrdered, Search, UserCheck, Users, X } from 'lucide-react';
+import { Award, CheckCircle2, Clock, ListOrdered, Search, Ticket, UserCheck, Users, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,9 +20,13 @@ import { abrirDocumento, gerarCertificadosHtml, type DadosDaImpressao } from '@/
 import {
   marcarChegada,
   marcarCertificadosEmitidos,
+  marcarCheckinConvidado,
   useCheckinDoEvento,
+  useConvidadosDoEvento,
   useGradeDoEvento,
   PARTICIPACAO_SELO,
+  type BlocoDaGrade,
+  type ConvidadoDaPorta,
   type EventoComResumo,
   type ParticipacaoStatus,
 } from '@/hooks/useEventos';
@@ -252,8 +256,10 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
   const { resumo } = lista;
 
   return (
-    <div className="space-y-4">
-      <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+    // flex-col (e não space-y) para o celular poder mandar os certificados para o fim:
+    // na porta, no dia, o que se usa primeiro é a lista de chegada.
+    <div className="flex flex-col gap-4">
+      <section className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         <Cartao icone={<Users className="h-4 w-4" />} rotulo="Esperados" valor={resumo.esperados} />
         <Cartao
           icone={<UserCheck className="h-4 w-4" />}
@@ -289,10 +295,10 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
       )}
 
       {resumo.esperados > 0 && (
-        <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-3">
+        <section className="order-last rounded-xl border border-slate-700 bg-slate-800/40 p-3 sm:order-none">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="min-w-0">
-              <h3 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              <h3 className="flex items-center gap-1.5 text-[12px] sm:text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                 <Award className="h-3.5 w-3.5" />
                 Certificados
               </h3>
@@ -301,7 +307,7 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
                 Abre numa aba nova, com botão para salvar em PDF.
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-1">
-                <span className="mr-1 text-[11px] text-slate-500">Emitir para:</span>
+                <span className="mr-1 text-[12px] sm:text-[11px] text-slate-500">Emitir para:</span>
                 <Chip
                   rotulo={`quem chegou (${lista.resumo.chegaram})`}
                   ativo={publicoCert === 'chegou'}
@@ -332,7 +338,7 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
               zero check-in é o estado normal de quem ainda não usou a aba, e um botão morto
               sem explicação parece defeito. */}
           {recebemCertificado.length === 0 && (
-            <p className="mt-2 text-[11.5px] text-amber-200/80">
+            <p className="mt-2 text-[12px] sm:text-[11.5px] text-amber-200/80">
               {publicoCert === 'chegou'
                 ? 'Ninguém com check-in ainda. Marque as chegadas abaixo ou emita para todos os esperados.'
                 : 'Ninguém na lista do dia.'}
@@ -341,7 +347,7 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
 
           {/* O formato é provisório e isso não pode ficar só no commit: quem abrir a tela
               precisa saber que o papel ainda vai mudar. */}
-          <p className="mt-2 text-[11px] text-slate-500">
+          <p className="mt-2 text-[12px] sm:text-[11px] text-slate-500">
             Modelo genérico, sem carga horária nem número de registro — o texto ainda vai ser
             definido. Quem se apresenta em dois cursos recebe <strong>dois</strong> certificados.
           </p>
@@ -350,7 +356,9 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
 
       {resumo.esperados > 0 && (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          {/* Celular: busca e Por nome/Por bloco grudam no topo enquanto a lista rola —
+              com 260 pessoas, voltar ao topo para procurar o próximo nome é o gargalo da porta. */}
+          <div className="sticky top-0 z-10 -mx-3 -my-2 flex before:absolute before:inset-x-0 before:-top-3 before:h-3 before:bg-slate-950 before:content-[''] sm:before:hidden flex-wrap items-center justify-between gap-2 bg-slate-950/95 px-3 py-2 backdrop-blur sm:static sm:mx-0 sm:my-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
             <div className="flex items-center gap-1">
               <Chip rotulo="Por nome" ativo={visao === 'porta'} onClick={() => setVisao('porta')} />
               <Chip
@@ -365,7 +373,7 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
                 placeholder="Procurar por nome…"
-                className="h-8 pl-8 text-[13px]"
+                className="h-11 pl-8 text-[16px] sm:h-8 sm:text-[13px]"
               />
             </div>
           </div>
@@ -400,11 +408,11 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
                     <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 border-b border-slate-700 pb-1">
                       <h3 className="text-[13px] font-semibold text-white">
                         {b.nome}
-                        <span className="ml-2 text-[11.5px] font-normal tabular-nums text-slate-500">
+                        <span className="ml-2 text-[12px] sm:text-[11.5px] font-normal tabular-nums text-slate-500">
                           {b.inicio}
                         </span>
                       </h3>
-                      <p className="text-[11.5px] tabular-nums">
+                      <p className="text-[12px] sm:text-[11.5px] tabular-nums">
                         {b.faltam === 0 ? (
                           <span className="text-emerald-300">
                             {b.pessoas === 1 ? 'a pessoa deste bloco chegou' : 'todos deste bloco chegaram'}
@@ -432,6 +440,11 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
           )}
         </>
       )}
+
+      {/* Convidados nominais (M3/M9): cortesia e vendido na mesma lista da porta,
+          com check-in por bloco. Vendido sem 'pago' aparece com o selo amber e o
+          banco barra a entrada — a tela mostra o motivo antes do clique. */}
+      <SecaoConvidados eventoId={evento.id} blocos={blocos} termo={termo} />
     </div>
   );
 }
@@ -445,7 +458,7 @@ function Chip({ rotulo, ativo, onClick }: { rotulo: string; ativo: boolean; onCl
       onClick={onClick}
       aria-pressed={ativo}
       className={cn(
-        'rounded px-2.5 py-1 text-[12px] transition-colors',
+        'min-h-[44px] rounded px-3 py-1 text-[13px] transition-colors sm:min-h-0 sm:px-2.5 sm:text-[12px]',
         ativo ? 'bg-amber-500/20 text-amber-200' : 'text-slate-400 hover:bg-slate-700/60',
       )}
     >
@@ -468,8 +481,8 @@ function Cartao({
   destaque?: 'emerald' | 'amber';
 }) {
   return (
-    <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-3">
-      <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-slate-500">
+    <div className="rounded-xl border border-slate-700 bg-slate-800/40 px-3 py-2.5 sm:p-3">
+      <p className="flex items-center gap-1.5 text-[12px] sm:text-[11px] uppercase tracking-wide text-slate-500">
         {icone}
         {rotulo}
       </p>
@@ -481,21 +494,22 @@ function Cartao({
       >
         {valor}
       </p>
-      {rodape && <p className="text-[11px] text-slate-500">{rodape}</p>}
+      {rodape && <p className="text-[12px] sm:text-[11px] text-slate-500">{rodape}</p>}
     </div>
   );
 }
 
 function SeloChegada({ chegouEm }: { chegouEm: string | null }) {
   if (chegouEm === null) {
-    return <span className="text-[11.5px] text-slate-500">aguardando</span>;
+    // Celular: o botão "Chegou" ao lado já diz que falta — o selo só tomava largura do nome.
+    return <span className="hidden text-[11.5px] text-slate-500 sm:inline">aguardando</span>;
   }
   const hora = new Date(chegouEm).toLocaleTimeString('pt-BR', {
     hour: '2-digit',
     minute: '2-digit',
   });
   return (
-    <span className="flex items-center gap-1 text-[11.5px] text-emerald-300">
+    <span className="flex items-center gap-1 text-[12px] sm:text-[11.5px] text-emerald-300">
       <CheckCircle2 className="h-3.5 w-3.5" />
       chegou {hora}
     </span>
@@ -520,16 +534,16 @@ function LinhaPessoa({
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-3 py-2',
+        'flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-3 py-2.5 sm:py-2',
         chegou ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-slate-700 bg-slate-800/40',
       )}
     >
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[13px] font-medium text-white">
+        <p className="text-[14px] font-medium text-white sm:truncate sm:text-[13px]">
           {pessoa.nome}
           {idade && <span className="font-normal text-slate-500"> · {idade}</span>}
         </p>
-        <p className="flex flex-wrap items-center gap-x-2 text-[11.5px] text-slate-400">
+        <p className="flex flex-wrap items-center gap-x-2 text-[12px] sm:text-[11.5px] text-slate-400">
           {pessoa.apresentacoes.length === 0 ? (
             // Confirmou e não entrou na grade: vem ao evento, não sobe ao palco. Dizer isso
             // evita que a porta ache que perdeu uma apresentação.
@@ -556,7 +570,7 @@ function LinhaPessoa({
       <Button
         size="sm"
         variant={chegou ? 'ghost' : 'outline'}
-        className="gap-1.5"
+        className="h-11 min-w-[104px] gap-1.5 sm:h-9 sm:min-w-0"
         disabled={salvando}
         onClick={onAlternar}
       >
@@ -583,23 +597,24 @@ function LinhaOrdem({
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-3 py-2',
+        'flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-3 py-2.5 sm:py-2',
         chegou ? 'border-slate-700 bg-slate-800/40' : 'border-amber-500/30 bg-amber-500/5',
       )}
     >
-      <span className="w-7 shrink-0 text-right text-[12px] tabular-nums text-slate-500">
+      {/* Celular: a posição sai — o horário ao lado já dá a ordem, e o nome precisa da largura. */}
+      <span className="hidden w-7 shrink-0 text-right text-[12px] tabular-nums text-slate-500 sm:inline">
         {linha.posicao}
       </span>
-      <span className="w-11 shrink-0 text-[12px] tabular-nums text-slate-300">{linha.horario}</span>
+      <span className="w-11 shrink-0 self-start pt-0.5 text-[13px] font-medium tabular-nums text-amber-300/90 sm:self-auto sm:pt-0 sm:text-[12px] sm:font-normal sm:text-slate-300">{linha.horario}</span>
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[13px] text-white">
+        <p className="text-[14px] text-white sm:truncate sm:text-[13px]">
           {linha.alunoNome}
           {idade && <span className="text-slate-500"> · {idade}</span>}
           {linha.cursoNome && <span className="text-slate-400"> · {linha.cursoNome}</span>}
         </p>
         {/* O bloco não se repete aqui: ele é o cabeçalho da seção logo acima. */}
-        <p className="truncate text-[11.5px] text-slate-500">
+        <p className="text-[12px] sm:text-[11.5px] text-slate-500 sm:truncate">
           {linha.musica?.trim() || <span className="italic">música não definida</span>}
           {linha.outrasApresentacoes > 0 && (
             // O check-in é da pessoa: sem este aviso, quem opera acharia que precisa marcar
@@ -617,7 +632,7 @@ function LinhaOrdem({
       <Button
         size="sm"
         variant={chegou ? 'ghost' : 'outline'}
-        className="gap-1.5"
+        className="h-11 min-w-[104px] gap-1.5 sm:h-9 sm:min-w-0"
         disabled={salvando}
         onClick={onAlternar}
       >
@@ -625,6 +640,136 @@ function LinhaOrdem({
         {salvando ? '…' : chegou ? 'Desfazer' : 'Chegou'}
       </Button>
     </div>
+  );
+}
+
+/** Lista nominal da porta (M3/M9): cortesia e vendido, check-in por bloco credenciado. */
+function SecaoConvidados({
+  eventoId,
+  blocos,
+  termo,
+}: {
+  eventoId: number;
+  blocos: BlocoDaGrade[];
+  termo: string;
+}) {
+  const { convidados, loading, recarregar } = useConvidadosDoEvento(eventoId);
+  const [ocupado, setOcupado] = useState<Set<number>>(new Set());
+
+  const nomeDoBloco = (id: number | null) =>
+    blocos.find((b) => b.id === id)?.nome ?? (id != null ? `Bloco ${id}` : null);
+
+  const alternarConvidado = async (c: ConvidadoDaPorta) => {
+    if (c.bloco_id == null) {
+      toast.error('Este convidado ainda não tem bloco credenciado.');
+      return;
+    }
+    setOcupado((s) => new Set(s).add(c.id));
+    const { error } = await marcarCheckinConvidado(c.id, c.bloco_id, c.checkin_em === null);
+    setOcupado((s) => {
+      const prox = new Set(s);
+      prox.delete(c.id);
+      return prox;
+    });
+    if (error) {
+      // o banco devolve a frase pronta — ex.: "Ingresso vendido so entra com a venda paga"
+      toast.error(error.message);
+      return;
+    }
+    await recarregar();
+  };
+
+  if (loading) return null;
+  if (convidados.length === 0) return null;
+
+  const visiveis = convidados.filter(
+    (c) => termo === '' || `${c.nome} ${c.alunos.join(' ')}`.toLowerCase().includes(termo),
+  );
+  const entraram = convidados.filter((c) => c.checkin_em !== null).length;
+
+  return (
+    <section className="rounded-xl border border-slate-700 bg-slate-800/40">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700/60 px-4 py-2.5">
+        <h3 className="flex items-center gap-1.5 text-[12px] sm:text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <Ticket className="h-3.5 w-3.5" />
+          Convidados
+        </h3>
+        <p className="text-[12px] sm:text-[11.5px] tabular-nums text-slate-500">
+          {entraram} de {convidados.length} entraram
+        </p>
+      </header>
+      <div className="divide-y divide-slate-700/40">
+        {visiveis.map((c) => {
+          const entrou = c.checkin_em !== null;
+          const pendenteDePagamento = c.tipo_entrada === 'vendido' && c.venda_status !== 'pago';
+          return (
+            <div
+              key={c.id}
+              className={cn(
+                'flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2',
+                entrou && 'bg-emerald-500/5',
+              )}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] font-medium text-white">
+                  {c.nome}
+                  <span
+                    className={cn(
+                      'ml-2 rounded px-1.5 py-0.5 text-[12px] sm:text-[10.5px]',
+                      c.tipo_entrada === 'vendido'
+                        ? 'bg-sky-500/15 text-sky-300'
+                        : 'bg-violet-500/15 text-violet-300',
+                    )}
+                  >
+                    {c.tipo_entrada === 'vendido' ? 'vendido' : 'cortesia'}
+                  </span>
+                  {pendenteDePagamento && (
+                    <span className="ml-1.5 rounded bg-amber-500/15 px-1.5 py-0.5 text-[12px] sm:text-[10.5px] text-amber-300">
+                      pagamento pendente
+                    </span>
+                  )}
+                </p>
+                <p className="truncate text-[12px] sm:text-[11.5px] text-slate-500">
+                  {nomeDoBloco(c.bloco_id) ?? 'sem bloco credenciado'}
+                  {c.alunos.length > 0 && ` · veio por ${c.alunos.join(', ')}`}
+                </p>
+              </div>
+              {entrou ? (
+                <>
+                  <SeloChegada chegouEm={c.checkin_em} />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="gap-1.5"
+                    disabled={ocupado.has(c.id)}
+                    onClick={() => alternarConvidado(c)}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Desfazer
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                  disabled={ocupado.has(c.id)}
+                  onClick={() => alternarConvidado(c)}
+                >
+                  <UserCheck className="h-3.5 w-3.5" />
+                  {ocupado.has(c.id) ? '…' : 'Entrou'}
+                </Button>
+              )}
+            </div>
+          );
+        })}
+        {visiveis.length === 0 && (
+          <p className="px-4 py-6 text-center text-[12.5px] text-slate-500">
+            Nenhum convidado com esse nome.
+          </p>
+        )}
+      </div>
+    </section>
   );
 }
 

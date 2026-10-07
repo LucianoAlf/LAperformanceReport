@@ -126,17 +126,16 @@ export interface EventoParaCalculo {
   horario_inicio: string;
   duracao_padrao_segundos: number;
   intervalo_entre_blocos_segundos: number;
-  /** Troca de palco entre uma apresentacao e a seguinte do MESMO bloco. Ausente = 5 min. */
+  /** Folga entre uma apresentacao e a seguinte do MESMO bloco. Ausente = sem folga. */
   intervalo_entre_apresentacoes_segundos?: number;
 }
 
 /**
- * Sem folga, a programacao dava a entender que a apresentacao seguinte comeca no segundo
- * em que a anterior termina (pedido do Hugo, 25/09). Vale so DENTRO do bloco: entre
- * blocos quem manda e `intervalo_entre_blocos_segundos`, e depois da ultima apresentacao
- * nao ha troca, entao o fim do bloco e o fim dela.
+ * Sem folga entre apresentacoes do mesmo bloco (pedido do Arthur, 02/10): a troca de palco
+ * entra no tempo padrao de cada apresentacao, que a unidade configura no evento. Os 5 min
+ * de 25/09 sairam. Entre blocos quem manda continua sendo `intervalo_entre_blocos_segundos`.
  */
-export const INTERVALO_ENTRE_APRESENTACOES_PADRAO_SEGUNDOS = 300;
+export const INTERVALO_ENTRE_APRESENTACOES_PADRAO_SEGUNDOS = 0;
 
 export interface BlocoComHorario {
   blocoId: number;
@@ -485,6 +484,17 @@ export function instrumentoDoCurso(cursoNome: string | null | undefined): string
   if (!cursoNome) return null;
   const chave = chaveDoItem(cursoNome).replace(/\s+ind$/, '');
   return INSTRUMENTO_POR_CURSO[chave] ?? null;
+}
+
+/**
+ * Curso de musicalização (Bebês, Infantil, Preparatória) × curso de instrumento.
+ *
+ * Serve ao filtro do seletor da Grade: o recital pode ter bloco só de instrumento (pedido do
+ * Arthur, 06/10). Não existe categoria no cadastro de `cursos`, então a régua é o nome — curso
+ * novo chamado "Musicalização …" entra sozinho.
+ */
+export function ehMusicalizacao(cursoNome: string | null | undefined): boolean {
+  return !!cursoNome && chaveDoItem(cursoNome).startsWith('musicaliza');
 }
 
 export interface ItemConsolidado {
@@ -1569,4 +1579,68 @@ export function idadeHoje(dataNascimento: string | null | undefined): number | n
 export function rotuloIdade(idade: number | null | undefined): string {
   if (idade === null || idade === undefined) return '';
   return `${idade} ${idade === 1 ? 'ano' : 'anos'}`;
+}
+
+/* ---------------------------------------------------------------------------
+ * BILHETERIA (M9) — orcamento da venda e lugares livres
+ * ------------------------------------------------------------------------ */
+
+export interface PacoteDeDesconto {
+  id: number;
+  quantidade_minima: number;
+  /** opcional — a M9 nao tem teto de pacote; existe pra compatibilidade futura */
+  quantidade_maxima?: number | null;
+  desconto_pct: number;
+}
+
+export interface OrcamentoVenda {
+  precoUnitario: number;
+  valorBase: number;
+  pacote: PacoteDeDesconto | null;
+  descontoPct: number;
+  valorFinal: number;
+}
+
+/**
+ * Previsao da venda — mesma regra da RPC `evento_bilheteria_vender_v1`:
+ * todos pagam o preco cobrado (meia) e o maior pacote que a quantidade cobre
+ * aplica o desconto. O banco reconta na gravacao; isso e so o resumo da tela.
+ */
+export function simularOrcamentoVenda(
+  precoCobrado: number | null | undefined,
+  quantidade: number,
+  pacotes: PacoteDeDesconto[],
+): OrcamentoVenda {
+  const unitario = precoCobrado ?? 0;
+  const base = Math.round(unitario * Math.max(quantidade, 0) * 100) / 100;
+  const pacote =
+    pacotes
+      .filter(
+        (p) =>
+          quantidade >= p.quantidade_minima &&
+          (p.quantidade_maxima === null || quantidade <= p.quantidade_maxima),
+      )
+      .sort((a, b) => b.desconto_pct - a.desconto_pct)[0] ?? null;
+  const descontoPct = pacote?.desconto_pct ?? 0;
+  const valorFinal = Math.round(base * (1 - descontoPct / 100) * 100) / 100;
+  return { precoUnitario: unitario, valorBase: base, pacote, descontoPct, valorFinal };
+}
+
+/**
+ * Lugares livres do bloco — ocupados = cortesias confirmadas + convidados de
+ * vendas vivas (pendente/pago). Cancelada/reembolsada devolve o lugar, igual
+ * ao que a RPC conta dentro do lock.
+ */
+export function vagasLivresDoBloco(bloco: {
+  capacidade: number | null;
+  cortesias: number;
+  vendidos: number;
+}): number | null {
+  if (bloco.capacidade === null) return null;
+  return bloco.capacidade - bloco.cortesias - bloco.vendidos;
+}
+
+/** Placeholder do convidado sem nome — igual ao que a RPC grava no banco. */
+export function nomeConvidadoPlaceholder(comprador: string, indice: number): string {
+  return `Convidado ${indice} de ${comprador.trim()}`;
 }

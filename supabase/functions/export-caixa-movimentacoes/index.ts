@@ -107,6 +107,8 @@ serve(async (request) => {
       'responsavel', 'criado_por', 'aluno_id', 'fatura_id',
       'cartao_modalidade', 'cartao_parcelas',
       'cheque_numero', 'cheque_banco', 'cheque_bom_para',
+      'cheque_emitente_nome', 'cheque_emitente_documento_hash',
+      'cheque_agencia', 'cheque_conta',
       'created_at', 'updated_at',
     ].join(',');
 
@@ -257,6 +259,13 @@ serve(async (request) => {
           cheque_numero: i.cheque_numero ?? null,
           cheque_banco: i.cheque_banco ?? null,
           cheque_bom_para: i.cheque_bom_para ?? null,
+          // Emitente e CMC-7 (pedido SF 06/10): persistidos a partir do
+          // payload da Sol; null ate a Sol passar a envia-los. Documento
+          // so em hash HMAC — nunca em claro.
+          cheque_emitente_nome: i.cheque_emitente_nome ?? null,
+          cheque_emitente_documento_hash: i.cheque_emitente_documento_hash ?? null,
+          cheque_agencia: i.cheque_agencia ?? null,
+          cheque_conta: i.cheque_conta ?? null,
           created_at: i.created_at,
           updated_at: i.updated_at,
         };

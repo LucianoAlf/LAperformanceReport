@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import type { MovimentacaoAdmin } from './AdministrativoPage';
 import { calcularReajusteMedioCanonico } from '@/lib/retencaoOperacionalCanonica';
+import { contaNosKpis, motivoForaDosKpis } from '@/lib/atividadesExtras';
 
 interface TabelaRenovacoesProps {
   data: MovimentacaoAdmin[];
@@ -191,9 +192,13 @@ export function TabelaRenovacoes({
     }
   }
 
-  const reajusteCanonico = calcularReajusteMedioCanonico(data);
-  const totalParcelasNovas = data.reduce((soma, item) => soma + toNumber(item.valor_parcela_novo), 0);
-  const qtdComParcelaNova = data.filter(item => toNumber(item.valor_parcela_novo) > 0).length;
+  // Bolsista e banda aparecem na lista, mas os totais do rodapé seguem a regra da
+  // casa (27/08): fora da taxa, fora do reajuste, fora da soma de parcelas.
+  const dataNaTaxa = data.filter(contaNosKpis);
+  const qtdForaDaTaxa = data.length - dataNaTaxa.length;
+  const reajusteCanonico = calcularReajusteMedioCanonico(dataNaTaxa);
+  const totalParcelasNovas = dataNaTaxa.reduce((soma, item) => soma + toNumber(item.valor_parcela_novo), 0);
+  const qtdComParcelaNova = dataNaTaxa.filter(item => toNumber(item.valor_parcela_novo) > 0).length;
 
   return (
     <div className="overflow-x-auto">
@@ -237,6 +242,7 @@ export function TabelaRenovacoes({
             data.map((item, index) => {
               const key = rowKey(item, index);
               const draft = getDraft(item, key);
+              const motivoForaDaTaxa = motivoForaDosKpis(item);
               const valorAnterior = valorAnteriorOperacional(item);
               const valorNovo = isPendente
                 ? toNumber(draft.valor_parcela_novo || item.valor_parcela_novo)
@@ -244,6 +250,11 @@ export function TabelaRenovacoes({
               const agente = draft.agente_comercial.trim() || item.agente_comercial || '';
               const semValidacaoFinanceira = isLinhaSemValidacaoFinanceira(item, valorAnterior);
               const podeValidar = semValidacaoFinanceira || (valorNovo > 0 && agente.trim().length > 0);
+              // A aba Antecipadas lista tudo o que foi lançado no mês para valer num mês
+              // futuro — validado ou não. Sem isto a linha já confirmada seguia com selo
+              // âmbar e ✓, e a equipe achava que faltava validar (Jhon/CG, 03/10/2026).
+              const jaConfirmada = isAntecipada && item.renovacao_status === 'antecipada_confirmada';
+              const aguardando = isPendente && !jaConfirmada;
               const reajuste = valorAnterior > 0 && valorNovo > 0
                 ? ((valorNovo - valorAnterior) / valorAnterior) * 100
                 : 0;
@@ -253,7 +264,7 @@ export function TabelaRenovacoes({
                   key={key}
                   className={cn(
                     'border-t border-slate-700/30',
-                    isPendente
+                    aguardando
                       ? 'bg-amber-500/[0.06] hover:bg-amber-500/[0.09]'
                       : 'hover:bg-slate-800/30'
                   )}
@@ -275,13 +286,27 @@ export function TabelaRenovacoes({
                   </td>
                   {isPendente && (
                     <td className="px-3 py-2.5 text-center">
-                      <span className="inline-flex items-center rounded-full border border-amber-400/30 bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
-                        {isAntecipada ? 'Antecipada' : 'Pendente'}
-                      </span>
+                      {jaConfirmada ? (
+                        <span className="inline-flex items-center rounded-full border border-emerald-400/30 bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
+                          Confirmada
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full border border-amber-400/30 bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
+                          {isAntecipada ? 'Antecipada' : 'Pendente'}
+                        </span>
+                      )}
                     </td>
                   )}
                   <td className="min-w-[280px] px-3 py-2.5 font-medium text-white">
                     <span className="whitespace-nowrap">{item.aluno_nome}</span>
+                    {motivoForaDaTaxa && (
+                      <span
+                        className="ml-2 inline-flex items-center whitespace-nowrap rounded-full border border-slate-500/40 bg-slate-600/25 px-2 py-0.5 text-[11px] font-semibold text-slate-300"
+                        title="Regra da casa (27/08/2026): bolsista e banda não entram na taxa de renovação nem no total do relatório mensal."
+                      >
+                        {motivoForaDaTaxa === 'banda' ? 'Banda' : 'Bolsista'} · não entra na taxa
+                      </span>
+                    )}
                   </td>
                   <td className="min-w-[140px] px-3 py-2.5 text-sm text-slate-300">{item.curso_nome || '-'}</td>
                   <td className="px-3 py-2.5">
@@ -389,7 +414,7 @@ export function TabelaRenovacoes({
                   </td>
                   <td className="px-3 py-2.5 text-center">
                     <div className="flex items-center justify-center gap-1">
-                      {isPendente && podeValidar && (
+                      {aguardando && podeValidar && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -444,7 +469,10 @@ export function TabelaRenovacoes({
           <tfoot className="bg-slate-800/50">
             <tr className="border-t border-slate-600">
               <td colSpan={6} className="px-4 py-3 text-right font-medium text-slate-400">
-                Totais: {data.length} renovações - {reajusteCanonico.total} válidas para reajuste
+                Totais: {dataNaTaxa.length} renovações - {reajusteCanonico.total} válidas para reajuste
+                {qtdForaDaTaxa > 0 && (
+                  <span className="ml-1 text-slate-500">(+{qtdForaDaTaxa} bolsista/banda fora da taxa)</span>
+                )}
               </td>
               <td
                 className="whitespace-nowrap px-3 py-3 text-right font-bold text-emerald-400"

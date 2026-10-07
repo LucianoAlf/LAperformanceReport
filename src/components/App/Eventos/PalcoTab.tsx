@@ -4,6 +4,8 @@ import { MapPin, Music2, Speaker, Volume2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   calcularHorariosDaGrade,
+  diasDoEvento,
+  formatarDataCurta,
   consolidarItensDoPalco,
   palcoDosNumeros,
   type ApresentacaoParaPalco,
@@ -119,7 +121,7 @@ export function PalcoTab({ evento }: { evento: EventoComResumo }) {
 
       {/* ── o evento inteiro ── */}
       <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <h3 className="text-[12px] sm:text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           O recital inteiro precisa de
         </h3>
         {palcoDoEvento.length === 0 ? (
@@ -134,7 +136,7 @@ export function PalcoTab({ evento }: { evento: EventoComResumo }) {
                 <Etiqueta key={`${item.tipo}-${item.nome}`} item={item} />
               ))}
             </div>
-            <p className="mt-2 text-[11px] text-slate-500">
+            <p className="mt-2 text-[12px] sm:text-[11px] text-slate-500">
               O número é quanto precisa existir <strong className="text-slate-400">ao mesmo
               tempo</strong>, não quantas vezes é usado — as apresentações são uma depois da
               outra, então o mesmo violão serve a várias.
@@ -145,10 +147,11 @@ export function PalcoTab({ evento }: { evento: EventoComResumo }) {
 
       {/* ── por bloco ── */}
       <section className="space-y-2">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <h3 className="text-[12px] sm:text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           Por bloco
         </h3>
         {blocos.map((bloco) => {
+          const dias = diasDoEvento(evento.data_evento, evento.data_fim);
           const h = horarios.find((x) => x.blocoId === bloco.id);
           const itens = consolidarItensDoPalco(paraPalco([bloco]));
           return (
@@ -158,12 +161,19 @@ export function PalcoTab({ evento }: { evento: EventoComResumo }) {
             >
               <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
                 <span className="text-[13px] font-medium text-white">{bloco.nome}</span>
+                {/* Evento de 2+ dias: sem o dia, dois "Bloco 3" (um em cada data) ficam iguais. */}
+                {dias.length > 1 && (
+                  <span className="text-[12px] sm:text-[11.5px] text-slate-400">
+                    {dias.indexOf(bloco.data ?? evento.data_evento) + 1}º dia ·{' '}
+                    {formatarDataCurta(bloco.data ?? evento.data_evento)}
+                  </span>
+                )}
                 {h && (
-                  <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[11.5px] tabular-nums text-amber-300">
+                  <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[12px] sm:text-[11.5px] tabular-nums text-amber-300">
                     {h.inicio} – {h.fim}
                   </span>
                 )}
-                <span className="text-[11.5px] text-slate-500">
+                <span className="text-[12px] sm:text-[11.5px] text-slate-500">
                   {bloco.apresentacoes.length}{' '}
                   {bloco.apresentacoes.length === 1 ? 'apresentação' : 'apresentações'}
                 </span>
@@ -184,7 +194,7 @@ export function PalcoTab({ evento }: { evento: EventoComResumo }) {
 
       {/* ── playback ── */}
       <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-3">
-        <h3 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <h3 className="flex items-center gap-1.5 text-[12px] sm:text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           <Volume2 className="h-3.5 w-3.5" />
           Playback ({comPlayback.length})
         </h3>
@@ -197,11 +207,11 @@ export function PalcoTab({ evento }: { evento: EventoComResumo }) {
             {comPlayback.map(({ bloco, ap }) => (
               <li key={ap.id} className="flex flex-wrap items-center gap-x-2 text-[12.5px]">
                 <span className="text-slate-200">{ap.aluno_nome}</span>
-                <span className="rounded bg-amber-500/15 px-1.5 py-px text-[10.5px] text-amber-300">
+                <span className="rounded bg-amber-500/15 px-1.5 py-px text-[12px] sm:text-[10.5px] text-amber-300">
                   {ap.curso_nome}
                 </span>
                 {ap.musica && <span className="text-slate-400">{ap.musica}</span>}
-                <span className="text-[11px] text-slate-600">{bloco}</span>
+                <span className="text-[12px] sm:text-[11px] text-slate-600">{bloco}</span>
               </li>
             ))}
           </ul>
@@ -210,7 +220,7 @@ export function PalcoTab({ evento }: { evento: EventoComResumo }) {
 
       {/* ── mapas ── */}
       <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-3">
-        <h3 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <h3 className="flex items-center gap-1.5 text-[12px] sm:text-[11px] font-semibold uppercase tracking-wide text-slate-400">
           <MapPin className="h-3.5 w-3.5" />
           Observações de palco ({comMapa.length})
         </h3>
@@ -224,10 +234,10 @@ export function PalcoTab({ evento }: { evento: EventoComResumo }) {
               <li key={ap.id} className="border-l-2 border-slate-700 pl-2.5">
                 <div className="flex flex-wrap items-center gap-x-2 text-[12.5px]">
                   <span className="text-slate-200">{ap.aluno_nome}</span>
-                  <span className="rounded bg-amber-500/15 px-1.5 py-px text-[10.5px] text-amber-300">
+                  <span className="rounded bg-amber-500/15 px-1.5 py-px text-[12px] sm:text-[10.5px] text-amber-300">
                     {ap.curso_nome}
                   </span>
-                  <span className="text-[11px] text-slate-600">{bloco}</span>
+                  <span className="text-[12px] sm:text-[11px] text-slate-600">{bloco}</span>
                 </div>
                 <p className="mt-0.5 text-[12.5px] text-slate-400">{ap.observacao_mapa}</p>
               </li>
@@ -262,7 +272,7 @@ function Etiqueta({ item }: { item: ItemConsolidado }) {
         <Speaker className="h-3 w-3 shrink-0" />
       )}
       <strong className="tabular-nums">{item.quantidade}×</strong> {item.nome}
-      <span className="text-[10.5px] opacity-60">({item.apresentacoes})</span>
+      <span className="text-[12px] sm:text-[10.5px] opacity-60">({item.apresentacoes})</span>
     </span>
   );
 }

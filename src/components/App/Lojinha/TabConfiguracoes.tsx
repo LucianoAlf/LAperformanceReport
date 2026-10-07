@@ -320,13 +320,13 @@ export function TabConfiguracoes({ unidadeId }: TabConfiguracoesProps) {
             <label className="text-xs font-semibold text-slate-400 uppercase">
               Alertas WhatsApp
             </label>
-            <div className="flex items-center gap-3 mt-2">
-              <label className="flex items-center gap-2 cursor-pointer">
+            <div className="flex items-center gap-3 mt-2 max-lg:flex-wrap">
+              <label className="flex items-center gap-2 cursor-pointer max-lg:min-h-[44px]">
                 <input
                   type="checkbox"
                   checked={configuracoes.alerta_whatsapp_ativo === 'true'}
                   onChange={(e) => updateConfig('alerta_whatsapp_ativo', e.target.checked ? 'true' : 'false')}
-                  className="rounded"
+                  className="rounded max-lg:h-5 max-lg:w-5"
                 />
                 <span className="text-sm text-slate-300">Disparo automático ativo</span>
               </label>
@@ -381,10 +381,10 @@ export function TabConfiguracoes({ unidadeId }: TabConfiguracoesProps) {
                     </span>
                   </td>
                   <td className="p-3 flex gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => handleEditResponsavel(r)}>
+                    <Button variant="ghost" size="sm" onClick={() => handleEditResponsavel(r)} className="max-lg:min-w-[44px]" aria-label={`Editar ${r.nome}`}>
                       <Edit2 className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDeleteResponsavel(r)} className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10">
+                    <Button variant="ghost" size="sm" onClick={() => handleDeleteResponsavel(r)} className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 max-lg:min-w-[44px]" aria-label={`Remover ${r.nome}`}>
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </td>
@@ -414,7 +414,7 @@ export function TabConfiguracoes({ unidadeId }: TabConfiguracoesProps) {
             >
               <span>{cat.icone}</span>
               <span className="text-sm text-white">{cat.nome}</span>
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleEditCategoria(cat)}>
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 max-lg:w-11" onClick={() => handleEditCategoria(cat)} aria-label={`Editar categoria ${cat.nome}`}>
                 <Edit2 className="w-3 h-3" />
               </Button>
             </div>
@@ -460,8 +460,8 @@ export function TabConfiguracoes({ unidadeId }: TabConfiguracoesProps) {
       </div>
 
       {/* Botão Salvar */}
-      <div className="flex justify-end gap-4 items-center">
-        <span className="text-xs text-slate-400">💾 Alterações são salvas automaticamente</span>
+      <div className="flex justify-end gap-4 items-center max-lg:flex-col-reverse max-lg:items-stretch max-lg:gap-2">
+        <span className="text-xs text-slate-400 max-lg:text-center">💾 Alterações são salvas automaticamente</span>
         <Button onClick={salvarConfiguracoes} disabled={saving} size="lg">
           <Save className="w-4 h-4 mr-2" />
           {saving ? 'Salvando...' : 'Salvar Todas'}

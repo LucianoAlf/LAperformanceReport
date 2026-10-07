@@ -115,7 +115,10 @@ const ultimo = (a) => String(a[a.length - 1] || '');
   // ── REGRESSÃO R-h: correção de categoria EXPLÍCITA continua funcionando ─────
   const B = novo({ interpretarFn: async () => ({ categoria: 'lojinha', aluno: 'Luiza Silva Araújo', competencia: null, forma: 'cartao' }), canonicaFn: async () => null });
   await B.h.handle({ chatId: CHAT, senderPhone: KAILANE, messageId: 'K4',
-    body: 'venda', hasMedia: true, mediaType: 'document', mediaUrls: ['fake://c.pdf'] });
+    // 02/10/2026: "venda" sozinho agora pergunta "ingresso ou lojinha?" (decisão do
+    // Alf: sem sinal claro, a Sol não chuta). O que este caso prova é a CORREÇÃO de
+    // um card de lojinha, então o card nasce de produto citado.
+    body: 'venda de palheta', hasMedia: true, mediaType: 'document', mediaUrls: ['fake://c.pdf'] });
   const rB = await B.h.handle({ chatId: CHAT, senderPhone: KAILANE, messageId: 'K5',
     body: 'não é lojinha, é parcela', hasMedia: false });
   console.log('REG categoria explícita:', rB && rB.acao);

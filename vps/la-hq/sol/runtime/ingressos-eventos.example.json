@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "_leia": [
+    "Config de VENDA DE INGRESSO da Sol (caixa-ingressos.cjs). Arquivo vivo:",
+    "/home/sol/.hermes/profiles/sol/caixa-ingestao/ingressos-eventos.json (fora do manifesto: é config, não código).",
+    "A Sol relê quando o arquivo muda: trocar lote/evento NÃO exige deploy nem restart.",
+    "aliases: como a equipe escreve o evento (mínimo 4 letras). Prefira o nome do EVENTO;",
+    "  nome de artista sozinho pode coincidir com nome de aluno.",
+    "lotes: o vigente é o último cujo a_partir_de (AAAA-MM-DD, horário de SP) já chegou; sem data = desde sempre.",
+    "setores (opcional): preço próprio por setor (Pista/VIP). Setor escrito e não configurado = card sem quantidade.",
+    "unidades (opcional): nomes ('Campo Grande', 'Barra', 'Recreio') ou unidade_id; vazio = todas.",
+    "ate (opcional): depois desta data o evento deixa de ser reconhecido pelo alias.",
+    "JSON inválido = nenhum evento configurado: ingresso continua reconhecido, só sem quantidade."
+  ],
+  "eventos": [
+    {
+      "id": "la-session-felipe-alves",
+      "nome": "LA Session – Felipe Alves",
+      "aliases": ["la session", "l.a session", "l.a. session"],
+      "ativo": true,
+      "unidades": [],
+      "lotes": [
+        { "nome": "1º lote", "preco": 40 }
+      ],
+      "setores": []
+    },
+    {
+      "id": "exemplo-show-com-setores",
+      "nome": "Show Exemplo",
+      "aliases": ["show exemplo"],
+      "ativo": false,
+      "ate": "2026-12-31",
+      "unidades": ["Campo Grande"],
+      "lotes": [
+        { "nome": "1º lote", "preco": 40 },
+        { "nome": "2º lote", "preco": 45, "a_partir_de": "2026-10-15" }
+      ],
+      "setores": [
+        { "nome": "Pista" },
+        { "nome": "VIP", "preco": 65 }
+      ]
+    }
+  ]
+}

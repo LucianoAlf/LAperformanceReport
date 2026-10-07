@@ -6,6 +6,7 @@ import {
   AlertTriangle, Check, X
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils';
 import { filtrarProdutos } from '@/lib/lojinhaMobile';
 import { useShellMobile } from '@/hooks/useShellMobile';
+import { escopoDoEstoque, somarEstoquePorProduto } from '@/lib/lojinhaEstoque';
 import { ProdutosMobile } from '@/mobile/telas/lojinha/ProdutosMobile';
 import type { LojaProduto, LojaCategoria, FiltrosProdutos } from '@/types/lojinha';
 import { ModalProduto } from './ModalProduto';
@@ -65,25 +67,32 @@ export function TabProdutos({ unidadeId }: TabProdutosProps) {
         `)
         .order('nome');
 
-      // Calcular estoque total por produto
+      // Estoque total por produto — UMA consulta, somada na memoria (regra em
+      // `@/lib/lojinhaEstoque`). Eram 20 consultas, uma por produto, e no
+      // Consolidado todas pediam a unidade 'todos', que nao existe: falhavam,
+      // e o `|| 0` mostrava a rede inteira sem estoque.
       if (prods) {
-        const produtosComEstoque = await Promise.all(
-          prods.map(async (p) => {
-            const { data: estoque } = await supabase
-              .from('loja_estoque')
-              .select('quantidade')
-              .eq('produto_id', p.id)
-              .eq('unidade_id', unidadeId === 'todos' ? unidadeId : unidadeId);
-            
-            const estoqueTotal = estoque?.reduce((acc, e) => acc + e.quantidade, 0) || 0;
-            return {
-              ...p,
-              estoque_total: estoqueTotal,
-              variacoes_count: p.loja_variacoes?.length || 0,
-            };
-          })
+        const escopo = escopoDoEstoque(unidadeId);
+        let totais = new Map<number, number>();
+        if (escopo.tipo !== 'aguardando') {
+          let estoqueQuery = supabase.from('loja_estoque').select('produto_id, quantidade');
+          if (escopo.tipo === 'unidade') estoqueQuery = estoqueQuery.eq('unidade_id', escopo.unidadeId);
+          const { data: estoque, error: erroEstoque } = await estoqueQuery;
+          if (erroEstoque) {
+            // Falha nao pode virar "estoque zero" em silencio: foi exatamente
+            // o que escondeu este defeito.
+            console.error(`[TabProdutos] estoque (${unidadeId}):`, erroEstoque.message);
+            toast.error('Não consegui carregar o estoque — os números de estoque desta tela não valem agora.');
+          }
+          totais = somarEstoquePorProduto(estoque ?? []);
+        }
+        setProdutos(
+          prods.map((p) => ({
+            ...p,
+            estoque_total: totais.get(p.id) ?? 0,
+            variacoes_count: p.loja_variacoes?.length || 0,
+          })),
         );
-        setProdutos(produtosComEstoque);
       }
     } catch (error) {
       console.error('Erro ao carregar produtos:', error);

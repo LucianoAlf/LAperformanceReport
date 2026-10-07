@@ -8,9 +8,23 @@ Problemas/limitações **do lado do Emusys** (API ou plataforma) que afetam noss
 > deste arquivo foi corrigido pelo Emusys no período. O que mudou foi o **valor** de alguns pedidos,
 > pela evolução do nosso lado — reavaliados abaixo, com medição.
 
+> **Revisão em 2026-10-05.** Changelog conferido até **v1.8.3 (05/10/2026)**: **três** itens atendidos —
+> `aula.id` nos webhooks de experimental (v1.8.1, como `aula.aula_id`), presença "não registrada"
+> (v1.8.2, campo `registro_presenca`) e listagem de leads (v1.6.0, `GET /leads`). Itens marcados
+> inline abaixo. Novos webhooks de contrato (`enviado_para_assinatura`/`assinado`, v1.8.0) e de
+> exclusão (`matricula_excluida`/`contrato_excluido`, v1.8.2) não eram pedidos nossos — são
+> oportunidades novas, detalhadas no `emusys-api` SKILL.
+
 ---
 
-## 🚨 [Webhook] `aula.id` NÃO vem nos 3 webhooks de aula experimental — PRIORIDADE MÁXIMA
+## ✅ [Webhook] `aula.id` NÃO vem nos 3 webhooks de aula experimental — ~~PRIORIDADE MÁXIMA~~ RESOLVIDO v1.8.1
+
+> ✅ **Atendido pelo Emusys em 04/10/2026 (v1.8.1):** os 3 webhooks de experimental passaram a trazer
+> `aula.aula_id` (o id real da aula, o mesmo de `GET /aulas`, **estável no reagendamento**) e
+> `aula.data_hora_inicio_original`. O `id` da raiz do payload continua sendo o id do evento.
+> Permite gravar o vínculo certo desde a chegada — o trigger `fn_experimental_recebe_id_da_aula` e as
+> reconciliações passam a ser rede de segurança. ⚠️ Mexe no n8n das experimentais, não no app —
+> adoção pendente do nosso lado.
 
 **Identificado em:** 2026-08-10
 
@@ -49,7 +63,15 @@ schema e não era preenchido; foi reportado e saiu na **v1.4.1 (04/08/2026)**. M
 
 ---
 
-## ⚠️ [API] `presenca` não distingue "não registrada" de "ausente"
+## ✅ [API] `presenca` não distingue "não registrada" de "ausente" — RESOLVIDO v1.8.2 (condicional)
+
+> ✅ **Atendido pelo Emusys em 04/10/2026 (v1.8.2):** `alunos[]`/`professores[]` de `GET /aulas`,
+> `GET /aula` e os PATCHs de presença ganharam `registro_presenca`: `"registrado"` (houve
+> lançamento) | `"pendente"` (nada lançado) | `null` (**a escola não usa o recurso de 3 estados**).
+> Falta lançada = `ausente` + `registrado`. ⚠️ **Condicional:** se as unidades LA não têm o recurso
+> ligado, tudo vem `null` — medir numa chamada real antes de mudar regra. Aulas anteriores à ativação
+> podem vir `pendente` mesmo com falta real; ignorar em `cancelada:true`; professor adicional de
+> turma sempre `null`.
 
 **Identificado em:** 2026-08-10
 
@@ -69,7 +91,12 @@ se "ausente" significa falta ou "ainda não marcaram".
 
 ---
 
-## ⚠️ [API] Não existe GET de histórico/estágio do lead no CRM
+## ⚠️ [API] Não existe GET de histórico/estágio do lead no CRM — PARCIAL v1.6.0
+
+> 🟡 **Parcialmente coberto em 15/09/2026 (v1.6.0):** `GET /leads/por_id`, `GET /leads/por_telefone`
+> e `GET /leads` (com filtro `estagio_id`) trazem o **estágio atual** (`estagio_funil`) e o `status`
+> calculado do lead. O que **continua sem endpoint**: o histórico (mudanças de estágio, anotações,
+> autor e data) — que é o que arbitra os casos ambíguos abaixo.
 
 **Identificado em:** 2026-08-10
 
@@ -101,7 +128,12 @@ como já existe `trancamento_ativo`) ou um `status='aviso_previo'`.
 
 ---
 
-## ⚠️ [API] Não existe listagem de leads
+## ✅ [API] Não existe listagem de leads — RESOLVIDO v1.6.0
+
+> ✅ **Atendido pelo Emusys em 15/09/2026 (v1.6.0):** `GET /leads` lista com paginação por cursor
+> (padrão `/faturas`), filtro `status` (`ativo`/`arquivado`/`abandonado`/`todas`) e `estagio_id`
+> (lista por vírgula). `GET /leads/por_id` e `GET /leads/por_telefone` completam. Viabiliza a
+> conferência periódica "algum lead não chegou?" que faltou no incidente de 11/08 (22 leads).
 
 **Identificado em:** 2026-08-10
 
@@ -331,6 +363,47 @@ Só existe **um** `matricula_alterada` para essa matrícula — não veio um seg
   `id_aluno`/`id_lead` passaram a vir direto no `/aulas` (v1.2.0, 21/06) e não precisamos mais
   resolver `id → pessoa`. Removido da lista de pedidos — não vale gastar capital com ele.
 
+### Estado da revisão de 2026-10-05
+
+Changelog conferido até **v1.8.3 (05/10/2026)** — 3 itens atendidos + 1 parcial:
+
+| Item | Como está |
+|---|---|
+| `aula.id` nos webhooks de experimental | ✅ **v1.8.1** — `aula.aula_id` estável no reagendamento + `aula.data_hora_inicio_original`. Adoção no n8n pendente |
+| `presenca` sem "não registrada" | ✅ **v1.8.2** — `registro_presenca` (`registrado`/`pendente`/`null`). ⚠️ Medir se as unidades LA retornam não-`null` |
+| Listagem de leads | ✅ **v1.6.0** — `GET /leads` + `/por_id` + `/por_telefone`, filtro `estagio_id` |
+| GET histórico do lead | 🟡 **Parcial** — v1.6.0 traz estágio ATUAL e `status`; histórico/anotações segue sem endpoint |
+| PULL do aviso prévio | Aberto — webhook existe, consulta não |
+| `responsavel_id` ignorado em silêncio | Aberto, não reverificado |
+| Status turma × individual | Aberto — workaround de dedup segue obrigatório |
+| Troca de curso não propaga | Aberto — exige triagem antes de reportar |
+| `/professores` só id+nome | Aberto (rebaixado) — 95% dos vínculos já têm `emusys_id` |
+| `pessoa_id` não filtra professor | Aberto, não reverificado |
+| Presença sem vínculo `pessoa_id` | Aberto, não reverificado |
+| Nr. Aulas Restantes diverge da tela | Aberto (baixa prioridade) |
+| `matricula_alterada` manda data antiga | Aberto (amostra de 1) |
+
+**Oportunidades novas (não eram pedidos):** webhooks `contrato_enviado_para_assinatura`/
+`contrato_assinado` (v1.8.0) e `matricula_excluida`/`contrato_excluido` (v1.8.2) — ⚠️ precisam ser
+**assinados no cadastro de webhooks de cada unidade** para chegar (foi o que travou o aviso prévio
+até 30/09). Params de agendamento de experimental: `forcar_individual` (v1.2.5),
+`contar_alunos_experimentais` (v1.2.7), `aula_online` (v1.4.3), `filtrar_sala_por_instrumento`
+(v1.8.3) — úteis se a Mila agendar pela API.
+
+**Correções nossas do mesmo dia (05/10, medição do agente do LA Teacher/Fábio):**
+12 das 14 cobranças de chamada do painel eram fantasmas — aula apagada ou aluno removido no Emusys
+seguia na fila. Resolvido em produção (migration `20261005140000`): (a) `vw_presenca_pendencia`
+passou a exigir `aula_alunos_emusys.ativo_operacional` (tirou ~263 linhas mortas: 482→~190);
+(b) `reconciliar_grade_snapshot_emusys_core_v3` deixou de ser só-futuro no cancelamento lógico —
+aula ausente do Emusys dentro da janela de cobrança (45d) é tombada `sync_ausente_emusys`.
+Backfill: 171 aulas mortas tombadas nas 58 datas afetadas das 3 unidades; residual = 0.
+**Gap novo descoberto (para o desenho das 3 gavetas):** presença lançada no Emusys *depois* do sync
+daquele dia fica velha aqui — a revisita `sync-presenca-backlog` cobre só D-14 em fatias de 3d a
+cada 5 dias. Caso medido: Renato, C_Qui_19 01/10 — `presente/registrado` no Emusys, nossa linha
+ficou `ausente` neutra do fetch único de 02/10 até o re-fetch manual. `registro_presenca`
+confirmado **ativo nas 3 unidades** (medido pelo Fábio 05/10) — é o gancho para re-ler só o que
+mudou de `pendente`→`registrado`.
+
 ### Estado da revisão de 2026-08-10
 
 Changelog conferido de 21/06 a 04/08 (v1.4.1): **nenhum** item aberto foi corrigido pelo Emusys.
@@ -366,3 +439,121 @@ Ao abrir ticket, sempre incluir:
 - Token usado (mascarado, só primeiros 6 chars + última letra)
 - Payload de exemplo retornado vs esperado
 - Impacto no nosso fluxo
+
+---
+
+## Geminação turma↔individual + justificada no nível da aula (auditoria 05/10/2026)
+
+**Estrutura (medido, 45d, as 3 unidades):** toda aula de turma gera uma aula
+`individual` por aluno no Emusys — mesmo (unidade, professor, inicio, fim,
+curso_nome), roster=1, `nr_da_aula=0`, `qtd_aulas_contrato` igual à da turma.
+~97% das individuais têm gêmea turma (Barra 1.690/1.749, CG 2.834/2.908,
+Recreio 2.434/2.541). Não é bug da nossa base — é o modelo do Emusys (a
+"individual" é o registro por aluno da sessão; o professor escreve anotações
+de conteúdo nela — medido: 970 individuais com anotações em 45d CG).
+
+**`justificada` na individual:** subset deliberado (não-automático: 240
+individuais `ausente` sem justificada vs 548 com). Fenômeno CG-concentrado e
+datado: mai 5 / jun 17 / jul 5 / **ago 432 / set 380 / out 0**. Zero correlação
+com `presenca_emusys_escrita` (não é eco nosso). Payload `GET /aula`:
+categoria `normal`, `reagendada=false`, professor `presente`+`registrado`,
+aluno `ausente`, justificada=true — a aula aconteceu; a justificativa é a
+ausência do aluno (falta justificada registrada no Emusys). Conferir na tela:
+Francisco (Bateria T, 15/09 20h, turma 650327 / indiv 687285, prof Gabriel
+Otávio), Neemias (Violino T, 15/09 14h, 537941/653027, prof Joel — com
+anotações), Arthur (MI, 19/09 14h, 747323/654989, prof Caio Tenório).
+
+**Onde já é tratado:** `fn_aula_operacional_id` / `fn_aula_operacional_da_sessao`
+(maior roster → turma primeiro), agenda professor `canonica_v2` (colapsa por
+slot), `vw_registro_pendencia` (âncora turma + lê anotacoes da individual do
+aluno — a individual é a superfície de conteúdo por aluno), bom-dia do Fábio
+(comentários I3/M7 de fixes de gêmea), Sol `fn_presenca_pendencias_do_dia_v2`
+(posicao=1 por slot_key).
+
+**Onde ainda vaza:**
+- `vw_presenca_slot_canonica_v1` <= v1.1: `bool_or` de cancelada/justificada
+  vetava o slot inteiro → apagou ~487 faltas reais de CG. Corrigido v1.2
+  (05/10): vetada ordena por último + resultado = o da linha escolhida.
+- `fn_presenca_pendencias_do_dia_v2` (Sol): `not exists(gêmea cancelada ou
+  justificada)` ainda suprime pendência da aula viva — ~67 aulas sem chamada
+  escondidas da cobrança (Barra 26, CG 19, Recreio 22 em 45d).
+- Health Score presença (`_c95`): conta por aula×aluno, não por slot — gêmea
+  é "esperado" a mais; gêmea justificada nunca classifica → cobertura
+  cai (gate 95%). CG voltou a pontuar: política nova de 05/10 tem
+  `exige_revisao_operacional=false` (a v2-19/07 tinha `true` para CG ago+).
+
+**Pendente de decisão (Alf/Fábio):** justificada na individual = falta
+justificada do aluno no Emusys → hoje a falta humana do LA Report vence;
+alternativa: divergência para a secretaria confirmar justificativa.
+
+## 2026-10-06 — "Furos de lançamento" resolvidos: modelo correto das gavetas
+
+Regra fixada no topo do CLAUDE.md (commit a9518ab3): gaveta da EQUIPE vale;
+Emusys `ausente` sozinho nunca é falta. Investigação dos "esperados sem
+classificação" de set/2026 (226 esperados-órfãos) mostrou que TODO número de
+"aula sem lançamento" é erro de medição até prova. Decomposição:
+
+- 118 resíduo de saida da escola (movimentacoes_admin <= data_aula).
+- 21 aula não aconteceu (professor ausente no Emusys + zero lançamento).
+- 18 remarcada (lançamento no mesmo dia/curso, outro horário).
+- 20 fora da janela da disciplina (data_primeira/ultima_aula da jornada).
+- 37 matriculado em outra turma do curso (dia_semana+horario da jornada
+  ≠ slot da aula — roster carrega a turma antiga).
+- 12 suspeitos → conferidos pelo Fábio no Emusys, um a um: ZERO era furo.
+
+**Duas correções permanentes na medição (validadas pelo Fábio):**
+
+1. **Saída de TURMA ≠ saída da escola.** `aula_alunos_emusys.ativo_operacional`
+   = false / `inativado_em` <= data_aula (motivos `ausente_snapshot_completo`,
+   `roster_vazio_confirmado`) = aluno fora daquela turma, mesmo matriculado na
+   escola. Esperado só conta linha de roster com ativo_operacional. Casos:
+   Gustavo (MP_Qua_11, saiu 02/09), Lara (C_Qua_18, 09/09), Maitê (C_Seg_14,
+   31/08 e 25/09).
+2. **`registro_presenca='registrado'` no Emusys É lançamento da equipe.** A
+   equipe também marca direto no Emusys — `respondido_por='emusys'` com
+   registro registrado conta como gaveta humana (ex.: C_Seg_17 CG 21/09 —
+   Maria/Elisa/Amanda presente+registrado). Só `ausente`+`pendente` é
+   "ninguém marcou".
+
+**Sobraram 8 alunos no mês inteiro** (aula aconteceu, colegas marcados,
+aluno ausente+pendente sem marca nenhuma). Hipótese do Fábio: a equipe marca
+quem VEIO e quem faltou fica ausente-pendente — se o Alf confirmar,
+ausente+pendente em aula realizada com chamada fechada = falta. **AGUARDANDO
+resposta do Alf antes de qualquer migration.** Sol e HS congelados nesse
+ponto — nada muda sem a decisão.
+
+**RESOLVIDO (06/10, auditoria do Fábio no Emusys): os 8 TODOS tinham
+lançamento — a conta não lia o lugar certo.** Auditoria de set/2026 fecha com
+**ZERO furo de lançamento da equipe**. Terceira correção permanente na
+medição:
+
+3. **O esperado tem que ler TAMBÉM a aula INDIVIDUAL gêmea do aluno
+   (`aulas_emusys.justificada` / `cancelada`), não só a aula da turma.** A
+   equipe lança falta justificada e cancelamento na individual do aluno, e a
+   linha da turma fica `ausente+pendente`. Casos verificados no banco:
+   - **CG, justificada=true na individual:** Miguel (H_Qua_19 23/09), Pedro
+     (B_Qua_19 23/09), Thuanny (C_Seg_17 21/09), Vinícius (PK_Qui_15 10/09 —
+     que no mesmo dia também teve C_Qui_16 com `agenda_secretaria`+ausente
+     registrado em turma E individual).
+   - **Barra, cancelada=true na individual:** Felipe (G_Seg_14 14/09).
+   - **Barra 18/09 19h (Eva, Leticia no C_Sex_19; Raquel no MBS_Sex_19):**
+     chamada feita DIRETO no Emusys, presentes registrados; os três sem
+     marca naquela noite. Nas outras sextas aparecem normalmente (Eva e
+     Leticia presentes; Raquel com faltas lançadas — cadastro trancado hoje).
+
+Decomposição final dos 226 órfãos de set/2026: 118 saída da escola + 21 aula
+não aconteceu + 18 remarcada + 20 fora da janela da disciplina + 37 outra
+turma/slot + 4 saída de turma (ativo_operacional) + 4 justificada na
+individual + 1 cancelada na individual + 3 sem marca em chamada fechada
+(Eva/Leticia/Raquel). Restam abertas, SEM migration: a semântica de
+`ausente+pendente` em aula realizada com chamada fechada (decisão do Alf,
+ver item anterior) e as correções 1-3 aplicadas às contas (esperado lê
+ativo_operacional da turma + gêmea individual + registrado-como-humano).
+
+**ENCERRADO pelo Fábio (06/10, após conferir os 4 commits no origin/main):
+os 3 de Barra (18/09 19h) estão encerrados** — chamada feita direto no
+Emusys; a pergunta ao Alf ("a equipe marca a falta ou só marca quem veio?")
+foi respondida e **não há nada a mudar**. Sol e Health Score permanecem
+como estão. Auditoria de presença set/2026: ENCERRADA com zero furo de
+lançamento — não reabrir sem nova evidência. As correções de medição
+1-3 acima são conhecimento para a PRÓXIMA conta, não migration pendente.

@@ -10,7 +10,7 @@ nada, senão a equipe não larga a planilha".
 
 - **Fase 0 — governança:** `ModalEditarEvento` (título, período, horário, local,
   status, duração padrão, intervalo, observações, excluir). Cards mostram a faixa de
-  datas. `AvisoEmDesenvolvimento` atualizado — só falta o Drive.
+  datas. `AvisoEmDesenvolvimento` atualizado.
 - **Eventos reais criados:** Barra `id=21` (28/11, já em uso), Recreio `id=22`
   (13–15/11), Campo Grande `id=23` (01–12/12). Evento "teste" removido.
 - **Período de vários dias:** `evento.data_fim` + `evento_bloco.data`. Um recital de
@@ -64,13 +64,30 @@ nada, senão a equipe não larga a planilha".
 - `npm run build` — verde.
 - Edge deployada (v1, `verify_jwt=true`) e smoke-testada em produção.
 
-## Pendente — Drive
+## Drive — implementado e provado (28/09)
 
-A organização automática dos playbacks no Drive **não foi implementada**: depende de
-credencial do Alf. Desenho preparado: os arquivos já chegam com path estável
-`<relatorio_id>/<arquivo>.mp3` no bucket `recital-playback`; a cópia para o Drive
-(pasta por unidade × professor) será uma edge/cron nova que lê os mesmos paths —
-nenhum dado adicional precisa ser coletado para isso.
+Pipeline fechado: professor sobe MP3 no LA Teacher → sync carimba `playback_path` →
+cron `recital-drive-sync` (`7,37 * * * *`) chama a edge → edge baixa do bucket e
+empurra pela **ponte Google Apps Script** implantada pelo Alf. Arquivos caem em
+`Recitais LA Music 2026 / Unidade / Evento / Professor / Aluno — Curso.ext`.
+
+- **Ponte Apps Script** (deploy v3, executa como `lucianoalf.la@gmail.com`, acesso
+  "Qualquer pessoa" fechado por TOKEN no código): `POST /exec` cria subpastas e grava;
+  substitui arquivo de mesmo nome. **Armadilha documentada na edge:** o POST dispara
+  o `doPost` e o Google devolve 302 para `script.googleusercontent.com/macros/echo`,
+  que só aceita GET — quem chama faz `redirect:'manual'` + GET no `Location`. Re-POST
+  no echo morre em 405.
+- **Edge `recital-drive-sync`** (deployada v1, `verify_jwt=false`): auth por bearer
+  service_role ou `x-sync-token` validado pela RPC `validar_token_recital_drive_v1`
+  (Vault `recital_drive_edge_token`, mesmo padrão de `sync-presenca-emusys`).
+  Secrets `RECITAL_DRIVE_URL`/`RECITAL_DRIVE_TOKEN` na Management API — nunca no repo.
+- **Espelho em `evento_apresentacao`:** `drive_playback_path` (o que subiu — professor
+  re-enviando muda o path e dispara novo upload), `drive_file_id`,
+  `drive_sincronizado_em`, `drive_erro` (último erro por linha, diagnóstico sem log).
+- **Provado com dado real:** a apresentação 106 (Billy Paulo Vangu Junior, Teclado,
+  prof. Isaque, Barra) subiu de verdade — `drive_file_id` gravado na linha.
+- **Para revogar o acesso:** apagar a implantação no Apps Script ou rotacionar
+  `RECITAL_DRIVE_TOKEN` nos dois lados.
 
 ## Não desfazer
 

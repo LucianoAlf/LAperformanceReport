@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Search, Users, Check, HelpCircle, X, Music, AlertTriangle, Guitar, LayoutList, UserPlus, Trash2 } from 'lucide-react';
+import { Search, Users, Check, HelpCircle, X, Music, AlertTriangle, Guitar, LayoutList, UserPlus, Trash2, GraduationCap, FileCheck } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -17,6 +18,7 @@ import {
   definirParticipacao,
   definirConvidados,
   definirParticipacaoEmLote,
+  definirFormando,
   removerAlunoDeOutraUnidade,
   type AlocacaoDoCurso,
   type AlunoElegivel,
@@ -70,7 +72,7 @@ function SeletorParticipacao({
             disabled={desabilitado && o.id === 'participa'}
             onClick={() => onEscolher(o.id)}
             className={cn(
-              'flex h-8 w-9 items-center justify-center transition-colors',
+              'flex h-11 w-12 items-center justify-center transition-colors sm:h-8 sm:w-9',
               selecionado ? o.ativo : 'text-slate-500 hover:bg-slate-700/60 hover:text-slate-300',
               desabilitado && o.id === 'participa' && 'cursor-not-allowed opacity-30 hover:bg-transparent',
             )}
@@ -86,11 +88,11 @@ function SeletorParticipacao({
 /** Selo de bloco de UM curso. `null` quando aquele curso ainda nao entrou na grade. */
 function SeloBloco({ alocacao }: { alocacao: AlocacaoDoCurso | undefined }) {
   if (!alocacao) {
-    return <span className="text-[11px] text-slate-600">· não alocado</span>;
+    return <span className="text-[12px] sm:text-[11px] text-slate-600">· não alocado</span>;
   }
   return (
     <span
-      className="rounded bg-violet-500/15 px-1.5 py-px text-[10.5px] font-medium text-violet-300"
+      className="rounded bg-violet-500/15 px-1.5 py-px text-[12px] sm:text-[10.5px] font-medium text-violet-300"
       title={alocacao.horario_inicial ? `Início ${alocacao.horario_inicial.slice(0, 5)}` : undefined}
     >
       {alocacao.bloco_nome}
@@ -99,15 +101,25 @@ function SeloBloco({ alocacao }: { alocacao: AlocacaoDoCurso | undefined }) {
   );
 }
 
+/** Rótulo do selo de formando: o tipo diz PARA ONDE a pessoa passa. */
+const FORMATURA_ROTULO: Record<string, string> = {
+  kids: 'Kids → School',
+  bebes: 'Bebês → Preparatória',
+  la: 'formando',
+};
+
 function LinhaAluno({
   aluno,
   onEscolher,
   onConvidados,
+  onFormando,
   onRemover,
 }: {
   aluno: AlunoElegivel;
   onEscolher: (s: ParticipacaoStatus) => void;
   onConvidados: (n: number) => void;
+  /** Marca/desmarca formando à mão ('manual' prevalece sobre a rotina). */
+  onFormando: () => void;
   /** So para aluno de outra unidade: tira do evento (participacao + apresentacoes). */
   onRemover?: () => void;
 }) {
@@ -118,34 +130,89 @@ function LinhaAluno({
   return (
     <div
       className={cn(
-        'flex items-center gap-3 border-b border-slate-800 px-3 py-2.5 last:border-b-0',
+        // Celular: nome e cursos ocupam a linha inteira; bloco, convidados e o tri-state
+        // descem para a linha de baixo — lado a lado, o nome ficava com 0px.
+        'group flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-slate-800 px-3 py-3 last:border-b-0 sm:flex-nowrap sm:py-2.5',
         aluno.status === 'participa' && 'bg-emerald-500/[0.04]',
         aluno.status === 'nao' && 'opacity-60',
       )}
     >
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 basis-full sm:basis-0">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="truncate text-[13.5px] font-medium text-white">{aluno.nome}</span>
+          <span className="text-[14px] font-medium text-white sm:truncate sm:text-[13.5px]">{aluno.nome}</span>
           {aluno.idade_anos != null && (
-            <span className="text-[11.5px] text-slate-500">{aluno.idade_anos} anos</span>
+            <span className="text-[12px] sm:text-[11.5px] text-slate-500">{aluno.idade_anos} anos</span>
           )}
           {aluno.unidade_origem_nome && (
             <span
-              className="rounded bg-sky-500/15 px-1.5 py-px text-[10.5px] font-medium text-sky-300"
+              className="rounded bg-sky-500/15 px-1.5 py-px text-[12px] sm:text-[10.5px] font-medium text-sky-300"
               title="Aluno de outra unidade que se apresenta neste evento"
             >
               de {aluno.unidade_origem_nome}
             </span>
           )}
           {aluno.faz_banda && (
-            <Badge variant="outline" className="gap-1 text-[10px]">
+            <Badge variant="outline" className="gap-1 text-[12px] sm:text-[10px]">
               <Guitar className="h-2.5 w-2.5" />
               banda
             </Badge>
           )}
+          {/* Selo de formando: clicável porque a coordenação pode marcar/desmarcar à
+              mão — 'manual' prevalece e a rotina do LA Teacher não sobrescreve. */}
+          <button
+            type="button"
+            onClick={onFormando}
+            title={
+              aluno.formatura_tipo
+                ? `Formando (${aluno.formatura_origem === 'manual' ? 'marcado à mão' : 'marcado pela regra'}) — clique para desmarcar`
+                : 'Marcar como formando (passa de ciclo este ano)'
+            }
+            className={cn(
+              // Celular: área de toque de 44px por pseudo-elemento — a pílula continua do mesmo tamanho.
+              `relative flex items-center gap-1 rounded px-1.5 py-px text-[12px] font-medium transition-colors after:absolute after:inset-x-0 after:-inset-y-3 after:content-[''] sm:text-[10.5px] sm:after:hidden`,
+              aluno.formatura_tipo
+                ? 'bg-violet-500/15 text-violet-300 hover:bg-violet-500/25'
+                : // Marcacao manual e excecao — o botao fantasma so aparece no hover da
+                  // linha, senao seria um controle morto em 270 alunos.
+                  // No celular não existe hover: o botão invisível seria um toque fantasma.
+                  'hidden text-slate-600 opacity-0 hover:bg-slate-800 hover:text-slate-400 group-hover:opacity-100 sm:flex',
+            )}
+          >
+            <GraduationCap className="h-3 w-3" />
+            {aluno.formatura_tipo ? `formando · ${FORMATURA_ROTULO[aluno.formatura_tipo] ?? ''}` : ''}
+          </button>
+          {/* O professor ja mexeu no relatorio do LA Teacher e a pessoa nao tem
+              apresentacao: e a fila que a coordenacao precisa zerar primeiro — alocar
+              aqui e o que traz musica, palco e playback pra dentro da grade. A cor
+              escala com a urgencia: aprovado (vermelho) > enviado (ambar) > musica
+              lancada (amarelo). */}
+          {aluno.relatorio_falta_alocar && (
+            <span
+              className={cn(
+                'flex items-center gap-1 rounded px-1.5 py-px text-[12px] sm:text-[10.5px] font-medium',
+                aluno.relatorio_falta_alocar === 'aprovado' && 'bg-rose-500/15 text-rose-300',
+                aluno.relatorio_falta_alocar === 'enviado' && 'bg-amber-500/15 text-amber-300',
+                aluno.relatorio_falta_alocar === 'musica' && 'bg-yellow-500/15 text-yellow-300',
+              )}
+              title={
+                aluno.relatorio_falta_alocar === 'aprovado'
+                  ? 'Relatório já APROVADO pelo revisor — só falta alocar num bloco'
+                  : aluno.relatorio_falta_alocar === 'enviado'
+                    ? 'Relatório enviado pelo professor, aguardando revisão — falta alocar num bloco'
+                    : 'O professor já lançou a música no LA Teacher — falta alocar num bloco'
+              }
+            >
+              <FileCheck className="h-3 w-3" />
+              {aluno.relatorio_falta_alocar === 'aprovado'
+                ? 'aprovado · falta alocar'
+                : aluno.relatorio_falta_alocar === 'enviado'
+                  ? 'enviado · falta alocar'
+                  : 'música lançada · falta alocar'}
+            </span>
+          )}
         </div>
 
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px] text-slate-400">
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] sm:text-[11.5px] text-slate-400">
           {aluno.cursos.map((c) => (
             <span key={c.curso_id} className="flex items-center gap-1">
               <Music className="h-3 w-3 text-slate-600" />
@@ -172,7 +239,7 @@ function LinhaAluno({
 
       {aluno.cursos_no_recital > 1 && (
         <span
-          className="shrink-0 rounded bg-slate-700/70 px-1.5 py-0.5 text-[10.5px] font-medium tabular-nums text-slate-300"
+          className="shrink-0 rounded bg-slate-700/70 px-1.5 py-0.5 text-[12px] sm:text-[10.5px] font-medium tabular-nums text-slate-300"
           title={`${aluno.cursos_no_recital} cursos = ${aluno.cursos_no_recital} apresentações`}
         >
           {aluno.cursos_no_recital}×
@@ -182,13 +249,13 @@ function LinhaAluno({
       {/* Coluna "Bloco / Horário" do prototipo. Estado unico (`situacao`), nunca condicoes
           soltas: com twMerge a ultima classe conflitante vence, e cartao pintado por flags
           independentes ja contradisse o proprio rotulo no modulo Agenda. */}
-      <div className="w-[116px] shrink-0 text-right">
+      <div className="mr-auto min-w-0 sm:mr-0 sm:w-[116px] sm:shrink-0 sm:text-right">
         {alocacao.situacao === 'completa' && aluno.cursos_no_recital === 1 ? (
           <SeloBloco alocacao={aluno.alocacoes[0]} />
         ) : alocacao.rotulo ? (
           <span
             className={cn(
-              'text-[11.5px]',
+              'text-[12px] sm:text-[11.5px]',
               alocacao.situacao === 'completa' && 'text-violet-300',
               alocacao.situacao === 'parcial' && 'text-amber-400',
               alocacao.situacao === 'nenhuma' && 'text-slate-600',
@@ -203,7 +270,7 @@ function LinhaAluno({
           um input morto em toda linha. */}
       {aluno.status === 'participa' && (
         <label
-          className="flex shrink-0 items-center gap-1 text-[11px] text-slate-500"
+          className="flex shrink-0 items-center gap-1 text-[12px] sm:text-[11px] text-slate-500"
           title="Quantos convidados essa pessoa leva"
         >
           <Users className="h-3 w-3" />
@@ -218,7 +285,7 @@ function LinhaAluno({
               const n = Math.max(0, Math.floor(Number(e.target.value) || 0));
               if (n !== aluno.convidados) onConvidados(n);
             }}
-            className="h-7 w-14 text-[12px] tabular-nums"
+            className="h-11 w-16 text-[16px] tabular-nums sm:h-7 sm:w-14 sm:text-[12px]"
             aria-label={`Convidados de ${aluno.nome}`}
           />
         </label>
@@ -236,7 +303,7 @@ function LinhaAluno({
           onClick={onRemover}
           title="Tirar do evento (aluno de outra unidade)"
           aria-label={`Tirar ${aluno.nome} do evento`}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-rose-500/15 hover:text-rose-300"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-rose-500/15 hover:text-rose-300 sm:h-8 sm:w-8"
         >
           <Trash2 className="h-4 w-4" />
         </button>
@@ -245,17 +312,35 @@ function LinhaAluno({
   );
 }
 
-export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId: string }) {
+export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
+  eventoId: number;
+  unidadeId: string;
+  /** Sobe a cada clique no quadro do topo: abre a aba ja com o filtro "falta alocar". */
+  pedidoFaltaAlocar?: number;
+}) {
   const { alunos, loading, erro, recarregar } = useAlunosDoEvento(eventoId, unidadeId);
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<FiltroStatus>('todos');
   const [filtroProfessor, setFiltroProfessor] = useState('todos');
   const [filtroCurso, setFiltroCurso] = useState('todos');
   const [soSemAlocar, setSoSemAlocar] = useState(false);
+  const [soRelatorioPronto, setSoRelatorioPronto] = useState(false);
+
+  // O quadro do topo manda um "tick": cada clique religa o filtro — mesmo se a
+  // pessoa ja tiver desligado, o proximo clique precisa reaplicar.
+  useEffect(() => {
+    if (pedidoFaltaAlocar) setSoRelatorioPronto(true);
+  }, [pedidoFaltaAlocar]);
   const [gravando, setGravando] = useState<string | null>(null);
   const [modalOutraUnidade, setModalOutraUnidade] = useState(false);
+  // Alvos congelados no clique: o modal promete N pessoas e a confirmacao grava
+  // exatamente essas N — recomputar no confirmar poderia mudar a conta por baixo da frase.
+  const [lotePendente, setLotePendente] = useState<AlunoElegivel[] | null>(null);
 
   const resumo = useMemo(() => resumirParticipacao(alunos), [alunos]);
+  // O botao so aparece quando existe alguem no estado — um filtro que nunca filtra
+  // nada e controle morto na barra.
+  const temRelatorioPronto = useMemo(() => alunos.some((a) => a.relatorio_falta_alocar), [alunos]);
 
   // Opcoes dos filtros saem da PROPRIA lista: um professor sem aluno elegivel no recital
   // nao pode ter aluno para filtrar, entao oferece-lo seria um caminho para o vazio.
@@ -295,13 +380,14 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
       if (soSemAlocar && (a.cursos_alocados >= a.cursos_no_recital || a.cursos_no_recital === 0)) {
         return false;
       }
+      if (soRelatorioPronto && !a.relatorio_falta_alocar) return false;
       if (!termo) return true;
       const alvo = normalizarBusca(
         `${a.nome} ${a.cursos.map((c) => `${c.curso_nome} ${c.professor_nome ?? ''}`).join(' ')}`,
       );
       return alvo.includes(termo);
     });
-  }, [alunos, busca, filtro, filtroProfessor, filtroCurso, soSemAlocar]);
+  }, [alunos, busca, filtro, filtroProfessor, filtroCurso, soSemAlocar, soRelatorioPronto]);
 
   const escolher = async (aluno: AlunoElegivel, status: ParticipacaoStatus) => {
     setGravando(aluno.pessoa_chave);
@@ -318,6 +404,35 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
   const salvarConvidados = async (aluno: AlunoElegivel, n: number) => {
     const { error } = await definirConvidados(eventoId, aluno.aluno_id_referencia, n);
     if (error) toast.error(`Não consegui gravar os convidados de ${aluno.nome}: ${error.message}`);
+    else recarregar();
+  };
+
+  // Formando: o selo vem da regra do LA Teacher (idade no ano + curso); o clique é o
+  // override da coordenação — grava 'manual' e a rotina automática não sobrescreve.
+  const alternarFormando = async (aluno: AlunoElegivel) => {
+    if (aluno.formatura_tipo) {
+      if (!window.confirm(`Tirar o selo de formando de ${aluno.nome}? A rotina não vai marcá-lo de novo.`)) return;
+      const { error } = await definirFormando(eventoId, aluno.pessoa_chave, aluno.aluno_id_referencia, null);
+      if (error) toast.error(`Não consegui desmarcar: ${error.message}`);
+      else recarregar();
+      return;
+    }
+    const tipo = window.prompt(
+      `Marcar ${aluno.nome} como formando. Qual passagem?\n` +
+        'kids — fez 12 anos no ano (Kids → LA Music School)\n' +
+        'bebes — fez 2 anos e está em Musicalização para Bebês (→ Preparatória)',
+      'kids',
+    );
+    if (tipo === null) return;
+    const normalizado = tipo.trim().toLowerCase();
+    if (normalizado !== 'kids' && normalizado !== 'bebes') {
+      toast.error('Tipo inválido — use "kids" ou "bebes".');
+      return;
+    }
+    const { error } = await definirFormando(
+      eventoId, aluno.pessoa_chave, aluno.aluno_id_referencia, normalizado,
+    );
+    if (error) toast.error(`Não consegui marcar: ${error.message}`);
     else recarregar();
   };
 
@@ -339,9 +454,11 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
 
   // Lote respeita o que esta FILTRADO na tela, nao a base inteira: marcar 400 pessoas
   // quando a coordenacao olhava para 12 e o tipo de surpresa que nao se desfaz num clique.
-  const marcarLote = async (status: ParticipacaoStatus) => {
-    const alvos = visiveis.filter((a) => avaliarElegibilidade(a).podeParticipar || status !== 'participa');
-    if (alvos.length === 0) return;
+  // Por isso o clique abre confirmacao em vez de gravar — e a gravacao devolve um Desfazer.
+  const marcarLote = async (status: ParticipacaoStatus, alvos: AlunoElegivel[]) => {
+    // Foto do estado anterior de cada alvo: o Desfazer devolve cada um ao status que
+    // tinha, nao a um generico — quem ja era 'nao' nao pode voltar como 'indefinido'.
+    const antes = new Map(alvos.map((a) => [a.aluno_id_referencia, a.status] as const));
     setGravando('__lote__');
     const { error } = await definirParticipacaoEmLote(
       eventoId,
@@ -349,9 +466,39 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
       status,
     );
     setGravando(null);
-    if (error) toast.error(`Não consegui gravar o lote: ${error.message}`);
-    else {
-      toast.success(`${alvos.length} ${alvos.length === 1 ? 'aluno atualizado' : 'alunos atualizados'}`);
+    if (error) {
+      toast.error(`Não consegui gravar o lote: ${error.message}`);
+      return;
+    }
+    recarregar();
+    toast.success(`${alvos.length} ${alvos.length === 1 ? 'aluno atualizado' : 'alunos atualizados'}`, {
+      // 15s: a janela do Desfazer e o tempo do toast. Depois disso a reversao continua
+      // possivel pelo log de auditoria, nao por este botao.
+      duration: 15000,
+      action: { label: 'Desfazer', onClick: () => desfazerLote(antes) },
+    });
+  };
+
+  const desfazerLote = async (antes: Map<number, ParticipacaoStatus>) => {
+    // Um upsert por status anterior (tres no maximo), em vez de um por aluno — 400
+    // restauracoes individuais travariam a aba por minutos.
+    const grupos = new Map<ParticipacaoStatus, number[]>();
+    for (const [alunoId, status] of antes) {
+      const g = grupos.get(status) ?? [];
+      g.push(alunoId);
+      grupos.set(status, g);
+    }
+    setGravando('__lote__');
+    let falha: string | null = null;
+    for (const [status, ids] of grupos) {
+      const { error } = await definirParticipacaoEmLote(eventoId, ids, status);
+      if (error) falha = error.message;
+    }
+    setGravando(null);
+    if (falha) {
+      toast.error(`Não consegui desfazer tudo: ${falha}. Confira a lista antes de seguir.`);
+    } else {
+      toast.success('Marcação em lote desfeita.');
       recarregar();
     }
   };
@@ -366,7 +513,29 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      {/* Celular: os 5 indicadores numa faixa compacta — em cartões eles ocupavam a
+          primeira tela inteira antes de a lista começar. */}
+      <div className="grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-slate-800 bg-slate-800 sm:hidden">
+        {[
+          { rotulo: 'elegíveis', valor: resumo.total, cor: 'text-white' },
+          { rotulo: 'participam', valor: resumo.participam, cor: 'text-emerald-300' },
+          { rotulo: 'indefinidos', valor: resumo.indefinidos, cor: 'text-amber-300' },
+          {
+            rotulo: `apresentações · ${resumo.apresentacoesAlocadas} na grade`,
+            valor: resumo.apresentacoesPrevistas,
+            cor: 'text-violet-300',
+            largo: true,
+          },
+          { rotulo: 'convidados', valor: resumo.convidadosTotal, cor: 'text-white' },
+        ].map((k) => (
+          <div key={k.rotulo} className={cn('bg-slate-900 px-3 py-2', k.largo && 'col-span-2')}>
+            <p className={cn('text-[18px] font-semibold tabular-nums leading-tight', k.cor)}>{k.valor}</p>
+            <p className="text-[12px] leading-tight text-slate-500">{k.rotulo}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="hidden grid-cols-2 gap-3 sm:grid lg:grid-cols-5">
         <KPICard size="sm" label="Elegíveis" value={resumo.total} icon={Users} variant="default" />
         <KPICard size="sm" label="Participam" value={resumo.participam} icon={Check} variant="emerald" />
         <KPICard size="sm" label="Indefinidos" value={resumo.indefinidos} icon={HelpCircle} variant="amber" />
@@ -393,24 +562,24 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[220px] flex-1">
+        <div className="relative w-full min-w-[220px] flex-1 sm:w-auto">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
           <Input
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             placeholder="Buscar aluno, curso ou professor…"
-            className="pl-8"
+            className="h-11 pl-8 text-[16px] sm:h-10 sm:text-sm"
           />
         </div>
 
-        <div className="flex overflow-hidden rounded-lg border border-slate-700">
+        <div className="flex w-full overflow-hidden rounded-lg border border-slate-700 sm:w-auto">
           {FILTROS.map((f) => (
             <button
               key={f.id}
               type="button"
               onClick={() => setFiltro(f.id)}
               className={cn(
-                'px-3 py-1.5 text-[12.5px] transition-colors',
+                'min-h-[44px] flex-auto whitespace-nowrap px-2 py-1.5 text-[13px] transition-colors sm:min-h-0 sm:flex-none sm:px-3 sm:text-[12.5px]',
                 filtro === f.id
                   ? 'bg-violet-600 text-white'
                   : 'text-slate-400 hover:bg-slate-700/60 hover:text-slate-200',
@@ -425,11 +594,11 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
             instrumento — sem os dois selects a resposta seria digitar nome por nome. */}
         {professores.length > 1 && (
           <Select value={filtroProfessor} onValueChange={setFiltroProfessor}>
-            <SelectTrigger className="h-9 w-[170px] text-[12.5px]">
+            <SelectTrigger className="h-11 min-w-0 flex-1 basis-[45%] text-[13px] sm:h-9 sm:w-[170px] sm:flex-none sm:basis-auto sm:text-[12.5px]">
               <SelectValue placeholder="Professor" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="todos">Todos os professores</SelectItem>
+              <SelectItem value="todos">Professor: todos</SelectItem>
               {professores.map(([id, nome]) => (
                 <SelectItem key={id} value={id}>{nome}</SelectItem>
               ))}
@@ -438,11 +607,11 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
         )}
         {cursos.length > 1 && (
           <Select value={filtroCurso} onValueChange={setFiltroCurso}>
-            <SelectTrigger className="h-9 w-[150px] text-[12.5px]">
+            <SelectTrigger className="h-11 min-w-0 flex-1 basis-[45%] text-[13px] sm:h-9 sm:w-[150px] sm:flex-none sm:basis-auto sm:text-[12.5px]">
               <SelectValue placeholder="Curso" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="todos">Todos os cursos</SelectItem>
+              <SelectItem value="todos">Curso: todos</SelectItem>
               {cursos.map(([id, nome]) => (
                 <SelectItem key={id} value={id}>{nome}</SelectItem>
               ))}
@@ -456,19 +625,36 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
           <Button
             variant={soSemAlocar ? 'default' : 'outline'}
             size="sm"
-            className="gap-1.5"
+            className="h-11 flex-1 gap-1.5 sm:h-9 sm:flex-none"
             onClick={() => setSoSemAlocar((v) => !v)}
           >
             <LayoutList className="h-3.5 w-3.5" />
             Sem alocar
           </Button>
         )}
+        {/* Quem o professor ja entregou relatorio e falta cadeira — a fila que a
+            coordenacao zera primeiro (Caio do Isaque foi o caso que originou). */}
+        {temRelatorioPronto && (
+          <Button
+            variant={soRelatorioPronto ? 'default' : 'outline'}
+            size="sm"
+            className="h-11 flex-1 gap-1.5 sm:h-9 sm:flex-none"
+            onClick={() => setSoRelatorioPronto((v) => !v)}
+          >
+            <FileCheck className="h-3.5 w-3.5" />
+            Relatório pronto
+          </Button>
+        )}
 
         <Button
           variant="outline"
           size="sm"
+          className="h-11 flex-1 sm:h-9 sm:flex-none"
           disabled={gravando === '__lote__' || visiveis.length === 0}
-          onClick={() => marcarLote('participa')}
+          onClick={() => {
+            const alvos = visiveis.filter((a) => avaliarElegibilidade(a).podeParticipar);
+            if (alvos.length > 0) setLotePendente(alvos);
+          }}
         >
           Marcar os {visiveis.length} visíveis
         </Button>
@@ -476,7 +662,7 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
         <Button
           variant="outline"
           size="sm"
-          className="gap-1.5"
+          className="h-11 flex-1 gap-1.5 sm:h-9 sm:flex-none"
           onClick={() => setModalOutraUnidade(true)}
         >
           <UserPlus className="h-3.5 w-3.5" />
@@ -508,12 +694,28 @@ export function AlunosTab({ eventoId, unidadeId }: { eventoId: number; unidadeId
                 aluno={a}
                 onEscolher={(s) => escolher(a, s)}
                 onConvidados={(n) => salvarConvidados(a, n)}
+                onFormando={() => alternarFormando(a)}
                 onRemover={a.unidade_origem_nome ? () => removerVisitante(a) : undefined}
               />
             ))}
           </div>
         )}
       </div>
+
+      <ModalConfirmacao
+        aberto={lotePendente !== null}
+        onClose={() => setLotePendente(null)}
+        onConfirmar={() => {
+          const alvos = lotePendente;
+          setLotePendente(null);
+          if (alvos) void marcarLote('participa', alvos);
+        }}
+        titulo="Marcar participação em lote"
+        mensagem={`Marcar ${lotePendente?.length ?? 0} ${(lotePendente?.length ?? 0) === 1 ? 'aluno' : 'alunos'} como participando do recital? Depois de gravar, o aviso na tela oferece Desfazer por alguns segundos.`}
+        tipo="warning"
+        textoConfirmar="Marcar todos"
+        carregando={gravando === '__lote__'}
+      />
     </div>
   );
 }

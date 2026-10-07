@@ -165,7 +165,7 @@ export function TarefasTab({ unidadeId }: TarefasTabProps) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between max-lg:flex-wrap max-lg:gap-3">
         <div>
           <h3 className="text-lg font-semibold text-white">Tarefas</h3>
           <p className="text-sm text-slate-400">Gerencie suas tarefas e to-dos</p>
@@ -248,7 +248,7 @@ export function TarefasTab({ unidadeId }: TarefasTabProps) {
         <input
           type="text"
           placeholder="Adicionar tarefa rápida..."
-          className="flex-1 bg-transparent border-none text-sm text-slate-300 placeholder-slate-600 outline-none"
+          className="flex-1 bg-transparent border-none text-sm text-slate-300 placeholder-slate-600 outline-none max-lg:min-h-[44px]"
           value={tarefaRapidaTexto}
           onChange={e => setTarefaRapidaTexto(e.target.value)}
           onKeyDown={async (e) => {
@@ -399,7 +399,7 @@ function TarefaRow({ tarefa, onToggle, onDelete }: TarefaRowProps) {
       <button
         onClick={onToggle}
         className={cn(
-          'w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all',
+          'w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all max-lg:relative max-lg:shrink-0 max-lg:before:absolute max-lg:before:-inset-[10px] max-lg:before:content-[\'\']',
           tarefa.concluida 
             ? 'border-emerald-500 bg-emerald-500' 
             : 'border-slate-500 hover:border-violet-500'
@@ -444,8 +444,8 @@ function TarefaRow({ tarefa, onToggle, onDelete }: TarefaRowProps) {
       </div>
 
       {/* Ações */}
-      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Button variant="ghost" size="sm" onClick={onDelete}>
+      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity max-lg:opacity-100">
+        <Button variant="ghost" size="sm" onClick={onDelete} className="max-lg:min-w-[44px]" aria-label="Excluir tarefa">
           <Trash2 className="w-4 h-4 text-rose-400" />
         </Button>
       </div>

@@ -20,6 +20,9 @@ function pareceChamarSol(texto = '') {
     || /(^|[^a-z0-9])sol\s*[,!?:]/.test(n)
     || /^sol\s+(me|nos|voce|vc|pode|poderia|consegue|ve|olha|manda|traz|qual|quais|quanto|quantos|quando|como|onde|porque|por que|preciso|faz|faca|ajuda|verifica|confere|checa|lista|mostra|tem|para|responde|responder|ta|esta)\b/.test(n)
     || /^pode\s*(?:[,!?:]|\s+ai)?\s+sol\b/.test(n)
+    // "Pode abrir sol" / "abre o caixa sol" (CG 03/10): pedido com o nome NO FIM.
+    // Só verbo de comando no início; "dia de sol" continua não sendo chamada.
+    || /^(pode|por favor|favor|abre|abra|abrir|reabre|reabrir|fecha|feche|fechar|lanca|lance|lancar|confere|confira|ve|veja|manda|mande|olha|ajuda)\b[^.!?\n]{0,60}[\s,]sol\s*[.!?]*$/.test(n)
     || /(^|[^a-z0-9])(oi|ola|opa|bom dia|boa tarde|boa noite|fala|e ai|ei)\s+sol\b/.test(n);
 }
 

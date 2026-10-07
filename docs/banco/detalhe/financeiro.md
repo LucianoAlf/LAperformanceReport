@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-09-28 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-06 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — financeiro
 
-44 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+48 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## caixa_categorias
 
@@ -361,6 +361,112 @@
 | `created_at` | timestamp with time zone | sim |  |  |
 | `updated_at` | timestamp with time zone | sim |  |  |
 | `backup_em` | timestamp with time zone | sim |  |  |
+
+## financeiro_asaas_convenios
+
+> Catálogo GET /financeiro/convenios_asaas (Emusys beta), completo a cada rodada. A CG tem DOIS convênios ativos (5 Kids CG e 7 LA CG). Só convênio ativo aceita extrato_asaas na origem.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `convenio_id` | bigint | não |  |  |
+| `status` | text | sim |  |  |
+| `conta_emusys_id` | bigint | sim |  |  |
+| `conta_descricao` | text | sim |  |  |
+| `conta_banco` | text | sim |  |  |
+| `conta_agencia` | text | sim |  |  |
+| `conta_numero` | text | sim |  |  |
+| `conta_titular` | text | sim |  |  |
+| `payload` | jsonb | não |  |  |
+| `hash_conteudo` | text | não |  |  |
+| `primeira_vez_visto` | timestamp with time zone | não | now() |  |
+| `ultima_vez_visto` | timestamp with time zone | não | now() |  |
+| `alterado_em` | timestamp with time zone | sim |  |  |
+| `sumiu_em` | timestamp with time zone | sim |  |  |
+
+**Únicos:**
+- `financeiro_asaas_convenios_pkey`
+- `financeiro_asaas_convenios_unidade_id_convenio_id_key`
+
+## financeiro_asaas_extrato
+
+> Espelho item a item de GET /financeiro/extrato_asaas (Emusys beta; cru do financialTransactions da Asaas). Nunca apaga: item que some de varredura completa ganha sumiu_em. Chave única (unidade_id, convenio_id, asaas_id) — convênio é por token e o id Asaas é textual.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `convenio_id` | bigint | não |  |  |
+| `asaas_id` | text | não |  |  |
+| `data` | date | não |  |  |
+| `valor` | numeric(14,2) | não |  |  |
+| `balance` | numeric(14,2) | sim |  |  |
+| `tipo` | text | não |  |  |
+| `descricao` | text | sim |  |  |
+| `payment_id` | text | sim |  |  |
+| `external_reference` | text | sim |  |  |
+| `transfer_id` | text | sim |  |  |
+| `pix_transaction_id` | text | sim |  |  |
+| `split_id` | text | sim |  |  |
+| `anticipation_id` | text | sim |  |  |
+| `bill_id` | text | sim |  |  |
+| `invoice_id` | text | sim |  |  |
+| `payment_dunning_id` | text | sim |  |  |
+| `credit_bureau_report_id` | text | sim |  |  |
+| `posicao_dia` | integer | sim |  |  |
+| `payload` | jsonb | não |  |  |
+| `hash_conteudo` | text | não |  |  |
+| `primeira_vez_visto` | timestamp with time zone | não | now() |  |
+| `ultima_vez_visto` | timestamp with time zone | não | now() |  |
+| `alterado_em` | timestamp with time zone | sim |  |  |
+| `sumiu_em` | timestamp with time zone | sim |  |  |
+
+**Únicos:**
+- `financeiro_asaas_extrato_pkey`
+- `financeiro_asaas_extrato_unidade_id_convenio_id_asaas_id_key`
+
+## financeiro_asaas_varredura_dias
+
+> Um dia só entra como completo quando a janela que o cobre veio inteira E a cadeia de balance não quebrou nele. Status erro nunca vale como vazio.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `unidade_id` | uuid | não |  | unidades.id |
+| `convenio_id` | bigint | não |  |  |
+| `data` | date | não |  |  |
+| `status` | text | não |  |  |
+| `itens` | integer | não | 0 |  |
+| `balance_quebras` | integer | não | 0 |  |
+| `tentativas` | integer | não | 0 |  |
+| `ultimo_erro` | text | sim |  |  |
+| `iniciado_em` | timestamp with time zone | sim |  |  |
+| `concluido_em` | timestamp with time zone | sim |  |  |
+| `ultima_tentativa_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `financeiro_asaas_varredura_dias_pkey`
+
+## financeiro_asaas_varredura_resumo
+
+> Estado da rotina por convênio: janela diária (últimos 10 dias), revarredura mensal do mês anterior e fronteira da carga inicial (a partir de 2024-01-01).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `unidade_id` | uuid | não |  | unidades.id |
+| `convenio_id` | bigint | não |  |  |
+| `janela_inicio` | date | sim |  |  |
+| `janela_fim` | date | sim |  |  |
+| `ultima_varredura_completa_em` | timestamp with time zone | sim |  |  |
+| `ultima_revarredura_mensal_em` | timestamp with time zone | sim |  |  |
+| `carga_inicial_concluida_ate` | date | sim |  |  |
+| `ultima_tentativa_em` | timestamp with time zone | não | now() |  |
+| `dias_pendentes` | integer | não | 0 |  |
+| `ultimo_erro` | text | sim |  |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `financeiro_asaas_varredura_resumo_pkey`
 
 ## financeiro_emusys_contas
 

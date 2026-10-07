@@ -195,6 +195,8 @@ Executado em 03/08/2026, após o aceite explícito do Gate B.
 - deploy da Vercel concluído com sucesso;
 - este gate publicou apenas frontend: nenhuma migration, Edge Function,
   alteração de banco ou mensagem de WhatsApp foi executada;
+- a URL filtrada foi deixada pronta em produção para conferência autenticada
+  do painel, contador, filtros e modal pelo Alf;
 - o Gate D permanece bloqueado até a abertura da janela de 08h BRT e a
   confirmação de entrega do alerta controlado
   `9c04dabb-a768-4ea7-b64f-3d5daffa771b`.

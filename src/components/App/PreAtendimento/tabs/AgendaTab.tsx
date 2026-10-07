@@ -74,6 +74,9 @@ export function AgendaTab({ unidadeId, ano, mes, onLeadClick }: AgendaTabProps) 
         if (leadError) throw leadError;
 
         if (lead.data_experimental) {
+          // P25: chamada_* registra a proveniência — presença marcada aqui vale como
+          // evidência confirmada na conciliação Exp→Mat (antes só o raw Emusys contava
+          // e a aula caía como pendência falsa).
           const { error: expError } = await supabase
             .from('lead_experimentais')
             .upsert({
@@ -86,6 +89,9 @@ export function AgendaTab({ unidadeId, ano, mes, onLeadClick }: AgendaTabProps) 
               horario_experimental: lead.horario_experimental || null,
               professor_experimental_id: (lead as any).professor_experimental_id ?? null,
               curso_interesse_id: (lead as any).curso_interesse_id ?? null,
+              chamada_em: new Date().toISOString(),
+              chamada_status: statusLead,
+              chamada_origem: 'pre_atendimento',
               updated_at: new Date().toISOString(),
             }, { onConflict: 'lead_id,data_experimental,nome_aluno' });
           if (expError) throw expError;
