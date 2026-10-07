@@ -27,6 +27,9 @@ memória, então **toda varredura vira leitura de disco**, e o disco tem cota.
 | 22/09 | 3 `refresh-situacao-snapshot-*` no **mesmo segundo**, a cada 5 min | 87–96 s cada, pool esgotado |
 | 23→25/09 | `dashboard-aquecer-caches` a cada 4 min recalculando ~70 RPCs, com o cache por versão invalidado ~500×/h | **9.420 s de banco/dia**; Disk IO 100% por 3 dias; queda |
 | contínuo | tabela que só cresce, sem retenção (`sync_run_items` 13 GB, `cron.job_run_details` 680 MB) | empurra o dado útil para fora da RAM |
+| 06/10 | sync regravando linha igual (`aula_alunos_emusys` 7 mi de updates em 46 mil linhas; espelho do Chatwoot carimbando `leads` a cada 40 min) | cada escrita derruba cache por versão, gera WAL que o Realtime decodifica e linha de `audit_log` |
+| 06/10 | `emusys_fatura_source_events` sem retenção, gêmea do `sync_run_items` | 3,7 GB (38% do banco) — corrigido estendendo o expurgo existente |
+| 07/10 | coletor do próprio monitor ordenando o histórico inteiro do `pg_cron` a cada 15 min; reconciliador de alertas varrendo `net._http_response` sem nada pendente | 7,1 mi + 3,9 mi de blocos lidos em 9 dias — viraram leitura incremental e saída antecipada |
 
 ## Checklist obrigatório antes de criar (cron, gatilho, cache, RPC pesada, tabela)
 
