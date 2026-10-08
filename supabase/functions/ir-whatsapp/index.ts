@@ -22,12 +22,21 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { codigoInvisivel, gerarCodigo } from '../_shared/rastreador.ts';
 
 // Caixas "Mila" de cada unidade (inboxes 147/155/148 do Chatwoot).
-const UNIDADES: Record<string, { telefone: string; nome: string }> = {
-  barra: { telefone: '552139550932', nome: 'Centro Metropolitano Barra' },
-  cg: { telefone: '5521982956809', nome: 'Campo Grande' },
-  recreio: { telefone: '552139552420', nome: 'Recreio' },
+const UNIDADES: Record<string, { telefone: string }> = {
+  barra: { telefone: '552139550932' },
+  cg: { telefone: '5521982956809' },
+  recreio: { telefone: '552139552420' },
 };
 const MARCAS: Record<string, string> = { school: 'LA Music School', kids: 'LA Music Kids' };
+
+// ⚠️ O TEXTO NAO E ENFEITE: o n8n "Definir Origem e Etiqueta Pela Mensagem do Anuncio" (5lRs2UVCB9xl0RCP,
+// node extraKeys) classifica a origem lendo a mensagem do lead:
+//     texto contem "site"  -> Site          (senao -> Instagram, que e o PADRAO)
+//     texto contem "kids" / "school" -> publico Crianca / Adulto
+// Por isso o texto do link tem de ser EXATAMENTE o que o canal ja usava: o do site contem "site", o do
+// Instagram nao. Em 08/10 o rastreador mandava "Quero informacoes das aulas de musica na LA Music School
+// ...", que nao tem "site" -> todo lead das paginas School era marcado Instagram (lead 14962).
+const NOME_UNIDADE: Record<string, string> = { barra: 'Centro Metropolitano Barra', cg: 'Campo Grande', recreio: 'Recreio' };
 const ORIGENS = new Set(['bio', 'site', 'lp', 'outro']);
 const UNIDADE_PADRAO = 'barra';
 
@@ -39,9 +48,17 @@ const limpa = (v: string | null, max = 300): string | null => {
   return s.length ? s : null;
 };
 
-function textoVisivel(unidade: string, publico: string): string {
-  const u = UNIDADES[unidade];
-  return `Quero informações das aulas de música na ${MARCAS[publico]} ${u.nome}`;
+function textoVisivel(unidade: string, publico: string, origem: string): string {
+  const marca = MARCAS[publico];
+  const nome = NOME_UNIDADE[unidade];
+  // Bio do Instagram: os textos que o canal Instagram sempre usou (nao contem "site").
+  if (origem === 'bio') {
+    return unidade === 'barra'
+      ? `Quero informações sobre a ${marca} unidade ${nome}`
+      : `Quero informações das aulas de música na ${marca} ${nome}`;
+  }
+  // Site / landing page / qualquer outro: o texto das landing pages ("...no site..." -> origem Site).
+  return `Estava no site da ${marca} e gostaria de informações das aulas na unidade ${nome}`;
 }
 
 function destino(telefone: string, texto: string): string {
@@ -63,7 +80,7 @@ Deno.serve(async (req: Request) => {
   const origemRaw = (q.get('o') ?? 'outro').toLowerCase();
   const origem = ORIGENS.has(origemRaw) ? origemRaw : 'outro';
 
-  const texto = textoVisivel(unidadeOk, publico);
+  const texto = textoVisivel(unidadeOk, publico, origem);
   const telefone = UNIDADES[unidadeOk].telefone;
   const semCodigo = destino(telefone, texto);
 
