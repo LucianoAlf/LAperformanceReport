@@ -388,6 +388,121 @@ export async function coletarPaginaFaturasPagasPorJanela(options: {
   return { rawItems, temMais, proximoCursor: temMais ? nextCursor : null };
 }
 
+// Coleta faturas ABERTAS vencidas numa janela ampla de vencimento (refresh
+// diario do espelho — o juros_e_multa das abertas muda todo dia e so se
+// atualiza quando a fatura e relida). A competencia de cada linha e derivada
+// do proprio data_vencimento, porque a janela cruza varios meses.
+export async function coletarPaginaFaturasAbertasVencidas(options: {
+  apiBaseUrl: string;
+  dataVencimentoInicial: string;
+  dataVencimentoFinal: string;
+  unidade: UnidadeSyncConfig;
+  limiter: GlobalRateLimiter;
+  cursor?: string | null;
+  fetchFn?: typeof fetch;
+}) {
+  const cursor = String(options.cursor ?? '').trim();
+  const params = new URLSearchParams({
+    status: 'aberta',
+    data_vencimento_inicial: options.dataVencimentoInicial,
+    data_vencimento_final: options.dataVencimentoFinal,
+    limite: '50',
+  });
+  if (cursor) params.set('cursor', cursor);
+  const payload = await fetchPage({
+    url: `${options.apiBaseUrl}/faturas?${params.toString()}`,
+    unidade: options.unidade,
+    limiter: options.limiter,
+    fetchFn: options.fetchFn ?? fetch,
+  });
+  const rawItems = (Array.isArray(payload?.items)
+    ? payload.items
+    : (Array.isArray(payload?.dados) ? payload.dados : [])) as FaturaEmusys[];
+  const nextCursor = String(
+    payload?.paginacao?.proximo_cursor ?? payload?.proximo_cursor ?? '',
+  ).trim();
+  const temMaisRaw = payload?.paginacao?.tem_mais ?? payload?.tem_mais;
+  const temMais = temMaisRaw == null ? Boolean(nextCursor) : temMaisRaw === true;
+
+  if (temMais && !nextCursor) {
+    throw new Error(`Emusys /faturas ${options.unidade.nome}: tem_mais exige cursor`);
+  }
+  if (temMais && rawItems.length === 0) {
+    throw new Error(`Emusys /faturas ${options.unidade.nome}: pagina vazia com tem_mais`);
+  }
+  if (temMais && nextCursor === cursor) {
+    throw new Error(`Emusys /faturas ${options.unidade.nome}: cursor repetido`);
+  }
+  return { rawItems, temMais, proximoCursor: temMais ? nextCursor : null };
+}
+
+export async function coletarFaturasAbertasVencidas(options: {
+  apiBaseUrl: string;
+  dataVencimentoInicial: string;
+  dataVencimentoFinal: string;
+  unidadeCodigo: string;
+  unidade: UnidadeSyncConfig;
+  limiter: GlobalRateLimiter;
+  fetchFn?: typeof fetch;
+}) {
+  const {
+    apiBaseUrl,
+    dataVencimentoInicial,
+    dataVencimentoFinal,
+    unidadeCodigo,
+    unidade,
+    limiter,
+    fetchFn,
+  } = options;
+
+  const rawItems: FaturaEmusys[] = [];
+  const seenIds = new Set<string>();
+  let cursor: string | null = '';
+  let paginas = 0;
+
+  while (true) {
+    const pagina = await coletarPaginaFaturasAbertasVencidas({
+      apiBaseUrl,
+      dataVencimentoInicial,
+      dataVencimentoFinal,
+      unidade,
+      limiter,
+      cursor,
+      fetchFn,
+    });
+    paginas += 1;
+    rawItems.push(...pagina.rawItems);
+    if (!pagina.temMais) break;
+    cursor = pagina.proximoCursor;
+    if (paginas >= 100) {
+      throw new Error(`Emusys /faturas ${unidade.nome}: paginacao excedeu limite de seguranca`);
+    }
+  }
+
+  const rows = rawItems.map((row) => {
+    const dataVencimento = strictDate(row.data_vencimento, 'data_vencimento', true)!;
+    // competencia = mes do proprio vencimento (a janela nao e mensal)
+    const mapped = mapFatura(row, unidadeCodigo, unidade, `${dataVencimento.slice(0, 7)}-01`);
+    if (seenIds.has(mapped.emusys_fatura_id)) {
+      throw new Error(`Emusys /faturas ${unidade.nome}: ID duplicado ${mapped.emusys_fatura_id}`);
+    }
+    seenIds.add(mapped.emusys_fatura_id);
+    return mapped;
+  });
+
+  return {
+    rows,
+    resumo: {
+      unidade: unidade.nome,
+      unidade_id: unidade.id,
+      unidade_codigo: unidadeCodigo,
+      paginas,
+      recebidas_api: rawItems.length,
+      processadas: rows.length,
+    },
+  };
+}
+
 export async function coletarFaturasPagasPorJanela(options: {
   apiBaseUrl: string;
   dataVencimentoInicial: string;

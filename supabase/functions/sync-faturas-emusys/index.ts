@@ -4,6 +4,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.89.0';
 import {
   coletarFaturasUnidade,
+  coletarFaturasAbertasVencidas,
   coletarPaginaFaturasPagasPorJanela,
   coletarFaturasPagasPorJanela,
   GlobalRateLimiter,
@@ -739,7 +740,7 @@ serve(async (req) => {
     if (access.denied) return access.denied;
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const mode = String(body.mode ?? 'enqueue_and_work').trim().toLowerCase();
-    if (!['enqueue_and_work', 'worker', 'probe', 'pagas_no_mes'].includes(mode)) {
+    if (!['enqueue_and_work', 'worker', 'probe', 'pagas_no_mes', 'vencidas_abertas'].includes(mode)) {
       return json({ ok: false, erro: 'mode invalido' }, 400);
     }
 
@@ -794,6 +795,112 @@ serve(async (req) => {
         queue_status: 'pending',
         jobs: enfileirado.jobs ?? [],
       }, 202);
+    }
+
+    // Modo vencidas_abertas: refresh diario e barato do espelho — rele do
+    // Emusys TODAS as faturas abertas com vencimento no passado (~220 itens,
+    // ~6 paginas no total, 1 chamada por unidade a cada 1,2s) para que o
+    // juros_e_multa delas nao fique parado no dia da primeira leitura.
+    // Nao cria sync_run: o snapshot canonico continua sendo por competencia.
+    // A publicacao vai direto para emusys_faturas via RPC dedicada, que ainda
+    // roda a vigia de divergencia (juros Emusys x formula por unidade).
+    if (mode === 'vencidas_abertas') {
+      if (!access.isServiceRole && access.requestedBy !== 'sync_admin_token') {
+        return json({ ok: false, erro: 'vencidas_abertas exige service_role ou token tecnico' }, 403);
+      }
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      // Serializacao global com as outras filas Emusys: se a fila de lancamentos
+      // ou a propria fila de competencias estiver trabalhando, adia para o
+      // proximo gatilho em vez de disputar a API (429 e tratado, mas barulho).
+      if (await varreduraFinanceiroEmusysAtiva(supabase)) {
+        return json({ ok: true, mode, queued: true, queue_status: 'blocked_by_financeiro_emusys' }, 202);
+      }
+      const filaFaturasAtiva = await supabase
+        .from('financeiro_sync_queue')
+        .select('id')
+        .in('status', ['pending', 'running', 'retry_wait'])
+        .limit(1);
+      if (!filaFaturasAtiva.error && (filaFaturasAtiva.data?.length ?? 0) > 0) {
+        return json({ ok: true, mode, queued: true, queue_status: 'blocked_by_faturas_queue' }, 202);
+      }
+
+      const unidadeFiltro = body.unidade ? String(body.unidade).trim().toLowerCase() : null;
+      if (unidadeFiltro && !Object.hasOwn(UNIDADES, unidadeFiltro)) {
+        return json({ ok: false, erro: 'unidade deve ser cg, recreio, barra ou omitida' }, 400);
+      }
+      const unidades = unidadeFiltro
+        ? { [unidadeFiltro]: UNIDADES[unidadeFiltro] }
+        : UNIDADES;
+
+      // Vencidas = data_vencimento <= ontem (America/Sao_Paulo). A janela de
+      // inicio vai ate o passado longinquo porque nao existe limite na API.
+      const hojeSP = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+      const ontemSP = new Date(`${hojeSP}T12:00:00Z`);
+      ontemSP.setUTCDate(ontemSP.getUTCDate() - 1);
+      const dataFinal = ontemSP.toISOString().slice(0, 10);
+      const dataInicial = String(body.data_vencimento_inicial ?? '2020-01-01').trim();
+
+      const limiter = new GlobalRateLimiter();
+      const fetchFn = fetchComPrazo(Date.now() + WORKER_BUDGET_MS);
+      const allItems: Record<string, unknown>[] = [];
+      const unidadesResumo: Record<string, unknown> = {};
+      try {
+        for (const [codigo, unidade] of Object.entries(unidades)) {
+          const collected = await coletarFaturasAbertasVencidas({
+            apiBaseUrl: EMUSYS_API,
+            dataVencimentoInicial: dataInicial,
+            dataVencimentoFinal: dataFinal,
+            unidadeCodigo: codigo,
+            unidade,
+            limiter,
+            fetchFn,
+          });
+          allItems.push(...collected.rows.map((row) => ({
+            unidade_id: row.unidade_id,
+            unidade_codigo: row.unidade_codigo,
+            emusys_fatura_id: row.emusys_fatura_id,
+            emusys_matricula_id: row.emusys_matricula_id,
+            emusys_contrato_id: row.emusys_contrato_id,
+            emusys_student_id: row.emusys_student_id,
+            descricao: row.descricao,
+            status: row.status,
+            data_vencimento: row.data_vencimento,
+            data_pagamento: row.data_pagamento,
+            competencia: row.competencia,
+            valor_original: row.valor_original,
+            valor_pago: row.valor_pago,
+            juros_e_multa: row.juros_e_multa,
+            desconto_aplicado: row.desconto_aplicado,
+            desconto_fixo: row.desconto_fixo,
+            desconto_condicional: row.desconto_condicional,
+            validation_issues: row.validation_issues,
+            payload: row.payload,
+          })));
+          unidadesResumo[codigo] = collected.resumo;
+        }
+      } catch (erro) {
+        const classificado = classifyFinanceiroSyncError(erro);
+        return json({
+          ok: false,
+          mode,
+          erro_codigo: classificado.code,
+          erro: classificado.detail,
+        }, classificado.retryable ? 502 : 500);
+      }
+
+      const publicado = await rpcOrThrow<Record<string, unknown>>(
+        supabase,
+        'publish_faturas_vencidas_sync',
+        {
+          p_items: allItems,
+          p_trigger_source: String(body.trigger_source ?? 'cron_faturas_vencidas_diario').trim()
+            || 'cron_faturas_vencidas_diario',
+          p_requested_by: access.requestedBy,
+        },
+      );
+      return json({ ok: true, mode, resultado: publicado, unidades: unidadesResumo }, 200);
     }
 
     if (mode === 'probe') {
