@@ -9252,6 +9252,7 @@ _Não lanço nada pela metade._`);
         if (!alvoP && semAluno.length === 1) alvoP = semAluno[0];
         if (nomeTardio && alvoP) {
           const _alunoAntesDaCorrecao = alvoP.aluno || null;
+          const _travadoAntesDaCorrecao = !!alvoP.bloqueiaLancamento;
           // Fotografia do card ANTES da correcao: se o texto nao se provar nome
           // de aluno, nada do que ele ditou pode ficar no card.
           const _cardAntes = { valor: alvoP.valor, competencia: alvoP.competencia };
@@ -9417,6 +9418,25 @@ _Não lanço nada pela metade._`);
           alvoP.faturaIndisponivel = canonicaIndisponivel;
           alvoP.bloqueiaFonteIndisponivel = bloqueiaFonteIndisponivel;
           alvoP.responsavelFinanceiro = responsavelFinanceiro;
+          // 🔴 08/10/2026 (CG, Lucas, 07/10 18:40–18:43): o card travou por valor
+          //    maior que a fatura; a equipe mandou aluno + curso + parcela duas vezes
+          //    e a Sol remontou o MESMO card travado ("Atualizei a pendência…"), em
+          //    laço. Se a correção não destravou nem trocou o aluno, a resposta é
+          //    dizer o que falta — não repetir o card.
+          if (_travadoAntesDaCorrecao && alvoP.bloqueiaLancamento && !_trocouAluno && !alvoP.composto) {
+            const _base = baseDaFaturaCanonica(alvoP.canonica);
+            const _f = alvoP.canonica && alvoP.canonica.fatura;
+            const _rot = _f && _f.competencia ? `parcela ${String(_f.competencia).slice(0, 7).split('-').reverse().join('/')}` : 'fatura';
+            const _dif = _base !== null ? Number(alvoP.valor) - _base : null;
+            alvoP.ts = agora;
+            await sendFn(chatId, `⚠️ Continua travado, e não é o aluno: o comprovante (${fmtBRL(alvoP.valor)})`
+              + (_dif !== null ? ` é ${fmtBRL(_dif)} maior que a ${_rot} do ${alvoP.aluno} (${fmtBRL(_base)})` : ' é maior que a fatura casada')
+              + ', então pode ter mais de um item junto.\n'
+              + '• Se tiver outro item, me manda a divisão: *Nome — item — R$ valor*.\n'
+              + '• Se foi tudo dessa parcela (ex.: a escola cobrou esse valor), ajusta/baixa a fatura no Emusys com esse valor e reenvia o comprovante — aí eu caso direto.');
+            log({ acao: 'complemento_card_travado_explicado', chatId, aluno: alvoP.aluno, diferenca: _dif });
+            return { acao: 'complemento_card_travado_explicado', aluno: alvoP.aluno };
+          }
           alvoP.descricao = descricaoDoComposto(alvoP.composto, alvoP.aluno) || descricaoDaFatura(canonica, alvoP.aluno) || _descricaoLancamento(categoria, competencia, alvoP.aluno, parcela);
           // Lojinha continua lojinha: item + comprador + vendedor (06/10/2026). E o
           // nome ditado responde a pergunta "É X?" — a trava do "pode" sai.
