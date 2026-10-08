@@ -9,6 +9,8 @@
 //                              E O CAMINHO PRINCIPAL: nada fora do Supabase precisa ser configurado.
 //   POST <payload message_created do Chatwoot>  -> casa na hora (opcional, se um dia houver webhook)
 //
+// ORDEM DE CONFIANCA: codigo (certo) > atraso do WhatsApp (forte) > janela de horario (provavel).
+//
 // O que faz no modo casar:
 //   1. ignora o que nao e mensagem recebida (incoming) ou nao tem codigo;
 //   2. acha o clique pelo codigo (so os ainda 'aguardando' e dos ultimos 3 dias);
@@ -24,6 +26,8 @@ import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supa
 import { candidatosDoTexto, candidatosTelefone } from '../_shared/rastreador.ts';
 
 const JANELA_CASAR_DIAS = 3;
+// Caixa Mila -> unidade do link (`ir-whatsapp?u=`): 147 Barra, 148 Recreio, 155 Campo Grande.
+const UNIDADE_POR_INBOX: Record<number, string> = { 147: 'barra', 148: 'recreio', 155: 'cg' };
 const JANELA_LEAD_DIAS = 7;
 
 const corsHeaders = {
@@ -32,6 +36,27 @@ const corsHeaders = {
 };
 const json = (b: unknown, status = 200) =>
   new Response(JSON.stringify(b), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+type MsgCw = {
+  message_type?: number | string;
+  content?: string | null;
+  created_at?: number;
+  content_attributes?: {
+    external_ad_reply?: { entry_point_conversion_source?: string; entry_point_conversion_delay_seconds?: number };
+  } | null;
+};
+
+/**
+ * Segundos entre o toque no link e o envio da 1a mensagem, como o PROPRIO WhatsApp registra
+ * (`external_ad_reply.entry_point_conversion_delay_seconds`, so em conversa aberta por link
+ * `click_to_chat_link`). Hora da mensagem - atraso = o instante do clique, ao segundo.
+ */
+function atrasoDaMensagem(m: Pick<MsgCw, 'content_attributes'>): number | null {
+  const ad = m.content_attributes?.external_ad_reply;
+  if (!ad || ad.entry_point_conversion_source !== 'click_to_chat_link') return null;
+  const s = Number(ad.entry_point_conversion_delay_seconds);
+  return Number.isFinite(s) && s >= 0 ? s : null;
+}
 
 // Aceita o webhook cru do Chatwoot e tambem um corpo simples {telefone, texto, conversa_id}.
 function normalizar(body: Record<string, any>) {
@@ -43,7 +68,9 @@ function normalizar(body: Record<string, any>) {
   );
   const conversaId = body?.conversation?.id ?? body?.conversa_id ?? null;
   const criadoEm = body?.created_at ?? body?.conversation?.created_at ?? null;
-  return { incoming, texto, telefone, conversaId, criadoEm };
+  const inboxId = Number(body?.inbox?.id ?? body?.conversation?.inbox_id ?? body?.inbox_id) || null;
+  const atrasoSeg = atrasoDaMensagem({ content_attributes: body?.content_attributes ?? body?.message?.content_attributes });
+  return { incoming, texto, telefone, conversaId, criadoEm, inboxId, atrasoSeg };
 }
 
 async function acharLead(supabase: SupabaseClient, telefone: string): Promise<number | null> {
@@ -113,11 +140,22 @@ async function aplicarCasamento(
 }
 
 async function casar(supabase: SupabaseClient, body: Record<string, any>) {
-  const { incoming, texto, telefone, conversaId, criadoEm } = normalizar(body);
+  const { incoming, texto, telefone, conversaId, criadoEm, inboxId, atrasoSeg } = normalizar(body);
   if (!incoming) return json({ ok: true, action: 'ignorado_nao_incoming' });
 
   const candidatos = candidatosDoTexto(texto);
-  if (candidatos.length === 0) return json({ ok: true, action: 'sem_codigo' });
+  if (candidatos.length === 0) {
+    // Sem codigo (texto apagado/trocado): o atraso que o WhatsApp registra ainda identifica o clique.
+    const unidade = inboxId != null ? UNIDADE_POR_INBOX[inboxId] : undefined;
+    if (atrasoSeg !== null && unidade && telefone) {
+      const msgEmSeg = typeof criadoEm === 'number' ? criadoEm : Math.floor(Date.parse(String(criadoEm)) / 1000);
+      if (Number.isFinite(msgEmSeg)) {
+        const r = await casarPorAtraso(supabase, { unidade, telefone, conversaId, msgEmSeg, atrasoSeg });
+        return json({ ok: true, ...r });
+      }
+    }
+    return json({ ok: true, action: 'sem_codigo' });
+  }
   if (!telefone) return json({ ok: true, action: 'sem_telefone' });
 
   const r = await aplicarCasamento(supabase, { candidatos, telefone, conversaId, criadoEm });
@@ -130,8 +168,6 @@ const JANELA_CHATWOOT_MIN = 30; // o cron roda a cada 5 min; a sobra cobre atras
 const MAX_PAGINAS_CHATWOOT = 12;
 const MAX_CONVERSAS_POR_RODADA = 60;
 
-// Caixa -> unidade do link (`ir-whatsapp?u=`).
-const UNIDADE_POR_INBOX: Record<number, string> = { 147: 'barra', 148: 'recreio', 155: 'cg' };
 const JANELA_CLIQUE_MIN = 10; // clique ate N min ANTES da primeira mensagem
 const SILENCIO_ABERTURA_SEG = 3600; // so conta como "abertura" se a conversa estava calada ha 1h
 
@@ -204,6 +240,85 @@ async function casarPorJanela(
   return { action: 'casado', clique_id: clique.id, lead_id: leadId, delay_segundos: delay };
 }
 
+// O clique no NOSSO link precede a abertura do WhatsApp (dialogo "Abrir no WhatsApp", troca de app):
+// medido em 08/10, 5 s. Por isso a janela e larga para tras e curta para frente.
+const ATRASO_ANTES_SEG = 120;
+const ATRASO_DEPOIS_SEG = 15;
+const ATRASO_FOLGA_AMBIGUO_SEG = 10;
+
+/**
+ * Casamento pelo ATRASO EXATO do WhatsApp: UNIDADE + instante do clique (hora da mensagem - atraso).
+ * Funciona mesmo que o lead apague o texto (e o codigo junto) e mesmo que espere horas.
+ *
+ * Se o WhatsApp diz que a conversa veio de um link e NENHUM clique nosso bate com aquele instante, a
+ * conversa veio de OUTRO link (bio, link direto): NAO cai na janela de horario -- seria um falso positivo.
+ */
+async function casarPorAtraso(
+  supabase: SupabaseClient,
+  a: { unidade: string; telefone: string; conversaId: number | null; msgEmSeg: number; atrasoSeg: number },
+): Promise<Record<string, unknown>> {
+  const msgIso = new Date(a.msgEmSeg * 1000).toISOString();
+
+  // Uma mensagem consome UM clique (a varredura repete a janela de leitura varias vezes).
+  if (a.conversaId != null) {
+    const { count: jaTem, error: jaErr } = await supabase
+      .from('rastreio_cliques')
+      .select('id', { count: 'exact', head: true })
+      .eq('chatwoot_conversation_id', a.conversaId)
+      .eq('situacao', 'casado')
+      .gte('casado_em', msgIso);
+    if (jaErr) throw jaErr;
+    if (jaTem) return { action: 'atraso_conversa_ja_casada' };
+  }
+
+  const aberturaMs = (a.msgEmSeg - a.atrasoSeg) * 1000;
+  const { data: cands, error } = await supabase
+    .from('rastreio_cliques')
+    .select('id, created_at, user_agent')
+    .eq('situacao', 'aguardando')
+    .eq('unidade', a.unidade)
+    .gte('created_at', new Date(aberturaMs - ATRASO_ANTES_SEG * 1000).toISOString())
+    .lte('created_at', new Date(aberturaMs + ATRASO_DEPOIS_SEG * 1000).toISOString())
+    .limit(10);
+  if (error) throw error;
+  if (!cands || cands.length === 0) return { action: 'atraso_sem_clique' };
+
+  // O clique mais proximo de "abertura - 5 s" (o atraso tipico entre o clique e o WhatsApp abrir).
+  const alvoMs = aberturaMs - 5000;
+  const ordenados = cands
+    .map((c) => ({ ...c, dist: Math.abs(new Date(c.created_at).getTime() - alvoMs) }))
+    .sort((x, y) => x.dist - y.dist);
+  const mesmoAparelho = ordenados.every((c) => c.user_agent === ordenados[0].user_agent);
+  if (ordenados.length > 1 && !mesmoAparelho && ordenados[1].dist - ordenados[0].dist < ATRASO_FOLGA_AMBIGUO_SEG * 1000) {
+    return { action: 'atraso_ambiguo', candidatos: ordenados.length };
+  }
+
+  const clique = ordenados[0];
+  const delay = Math.max(0, Math.round((a.msgEmSeg * 1000 - new Date(clique.created_at).getTime()) / 1000));
+  let leadId: number | null = null;
+  try {
+    leadId = await acharLead(supabase, a.telefone);
+  } catch (e) {
+    console.error('[rastreador-casar] falha ao buscar lead (segue sem):', e instanceof Error ? e.message : e);
+  }
+  const { error: upErr } = await supabase
+    .from('rastreio_cliques')
+    .update({
+      situacao: 'casado',
+      metodo_casamento: 'atraso',
+      telefone_lead: candidatosTelefone(a.telefone)[0] ?? a.telefone,
+      chatwoot_conversation_id: a.conversaId,
+      lead_id: leadId,
+      delay_segundos: delay,
+      casado_em: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', clique.id)
+    .eq('situacao', 'aguardando');
+  if (upErr) throw upErr;
+  return { action: 'casado', metodo: 'atraso', clique_id: clique.id, lead_id: leadId, delay_segundos: delay };
+}
+
 /**
  * Le as conversas novas das caixas Mila direto do Chatwoot e casa o codigo da primeira
  * mensagem. Substitui o webhook: nada fora do Supabase precisa ser configurado, so o link.
@@ -213,7 +328,7 @@ async function casarPeloChatwoot(supabase: SupabaseClient, janelaMin = JANELA_CH
   const baseUrl = Deno.env.get('CHATWOOT_URL');
   const accountId = Deno.env.get('CHATWOOT_ACCOUNT_ID');
   const cwToken = Deno.env.get('CHATWOOT_API_TOKEN');
-  const resumo = { conversas_lidas: 0, conversas_mila: 0, verificadas: 0, casadas: 0, casadas_janela: 0, janela_ambigua: 0, sem_codigo: 0, erros: 0, pulado: null as string | null };
+  const resumo = { conversas_lidas: 0, conversas_mila: 0, verificadas: 0, casadas: 0, casadas_atraso: 0, atraso_ambiguo: 0, atraso_sem_clique: 0, casadas_janela: 0, janela_ambigua: 0, sem_codigo: 0, erros: 0, pulado: null as string | null };
   if (!baseUrl || !accountId || !cwToken) { resumo.pulado = 'sem_credenciais_chatwoot'; return resumo; }
 
   // Sem clique esperando conversa, nenhum codigo pode casar: nem vai ao Chatwoot. E o que faz a
@@ -259,7 +374,7 @@ async function casarPeloChatwoot(supabase: SupabaseClient, janelaMin = JANELA_CH
       resumo.verificadas++;
       const r = await fetch(`${baseUrl}/api/v1/accounts/${accountId}/conversations/${c.id}/messages`, { headers });
       if (!r.ok) throw new Error(`mensagens da conversa ${c.id}: HTTP ${r.status}`);
-      const msgs: { message_type?: number | string; content?: string | null; created_at?: number }[] = (await r.json())?.payload ?? [];
+      const msgs: MsgCw[] = (await r.json())?.payload ?? [];
       const telefone = String(c.meta?.sender?.phone_number ?? '');
       let achouCodigo = false;
       // So mensagens RECEBIDAS dentro da janela: o codigo vem na mensagem do clique, nao no historico.
@@ -283,7 +398,17 @@ async function casarPeloChatwoot(supabase: SupabaseClient, janelaMin = JANELA_CH
         const abertura = recebidas.find((m) =>
           !msgs.some((o) => (o.message_type === 0 || o.message_type === 'incoming') && o !== m &&
             (o.created_at ?? 0) < (m.created_at ?? 0) && (o.created_at ?? 0) >= (m.created_at ?? 0) - SILENCIO_ABERTURA_SEG));
-        if (unidade && abertura && telefone) {
+        // 2o: o ATRASO que o proprio WhatsApp registra (clique ao segundo, sobrevive ao texto apagado).
+        const comAtraso = recebidas.find((m) => atrasoDaMensagem(m) !== null);
+        if (comAtraso && unidade && telefone) {
+          const ra = await casarPorAtraso(supabase, {
+            unidade, telefone, conversaId: c.id, msgEmSeg: comAtraso.created_at ?? 0, atrasoSeg: atrasoDaMensagem(comAtraso)!,
+          });
+          if (ra.action === 'casado') resumo.casadas_atraso++;
+          else if (ra.action === 'atraso_ambiguo') resumo.atraso_ambiguo++;
+          else if (ra.action === 'atraso_sem_clique') resumo.atraso_sem_clique++;
+        } else if (unidade && abertura && telefone) {
+          // 3o (ultimo recurso): sem codigo e sem atraso -> unidade + proximidade de horario (provavel).
           const rj = await casarPorJanela(supabase, { unidade, telefone, conversaId: c.id, msgEmSeg: abertura.created_at ?? 0 });
           if (rj.action === 'casado') resumo.casadas_janela++;
           else if (rj.action === 'janela_ambigua') resumo.janela_ambigua++;
