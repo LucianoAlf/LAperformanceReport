@@ -565,6 +565,8 @@
 - `emusys_faturas_unidade_fatura_uniq`
 
 **Triggers:**
+- `trg_baixa_desfeita → trg_financeiro_baixa_desfeita()`
+- `trg_baixa_desfeita_delete → trg_financeiro_baixa_desfeita()`
 - `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_emusys_faturas_updated_at → touch_emusys_faturas_updated_at()`
 

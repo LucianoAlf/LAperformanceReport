@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — financeiro
 
-51 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+54 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## caixa_categorias
 
@@ -471,6 +471,65 @@
 
 **Únicos:**
 - `financeiro_asaas_varredura_resumo_pkey`
+
+## financeiro_baixas_desfeitas
+
+> Auditoria: fatura que era paga e voltou a aberta/estornada/removida no espelho Emusys.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `unidade_id` | uuid | não |  |  |
+| `unidade_codigo` | text | sim |  |  |
+| `emusys_fatura_id` | bigint | não |  |  |
+| `emusys_matricula_id` | bigint | sim |  |  |
+| `emusys_student_id` | bigint | sim |  |  |
+| `status_novo` | text | sim |  |  |
+| `data_pagamento_anterior` | date | sim |  |  |
+| `valor_pago_anterior` | numeric | sim |  |  |
+| `forma_pagamento_anterior` | text | sim |  |  |
+| `detectado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `financeiro_baixas_desfeitas_pkey`
+
+## financeiro_cnpj_ignorados
+
+> CNPJs que nunca viram sugestao de aluno: empresas da propria LA e adquirentes (PagSeguro etc.).
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `cnpj_hmac` | text | não |  |  |
+| `cnpj_mascarado` | text | não |  |  |
+| `motivo` | text | não |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `financeiro_cnpj_ignorados_pkey`
+
+## financeiro_cnpj_vinculos
+
+> Mapa aprendido CNPJ -> fatura/aluno. Alimentado pelo Super Folha a cada casamento manual confirmado. So HMAC, nunca CNPJ em claro.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `unidade_id` | uuid | não |  | unidades.id |
+| `cnpj_hmac` | text | não |  |  |
+| `cnpj_mascarado` | text | não |  |  |
+| `emusys_fatura_id` | bigint | não |  |  |
+| `emusys_matricula_id` | bigint | sim |  |  |
+| `emusys_student_id` | bigint | sim |  |  |
+| `aluno_id` | integer | sim |  |  |
+| `vezes` | integer | não | 1 |  |
+| `primeiro_visto_em` | timestamp with time zone | não | now() |  |
+| `ultimo_visto_em` | timestamp with time zone | não | now() |  |
+| `ultimo_casado_em` | timestamp with time zone | sim |  |  |
+| `fonte` | text | não | 'super_folha'::text |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `financeiro_cnpj_vinculos_pkey`
 
 ## financeiro_emusys_contas
 

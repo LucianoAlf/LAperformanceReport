@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Funções
 
-1800 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
+1808 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
 chamadas diretas ao PostgREST não são visíveis para o gerador.
 
 ## aluno
@@ -314,6 +314,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | Função | Estado | Segurança | Consumidores |
 |---|---|---|---|
 | `admitir_refresh_snapshot_experimentais_v1(p_unidade_id uuid, p_data_inicio date, p_data_fim date, p_origem text, p_agora timestamp with time zone)` | ATIVA | DEFINER | edge:supabase/functions/relatorio-admin-whatsapp/index.ts |
+| `agente_modo_publico()` | ORFA | DEFINER · 🔓 anon | sem consumidor conhecido |
 | `agente_pode_falar_v1(p_destino text, p_peso text, p_agente text, p_dia date)` | ATIVA | DEFINER | edge:supabase/functions/registrar-mensagem-agente/index.ts, funcao:agente_registrar_mensagem_v1, funcao:radar_enfileirar_pauta_v1 |
 | `agente_registrar_mensagem_v1(p_agente text, p_destino text, p_tipo text, p_peso text)` | ATIVA | DEFINER | edge:supabase/functions/registrar-mensagem-agente/index.ts |
 | `amostra_pareada_atendimento_v1(p_pares integer, p_meses integer)` | ORFA | DEFINER | sem consumidor conhecido |
@@ -465,6 +466,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `enqueue_financeiro_sync_backlog(p_trigger_source text, p_requested_by text)` | ATIVA | DEFINER | edge:supabase/functions/sync-faturas-emusys/index.ts |
 | `enqueue_sync_faturas_pagas_mes_jobs(p_competencias date[], p_unidade_codigo text, p_trigger_source text)` | ATIVA | DEFINER | edge:supabase/functions/sync-faturas-emusys/index.ts |
 | `enqueue_sync_financeiro_emusys_job(p_unidade_codigo text, p_data_inicial date, p_data_final date, p_catalogos boolean, p_trigger_source text, p_priority integer, p_max_retries integer, p_next_attempt_at timestamp with time zone)` | ATIVA | DEFINER | edge:supabase/functions/sync-financeiro-emusys/index.ts |
+| `exportar_financeiro_baixadas_v1(p_desde_data_pagamento date, p_sincronizado_desde timestamp with time zone, p_cursor text, p_unidade_id uuid, p_limite integer)` | ATIVA | DEFINER | edge:supabase/functions/export-financeiro-baixadas/index.ts |
 | `fail_financeiro_sync_job(p_job_id uuid, p_worker_id uuid, p_sync_run_id uuid, p_error_code text, p_error_detail text)` | ATIVA | DEFINER | edge:supabase/functions/sync-faturas-emusys/index.ts |
 | `fail_financeiro_sync_run(p_run_id uuid, p_erro_detalhe text)` | ATIVA | DEFINER | edge:supabase/functions/sync-faturas-emusys/index.ts |
 | `fail_sync_faturas_pagas_mes_job(p_job_id uuid, p_worker_id uuid, p_error_code text, p_error_detail text, p_http_status integer)` | ATIVA | DEFINER | edge:supabase/functions/sync-faturas-emusys/index.ts |
@@ -504,12 +506,14 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `marcar_inadimplentes_apos_vencimento()` | ORFA | DEFINER | sem consumidor conhecido |
 | `preview_fechamento_mensal(p_ano integer, p_mes integer, p_unidade_id uuid, p_incluir_payloads boolean)` | SO-INTERNA | DEFINER | funcao:gravar_snapshot_fechamento_mensal |
 | `proteger_fechamento_mensal_snapshot_imutavel_v1()` | ATIVA | DEFINER | trigger:fechamento_mensal_snapshots.trg_fechamento_mensal_snapshot_imutavel |
+| `publicar_financeiro_cnpj_vinculos_v1(p_items jsonb, p_fonte text)` | ATIVA | DEFINER | edge:supabase/functions/financeiro-cnpj-vinculos/index.ts |
 | `publish_faturas_vencidas_sync(p_items jsonb, p_trigger_source text, p_requested_by text)` | ATIVA | DEFINER | edge:supabase/functions/sync-faturas-emusys/index.ts, funcao:calcular_valores_fatura_financeiro_v1 |
 | `publish_financeiro_sync_run(p_run_id uuid, p_items jsonb, p_units_summary jsonb, p_override_reason text)` | ATIVA | DEFINER | edge:supabase/functions/sync-faturas-emusys/index.ts |
 | `reabrir_caixa_diario(p_caixa_diario_id uuid, p_motivo text, p_reaberto_por text)` | ATIVA | DEFINER | front:src/hooks/useCaixaDiario.ts |
 | `reconexao_consultar_caixa(p_waha_session text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `registrar_contrato_assinatura_lote_v1(p_execucao_id uuid, p_unidade_id uuid, p_observado_em timestamp with time zone, p_linhas jsonb)` | ATIVA | DEFINER | edge:supabase/functions/sync-contratos-assinatura-emusys/index.ts |
 | `renew_sync_financeiro_emusys_job_lease(p_job_id uuid, p_worker_id uuid, p_lease_seconds integer)` | ATIVA | DEFINER | edge:supabase/functions/sync-financeiro-emusys/index.ts |
+| `resolver_financeiro_cnpj_v1(p_cnpj text)` | ATIVA | DEFINER | edge:supabase/functions/financeiro-cnpj-vinculos/index.ts |
 | `resolver_reconciliacao_fatura(p_unidade_id uuid, p_emusys_fatura_id bigint, p_tipo_decisao text, p_observacao text, p_canonical_fatura_id uuid, p_emusys_matricula_id bigint, p_emusys_student_id bigint, p_forma_pagamento_id integer, p_decidido_por text)` | ATIVA | DEFINER | front:src/components/App/FaturasAlunos/FaturasAlunosFinanceirasPage.tsx |
 | `retry_financeiro_sync_job(p_job_id uuid, p_worker_id uuid, p_sync_run_id uuid, p_error_code text, p_error_detail text, p_http_status integer, p_retry_after_seconds integer)` | ATIVA | DEFINER | edge:supabase/functions/sync-faturas-emusys/index.ts |
 | `retry_sync_faturas_pagas_mes_job(p_job_id uuid, p_worker_id uuid, p_error_code text, p_error_detail text, p_http_status integer)` | ATIVA | DEFINER | edge:supabase/functions/sync-faturas-emusys/index.ts |
@@ -1029,6 +1033,8 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `introspect_schema_lamusic(table_names text[])` | ATIVA | DEFINER | edge:supabase/functions/bi-agent-lamusic/index.ts, edge:supabase/functions/bi-agent-lamusic/tools.ts |
 | `is_admin()` | ATIVA | DEFINER | front:src/components/App/Agenda/Chamada/ChamadaDrawer.tsx, edge:supabase/functions/atualizar-faturas-aluno/index.ts, view:vw_absenteismo_aluno_canonica_v2, view:vw_alunos_sem_fatura_mes, view:vw_contratos_vencendo, view:vw_disponibilidade_professores, +41 outros |
 | `is_admin_usuario()` | SO-INTERNA | DEFINER | funcao:get_financeiro_espelho_status |
+| `la_os_agente_modo_definir(p_agente text, p_unidade text, p_modo text, p_email text, p_motivo text)` | ORFA | DEFINER | sem consumidor conhecido |
+| `la_os_agente_modo_listar()` | ORFA | DEFINER | sem consumidor conhecido |
 | `la_os_banco_atual()` | ORFA | DEFINER | sem consumidor conhecido |
 | `la_os_banco_coletar_consumo()` | ORFA | DEFINER | sem consumidor conhecido |
 | `la_os_banco_consumidores(p_horas integer)` | ORFA | DEFINER | sem consumidor conhecido |
@@ -1352,7 +1358,8 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_amarrar_email_do_professor(p_professor_id integer, p_email text)` | ORFA | DEFINER | sem consumidor conhecido |
 | `fn_aniversariantes_do_professor_v1(p_professor_id integer, p_de date, p_ate date)` | SO-INTERNA | DEFINER | funcao:fn_novidades_do_professor |
 | `fn_aplicar_comando_presenca_core_v2(p_request_id uuid)` | SO-INTERNA | DEFINER | funcao:app_aplicar_comando_presenca_v2 |
-| `fn_audio_preso_recusados_resolvidos(p_professor_id integer, p_terminais integer, p_aulas integer[], p_vinculos integer[])` | SO-INTERNA | DEFINER | funcao:fn_diag_audio_preso_no_aparelho |
+| `fn_audio_preso_recusados_resolvidos(p_professor_id integer, p_terminais integer, p_aulas integer[], p_vinculos integer[])` | ORFA | DEFINER | sem consumidor conhecido |
+| `fn_audio_preso_recusas_certas(p_professor_id integer, p_terminais integer, p_aulas integer[], p_vinculos integer[])` | SO-INTERNA | DEFINER | funcao:fn_audio_preso_recusados_resolvidos, funcao:fn_diag_audio_preso_no_aparelho |
 | `fn_aula_alunos_emusys_casar_aluno()` | ATIVA | DEFINER | trigger:aula_alunos_emusys.trg_aula_alunos_emusys_casar_aluno |
 | `fn_aula_alunos_emusys_reconcilia_chave()` | ATIVA | INVOKER | trigger:aula_alunos_emusys.trg_aula_alunos_emusys_reconcilia_chave |
 | `fn_aula_individual_do_aluno(p_aula_id integer, p_aluno_id integer)` | SO-INTERNA | DEFINER | funcao:app_registro_completo, funcao:fabio_criar_registro, funcao:fabio_registro_completo, funcao:fn_confirmar_registro_core, funcao:fn_gravar_fatias_que_a_presenca_liberou |
@@ -1401,6 +1408,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `fn_eventos_operacionais_timestamptz(p_valor text)` | SO-INTERNA | INVOKER | funcao:fn_eventos_operacionais_carga_inicial_v1 |
 | `fn_fabio_audio_do_registro(p_registro_id uuid)` | SO-INTERNA | DEFINER | funcao:fn_fabio_diario_coletar |
 | `fn_fabio_audio_recusa_causa(p_audio_id uuid)` | SO-INTERNA | DEFINER | funcao:fn_fabio_ocorrencia_classe |
+| `fn_fabio_aula_tem_ficha_com_conteudo(p_aula_id integer)` | SO-INTERNA | DEFINER | funcao:fn_fabio_det_rascunho_parado, funcao:fn_fabio_diario_coletar |
 | `fn_fabio_barrar_bom_dia_legado()` | ATIVA | DEFINER | trigger:fabio_chat_mensagens.trg_fabio_barrar_bom_dia_legado, trigger:fabio_notificacoes.trg_fabio_barrar_bom_dia_legado |
 | `fn_fabio_campo_ja_estava_na_familia(p_registro_id uuid, p_depois jsonb, p_quando timestamp with time zone)` | SO-INTERNA | DEFINER | funcao:fn_fabio_diario_coletar |
 | `fn_fabio_canario_correcao_de_ficha()` | ATIVA | DEFINER | cron:fabio-canario-escrita |
