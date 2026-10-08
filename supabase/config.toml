@@ -315,3 +315,14 @@ verify_jwt = false
 # Botao "Atualizar faturas deste aluno" do caixa (LAPE-56). O navegador manda o JWT do
 # usuario; a funcao ainda exige perfil admin/unidade e acesso a unidade pedida.
 verify_jwt = true
+
+[functions.ir-whatsapp]
+# Publica de proposito: quem chama e o navegador do lead, que nao tem token. So aceita GET,
+# destino e telefone saem de whitelist interna (nao ha open redirect), e qualquer falha
+# redireciona do mesmo jeito -- o clique do lead nunca quebra.
+verify_jwt = false
+
+[functions.rastreador-casar]
+# Chamada pelo n8n com a anon key no Authorization (webhook message_created do Chatwoot) e
+# pelo cron de varredura. O gateway valida o JWT.
+verify_jwt = true
