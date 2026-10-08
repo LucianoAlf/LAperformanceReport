@@ -1423,7 +1423,16 @@ async function caixaAbf() {
               if (!event.hasMedia) {
                 const _citaCard = (() => { try { return !!(event.quotedMessageId && _fh.citaCardPendenteDaSol
                   && _fh.citaCardPendenteDaSol(chatId, event.quotedMessageId)); } catch (_) { return false; } })();
-                jevSombra().then((j) => j && j.observar({ event, unidade: _grupoCaixa && _grupoCaixa.nome, legado: _r, citaCardDaSol: _citaCard }))
+                const _cardAberto = (() => { try { return !!(_fh.temPendencia && _fh.temPendencia(chatId)); } catch (_) { return false; } })();
+                const _ultimaSol = (() => {
+                  let ult = null;
+                  for (const it of recentlySentMessages.values()) {
+                    if (it && it.chatId === chatId && Date.now() - it.sentAt <= 15 * 60000 && (!ult || it.sentAt > ult.sentAt)) ult = it;
+                  }
+                  return ult ? { min: Math.floor((Date.now() - ult.sentAt) / 60000), texto: ult.text } : null;
+                })();
+                jevSombra().then((j) => j && j.observar({ event, unidade: _grupoCaixa && _grupoCaixa.nome, legado: _r,
+                  citaCardDaSol: _citaCard, cardAberto: _cardAberto, ultimaSol: _ultimaSol }))
                   .catch(() => {});
               }
               if (_shadow && _shadowClassificacao) {

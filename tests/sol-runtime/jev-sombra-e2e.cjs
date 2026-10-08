@@ -19,7 +19,15 @@ const fetchOk = async (_u, o) => { corpos.push(JSON.parse(o.body)); return { ok:
   checar(corpos[0].model === 'typesafe/jev-1.13', 'modelo errado');
   checar(await j.observar({ event: { ...ev, hasMedia: true } }) === null, 'mídia não deveria ir ao Jev');
   const reg = fs.readFileSync(path.join(dir, 'jev-sombra.jsonl'), 'utf8').trim().split('\n');
-  checar(reg.length === 1 && !/99999/.test(reg[0]) && !/Pode, liga/.test(reg[0]), 'registro deveria ter 1 linha, sem texto/telefone');
+  checar(reg.length === 1 && !/99999/.test(reg[0]) && /Pode, liga pra \[tel\]/.test(reg[0]), 'registro deveria ter 1 linha, com o texto mascarado');
+  const lc = await j.observar({ event: { messageId: 'M2', body: 'Lança manualmente, Mayra' }, unidade: 'CG', legado: null });
+  checar(lc && lc.via === 'filtro' && lc.final === 'conversa' && corpos.length === 1, 'colega por nome deveria ser filtrado sem chamar o Jev');
+  const fetchDeixa = async () => ({ ok: true, json: async () => ({ answers: { intencao: { choice: 'aprovar', confidence: 0.95 } } }) });
+  const jd = criarJevSombra({ dir, fetchImpl: fetchDeixa });
+  const ld = await jd.observar({ event: { messageId: 'M3', body: 'Pode deixar' } });
+  checar(ld && ld.escolha === 'aprovar' && ld.final === 'conversa' && ld.trava === true, 'trava de fala curta deveria barrar "Pode deixar"');
+  const lp = await jd.observar({ event: { messageId: 'M4', body: 'Pode' } });
+  checar(lp && lp.final === 'aprovar', '"Pode" curto segue aprovar');
   const jErro = criarJevSombra({ dir, fetchImpl: async () => { throw new Error('rede'); } });
   const le = await jErro.observar({ event: ev, unidade: 'CG', legado: null });
   checar(le && le.erro === 'falha', 'falha de rede deveria virar linha de erro');

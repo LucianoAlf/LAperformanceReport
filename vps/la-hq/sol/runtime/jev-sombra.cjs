@@ -32,10 +32,34 @@ const CRITERIOS = {
 const FONE = /(\+?55\s?)?\(?\b\d{2}\)?\s?9?\d{4}[-\s]?\d{4}\b/g;
 const limpa = (s, n) => String(s || '').replace(FONE, '[tel]').replace(/@\d{6,}/g, '@[tel]').slice(0, n);
 
-function estado(fala, citada, unidade) {
+function estado(fala, citada, unidade, ultimaSol = null) {
   let s = `Mensagem no grupo financeiro${unidade ? ` da unidade ${unidade}` : ''} da LA Music, onde a Sol (assistente do caixa) monta cards de lançamento: "${limpa(fala, 1200)}"`;
   if (citada) s += `\nA mensagem está respondendo a: "${limpa(citada, 600)}"`;
+  s += ultimaSol && ultimaSol.texto
+    ? `\nContexto: há ${ultimaSol.min} min a Sol mandou neste grupo: "${limpa(ultimaSol.texto, 300)}"`
+    : '\nContexto: a Sol não mandou nada neste grupo nos últimos 15 minutos.';
   return s;
+}
+
+// Filtro em código, antes do Jev (custo zero; teste v2 de 08/10): fala que chama
+// um colega pelo nome no começo ou no fim, ou marca alguém por @, sem citar card
+// da Sol e sem falar "Sol", é conversa entre a equipe.
+const NOMES = '(luciano|alf|mayra|vit[oó]ria|vi|tutu|rose|f[eê]|fefe|fef[eê]|ana|kailane|anne|jeremias|jereh|eduarda|duda|daiana|susan|jhon|jhonatan|john|arthur|clayton|hugo|galo|yuri|meninas|pessoal|gente)';
+const CHAMA_COLEGA = new RegExp(`(^\\s*(oi|olá|ola|bom dia|boa tarde|boa noite)?[\\s,!]*@?${NOMES}\\b[\\s,!:?])|(,\\s*${NOMES}\\s*[.!?]*\\s*$)`, 'i');
+function conversaDeColega(fala, citaCardDaSol) {
+  if (citaCardDaSol || /\bsol\b/i.test(fala)) return false;
+  return CHAMA_COLEGA.test(fala) || /@\d{6,}|@\[tel\]/.test(fala);
+}
+// Trava de fala curta: até 5 palavras sem número, sem citar card e sem card
+// aberto, não vira pedido de gravação. "pode" curto segue como "pode" (quem
+// decide se lança é o card citado + a trava do banco, nunca o Jev).
+const PODE_CURTO = /^\s*(p[oa]?[dl]e|ppde|lode)\b[\s,!.]*(lan[cç]ar)?(\s*sol)?[\s!.]*$/i;
+function aplicarTrava(fala, escolha, { citaCardDaSol, cardAberto }) {
+  const curta = fala.split(/\s+/).filter(Boolean).length <= 5 && !/\d/.test(fala);
+  if (!curta || citaCardDaSol) return escolha;
+  if (escolha === 'aprovar') return PODE_CURTO.test(fala) ? escolha : 'conversa';
+  if (!cardAberto && ['correcao', 'recusar', 'registro_novo', 'explicacao'].includes(escolha)) return 'conversa';
+  return escolha;
 }
 
 function lerChave(dir) {
@@ -55,7 +79,7 @@ function criarJevSombra({ dir, fetchImpl = fetch, agora = () => Date.now(), time
   function gravar(linha) {
     try { fs.appendFileSync(arquivo, JSON.stringify(linha) + '\n', { mode: 0o600 }); } catch (_) { /* melhor esforço */ }
   }
-  async function decidir({ fala, citada, unidade }) {
+  async function decidir({ fala, citada, unidade, ultimaSol }) {
     const chave = lerChave(dir);
     if (!chave) return { erro: 'sem_chave' };
     const controle = new AbortController();
@@ -65,7 +89,7 @@ function criarJevSombra({ dir, fetchImpl = fetch, agora = () => Date.now(), time
       const resp = await fetchImpl(URL, {
         method: 'POST', signal: controle.signal,
         headers: { authorization: `Bearer ${chave}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ model: MODELO, state: estado(fala, citada, unidade),
+        body: JSON.stringify({ model: MODELO, state: estado(fala, citada, unidade, ultimaSol),
           questions: { intencao: { type: 'choice', instructions: 'O que esta mensagem é, do ponto de vista da Sol?', criteria: CRITERIOS } } }),
       });
       const ms = agora() - t0;
@@ -80,16 +104,23 @@ function criarJevSombra({ dir, fetchImpl = fetch, agora = () => Date.now(), time
     } finally { clearTimeout(t); }
   }
   // Chamado DEPOIS do caminho de hoje; nunca bloqueia nem lança erro.
-  async function observar({ event, unidade, legado, citaCardDaSol = false }) {
+  async function observar({ event, unidade, legado, citaCardDaSol = false, cardAberto = false, ultimaSol = null }) {
     try {
       if (!lerConfig(dir).sombra) return null;
       if (!event || event.hasMedia) return null;
       const fala = String(event.body || '').trim();
       if (!fala) return null;
-      const r = await decidir({ fala, citada: event.quotedPreview || '', unidade });
-      const linha = { ts: new Date(agora()).toISOString(), messageId: event.messageId || null, unidade: unidade || null,
-        citou: !!event.quotedMessageId, cita_card_sol: !!citaCardDaSol,
-        legado: legado && legado.acao ? legado.acao : null, ...r };
+      const base = { ts: new Date(agora()).toISOString(), messageId: event.messageId || null, unidade: unidade || null,
+        texto: limpa(fala, 300), citou: !!event.quotedMessageId, cita_card_sol: !!citaCardDaSol, card_aberto: !!cardAberto,
+        ctx_sol: !!(ultimaSol && ultimaSol.texto), provedor: 'openrouter', legado: legado && legado.acao ? legado.acao : null };
+      let linha;
+      if (conversaDeColega(fala, citaCardDaSol)) {
+        linha = { ...base, via: 'filtro', escolha: 'conversa', final: 'conversa' };
+      } else {
+        const r = await decidir({ fala, citada: event.quotedPreview || '', unidade, ultimaSol });
+        const final = r.escolha ? aplicarTrava(fala, r.escolha, { citaCardDaSol, cardAberto }) : null;
+        linha = { ...base, via: 'jev', ...r, final, trava: !!(final && final !== r.escolha) };
+      }
       gravar(linha);
       return linha;
     } catch (_) { return null; }
@@ -97,4 +128,4 @@ function criarJevSombra({ dir, fetchImpl = fetch, agora = () => Date.now(), time
   return { observar, decidir, _estado: estado };
 }
 
-module.exports = { criarJevSombra, CRITERIOS, _estado: estado };
+module.exports = { criarJevSombra, CRITERIOS, _estado: estado, _conversaDeColega: conversaDeColega, _aplicarTrava: aplicarTrava };
