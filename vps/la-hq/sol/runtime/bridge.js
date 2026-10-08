@@ -849,6 +849,21 @@ async function classificadorV3Shadow() {
   }
   return _classificadorV3Shadow;
 }
+// Jev em sombra (08/10/2026): só registra a leitura do Jev ao lado do que a Sol
+// fez. Ligado por caixa-ingestao/jev.json {"sombra": true}; chave em .jev.env.
+let _jevSombra = null;
+async function jevSombra() {
+  if (_jevSombra) return _jevSombra;
+  try {
+    const m = await import('file:///home/sol/.hermes/profiles/sol/caixa-ingestao/jev-sombra.cjs');
+    const criar = m.criarJevSombra || (m.default && m.default.criarJevSombra);
+    _jevSombra = criar({ dir: '/home/sol/.hermes/profiles/sol/caixa-ingestao' });
+  } catch (e) {
+    _caixaLog({ step: 'jev_sombra_load_erro', msg: e.message });
+    _jevSombra = null;
+  }
+  return _jevSombra;
+}
 // Executor das ferramentas de caixa (28/09/2026): o MCP não tem mais caixa
 // próprio; ele valida o crachá e chama POST /caixa/tool, que roda aqui, com o
 // MESMO handler que atende as mensagens do grupo. Um estado só.
@@ -1404,6 +1419,13 @@ async function caixaAbf() {
               const _r = await _fh.handle(event);
               _resultadoCaixa = _r;
               _caixaLog({ step: 'result', r: _r });
+              // Jev em sombra: depois do caminho de hoje, sem esperar, sem efeito.
+              if (!event.hasMedia) {
+                const _citaCard = (() => { try { return !!(event.quotedMessageId && _fh.citaCardPendenteDaSol
+                  && _fh.citaCardPendenteDaSol(chatId, event.quotedMessageId)); } catch (_) { return false; } })();
+                jevSombra().then((j) => j && j.observar({ event, unidade: _grupoCaixa && _grupoCaixa.nome, legado: _r, citaCardDaSol: _citaCard }))
+                  .catch(() => {});
+              }
               if (_shadow && _shadowClassificacao) {
                 try { _shadow.registrar({ log: _caixaLog, event, grupo: _grupoCaixa, classificacao: _shadowClassificacao, legado: _r }); }
                 catch (e) { _caixaLog({ step: 'classificador_v3_shadow_erro', msg: e.message }); }
