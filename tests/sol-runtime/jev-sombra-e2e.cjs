@@ -6,7 +6,8 @@ const falhas = []; const checar = (c, m) => { if (!c) falhas.push(m); };
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jev-'));
 fs.writeFileSync(path.join(dir, '.jev.env'), 'SOL_JEV_OPENROUTER_KEY=chave-teste\n');
 const corpos = [];
-const fetchOk = async (_u, o) => { corpos.push(JSON.parse(o.body)); return { ok: true, json: async () => ({ answers: { intencao: { choice: 'aprovar', confidence: 0.97 } }, usage: { cost: 0.00001 } }) }; };
+const cabecalhos = [];
+const fetchOk = async (_u, o) => { corpos.push(JSON.parse(o.body)); cabecalhos.push(o.headers); return { ok: true, json: async () => ({ answers: { intencao: { choice: 'aprovar', confidence: 0.97 } }, usage: { cost: 0.00001 } }) }; };
 (async () => {
   const j = criarJevSombra({ dir, fetchImpl: fetchOk });
   const ev = { messageId: 'M1', body: 'Pode, liga pra 21 99999-8888', quotedMessageId: 'Q1', quotedPreview: 'Comprovante recebido — R$ 377,00' };
@@ -17,6 +18,8 @@ const fetchOk = async (_u, o) => { corpos.push(JSON.parse(o.body)); return { ok:
   checar(l && l.escolha === 'aprovar' && l.confianca === 0.97 && l.legado === 'lancado' && l.cita_card_sol === true, 'linha errada: ' + JSON.stringify(l));
   checar(!/99999/.test(corpos[0].state) && /\[tel\]/.test(corpos[0].state), 'telefone vazou no state');
   checar(corpos[0].model === 'typesafe/jev-1.13', 'modelo errado');
+  checar(cabecalhos[0]['X-Title'] === 'Sol', 'falta X-Title: Sol');
+  checar(require('../../vps/la-hq/sol/runtime/jev-sombra.cjs')._aplicarTrava('Parcela Kailane Marcos', 'registro_novo', {}) === 'registro_novo', 'legenda curta de pagamento não pode virar conversa');
   checar(await j.observar({ event: { ...ev, hasMedia: true } }) === null, 'mídia não deveria ir ao Jev');
   const reg = fs.readFileSync(path.join(dir, 'jev-sombra.jsonl'), 'utf8').trim().split('\n');
   checar(reg.length === 1 && !/99999/.test(reg[0]) && /Pode, liga pra \[tel\]/.test(reg[0]), 'registro deveria ter 1 linha, com o texto mascarado');

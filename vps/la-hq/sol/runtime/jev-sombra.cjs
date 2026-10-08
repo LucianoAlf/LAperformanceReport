@@ -58,7 +58,9 @@ function aplicarTrava(fala, escolha, { citaCardDaSol, cardAberto }) {
   const curta = fala.split(/\s+/).filter(Boolean).length <= 5 && !/\d/.test(fala);
   if (!curta || citaCardDaSol) return escolha;
   if (escolha === 'aprovar') return PODE_CURTO.test(fala) ? escolha : 'conversa';
-  if (!cardAberto && ['correcao', 'recusar', 'registro_novo', 'explicacao'].includes(escolha)) return 'conversa';
+  // registro_novo fica de fora (08/10, teste v2): "Parcela Kailane Marcos" é legenda
+  // curta sem número e a trava a comia; criar card não grava nada sem o "pode".
+  if (!cardAberto && ['correcao', 'recusar', 'explicacao'].includes(escolha)) return 'conversa';
   return escolha;
 }
 
@@ -88,7 +90,8 @@ function criarJevSombra({ dir, fetchImpl = fetch, agora = () => Date.now(), time
     try {
       const resp = await fetchImpl(URL, {
         method: 'POST', signal: controle.signal,
-        headers: { authorization: `Bearer ${chave}`, 'content-type': 'application/json' },
+        // X-Title separa o gasto da Sol e da Maria na tela de uso (a chave é a mesma).
+        headers: { authorization: `Bearer ${chave}`, 'content-type': 'application/json', 'X-Title': 'Sol', 'HTTP-Referer': 'https://lamusic.com.br/sol' },
         body: JSON.stringify({ model: MODELO, state: estado(fala, citada, unidade, ultimaSol),
           questions: { intencao: { type: 'choice', instructions: 'O que esta mensagem é, do ponto de vista da Sol?', criteria: CRITERIOS } } }),
       });
