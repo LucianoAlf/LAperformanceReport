@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Tabelas e views
 
-654 objetos. Uma linha cada; colunas e FKs em `detalhe/<dominio>.md`.
+655 objetos. Uma linha cada; colunas e FKs em `detalhe/<dominio>.md`.
 
 | Objeto | Tipo | Domínio | Colunas | Linhas | RLS | FKs | Comentário |
 |---|---|---|---|---|---|---|---|
@@ -110,7 +110,7 @@
 | `radar_padroes` | tabela | aluno | 17 | 12 | sim (1) | 0 | O que a REDE ensinou: padrão medido com amostra, lift e JANELA DE AÇÃO. Recalculado periodicamente — aprendizado vivo, não número cravado. |
 | `radar_regras` | tabela | aluno | 17 | 21 | sim (1) | 1 | Regras do radar com o LASTRO que as fundamentou (nunca peso chutado). Regra com muita improcedencia e rebaixada a observacional. |
 | `radar_rodadas` | tabela | aluno | 7 | 609 | sim (1) | 0 | Uma linha por execucao do detector. Existe para desambiguar "a situacao parou de aparecer" (sanou) de "o detector nao rodou" (nao sei). Sem isso, cron parado esvazia a pauta em silencio. |
-| `radar_sinais` | tabela | aluno | 31 | 2514 | sim (1) | 1 | Mapa de Sinais: cada detecção vira evento com evidência, orientação e desfecho. View=foto, esta tabela=filme. |
+| `radar_sinais` | tabela | aluno | 31 | 2547 | sim (1) | 1 | Mapa de Sinais: cada detecção vira evento com evidência, orientação e desfecho. View=foto, esta tabela=filme. |
 | `renovacoes_legado` | tabela | aluno | 18 | 452 | sim (4) | 5 | ARQUIVO read-only. Aposentada em 2026-07-01: a fonte de verdade de renovacoes passou a ser movimentacoes_admin. NAO usar em codigo novo. Contem historico legado (incl. ~44 renovacoes que so existiam aqui). |
 | `risco_evasao` | tabela | aluno | 9 | 2311 | sim (2) | 2 |  |
 | `tipos_matricula` | tabela | aluno | 10 | 6 | sim (4) | 0 |  |
@@ -275,6 +275,7 @@
 | `financeiro_emusys_plano_contas` | tabela | financeiro | 16 | 552 | sim (0) | 1 | Catálogo GET /financeiro/plano_contas (Emusys beta), completo a cada rodada. codigo_extraido vem do início do nome; codigo_api é a numeração interna e não classifica nada. |
 | `financeiro_emusys_varredura_dias` | tabela | financeiro | 9 | 828 | sim (0) | 1 | Um dia só entra como completo quando TODAS as páginas dele vieram. Status erro nunca vale como vazio: o dia fica pendente até completar. |
 | `financeiro_emusys_varredura_resumo` | tabela | financeiro | 10 | 3 | sim (0) | 1 | Estado da rotina diária (mês corrente + 2 anteriores). ultima_varredura_completa_em só anda quando a janela inteira fecha sem dia em erro. |
+| `financeiro_encargos_unidade` | tabela | financeiro | 7 | 0 | sim (0) | 1 | Encargos de atraso por unidade (multa + mora mensal). Unidade sem linha cai no padrao 2%/1% — nenhuma unidade nova quebra. |
 | `financeiro_fatura_reconciliacao_decisoes` | tabela | financeiro | 13 | 8 | sim (0) | 2 | Auditoria append-only das decisoes operacionais da conciliacao de faturas. Nunca altera o status do snapshot Emusys. |
 | `financeiro_sync_queue` | tabela | financeiro | 20 | 9814 | sim (0) | 1 | Fila unica do sync financeiro Emusys. Um job publica uma competencia completa das tres unidades. |
 | `formas_pagamento` | tabela | financeiro | 5 | 8 | sim (4) | 0 |  |
@@ -321,7 +322,7 @@
 | `metas_kpi` | tabela | gestao | 8 | 596 | sim (4) | 1 |  |
 | `metas_legado` | tabela | gestao | 14 | 6 | sim (2) | 1 | BACKUP: Tabela metas original (estrutura anual). Dados migrados para nova tabela metas em 2026-01-16. Pode ser removida após 30 dias de validação. |
 | `metas_professor_turma` | tabela | gestao | 13 | 0 | sim (1) | 2 |  |
-| `pix_migracao_snapshot` | tabela | gestao | 18 | 18509 | sim (0) | 0 |  |
+| `pix_migracao_snapshot` | tabela | gestao | 18 | 21034 | sim (0) | 0 |  |
 | `projecao_aulas` | tabela | gestao | 12 | 55178 | sim (4) | 2 |  |
 | `projecao_recaculo_log` | tabela | gestao | 8 | 0 | sim (3) | 0 |  |
 | `relatorio_anual` | tabela | gestao | 36 | 14 | sim (0) | 0 | Relatório Pedagógico Anual: um por (recital, aluno). Fechada; acesso só por funções guardadas (fn_relatorio_anual_papel). |
@@ -477,7 +478,7 @@
 | `assistente_ia_config` | tabela | plataforma | 4 | 1 | sim (2) | 0 |  |
 | `audit_log` | tabela | plataforma | 11 | 296613 | sim (2) | 0 |  |
 | `auditoria_acesso` | tabela | plataforma | 10 | 3 | sim (2) | 1 | Log de auditoria para ações de acesso e permissões |
-| `cache_versao_log` | tabela | plataforma | 3 | 8119 | sim (0) | 0 | LAPE-42: uma linha por comando de escrita nas tabelas lidas pelos caches de servidor. Versao de cache = count:max:sum dos ids visiveis. Podado por cache_versao_podar_v1. |
+| `cache_versao_log` | tabela | plataforma | 3 | 400 | sim (0) | 0 | LAPE-42: uma linha por comando de escrita nas tabelas lidas pelos caches de servidor. Versao de cache = count:max:sum dos ids visiveis. Podado por cache_versao_podar_v1. |
 | `ficha_tokens` | tabela | plataforma | 8 | 15 | sim (0) | 1 | Token pessoal por colaborador. Uso unico: usado_em preenchido trava o reenvio. RLS sem policy por design — so service_role le; token nunca vai para o client. |
 | `migrations_audit_data_nascimento` | tabela | plataforma | 7 | 80 | sim (3) | 0 |  |
 | `paginas_rpc_cache` | tabela | plataforma | 4 | 13 | não | 0 | Cache generico das RPCs pesadas de pagina (agenda, alunos, administrativo, professores). Chave = recorte logico (+escopo de unidades quando a funcao filtra por usuario). TTL na funcao wrapper. Criado em 2026-09-24. |
@@ -503,9 +504,9 @@
 | `anotacoes` | tabela | professor | 11 | 0 | sim (2) | 1 |  |
 | `anotacoes_alunos` | tabela | professor | 8 | 36 | sim (4) | 1 | Anotações e observações sobre alunos |
 | `app_audio_preso_no_aparelho` | tabela | professor | 7 | 12 | sim (0) | 1 | Farol do app (20260827170000): estado ATUAL da fila local de audios de cada professor. Uma linha por professor, sobrescrita — e o zero tambem e reportado, senao o alarme de ontem nunca apaga. Sem isto, audio recusado fica so no aparelho e nenhuma auditoria pode ve-lo (caso Valdo/Bruno, 26/08/2026). |
-| `aula_alunos_emusys` | tabela | professor | 16 | 46975 | sim (3) | 3 | Roster operacional de aulas do Emusys, sem contato ou dados financeiros. |
+| `aula_alunos_emusys` | tabela | professor | 16 | 46298 | sim (3) | 3 | Roster operacional de aulas do Emusys, sem contato ou dados financeiros. |
 | `aula_registros_fabio_log` | tabela | professor | 8 | 1570 | sim (0) | 1 | Auditoria das gravações do Fábio em aulas_emusys.anotacoes_fabio. É trilha de rastreabilidade, não o lar do registro (o registro vive em anotacoes_fabio). |
-| `aula_roster_sync_estado` | tabela | professor | 9 | 27146 | sim (0) | 2 |  |
+| `aula_roster_sync_estado` | tabela | professor | 9 | 31029 | sim (0) | 2 |  |
 | `aulas_emusys` | tabela | professor | 36 | 72593 | sim (4) | 3 | Metadados completos de cada aula importada do Emusys (turma, curso, sala, professor, horários) |
 | `config_health_score` | tabela | professor | 13 | 1 | sim (2) | 1 | Configuração dos pesos e limites do Health Score do Professor |
 | `config_health_score_aluno` | tabela | professor | 11 | 1 | sim (2) | 1 | Configuração de pesos do Health Score de Alunos - ajustável por unidade |
@@ -599,7 +600,7 @@
 | `professor_passagem_bastao` | tabela | professor | 15 | 96 | sim (2) | 5 | Camada quente: pendencia humana de passagem de bastao para LA Teacher/Fabio. |
 | `professor_perfil_respostas` | tabela | professor | 7 | 390 | sim (1) | 1 | Respostas individuais por aplicação. opcao_canonica (A/B/C/D do gabarito) preserva o recálculo mesmo com opções embaralhadas na exibição. 1-13 fixas; 14-15 desempate (presença = houve empate). |
 | `professor_perfil_testes` | tabela | professor | 26 | 17 | sim (1) | 4 | Aplicações do teste de perfil comportamental do professor (13+2 cenários). Histórico preservado; o vigente desnormaliza em professores.temperamento_codinome. |
-| `professor_periodos_reconstrucao_manifesto_v1` | tabela | professor | 13 | 209575 | sim (0) | 5 | Manifesto privado e imutavel por versao do recorte. Calcula uma vez a particao da pessoa canonica. |
+| `professor_periodos_reconstrucao_manifesto_v1` | tabela | professor | 13 | 217475 | sim (0) | 5 | Manifesto privado e imutavel por versao do recorte. Calcula uma vez a particao da pessoa canonica. |
 | `professor_periodos_reconstrucao_particoes_v1` | tabela | professor | 20 | 170 | sim (0) | 2 | Resultados intermediarios, idempotentes e privados da reconstrucao V3. O detalhe diagnostico fica aqui; a camada final so nasce apos todas as particoes. |
 | `professor_periodos_reconstrucoes_v1` | tabela | professor | 19 | 166 | sim (0) | 2 | Execucao versionada e idempotente do reconstrutor historico de periodos professor-matricula-disciplina. |
 | `professor_periodos_revisoes_v1` | tabela | professor | 16 | 458 | sim (0) | 5 | Trilha append-only de revisoes humanas e promocoes automaticas estruturadas sobre periodos reconstruidos. |

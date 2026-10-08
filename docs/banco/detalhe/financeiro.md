@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — financeiro
 
-48 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+49 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## caixa_categorias
 
@@ -619,6 +619,23 @@
 
 **Únicos:**
 - `financeiro_emusys_varredura_resumo_pkey`
+
+## financeiro_encargos_unidade
+
+> Encargos de atraso por unidade (multa + mora mensal). Unidade sem linha cai no padrao 2%/1% — nenhuma unidade nova quebra.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `unidade_id` | uuid | não |  | unidades.id |
+| `multa_pct` | numeric(6,4) | não | 0.02 |  |
+| `mora_mensal_pct` | numeric(6,4) | não | 0.01 |  |
+| `fonte` | text | não |  |  |
+| `vigente_desde` | date | não | '2026-01-01'::date |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `financeiro_encargos_unidade_pkey`
 
 ## financeiro_fatura_reconciliacao_decisoes
 
