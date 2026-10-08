@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { supabase } from '@/lib/supabase';
 import { usePaginacaoTabela, PaginacaoTabela } from './PaginacaoTabela';
@@ -7,7 +8,7 @@ import { ptBR } from 'date-fns/locale';
 import {
   DollarSign, Eye, MousePointerClick, MessageCircle,
   Loader2, RefreshCw, Users, Target, AlertTriangle,
-  TrendingUp, Image as ImageIcon, LayoutGrid, UsersRound, MapPin, Repeat
+  TrendingUp, Image as ImageIcon, LayoutGrid, UsersRound, MapPin, Repeat, Search, X
 } from 'lucide-react';
 import {
   ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis,
@@ -178,6 +179,13 @@ export function TrafegoPagoPage() {
   });
   const sentinelRef = useWidgetOverlapSentinel();
 
+  // Mesmo seletor de unidade do header que as paginas irmas consomem. null/'todos' = consolidado.
+  // So a LISTA de leads respeita a unidade: gasto e conversas vem da conta de anuncios da Meta, que
+  // tem uma unica campanha de leads ("Todas as unidades") e nao sabe dividir por unidade.
+  const context = useOutletContext<{ unidadeSelecionada: string | null } | undefined>();
+  const unidadeSel = context?.unidadeSelecionada ?? null;
+  const unidadeFiltro = unidadeSel && unidadeSel !== 'todos' ? unidadeSel : null;
+
   const [preset, setPreset] = useState<Preset>('last_30d');
   const [plataforma, setPlataforma] = useState<Plataforma>('meta');
   const [insights, setInsights] = useState<InsightsResponse | null>(null);
@@ -188,6 +196,8 @@ export function TrafegoPagoPage() {
   const [adsCache, setAdsCache] = useState<Map<string, AdCache>>(new Map());
   const [loadingLeads, setLoadingLeads] = useState(true);
   const paginacaoLeads = usePaginacaoTabela(leadsAtribuidos, 15);
+  const [busca, setBusca] = useState('');
+  const [buscaAplicada, setBuscaAplicada] = useState('');
 
   // ----- Insights (via edge function meta-ads-insights, token fica no servidor) -----
   // Só consulta quando a aba do Meta está à vista: cada chamada custa requisição
@@ -215,17 +225,37 @@ export function TrafegoPagoPage() {
     return () => { ativo = false; };
   }, [preset, plataforma]);
 
+  // A busca vai ao banco (nao filtra so os 200 ja carregados): sem isso, um lead antigo nunca seria achado.
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaAplicada(busca.trim()), 350);
+    return () => clearTimeout(t);
+  }, [busca]);
+
   // ----- Leads atribuídos + cache de anúncios -----
   const carregarLeads = async () => {
     setLoadingLeads(true);
     try {
       const [{ data: leads }, { data: cache }] = await Promise.all([
-        supabase
-          .from('leads')
-          .select('id, nome, telefone, data_contato, status, converteu, meta_ad_source_id, unidades:unidade_id(codigo), canais_origem:canal_origem_id(nome)')
-          .not('meta_ad_source_id', 'is', null)
-          .order('data_contato', { ascending: false })
-          .limit(200),
+        (() => {
+          let q = supabase
+            .from('leads')
+            .select('id, nome, telefone, data_contato, status, converteu, meta_ad_source_id, unidades:unidade_id(codigo), canais_origem:canal_origem_id(nome)')
+            .not('meta_ad_source_id', 'is', null)
+            .order('data_contato', { ascending: false })
+            .limit(200);
+          if (unidadeFiltro) q = q.eq('unidade_id', unidadeFiltro);
+          // Tira o que quebraria a sintaxe do .or() do PostgREST (virgula, parenteses, % e *).
+          const termo = buscaAplicada.replace(/[,()%*\\]/g, ' ').trim();
+          if (termo) {
+            const filtros = [`nome.ilike.%${termo}%`];
+            // O telefone fica gravado so com digitos (55DDD...): "(21) 96918-6349" tem de achar.
+            const digitos = termo.replace(/\D/g, '');
+            if (digitos.length >= 4) filtros.push(`telefone.ilike.%${digitos}%`);
+            if (/^\d+$/.test(termo)) filtros.push(`id.eq.${Number(termo)}`);
+            q = q.or(filtros.join(','));
+          }
+          return q;
+        })(),
         supabase.from('meta_ads_cache').select('source_id, ad_name, campaign_name, adset_name, effective_status'),
       ]);
       setLeadsAtribuidos((leads as unknown as LeadAtribuido[]) || []);
@@ -238,7 +268,7 @@ export function TrafegoPagoPage() {
     }
   };
 
-  useEffect(() => { carregarLeads(); }, []);
+  useEffect(() => { carregarLeads(); }, [unidadeFiltro, buscaAplicada]);
 
   // ----- Derivados -----
   const conta = insights?.conta ?? null;
@@ -673,6 +703,27 @@ export function TrafegoPagoPage() {
           <h3 className="text-sm font-medium text-slate-400 flex items-center gap-2">
             <Users className="w-4 h-4" /> Leads atribuídos a anúncios
           </h3>
+          <div className="relative w-full sm:w-72 order-3 sm:order-none">
+            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+              placeholder="Buscar por nome, telefone ou nº do lead"
+              aria-label="Buscar lead por nome, telefone ou número"
+              className="w-full bg-slate-900/60 border border-slate-700 rounded-lg pl-9 pr-8 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-pink-500/60"
+            />
+            {busca && (
+              <button
+                type="button"
+                onClick={() => setBusca('')}
+                aria-label="Limpar busca"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-4 text-xs">
             <span className="text-slate-400">
               Atribuídos: <span className="text-white font-bold">{leadsAtribuidos.length}</span>
@@ -683,6 +734,12 @@ export function TrafegoPagoPage() {
           </div>
         </div>
 
+        {unidadeFiltro && (
+          <p className="px-5 py-2 text-xs text-amber-400/90 border-b border-slate-700/50">
+            A lista está filtrada pela unidade escolhida. O investimento e as conversas acima são da conta de
+            anúncios inteira (a campanha é "Todas as unidades") e não mudam com a unidade.
+          </p>
+        )}
         {loadingLeads ? (
           <div className="flex items-center justify-center h-24">
             <Loader2 className="w-5 h-5 text-pink-400 animate-spin" />
@@ -690,11 +747,17 @@ export function TrafegoPagoPage() {
         ) : leadsAtribuidos.length === 0 ? (
           <div className="p-8 text-center text-slate-400">
             <MousePointerClick className="w-8 h-8 mx-auto mb-3 opacity-40" />
-            <p className="text-sm">Nenhum lead atribuído ainda.</p>
-            <p className="text-xs text-slate-500 mt-1">
-              A captura de atribuição foi ligada em 05/07/2026 — leads que clicarem em anúncio
-              Click-to-WhatsApp a partir de agora aparecem aqui automaticamente.
-            </p>
+            {buscaAplicada || unidadeFiltro ? (
+              <p className="text-sm">Nenhum lead atribuído a anúncio encontrado com esse filtro.</p>
+            ) : (
+              <>
+                <p className="text-sm">Nenhum lead atribuído ainda.</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  A captura de atribuição foi ligada em 05/07/2026 — leads que clicarem em anúncio
+                  Click-to-WhatsApp a partir de agora aparecem aqui automaticamente.
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
