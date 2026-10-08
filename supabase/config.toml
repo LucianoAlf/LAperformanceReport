@@ -124,6 +124,18 @@ verify_jwt = false
 # fatura via fatura_id/emusys_fatura_id. Mesmo segredo dedicado no codigo.
 verify_jwt = false
 
+[functions.export-financeiro-baixadas]
+# Baixadas/desfeitas do espelho emusys_faturas p/ o Super Folha (poll 15min).
+# Leitura: valida SUPER_FOLHA_FINANCEIRO_SECRET no codigo; sem JWT o SF recebe
+# 401 do gateway antes do codigo rodar (mesmo padrao dos outros export-*).
+verify_jwt = false
+
+[functions.financeiro-cnpj-vinculos]
+# Resolvedor/ingestor CNPJ->fatura aprendido dos casamentos do SF. Escrita:
+# aceita SÓ SUPER_FOLHA_CNPJ_VINCULOS_SECRET, validado no codigo. Sem esta
+# linha o gateway exige JWT que o SF nao tem e devolve 401.
+verify_jwt = false
+
 [functions.export-kpis-mensais]
 # Indicadores canonicos por unidade/mes p/ o Super Folha (CAC/CRC/LTV).
 # Segredo dedicado SUPER_FOLHA_KPIS_SECRET (fallback: contas-receber), validado no codigo.
