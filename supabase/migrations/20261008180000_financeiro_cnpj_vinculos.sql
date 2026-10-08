@@ -316,16 +316,78 @@ begin
 end;
 $function$;
 
+-- Baixas desfeitas: quando uma fatura 'paga' volta a outro status (ou e
+-- removida) no espelho, o SF precisa saber — senao a Maria mantem o ok em
+-- parcela que reabriu. A trigger registra o estado ANTES da baixa sumir.
+create table if not exists public.financeiro_baixas_desfeitas (
+  id bigint generated always as identity primary key,
+  unidade_id uuid not null,
+  unidade_codigo text,
+  emusys_fatura_id bigint not null,
+  emusys_matricula_id bigint,
+  emusys_student_id bigint,
+  status_novo text,
+  data_pagamento_anterior date,
+  valor_pago_anterior numeric,
+  forma_pagamento_anterior text,
+  detectado_em timestamptz not null default now()
+);
+
+comment on table public.financeiro_baixas_desfeitas is
+  'Auditoria: fatura que era paga e voltou a aberta/estornada/removida no espelho Emusys.';
+
+alter table public.financeiro_baixas_desfeitas enable row level security;
+revoke all on public.financeiro_baixas_desfeitas from public, anon, authenticated;
+grant all on public.financeiro_baixas_desfeitas to service_role;
+grant select on public.financeiro_baixas_desfeitas to mila_acesso_restrito, fabio_agent, lia_acesso_restrito;
+
+create or replace function private.trg_financeiro_baixa_desfeita()
+ returns trigger
+ language plpgsql
+ security definer
+ set search_path to 'public', 'pg_temp'
+as $function$
+begin
+  insert into public.financeiro_baixas_desfeitas (
+    unidade_id, unidade_codigo, emusys_fatura_id,
+    emusys_matricula_id, emusys_student_id,
+    status_novo, data_pagamento_anterior,
+    valor_pago_anterior, forma_pagamento_anterior
+  ) values (
+    coalesce(new.unidade_id, old.unidade_id), coalesce(new.unidade_codigo, old.unidade_codigo),
+    old.emusys_fatura_id, old.emusys_matricula_id, old.emusys_student_id,
+    case when tg_op = 'DELETE' then 'removida' else new.status end,
+    old.data_pagamento, old.valor_pago, old.payload->>'forma_pagamento_transacao'
+  );
+  return coalesce(new, old);
+end;
+$function$;
+
+drop trigger if exists trg_baixa_desfeita on public.emusys_faturas;
+create trigger trg_baixa_desfeita
+  after update on public.emusys_faturas
+  for each row
+  when (old.status = 'paga' and new.status is distinct from 'paga')
+  execute function private.trg_financeiro_baixa_desfeita();
+
+drop trigger if exists trg_baixa_desfeita_delete on public.emusys_faturas;
+create trigger trg_baixa_desfeita_delete
+  after delete on public.emusys_faturas
+  for each row
+  when (old.status = 'paga')
+  execute function private.trg_financeiro_baixa_desfeita();
+
 -- Baixadas para o SF: leitura direta do espelho emusys_faturas (fresco a
 -- cada 15 min na competencia vigente; 60 min em M-1/M-2; backlog 2h no
--- resto). Dois filtros independentes, OR entre si:
---   p_desde_data_pagamento — data_pagamento >= X (baixa por data)
---   p_sincronizado_desde   — synced_at >= ts (o que o espelho aprendeu
---                            desde o ultimo poll, mesmo com data antiga)
--- Pelo menos um e obrigatorio.
+-- resto) + a auditoria de baixas desfeitas, numa unica corrente ordenada.
+--
+-- Paginacao por cursor composto: '2026-10-08T16:33:26.703Z|45198'.
+-- Filtro INCLUSIVO (sincronizado_em, emusys_fatura_id) >= cursor — o SF
+-- deduplica por emusys_fatura_id. tem_mais/proximo_cursor fecham o ciclo.
 create or replace function public.exportar_financeiro_baixadas_v1(
   p_desde_data_pagamento date default null,
   p_sincronizado_desde timestamptz default null,
+  p_cursor text default null,
   p_unidade_id uuid default null,
   p_limite integer default 500
 )
@@ -335,61 +397,107 @@ create or replace function public.exportar_financeiro_baixadas_v1(
  set search_path to 'public', 'pg_temp'
 as $function$
 declare
-  v_itens jsonb;
+  v_limite integer := greatest(1, least(coalesce(p_limite, 500), 2000));
+  v_cur_ts timestamptz;
+  v_cur_id bigint := -9223372036854775808;
+  v_eventos jsonb;
+  v_tem_mais boolean := false;
+  v_cursor text;
 begin
-  if p_desde_data_pagamento is null and p_sincronizado_desde is null then
-    raise exception 'informe desde_data_pagamento ou sincronizado_desde' using errcode = '22023';
+  if p_desde_data_pagamento is null and p_sincronizado_desde is null and p_cursor is null then
+    raise exception 'informe desde_data_pagamento, sincronizado_desde ou cursor' using errcode = '22023';
   end if;
 
-  select coalesce(jsonb_agg(to_jsonb(f) order by f.baixada_em), '[]'::jsonb)
-    into v_itens
-    from (
-      select
-        ef.unidade_id,
-        u.codigo as unidade_codigo,
-        ef.emusys_fatura_id,
-        ef.emusys_matricula_id,
-        ef.emusys_student_id,
-        a.id as aluno_id,
-        ef.descricao,
-        ef.data_vencimento,
-        ef.data_pagamento,
-        ef.valor_original,
-        ef.valor_pago,
-        ef.juros_e_multa,
-        ef.payload->>'forma_pagamento_transacao' as forma_pagamento,
-        ef.payload->>'transacao_id' as transacao_id,
-        ef.synced_at as baixada_em
-      from public.emusys_faturas ef
-      join public.unidades u on u.id = ef.unidade_id
-      left join public.alunos a
-        on a.unidade_id = ef.unidade_id
-       and a.emusys_matricula_id = ef.emusys_matricula_id::text
-      where ef.status = 'paga'
-        and (p_unidade_id is null or ef.unidade_id = p_unidade_id)
-        and (
-          (p_desde_data_pagamento is not null and ef.data_pagamento >= p_desde_data_pagamento)
-          or (p_sincronizado_desde is not null and ef.synced_at >= p_sincronizado_desde)
-        )
-      order by ef.synced_at
-      limit greatest(1, least(coalesce(p_limite, 500), 2000))
-    ) f;
+  if p_cursor is not null then
+    v_cur_ts := split_part(p_cursor, '|', 1)::timestamptz;
+    v_cur_id := split_part(p_cursor, '|', 2)::bigint;
+  end if;
+
+  with eventos as (
+    select
+      'baixada'::text as situacao,
+      ef.unidade_id, u.codigo as unidade_codigo, ef.emusys_fatura_id,
+      ef.emusys_matricula_id, ef.emusys_student_id,
+      a.id as aluno_id,
+      ef.descricao, ef.data_vencimento, ef.data_pagamento,
+      ef.valor_original, ef.valor_pago, ef.juros_e_multa,
+      ef.payload->>'forma_pagamento_transacao' as forma_pagamento,
+      ef.payload->>'transacao_id' as transacao_id,
+      null::text as status_novo,
+      ef.synced_at as sincronizado_em
+    from public.emusys_faturas ef
+    join public.unidades u on u.id = ef.unidade_id
+    left join public.alunos a
+      on a.unidade_id = ef.unidade_id
+     and a.emusys_matricula_id = ef.emusys_matricula_id::text
+    where ef.status = 'paga'
+      and (p_unidade_id is null or ef.unidade_id = p_unidade_id)
+
+    union all
+
+    select
+      'desfeita'::text,
+      d.unidade_id, coalesce(d.unidade_codigo, u2.codigo), d.emusys_fatura_id,
+      d.emusys_matricula_id, d.emusys_student_id,
+      a2.id,
+      null, null, d.data_pagamento_anterior,
+      null, d.valor_pago_anterior, null,
+      d.forma_pagamento_anterior, null,
+      d.status_novo,
+      d.detectado_em
+    from public.financeiro_baixas_desfeitas d
+    left join public.unidades u2 on u2.id = d.unidade_id
+    left join public.alunos a2
+      on a2.unidade_id = d.unidade_id
+     and a2.emusys_matricula_id = d.emusys_matricula_id::text
+    where (p_unidade_id is null or d.unidade_id = p_unidade_id)
+  ),
+  filtrados as (
+    select * from eventos e
+    where
+      case when p_cursor is not null
+           then (e.sincronizado_em, e.emusys_fatura_id) >= (v_cur_ts, v_cur_id)
+           else true end
+      and case when p_cursor is null and p_sincronizado_desde is not null
+           then e.sincronizado_em >= p_sincronizado_desde
+           else true end
+      and case when p_desde_data_pagamento is not null
+           then e.data_pagamento >= p_desde_data_pagamento
+                or (e.situacao = 'desfeita' and e.sincronizado_em::date >= p_desde_data_pagamento)
+           else true end
+    order by e.sincronizado_em, e.emusys_fatura_id
+    limit v_limite + 1
+  )
+  select jsonb_agg(to_jsonb(f)) into v_eventos from filtrados f;
+
+  if v_eventos is not null and jsonb_array_length(v_eventos) > v_limite then
+    v_tem_mais := true;
+    v_eventos := (select jsonb_agg(elem) from (
+      select elem from jsonb_array_elements(v_eventos) with ordinality as t(elem, ord)
+      where ord <= v_limite order by ord
+    ) ultimos);
+  end if;
+
+  if v_eventos is not null and jsonb_array_length(v_eventos) > 0 then
+    v_cursor := (
+      select (elem->>'sincronizado_em') || '|' || (elem->>'emusys_fatura_id')
+      from jsonb_array_elements(v_eventos) with ordinality as t(elem, ord)
+      order by ord desc limit 1
+    );
+  end if;
 
   return jsonb_build_object(
     'gerado_em', now(),
-    'filtros', jsonb_build_object(
-      'desde_data_pagamento', p_desde_data_pagamento,
-      'sincronizado_desde', p_sincronizado_desde,
-      'unidade_id', p_unidade_id
-    ),
-    'total', jsonb_array_length(v_itens),
-    'itens', v_itens
+    'total', coalesce(jsonb_array_length(v_eventos), 0),
+    'tem_mais', v_tem_mais,
+    'proximo_cursor', v_cursor,
+    'itens', coalesce(v_eventos, '[]'::jsonb)
   );
 end;
 $function$;
 
-revoke all on function public.exportar_financeiro_baixadas_v1(date, timestamptz, uuid, integer) from public, anon, authenticated;
-grant execute on function public.exportar_financeiro_baixadas_v1(date, timestamptz, uuid, integer) to service_role;
+revoke all on function public.exportar_financeiro_baixadas_v1(date, timestamptz, text, uuid, integer) from public, anon, authenticated;
+grant execute on function public.exportar_financeiro_baixadas_v1(date, timestamptz, text, uuid, integer) to service_role;
 
 -- Permissoes iguais ao resolvedor de CPF.
 revoke all on function public.publicar_financeiro_cnpj_vinculos_v1(jsonb, text) from public, anon, authenticated;

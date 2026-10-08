@@ -16,9 +16,9 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.89.0';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+// Segredo DEDICADO (contrato aprovado 08/10): a ingestao escreve no mapa,
+// entao nao aceita os segredos compartilhados dos exports de leitura.
 const SECRETS = [
-  Deno.env.get('SUPER_FOLHA_CONTAS_RECEBER_SECRET'),
-  Deno.env.get('SUPER_FOLHA_FINANCEIRO_SECRET'),
   Deno.env.get('SUPER_FOLHA_CNPJ_VINCULOS_SECRET'),
 ].filter((s): s is string => !!s?.trim()).map((s) => s.trim());
 

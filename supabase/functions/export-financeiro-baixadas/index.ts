@@ -1,18 +1,20 @@
 /// <reference lib="deno.ns" />
 
-// "Faturas baixadas desde <ts>" para o Super Folha (pedido Alf 08/10/2026):
-// leitura direta do espelho emusys_faturas, que e atualizado a cada 15 min
-// na competencia vigente (60 min em M-1/M-2, backlog 2h no resto). Substitui
-// a espera do faturas_pagas_mes (diario) para "a parcela ja caiu no Emusys?".
+// "Faturas baixadas/desfeitas desde <ts>" para o Super Folha (contrato
+// aprovado 08/10/2026): leitura do espelho emusys_faturas + auditoria de
+// baixas desfeitas, numa corrente ordenada por (sincronizado_em,
+// emusys_fatura_id) com filtro INCLUSIVO — o SF deduplica por
+// emusys_fatura_id e continua de `proximo_cursor`.
 //
 //   POST {
-//     desde_data_pagamento?: 'YYYY-MM-DD',   // data_pagamento >= X
-//     sincronizado_desde?:   '<timestamptz>', // espelho aprendeu desde ts
+//     cursor?:               'timestamptz|emusys_fatura_id',  // continuar
+//     sincronizado_desde?:   '<timestamptz>',                 // 1o poll
+//     desde_data_pagamento?: 'YYYY-MM-DD',                    // varredura
 //     unidade_id?: uuid,
 //     limite?: int (default 500, max 2000)
 //   }
-// Ao menos um dos dois filtros e obrigatorio; os dois combinam com OR —
-// sincronizado_desde e o poll barato recomendado a cada 15 min.
+// Ao menos um dos tres e obrigatorio. itens[].situacao = 'baixada' |
+// 'desfeita' (estorno/remocao — desfeita traz os dados da baixa anterior).
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.89.0';
@@ -20,8 +22,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.89.0';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const SECRETS = [
-  Deno.env.get('SUPER_FOLHA_CONTAS_RECEBER_SECRET'),
   Deno.env.get('SUPER_FOLHA_FINANCEIRO_SECRET'),
+  Deno.env.get('SUPER_FOLHA_CONTAS_RECEBER_SECRET'),
 ].filter((s): s is string => !!s?.trim()).map((s) => s.trim());
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
@@ -40,6 +42,7 @@ function safeEqual(left: string, right: string) {
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const CURSOR_RE = /^.+\|\d+$/;
 
 serve(async (req) => {
   if (req.method !== 'POST') return json({ ok: false, error: 'method_not_allowed' }, 405);
@@ -58,15 +61,19 @@ serve(async (req) => {
 
   const desdeDataPagamento = body.desde_data_pagamento ?? body.data_pagamento_inicial ?? null;
   const sincronizadoDesde = body.sincronizado_desde ?? body.baixadas_desde ?? null;
+  const cursor = body.cursor ?? null;
 
   if (desdeDataPagamento !== null && !DATE_RE.test(String(desdeDataPagamento))) {
     return json({ ok: false, error: 'desde_data_pagamento_invalido' }, 400);
   }
-  if (desdeDataPagamento === null && sincronizadoDesde === null) {
+  if (cursor !== null && !CURSOR_RE.test(String(cursor))) {
+    return json({ ok: false, error: 'cursor_invalido' }, 400);
+  }
+  if (desdeDataPagamento === null && sincronizadoDesde === null && cursor === null) {
     return json({
       ok: false,
       error: 'filtro_obrigatorio',
-      detalhe: 'informe desde_data_pagamento (YYYY-MM-DD) ou sincronizado_desde (timestamptz)',
+      detalhe: 'informe cursor, sincronizado_desde (timestamptz) ou desde_data_pagamento (YYYY-MM-DD)',
     }, 400);
   }
 
@@ -80,6 +87,7 @@ serve(async (req) => {
   const { data, error } = await client.rpc('exportar_financeiro_baixadas_v1', {
     p_desde_data_pagamento: desdeDataPagamento,
     p_sincronizado_desde: sincronizadoDesde,
+    p_cursor: cursor,
     p_unidade_id: unidadeId,
     p_limite: limite,
   });
