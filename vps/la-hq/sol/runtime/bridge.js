@@ -864,6 +864,19 @@ async function jevSombra() {
   }
   return _jevSombra;
 }
+// Fluxo "Recebimentos em aberto" da Maria (09/10/2026): a Sol não participa.
+let _recebimentosMaria = null;
+async function recebimentosMaria() {
+  if (_recebimentosMaria) return _recebimentosMaria;
+  try {
+    const m = await import('file:///home/sol/.hermes/profiles/sol/caixa-ingestao/recebimentos-maria.cjs');
+    _recebimentosMaria = m.fluxoRecebimentosDaMaria ? m : (m.default || null);
+  } catch (e) {
+    _caixaLog({ step: 'recebimentos_maria_load_erro', msg: e.message });
+    _recebimentosMaria = null;
+  }
+  return _recebimentosMaria;
+}
 // Executor das ferramentas de caixa (28/09/2026): o MCP não tem mais caixa
 // próprio; ele valida o crachá e chama POST /caixa/tool, que roda aqui, com o
 // MESMO handler que atende as mensagens do grupo. Um estado só.
@@ -1279,6 +1292,14 @@ async function caixaAbf() {
       if (isGroup) {
         // Observa (persiste) SEMPRE, antes de qualquer decisao de resposta.
         observeGroupMessage(event);
+        // Lista "Recebimentos em aberto" da Maria (09/10/2026): baixa no Emusys é
+        // da recepção, não pagamento novo. Para aqui: sem card, sem reação, sem Jev.
+        const _rm = await recebimentosMaria();
+        const _motivoRm = _rm ? _rm.fluxoRecebimentosDaMaria(event) : null;
+        if (_motivoRm) {
+          _caixaLog({ step: 'ignorado_recebimentos_maria', chatId: chatId, motivo: _motivoRm });
+          continue;
+        }
         if (SOL_CAIXA_LIVE && FINANCE_GROUPS.has(chatId)) {
           try {
             const _grupoCaixa = financeGroupMap()[chatId];
