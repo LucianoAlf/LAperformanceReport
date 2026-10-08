@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Funções
 
-1799 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
+1800 funções. `ORFA` é **sinal, não veredito**: n8n, scripts da VPS e
 chamadas diretas ao PostgREST não são visíveis para o gerador.
 
 ## aluno
@@ -455,7 +455,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `aplicar_valor_parcela_comercial_canonico()` | ATIVA | INVOKER | trigger:alunos.trg_alunos_valor_parcela_comercial_canonico |
 | `caixa_fatura_resolver_id_v1(p_unidade_id uuid, p_emusys_fatura_id bigint)` | ATIVA | DEFINER · 🔓 anon | front:src/hooks/useFaturasParaCaixa.ts |
 | `caixa_faturas_do_aluno_v1(p_unidade_id uuid, p_emusys_student_id bigint)` | ATIVA | DEFINER · 🔓 anon | front:src/hooks/useFaturasParaCaixa.ts |
-| `calcular_valores_fatura_financeiro_v1(p_valor_original numeric, p_desconto_fixo numeric, p_desconto_condicional numeric, p_data_vencimento date, p_status text, p_as_of_date date, p_unidade_id uuid)` | SO-INTERNA | INVOKER | funcao:get_faturas_alunos_financeiro_v1_base, funcao:get_faturas_alunos_financeiro_v1_canonica_20260817, funcao:get_faturas_alunos_financeiro_v1_reconciliacao_base, funcao:get_inadimplencia_canonica_v4_base |
+| `calcular_valores_fatura_financeiro_v1(p_valor_original numeric, p_desconto_fixo numeric, p_desconto_condicional numeric, p_data_vencimento date, p_status text, p_as_of_date date, p_unidade_id uuid, p_emusys_juros numeric, p_emusys_synced_at timestamp with time zone)` | SO-INTERNA | INVOKER | funcao:get_faturas_alunos_financeiro_v1_base, funcao:get_faturas_alunos_financeiro_v1_canonica_20260817, funcao:get_faturas_alunos_financeiro_v1_reconciliacao_base, funcao:get_inadimplencia_canonica_v4_base, funcao:publish_faturas_vencidas_sync |
 | `checkpoint_sync_faturas_pagas_mes_job(p_job_id uuid, p_worker_id uuid, p_next_cursor text, p_tem_mais boolean, p_release boolean, p_recebidas integer, p_pagas_no_mes integer, p_upserted integer, p_lease_seconds integer)` | ATIVA | DEFINER | edge:supabase/functions/sync-faturas-emusys/index.ts |
 | `claim_financeiro_sync_job(p_worker_id uuid, p_lease_seconds integer)` | ATIVA | DEFINER | edge:supabase/functions/sync-faturas-emusys/index.ts |
 | `complete_financeiro_sync_job(p_job_id uuid, p_worker_id uuid, p_sync_run_id uuid)` | ATIVA | DEFINER | edge:supabase/functions/sync-faturas-emusys/index.ts |
@@ -504,6 +504,7 @@ chamadas diretas ao PostgREST não são visíveis para o gerador.
 | `marcar_inadimplentes_apos_vencimento()` | ORFA | DEFINER | sem consumidor conhecido |
 | `preview_fechamento_mensal(p_ano integer, p_mes integer, p_unidade_id uuid, p_incluir_payloads boolean)` | SO-INTERNA | DEFINER | funcao:gravar_snapshot_fechamento_mensal |
 | `proteger_fechamento_mensal_snapshot_imutavel_v1()` | ATIVA | DEFINER | trigger:fechamento_mensal_snapshots.trg_fechamento_mensal_snapshot_imutavel |
+| `publish_faturas_vencidas_sync(p_items jsonb, p_trigger_source text, p_requested_by text)` | ATIVA | DEFINER | edge:supabase/functions/sync-faturas-emusys/index.ts, funcao:calcular_valores_fatura_financeiro_v1 |
 | `publish_financeiro_sync_run(p_run_id uuid, p_items jsonb, p_units_summary jsonb, p_override_reason text)` | ATIVA | DEFINER | edge:supabase/functions/sync-faturas-emusys/index.ts |
 | `reabrir_caixa_diario(p_caixa_diario_id uuid, p_motivo text, p_reaberto_por text)` | ATIVA | DEFINER | front:src/hooks/useCaixaDiario.ts |
 | `reconexao_consultar_caixa(p_waha_session text)` | ORFA | DEFINER | sem consumidor conhecido |

@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — financeiro
 
-49 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+51 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## caixa_categorias
 
@@ -663,6 +663,53 @@
 **Triggers:**
 - `financeiro_fatura_reconciliacao_decisao_immutavel → financeiro_fatura_reconciliacao_decisao_immutavel()`
 - `trg_cache_versao → cache_versao_registrar_trg()`
+
+## financeiro_faturas_vencidas_runs
+
+> Log de execuções do refresh diário de faturas abertas+vencidas (edge sync-faturas-emusys mode=vencidas_abertas). Não é sync_runs: aquele é por competência e alimenta o snapshot canônico; este é um append-only de operação.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | uuid | não | gen_random_uuid() |  |
+| `trigger_source` | text | não |  |  |
+| `requested_by` | text | sim |  |  |
+| `status` | text | não | 'running'::text |  |
+| `started_at` | timestamp with time zone | não | now() |  |
+| `completed_at` | timestamp with time zone | sim |  |  |
+| `unidades_resumo` | jsonb | não | '{}'::jsonb |  |
+| `itens_recebidos` | integer | não | 0 |  |
+| `itens_atualizados` | integer | não | 0 |  |
+| `divergencias` | integer | não | 0 |  |
+| `erro_detalhe` | text | sim |  |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `financeiro_faturas_vencidas_runs_pkey`
+
+## financeiro_juros_divergencias
+
+> Vigia de divergência entre juros_e_multa lido do Emusys e a fórmula por unidade. Divergência > R$0,02 sugere taxa alterada no Emusys — revisar financeiro_encargos_unidade. Sem dado pessoal: só ids e valores.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `run_id` | uuid | não |  | financeiro_faturas_vencidas_runs.id |
+| `unidade_id` | uuid | não |  |  |
+| `unidade_codigo` | text | sim |  |  |
+| `emusys_fatura_id` | bigint | não |  |  |
+| `data_vencimento` | date | sim |  |  |
+| `juros_emusys` | numeric(14,2) | não |  |  |
+| `juros_formula` | numeric(14,2) | não |  |  |
+| `diferenca` | numeric(14,2) | não |  |  |
+| `detectado_em` | timestamp with time zone | não | now() |  |
+| `resolvido` | boolean | não | false |  |
+| `resolvido_por` | text | sim |  |  |
+| `resolvido_em` | timestamp with time zone | sim |  |  |
+
+**Únicos:**
+- `financeiro_juros_divergencias_pkey`
+- `financeiro_juros_divergencias_run_id_unidade_id_emusys_fatu_key`
 
 ## financeiro_sync_queue
 
