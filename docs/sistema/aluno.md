@@ -267,6 +267,15 @@ apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **L
   conversa e da mensagem. Reenviar pede segundo clique. ⚠️ O "enviado" é o Chatwoot aceitar sem marcar falha
   em ~4 s; entrega lida depois disso não volta para a tela. Conferir: `select status, erro, destino_nome,
   enviado_em from evento_comunicacao where tipo='convite' order by id desc limit 20;`
+- **Motivo obrigatório no "Não vai" (09/10/2026, item 11 da reunião):** escolher "Não vai" abre
+  `ModalMotivoAusencia` em vez de gravar; só grava com um motivo (+ observação opcional) e a linha mostra
+  "Não vai · Viagem". Os motivos são **da própria equipe de cada unidade** (`evento_motivo_ausencia`),
+  criados, renomeados e escondidos em "Gerenciar motivos" na mesma janela — **não se apagam**, para o "não vai"
+  antigo continuar legível. Começou com 5 provisórios por unidade (Viagem, Compromisso no dia, Não quer se
+  apresentar, Saúde, Outro). A regra também está no **banco** (`trg_evento_participacao_motivo_ausencia`):
+  "não vai" marcado pela tela sem motivo é recusado (`motivo_obrigatorio`); família, LA Teacher e sistema
+  seguem livres; voltar para "participa" limpa o motivo. As **58** linhas "não vai" anteriores aparecem como
+  "Não vai · sem motivo", clicáveis para preencher.
 - **Playbacks numerados no Drive (09/10/2026):** `recital-drive-sync` nomeia "B1-03 — Aluno — Curso.mp3"
   (bloco 1, 3º número; quem toca junto divide o número, regra de `agruparEmNumeros`) e **renomeia** o
   arquivo quando a posição muda depois do envio — o último nome fica em

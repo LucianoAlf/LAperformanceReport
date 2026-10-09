@@ -301,6 +301,9 @@ export interface AlunoElegivel {
   status: ParticipacaoStatus;
   /** Quantos convidados a pessoa leva. Por PESSOA, como o check-in. 0 = ninguem informou. */
   convidados: number;
+  /** Por que NÃO vai (status 'nao'). NULL em 'nao' antigo = ninguém registrou o motivo. */
+  motivo_ausencia_id: number | null;
+  motivo_ausencia_obs: string | null;
   /**
    * Selo de formando (passagem de ciclo), por PESSOA. 'kids' = 12 anos no ano → LA
    * Music School; 'bebes' = 2 anos no ano estando em Musicalização para Bebês →
@@ -345,7 +348,7 @@ export interface AlunoDeOutraUnidade {
 }
 
 interface VisitantesDoEvento {
-  pessoas: (Omit<AlunoElegivel, 'status' | 'convidados' | 'alocacoes' | 'cursos_alocados' | 'relatorio_falta_alocar'> & {
+  pessoas: (Omit<AlunoElegivel, 'status' | 'convidados' | 'motivo_ausencia_id' | 'motivo_ausencia_obs' | 'alocacoes' | 'cursos_alocados' | 'relatorio_falta_alocar'> & {
     unidade_origem_nome: string;
   })[];
   /** aluno_id -> nome de toda matricula de outra unidade que o evento referencia. */
@@ -431,7 +434,7 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
         .order('nome'),
       supabase
         .from('evento_participacao')
-        .select('pessoa_chave, status, convidados, formatura_tipo, formatura_origem')
+        .select('pessoa_chave, status, convidados, formatura_tipo, formatura_origem, motivo_ausencia_id, motivo_ausencia_obs')
         .eq('evento_id', eventoId),
       // O embed do bloco depende da FK `bloco_id -> evento_bloco`, que existe desde a
       // migration de criacao — foi a FK AUSENTE de `evento_id` que derrubou a lista antes.
@@ -463,6 +466,15 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
       (participacoes.data ?? []).map((p) => [
         p.pessoa_chave as string,
         (p.convidados as number) ?? 0,
+      ]),
+    );
+    const motivoPorChave = new Map<string, { id: number | null; obs: string | null }>(
+      (participacoes.data ?? []).map((p) => [
+        p.pessoa_chave as string,
+        {
+          id: (p.motivo_ausencia_id as number | null) ?? null,
+          obs: (p.motivo_ausencia_obs as string | null) ?? null,
+        },
       ]),
     );
     const formaturaPorChave = new Map(
@@ -518,7 +530,7 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
     const base = [
       ...((elegiveis.data ?? []) as unknown as Omit<
         AlunoElegivel,
-        'status' | 'alocacoes' | 'cursos_alocados' | 'relatorio_falta_alocar'
+        'status' | 'motivo_ausencia_id' | 'motivo_ausencia_obs' | 'alocacoes' | 'cursos_alocados' | 'relatorio_falta_alocar'
       >[]),
       ...visitantes.visitantes.pessoas,
     ];
@@ -531,6 +543,8 @@ export function useAlunosDoEvento(eventoId: number | null, unidadeId: string | n
           cursos: (a.cursos ?? []) as CursoDoAluno[],
           status: porChave.get(a.pessoa_chave) ?? 'indefinido',
           convidados: convidadosPorChave.get(a.pessoa_chave) ?? 0,
+          motivo_ausencia_id: motivoPorChave.get(a.pessoa_chave)?.id ?? null,
+          motivo_ausencia_obs: motivoPorChave.get(a.pessoa_chave)?.obs ?? null,
           formatura_tipo: formaturaPorChave.get(a.pessoa_chave)?.tipo ?? null,
           formatura_origem: formaturaPorChave.get(a.pessoa_chave)?.origem ?? null,
           alocacoes,
@@ -568,6 +582,81 @@ export async function definirParticipacao(
       { evento_id: eventoId, aluno_id: alunoIdReferencia, status },
       { onConflict: 'evento_id,pessoa_chave' },
     );
+}
+
+/**
+ * "Não vai" com o motivo (item 11 da reunião de 08/10). O banco recusa 'nao' sem motivo
+ * vindo da tela (`motivo_obrigatorio`), então este é o único caminho para marcar.
+ */
+export async function marcarNaoVai(
+  eventoId: number,
+  alunoIdReferencia: number,
+  motivoId: number,
+  observacao: string | null,
+) {
+  return supabase
+    .from('evento_participacao')
+    .upsert(
+      {
+        evento_id: eventoId,
+        aluno_id: alunoIdReferencia,
+        status: 'nao',
+        motivo_ausencia_id: motivoId,
+        motivo_ausencia_obs: observacao?.trim() || null,
+      },
+      { onConflict: 'evento_id,pessoa_chave' },
+    )
+    .select('id');
+}
+
+export interface MotivoAusencia {
+  id: number;
+  unidade_id: string;
+  nome: string;
+  ativo: boolean;
+  ordem: number;
+}
+
+/** Motivos da unidade (inclusive os desativados, para o histórico e a tela de cadastro). */
+export function useMotivosAusencia(unidadeId: string | null) {
+  const [motivos, setMotivos] = useState<MotivoAusencia[]>([]);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const recarregar = useCallback(async () => {
+    if (!unidadeId) return;
+    const { data, error } = await supabase
+      .from('evento_motivo_ausencia')
+      .select('id, unidade_id, nome, ativo, ordem')
+      .eq('unidade_id', unidadeId)
+      .order('ordem')
+      .order('nome');
+    if (error) {
+      setErro(error.message);
+      return;
+    }
+    setErro(null);
+    setMotivos((data ?? []) as MotivoAusencia[]);
+  }, [unidadeId]);
+
+  useEffect(() => {
+    void recarregar();
+  }, [recarregar]);
+
+  return { motivos, erro, recarregar };
+}
+
+export async function criarMotivoAusencia(unidadeId: string, nome: string, ordem: number) {
+  return supabase
+    .from('evento_motivo_ausencia')
+    .insert({ unidade_id: unidadeId, nome: nome.trim(), ordem })
+    .select('id, unidade_id, nome, ativo, ordem')
+    .single();
+}
+
+/** Renomear ou (des)ativar. Não existe apagar: o "não vai" antigo precisa continuar legível. */
+export async function atualizarMotivoAusencia(id: number, campos: Partial<Pick<MotivoAusencia, 'nome' | 'ativo'>>) {
+  const limpo = campos.nome !== undefined ? { ...campos, nome: campos.nome.trim() } : campos;
+  return supabase.from('evento_motivo_ausencia').update(limpo).eq('id', id).select('id');
 }
 
 /**

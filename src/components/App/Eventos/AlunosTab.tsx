@@ -28,12 +28,14 @@ import {
   type AlunoElegivel,
   type ParticipacaoStatus,
   useConvitesDoEvento,
+  useMotivosAusencia,
   type ConviteRegistrado,
   type Evento,
 } from '@/hooks/useEventos';
 import { ModalAlunoOutraUnidade } from './ModalAlunoOutraUnidade';
 import { ModalConvidadosDoAluno } from './ModalConvidadosDoAluno';
 import { ModalConviteRecital } from './ModalConviteRecital';
+import { ModalMotivoAusencia } from './ModalMotivoAusencia';
 import { PainelAlunos, type CursoNoPainel } from './PainelDoRecital';
 
 type FiltroStatus = 'todos' | ParticipacaoStatus;
@@ -214,8 +216,14 @@ function LinhaAluno({
   onRemover,
   convite,
   onConvite,
+  motivoNome,
+  onMotivo,
 }: {
   aluno: AlunoElegivel;
+  /** Nome do motivo de não ir (só com status 'nao'); null = não registrado. */
+  motivoNome: string | null;
+  /** Abre a escolha do motivo (para preencher ou trocar). */
+  onMotivo: () => void;
   /** Último convite de WhatsApp desta pessoa (null = nunca enviado). */
   convite: ConviteRegistrado | null;
   /** Abre a prévia do convite. */
@@ -261,6 +269,22 @@ function LinhaAluno({
           {/* Trancado: entra na lista e entra MARCADO. A decisao de convidar quem parou e da
               coordenacao — ela so nao pode descobrir depois. */}
           {aluno.trancado && <SeloTrancado />}
+          {/* Item 11 da reunião de 08/10: "não vai" sempre diz por quê. Os antigos sem
+              motivo aparecem como pendência, clicável para preencher. */}
+          {aluno.status === 'nao' && (
+            <button
+              type="button"
+              onClick={onMotivo}
+              className={cn(
+                'rounded px-1.5 py-px text-[12px] font-medium sm:text-[10.5px]',
+                motivoNome
+                  ? 'bg-rose-500/15 text-rose-300 hover:bg-rose-500/25'
+                  : 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25',
+              )}
+            >
+              {motivoNome ? `Não vai · ${motivoNome}` : 'Não vai · sem motivo'}
+            </button>
+          )}
           {aluno.faz_banda && (
             <Badge variant="outline" className="gap-1 text-[12px] sm:text-[10px]">
               <Guitar className="h-2.5 w-2.5" />
@@ -490,6 +514,9 @@ export function AlunosTab({ evento, eventoId, unidadeId, pedidoFaltaAlocar, onEv
   const [convidadosDe, setConvidadosDe] = useState<string | null>(null);
   const { porPessoa: convites, recarregar: recarregarConvites } = useConvitesDoEvento(eventoId);
   const [conviteDe, setConviteDe] = useState<string | null>(null);
+  const [motivoDe, setMotivoDe] = useState<string | null>(null);
+  const { motivos } = useMotivosAusencia(unidadeId);
+  const nomeDoMotivo = useMemo(() => new Map(motivos.map((m) => [m.id, m.nome])), [motivos]);
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<FiltroStatus>('todos');
   const [filtroProfessor, setFiltroProfessor] = useState('todos');
@@ -600,6 +627,11 @@ export function AlunosTab({ evento, eventoId, unidadeId, pedidoFaltaAlocar, onEv
   const daPagina = visiveis.slice((paginaAtual - 1) * ALUNOS_POR_PAGINA, paginaAtual * ALUNOS_POR_PAGINA);
 
   const escolher = async (aluno: AlunoElegivel, status: ParticipacaoStatus) => {
+    // "Não vai" exige motivo (o banco também recusa sem): abre a escolha em vez de gravar.
+    if (status === 'nao') {
+      setMotivoDe(aluno.pessoa_chave);
+      return;
+    }
     setGravando(aluno.pessoa_chave);
     const { error } = await definirParticipacao(eventoId, aluno.aluno_id_referencia, status);
     setGravando(null);
@@ -931,6 +963,15 @@ export function AlunosTab({ evento, eventoId, unidadeId, pedidoFaltaAlocar, onEv
         }}
       />
 
+      <ModalMotivoAusencia
+        aberto={motivoDe !== null}
+        eventoId={eventoId}
+        unidadeId={unidadeId}
+        aluno={alunos.find((x) => x.pessoa_chave === motivoDe) ?? null}
+        onFechar={() => setMotivoDe(null)}
+        onGravado={recarregar}
+      />
+
       <ModalConviteRecital
         aberto={conviteDe !== null}
         evento={evento}
@@ -962,6 +1003,8 @@ export function AlunosTab({ evento, eventoId, unidadeId, pedidoFaltaAlocar, onEv
                 onRemover={a.unidade_origem_nome ? () => removerVisitante(a) : undefined}
                 convite={convites.get(a.pessoa_chave) ?? null}
                 onConvite={() => setConviteDe(a.pessoa_chave)}
+                motivoNome={a.motivo_ausencia_id ? nomeDoMotivo.get(a.motivo_ausencia_id) ?? null : null}
+                onMotivo={() => setMotivoDe(a.pessoa_chave)}
               />
             ))}
           </div>
