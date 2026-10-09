@@ -35,6 +35,8 @@ export interface Evento {
   /** Folga entre blocos. 2700s = os 45 min do protótipo; configurável por evento. */
   intervalo_entre_blocos_segundos: number;
   observacoes: string | null;
+  /** Modelo do convite de WhatsApp deste recital. NULL = `CONVITE_PADRAO`. */
+  convite_texto: string | null;
   created_at: string;
 }
 
@@ -70,6 +72,7 @@ export type CamposDoEvento = Partial<
     | 'duracao_padrao_segundos'
     | 'intervalo_entre_blocos_segundos'
     | 'observacoes'
+    | 'convite_texto'
   >
 >;
 
@@ -203,7 +206,7 @@ export function useEvento(eventoId: number | null) {
       .from('evento')
       .select(
         'id, unidade_id, titulo, data_evento, data_fim, horario_inicio, local, status,' +
-          ' duracao_padrao_segundos, intervalo_entre_blocos_segundos, observacoes, created_at, unidades(nome)',
+          ' duracao_padrao_segundos, intervalo_entre_blocos_segundos, observacoes, convite_texto, created_at, unidades(nome)',
       )
       .eq('id', eventoId)
       .maybeSingle();
@@ -1419,6 +1422,109 @@ export async function definirFormando(
     p_pessoa_chave: pessoaChave,
     p_aluno_id: alunoId,
     p_tipo: tipo,
+  });
+}
+
+/* ────────────────────────── convite por WhatsApp ────────────────────────── */
+
+export type StatusConvite = 'enviando' | 'enviado' | 'erro';
+
+export interface DestinoConvite {
+  tipo: 'responsavel' | 'aluno';
+  nome: string;
+  telefone: string;
+}
+
+export interface ConviteRegistrado {
+  pessoa_chave: string;
+  status: StatusConvite | null;
+  enviado_em: string;
+  destino_nome: string | null;
+  destino_telefone: string | null;
+  erro: string | null;
+}
+
+/** Último convite de cada pessoa do evento (o histórico fica na tabela, uma linha por envio). */
+export function useConvitesDoEvento(eventoId: number | null) {
+  const [porPessoa, setPorPessoa] = useState<Map<string, ConviteRegistrado>>(new Map());
+  const [erro, setErro] = useState<string | null>(null);
+
+  const recarregar = useCallback(async () => {
+    if (!eventoId) return;
+    const { data, error } = await supabase
+      .from('evento_comunicacao')
+      .select(
+        'status, enviado_em, destino_nome, destino_telefone, erro, evento_participacao!inner(pessoa_chave, evento_id)',
+      )
+      .eq('tipo', 'convite')
+      .eq('evento_participacao.evento_id', eventoId)
+      .order('enviado_em', { ascending: false });
+    if (error) {
+      setErro(error.message);
+      return;
+    }
+    setErro(null);
+    const mapa = new Map<string, ConviteRegistrado>();
+    for (const linha of (data ?? []) as Array<Record<string, unknown>>) {
+      const part = linha.evento_participacao as { pessoa_chave: string } | null;
+      if (!part || mapa.has(part.pessoa_chave)) continue;
+      mapa.set(part.pessoa_chave, {
+        pessoa_chave: part.pessoa_chave,
+        status: linha.status as StatusConvite | null,
+        enviado_em: linha.enviado_em as string,
+        destino_nome: (linha.destino_nome as string | null) ?? null,
+        destino_telefone: (linha.destino_telefone as string | null) ?? null,
+        erro: (linha.erro as string | null) ?? null,
+      });
+    }
+    setPorPessoa(mapa);
+  }, [eventoId]);
+
+  useEffect(() => {
+    void recarregar();
+  }, [recarregar]);
+
+  return { porPessoa, erro, recarregar };
+}
+
+export interface RespostaConvite {
+  ok: boolean;
+  status?: StatusConvite;
+  motivo?: string | null;
+  erro?: string | null;
+  destinos?: DestinoConvite[];
+  destino?: DestinoConvite;
+  ultimo?: { status: StatusConvite | null; enviado_em: string; destino_nome: string | null } | null;
+  caixa_configurada?: boolean;
+  conversa_url?: string;
+}
+
+async function chamarConvite(body: Record<string, unknown>): Promise<RespostaConvite> {
+  const { data, error } = await supabase.functions.invoke('evento-enviar-convite', { body });
+  if (error) return { ok: false, motivo: 'falha_de_rede', erro: error.message };
+  return (data as RespostaConvite) ?? { ok: false, motivo: 'resposta_vazia' };
+}
+
+/** Quem receberia o convite (o número sai do cadastro, nunca da tela). Não envia nada. */
+export function consultarDestinosConvite(eventoId: number, pessoaChave: string) {
+  return chamarConvite({ modo: 'destinos', evento_id: eventoId, pessoa_chave: pessoaChave });
+}
+
+/** Envia ESTE texto (o que a pessoa viu na prévia) pela caixa da secretaria da unidade. */
+export function enviarConvite(params: {
+  eventoId: number;
+  pessoaChave: string;
+  texto: string;
+  destinoTipo: DestinoConvite['tipo'];
+  reenviar?: boolean;
+}) {
+  return chamarConvite({
+    modo: 'enviar',
+    evento_id: params.eventoId,
+    pessoa_chave: params.pessoaChave,
+    texto: params.texto,
+    destino_tipo: params.destinoTipo,
+    reenviar: Boolean(params.reenviar),
   });
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
-import { Search, Users, Check, HelpCircle, X, Music, AlertTriangle, Guitar, LayoutList, UserPlus, Trash2, GraduationCap, FileCheck } from 'lucide-react';
+import { Search, Users, Check, HelpCircle, X, Music, AlertTriangle, Guitar, LayoutList, UserPlus, Trash2, GraduationCap, FileCheck, MessageCircle, CheckCheck } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -27,9 +27,13 @@ import {
   type AlocacaoDoCurso,
   type AlunoElegivel,
   type ParticipacaoStatus,
+  useConvitesDoEvento,
+  type ConviteRegistrado,
+  type Evento,
 } from '@/hooks/useEventos';
 import { ModalAlunoOutraUnidade } from './ModalAlunoOutraUnidade';
 import { ModalConvidadosDoAluno } from './ModalConvidadosDoAluno';
+import { ModalConviteRecital } from './ModalConviteRecital';
 import { PainelAlunos, type CursoNoPainel } from './PainelDoRecital';
 
 type FiltroStatus = 'todos' | ParticipacaoStatus;
@@ -208,8 +212,14 @@ function LinhaAluno({
   onNomes,
   onFormando,
   onRemover,
+  convite,
+  onConvite,
 }: {
   aluno: AlunoElegivel;
+  /** Último convite de WhatsApp desta pessoa (null = nunca enviado). */
+  convite: ConviteRegistrado | null;
+  /** Abre a prévia do convite. */
+  onConvite: () => void;
   /** Quantos convidados desta pessoa já têm nome (cortesia + vendido). */
   nomeados: number;
   onEscolher: (s: ParticipacaoStatus) => void;
@@ -403,6 +413,39 @@ function LinhaAluno({
         </button>
       )}
 
+      {/* Convite por WhatsApp (item 10 da reunião de 08/10): prévia e envio na janela. */}
+      {aluno.status === 'participa' && (
+        <Tooltip
+          side="bottom"
+          content={
+            <Dica titulo="Convite por WhatsApp">
+              {convite?.status === 'enviado'
+                ? `Enviado em ${new Date(convite.enviado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}${convite.destino_nome ? ` para ${convite.destino_nome}` : ''}. Clique para ver ou reenviar.`
+                : convite?.status === 'erro'
+                  ? `Não foi entregue: ${convite.erro ?? 'erro no envio'}. Clique para tentar de novo.`
+                  : 'Abre a prévia do convite do recital e envia pelo WhatsApp da secretaria.'}
+            </Dica>
+          }
+        >
+          <button
+            type="button"
+            onClick={onConvite}
+            aria-label={`Convite de ${aluno.nome}`}
+            className={cn(
+              'flex h-11 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] transition-colors sm:h-7 sm:text-[11.5px]',
+              convite?.status === 'enviado'
+                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:border-emerald-400/70'
+                : convite?.status === 'erro'
+                  ? 'border-rose-500/40 bg-rose-500/10 text-rose-300 hover:border-rose-400/70'
+                  : 'border-dashed border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300',
+            )}
+          >
+            {convite?.status === 'enviado' ? <CheckCheck className="h-3.5 w-3.5" /> : <MessageCircle className="h-3.5 w-3.5" />}
+            {convite?.status === 'enviado' ? 'Convite enviado' : convite?.status === 'erro' ? 'Convite: erro' : 'Convite'}
+          </button>
+        </Tooltip>
+      )}
+
       <SeletorParticipacao
         valor={aluno.status}
         desabilitado={!avaliacao.podeParticipar}
@@ -424,9 +467,13 @@ function LinhaAluno({
   );
 }
 
-export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
+export function AlunosTab({ evento, eventoId, unidadeId, pedidoFaltaAlocar, onEventoMudou }: {
+  /** Para o convite: datas, horário de início e o texto do modelo deste recital. */
+  evento: Evento;
   eventoId: number;
   unidadeId: string;
+  /** Relê o evento depois de salvar o texto do convite. */
+  onEventoMudou?: () => void;
   /** Sobe a cada clique no quadro do topo: abre a aba ja com o filtro "falta alocar". */
   pedidoFaltaAlocar?: number;
 }) {
@@ -441,6 +488,8 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
     return mapa;
   }, [convidados]);
   const [convidadosDe, setConvidadosDe] = useState<string | null>(null);
+  const { porPessoa: convites, recarregar: recarregarConvites } = useConvitesDoEvento(eventoId);
+  const [conviteDe, setConviteDe] = useState<string | null>(null);
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<FiltroStatus>('todos');
   const [filtroProfessor, setFiltroProfessor] = useState('todos');
@@ -882,6 +931,15 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
         }}
       />
 
+      <ModalConviteRecital
+        aberto={conviteDe !== null}
+        evento={evento}
+        aluno={alunos.find((x) => x.pessoa_chave === conviteDe) ?? null}
+        onFechar={() => setConviteDe(null)}
+        onEnviado={recarregarConvites}
+        onTextoSalvo={() => onEventoMudou?.()}
+      />
+
       <div className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800/40">
         {loading && alunos.length === 0 ? (
           <p className="p-8 text-center text-sm text-slate-400">Carregando alunos…</p>
@@ -902,6 +960,8 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
                 onNomes={() => setConvidadosDe(a.pessoa_chave)}
                 onFormando={() => alternarFormando(a)}
                 onRemover={a.unidade_origem_nome ? () => removerVisitante(a) : undefined}
+                convite={convites.get(a.pessoa_chave) ?? null}
+                onConvite={() => setConviteDe(a.pessoa_chave)}
               />
             ))}
           </div>

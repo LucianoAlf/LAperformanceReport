@@ -253,6 +253,20 @@ apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **L
   grade inteira. Ao arrastar um **bloco**, todos mostram só o cabeçalho (senão os outros eram empurrados
   pela altura de dezenas de cartões e saíam da tela). Arrasto cancelado limpa o fantasma. Os botões do
   rodapé do cartão (palco, observação, tocar junto) viraram pílulas com borda no desktop.
+- **Convite por WhatsApp (09/10/2026, item 10 da reunião):** na aba Alunos, quem participa tem o botão
+  **Convite** (selo "Convite enviado" ou "Convite: erro"). A janela (`ModalConviteRecital`) mostra para quem
+  vai — responsável quando cadastrado, senão o aluno; o número sai do **cadastro**, nunca da tela — e a
+  prévia num balão de WhatsApp. **Só envia ao clicar em Enviar**, pela caixa da **secretaria da unidade no
+  Chatwoot** (Barra 179, CG 180, Recreio 168; a resposta da família cai lá). O texto-base é o da Fernanda
+  (Recreio) e é **por recital** (`evento.convite_texto`, NULL = padrão), editável na própria janela, com os
+  campos `{saudacao} {responsavel} {aluno} {bloco} {data} {dia_semana} {horario}`. Montagem em
+  `src/lib/eventoConvite.ts` (fonte única: a edge manda o texto que a pessoa viu); o horário é o do bloco,
+  calculado (`calcularHorariosDaGrade`). Envio pela edge **`evento-enviar-convite`** (login obrigatório; o
+  escopo é a RLS de quem clicou), que reserva a linha em `evento_comunicacao` (`status='enviando'`, índice
+  único impede duplo envio) antes de chamar o Chatwoot e grava `enviado`/`erro` com o motivo e os ids da
+  conversa e da mensagem. Reenviar pede segundo clique. ⚠️ O "enviado" é o Chatwoot aceitar sem marcar falha
+  em ~4 s; entrega lida depois disso não volta para a tela. Conferir: `select status, erro, destino_nome,
+  enviado_em from evento_comunicacao where tipo='convite' order by id desc limit 20;`
 - **Playbacks numerados no Drive (09/10/2026):** `recital-drive-sync` nomeia "B1-03 — Aluno — Curso.mp3"
   (bloco 1, 3º número; quem toca junto divide o número, regra de `agruparEmNumeros`) e **renomeia** o
   arquivo quando a posição muda depois do envio — o último nome fica em
