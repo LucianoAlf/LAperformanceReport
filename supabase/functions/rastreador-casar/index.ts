@@ -24,7 +24,7 @@
 // registrar-atribuicao-google-ads). Por isso o lead_id e resolvido tambem pelo modo `varrer`.
 
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { candidatosDoTexto, candidatosTelefone } from '../_shared/rastreador.ts';
+import { candidatosDoTexto, candidatosTelefone, textoBateComClique, veioDeAnuncio } from '../_shared/rastreador.ts';
 
 const JANELA_CASAR_DIAS = 3;
 // Caixa Mila -> unidade do link (`ir-whatsapp?u=`): 147 Barra, 148 Recreio, 155 Campo Grande.
@@ -43,7 +43,8 @@ type MsgCw = {
   content?: string | null;
   created_at?: number;
   content_attributes?: {
-    external_ad_reply?: { entry_point_conversion_source?: string; entry_point_conversion_delay_seconds?: number };
+    // Alem do atraso, traz a marca de anuncio do Meta (ctwa_clid, source_type, conversion_source).
+    external_ad_reply?: { entry_point_conversion_source?: string; entry_point_conversion_delay_seconds?: number; [k: string]: unknown };
   } | null;
 };
 
@@ -180,10 +181,16 @@ const SILENCIO_ABERTURA_SEG = 3600; // so conta como "abertura" se a conversa es
  *
  * Nao adivinha: se os candidatos vieram de aparelhos diferentes (user-agent), nao casa. O mesmo
  * aparelho clicando 2x (voltou e clicou de novo) e a mesma pessoa: casa com o clique mais recente.
+ *
+ * ⚠️ So conta como candidato o clique cujo TEXTO DO BOTAO abre a mensagem (o codigo pode se perder,
+ * o texto nao). Medido em 09/10/2026: sem esta regra, 13 de 14 casamentos por janela nao tinham
+ * evidencia nenhuma -- 6 eram lead de anuncio (barrado antes, ver `veioDeAnuncio` no laco da
+ * varredura) e 7 abriam com "bom dia"/"oii". Nao basta "veio de link wa.me": outros links nao rastreados (perfil do Google,
+ * workshop) tambem sao wa.me. Quem apaga o texto e veio por link ja casa pelo `atraso`.
  */
 async function casarPorJanela(
   supabase: SupabaseClient,
-  a: { unidade: string; telefone: string; conversaId: number; msgEmSeg: number },
+  a: { unidade: string; telefone: string; conversaId: number; msgEmSeg: number; texto: string },
 ): Promise<Record<string, unknown>> {
   const fim = new Date(a.msgEmSeg * 1000);
   const ini = new Date(fim.getTime() - JANELA_CLIQUE_MIN * 60_000);
@@ -200,9 +207,9 @@ async function casarPorJanela(
   if (jaErr) throw jaErr;
   if (jaTem) return { action: 'janela_conversa_ja_casada' };
 
-  const { data: cands, error } = await supabase
+  const { data: todos, error } = await supabase
     .from('rastreio_cliques')
-    .select('id, created_at, user_agent')
+    .select('id, created_at, user_agent, texto_visivel')
     .eq('situacao', 'aguardando')
     .eq('unidade', a.unidade)
     .gte('created_at', ini.toISOString())
@@ -210,7 +217,9 @@ async function casarPorJanela(
     .order('created_at', { ascending: false })
     .limit(10);
   if (error) throw error;
-  if (!cands || cands.length === 0) return { action: 'janela_sem_candidato' };
+  if (!todos || todos.length === 0) return { action: 'janela_sem_candidato' };
+  const cands = todos.filter((c) => textoBateComClique(c.texto_visivel, a.texto));
+  if (cands.length === 0) return { action: 'janela_texto_nao_bate', candidatos: todos.length };
   if (cands.some((c) => c.user_agent !== cands[0].user_agent)) {
     return { action: 'janela_ambigua', candidatos: cands.length };
   }
@@ -329,7 +338,7 @@ async function casarPeloChatwoot(supabase: SupabaseClient, janelaMin = JANELA_CH
   const baseUrl = Deno.env.get('CHATWOOT_URL');
   const accountId = Deno.env.get('CHATWOOT_ACCOUNT_ID');
   const cwToken = Deno.env.get('CHATWOOT_API_TOKEN');
-  const resumo = { conversas_lidas: 0, conversas_mila: 0, verificadas: 0, casadas: 0, casadas_atraso: 0, atraso_ambiguo: 0, atraso_sem_clique: 0, casadas_janela: 0, janela_ambigua: 0, sem_codigo: 0, erros: 0, pulado: null as string | null };
+  const resumo = { conversas_lidas: 0, conversas_mila: 0, verificadas: 0, casadas: 0, casadas_atraso: 0, atraso_ambiguo: 0, atraso_sem_clique: 0, casadas_janela: 0, janela_ambigua: 0, janela_pulada_anuncio: 0, janela_texto_nao_bate: 0, sem_codigo: 0, erros: 0, pulado: null as string | null };
   if (!baseUrl || !accountId || !cwToken) { resumo.pulado = 'sem_credenciais_chatwoot'; return resumo; }
 
   // Sem clique esperando conversa, nenhum codigo pode casar: nem vai ao Chatwoot. E o que faz a
@@ -348,7 +357,7 @@ async function casarPeloChatwoot(supabase: SupabaseClient, janelaMin = JANELA_CH
   // ⚠️ ATIVIDADE, nao criacao. A caixa usa `lock_to_single_conversation`: quem ja falou com a Mila
   // alguma vez volta SEMPRE para a mesma conversa. Olhar so conversa criada na janela perdia todo
   // lead que retorna (medido no teste com o numero 3325, conversa 8724 de meses atras).
-  type Conv = { id: number; last_activity_at?: number; inbox_id?: number; meta?: { sender?: { phone_number?: string | null } | null } | null };
+  type Conv = { id: number; last_activity_at?: number; inbox_id?: number; additional_attributes?: Record<string, unknown> | null; meta?: { sender?: { phone_number?: string | null } | null } | null };
   const ativas: Conv[] = [];
   for (const inboxId of INBOXES_MILA) {
     for (let pg = 1; pg <= MAX_PAGINAS_CHATWOOT; pg++) {
@@ -410,9 +419,20 @@ async function casarPeloChatwoot(supabase: SupabaseClient, janelaMin = JANELA_CH
           else if (ra.action === 'atraso_sem_clique') resumo.atraso_sem_clique++;
         } else if (unidade && abertura && telefone) {
           // 3o (ultimo recurso): sem codigo e sem atraso -> unidade + proximidade de horario (provavel).
-          const rj = await casarPorJanela(supabase, { unidade, telefone, conversaId: c.id, msgEmSeg: abertura.created_at ?? 0 });
-          if (rj.action === 'casado') resumo.casadas_janela++;
-          else if (rj.action === 'janela_ambigua') resumo.janela_ambigua++;
+          // Conversa aberta por ANUNCIO do Meta nunca passou pelo nosso link: nao entra na janela.
+          const adAbertura = abertura.content_attributes?.external_ad_reply as Record<string, unknown> | undefined;
+          if (veioDeAnuncio(adAbertura, c.additional_attributes)) {
+            resumo.janela_pulada_anuncio++;
+            console.log('[rastreador-casar/janela] conversa', c.id, 'aberta por anuncio: nao casa por janela');
+          } else {
+            const rj = await casarPorJanela(supabase, {
+              unidade, telefone, conversaId: c.id, msgEmSeg: abertura.created_at ?? 0,
+              texto: abertura.content ?? '',
+            });
+            if (rj.action === 'casado') resumo.casadas_janela++;
+            else if (rj.action === 'janela_ambigua') resumo.janela_ambigua++;
+            else if (rj.action === 'janela_texto_nao_bate') resumo.janela_texto_nao_bate++;
+          }
         }
       }
     } catch (e) {
