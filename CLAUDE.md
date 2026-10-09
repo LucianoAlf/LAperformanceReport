@@ -235,6 +235,17 @@ dia). Logo do papel por marca (Kids/School, `alunos.classificacao`) e playback n
   health score, score de professor, `aluno_presenca` ou `movimentacoes_admin`** — testar em produção
   é seguro. ⚠️ Ao acrescentar consumidor novo, essa propriedade deixa de valer sozinha: ela é
   consequência de ninguém ler as tabelas, não de uma trava.
+- 🔴 **Aluno TRANCADO é elegível ao recital, e entra MARCADO (09/10/2026, pedido da Fernanda).**
+  `vw_evento_aluno_elegivel_v1` e `evento_apresentacao_adicionar_v1` eram os **dois únicos** filtros
+  de `alunos.status` no módulo e exigiam `'ativo'`; hoje aceitam `'ativo'` ou `'trancado'`. **Trancar
+  não é sair** — trancado segue fora dos KPIs (§3), e o recital é convite, não KPI. Medido: 20
+  matrículas = **19 pessoas**, lista 994 → 1013, 0 pessoa perdida, 0 divergência nas colunas antigas.
+  ⚠️ **Entra marcado**: coluna `trancado` (pessoa) + `cursos[].trancado`, com o rótulo em fonte única
+  (`SeloTrancado.tsx`); o front **não deriva** "pessoa trancada" da lista de cursos. ⚠️ `cursos` passou
+  a agregar por **(pessoa, curso)** — com a flag dentro do objeto, o `jsonb_agg(distinct)` antigo
+  duplicaria o curso de quem o tem ativo e trancado. ⚠️ A **ativa manda** sobre a trancada na matrícula
+  que a apresentação grava. ⚠️ `vw_evento_familia_v1` acompanhou (88 → 94), senão o irmão trancado não
+  casa com o ativo. Detalhe e armadilhas em [`docs/sistema/aluno.md`](docs/sistema/aluno.md).
 - **A `UNIQUE (evento_id, pessoa_chave, curso_id)` é o coração do schema**: implementa "2 cursos = 2
   apresentações, 2 matrículas do mesmo curso = 1" sem nenhum `if`. `pessoa_chave` é derivada por
   trigger de `fn_pessoa_chave_aluno`, **nunca escrita à mão**; `aluno_id` é PROCEDÊNCIA (padrão da

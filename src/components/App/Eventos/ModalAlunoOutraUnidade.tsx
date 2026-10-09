@@ -12,12 +12,13 @@ import {
   definirParticipacao,
   type AlunoDeOutraUnidade,
 } from '@/hooks/useEventos';
+import { SeloTrancado } from './SeloTrancado';
 
 /**
  * Aluno de OUTRA unidade que vai se apresentar neste evento (pedido do Arthur, 28/09).
  *
  * Raro, mas acontece: aluno do Recreio tocando no recital da Barra e vice-versa. A busca
- * so devolve matricula ativa com curso que entra no recital, e so o minimo (nome, unidade,
+ * so devolve matricula ativa ou trancada com curso que entra no recital, e so o minimo (nome, unidade,
  * cursos) — a ficha completa continua restrita a unidade de origem.
  */
 export function ModalAlunoOutraUnidade({
@@ -133,7 +134,7 @@ export function ModalAlunoOutraUnidade({
             </p>
           ) : resultados.length === 0 ? (
             <p className="p-4 text-center text-[13px] text-slate-500">
-              Nenhum aluno ativo de outra unidade com esse nome.
+              Nenhum aluno de outra unidade com esse nome.
             </p>
           ) : (
             resultados.map((a) => (
@@ -157,6 +158,11 @@ export function ModalAlunoOutraUnidade({
                         <Music className="h-3 w-3 text-slate-600" />
                         {c.curso_nome}
                         {c.professor_nome && <span className="text-slate-600">· {c.professor_nome}</span>}
+                        {/* O selo sai por CURSO porque a RPC devolve `cursos` da propria
+                            view (com `trancado` dentro) e nao a flag da pessoa — derivar
+                            "pessoa trancada" aqui seria uma segunda regua para a mesma
+                            pergunta, e a do banco e a que vale. */}
+                        {c.trancado && <SeloTrancado escopo="curso" />}
                       </span>
                     ))}
                   </div>
