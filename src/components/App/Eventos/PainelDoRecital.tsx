@@ -52,7 +52,9 @@ export function Painel({
         <h3 className="text-[11.5px] font-semibold uppercase tracking-wide text-slate-400">{titulo}</h3>
         {destaque}
       </div>
-      {children}
+      {/* Um bloco só: com o painel esticado (flex-1 + justify-between), o título fica no topo
+          e o conteúdo inteiro desce junto, em vez de se espalhar pela altura. */}
+      <div>{children}</div>
     </section>
   );
 }
@@ -304,7 +306,9 @@ export function PainelAlunos({
       <div className="flex flex-col gap-3">
         <Painel
           titulo="Confirmação"
-          className="p-3"
+          // flex-1: as duas dividem a altura da coluna, que a grade iguala à do ranking —
+          // topo e base alinhados com o painel da direita.
+          className="flex flex-1 flex-col justify-between p-3"
           destaque={
             <span className="text-[12px] text-slate-500">
               <NumeroAnimado valor={elegiveis} className="font-semibold text-slate-300" /> elegíveis
@@ -341,7 +345,9 @@ export function PainelAlunos({
 
         <Painel
           titulo="Montagem dos blocos"
-          className="p-3"
+          // flex-1: as duas dividem a altura da coluna, que a grade iguala à do ranking —
+          // topo e base alinhados com o painel da direita.
+          className="flex flex-1 flex-col justify-between p-3"
           destaque={
             <span className="text-[12px] text-slate-500">
               <NumeroAnimado valor={nosBlocos} className="font-semibold text-white" /> de{' '}
@@ -376,7 +382,7 @@ export function PainelAlunos({
 
       <Painel
         titulo="Por curso"
-        className="p-3"
+        className="h-full p-3"
         destaque={
           <span className="flex items-center gap-3 text-[11.5px] text-slate-500">
             <span>cheia = nos blocos · clara = confirmados</span>
