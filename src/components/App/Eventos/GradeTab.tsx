@@ -1,4 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { motion, useReducedMotion } from 'framer-motion';
 import { toast } from 'sonner';
 import {
   DndContext,
@@ -40,6 +42,8 @@ import {
   Users,
   GraduationCap,
   ArrowRightLeft,
+  ArrowUp,
+  ArrowDown,
   Mic2,
 } from 'lucide-react';
 
@@ -552,6 +556,8 @@ type PropsDoNumero = {
   unidadeId: string;
   blocoId: number;
   onMudou: () => void;
+  /** Botão direito no cartão: abre o menu de mover (onde o mouse está). */
+  onMenu?: (apresentacaoId: number, x: number, y: number) => void;
 };
 
 /**
@@ -570,6 +576,16 @@ function CartaoNumero(props: PropsDoNumero) {
   return (
     <div
       ref={setNodeRef}
+      onContextMenu={
+        props.onMenu
+          ? (e) => {
+              // Campo de texto mantém o menu do navegador (copiar/colar).
+              if ((e.target as HTMLElement).closest('input, textarea')) return;
+              e.preventDefault();
+              props.onMenu?.(numero[0].id, e.clientX, e.clientY);
+            }
+          : undefined
+      }
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
         // Celular: cartão de roteiro (16px de raio, superfície mais densa, borda discreta).
@@ -1008,6 +1024,123 @@ const CorpoDoNumero = memo(function CorpoDoNumero({
   );
 });
 
+/**
+ * Menu do botão direito num número (pedido do Hugo, 09/10): mover para outro bloco ou dia
+ * sem arrastar pela tela, e subir/descer até a ponta do próprio bloco.
+ */
+function MenuDoNumero({
+  x,
+  y,
+  numero,
+  blocoAtualId,
+  blocos,
+  diaDoBloco,
+  dias,
+  onMover,
+  onFechar,
+}: {
+  x: number;
+  y: number;
+  numero: ApresentacaoDaGrade[];
+  blocoAtualId: number | null;
+  blocos: BlocoDaGrade[];
+  diaDoBloco: (b: { data: string | null }) => string;
+  dias: string[];
+  onMover: (blocoId: number, onde: 'inicio' | 'fim') => void;
+  onFechar: () => void;
+}) {
+  const reduzir = useReducedMotion();
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ left: x, top: y });
+
+  useEffect(() => {
+    const fora = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onFechar();
+    };
+    const tecla = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onFechar();
+    };
+    document.addEventListener('mousedown', fora);
+    document.addEventListener('keydown', tecla);
+    window.addEventListener('scroll', onFechar, true);
+    return () => {
+      document.removeEventListener('mousedown', fora);
+      document.removeEventListener('keydown', tecla);
+      window.removeEventListener('scroll', onFechar, true);
+    };
+  }, [onFechar]);
+
+  // Perto da borda o menu abre para dentro da tela.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setPos({
+      left: Math.max(8, Math.min(x, window.innerWidth - r.width - 8)),
+      top: Math.max(8, Math.min(y, window.innerHeight - r.height - 8)),
+    });
+  }, [x, y]);
+
+  const multiDia = dias.length > 1;
+  const outros = [...blocos].sort((a, b) => a.ordem - b.ordem).filter((b) => b.id !== blocoAtualId);
+  const item =
+    'flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] text-slate-200 transition-colors hover:bg-slate-800 focus-visible:bg-slate-800 focus-visible:outline-none';
+
+  return createPortal(
+    <motion.div
+      ref={ref}
+      role="menu"
+      initial={reduzir ? false : { opacity: 0, scale: 0.96, y: -4 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      transition={{ type: 'spring', stiffness: 600, damping: 34, mass: 0.6 }}
+      style={{ left: pos.left, top: pos.top }}
+      className="fixed z-[60] max-h-[70vh] w-72 overflow-y-auto rounded-xl border border-slate-700 bg-slate-900/95 p-1.5 shadow-2xl shadow-black/50 backdrop-blur"
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <p className="truncate px-2.5 pb-1.5 pt-1 text-[11.5px] font-semibold uppercase tracking-wide text-slate-500">
+        {numero.map((a) => a.aluno_nome.split(' ')[0]).join(' + ') || 'Apresentação'}
+      </p>
+      {blocoAtualId !== null && (
+        <>
+          <button type="button" role="menuitem" className={item} onClick={() => onMover(blocoAtualId, 'inicio')}>
+            <ArrowUp className="h-3.5 w-3.5 text-slate-400" /> Subir para o início do bloco
+          </button>
+          <button type="button" role="menuitem" className={item} onClick={() => onMover(blocoAtualId, 'fim')}>
+            <ArrowDown className="h-3.5 w-3.5 text-slate-400" /> Descer para o fim do bloco
+          </button>
+        </>
+      )}
+      {outros.length > 0 && (
+        <>
+          <div className="my-1 h-px bg-slate-800" />
+          <p className="px-2.5 pb-1 pt-1 text-[11.5px] text-slate-500">Mover para outro bloco (entra no fim)</p>
+          {outros.map((b) => {
+            const dia = diaDoBloco(b);
+            return (
+              <button key={b.id} type="button" role="menuitem" className={item} onClick={() => onMover(b.id, 'fim')}>
+                <LayoutList className="h-3.5 w-3.5 shrink-0 text-violet-300" />
+                <span className="min-w-0 flex-1 truncate">{b.nome}</span>
+                {multiDia && (
+                  <span className="shrink-0 text-[11.5px] text-slate-500">
+                    {dias.indexOf(dia) + 1}º dia · {formatarDataCurta(dia)}
+                  </span>
+                )}
+                <span
+                  className="shrink-0 rounded bg-slate-800 px-1.5 text-[11px] tabular-nums text-slate-400"
+                  title="números no bloco"
+                >
+                  {agruparEmNumeros(b.apresentacoes).length}
+                </span>
+              </button>
+            );
+          })}
+        </>
+      )}
+    </motion.div>,
+    document.body,
+  );
+}
+
 /* ───────────────────────────── bloco ───────────────────────────── */
 
 function CartaoBloco({
@@ -1019,6 +1152,7 @@ function CartaoBloco({
   dias,
   dataEvento,
   compacto = false,
+  onMenuNumero,
   onMudou,
 }: {
   bloco: BlocoDaGrade;
@@ -1035,6 +1169,7 @@ function CartaoBloco({
    * tela — o "bloco que some" da reunião de 08/10.
    */
   compacto?: boolean;
+  onMenuNumero?: (apresentacaoId: number, x: number, y: number) => void;
   onMudou: () => void;
 }) {
   const [adicionando, setAdicionando] = useState(false);
@@ -1299,6 +1434,7 @@ function CartaoBloco({
                     unidadeId={unidadeId}
                     blocoId={bloco.id}
                     onMudou={onMudou}
+                    onMenu={onMenuNumero}
                   />
                 </div>
               );
@@ -1496,6 +1632,54 @@ export function GradeTab({
     recarregar();
   };
 
+  /**
+   * Grava uma grade nova (arrastar ou menu do botão direito): só os blocos tocados vão ao
+   * banco, inteiros e renumerados; a tela muda antes (`aplicarLocal`) e o `recarregar`
+   * confirma — em erro, devolve o que o banco tem.
+   */
+  const salvarNovaOrdem = async (final: BlocoDaGrade[]) => {
+    const antes = new Map(blocos.flatMap((b) => b.apresentacoes).map((a) => [a.id, a]));
+    const tocados = new Set<number>();
+    for (const a of final.flatMap((b) => b.apresentacoes)) {
+      const o = antes.get(a.id);
+      if (!o || o.bloco_id !== a.bloco_id || o.ordem !== a.ordem) {
+        tocados.add(a.bloco_id);
+        if (o) tocados.add(o.bloco_id);
+      }
+    }
+    if (tocados.size === 0) return false;
+    const itens = final
+      .filter((b) => tocados.has(b.id))
+      .flatMap((b) => b.apresentacoes.map((a) => ({ id: a.id, bloco_id: b.id, ordem: a.ordem })));
+
+    // Na tela já, antes do banco (ver `aplicarLocal`). Em erro, o `recarregar` devolve tudo.
+    aplicarLocal(() => final);
+    const { error } = await reordenarGrade(evento.id, itens);
+    if (error) toast.error(`Não consegui salvar a nova ordem: ${error.message}`);
+    recarregar();
+    return !error;
+  };
+
+  /** Menu do botão direito sobre um número: onde abriu e qual apresentação. */
+  const [menu, setMenu] = useState<{ x: number; y: number; apresentacaoId: number } | null>(null);
+  const abrirMenu = useCallback((apresentacaoId: number, x: number, y: number) => {
+    setMenu({ apresentacaoId, x, y });
+  }, []);
+  const fecharMenu = useCallback(() => setMenu(null), []);
+
+  /** Move pelo menu: para outro bloco (fim dele) ou para o início/fim do próprio bloco. */
+  const moverPeloMenu = async (apresentacaoId: number, blocoDestinoId: number, onde: 'inicio' | 'fim') => {
+    setMenu(null);
+    const destino = blocos.find((b) => b.id === blocoDestinoId);
+    if (!destino) return;
+    const origem = blocoDoItem(apresentacaoId);
+    const numeros = agruparEmNumeros(destino.apresentacoes);
+    const mesmo = origem?.id === blocoDestinoId;
+    const indice = onde === 'inicio' ? 0 : mesmo ? numeros.length - 1 : numeros.length;
+    const ok = await salvarNovaOrdem(moverNumero(blocos, apresentacaoId, blocoDestinoId, indice));
+    if (ok && !mesmo) toast.success(`Movido para ${destino.nome}`);
+  };
+
   const aoSoltar = async (e: DragEndEvent) => {
     setArrastando(null);
     const { active, over } = e;
@@ -1536,26 +1720,7 @@ export function GradeTab({
       final = moverNumero(base, idAtivo, alvo.id, naLista < 0 ? numerosAlvo.length : naLista);
     }
 
-    // Só os blocos tocados vão ao banco, inteiros e renumerados (o RPC espera a ordem cheia).
-    const antes = new Map(blocos.flatMap((b) => b.apresentacoes).map((a) => [a.id, a]));
-    const tocados = new Set<number>();
-    for (const a of final.flatMap((b) => b.apresentacoes)) {
-      const o = antes.get(a.id);
-      if (!o || o.bloco_id !== a.bloco_id || o.ordem !== a.ordem) {
-        tocados.add(a.bloco_id);
-        if (o) tocados.add(o.bloco_id);
-      }
-    }
-    if (tocados.size === 0) return;
-    const itens = final
-      .filter((b) => tocados.has(b.id))
-      .flatMap((b) => b.apresentacoes.map((a) => ({ id: a.id, bloco_id: b.id, ordem: a.ordem })));
-
-    // Na tela já, antes do banco (ver `aplicarLocal`). Em erro, o `recarregar` devolve tudo.
-    aplicarLocal(() => final);
-    const { error } = await reordenarGrade(evento.id, itens);
-    if (error) toast.error(`Não consegui salvar a nova ordem: ${error.message}`);
-    recarregar();
+    await salvarNovaOrdem(final);
   };
 
   /**
@@ -1766,6 +1931,7 @@ export function GradeTab({
                     dias={dias}
                     dataEvento={evento.data_evento}
                     compacto={arrastando?.tipo === 'bloco'}
+                    onMenuNumero={abrirMenu}
                     onMudou={aoMudarBloco}
                   />
                 </div>
@@ -1792,6 +1958,25 @@ export function GradeTab({
             )}
           </DragOverlay>
         </DndContext>
+      )}
+
+      {menu && (
+        <MenuDoNumero
+          x={menu.x}
+          y={menu.y}
+          numero={(() => {
+            const b = blocoDoItem(menu.apresentacaoId);
+            return b
+              ? agruparEmNumeros(b.apresentacoes).find((n) => n.some((a) => a.id === menu.apresentacaoId)) ?? []
+              : [];
+          })()}
+          blocoAtualId={blocoDoItem(menu.apresentacaoId)?.id ?? null}
+          blocos={blocos}
+          diaDoBloco={diaDoBloco}
+          dias={dias}
+          onMover={(blocoId, onde) => moverPeloMenu(menu.apresentacaoId, blocoId, onde)}
+          onFechar={fecharMenu}
+        />
       )}
     </div>
   );
