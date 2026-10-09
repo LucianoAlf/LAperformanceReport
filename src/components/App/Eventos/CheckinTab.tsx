@@ -27,6 +27,7 @@ import {
   type EventoComResumo,
   type ParticipacaoStatus,
 } from '@/hooks/useEventos';
+import { PainelCheckin } from './PainelDoRecital';
 
 /**
  * Check-in do dia do recital — LAPE-39, fase 7.
@@ -178,33 +179,19 @@ export function CheckinTab({
     // flex-col (e não space-y) para o celular poder mandar os certificados para o fim:
     // na porta, no dia, o que se usa primeiro é a lista de chegada.
     <div className="flex flex-col gap-4">
-      <section className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <Cartao icone={<Users className="h-4 w-4" />} rotulo="Esperados" valor={resumo.esperados} />
-        <Cartao
-          icone={<UserCheck className="h-4 w-4" />}
-          rotulo="Chegaram"
-          valor={resumo.chegaram}
-          destaque="emerald"
-        />
-        <Cartao
-          icone={<Clock className="h-4 w-4" />}
-          rotulo="Faltam"
-          valor={resumo.faltam}
-          destaque={resumo.faltam > 0 ? 'amber' : undefined}
-        />
-        <Cartao
-          icone={<ListOrdered className="h-4 w-4" />}
-          rotulo="Apresentações"
-          valor={resumo.apresentacoes}
-          rodape={
-            resumo.apresentacoesSemChegada > 0
-              ? `${resumo.apresentacoesSemChegada} com a pessoa ainda fora`
-              : resumo.apresentacoes > 0
-                ? 'todo mundo que sobe ao palco chegou'
-                : 'nenhum bloco montado'
-          }
-        />
-      </section>
+      <PainelCheckin
+        esperados={resumo.esperados}
+        chegaram={resumo.chegaram}
+        apresentacoes={resumo.apresentacoes}
+        apresentacoesSemChegada={resumo.apresentacoesSemChegada}
+        blocos={lista.blocos.map((b) => ({
+          id: b.blocoId,
+          nome: b.nome,
+          inicio: b.inicio,
+          pessoas: b.pessoas,
+          chegaram: b.chegaram,
+        }))}
+      />
 
       {resumo.esperados === 0 && (
         <p className="rounded-xl border border-slate-700 bg-slate-800/40 p-4 text-[13px] text-slate-400">

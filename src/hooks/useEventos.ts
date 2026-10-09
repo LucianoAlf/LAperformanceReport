@@ -799,7 +799,17 @@ export function useGradeDoEvento(eventoId: number | null) {
     recarregar();
   }, [recarregar]);
 
-  return { blocos, loading, erro, recarregar };
+  /**
+   * Aplica uma mudança na tela ANTES de o banco responder (arrastar cartão ou bloco). Sem
+   * isso o cartão voltava ao lugar antigo e só pulava para o novo depois da gravação e da
+   * releitura da grade inteira — o "atraso ao arrastar" da reunião de 08/10. Quem chama
+   * recarrega depois: o banco continua sendo a palavra final, e em erro a tela volta.
+   */
+  const aplicarLocal = useCallback((mudar: (atual: BlocoDaGrade[]) => BlocoDaGrade[]) => {
+    setBlocos((atual) => mudar(atual));
+  }, []);
+
+  return { blocos, loading, erro, recarregar, aplicarLocal };
 }
 
 export async function criarBloco(
@@ -916,6 +926,31 @@ export async function definirProfessorNoPalco(apresentacaoId: number, professorI
   const { data, error } = await supabase
     .from('evento_apresentacao')
     .update({ professor_palco_id: professorId, updated_at: new Date().toISOString() })
+    .eq('id', apresentacaoId)
+    .select('id');
+  if (error) return { error };
+  if ((data ?? []).length !== 1) {
+    return { error: { message: `apresentação ${apresentacaoId}: nada foi salvo — confira a permissão.` } };
+  }
+  return { error: null };
+}
+
+/**
+ * Troca o professor DO ALUNO nesta apresentação (pedido do Arthur, 09/10). Não mexe na
+ * matrícula: é só o recital. ⚠️ É esse professor que faz o relatório no LA Teacher — o aluno
+ * passa para a lista dele no app. Se o novo professor era o "no palco", o palco é limpo
+ * (seria o mesmo professor nos dois papéis).
+ */
+export async function trocarProfessorDaApresentacao(
+  apresentacaoId: number,
+  professorId: number,
+  professorPalcoAtual: number | null,
+) {
+  const campos: Record<string, unknown> = { professor_id: professorId, updated_at: new Date().toISOString() };
+  if (professorPalcoAtual === professorId) campos.professor_palco_id = null;
+  const { data, error } = await supabase
+    .from('evento_apresentacao')
+    .update(campos)
     .eq('id', apresentacaoId)
     .select('id');
   if (error) return { error };

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { Search, Users, Check, HelpCircle, X, Music, AlertTriangle, Guitar, LayoutList, UserPlus, Trash2, GraduationCap, FileCheck } from 'lucide-react';
 
@@ -10,6 +10,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { KPICard } from '@/components/ui/KPICard';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { cn } from '@/lib/utils';
 import { normalizarBusca } from '@/lib/agenda';
 import { avaliarElegibilidade, resumirParticipacao, resumirAlocacao } from '@/lib/eventos';
@@ -28,6 +29,7 @@ import {
 } from '@/hooks/useEventos';
 import { ModalAlunoOutraUnidade } from './ModalAlunoOutraUnidade';
 import { ModalConvidadosDoAluno } from './ModalConvidadosDoAluno';
+import { PainelAlunos, type CursoNoPainel } from './PainelDoRecital';
 
 type FiltroStatus = 'todos' | ParticipacaoStatus;
 
@@ -110,6 +112,93 @@ const FORMATURA_ROTULO: Record<string, string> = {
   bebes: 'Bebês → Preparatória',
   la: 'formando',
 };
+
+/** Conteúdo dos tooltips da barra: título curto + uma linha de explicação. */
+function Dica({ titulo, children }: { titulo: string; children: ReactNode }) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-[12.5px] font-semibold text-white">{titulo}</p>
+      <p className="text-[12px] font-normal leading-snug text-slate-300">{children}</p>
+    </div>
+  );
+}
+
+const ALUNOS_POR_PAGINA = 50;
+
+/** Páginas visíveis: primeira, última e vizinhas da atual, com "…" entre os saltos. */
+function paginasVisiveis(atual: number, total: number): (number | '…')[] {
+  const nums = new Set([1, total, atual - 1, atual, atual + 1].filter((n) => n >= 1 && n <= total));
+  const ordenadas = [...nums].sort((a, b) => a - b);
+  const saida: (number | '…')[] = [];
+  ordenadas.forEach((n, i) => {
+    if (i > 0 && n - ordenadas[i - 1] > 1) saida.push('…');
+    saida.push(n);
+  });
+  return saida;
+}
+
+function Paginacao({
+  pagina,
+  totalPaginas,
+  inicio,
+  fim,
+  total,
+  onIr,
+}: {
+  pagina: number;
+  totalPaginas: number;
+  inicio: number;
+  fim: number;
+  total: number;
+  onIr: (n: number) => void;
+}) {
+  const botao =
+    'flex h-11 min-w-[44px] items-center justify-center rounded-lg px-3 text-[13px] tabular-nums transition-colors disabled:opacity-40 sm:h-8 sm:min-w-[32px] sm:px-2';
+  return (
+    <nav aria-label="Páginas da lista de alunos" className="flex flex-wrap items-center justify-between gap-2">
+      <p className="text-[12.5px] text-slate-400">
+        Mostrando <span className="tabular-nums text-slate-200">{inicio}–{fim}</span> de{' '}
+        <span className="tabular-nums text-slate-200">{total}</span>
+      </p>
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => onIr(pagina - 1)}
+          disabled={pagina <= 1}
+          className={cn(botao, 'border border-slate-700 text-slate-300 enabled:hover:bg-slate-800')}
+        >
+          Anterior
+        </button>
+        {paginasVisiveis(pagina, totalPaginas).map((n, i) =>
+          n === '…' ? (
+            <span key={`r${i}`} className="px-1 text-slate-600">…</span>
+          ) : (
+            <button
+              key={n}
+              type="button"
+              onClick={() => onIr(n)}
+              aria-current={n === pagina ? 'page' : undefined}
+              className={cn(
+                botao,
+                n === pagina ? 'bg-violet-600 font-semibold text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white',
+              )}
+            >
+              {n}
+            </button>
+          ),
+        )}
+        <button
+          type="button"
+          onClick={() => onIr(pagina + 1)}
+          disabled={pagina >= totalPaginas}
+          className={cn(botao, 'border border-slate-700 text-slate-300 enabled:hover:bg-slate-800')}
+        >
+          Próxima
+        </button>
+      </div>
+    </nav>
+  );
+}
 
 function LinhaAluno({
   aluno,
@@ -349,6 +438,12 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
   const [filtroProfessor, setFiltroProfessor] = useState('todos');
   const [filtroCurso, setFiltroCurso] = useState('todos');
   const [soSemAlocar, setSoSemAlocar] = useState(false);
+  /**
+   * Recorte vindo do painel "Montagem dos blocos". Fica separado dos outros filtros porque
+   * responde exatamente ao número do painel: 'em_bloco' = confirmados com algum curso num
+   * bloco; 'sem_bloco' = confirmados sem nenhum.
+   */
+  const [filtroFunil, setFiltroFunil] = useState<'em_bloco' | 'sem_bloco' | null>(null);
   const [soRelatorioPronto, setSoRelatorioPronto] = useState(false);
 
   // O quadro do topo manda um "tick": cada clique religa o filtro — mesmo se a
@@ -363,6 +458,22 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
   const [lotePendente, setLotePendente] = useState<AlunoElegivel[] | null>(null);
 
   const resumo = useMemo(() => resumirParticipacao(alunos), [alunos]);
+  // Ranking por curso de quem confirmou: previstas × já nos blocos (painel "Por curso").
+  const porCurso = useMemo<CursoNoPainel[]>(() => {
+    const mapa = new Map<string, CursoNoPainel>();
+    for (const a of alunos) {
+      if (a.status !== 'participa') continue;
+      const alocados = new Set(a.alocacoes.map((x) => x.curso_id));
+      for (const c of a.cursos) {
+        const chave = String(c.curso_id);
+        const atual = mapa.get(chave) ?? { cursoId: chave, curso: c.curso_nome ?? 'Curso', previstas: 0, nosBlocos: 0 };
+        atual.previstas += 1;
+        if (alocados.has(c.curso_id)) atual.nosBlocos += 1;
+        mapa.set(chave, atual);
+      }
+    }
+    return [...mapa.values()];
+  }, [alunos]);
   // O botao so aparece quando existe alguem no estado — um filtro que nunca filtra
   // nada e controle morto na barra.
   const temRelatorioPronto = useMemo(() => alunos.some((a) => a.relatorio_falta_alocar), [alunos]);
@@ -391,6 +502,8 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
     const termo = normalizarBusca(busca.trim());
     return alunos.filter((a) => {
       if (filtro !== 'todos' && a.status !== filtro) return false;
+      if (filtroFunil === 'em_bloco' && !(a.status === 'participa' && a.cursos_alocados > 0)) return false;
+      if (filtroFunil === 'sem_bloco' && !(a.status === 'participa' && a.cursos_alocados === 0)) return false;
       // Professor e curso filtram por CURSO da pessoa: quem faz dois cursos continua na
       // lista quando um dos dois casa — esconder o outro e trabalho do olho, nao do filtro.
       if (filtroProfessor !== 'todos' && !a.cursos.some((c) => String(c.professor_id) === filtroProfessor)) {
@@ -412,7 +525,22 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
       );
       return alvo.includes(termo);
     });
-  }, [alunos, busca, filtro, filtroProfessor, filtroCurso, soSemAlocar, soRelatorioPronto]);
+  }, [alunos, busca, filtro, filtroProfessor, filtroCurso, soSemAlocar, soRelatorioPronto, filtroFunil]);
+
+  const paraConfirmar = useMemo(
+    () => visiveis.filter((a) => a.status !== 'participa' && avaliarElegibilidade(a).podeParticipar),
+    [visiveis],
+  );
+
+  // Paginação (pedido do Hugo, 09/10): 400 linhas com seletores de uma vez deixavam a aba
+  // pesada e longa. Qualquer filtro novo volta para a 1ª página.
+  const [pagina, setPagina] = useState(1);
+  useEffect(() => {
+    setPagina(1);
+  }, [busca, filtro, filtroProfessor, filtroCurso, soSemAlocar, soRelatorioPronto, filtroFunil]);
+  const totalPaginas = Math.max(1, Math.ceil(visiveis.length / ALUNOS_POR_PAGINA));
+  const paginaAtual = Math.min(pagina, totalPaginas);
+  const daPagina = visiveis.slice((paginaAtual - 1) * ALUNOS_POR_PAGINA, paginaAtual * ALUNOS_POR_PAGINA);
 
   const escolher = async (aluno: AlunoElegivel, status: ParticipacaoStatus) => {
     setGravando(aluno.pessoa_chave);
@@ -560,29 +688,34 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
         ))}
       </div>
 
-      <div className="hidden grid-cols-2 gap-3 sm:grid lg:grid-cols-5">
-        <KPICard size="sm" label="Elegíveis" value={resumo.total} icon={Users} variant="default" />
-        <KPICard size="sm" label="Participam" value={resumo.participam} icon={Check} variant="emerald" />
-        <KPICard size="sm" label="Indefinidos" value={resumo.indefinidos} icon={HelpCircle} variant="amber" />
-        <KPICard
-          size="sm"
-          label="Apresentações previstas"
-          value={resumo.apresentacoesPrevistas}
-          icon={Music}
-          variant="violet"
-          subvalue={
-            resumo.apresentacoesAlocadas > 0
-              ? `${resumo.apresentacoesAlocadas} já nos blocos`
-              : '1 por curso de quem participa'
-          }
-        />
-        <KPICard
-          size="sm"
-          label="Convidados"
-          value={resumo.convidadosTotal}
-          icon={Users}
-          variant="default"
-          subvalue="somando quem participa"
+      <div className="hidden sm:block">
+        <PainelAlunos
+          elegiveis={resumo.total}
+          participam={resumo.participam}
+          indefinidos={resumo.indefinidos}
+          naoParticipam={resumo.naoParticipam}
+          previstas={resumo.apresentacoesPrevistas}
+          nosBlocos={resumo.apresentacoesAlocadas}
+          confirmadosSemBloco={resumo.participamSemAlocacao}
+          pessoasEmBloco={alunos.filter((a) => a.status === 'participa' && a.cursos_alocados > 0).length}
+          convidados={resumo.convidadosTotal}
+          convidadosComNome={alunos
+            .filter((a) => a.status === 'participa')
+            .reduce((t, a) => t + (convidadosPorPessoa.get(a.pessoa_chave)?.length ?? 0), 0)}
+          cursos={porCurso}
+          cursoAtivo={filtroCurso === 'todos' ? null : filtroCurso}
+          onFiltroStatus={(st) => {
+            setFiltroFunil(null);
+            setFiltro((atual) => (atual === st ? 'todos' : st));
+          }}
+          statusAtivo={filtroFunil || soSemAlocar || filtro === 'todos' ? null : filtro}
+          recorteAtivo={filtroFunil === 'em_bloco' || filtroFunil === 'sem_bloco' ? filtroFunil : null}
+          onRecorte={(recorte) => {
+            setSoSemAlocar(false);
+            setFiltro('todos');
+            setFiltroFunil((atual) => (atual === recorte ? null : recorte));
+          }}
+          onCurso={(c) => setFiltroCurso((atual) => (atual === c ? 'todos' : c))}
         />
       </div>
 
@@ -602,7 +735,10 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
             <button
               key={f.id}
               type="button"
-              onClick={() => setFiltro(f.id)}
+              onClick={() => {
+                setFiltroFunil(null);
+                setFiltro(f.id);
+              }}
               className={cn(
                 'min-h-[44px] flex-auto whitespace-nowrap px-2 py-1.5 text-[13px] transition-colors sm:min-h-0 sm:flex-none sm:px-3 sm:text-[12.5px]',
                 filtro === f.id
@@ -647,52 +783,74 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
         {/* So aparece quando ha grade montada: antes disso ele filtraria a lista inteira
             e nao responderia pergunta nenhuma. */}
         {resumo.apresentacoesAlocadas > 0 && (
-          <Button
-            variant={soSemAlocar ? 'default' : 'outline'}
-            size="sm"
-            className="h-11 flex-1 gap-1.5 sm:h-9 sm:flex-none"
-            onClick={() => setSoSemAlocar((v) => !v)}
-          >
-            <LayoutList className="h-3.5 w-3.5" />
-            Sem alocar
-          </Button>
+          <Tooltip side="bottom" content={<Dica titulo="Sem alocar">Mostra só quem confirmou e ainda não está em nenhum bloco. Clique de novo para tirar o filtro.</Dica>}>
+            <Button
+              variant={soSemAlocar ? 'default' : 'outline'}
+              size="sm"
+              className="h-11 flex-1 gap-1.5 sm:h-9 sm:flex-none"
+              onClick={() => {
+                setFiltroFunil(null);
+                setSoSemAlocar((v) => !v);
+              }}
+            >
+              <LayoutList className="h-3.5 w-3.5" />
+              Sem alocar
+            </Button>
+          </Tooltip>
         )}
         {/* Quem o professor ja entregou relatorio e falta cadeira — a fila que a
             coordenacao zera primeiro (Caio do Isaque foi o caso que originou). */}
         {temRelatorioPronto && (
-          <Button
-            variant={soRelatorioPronto ? 'default' : 'outline'}
-            size="sm"
-            className="h-11 flex-1 gap-1.5 sm:h-9 sm:flex-none"
-            onClick={() => setSoRelatorioPronto((v) => !v)}
-          >
-            <FileCheck className="h-3.5 w-3.5" />
-            Relatório pronto
-          </Button>
+          <Tooltip side="bottom" content={<Dica titulo="Relatório pronto">Alunos cujo professor já lançou o trabalho no LA Teacher, mas que ainda não têm lugar nos blocos — os primeiros a alocar.</Dica>}>
+            <Button
+              variant={soRelatorioPronto ? 'default' : 'outline'}
+              size="sm"
+              className="h-11 flex-1 gap-1.5 sm:h-9 sm:flex-none"
+              onClick={() => setSoRelatorioPronto((v) => !v)}
+            >
+              <FileCheck className="h-3.5 w-3.5" />
+              Relatório pronto
+            </Button>
+          </Tooltip>
         )}
 
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-11 flex-1 sm:h-9 sm:flex-none"
-          disabled={gravando === '__lote__' || visiveis.length === 0}
-          onClick={() => {
-            const alvos = visiveis.filter((a) => avaliarElegibilidade(a).podeParticipar);
-            if (alvos.length > 0) setLotePendente(alvos);
-          }}
-        >
-          Marcar os {visiveis.length} visíveis
-        </Button>
+        {/* Confirma em lote quem do filtro (todas as páginas) AINDA não está confirmado e pode
+            participar — o mesmo que o ✓ de cada linha. Antes contava o filtro inteiro e, com
+            "Participam" ligado, oferecia "marcar 251" que já estavam confirmados (Hugo, 09/10). */}
+        {paraConfirmar.length > 0 && (
+          <Tooltip
+            side="bottom"
+            content={
+              <Dica titulo={`Confirmar ${paraConfirmar.length} de uma vez`}>
+                Põe como &ldquo;participa&rdquo; quem do filtro atual ainda não está confirmado (todas as páginas).
+                Pede confirmação antes e oferece Desfazer.
+              </Dica>
+            }
+          >
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-11 flex-1 sm:h-9 sm:flex-none"
+              disabled={gravando === '__lote__'}
+              onClick={() => setLotePendente(paraConfirmar)}
+            >
+              <Check className="h-4 w-4" />
+              Confirmar {paraConfirmar.length} {paraConfirmar.length === 1 ? 'aluno' : 'alunos'}
+            </Button>
+          </Tooltip>
+        )}
 
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-11 flex-1 gap-1.5 sm:h-9 sm:flex-none"
-          onClick={() => setModalOutraUnidade(true)}
-        >
-          <UserPlus className="h-3.5 w-3.5" />
-          Aluno de outra unidade
-        </Button>
+        <Tooltip side="bottom" content={<Dica titulo="Aluno de outra unidade">Coloca no recital um aluno de outra unidade da LA, que vai se apresentar aqui.</Dica>}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-11 flex-1 gap-1.5 sm:h-9 sm:flex-none"
+            onClick={() => setModalOutraUnidade(true)}
+          >
+            <UserPlus className="h-3.5 w-3.5" />
+            Aluno de outra unidade
+          </Button>
+        </Tooltip>
       </div>
 
       <ModalAlunoOutraUnidade
@@ -727,7 +885,7 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
           </p>
         ) : (
           <div className={cn('transition-opacity', gravando && 'opacity-60')}>
-            {visiveis.map((a) => (
+            {daPagina.map((a) => (
               <LinhaAluno
                 key={a.pessoa_chave}
                 aluno={a}
@@ -742,6 +900,20 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
         )}
       </div>
 
+      {visiveis.length > ALUNOS_POR_PAGINA && (
+        <Paginacao
+          pagina={paginaAtual}
+          totalPaginas={totalPaginas}
+          inicio={(paginaAtual - 1) * ALUNOS_POR_PAGINA + 1}
+          fim={Math.min(paginaAtual * ALUNOS_POR_PAGINA, visiveis.length)}
+          total={visiveis.length}
+          onIr={(n) => {
+            setPagina(n);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        />
+      )}
+
       <ModalConfirmacao
         aberto={lotePendente !== null}
         onClose={() => setLotePendente(null)}
@@ -750,8 +922,8 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
           setLotePendente(null);
           if (alvos) void marcarLote('participa', alvos);
         }}
-        titulo="Marcar participação em lote"
-        mensagem={`Marcar ${lotePendente?.length ?? 0} ${(lotePendente?.length ?? 0) === 1 ? 'aluno' : 'alunos'} como participando do recital? Depois de gravar, o aviso na tela oferece Desfazer por alguns segundos.`}
+        titulo="Confirmar participação em lote"
+        mensagem={`Confirmar ${lotePendente?.length ?? 0} ${(lotePendente?.length ?? 0) === 1 ? 'aluno' : 'alunos'} como participando do recital? Inclui quem estava como indefinido ou não vai. Depois de gravar, o aviso na tela oferece Desfazer por alguns segundos.`}
         tipo="warning"
         textoConfirmar="Marcar todos"
         carregando={gravando === '__lote__'}

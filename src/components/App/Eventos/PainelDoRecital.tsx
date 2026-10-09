@@ -1,0 +1,856 @@
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { animate, motion, useReducedMotion } from 'framer-motion';
+
+import { cn } from '@/lib/utils';
+import { Tooltip } from '@/components/ui/Tooltip';
+import { MOLA_CURTA } from './ControlesComMovimento';
+
+/**
+ * Peças dos painéis do recital (abas Alunos e Revisão) — pedido do Hugo em 09/10: os cartões
+ * de número solto "ocupam muito espaço e dizem muito pouco". Inspiração: race bar chart do
+ * uiarc.dev (barras que crescem com mola, números que contam até o valor), no tema do sistema.
+ */
+
+const MOLA_BARRA = { type: 'spring', stiffness: 170, damping: 26, mass: 0.9 } as const;
+
+/** Número que conta até o valor quando muda (sem animação para quem pede menos movimento). */
+export function NumeroAnimado({ valor, className }: { valor: number; className?: string }) {
+  const reduzir = useReducedMotion();
+  const [exibido, setExibido] = useState(reduzir ? valor : 0);
+  const anterior = useRef(reduzir ? valor : 0);
+  useEffect(() => {
+    if (reduzir) {
+      setExibido(valor);
+      anterior.current = valor;
+      return;
+    }
+    const controle = animate(anterior.current, valor, {
+      duration: 0.7,
+      ease: [0.22, 1, 0.36, 1],
+      onUpdate: (v) => setExibido(Math.round(v)),
+    });
+    anterior.current = valor;
+    return () => controle.stop();
+  }, [valor, reduzir]);
+  return <span className={cn('tabular-nums', className)}>{exibido.toLocaleString('pt-BR')}</span>;
+}
+
+/** Moldura comum dos painéis: título pequeno em caixa alta, valor de destaque opcional. */
+export function Painel({
+  titulo,
+  destaque,
+  children,
+  className,
+  esticar = false,
+}: {
+  titulo: string;
+  destaque?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  /** Conteúdo ocupa a altura do painel, com o primeiro filho no topo e o último na base. */
+  esticar?: boolean;
+}) {
+  return (
+    <section className={cn('rounded-xl border border-slate-800 bg-slate-900/60 p-4', className)}>
+      <div className="mb-3 flex items-baseline justify-between gap-2">
+        <h3 className="text-[11.5px] font-semibold uppercase tracking-wide text-slate-400">{titulo}</h3>
+        {destaque}
+      </div>
+      {/* Um bloco só: com o painel esticado (flex-1 + justify-between), o título fica no topo
+          e o conteúdo inteiro desce junto, em vez de se espalhar pela altura. */}
+      <div className={esticar ? 'flex flex-1 flex-col justify-between gap-3' : undefined}>{children}</div>
+    </section>
+  );
+}
+
+export interface FatiaEmpilhada {
+  chave: string;
+  rotulo: string;
+  valor: number;
+  /** Classe de fundo da fatia e do ponto da legenda (ex.: 'bg-emerald-400'). */
+  cor: string;
+}
+
+/** Uma barra só, dividida em fatias proporcionais, com legenda clicável embaixo. */
+export function BarraEmpilhada({
+  fatias,
+  onEscolher,
+}: {
+  fatias: FatiaEmpilhada[];
+  onEscolher?: (chave: string) => void;
+}) {
+  const reduzir = useReducedMotion();
+  const total = fatias.reduce((s, f) => s + f.valor, 0);
+  return (
+    <div>
+      <div className="flex h-3 w-full gap-0.5 overflow-hidden rounded-full bg-slate-800">
+        {fatias.map((f) =>
+          f.valor > 0 ? (
+            <motion.div
+              key={f.chave}
+              className={cn('h-full first:rounded-l-full last:rounded-r-full', f.cor)}
+              initial={reduzir ? false : { width: 0 }}
+              animate={{ width: `${total ? (f.valor / total) * 100 : 0}%` }}
+              transition={reduzir ? { duration: 0 } : MOLA_BARRA}
+              title={`${f.rotulo}: ${f.valor}`}
+            />
+          ) : null,
+        )}
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {fatias.map((f) => {
+          const conteudo = (
+            <>
+              <span className="flex items-center gap-1.5 text-[11.5px] text-slate-400">
+                <span className={cn('h-2 w-2 rounded-full', f.cor)} />
+                {f.rotulo}
+              </span>
+              <span className="mt-0.5 flex items-baseline gap-1.5">
+                <NumeroAnimado valor={f.valor} className="text-[20px] font-semibold leading-none text-white" />
+                <span className="text-[11.5px] tabular-nums text-slate-500">
+                  {total ? Math.round((f.valor / total) * 100) : 0}%
+                </span>
+              </span>
+            </>
+          );
+          return onEscolher ? (
+            <button
+              key={f.chave}
+              type="button"
+              onClick={() => onEscolher(f.chave)}
+              className="flex min-h-[44px] flex-col items-start rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-slate-800/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
+            >
+              {conteudo}
+            </button>
+          ) : (
+            <div key={f.chave} className="flex flex-col px-1.5 py-1">
+              {conteudo}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export interface LinhaDaCorrida {
+  chave: string;
+  rotulo: string;
+  /** Tamanho total da barra (ex.: apresentações previstas). */
+  total: number;
+  /** Parte já feita, desenhada por cima em cor cheia (ex.: já nos blocos). */
+  feito?: number;
+  /** Texto à direita; sem ele, mostra `feito/total` ou `total`. */
+  valorTexto?: string;
+  /** Linha secundária pequena embaixo do rótulo. */
+  detalhe?: string;
+  cor?: string;
+}
+
+/**
+ * Barras horizontais ranqueadas (race bar chart): a maior ocupa a largura toda, as outras na
+ * proporção. Reordenar anima a troca de lugar (layout), crescer anima com mola.
+ */
+export function BarrasCorrida({
+  linhas,
+  ativa,
+  onEscolher,
+  corPadrao = 'bg-violet-500',
+  compacta = false,
+}: {
+  /** Barras mais baixas (h-6) — para caber ao lado de painéis curtos. */
+  compacta?: boolean;
+  linhas: LinhaDaCorrida[];
+  ativa?: string | null;
+  onEscolher?: (chave: string) => void;
+  corPadrao?: string;
+}) {
+  const reduzir = useReducedMotion();
+  const maior = Math.max(1, ...linhas.map((l) => l.total));
+  return (
+    <ul className={compacta ? 'space-y-1' : 'space-y-1.5'}>
+      {linhas.map((l) => {
+        const largura = (l.total / maior) * 100;
+        const feito = l.feito ?? null;
+        const cor = l.cor ?? corPadrao;
+        const conteudo = (
+          <>
+            <div className={cn('relative flex-1 overflow-hidden rounded-md bg-slate-800/60', compacta ? 'h-6' : 'h-7')}>
+              <motion.div
+                className={cn('absolute inset-y-0 left-0 rounded-md opacity-30', cor)}
+                initial={reduzir ? false : { width: 0 }}
+                animate={{ width: `${largura}%` }}
+                transition={reduzir ? { duration: 0 } : MOLA_BARRA}
+              />
+              {feito !== null && (
+                <motion.div
+                  className={cn('absolute inset-y-0 left-0 rounded-md', cor)}
+                  initial={reduzir ? false : { width: 0 }}
+                  animate={{ width: `${(Math.min(feito, l.total) / maior) * 100}%` }}
+                  transition={reduzir ? { duration: 0 } : { ...MOLA_BARRA, delay: 0.08 }}
+                />
+              )}
+              <span className="relative flex h-full items-center gap-2 truncate px-2 text-[12.5px] font-medium text-white">
+                <span className="truncate">{l.rotulo}</span>
+                {l.detalhe && <span className="truncate text-[11px] font-normal text-slate-300/80">{l.detalhe}</span>}
+              </span>
+            </div>
+            <span className="w-16 shrink-0 text-right text-[12.5px] tabular-nums text-slate-300">
+              {l.valorTexto ?? (feito !== null ? `${feito}/${l.total}` : l.total)}
+            </span>
+          </>
+        );
+        return (
+          <motion.li key={l.chave} layout={!reduzir} transition={MOLA_CURTA}>
+            {onEscolher ? (
+              <button
+                type="button"
+                onClick={() => onEscolher(l.chave)}
+                aria-pressed={ativa === l.chave}
+                className={cn(
+                  'flex w-full items-center gap-2 rounded-lg p-0.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60',
+                  ativa === l.chave ? 'ring-1 ring-amber-500/60' : 'hover:bg-slate-800/40',
+                )}
+              >
+                {conteudo}
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 p-0.5">{conteudo}</div>
+            )}
+          </motion.li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Barra de progresso fina com o percentual ao lado. */
+export function Progresso({ feito, total, cor = 'bg-violet-500' }: { feito: number; total: number; cor?: string }) {
+  const reduzir = useReducedMotion();
+  const pct = total > 0 ? Math.min(100, (feito / total) * 100) : 0;
+  return (
+    <div className="flex items-center gap-2">
+      <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-800">
+        <motion.div
+          className={cn('h-full rounded-full', cor)}
+          initial={reduzir ? false : { width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={reduzir ? { duration: 0 } : MOLA_BARRA}
+        />
+      </div>
+      <span className="w-10 text-right text-[12px] tabular-nums text-slate-400">{Math.round(pct)}%</span>
+    </div>
+  );
+}
+
+/* ─────────────────────── painéis prontos das abas ─────────────────────── */
+
+export interface CursoNoPainel {
+  cursoId: string;
+  curso: string;
+  /** Apresentações previstas desse curso (quem confirmou). */
+  previstas: number;
+  /** Quantas delas já estão nos blocos. */
+  nosBlocos: number;
+}
+
+/**
+ * Aba Alunos: confirmação, montagem dos blocos e ranking por curso, no lugar dos cinco
+ * cartões de número solto. Os cliques reaproveitam os filtros que a aba já tem.
+ */
+export function PainelAlunos({
+  elegiveis,
+  participam,
+  indefinidos,
+  naoParticipam,
+  previstas,
+  nosBlocos,
+  confirmadosSemBloco,
+  pessoasEmBloco,
+  convidados,
+  convidadosComNome,
+  cursos,
+  cursoAtivo,
+  onFiltroStatus,
+  onCurso,
+  statusAtivo,
+  recorteAtivo,
+  onRecorte,
+}: {
+  /** Status que está filtrando a lista agora (acende o item da Confirmação). */
+  statusAtivo?: 'participa' | 'indefinido' | 'nao' | null;
+  /** Recorte de montagem filtrando a lista agora (acende o item da Montagem). */
+  recorteAtivo?: 'em_bloco' | 'sem_bloco' | null;
+  /** Clique em "Em algum bloco" / "Sem bloco": filtra a lista; de novo, tira. */
+  onRecorte?: (recorte: 'em_bloco' | 'sem_bloco') => void;
+  elegiveis: number;
+  participam: number;
+  indefinidos: number;
+  naoParticipam: number;
+  previstas: number;
+  nosBlocos: number;
+  confirmadosSemBloco: number;
+  /** Confirmados com ao menos um curso num bloco. */
+  pessoasEmBloco: number;
+  convidados: number;
+  convidadosComNome: number;
+  cursos: CursoNoPainel[];
+  cursoAtivo?: string | null;
+  onFiltroStatus?: (status: 'participa' | 'indefinido' | 'nao') => void;
+  onCurso?: (cursoId: string) => void;
+}) {
+  const [todosCursos, setTodosCursos] = useState(false);
+  const ordenados = [...cursos].sort(
+    (a, b) => b.previstas - a.previstas || a.curso.localeCompare(b.curso, 'pt-BR'),
+  );
+  const visiveis = todosCursos ? ordenados : ordenados.slice(0, 6);
+  const faltam = Math.max(0, previstas - nosBlocos);
+
+  const fatias = [
+    { chave: 'participa' as const, rotulo: 'Participam', valor: participam, cor: 'bg-emerald-400' },
+    { chave: 'indefinido' as const, rotulo: 'Indefinidos', valor: indefinidos, cor: 'bg-amber-400' },
+    { chave: 'nao' as const, rotulo: 'Não vão', valor: naoParticipam, cor: 'bg-rose-400' },
+  ];
+  const totalFatias = participam + indefinidos + naoParticipam;
+
+  // Duas colunas: à esquerda confirmação + montagem empilhadas (compactas), à direita o
+  // ranking — assim as alturas se casam e nenhum painel fica com sobra (Hugo, 09/10).
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      <div className="flex flex-col gap-3">
+        <Painel
+          titulo="Confirmação"
+          // flex-1: as duas dividem a altura da coluna, que a grade iguala à do ranking.
+          className="flex flex-1 flex-col justify-between p-3"
+          destaque={
+            <span className="text-[12px] text-slate-500">
+              <NumeroAnimado valor={participam} className="font-semibold text-emerald-300" /> de{' '}
+              <span className="tabular-nums text-slate-300">{elegiveis}</span> elegíveis confirmados
+            </span>
+          }
+        >
+          <BarraFina fatias={fatias} total={totalFatias} />
+          <div className="mt-2 grid grid-cols-3 gap-1.5">
+            {fatias.map((f) => (
+              <ItemClicavel
+                key={f.chave}
+                ativo={statusAtivo === f.chave}
+                dica={statusAtivo === f.chave ? 'Clique de novo para ver todos' : `Mostrar só ${f.rotulo.toLowerCase()}`}
+                onClick={onFiltroStatus ? () => onFiltroStatus(f.chave) : undefined}
+              >
+                <span className="flex items-center gap-1.5 text-[11.5px] text-slate-400">
+                  <span className={cn('h-2 w-2 rounded-full', f.cor)} />
+                  {f.rotulo}
+                </span>
+                <span className="flex items-baseline gap-1.5">
+                  <NumeroAnimado valor={f.valor} className="text-[18px] font-semibold text-white" />
+                  <span className="text-[11px] tabular-nums text-slate-500">
+                    {totalFatias ? Math.round((f.valor / totalFatias) * 100) : 0}%
+                  </span>
+                </span>
+              </ItemClicavel>
+            ))}
+          </div>
+        </Painel>
+
+        <Painel
+          titulo="Montagem dos blocos"
+          className="flex flex-1 flex-col justify-between p-3"
+          destaque={
+            <span className="text-[12px] text-slate-500">
+              <NumeroAnimado valor={nosBlocos} className="font-semibold text-violet-300" /> de{' '}
+              <span className="tabular-nums text-slate-300">{previstas}</span> apresentações nos blocos
+            </span>
+          }
+        >
+          <Progresso feito={nosBlocos} total={previstas} cor="bg-violet-500" />
+          <div className="mt-2 grid grid-cols-3 gap-1.5">
+            <ItemClicavel
+              ativo={recorteAtivo === 'em_bloco'}
+              dica={recorteAtivo === 'em_bloco' ? 'Clique de novo para ver todos' : 'Confirmados com ao menos um curso num bloco'}
+              onClick={onRecorte ? () => onRecorte('em_bloco') : undefined}
+            >
+              <span className="text-[11.5px] text-slate-400">Em algum bloco</span>
+              <NumeroAnimado valor={pessoasEmBloco} className="text-[18px] font-semibold text-white" />
+            </ItemClicavel>
+            <ItemClicavel
+              ativo={recorteAtivo === 'sem_bloco'}
+              dica={recorteAtivo === 'sem_bloco' ? 'Clique de novo para ver todos' : 'Confirmaram e ainda não estão em nenhum bloco'}
+              onClick={onRecorte ? () => onRecorte('sem_bloco') : undefined}
+            >
+              <span className="text-[11.5px] text-slate-400">Sem bloco</span>
+              <NumeroAnimado
+                valor={confirmadosSemBloco}
+                className={cn('text-[18px] font-semibold', confirmadosSemBloco > 0 ? 'text-amber-300' : 'text-white')}
+              />
+            </ItemClicavel>
+            <ItemClicavel dica={convidados > 0 ? `${convidadosComNome} de ${convidados} convidados com nome` : 'Nenhum convidado ainda'}>
+              <span className="text-[11.5px] text-slate-400">Convidados</span>
+              <span className="flex items-baseline gap-1.5">
+                <NumeroAnimado valor={convidados} className="text-[18px] font-semibold text-white" />
+                {convidados > 0 && (
+                  <span className={cn('text-[11px]', convidadosComNome >= convidados ? 'text-emerald-400' : 'text-amber-400')}>
+                    {convidadosComNome >= convidados ? 'todos com nome' : `${convidadosComNome} c/ nome`}
+                  </span>
+                )}
+              </span>
+            </ItemClicavel>
+          </div>
+          {faltam > 0 && (
+            <p className="mt-1.5 text-[11.5px] text-slate-500">
+              Faltam alocar <span className="font-semibold tabular-nums text-amber-300">{faltam}</span> apresentações
+            </p>
+          )}
+        </Painel>
+      </div>
+
+      <Painel
+        titulo="Por curso"
+        className="h-full p-3"
+        destaque={
+          <span className="flex items-center gap-3 text-[11.5px] text-slate-500">
+            <span>cheia = nos blocos · clara = confirmados</span>
+            {ordenados.length > 6 && (
+              <button
+                type="button"
+                onClick={() => setTodosCursos((v) => !v)}
+                className="text-[12px] text-violet-300 hover:text-violet-200"
+              >
+                {todosCursos ? 'só os 6 maiores' : `ver os ${ordenados.length}`}
+              </button>
+            )}
+          </span>
+        }
+      >
+        {visiveis.length === 0 ? (
+          <p className="text-[12.5px] text-slate-500">Ninguém confirmou ainda.</p>
+        ) : (
+          <BarrasCorrida
+            compacta
+            linhas={visiveis.map((c) => ({
+              chave: c.cursoId,
+              rotulo: c.curso,
+              total: c.previstas,
+              feito: c.nosBlocos,
+            }))}
+            ativa={cursoAtivo}
+            onEscolher={onCurso}
+          />
+        )}
+      </Painel>
+    </div>
+  );
+}
+
+/** Número com rótulo; clicável quando filtra a lista, aceso quando o filtro está ligado. */
+function ItemClicavel({
+  ativo = false,
+  dica,
+  onClick,
+  children,
+}: {
+  ativo?: boolean;
+  dica: string;
+  onClick?: () => void;
+  children: ReactNode;
+}) {
+  const classe = cn(
+    'flex min-w-0 flex-col items-start gap-0.5 rounded-lg px-2 py-1.5 text-left ring-1 ring-inset transition-colors',
+    ativo ? 'bg-amber-400/10 ring-amber-400/50' : 'bg-slate-800/40 ring-transparent',
+    onClick && !ativo && 'hover:bg-slate-800 hover:ring-slate-700',
+    onClick && 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60',
+  );
+  return (
+    <Tooltip content={dica} side="bottom">
+      {onClick ? (
+        <button type="button" onClick={onClick} aria-pressed={ativo} className={classe}>
+          {children}
+        </button>
+      ) : (
+        <div className={classe}>{children}</div>
+      )}
+    </Tooltip>
+  );
+}
+
+/** Barra empilhada só a faixa, sem legenda (a legenda do painel é compacta, em linha). */
+function BarraFina({ fatias, total }: { fatias: FatiaEmpilhada[]; total: number }) {
+  const reduzir = useReducedMotion();
+  return (
+    <div className="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full bg-slate-800">
+      {fatias.map((f) =>
+        f.valor > 0 ? (
+          <motion.div
+            key={f.chave}
+            className={cn('h-full first:rounded-l-full last:rounded-r-full', f.cor)}
+            initial={reduzir ? false : { width: 0 }}
+            animate={{ width: `${total ? (f.valor / total) * 100 : 0}%` }}
+            transition={reduzir ? { duration: 0 } : MOLA_BARRA}
+            title={`${f.rotulo}: ${f.valor}`}
+          />
+        ) : null,
+      )}
+    </div>
+  );
+}
+
+export interface BlocoNoPainel {
+  id: number;
+  nome: string;
+  inicio: string;
+  fim: string;
+  duracaoSegundos: number;
+  numeros: number;
+  conflito?: boolean;
+  /** Dia do bloco ('AAAA-MM-DD') — recital de vários dias ganha uma linha por dia. */
+  dia?: string | null;
+}
+
+function duracaoCurta(seg: number) {
+  const min = Math.round(seg / 60);
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m ? `${h}h${String(m).padStart(2, '0')}` : `${h}h`;
+}
+
+/** Aba Revisão: totais compactos + a linha do recital, uma barra por bloco. */
+export function PainelRevisao({
+  participantes,
+  apresentacoes,
+  inicio,
+  termino,
+  duracaoSegundos,
+  semDuracaoPropria,
+  blocos,
+  rotuloDoDia,
+}: {
+  rotuloDoDia?: (dia: string) => string;
+  participantes: number;
+  apresentacoes: number;
+  inicio: string | null;
+  termino: string | null;
+  duracaoSegundos: number;
+  semDuracaoPropria: number;
+  blocos: BlocoNoPainel[];
+}) {
+  // Recital de vários dias: uma linha por dia (o "início → término" do topo atravessa dias e
+  // sozinho engana). Um dia só: uma linha por bloco.
+  const dias = [...new Set(blocos.map((b) => b.dia ?? ''))];
+  const linhas =
+    dias.length > 1
+      ? dias.map((dia) => {
+          const doDia = blocos.filter((b) => (b.dia ?? '') === dia);
+          const numeros = doDia.reduce((t, b) => t + b.numeros, 0);
+          return {
+            chave: dia || 'sem-dia',
+            rotulo: dia && rotuloDoDia ? rotuloDoDia(dia) : 'sem dia',
+            inicio: doDia[0]?.inicio ?? '--:--',
+            fim: doDia[doDia.length - 1]?.fim ?? '--:--',
+            detalhe: `${doDia.length} ${doDia.length === 1 ? 'bloco' : 'blocos'} · ${numeros} números`,
+          };
+        })
+      : blocos.map((b) => ({
+          chave: String(b.id),
+          rotulo: b.nome,
+          inicio: b.inicio,
+          fim: b.fim,
+          detalhe: `${b.numeros} números`,
+        }));
+  return (
+    <div className="grid gap-3 lg:grid-cols-3">
+      <Painel titulo="O recital" className="flex h-full flex-col p-3" esticar>
+        <div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-[24px] font-semibold leading-none tabular-nums text-white">{inicio ?? '--:--'}</span>
+            <span className="text-[13px] text-slate-500">→</span>
+            <span className="text-[24px] font-semibold leading-none tabular-nums text-amber-300">
+              {termino ?? '--:--'}
+            </span>
+          </div>
+          <p className="mt-1 text-[12px] text-slate-500">
+            {duracaoSegundos > 0 ? `${duracaoCurta(duracaoSegundos)} de recital` : 'nenhum bloco montado'}
+            {semDuracaoPropria > 0 &&
+              apresentacoes > 0 &&
+              ` · término estimado (${semDuracaoPropria} sem duração própria)`}
+          </p>
+        </div>
+
+        {linhas.length > 0 && (
+          <ul className="space-y-1">
+            {linhas.map((l) => (
+              <li
+                key={l.chave}
+                className="flex items-baseline justify-between gap-3 rounded-lg bg-slate-800/40 px-2.5 py-1.5 text-[12px]"
+              >
+                <span className="min-w-0 truncate font-medium capitalize text-slate-300">{l.rotulo}</span>
+                <span className="shrink-0 tabular-nums text-slate-400">
+                  <span className="text-slate-200">{l.inicio}–{l.fim}</span>
+                  <span className="text-slate-500"> · {l.detalhe}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="grid grid-cols-3 gap-2 border-t border-slate-800 pt-2">
+          {[
+            { rotulo: 'participantes', valor: participantes },
+            { rotulo: 'apresentações', valor: apresentacoes },
+            { rotulo: 'blocos', valor: blocos.length },
+          ].map((k) => (
+            <div key={k.rotulo}>
+              <NumeroAnimado valor={k.valor} className="text-[16px] font-semibold text-white" />
+              <p className="text-[11.5px] text-slate-500">{k.rotulo}</p>
+            </div>
+          ))}
+        </div>
+      </Painel>
+
+      <Painel
+        titulo="Linha do recital"
+        className="p-3 lg:col-span-2"
+        destaque={<span className="text-[12px] text-slate-500">posição e tamanho = horário real</span>}
+      >
+        {blocos.length === 0 ? (
+          <p className="text-[12.5px] text-slate-500">Monte os blocos na aba Blocos.</p>
+        ) : (
+          <LinhaDoTempo
+            rotuloDoDia={rotuloDoDia}
+            faixas={blocos.map((b) => ({
+              id: b.id,
+              nome: b.nome,
+              inicio: b.inicio,
+              fim: b.fim,
+              numeros: b.numeros,
+              conflito: b.conflito,
+              dia: b.dia ?? null,
+            }))}
+          />
+        )}
+      </Painel>
+    </div>
+  );
+}
+
+export interface BlocoNaChegadaDoPainel {
+  id: number;
+  nome: string;
+  inicio: string;
+  pessoas: number;
+  chegaram: number;
+}
+
+/**
+ * Aba Check-in: chegada geral com progresso, apresentações com a pessoa no teatro e o
+ * andamento por bloco — no lugar dos quatro cartões de número solto (Hugo, 09/10).
+ */
+export function PainelCheckin({
+  esperados,
+  chegaram,
+  apresentacoes,
+  apresentacoesSemChegada,
+  blocos,
+}: {
+  esperados: number;
+  chegaram: number;
+  apresentacoes: number;
+  apresentacoesSemChegada: number;
+  blocos: BlocoNaChegadaDoPainel[];
+}) {
+  const faltam = Math.max(0, esperados - chegaram);
+  const prontas = Math.max(0, apresentacoes - apresentacoesSemChegada);
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      <Painel titulo="Chegada" className="flex h-full flex-col justify-center p-3">
+        <div className="flex items-center gap-5">
+          <Anel feito={chegaram} total={esperados} rotulo="chegaram" />
+          <div className="min-w-0 space-y-2.5">
+            <div>
+              <p className="text-[11.5px] text-slate-500">No teatro</p>
+              <p className="text-[15px] text-slate-300">
+                <NumeroAnimado valor={chegaram} className="text-[22px] font-semibold text-emerald-300" /> de{' '}
+                <span className="tabular-nums">{esperados}</span>
+              </p>
+            </div>
+            <div>
+              <p className="text-[11.5px] text-slate-500">Faltam chegar</p>
+              <NumeroAnimado valor={faltam} className="text-[18px] font-semibold text-amber-300" />
+            </div>
+            <div>
+              <p className="text-[11.5px] text-slate-500">Apresentações prontas</p>
+              <p className="text-[13px] text-slate-300">
+                <span className="font-semibold tabular-nums text-white">{prontas}</span> de{' '}
+                <span className="tabular-nums">{apresentacoes}</span>
+                {apresentacoesSemChegada > 0 && (
+                  <span className="text-slate-500"> · {apresentacoesSemChegada} com a pessoa fora</span>
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+      </Painel>
+
+      <Painel
+        titulo="Por bloco"
+        className="h-full p-3"
+        destaque={<span className="text-[11.5px] text-slate-500">cheia = chegaram · clara = esperados</span>}
+      >
+        {blocos.length === 0 ? (
+          <p className="text-[12.5px] text-slate-500">Nenhum bloco montado.</p>
+        ) : (
+          <BarrasCorrida
+            compacta
+            corPadrao="bg-emerald-500"
+            linhas={blocos.map((b) => ({
+              chave: String(b.id),
+              rotulo: b.nome,
+              detalhe: b.inicio,
+              total: Math.max(b.pessoas, 1),
+              feito: b.chegaram,
+              valorTexto: `${b.chegaram}/${b.pessoas}`,
+            }))}
+          />
+        )}
+      </Painel>
+    </div>
+  );
+}
+
+/* ─────────────────────── gráficos alternativos (09/10) ─────────────────────── */
+
+export interface FaixaDaLinha {
+  id: number;
+  nome: string;
+  inicio: string;
+  fim: string;
+  numeros: number;
+  conflito?: boolean;
+  /** Dia do bloco ('AAAA-MM-DD'); separa uma linha por dia em recital de vários dias. */
+  dia?: string | null;
+}
+
+function minutos(hora: string) {
+  const [h, m] = hora.split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+/**
+ * Linha do tempo do dia: régua de horas, blocos como faixas na posição e no tamanho reais,
+ * intervalos como vãos. Um dia por linha.
+ */
+export function LinhaDoTempo({ faixas, rotuloDoDia }: { faixas: FaixaDaLinha[]; rotuloDoDia?: (dia: string) => string }) {
+  const reduzir = useReducedMotion();
+  const validas = faixas.filter((f) => /^\d{1,2}:\d{2}/.test(f.inicio) && /^\d{1,2}:\d{2}/.test(f.fim));
+  const dias = [...new Set(validas.map((f) => f.dia ?? ''))];
+  return (
+    <div className="space-y-4">
+      {dias.map((dia) => {
+        const doDia = validas.filter((f) => (f.dia ?? '') === dia);
+        const ini = Math.floor(Math.min(...doDia.map((f) => minutos(f.inicio))) / 60) * 60;
+        const fim = Math.ceil(Math.max(...doDia.map((f) => Math.max(minutos(f.fim), minutos(f.inicio) + 1))) / 60) * 60;
+        const span = Math.max(60, fim - ini);
+        const horas = Array.from({ length: span / 60 + 1 }, (_, i) => ini + i * 60);
+        const pos = (m: number) => ((m - ini) / span) * 100;
+        return (
+          <div key={dia || 'unico'}>
+            {dias.length > 1 && rotuloDoDia && (
+              <p className="mb-1 text-[11.5px] font-medium text-slate-400">{rotuloDoDia(dia)}</p>
+            )}
+            <div className="relative h-14 rounded-lg bg-slate-800/40">
+              {horas.map((h) => (
+                <div key={h} className="absolute inset-y-0 border-l border-slate-700/60" style={{ left: `${pos(h)}%` }}>
+                  <span className="absolute -bottom-4 -translate-x-1/2 text-[10.5px] tabular-nums text-slate-500">
+                    {String(Math.floor(h / 60)).padStart(2, '0')}h
+                  </span>
+                </div>
+              ))}
+              {doDia.map((f, i) => {
+                const a = minutos(f.inicio);
+                const b = Math.max(minutos(f.fim), a + 1);
+                return (
+                  <motion.div
+                    key={f.id}
+                    title={`${f.nome} · ${f.inicio}–${f.fim} · ${f.numeros} números`}
+                    className={cn(
+                      'absolute inset-y-1.5 flex flex-col justify-center overflow-hidden rounded-md px-1.5 ring-1 ring-inset',
+                      f.conflito
+                        ? 'bg-rose-500/30 ring-rose-400/60'
+                        : f.numeros === 0
+                          ? 'bg-slate-700/50 ring-slate-500/40'
+                          : 'bg-amber-500/25 ring-amber-400/50',
+                    )}
+                    style={{ left: `${pos(a)}%` }}
+                    initial={reduzir ? false : { width: 0, opacity: 0 }}
+                    animate={{ width: `${Math.max(1.2, pos(b) - pos(a))}%`, opacity: 1 }}
+                    transition={reduzir ? { duration: 0 } : { ...MOLA_BARRA, delay: i * 0.05 }}
+                  >
+                    <span className="truncate text-[11.5px] font-semibold text-white">{f.nome}</span>
+                    <span className="truncate text-[10.5px] tabular-nums text-slate-300">
+                      {f.inicio}–{f.fim} · {f.numeros}
+                    </span>
+                  </motion.div>
+                );
+              })}
+            </div>
+            <div className="h-4" />
+          </div>
+        );
+      })}
+      <div className="flex flex-wrap gap-3 text-[11px] text-slate-500">
+        <span className="flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-amber-500/40" /> bloco</span>
+        <span className="flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-slate-600" /> bloco vazio</span>
+        <span className="flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-rose-500/50" /> começa antes do anterior terminar</span>
+        <span>· vão = intervalo</span>
+      </div>
+    </div>
+  );
+}
+
+/** Anel de progresso (SVG), com o percentual e um rótulo no meio. */
+export function Anel({
+  feito,
+  total,
+  tamanho = 132,
+  espessura = 12,
+  cor = 'stroke-emerald-400',
+  rotulo,
+}: {
+  feito: number;
+  total: number;
+  tamanho?: number;
+  espessura?: number;
+  cor?: string;
+  rotulo?: string;
+}) {
+  const reduzir = useReducedMotion();
+  const r = (tamanho - espessura) / 2;
+  const c = 2 * Math.PI * r;
+  const pct = total > 0 ? Math.min(1, feito / total) : 0;
+  return (
+    <div className="relative shrink-0" style={{ width: tamanho, height: tamanho }}>
+      <svg width={tamanho} height={tamanho} className="-rotate-90">
+        <circle cx={tamanho / 2} cy={tamanho / 2} r={r} fill="none" strokeWidth={espessura} className="stroke-slate-800" />
+        <motion.circle
+          cx={tamanho / 2}
+          cy={tamanho / 2}
+          r={r}
+          fill="none"
+          strokeWidth={espessura}
+          strokeLinecap="round"
+          className={cor}
+          strokeDasharray={c}
+          initial={reduzir ? false : { strokeDashoffset: c }}
+          animate={{ strokeDashoffset: c * (1 - pct) }}
+          transition={reduzir ? { duration: 0 } : MOLA_BARRA}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className={cn('font-semibold tabular-nums text-white', tamanho >= 100 ? 'text-[26px]' : 'text-[14px]')}>
+          {Math.round(pct * 100)}%
+        </span>
+        {rotulo && <span className="text-[11px] text-slate-500">{rotulo}</span>}
+      </div>
+    </div>
+  );
+}

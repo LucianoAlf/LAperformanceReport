@@ -1,14 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { motion, useReducedMotion } from 'framer-motion';
 import { toast } from 'sonner';
 import {
   DndContext,
   DragOverlay,
   KeyboardSensor,
+  MeasuringStrategy,
   PointerSensor,
   closestCorners,
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
 import {
@@ -38,6 +42,8 @@ import {
   Users,
   GraduationCap,
   ArrowRightLeft,
+  ArrowUp,
+  ArrowDown,
   Mic2,
 } from 'lucide-react';
 
@@ -60,6 +66,7 @@ import {
   horaParaSegundos,
   idadeHoje,
   palcoDosNumeros,
+  moverNumero,
   rotuloIdade,
   segundosParaHora,
   type BlocoComHorario,
@@ -81,6 +88,7 @@ import {
   useTocaJunto,
   useProfessoresDaUnidade,
   definirProfessorNoPalco,
+  trocarProfessorDaApresentacao,
   decidirTocaJunto,
   type PedidoTocaJunto,
   type ApresentacaoDaGrade,
@@ -250,6 +258,15 @@ function FilaTocaJunto({ eventoId, onMudou }: { eventoId: number; onMudou: () =>
   );
 }
 
+/**
+ * Botões do rodapé do cartão (palco, observação, tocar junto) no desktop. Eram texto cinza de
+ * 11px sem borda e ninguém os achava na demonstração de 08/10 ("botões mais visíveis no
+ * rodapé do cartão"); agora são pílulas com borda, do mesmo tamanho, lado a lado.
+ */
+const PILULA_RODAPE =
+  'sm:inline-flex sm:h-7 sm:min-h-0 sm:items-center sm:gap-1.5 sm:rounded-md sm:border sm:px-2.5 sm:text-[12px] sm:font-medium sm:transition-colors';
+const PILULA_NEUTRA = 'sm:border-slate-700 sm:bg-slate-800/60 sm:text-slate-300 sm:hover:border-slate-500 sm:hover:text-white';
+
 /** Valor do Select para "ninguém": o Radix proíbe `value=""`. */
 const SEM_PROFESSOR_NO_PALCO = 'sem-professor-no-palco';
 
@@ -319,6 +336,78 @@ function ProfessorNoPalco({
       </SelectTrigger>
       <SelectContent className="max-h-72">
         {opcoes.map((p) => (
+          <SelectItem key={p.id} value={String(p.id)}>
+            {p.nome}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+/**
+ * Professor DO ALUNO nesta apresentação, trocável no cartão (pedido do Arthur, 09/10).
+ * Parece texto ("Prof. Fulano ▾") para não pesar no cartão; abre a lista da unidade.
+ */
+function ProfessorDoAluno({
+  apresentacao,
+  unidadeId,
+  onMudou,
+}: {
+  apresentacao: ApresentacaoDaGrade;
+  unidadeId: string;
+  onMudou: () => void;
+}) {
+  const { professores } = useProfessoresDaUnidade(unidadeId);
+  const [salvando, setSalvando] = useState(false);
+
+  const trocar = async (valor: string) => {
+    const novo = Number(valor);
+    if (!novo || novo === apresentacao.professor_id) return;
+    const nome = professores.find((p) => p.id === novo)?.nome ?? 'o novo professor';
+    const jaLancou = Boolean(apresentacao.professor?.musica_lancada_em);
+    const ok = window.confirm(
+      `Trocar o professor de ${apresentacao.aluno_nome} no recital para ${nome}?
+
+` +
+        'A matrícula não muda. No LA Teacher, o aluno passa para a lista de relatórios de ' +
+        `${nome.split(' ')[0]}` +
+        (jaLancou ? ' — e o que o professor atual já lançou (música, relatório) vai junto.' : '.'),
+    );
+    if (!ok) return;
+    setSalvando(true);
+    const { error } = await trocarProfessorDaApresentacao(
+      apresentacao.id,
+      novo,
+      apresentacao.professor_palco_id,
+    );
+    setSalvando(false);
+    if (error) toast.error(`Não consegui trocar o professor: ${error.message}`);
+    else {
+      toast.success(`Professor de ${apresentacao.aluno_nome.split(' ')[0]} agora é ${nome}`);
+      onMudou();
+    }
+  };
+
+  return (
+    <Select value={apresentacao.professor_id ? String(apresentacao.professor_id) : undefined} onValueChange={trocar} disabled={salvando}>
+      <SelectTrigger
+        aria-label={`Professor de ${apresentacao.aluno_nome}`}
+        title="Trocar o professor do aluno neste recital"
+        className="h-auto w-auto max-w-full gap-1 border-0 bg-transparent p-0 text-[12px] text-slate-500 shadow-none hover:text-slate-300 focus:ring-0 focus:ring-offset-0 sm:text-[11.5px] [&>svg]:h-3 [&>svg]:w-3 [&>svg]:opacity-60"
+      >
+        <span className="truncate">
+          {salvando ? 'salvando…' : `Prof. ${apresentacao.professor_nome ?? 'sem professor'}`}
+        </span>
+      </SelectTrigger>
+      <SelectContent className="max-h-72">
+        {apresentacao.professor_id && !professores.some((p) => p.id === apresentacao.professor_id) && (
+          // Professor de outra unidade (aluno visitante): continua na lista para não sumir.
+          <SelectItem value={String(apresentacao.professor_id)}>
+            {apresentacao.professor_nome ?? 'Professor atual'}
+          </SelectItem>
+        )}
+        {professores.map((p) => (
           <SelectItem key={p.id} value={String(p.id)}>
             {p.nome}
           </SelectItem>
@@ -399,11 +488,11 @@ function LinhaIntegrante({
               </span>
             )}
           </div>
-          {apresentacao.professor_nome && (
-            // "Prof." explícito: sem ele o nome fica solto embaixo do nome do aluno e a
-            // programação impressa vira dois nomes sem papel declarado.
-            <p className="text-[12px] sm:text-[11.5px] text-slate-500">Prof. {apresentacao.professor_nome}</p>
-          )}
+          {/* "Prof." explícito: sem ele o nome fica solto embaixo do nome do aluno e a
+              programação impressa vira dois nomes sem papel declarado. */}
+          <div>
+            <ProfessorDoAluno apresentacao={apresentacao} unidadeId={unidadeId} onMudou={onMudou} />
+          </div>
           <ProfessorNoPalco apresentacao={apresentacao} unidadeId={unidadeId} onMudou={onMudou} />
         </div>
 
@@ -459,7 +548,59 @@ function LinhaIntegrante({
  * primeiro deixaria a planilha e o certificado dos outros com a música vazia. Palco e mapa
  * continuam por integrante — é o que cada um pede para tocar.
  */
-function CartaoNumero({
+type PropsDoNumero = {
+  numero: ApresentacaoDaGrade[];
+  horario: { inicio: string; duracaoSegundos: number } | undefined;
+  sugestoes: { instrumento: string[]; equipamento: string[] };
+  eventoId: number;
+  unidadeId: string;
+  blocoId: number;
+  onMudou: () => void;
+  /** Botão direito no cartão: abre o menu de mover (onde o mouse está). */
+  onMenu?: (apresentacaoId: number, x: number, y: number) => void;
+};
+
+/**
+ * Casca arrastável do número. Só ela re-renderiza a cada movimento do mouse durante um
+ * arrasto (o dnd-kit atualiza todo `useSortable`); o conteúdo pesado — campos, seletores,
+ * palco — fica em `CorpoDoNumero`, memorizado. Com ~250 cartões, redesenhar o corpo de todos
+ * a cada pixel era a lentidão ao arrastar (reunião de 08/10).
+ */
+function CartaoNumero(props: PropsDoNumero) {
+  const { numero } = props;
+  const emGrupo = numero.length > 1;
+  // A alça move o NÚMERO inteiro: o id arrastável é o do primeiro integrante.
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: numero[0].id,
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      onContextMenu={
+        props.onMenu
+          ? (e) => {
+              // Campo de texto mantém o menu do navegador (copiar/colar).
+              if ((e.target as HTMLElement).closest('input, textarea')) return;
+              e.preventDefault();
+              props.onMenu?.(numero[0].id, e.clientX, e.clientY);
+            }
+          : undefined
+      }
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        // Celular: cartão de roteiro (16px de raio, superfície mais densa, borda discreta).
+        'rounded-2xl border bg-slate-900/80 p-3 shadow-sm shadow-black/20 sm:rounded-lg sm:bg-slate-900/50 sm:p-2.5 sm:shadow-none',
+        emGrupo ? 'border-violet-500/40' : 'border-slate-800 sm:border-slate-700/60',
+        // O vão de onde o cartão vai cair: tracejado violeta, conteúdo apagado.
+        isDragging && 'border-dashed border-violet-400/70 bg-violet-500/10 [&>*]:opacity-25',
+      )}
+    >
+      <CorpoDoNumero {...props} alca={attributes} alcaEventos={listeners} />
+    </div>
+  );
+}
+
+const CorpoDoNumero = memo(function CorpoDoNumero({
   numero,
   horario,
   sugestoes,
@@ -467,7 +608,13 @@ function CartaoNumero({
   unidadeId,
   blocoId,
   onMudou,
-}: {
+  alca,
+  alcaEventos,
+}: PropsDoNumero & {
+  /** `attributes`/`listeners` do useSortable da casca — vão nas duas alças do cartão. */
+  alca: ReturnType<typeof useSortable>['attributes'];
+  alcaEventos: ReturnType<typeof useSortable>['listeners'];
+} & {
   numero: ApresentacaoDaGrade[];
   horario: { inicio: string; duracaoSegundos: number } | undefined;
   sugestoes: { instrumento: string[]; equipamento: string[] };
@@ -483,10 +630,6 @@ function CartaoNumero({
   );
   const emGrupo = numero.length > 1;
 
-  // A alça move o NÚMERO inteiro: o id arrastável é o do primeiro integrante.
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: principal.id,
-  });
   const [musica, setMusica] = useState(principal.musica ?? '');
   const [musicaLink, setMusicaLink] = useState(principal.musica_link ?? '');
   // O banco muda por fora do campo (sync do LA Teacher, outro integrante do número). Sem
@@ -563,23 +706,13 @@ function CartaoNumero({
   const primeiroNome = (ap: ApresentacaoDaGrade) => ap.aluno_nome.split(' ')[0];
 
   return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn(
-        // Celular: cartão de roteiro (16px de raio, superfície mais densa, borda discreta).
-        'rounded-2xl border bg-slate-900/80 p-3 shadow-sm shadow-black/20 sm:rounded-lg sm:bg-slate-900/50 sm:p-2.5 sm:shadow-none',
-        emGrupo ? 'border-violet-500/40' : 'border-slate-800 sm:border-slate-700/60',
-        isDragging && 'opacity-40',
-      )}
-    >
       <div className="flex items-start gap-2">
         {/* O handle é SÓ a alça: com o listener no cartão inteiro, clicar no campo de música
             iniciaria um arrasto e o input nunca receberia foco. */}
         <button
           type="button"
-          {...attributes}
-          {...listeners}
+          {...alca}
+          {...alcaEventos}
           aria-label={`Mover ${numero.map((a) => a.aluno_nome).join(' e ')}`}
           className="mt-0.5 hidden cursor-grab touch-none text-slate-600 hover:text-slate-400 active:cursor-grabbing sm:block"
         >
@@ -608,8 +741,8 @@ function CartaoNumero({
             </span>
             <button
               type="button"
-              {...attributes}
-              {...listeners}
+              {...alca}
+              {...alcaEventos}
               aria-label={`Mover ${numero.map((a) => a.aluno_nome).join(' e ')} (celular)`}
               className="-mr-2 ml-auto flex h-11 w-11 cursor-grab touch-none items-center justify-center rounded-xl text-slate-500 active:bg-slate-800"
             >
@@ -782,7 +915,13 @@ function CartaoNumero({
               type="button"
               onClick={() => setPalcoAberto((v) => !v)}
               aria-expanded={palcoAberto}
-              className="flex min-h-[44px] items-center gap-1.5 rounded-full bg-slate-800/70 px-3.5 py-0.5 text-[12px] text-slate-300 transition-colors hover:bg-slate-800 hover:text-slate-300 sm:min-h-0 sm:gap-1 sm:rounded sm:bg-transparent sm:px-1.5 sm:text-[11.5px] sm:text-slate-500"
+              className={cn(
+                'flex min-h-[44px] items-center gap-1.5 rounded-full bg-slate-800/70 px-3.5 py-0.5 text-[12px] text-slate-300 transition-colors hover:bg-slate-800',
+                PILULA_RODAPE,
+                palcoAberto
+                  ? 'sm:border-amber-500/50 sm:bg-amber-500/10 sm:text-amber-200'
+                  : PILULA_NEUTRA,
+              )}
             >
               <Settings2 className="h-3.5 w-3.5" />
               {palcoAberto ? 'fechar palco' : palco.length > 0 ? 'editar palco' : (
@@ -833,10 +972,10 @@ function CartaoNumero({
                 type="button"
                 onClick={() => setPalcoAberto(true)}
                 // Convite vazio: no celular ocupava uma linha de 36px em cada um dos 24 cartoes.
-                className="hidden items-center gap-1.5 px-1.5 text-[12px] sm:text-[11.5px] text-slate-600 transition-colors hover:text-slate-400 sm:flex"
+                className={cn('hidden w-fit', PILULA_RODAPE, PILULA_NEUTRA)}
               >
                 <MapPin className="h-3.5 w-3.5" />
-                adicionar observação / mapa de palco
+                observação / mapa de palco
               </button>
             ))}
 
@@ -869,16 +1008,136 @@ function CartaoNumero({
             <button
               type="button"
               onClick={() => setAdicionando(true)}
-              className="hidden items-center gap-1 rounded px-1.5 py-0.5 text-[11.5px] text-violet-300/80 transition-colors hover:bg-violet-500/10 hover:text-violet-200 sm:flex"
+              className={cn(
+                'hidden w-fit',
+                PILULA_RODAPE,
+                'sm:border-violet-500/40 sm:bg-violet-500/10 sm:text-violet-200 sm:hover:border-violet-400 sm:hover:bg-violet-500/20',
+              )}
               title="Colocar outro aluno para tocar junto neste número"
             >
               <UserPlus className="h-3.5 w-3.5" />
-              adicionar aluno a este número
+              tocar junto (adicionar aluno)
             </button>
           )}
         </div>
       </div>
-    </div>
+  );
+});
+
+/**
+ * Menu do botão direito num número (pedido do Hugo, 09/10): mover para outro bloco ou dia
+ * sem arrastar pela tela, e subir/descer até a ponta do próprio bloco.
+ */
+function MenuDoNumero({
+  x,
+  y,
+  numero,
+  blocoAtualId,
+  blocos,
+  diaDoBloco,
+  dias,
+  onMover,
+  onFechar,
+}: {
+  x: number;
+  y: number;
+  numero: ApresentacaoDaGrade[];
+  blocoAtualId: number | null;
+  blocos: BlocoDaGrade[];
+  diaDoBloco: (b: { data: string | null }) => string;
+  dias: string[];
+  onMover: (blocoId: number, onde: 'inicio' | 'fim') => void;
+  onFechar: () => void;
+}) {
+  const reduzir = useReducedMotion();
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ left: x, top: y });
+
+  useEffect(() => {
+    const fora = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onFechar();
+    };
+    const tecla = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onFechar();
+    };
+    document.addEventListener('mousedown', fora);
+    document.addEventListener('keydown', tecla);
+    window.addEventListener('scroll', onFechar, true);
+    return () => {
+      document.removeEventListener('mousedown', fora);
+      document.removeEventListener('keydown', tecla);
+      window.removeEventListener('scroll', onFechar, true);
+    };
+  }, [onFechar]);
+
+  // Perto da borda o menu abre para dentro da tela.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setPos({
+      left: Math.max(8, Math.min(x, window.innerWidth - r.width - 8)),
+      top: Math.max(8, Math.min(y, window.innerHeight - r.height - 8)),
+    });
+  }, [x, y]);
+
+  const multiDia = dias.length > 1;
+  const outros = [...blocos].sort((a, b) => a.ordem - b.ordem).filter((b) => b.id !== blocoAtualId);
+  const item =
+    'flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] text-slate-200 transition-colors hover:bg-slate-800 focus-visible:bg-slate-800 focus-visible:outline-none';
+
+  return createPortal(
+    <motion.div
+      ref={ref}
+      role="menu"
+      initial={reduzir ? false : { opacity: 0, scale: 0.96, y: -4 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      transition={{ type: 'spring', stiffness: 600, damping: 34, mass: 0.6 }}
+      style={{ left: pos.left, top: pos.top }}
+      className="fixed z-[60] max-h-[70vh] w-72 overflow-y-auto rounded-xl border border-slate-700 bg-slate-900/95 p-1.5 shadow-2xl shadow-black/50 backdrop-blur"
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <p className="truncate px-2.5 pb-1.5 pt-1 text-[11.5px] font-semibold uppercase tracking-wide text-slate-500">
+        {numero.map((a) => a.aluno_nome.split(' ')[0]).join(' + ') || 'Apresentação'}
+      </p>
+      {blocoAtualId !== null && (
+        <>
+          <button type="button" role="menuitem" className={item} onClick={() => onMover(blocoAtualId, 'inicio')}>
+            <ArrowUp className="h-3.5 w-3.5 text-slate-400" /> Subir para o início do bloco
+          </button>
+          <button type="button" role="menuitem" className={item} onClick={() => onMover(blocoAtualId, 'fim')}>
+            <ArrowDown className="h-3.5 w-3.5 text-slate-400" /> Descer para o fim do bloco
+          </button>
+        </>
+      )}
+      {outros.length > 0 && (
+        <>
+          <div className="my-1 h-px bg-slate-800" />
+          <p className="px-2.5 pb-1 pt-1 text-[11.5px] text-slate-500">Mover para outro bloco (entra no fim)</p>
+          {outros.map((b) => {
+            const dia = diaDoBloco(b);
+            return (
+              <button key={b.id} type="button" role="menuitem" className={item} onClick={() => onMover(b.id, 'fim')}>
+                <LayoutList className="h-3.5 w-3.5 shrink-0 text-violet-300" />
+                <span className="min-w-0 flex-1 truncate">{b.nome}</span>
+                {multiDia && (
+                  <span className="shrink-0 text-[11.5px] text-slate-500">
+                    {dias.indexOf(dia) + 1}º dia · {formatarDataCurta(dia)}
+                  </span>
+                )}
+                <span
+                  className="shrink-0 rounded bg-slate-800 px-1.5 text-[11px] tabular-nums text-slate-400"
+                  title="números no bloco"
+                >
+                  {agruparEmNumeros(b.apresentacoes).length}
+                </span>
+              </button>
+            );
+          })}
+        </>
+      )}
+    </motion.div>,
+    document.body,
   );
 }
 
@@ -892,6 +1151,8 @@ function CartaoBloco({
   sugestoes,
   dias,
   dataEvento,
+  compacto = false,
+  onMenuNumero,
   onMudou,
 }: {
   bloco: BlocoDaGrade;
@@ -902,6 +1163,13 @@ function CartaoBloco({
   /** Todos os dias do recital — vazio/1 dia = o seletor de data nem aparece. */
   dias: string[];
   dataEvento: string;
+  /**
+   * Enquanto um BLOCO é arrastado, todos mostram só o cabeçalho. Com o bloco inteiro aberto,
+   * trocar dois blocos deslocava os outros pela altura de dezenas de cartões e eles saíam da
+   * tela — o "bloco que some" da reunião de 08/10.
+   */
+  compacto?: boolean;
+  onMenuNumero?: (apresentacaoId: number, x: number, y: number) => void;
   onMudou: () => void;
 }) {
   const [adicionando, setAdicionando] = useState(false);
@@ -1116,7 +1384,7 @@ function CartaoBloco({
         </div>
       </header>
 
-      <div className="space-y-2.5 py-3 sm:space-y-2 sm:p-3">
+      <div className={cn('space-y-2.5 py-3 sm:space-y-2 sm:p-3', compacto && 'hidden')}>
         {adicionando ? (
           <SeletorApresentacao
             eventoId={eventoId}
@@ -1166,6 +1434,7 @@ function CartaoBloco({
                     unidadeId={unidadeId}
                     blocoId={bloco.id}
                     onMudou={onMudou}
+                    onMenu={onMenuNumero}
                   />
                 </div>
               );
@@ -1188,7 +1457,7 @@ export function GradeTab({
   /** Recarrega o evento (tempo padrão mudou) — o horário de toda a grade depende dele. */
   onEventoMudou: () => void;
 }) {
-  const { blocos, loading, erro, recarregar } = useGradeDoEvento(evento.id);
+  const { blocos, loading, erro, recarregar, aplicarLocal } = useGradeDoEvento(evento.id);
   const { alunos, recarregar: recarregarAlunos } = useAlunosDoEvento(evento.id, evento.unidade_id);
   const [sincronizando, setSincronizando] = useState(false);
   // Os dias que um bloco pode ocupar — um evento de uma data so devolve lista de 1 e o
@@ -1205,7 +1474,15 @@ export function GradeTab({
   const diaDoBloco = (b: { data: string | null }) => b.data ?? evento.data_evento;
   const multiDia = dias.length > 1;
   const diaVisivel = multiDia && dias.includes(diaAtivo) ? diaAtivo : evento.data_evento;
-  const blocosVisiveis = multiDia ? blocos.filter((b) => diaDoBloco(b) === diaVisivel) : blocos;
+  /**
+   * Prévia do arrastar: enquanto um cartão é arrastado, a tela desenha esta cópia, em que o
+   * número já entrou no bloco sobre o qual está — os outros cartões abrem espaço e o vão
+   * tracejado mostra onde ele vai ficar ANTES do drop (pedido do Hugo, 09/10). `null` fora
+   * do arrasto.
+   */
+  const [previa, setPrevia] = useState<BlocoDaGrade[] | null>(null);
+  const blocosTela = previa ?? blocos;
+  const blocosVisiveis = multiDia ? blocosTela.filter((b) => diaDoBloco(b) === diaVisivel) : blocosTela;
 
   /** Releitura manual do canal professor — o automatico ja roda ao abrir a sala. */
   const sincronizar = async () => {
@@ -1260,7 +1537,7 @@ export function GradeTab({
           duracao_padrao_segundos: evento.duracao_padrao_segundos,
           intervalo_entre_blocos_segundos: evento.intervalo_entre_blocos_segundos ?? 2700,
         },
-        blocos.map((b) => ({
+        blocosTela.map((b) => ({
           id: b.id,
           ordem: b.ordem,
           // A data do bloco decide quando o dia vira — sem ela um bloco de domingo
@@ -1276,7 +1553,7 @@ export function GradeTab({
           })),
         })),
       ),
-    [evento, blocos],
+    [evento, blocosTela],
   );
 
   /**
@@ -1309,6 +1586,13 @@ export function GradeTab({
     0,
   );
 
+  // Estável de propósito: vai até o corpo memorizado de cada cartão (`CorpoDoNumero`); uma
+  // função nova a cada render desfaria a memorização e a lentidão ao arrastar voltava.
+  const aoMudarBloco = useCallback(() => {
+    recarregar();
+    recarregarAlunos();
+  }, [recarregar, recarregarAlunos]);
+
   const blocoDoItem = (id: number) => blocos.find((b) => b.apresentacoes.some((a) => a.id === id));
 
   /** `bloco-7` -> 7. Devolve `null` quando o id é de uma apresentação (número puro). */
@@ -1334,15 +1618,77 @@ export function GradeTab({
     nova.splice(de, 1);
     nova.splice(para, 0, activeId);
 
+    // Na tela já, antes do banco: a ordem nova vale também para o cálculo do horário.
+    aplicarLocal((bs) =>
+      nova
+        .map((id, i) => {
+          const b = bs.find((x) => x.id === id);
+          return b ? { ...b, ordem: i + 1 } : null;
+        })
+        .filter((b): b is BlocoDaGrade => b !== null),
+    );
     const { error } = await reordenarBlocos_rpc(evento.id, nova);
     if (error) toast.error(`Não consegui salvar a ordem dos blocos: ${error.message}`);
     recarregar();
   };
 
+  /**
+   * Grava uma grade nova (arrastar ou menu do botão direito): só os blocos tocados vão ao
+   * banco, inteiros e renumerados; a tela muda antes (`aplicarLocal`) e o `recarregar`
+   * confirma — em erro, devolve o que o banco tem.
+   */
+  const salvarNovaOrdem = async (final: BlocoDaGrade[]) => {
+    const antes = new Map(blocos.flatMap((b) => b.apresentacoes).map((a) => [a.id, a]));
+    const tocados = new Set<number>();
+    for (const a of final.flatMap((b) => b.apresentacoes)) {
+      const o = antes.get(a.id);
+      if (!o || o.bloco_id !== a.bloco_id || o.ordem !== a.ordem) {
+        tocados.add(a.bloco_id);
+        if (o) tocados.add(o.bloco_id);
+      }
+    }
+    if (tocados.size === 0) return false;
+    const itens = final
+      .filter((b) => tocados.has(b.id))
+      .flatMap((b) => b.apresentacoes.map((a) => ({ id: a.id, bloco_id: b.id, ordem: a.ordem })));
+
+    // Na tela já, antes do banco (ver `aplicarLocal`). Em erro, o `recarregar` devolve tudo.
+    aplicarLocal(() => final);
+    const { error } = await reordenarGrade(evento.id, itens);
+    if (error) toast.error(`Não consegui salvar a nova ordem: ${error.message}`);
+    recarregar();
+    return !error;
+  };
+
+  /** Menu do botão direito sobre um número: onde abriu e qual apresentação. */
+  const [menu, setMenu] = useState<{ x: number; y: number; apresentacaoId: number } | null>(null);
+  const abrirMenu = useCallback((apresentacaoId: number, x: number, y: number) => {
+    setMenu({ apresentacaoId, x, y });
+  }, []);
+  const fecharMenu = useCallback(() => setMenu(null), []);
+
+  /** Move pelo menu: para outro bloco (fim dele) ou para o início/fim do próprio bloco. */
+  const moverPeloMenu = async (apresentacaoId: number, blocoDestinoId: number, onde: 'inicio' | 'fim') => {
+    setMenu(null);
+    const destino = blocos.find((b) => b.id === blocoDestinoId);
+    if (!destino) return;
+    const origem = blocoDoItem(apresentacaoId);
+    const numeros = agruparEmNumeros(destino.apresentacoes);
+    const mesmo = origem?.id === blocoDestinoId;
+    const indice = onde === 'inicio' ? 0 : mesmo ? numeros.length - 1 : numeros.length;
+    const ok = await salvarNovaOrdem(moverNumero(blocos, apresentacaoId, blocoDestinoId, indice));
+    if (ok && !mesmo) toast.success(`Movido para ${destino.nome}`);
+  };
+
   const aoSoltar = async (e: DragEndEvent) => {
     setArrastando(null);
     const { active, over } = e;
-    if (!over || active.id === over.id) return;
+    if (!over) {
+      setPrevia(null);
+      return;
+    }
+    // Soltar sobre si mesmo ainda pode ser fim de uma troca de bloco feita pela prévia.
+    if (active.id === over.id && !previa) return;
 
     const blocoArrastado = idDeBloco(active.id);
     if (blocoArrastado !== null) {
@@ -1350,44 +1696,57 @@ export function GradeTab({
       return;
     }
 
-    const origem = blocoDoItem(Number(active.id));
-    if (!origem) return;
+    // A prévia já levou o número para o bloco certo (`aoPassar`). Aqui falta só a posição
+    // DENTRO do bloco onde ele caiu: o índice do alvo na lista completa = arrayMove.
+    const base = previa ?? blocos;
+    setPrevia(null);
+    const idAtivo = Number(active.id);
+    const contem = (id: number) => (b: BlocoDaGrade) => b.apresentacoes.some((a) => a.id === id);
+    const atual = base.find(contem(idAtivo));
+    const alvoBlocoId = idDeBloco(over.id);
+    const alvo =
+      alvoBlocoId !== null ? base.find((b) => b.id === alvoBlocoId) : base.find(contem(Number(over.id)));
+    if (!atual || !alvo) return;
+    let final = base;
+    const numerosAlvo = agruparEmNumeros(alvo.apresentacoes);
+    const naLista = numerosAlvo.findIndex((n) => n.some((a) => a.id === Number(over.id)));
+    if (alvo.id === atual.id) {
+      const de = numerosAlvo.findIndex((n) => n.some((a) => a.id === idAtivo));
+      if (alvoBlocoId === null && naLista >= 0 && naLista !== de) {
+        final = moverNumero(base, idAtivo, atual.id, naLista);
+      }
+    } else {
+      // A prévia não chegou a mover (soltou rápido demais): entra antes do alvo ou no fim.
+      final = moverNumero(base, idAtivo, alvo.id, naLista < 0 ? numerosAlvo.length : naLista);
+    }
 
-    // O alvo pode ser outro número OU o corpo de um bloco vazio.
-    const alvoId = idDeBloco(over.id);
-    const alvoBloco =
-      alvoId !== null ? blocos.find((b) => b.id === alvoId) : blocoDoItem(Number(over.id));
-    if (!alvoBloco) return;
+    await salvarNovaOrdem(final);
+  };
 
-    // O que se arrasta é o NÚMERO: quem sobe junto vai junto, senão a trava do banco recusa
-    // o número partido em dois blocos. A conta é por número e só no fim vira apresentação.
-    const numerosOrigem = agruparEmNumeros(origem.apresentacoes);
-    const movido = numerosOrigem.find((n) => n.some((a) => a.id === Number(active.id)));
-    if (!movido) return;
-    const restantes = numerosOrigem.filter((n) => n !== movido);
-    const destino =
-      alvoBloco.id === origem.id ? restantes : agruparEmNumeros(alvoBloco.apresentacoes);
-
-    // Soltar no corpo do bloco (id com prefixo) põe no fim; soltar sobre um número põe na
-    // posição dele.
-    const posicao =
-      alvoId !== null
-        ? destino.length
-        : destino.findIndex((n) => n.some((a) => a.id === Number(over.id)));
-    destino.splice(posicao < 0 ? destino.length : posicao, 0, movido);
-
-    // Reenumera os DOIS blocos: mover para fora deixa buracos na origem, e a ordem com
-    // buraco funciona até alguém inserir no meio.
-    const itens = [
-      ...destino.flat().map((a, i) => ({ id: a.id, bloco_id: alvoBloco.id, ordem: i + 1 })),
-      ...(alvoBloco.id === origem.id
-        ? []
-        : restantes.flat().map((a, i) => ({ id: a.id, bloco_id: origem.id, ordem: i + 1 }))),
-    ];
-
-    const { error } = await reordenarGrade(evento.id, itens);
-    if (error) toast.error(`Não consegui salvar a nova ordem: ${error.message}`);
-    recarregar();
+  /**
+   * Durante o arrasto: quando o cartão passa sobre OUTRO bloco, a prévia o leva para lá —
+   * em cima ou embaixo do cartão sob o mouse, conforme a metade. Dentro do mesmo bloco quem
+   * abre espaço é o próprio dnd-kit; aqui não se mexe.
+   */
+  const aoPassar = (e: DragOverEvent) => {
+    const { active, over } = e;
+    if (!previa || !over || idDeBloco(active.id) !== null || active.id === over.id) return;
+    const idAtivo = Number(active.id);
+    const contem = (id: number) => (b: BlocoDaGrade) => b.apresentacoes.some((a) => a.id === id);
+    const atual = previa.find(contem(idAtivo));
+    const alvoBlocoId = idDeBloco(over.id);
+    const alvo =
+      alvoBlocoId !== null ? previa.find((b) => b.id === alvoBlocoId) : previa.find(contem(Number(over.id)));
+    if (!atual || !alvo || alvo.id === atual.id) return;
+    const numerosAlvo = agruparEmNumeros(alvo.apresentacoes);
+    let indice = numerosAlvo.length;
+    if (alvoBlocoId === null) {
+      const i = numerosAlvo.findIndex((n) => n.some((a) => a.id === Number(over.id)));
+      const r = active.rect.current.translated;
+      const abaixo = r !== null && r.top + r.height / 2 > over.rect.top + over.rect.height / 2;
+      indice = i < 0 ? numerosAlvo.length : i + (abaixo ? 1 : 0);
+    }
+    setPrevia(moverNumero(previa, idAtivo, alvo.id, indice));
   };
 
   if (erro) {
@@ -1505,12 +1864,26 @@ export function GradeTab({
         <DndContext
           sensors={sensors}
           collisionDetection={closestCorners}
+          // Remede os alvos durante o arrasto: ao arrastar um BLOCO todos se recolhem (ver
+          // `compacto`), e as medidas da hora do clique já não valeriam.
+          // Só ao arrastar BLOCO: remedir tudo a cada quadro custa caro com ~250 cartões.
+          measuring={{
+            droppable: {
+              strategy: arrastando?.tipo === 'bloco' ? MeasuringStrategy.Always : MeasuringStrategy.WhileDragging,
+            },
+          }}
+          onDragCancel={() => {
+            setArrastando(null);
+            setPrevia(null);
+          }}
+          onDragOver={aoPassar}
           onDragStart={(e: DragStartEvent) => {
             const blocoId = idDeBloco(e.active.id);
             if (blocoId !== null) {
               setArrastando({ tipo: 'bloco', rotulo: blocos.find((b) => b.id === blocoId)?.nome ?? 'Bloco' });
               return;
             }
+            setPrevia(blocos);
             const bloco = blocoDoItem(Number(e.active.id));
             const numero = bloco
               ? agruparEmNumeros(bloco.apresentacoes).find((n) =>
@@ -1557,10 +1930,9 @@ export function GradeTab({
                     sugestoes={sugestoesDeItem}
                     dias={dias}
                     dataEvento={evento.data_evento}
-                    onMudou={() => {
-                      recarregar();
-                      recarregarAlunos();
-                    }}
+                    compacto={arrastando?.tipo === 'bloco'}
+                    onMenuNumero={abrirMenu}
+                    onMudou={aoMudarBloco}
                   />
                 </div>
               );
@@ -1568,7 +1940,9 @@ export function GradeTab({
           </div>
           </SortableContext>
 
-          <DragOverlay>
+          {/* Sem animação de volta ao soltar: a prévia já pôs o cartão no lugar novo, e os
+              250 ms do fantasma voltando eram a "travada" depois do drop. */}
+          <DragOverlay dropAnimation={null}>
             {arrastando && (
               <div className="flex items-center gap-2 rounded-lg border border-violet-500/60 bg-slate-900 px-3 py-2 shadow-2xl">
                 {arrastando.tipo === 'bloco' ? (
@@ -1584,6 +1958,25 @@ export function GradeTab({
             )}
           </DragOverlay>
         </DndContext>
+      )}
+
+      {menu && (
+        <MenuDoNumero
+          x={menu.x}
+          y={menu.y}
+          numero={(() => {
+            const b = blocoDoItem(menu.apresentacaoId);
+            return b
+              ? agruparEmNumeros(b.apresentacoes).find((n) => n.some((a) => a.id === menu.apresentacaoId)) ?? []
+              : [];
+          })()}
+          blocoAtualId={blocoDoItem(menu.apresentacaoId)?.id ?? null}
+          blocos={blocos}
+          diaDoBloco={diaDoBloco}
+          dias={dias}
+          onMover={(blocoId, onde) => moverPeloMenu(menu.apresentacaoId, blocoId, onde)}
+          onFechar={fecharMenu}
+        />
       )}
     </div>
   );

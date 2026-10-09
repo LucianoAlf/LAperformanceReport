@@ -213,6 +213,37 @@ export function agruparEmNumeros<T extends { id: number; ordem: number; grupo_id
 }
 
 /**
+ * Move um NÚMERO (quem sobe junto vai junto) para o bloco `blocoDestinoId`, na posição
+ * `indice` da lista de números desse bloco, já sem ele. Devolve os blocos com `bloco_id` e
+ * `ordem` (1..n) refeitos nos blocos tocados — os demais saem idênticos (mesmo objeto).
+ *
+ * É a peça da prévia do arrastar (o cartão abre espaço no bloco de destino ANTES do drop) e
+ * do drop no mesmo bloco: passar o índice do alvo na lista completa dá a semântica do
+ * `arrayMove` (descer funciona).
+ */
+export function moverNumero<
+  A extends { id: number; ordem: number; bloco_id: number; grupo_id?: string | null },
+  B extends { id: number; apresentacoes: A[] },
+>(blocos: B[], idMovido: number, blocoDestinoId: number, indice: number): B[] {
+  const origem = blocos.find((b) => b.apresentacoes.some((a) => a.id === idMovido));
+  const destinoBloco = blocos.find((b) => b.id === blocoDestinoId);
+  if (!origem || !destinoBloco) return blocos;
+  const numerosOrigem = agruparEmNumeros(origem.apresentacoes);
+  const movido = numerosOrigem.find((n) => n.some((a) => a.id === idMovido));
+  if (!movido) return blocos;
+  const restantes = numerosOrigem.filter((n) => n !== movido);
+  const destino = origem.id === blocoDestinoId ? [...restantes] : agruparEmNumeros(destinoBloco.apresentacoes);
+  destino.splice(Math.max(0, Math.min(indice, destino.length)), 0, movido);
+  const renumerar = (numeros: A[][], blocoId: number) =>
+    numeros.flat().map((a, i) => ({ ...a, bloco_id: blocoId, ordem: i + 1 }));
+  return blocos.map((b) => {
+    if (b.id === blocoDestinoId) return { ...b, apresentacoes: renumerar(destino, b.id) };
+    if (b.id === origem.id) return { ...b, apresentacoes: renumerar(restantes, b.id) };
+    return b;
+  });
+}
+
+/**
  * Horario de cada bloco e de cada apresentacao.
  *
  * Regra lida no prototipo do Arthur (18/09, com o navegador): Bloco 1 as 09:00 com uma
