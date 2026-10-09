@@ -45,7 +45,9 @@ function estado(fala, citada, unidade, ultimaSol = null) {
 // um colega pelo nome no começo ou no fim, ou marca alguém por @, sem citar card
 // da Sol e sem falar "Sol", é conversa entre a equipe.
 const NOMES = '(luciano|alf|mayra|vit[oó]ria|vi|tutu|rose|f[eê]|fefe|fef[eê]|ana|kailane|anne|jeremias|jereh|eduarda|duda|daiana|susan|jhon|jhonatan|john|arthur|clayton|hugo|galo|yuri|meninas|pessoal|gente)';
-const CHAMA_COLEGA = new RegExp(`(^\\s*(oi|olá|ola|bom dia|boa tarde|boa noite)?[\\s,!]*@?${NOMES}\\b[\\s,!:?])|(,\\s*${NOMES}\\s*[.!?]*\\s*$)`, 'i');
+// 09/10: o nome precisa vir seguido de pontuação ("Mayra, ..."), não de espaço:
+// "Ana Mel - R$ 137,00" é aluna, não colega (a Ana da equipe virava falso filtro).
+const CHAMA_COLEGA = new RegExp(`(^\\s*(oi|olá|ola|bom dia|boa tarde|boa noite)?[\\s,!]*@?${NOMES}\\s*[,!:?])|(^\\s*@?${NOMES}\\s*$)|(,\\s*${NOMES}\\s*[.!?]*\\s*$)`, 'i');
 function conversaDeColega(fala, citaCardDaSol) {
   if (citaCardDaSol || /\bsol\b/i.test(fala)) return false;
   return CHAMA_COLEGA.test(fala) || /@\d{6,}|@\[tel\]/.test(fala);
