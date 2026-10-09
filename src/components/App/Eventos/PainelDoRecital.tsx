@@ -262,6 +262,8 @@ export function PainelAlunos({
   previstas,
   nosBlocos,
   confirmadosSemBloco,
+  pessoasEmBloco,
+  pessoasCompletas,
   convidados,
   convidadosComNome,
   cursos,
@@ -277,6 +279,10 @@ export function PainelAlunos({
   previstas: number;
   nosBlocos: number;
   confirmadosSemBloco: number;
+  /** Confirmados com ao menos um curso num bloco. */
+  pessoasEmBloco: number;
+  /** Confirmados com TODOS os cursos nos blocos. */
+  pessoasCompletas: number;
   convidados: number;
   convidadosComNome: number;
   cursos: CursoNoPainel[];
@@ -303,82 +309,49 @@ export function PainelAlunos({
   // ranking — assim as alturas se casam e nenhum painel fica com sobra (Hugo, 09/10).
   return (
     <div className="grid gap-3 lg:grid-cols-2">
-      <div className="flex flex-col gap-3">
-        <Painel
-          titulo="Confirmação"
-          // flex-1: as duas dividem a altura da coluna, que a grade iguala à do ranking —
-          // topo e base alinhados com o painel da direita.
-          className="flex flex-1 flex-col justify-between p-3"
-          destaque={
-            <span className="text-[12px] text-slate-500">
-              <NumeroAnimado valor={elegiveis} className="font-semibold text-slate-300" /> elegíveis
-              {' · '}
-              convidados <span className="font-semibold tabular-nums text-slate-300">{convidados}</span>
-              {convidados > 0 && (
-                <span className={convidadosComNome >= convidados ? 'text-emerald-400' : 'text-amber-400'}>
-                  {' '}({convidadosComNome >= convidados ? 'todos com nome' : `${convidadosComNome} com nome`})
-                </span>
-              )}
-            </span>
-          }
-        >
-          <BarraFina fatias={fatias} total={totalFatias} />
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-            {fatias.map((f) => (
-              <button
-                key={f.chave}
-                type="button"
-                disabled={!onFiltroStatus}
-                onClick={() => onFiltroStatus?.(f.chave)}
-                className="flex items-baseline gap-1.5 rounded-md px-1 py-0.5 text-left transition-colors enabled:hover:bg-slate-800/70"
-              >
-                <span className={cn('h-2 w-2 self-center rounded-full', f.cor)} />
-                <span className="text-[12px] text-slate-400">{f.rotulo}</span>
-                <NumeroAnimado valor={f.valor} className="text-[16px] font-semibold text-white" />
-                <span className="text-[11px] tabular-nums text-slate-500">
-                  {totalFatias ? Math.round((f.valor / totalFatias) * 100) : 0}%
-                </span>
-              </button>
-            ))}
-          </div>
-        </Painel>
-
-        <Painel
-          titulo="Montagem dos blocos"
-          // flex-1: as duas dividem a altura da coluna, que a grade iguala à do ranking —
-          // topo e base alinhados com o painel da direita.
-          className="flex flex-1 flex-col justify-between p-3"
-          destaque={
-            <span className="text-[12px] text-slate-500">
-              <NumeroAnimado valor={nosBlocos} className="font-semibold text-white" /> de{' '}
-              <span className="tabular-nums">{previstas}</span> nos blocos
-            </span>
-          }
-        >
-          <Progresso feito={nosBlocos} total={previstas} cor="bg-violet-500" />
-          <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[12px] text-slate-400">
-            <span>
-              Faltam alocar <NumeroAnimado valor={faltam} className="text-[16px] font-semibold text-amber-300" />
-            </span>
-            {onSoSemBloco ? (
-              <button
-                type="button"
-                onClick={onSoSemBloco}
-                className="rounded-md px-1 py-0.5 transition-colors hover:bg-slate-800/70"
-                title="Mostrar só quem confirmou e ainda não está em nenhum bloco"
-              >
-                Confirmados sem bloco{' '}
-                <NumeroAnimado valor={confirmadosSemBloco} className="text-[16px] font-semibold text-slate-200" /> →
-              </button>
-            ) : (
-              <span>
-                Confirmados sem bloco{' '}
-                <NumeroAnimado valor={confirmadosSemBloco} className="text-[16px] font-semibold text-slate-200" />
+      <Painel
+        titulo="Caminho até o palco"
+        className="flex h-full flex-col justify-between p-3"
+        destaque={<span className="text-[11.5px] text-slate-500">pessoas · % = passagem da etapa anterior</span>}
+      >
+        <Funil
+          etapas={[
+            { chave: 'elegiveis', rotulo: 'Elegíveis', valor: elegiveis, detalhe: 'alunos ativos da unidade' },
+            { chave: 'participa', rotulo: 'Confirmados', valor: participam, detalhe: 'vão se apresentar' },
+            { chave: 'em_bloco', rotulo: 'Em algum bloco', valor: pessoasEmBloco, detalhe: 'já têm horário' },
+            { chave: 'completos', rotulo: 'Todos os cursos', valor: pessoasCompletas, detalhe: 'nada falta alocar' },
+          ]}
+          onEscolher={(c) => {
+            if (c === 'participa') onFiltroStatus?.('participa');
+            if ((c === 'em_bloco' || c === 'completos') && onSoSemBloco) onSoSemBloco();
+          }}
+        />
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-800 pt-2 text-[12px] text-slate-400">
+          {fatias.slice(1).map((f) => (
+            <button
+              key={f.chave}
+              type="button"
+              disabled={!onFiltroStatus}
+              onClick={() => onFiltroStatus?.(f.chave)}
+              className="flex items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors enabled:hover:bg-slate-800/70"
+            >
+              <span className={cn('h-2 w-2 rounded-full', f.cor)} />
+              {f.rotulo} <span className="font-semibold tabular-nums text-slate-200">{f.valor}</span>
+            </button>
+          ))}
+          <span>
+            Faltam alocar <span className="font-semibold tabular-nums text-amber-300">{faltam}</span> apresentações
+          </span>
+          <span>
+            Convidados <span className="font-semibold tabular-nums text-slate-200">{convidados}</span>
+            {convidados > 0 && (
+              <span className={convidadosComNome >= convidados ? 'text-emerald-400' : 'text-amber-400'}>
+                {' '}({convidadosComNome >= convidados ? 'todos com nome' : `${convidadosComNome} com nome`})
               </span>
             )}
-          </div>
-        </Painel>
-      </div>
+          </span>
+        </div>
+      </Painel>
 
       <Painel
         titulo="Por curso"
@@ -447,6 +420,8 @@ export interface BlocoNoPainel {
   duracaoSegundos: number;
   numeros: number;
   conflito?: boolean;
+  /** Dia do bloco ('AAAA-MM-DD') — recital de vários dias ganha uma linha por dia. */
+  dia?: string | null;
 }
 
 function duracaoCurta(seg: number) {
@@ -466,7 +441,9 @@ export function PainelRevisao({
   duracaoSegundos,
   semDuracaoPropria,
   blocos,
+  rotuloDoDia,
 }: {
+  rotuloDoDia?: (dia: string) => string;
   participantes: number;
   apresentacoes: number;
   inicio: string | null;
@@ -508,20 +485,21 @@ export function PainelRevisao({
       <Painel
         titulo="Linha do recital"
         className="p-3 lg:col-span-2"
-        destaque={<span className="text-[12px] text-slate-500">tamanho = duração do bloco</span>}
+        destaque={<span className="text-[12px] text-slate-500">posição e tamanho = horário real</span>}
       >
         {blocos.length === 0 ? (
           <p className="text-[12.5px] text-slate-500">Monte os blocos na aba Blocos.</p>
         ) : (
-          <BarrasCorrida
-            compacta
-            linhas={blocos.map((b) => ({
-              chave: String(b.id),
-              rotulo: b.nome,
-              detalhe: `${b.inicio}–${b.fim}`,
-              total: Math.max(b.duracaoSegundos, 1),
-              valorTexto: `${b.numeros} núm.`,
-              cor: b.conflito ? 'bg-rose-500' : 'bg-amber-500',
+          <LinhaDoTempo
+            rotuloDoDia={rotuloDoDia}
+            faixas={blocos.map((b) => ({
+              id: b.id,
+              nome: b.nome,
+              inicio: b.inicio,
+              fim: b.fim,
+              numeros: b.numeros,
+              conflito: b.conflito,
+              dia: b.dia ?? null,
             }))}
           />
         )}
@@ -559,43 +537,34 @@ export function PainelCheckin({
   const prontas = Math.max(0, apresentacoes - apresentacoesSemChegada);
   return (
     <div className="grid gap-3 lg:grid-cols-2">
-      <div className="flex flex-col gap-3">
-        <Painel
-          titulo="Chegada"
-          className="flex flex-1 flex-col justify-between p-3"
-          destaque={
-            <span className="text-[12px] text-slate-500">
-              <NumeroAnimado valor={chegaram} className="font-semibold text-emerald-300" /> de{' '}
-              <span className="tabular-nums">{esperados}</span> no teatro
-            </span>
-          }
-        >
-          <Progresso feito={chegaram} total={esperados} cor="bg-emerald-400" />
-          <p className="mt-2 text-[12px] text-slate-400">
-            Faltam <NumeroAnimado valor={faltam} className="text-[16px] font-semibold text-amber-300" />{' '}
-            {faltam === 1 ? 'pessoa' : 'pessoas'}
-          </p>
-        </Painel>
-        <Painel
-          titulo="Quem sobe ao palco"
-          className="flex flex-1 flex-col justify-between p-3"
-          destaque={
-            <span className="text-[12px] text-slate-500">
-              <NumeroAnimado valor={prontas} className="font-semibold text-white" /> de{' '}
-              <span className="tabular-nums">{apresentacoes}</span> apresentações prontas
-            </span>
-          }
-        >
-          <Progresso feito={prontas} total={apresentacoes} cor="bg-violet-500" />
-          <p className="mt-2 text-[12px] text-slate-400">
-            {apresentacoes === 0
-              ? 'Nenhum bloco montado.'
-              : apresentacoesSemChegada > 0
-                ? `${apresentacoesSemChegada} com a pessoa ainda fora do teatro`
-                : 'Todo mundo que sobe ao palco chegou.'}
-          </p>
-        </Painel>
-      </div>
+      <Painel titulo="Chegada" className="flex h-full flex-col justify-center p-3">
+        <div className="flex items-center gap-5">
+          <Anel feito={chegaram} total={esperados} rotulo="chegaram" />
+          <div className="min-w-0 space-y-2.5">
+            <div>
+              <p className="text-[11.5px] text-slate-500">No teatro</p>
+              <p className="text-[15px] text-slate-300">
+                <NumeroAnimado valor={chegaram} className="text-[22px] font-semibold text-emerald-300" /> de{' '}
+                <span className="tabular-nums">{esperados}</span>
+              </p>
+            </div>
+            <div>
+              <p className="text-[11.5px] text-slate-500">Faltam chegar</p>
+              <NumeroAnimado valor={faltam} className="text-[18px] font-semibold text-amber-300" />
+            </div>
+            <div>
+              <p className="text-[11.5px] text-slate-500">Apresentações prontas</p>
+              <p className="text-[13px] text-slate-300">
+                <span className="font-semibold tabular-nums text-white">{prontas}</span> de{' '}
+                <span className="tabular-nums">{apresentacoes}</span>
+                {apresentacoesSemChegada > 0 && (
+                  <span className="text-slate-500"> · {apresentacoesSemChegada} com a pessoa fora</span>
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+      </Painel>
 
       <Painel
         titulo="Por bloco"
@@ -619,6 +588,214 @@ export function PainelCheckin({
           />
         )}
       </Painel>
+    </div>
+  );
+}
+
+/* ─────────────────────── gráficos alternativos (09/10) ─────────────────────── */
+
+export interface EtapaDoFunil {
+  chave: string;
+  rotulo: string;
+  valor: number;
+  /** Texto curto embaixo do rótulo (ex.: o que a etapa significa). */
+  detalhe?: string;
+}
+
+/**
+ * Funil: cada etapa é uma barra centrada, do tamanho proporcional à primeira, com a
+ * passagem (%) entre uma e outra. Mostra num olhar onde a fila trava.
+ */
+export function Funil({
+  etapas,
+  cores = ['bg-slate-500', 'bg-emerald-500', 'bg-violet-500', 'bg-amber-400'],
+  onEscolher,
+}: {
+  etapas: EtapaDoFunil[];
+  cores?: string[];
+  onEscolher?: (chave: string) => void;
+}) {
+  const reduzir = useReducedMotion();
+  const topo = Math.max(1, etapas[0]?.valor ?? 1);
+  return (
+    <ol className="space-y-1">
+      {etapas.map((e, i) => {
+        const largura = Math.max(8, (e.valor / topo) * 100);
+        const anterior = i > 0 ? etapas[i - 1].valor : null;
+        const passagem = anterior ? Math.round((e.valor / anterior) * 100) : null;
+        const conteudo = (
+          <div className="flex items-center gap-3">
+            <div className="w-36 shrink-0 text-left">
+              <p className="text-[12.5px] font-medium text-slate-200">{e.rotulo}</p>
+              {e.detalhe && <p className="truncate text-[11px] text-slate-500">{e.detalhe}</p>}
+            </div>
+            <div className="flex h-8 flex-1 items-center justify-center">
+              <motion.div
+                className={cn('flex h-full items-center justify-center rounded-md', cores[i % cores.length])}
+                initial={reduzir ? false : { width: 0 }}
+                animate={{ width: `${largura}%` }}
+                transition={reduzir ? { duration: 0 } : { ...MOLA_BARRA, delay: i * 0.06 }}
+              >
+                <NumeroAnimado valor={e.valor} className="text-[13px] font-semibold text-slate-950" />
+              </motion.div>
+            </div>
+            <span className="w-12 shrink-0 text-right text-[11.5px] tabular-nums text-slate-500">
+              {passagem !== null ? `${passagem}%` : ''}
+            </span>
+          </div>
+        );
+        return (
+          <li key={e.chave}>
+            {onEscolher ? (
+              <button
+                type="button"
+                onClick={() => onEscolher(e.chave)}
+                className="w-full rounded-lg p-0.5 transition-colors hover:bg-slate-800/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
+              >
+                {conteudo}
+              </button>
+            ) : (
+              <div className="p-0.5">{conteudo}</div>
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+export interface FaixaDaLinha {
+  id: number;
+  nome: string;
+  inicio: string;
+  fim: string;
+  numeros: number;
+  conflito?: boolean;
+  /** Dia do bloco ('AAAA-MM-DD'); separa uma linha por dia em recital de vários dias. */
+  dia?: string | null;
+}
+
+function minutos(hora: string) {
+  const [h, m] = hora.split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+/**
+ * Linha do tempo do dia: régua de horas, blocos como faixas na posição e no tamanho reais,
+ * intervalos como vãos. Um dia por linha.
+ */
+export function LinhaDoTempo({ faixas, rotuloDoDia }: { faixas: FaixaDaLinha[]; rotuloDoDia?: (dia: string) => string }) {
+  const reduzir = useReducedMotion();
+  const validas = faixas.filter((f) => /^\d{1,2}:\d{2}/.test(f.inicio) && /^\d{1,2}:\d{2}/.test(f.fim));
+  const dias = [...new Set(validas.map((f) => f.dia ?? ''))];
+  return (
+    <div className="space-y-4">
+      {dias.map((dia) => {
+        const doDia = validas.filter((f) => (f.dia ?? '') === dia);
+        const ini = Math.floor(Math.min(...doDia.map((f) => minutos(f.inicio))) / 60) * 60;
+        const fim = Math.ceil(Math.max(...doDia.map((f) => Math.max(minutos(f.fim), minutos(f.inicio) + 1))) / 60) * 60;
+        const span = Math.max(60, fim - ini);
+        const horas = Array.from({ length: span / 60 + 1 }, (_, i) => ini + i * 60);
+        const pos = (m: number) => ((m - ini) / span) * 100;
+        return (
+          <div key={dia || 'unico'}>
+            {dias.length > 1 && rotuloDoDia && (
+              <p className="mb-1 text-[11.5px] font-medium text-slate-400">{rotuloDoDia(dia)}</p>
+            )}
+            <div className="relative h-14 rounded-lg bg-slate-800/40">
+              {horas.map((h) => (
+                <div key={h} className="absolute inset-y-0 border-l border-slate-700/60" style={{ left: `${pos(h)}%` }}>
+                  <span className="absolute -bottom-4 -translate-x-1/2 text-[10.5px] tabular-nums text-slate-500">
+                    {String(Math.floor(h / 60)).padStart(2, '0')}h
+                  </span>
+                </div>
+              ))}
+              {doDia.map((f, i) => {
+                const a = minutos(f.inicio);
+                const b = Math.max(minutos(f.fim), a + 1);
+                return (
+                  <motion.div
+                    key={f.id}
+                    title={`${f.nome} · ${f.inicio}–${f.fim} · ${f.numeros} números`}
+                    className={cn(
+                      'absolute inset-y-1.5 flex flex-col justify-center overflow-hidden rounded-md px-1.5 ring-1 ring-inset',
+                      f.conflito
+                        ? 'bg-rose-500/30 ring-rose-400/60'
+                        : f.numeros === 0
+                          ? 'bg-slate-700/50 ring-slate-500/40'
+                          : 'bg-amber-500/25 ring-amber-400/50',
+                    )}
+                    style={{ left: `${pos(a)}%` }}
+                    initial={reduzir ? false : { width: 0, opacity: 0 }}
+                    animate={{ width: `${Math.max(1.2, pos(b) - pos(a))}%`, opacity: 1 }}
+                    transition={reduzir ? { duration: 0 } : { ...MOLA_BARRA, delay: i * 0.05 }}
+                  >
+                    <span className="truncate text-[11.5px] font-semibold text-white">{f.nome}</span>
+                    <span className="truncate text-[10.5px] tabular-nums text-slate-300">
+                      {f.inicio}–{f.fim} · {f.numeros}
+                    </span>
+                  </motion.div>
+                );
+              })}
+            </div>
+            <div className="h-4" />
+          </div>
+        );
+      })}
+      <div className="flex flex-wrap gap-3 text-[11px] text-slate-500">
+        <span className="flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-amber-500/40" /> bloco</span>
+        <span className="flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-slate-600" /> bloco vazio</span>
+        <span className="flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-rose-500/50" /> começa antes do anterior terminar</span>
+        <span>· vão = intervalo</span>
+      </div>
+    </div>
+  );
+}
+
+/** Anel de progresso (SVG), com o percentual e um rótulo no meio. */
+export function Anel({
+  feito,
+  total,
+  tamanho = 132,
+  espessura = 12,
+  cor = 'stroke-emerald-400',
+  rotulo,
+}: {
+  feito: number;
+  total: number;
+  tamanho?: number;
+  espessura?: number;
+  cor?: string;
+  rotulo?: string;
+}) {
+  const reduzir = useReducedMotion();
+  const r = (tamanho - espessura) / 2;
+  const c = 2 * Math.PI * r;
+  const pct = total > 0 ? Math.min(1, feito / total) : 0;
+  return (
+    <div className="relative shrink-0" style={{ width: tamanho, height: tamanho }}>
+      <svg width={tamanho} height={tamanho} className="-rotate-90">
+        <circle cx={tamanho / 2} cy={tamanho / 2} r={r} fill="none" strokeWidth={espessura} className="stroke-slate-800" />
+        <motion.circle
+          cx={tamanho / 2}
+          cy={tamanho / 2}
+          r={r}
+          fill="none"
+          strokeWidth={espessura}
+          strokeLinecap="round"
+          className={cor}
+          strokeDasharray={c}
+          initial={reduzir ? false : { strokeDashoffset: c }}
+          animate={{ strokeDashoffset: c * (1 - pct) }}
+          transition={reduzir ? { duration: 0 } : MOLA_BARRA}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className={cn('font-semibold tabular-nums text-white', tamanho >= 100 ? 'text-[26px]' : 'text-[14px]')}>
+          {Math.round(pct * 100)}%
+        </span>
+        {rotulo && <span className="text-[11px] text-slate-500">{rotulo}</span>}
+      </div>
     </div>
   );
 }

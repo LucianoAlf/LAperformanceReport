@@ -689,6 +689,12 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
           previstas={resumo.apresentacoesPrevistas}
           nosBlocos={resumo.apresentacoesAlocadas}
           confirmadosSemBloco={resumo.participamSemAlocacao}
+          pessoasEmBloco={alunos.filter((a) => a.status === 'participa' && a.cursos_alocados > 0).length}
+          pessoasCompletas={
+            alunos.filter(
+              (a) => a.status === 'participa' && a.cursos_no_recital > 0 && a.cursos_alocados >= a.cursos_no_recital,
+            ).length
+          }
           convidados={resumo.convidadosTotal}
           convidadosComNome={alunos
             .filter((a) => a.status === 'participa')

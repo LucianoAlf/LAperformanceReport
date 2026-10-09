@@ -87,6 +87,7 @@ export function RevisaoTab({
           duracaoSegundos: h?.duracaoSegundos ?? 0,
           numeros: agruparEmNumeros(b.apresentacoes).length,
           conflito: h?.conflitaComAnterior ?? false,
+          dia: h?.data ?? b.data ?? evento.data_evento,
         };
       });
   }, [blocos, entrada]);
@@ -115,6 +116,10 @@ export function RevisaoTab({
         duracaoSegundos={resumo.duracaoTotalSegundos}
         semDuracaoPropria={resumo.semDuracaoPropria}
         blocos={blocosNoPainel}
+        rotuloDoDia={(dia) => {
+          const [ano, mes, d] = dia.split('-').map(Number);
+          return new Date(ano, mes - 1, d).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' });
+        }}
       />
 
       {/* ── relatórios do LA Teacher ── */}
