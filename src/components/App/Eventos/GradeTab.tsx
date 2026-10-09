@@ -84,6 +84,7 @@ import {
   useTocaJunto,
   useProfessoresDaUnidade,
   definirProfessorNoPalco,
+  trocarProfessorDaApresentacao,
   decidirTocaJunto,
   type PedidoTocaJunto,
   type ApresentacaoDaGrade,
@@ -340,6 +341,78 @@ function ProfessorNoPalco({
   );
 }
 
+/**
+ * Professor DO ALUNO nesta apresentação, trocável no cartão (pedido do Arthur, 09/10).
+ * Parece texto ("Prof. Fulano ▾") para não pesar no cartão; abre a lista da unidade.
+ */
+function ProfessorDoAluno({
+  apresentacao,
+  unidadeId,
+  onMudou,
+}: {
+  apresentacao: ApresentacaoDaGrade;
+  unidadeId: string;
+  onMudou: () => void;
+}) {
+  const { professores } = useProfessoresDaUnidade(unidadeId);
+  const [salvando, setSalvando] = useState(false);
+
+  const trocar = async (valor: string) => {
+    const novo = Number(valor);
+    if (!novo || novo === apresentacao.professor_id) return;
+    const nome = professores.find((p) => p.id === novo)?.nome ?? 'o novo professor';
+    const jaLancou = Boolean(apresentacao.professor?.musica_lancada_em);
+    const ok = window.confirm(
+      `Trocar o professor de ${apresentacao.aluno_nome} no recital para ${nome}?
+
+` +
+        'A matrícula não muda. No LA Teacher, o aluno passa para a lista de relatórios de ' +
+        `${nome.split(' ')[0]}` +
+        (jaLancou ? ' — e o que o professor atual já lançou (música, relatório) vai junto.' : '.'),
+    );
+    if (!ok) return;
+    setSalvando(true);
+    const { error } = await trocarProfessorDaApresentacao(
+      apresentacao.id,
+      novo,
+      apresentacao.professor_palco_id,
+    );
+    setSalvando(false);
+    if (error) toast.error(`Não consegui trocar o professor: ${error.message}`);
+    else {
+      toast.success(`Professor de ${apresentacao.aluno_nome.split(' ')[0]} agora é ${nome}`);
+      onMudou();
+    }
+  };
+
+  return (
+    <Select value={apresentacao.professor_id ? String(apresentacao.professor_id) : undefined} onValueChange={trocar} disabled={salvando}>
+      <SelectTrigger
+        aria-label={`Professor de ${apresentacao.aluno_nome}`}
+        title="Trocar o professor do aluno neste recital"
+        className="h-auto w-auto max-w-full gap-1 border-0 bg-transparent p-0 text-[12px] text-slate-500 shadow-none hover:text-slate-300 focus:ring-0 focus:ring-offset-0 sm:text-[11.5px] [&>svg]:h-3 [&>svg]:w-3 [&>svg]:opacity-60"
+      >
+        <span className="truncate">
+          {salvando ? 'salvando…' : `Prof. ${apresentacao.professor_nome ?? 'sem professor'}`}
+        </span>
+      </SelectTrigger>
+      <SelectContent className="max-h-72">
+        {apresentacao.professor_id && !professores.some((p) => p.id === apresentacao.professor_id) && (
+          // Professor de outra unidade (aluno visitante): continua na lista para não sumir.
+          <SelectItem value={String(apresentacao.professor_id)}>
+            {apresentacao.professor_nome ?? 'Professor atual'}
+          </SelectItem>
+        )}
+        {professores.map((p) => (
+          <SelectItem key={p.id} value={String(p.id)}>
+            {p.nome}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 /** Nome, idade, curso, professor e selos de UM integrante do número. */
 function LinhaIntegrante({
   apresentacao,
@@ -411,11 +484,11 @@ function LinhaIntegrante({
               </span>
             )}
           </div>
-          {apresentacao.professor_nome && (
-            // "Prof." explícito: sem ele o nome fica solto embaixo do nome do aluno e a
-            // programação impressa vira dois nomes sem papel declarado.
-            <p className="text-[12px] sm:text-[11.5px] text-slate-500">Prof. {apresentacao.professor_nome}</p>
-          )}
+          {/* "Prof." explícito: sem ele o nome fica solto embaixo do nome do aluno e a
+              programação impressa vira dois nomes sem papel declarado. */}
+          <div>
+            <ProfessorDoAluno apresentacao={apresentacao} unidadeId={unidadeId} onMudou={onMudou} />
+          </div>
           <ProfessorNoPalco apresentacao={apresentacao} unidadeId={unidadeId} onMudou={onMudou} />
         </div>
 

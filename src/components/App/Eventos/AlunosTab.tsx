@@ -112,6 +112,83 @@ const FORMATURA_ROTULO: Record<string, string> = {
   la: 'formando',
 };
 
+const ALUNOS_POR_PAGINA = 50;
+
+/** Páginas visíveis: primeira, última e vizinhas da atual, com "…" entre os saltos. */
+function paginasVisiveis(atual: number, total: number): (number | '…')[] {
+  const nums = new Set([1, total, atual - 1, atual, atual + 1].filter((n) => n >= 1 && n <= total));
+  const ordenadas = [...nums].sort((a, b) => a - b);
+  const saida: (number | '…')[] = [];
+  ordenadas.forEach((n, i) => {
+    if (i > 0 && n - ordenadas[i - 1] > 1) saida.push('…');
+    saida.push(n);
+  });
+  return saida;
+}
+
+function Paginacao({
+  pagina,
+  totalPaginas,
+  inicio,
+  fim,
+  total,
+  onIr,
+}: {
+  pagina: number;
+  totalPaginas: number;
+  inicio: number;
+  fim: number;
+  total: number;
+  onIr: (n: number) => void;
+}) {
+  const botao =
+    'flex h-11 min-w-[44px] items-center justify-center rounded-lg px-3 text-[13px] tabular-nums transition-colors disabled:opacity-40 sm:h-8 sm:min-w-[32px] sm:px-2';
+  return (
+    <nav aria-label="Páginas da lista de alunos" className="flex flex-wrap items-center justify-between gap-2">
+      <p className="text-[12.5px] text-slate-400">
+        Mostrando <span className="tabular-nums text-slate-200">{inicio}–{fim}</span> de{' '}
+        <span className="tabular-nums text-slate-200">{total}</span>
+      </p>
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => onIr(pagina - 1)}
+          disabled={pagina <= 1}
+          className={cn(botao, 'border border-slate-700 text-slate-300 enabled:hover:bg-slate-800')}
+        >
+          Anterior
+        </button>
+        {paginasVisiveis(pagina, totalPaginas).map((n, i) =>
+          n === '…' ? (
+            <span key={`r${i}`} className="px-1 text-slate-600">…</span>
+          ) : (
+            <button
+              key={n}
+              type="button"
+              onClick={() => onIr(n)}
+              aria-current={n === pagina ? 'page' : undefined}
+              className={cn(
+                botao,
+                n === pagina ? 'bg-violet-600 font-semibold text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white',
+              )}
+            >
+              {n}
+            </button>
+          ),
+        )}
+        <button
+          type="button"
+          onClick={() => onIr(pagina + 1)}
+          disabled={pagina >= totalPaginas}
+          className={cn(botao, 'border border-slate-700 text-slate-300 enabled:hover:bg-slate-800')}
+        >
+          Próxima
+        </button>
+      </div>
+    </nav>
+  );
+}
+
 function LinhaAluno({
   aluno,
   nomeados,
@@ -431,6 +508,16 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
     });
   }, [alunos, busca, filtro, filtroProfessor, filtroCurso, soSemAlocar, soRelatorioPronto]);
 
+  // Paginação (pedido do Hugo, 09/10): 400 linhas com seletores de uma vez deixavam a aba
+  // pesada e longa. Qualquer filtro novo volta para a 1ª página.
+  const [pagina, setPagina] = useState(1);
+  useEffect(() => {
+    setPagina(1);
+  }, [busca, filtro, filtroProfessor, filtroCurso, soSemAlocar, soRelatorioPronto]);
+  const totalPaginas = Math.max(1, Math.ceil(visiveis.length / ALUNOS_POR_PAGINA));
+  const paginaAtual = Math.min(pagina, totalPaginas);
+  const daPagina = visiveis.slice((paginaAtual - 1) * ALUNOS_POR_PAGINA, paginaAtual * ALUNOS_POR_PAGINA);
+
   const escolher = async (aluno: AlunoElegivel, status: ParticipacaoStatus) => {
     setGravando(aluno.pessoa_chave);
     const { error } = await definirParticipacao(eventoId, aluno.aluno_id_referencia, status);
@@ -691,12 +778,17 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
           size="sm"
           className="h-11 flex-1 sm:h-9 sm:flex-none"
           disabled={gravando === '__lote__' || visiveis.length === 0}
+          title="Marca como participando todos os alunos do filtro atual (todas as páginas), com confirmação e Desfazer"
           onClick={() => {
             const alvos = visiveis.filter((a) => avaliarElegibilidade(a).podeParticipar);
             if (alvos.length > 0) setLotePendente(alvos);
           }}
         >
-          Marcar os {visiveis.length} visíveis
+          {/* "Visíveis" enganava com a paginação: o lote pega TODOS do filtro, de todas as páginas. */}
+          <Check className="h-4 w-4" />
+          {filtro === 'todos' && !busca && filtroProfessor === 'todos' && filtroCurso === 'todos' && !soSemAlocar && !soRelatorioPronto
+            ? `Todos participam (${visiveis.length})`
+            : `Marcar os ${visiveis.length} do filtro como participam`}
         </Button>
 
         <Button
@@ -742,7 +834,7 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
           </p>
         ) : (
           <div className={cn('transition-opacity', gravando && 'opacity-60')}>
-            {visiveis.map((a) => (
+            {daPagina.map((a) => (
               <LinhaAluno
                 key={a.pessoa_chave}
                 aluno={a}
@@ -756,6 +848,20 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
           </div>
         )}
       </div>
+
+      {visiveis.length > ALUNOS_POR_PAGINA && (
+        <Paginacao
+          pagina={paginaAtual}
+          totalPaginas={totalPaginas}
+          inicio={(paginaAtual - 1) * ALUNOS_POR_PAGINA + 1}
+          fim={Math.min(paginaAtual * ALUNOS_POR_PAGINA, visiveis.length)}
+          total={visiveis.length}
+          onIr={(n) => {
+            setPagina(n);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        />
+      )}
 
       <ModalConfirmacao
         aberto={lotePendente !== null}

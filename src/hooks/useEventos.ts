@@ -935,6 +935,31 @@ export async function definirProfessorNoPalco(apresentacaoId: number, professorI
   return { error: null };
 }
 
+/**
+ * Troca o professor DO ALUNO nesta apresentação (pedido do Arthur, 09/10). Não mexe na
+ * matrícula: é só o recital. ⚠️ É esse professor que faz o relatório no LA Teacher — o aluno
+ * passa para a lista dele no app. Se o novo professor era o "no palco", o palco é limpo
+ * (seria o mesmo professor nos dois papéis).
+ */
+export async function trocarProfessorDaApresentacao(
+  apresentacaoId: number,
+  professorId: number,
+  professorPalcoAtual: number | null,
+) {
+  const campos: Record<string, unknown> = { professor_id: professorId, updated_at: new Date().toISOString() };
+  if (professorPalcoAtual === professorId) campos.professor_palco_id = null;
+  const { data, error } = await supabase
+    .from('evento_apresentacao')
+    .update(campos)
+    .eq('id', apresentacaoId)
+    .select('id');
+  if (error) return { error };
+  if ((data ?? []).length !== 1) {
+    return { error: { message: `apresentação ${apresentacaoId}: nada foi salvo — confira a permissão.` } };
+  }
+  return { error: null };
+}
+
 export interface ProfessorDaUnidade {
   id: number;
   nome: string;
