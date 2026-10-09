@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { toast } from 'sonner';
-import { AlertTriangle, ArrowRight, Award, Eye, FileText, GraduationCap, Speaker, Table2 } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Award, Eye, FileText, GraduationCap, Speaker, Table2, Users } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import {
@@ -16,11 +16,13 @@ import {
   baixarArquivo,
   gerarCertificadosHtml,
   gerarFolhaDePalcoHtml,
+  gerarListaDeConvidadosHtml,
   gerarPlanilhaCsv,
   gerarProgramaHtml,
   marcaDaClassificacao,
   nomeDoArquivo,
   ETAPA_DA_FORMATURA,
+  type ConvidadosDoAlunoParaImprimir,
   type MarcaDoAluno,
   type TipoDeCertificado,
   type TipoDeFormatura,
@@ -28,6 +30,7 @@ import {
 import {
   marcarCertificadosEmitidos,
   useCheckinDoEvento,
+  useConvidadosDoEvento,
   type EventoComResumo,
 } from '@/hooks/useEventos';
 import { useRevisaoDoEvento } from './useRevisaoDoEvento';
@@ -52,6 +55,7 @@ export function DocumentosTab({ evento }: { evento: EventoComResumo }) {
   const { participacoes, loading: carregandoCheckin, erro: erroCheckin } = useCheckinDoEvento(
     evento.id,
   );
+  const { convidados, erro: erroConvidados } = useConvidadosDoEvento(evento.id);
 
   // `null` = recital inteiro. O recorte é de EXIBIÇÃO: o horário de cada bloco continua sendo
   // o real dentro do recital, porque o cálculo roda sobre a grade completa.
@@ -79,6 +83,35 @@ export function DocumentosTab({ evento }: { evento: EventoComResumo }) {
       'text/csv;charset=utf-8',
     );
     toast.success('Planilha baixada. Abre no Excel com dois cliques.');
+  };
+
+  /* ── convidados por aluno ── */
+  // Agrupado por PESSOA: irmãos que dividem um convidado aparecem os dois, cada um com ele.
+  const convidadosPorAluno = useMemo<ConvidadosDoAlunoParaImprimir[]>(() => {
+    const porPessoa = new Map<string, ConvidadosDoAlunoParaImprimir>();
+    for (const p of participacoes) {
+      if (p.status !== 'participa' && p.convidados === 0) continue;
+      porPessoa.set(p.pessoa_chave, { aluno: p.nome, leva: p.convidados, convidados: [] });
+    }
+    for (const c of convidados) {
+      for (const chave of c.pessoas) {
+        const grupo = porPessoa.get(chave);
+        if (grupo) grupo.convidados.push({ nome: c.nome, tipo: c.tipo_entrada, bloco_id: c.bloco_id });
+      }
+    }
+    return [...porPessoa.values()];
+  }, [participacoes, convidados]);
+  const totalConvidadosComNome = convidados.length;
+
+  const abrirConvidados = () => {
+    if (erroConvidados) {
+      toast.error(`Não consegui ler os convidados: ${erroConvidados}`);
+      return;
+    }
+    const html = gerarListaDeConvidadosHtml(dadosDaImpressao, convidadosPorAluno, blocoEscolhido ?? undefined);
+    if (!abrirDocumento(html)) {
+      toast.error('O navegador bloqueou a janela. Permita pop-ups para este site e tente de novo.');
+    }
   };
 
   /* ── certificados ── */
@@ -222,7 +255,7 @@ export function DocumentosTab({ evento }: { evento: EventoComResumo }) {
           />
         )}
 
-        <div className="grid gap-2.5 sm:grid-cols-3">
+        <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
           <CartaoDocumento
             icone={<FileText className="h-4 w-4" />}
             tom="amber"
@@ -252,6 +285,20 @@ export function DocumentosTab({ evento }: { evento: EventoComResumo }) {
             acao="Baixar"
             desabilitado={semApresentacao}
             onClick={baixarPlanilha}
+          />
+          <CartaoDocumento
+            icone={<Users className="h-4 w-4" />}
+            tom="violet"
+            titulo="Convidados por aluno"
+            publico="para a porta"
+            descricao={
+              totalConvidadosComNome > 0
+                ? `${totalConvidadosComNome} com nome, agrupados por aluno, com caixinha para riscar.`
+                : 'Ainda sem nomes — cadastre em Alunos, no botão "nomes".'
+            }
+            acao="Abrir"
+            desabilitado={totalConvidadosComNome === 0 && !convidadosPorAluno.some((g) => g.leva > 0)}
+            onClick={abrirConvidados}
           />
         </div>
 
@@ -441,6 +488,7 @@ const TONS = {
   amber: { tile: 'bg-amber-500/15 text-amber-300', borda: 'hover:border-amber-500/40' },
   sky: { tile: 'bg-sky-500/15 text-sky-300', borda: 'hover:border-sky-500/40' },
   emerald: { tile: 'bg-emerald-500/15 text-emerald-300', borda: 'hover:border-emerald-500/40' },
+  violet: { tile: 'bg-violet-500/15 text-violet-300', borda: 'hover:border-violet-500/40' },
 } as const;
 
 function CartaoDocumento({
