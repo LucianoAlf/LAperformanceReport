@@ -1,128 +1,63 @@
-import { useMemo, useState } from 'react';
-import { toast } from 'sonner';
+import { useMemo } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
   ClipboardList,
   Clock,
+  FileText,
   LayoutList,
   Music,
-  FileText,
-  Speaker,
-  Table2,
   Users,
 } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
-  diasDoEvento,
-  formatarDataCurta,
   formatarDuracao,
   idadeHoje,
-  levantarPendencias,
-  resumirEvento,
   resumirRelatorios,
   rotuloIdade,
-  type EntradaDaRevisao,
   type Pendencia,
 } from '@/lib/eventos';
 import {
-  abrirDocumento,
-  baixarArquivo,
-  gerarFolhaDePalcoHtml,
-  gerarPlanilhaCsv,
-  gerarProgramaHtml,
-  nomeDoArquivo,
-  type DadosDaImpressao,
-} from '@/lib/eventosImpressao';
-import {
-  useGradeDoEvento,
-  useAlunosDoEvento,
-  useRelatoriosDoEvento,
   RELATORIO_STATUS_LABEL,
   type EventoComResumo,
   type RelatorioDoProfessor,
 } from '@/hooks/useEventos';
+import { useRevisaoDoEvento } from './useRevisaoDoEvento';
+
+type AbaDeDestino = 'alunos' | 'grade' | 'documentos';
 
 /**
  * Revisao + resumo — LAPE-39, fase 5.
  *
- * Responde "posso imprimir?" num lugar so. Os sinais ja existiam espalhados (o contador de
- * quem participa e esta fora da grade, o selo vermelho de conflito no bloco); aqui viram
- * uma lista ordenada por gravidade, cada item dizendo ONDE se resolve.
+ * Responde "o que falta para o recital fechar" num lugar so. Os sinais ja existiam espalhados
+ * (o contador de quem participa e esta fora dos blocos, o selo vermelho de conflito no bloco);
+ * aqui viram uma lista ordenada por gravidade, cada item dizendo ONDE se resolve.
  *
- * ⚠️ A regra mora em `src/lib/eventos.ts`, nao aqui: a impressao (fase 6) vai fazer a mesma
- * pergunta antes de deixar imprimir, e duas implementacoes divergiriam no primeiro ajuste.
+ * Os documentos (programacao, folha de palco, planilha, certificados) sairam daqui para a aba
+ * Documentos em 08/10/2026 (reuniao do recital). A montagem dos dados e a mesma das duas abas:
+ * `useRevisaoDoEvento`.
  */
 export function RevisaoTab({
   evento,
   onIrPara,
 }: {
   evento: EventoComResumo;
-  onIrPara: (aba: 'alunos' | 'grade') => void;
+  onIrPara: (aba: AbaDeDestino) => void;
 }) {
-  const { blocos, loading: carregandoGrade, erro: erroGrade } = useGradeDoEvento(evento.id);
   const {
-    alunos,
-    loading: carregandoAlunos,
-    erro: erroAlunos,
-  } = useAlunosDoEvento(evento.id, evento.unidade_id);
-  // O painel do canal professor mora aqui, na revisao — e a aba que a equipe abre quando
-  // pergunta "falta o quê para o recital fechar".
-  const {
+    blocos,
     relatorios,
-    loading: carregandoRelatorios,
-    erro: erroRelatorios,
-  } = useRelatoriosDoEvento(evento.id);
+    pendencias,
+    resumo,
+    impedimentos,
+    carregando,
+    carregandoRelatorios,
+    erro,
+    erroRelatorios,
+  } = useRevisaoDoEvento(evento);
 
-  const entrada = useMemo<EntradaDaRevisao>(
-    () => ({
-      evento: {
-        horario_inicio: evento.horario_inicio,
-        duracao_padrao_segundos: evento.duracao_padrao_segundos,
-        intervalo_entre_blocos_segundos: evento.intervalo_entre_blocos_segundos ?? 2700,
-      },
-      blocos: blocos.map((b) => ({
-        id: b.id,
-        nome: b.nome,
-        ordem: b.ordem,
-        data: b.data,
-        horario_inicial: b.horario_inicial,
-        inicio_manual: b.inicio_manual,
-        apresentacoes: b.apresentacoes.map((a) => ({
-          id: a.id,
-          ordem: a.ordem,
-          duracao_segundos: a.duracao_segundos,
-          pessoa_chave: a.pessoa_chave,
-          aluno_nome: a.aluno_nome,
-          curso_nome: a.curso_nome,
-          musica: a.musica,
-          grupo_id: a.grupo_id,
-        })),
-      })),
-      alunos: alunos.map((a) => ({
-        pessoa_chave: a.pessoa_chave,
-        nome: a.nome,
-        status: a.status,
-        cursos_no_recital: a.cursos_no_recital,
-        cursos: a.cursos.map((c) => ({ curso_id: c.curso_id, curso_nome: c.curso_nome })),
-        alocacoes: a.alocacoes.map((x) => ({ curso_id: x.curso_id })),
-      })),
-      // Relatorio lancado para quem nao esta na grade e pendencia DO EVENTO, nao do
-      // professor — a revisao tem de apontar para poder destravar o canal.
-      relatorios: relatorios.map((r) => ({
-        aluno_nome: r.aluno_nome,
-        curso: r.curso,
-        professor_nome: r.professor_nome,
-        apresentacao_id: r.apresentacao_id,
-      })),
-    }),
-    [evento, blocos, alunos, relatorios],
-  );
-
-  const pendencias = useMemo(() => levantarPendencias(entrada), [entrada]);
   // A idade da lista de relatorios sai da GRADE (quem ja tem apresentacao): o relatorio do
   // professor nao carrega a data de nascimento.
   const nascimentoPorApresentacao = useMemo(
@@ -132,84 +67,7 @@ export function RevisaoTab({
       ),
     [blocos],
   );
-  const resumo = useMemo(() => resumirEvento(entrada), [entrada]);
-  const impedimentos = pendencias.filter((p) => p.gravidade === 'impede');
 
-  const dadosDaImpressao = useMemo<DadosDaImpressao>(
-    () => ({
-      evento: {
-        titulo: evento.titulo,
-        data_evento: evento.data_evento,
-        data_fim: evento.data_fim,
-        local: evento.local,
-        unidade_nome: evento.unidade_nome,
-        horario_inicio: evento.horario_inicio,
-        duracao_padrao_segundos: evento.duracao_padrao_segundos,
-        intervalo_entre_blocos_segundos: evento.intervalo_entre_blocos_segundos ?? 2700,
-      },
-      blocos: blocos.map((b) => ({
-        id: b.id,
-        nome: b.nome,
-        ordem: b.ordem,
-        data: b.data,
-        horario_inicial: b.horario_inicial,
-        inicio_manual: b.inicio_manual,
-        apresentacoes: b.apresentacoes.map((a) => ({
-          id: a.id,
-          ordem: a.ordem,
-          duracao_segundos: a.duracao_segundos,
-          aluno_nome: a.aluno_nome,
-          curso_nome: a.curso_nome,
-          professor_nome: a.professor_nome,
-          musica: a.musica,
-          musica_artista: a.musica_artista,
-          musica_link: a.musica_link,
-          playback_path: a.playback_path,
-          tem_playback: a.tem_playback,
-          observacao_mapa: a.observacao_mapa,
-          grupo_id: a.grupo_id,
-          idade: idadeHoje(a.aluno_data_nascimento),
-          itens: a.itens.map((i) => ({
-            tipo: i.tipo,
-            nome: i.nome,
-            quantidade: i.quantidade,
-          })),
-        })),
-      })),
-      // `window.location.origin` e lido AQUI, nao dentro do gerador: a funcao que monta o
-      // documento fica pura e testavel em Node, onde `window` nao existe.
-      origem: typeof window === 'undefined' ? undefined : window.location.origin,
-    }),
-    [evento, blocos],
-  );
-
-  // `null` = recital inteiro. O recorte e de EXIBICAO: o horario de cada bloco continua
-  // sendo o real dentro do recital, porque o calculo roda sobre a grade completa.
-  const [blocoEscolhido, setBlocoEscolhido] = useState<number | null>(null);
-
-  const abrir = (qual: 'programa' | 'palco') => {
-    const apenas = blocoEscolhido ?? undefined;
-    const html =
-      qual === 'programa'
-        ? gerarProgramaHtml(dadosDaImpressao, apenas)
-        : gerarFolhaDePalcoHtml(dadosDaImpressao, apenas);
-    if (!abrirDocumento(html)) {
-      toast.error('O navegador bloqueou a janela. Permita pop-ups para este site e tente de novo.');
-    }
-  };
-
-  const baixarPlanilha = () => {
-    const apenas = blocoEscolhido ?? undefined;
-    const sufixo = apenas === undefined ? 'grade.csv' : 'bloco.csv';
-    baixarArquivo(
-      nomeDoArquivo(dadosDaImpressao, sufixo),
-      gerarPlanilhaCsv(dadosDaImpressao, apenas),
-      'text/csv;charset=utf-8',
-    );
-    toast.success('Planilha baixada. Abre no Excel com dois cliques.');
-  };
-
-  const erro = erroGrade ?? erroAlunos;
   if (erro) {
     return (
       <p className="rounded-md border border-rose-500/40 bg-rose-500/10 p-3 text-[13px] text-rose-200">
@@ -218,7 +76,6 @@ export function RevisaoTab({
     );
   }
 
-  const carregando = (carregandoGrade || carregandoAlunos) && blocos.length === 0;
   if (carregando) {
     return <p className="p-8 text-center text-sm text-slate-400">Carregando revisão…</p>;
   }
@@ -238,7 +95,7 @@ export function RevisaoTab({
           rodape={
             resumo.inicio && resumo.terminoPrevisto
               ? `${resumo.inicio} às ${resumo.terminoPrevisto}`
-              : 'sem blocos na grade'
+              : 'nenhum bloco montado'
           }
         />
       </section>
@@ -271,7 +128,7 @@ export function RevisaoTab({
           </p>
         ) : relatorios.length === 0 && resumo.apresentacoes === 0 ? (
           <p className="mt-2 text-[12.5px] text-slate-500">
-            Nenhum relatório lançado ainda — e a grade ainda está vazia. Os professores lançam
+            Nenhum relatório lançado ainda — e nenhum bloco tem apresentação. Os professores lançam
             música e palco no LA Teacher; o que eles escrevem chega aqui na sincronização.
           </p>
         ) : (
@@ -283,102 +140,30 @@ export function RevisaoTab({
         )}
       </section>
 
-      {/* ── impressão ── */}
-      <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="min-w-0">
-            <h3 className="flex items-center gap-1.5 text-[12px] sm:text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              <FileText className="h-3.5 w-3.5" />
-              Documentos
-            </h3>
-            <p className="mt-0.5 text-[12px] text-slate-500">
-              Dois documentos, dois públicos: a programação vai para a plateia, a folha de
-              palco fica com a produção. Abrem numa aba nova, com botão para salvar em PDF.
-            </p>
-
-            {/* Recorte por bloco. Chips e não select: com 2 a 6 blocos, ver as opções todas
-                custa menos que abrir uma lista — e o estado escolhido fica à vista. */}
-            {blocos.length > 1 && (
-              <div className="mt-2 flex flex-wrap items-center gap-1">
-                <span className="mr-1 text-[12px] sm:text-[11px] text-slate-500">Imprimir:</span>
-                <ChipBloco
-                  rotulo="recital inteiro"
-                  ativo={blocoEscolhido === null}
-                  onClick={() => setBlocoEscolhido(null)}
-                />
-                {blocos.map((b) => (
-                  <ChipBloco
-                    key={b.id}
-                    // Evento de 2+ dias: dois "Bloco 3" (um por data) só se distinguem pelo dia.
-                    rotulo={
-                      diasDoEvento(evento.data_evento, evento.data_fim).length > 1
-                        ? `${b.nome} · ${formatarDataCurta(b.data ?? evento.data_evento)}`
-                        : b.nome
-                    }
-                    ativo={blocoEscolhido === b.id}
-                    onClick={() => setBlocoEscolhido(b.id)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5"
-              onClick={() => abrir('programa')}
-              disabled={resumo.apresentacoes === 0}
-            >
-              <FileText className="h-3.5 w-3.5" />
-              Programação
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5"
-              onClick={() => abrir('palco')}
-              disabled={resumo.apresentacoes === 0}
-            >
-              <Speaker className="h-3.5 w-3.5" />
-              Folha de palco
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5"
-              onClick={baixarPlanilha}
-              disabled={resumo.apresentacoes === 0}
-              title="Planilha com uma linha por apresentação — abre no Excel"
-            >
-              <Table2 className="h-3.5 w-3.5" />
-              Planilha
-            </Button>
-          </div>
-        </div>
-
-        {/* ⚠️ Avisa, nunca BLOQUEIA. Imprimir uma prévia com pendência conhecida é uso
-            legítimo — quem monta o recital precisa do papel na mão para conferir com os
-            professores. Travar o botão obrigaria a resolver tudo antes de poder olhar. */}
-        {impedimentos.length > 0 && resumo.apresentacoes > 0 && (
-          <p className="mt-2 flex items-start gap-1.5 rounded border border-rose-500/30 bg-rose-500/5 px-2 py-1.5 text-[12px] sm:text-[11.5px] text-rose-200/90">
-            <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0 text-rose-400" />
-            <span>
-              {impedimentos.length === 1
-                ? 'Há 1 pendência que sai errada no documento'
-                : `Há ${impedimentos.length} pendências que saem erradas no documento`}{' '}
-              — dá para abrir assim mesmo, é prévia.
-            </span>
-          </p>
-        )}
-      </section>
+      {/* ── atalho para a aba Documentos ── */}
+      <button
+        type="button"
+        onClick={() => onIrPara('documentos')}
+        className="group flex w-full items-center gap-3 rounded-xl border border-slate-700 bg-slate-800/40 p-3 text-left transition-colors hover:border-amber-500/40 hover:bg-slate-800/70"
+      >
+        <FileText className="h-4 w-4 shrink-0 text-amber-400" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13px] font-medium text-white">Documentos para imprimir</span>
+          <span className="block text-[12px] text-slate-500">
+            Programação, folha de palco, planilha e certificados ficam na aba Documentos.
+            {impedimentos.length > 0 &&
+              ` ${impedimentos.length === 1 ? '1 pendência abaixo sai errada' : `${impedimentos.length} pendências abaixo saem erradas`} no papel.`}
+          </span>
+        </span>
+        <ArrowRight className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-hover:translate-x-0.5" />
+      </button>
 
       {/* ── pendências ── */}
       {pendencias.length === 0 ? (
         <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
           <p className="flex items-center gap-2 text-[13px] text-emerald-200">
             <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-            Nada a apontar na grade.
+            Nada a apontar nos blocos.
           </p>
           {/* "Nada a apontar" ≠ "está tudo certo": a revisão só enxerga o que o sistema
               sabe. Dizer o contrário daria uma garantia que ninguém aqui pode dar. */}
@@ -454,7 +239,7 @@ function PainelRelatorios({
         )}
         {r.sem_apresentacao > 0 && (
           <span className="text-slate-300">
-            <strong className="tabular-nums text-rose-300">{r.sem_apresentacao}</strong> fora da grade
+            <strong className="tabular-nums text-rose-300">{r.sem_apresentacao}</strong> fora dos blocos
           </span>
         )}
       </div>
@@ -488,7 +273,7 @@ function PainelRelatorios({
                 )}
               >
                 {p.apresentacao_id === null
-                  ? 'sem apresentação na grade'
+                  ? 'sem apresentação nos blocos'
                   : !p.musica_lancada
                     ? 'sem música lançada'
                     : (RELATORIO_STATUS_LABEL[p.relatorio_status] ?? p.relatorio_status)}
@@ -498,30 +283,6 @@ function PainelRelatorios({
         </ul>
       )}
     </div>
-  );
-}
-
-function ChipBloco({
-  rotulo,
-  ativo,
-  onClick,
-}: {
-  rotulo: string;
-  ativo: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={ativo}
-      className={cn(
-        'min-h-[44px] rounded px-2.5 py-0.5 text-[12px] transition-colors sm:min-h-0 sm:px-2 sm:text-[11.5px]',
-        ativo ? 'bg-amber-500/20 text-amber-200' : 'text-slate-400 hover:bg-slate-700/60',
-      )}
-    >
-      {rotulo}
-    </button>
   );
 }
 
@@ -553,7 +314,7 @@ function CartaoPendencia({
   onIrPara,
 }: {
   pendencia: Pendencia;
-  onIrPara: (aba: 'alunos' | 'grade') => void;
+  onIrPara: (aba: AbaDeDestino) => void;
 }) {
   const impede = pendencia.gravidade === 'impede';
   // ⚠️ Estado é UM valor derivado da gravidade, não condições soltas: `cn()` usa twMerge e
@@ -585,7 +346,7 @@ function CartaoPendencia({
           // Celular: desce para a linha de baixo em largura cheia — ao lado, espremia o título.
           className="order-last flex min-h-[44px] w-full shrink-0 items-center justify-center gap-1 rounded-lg bg-slate-700/60 px-2 py-1 text-[13px] text-slate-200 transition-colors hover:bg-slate-700 sm:order-none sm:min-h-0 sm:w-auto sm:rounded sm:text-[11.5px]"
         >
-          Resolver em {pendencia.onde === 'alunos' ? 'Alunos' : 'Grade'}
+          Resolver em {pendencia.onde === 'alunos' ? 'Alunos' : 'Blocos'}
           <ArrowRight className="h-3 w-3" />
         </button>
       </div>

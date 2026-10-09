@@ -119,7 +119,7 @@ serve(async (req: Request) => {
   // último envio). Filtro em JS porque PostgREST não compara coluna com coluna.
   let query = service
     .from('evento_apresentacao')
-    .select('id, playback_path, aluno_id, evento:evento_id(titulo), unidade:unidade_id(nome), curso:curso_id(nome), professor:professor_id(nome), aluno:aluno_id(nome), drive_playback_path, drive_file_id, drive_erro')
+    .select('id, evento_id, playback_path, aluno_id, evento:evento_id(titulo), unidade:unidade_id(nome), curso:curso_id(nome), professor:professor_id(nome), aluno:aluno_id(nome), drive_playback_path, drive_file_id, drive_erro, drive_nome')
     .or('playback_path.not.is.null,drive_playback_path.not.is.null')
     .order('id');
   if (typeof corpo.evento_id === 'number') query = query.eq('evento_id', corpo.evento_id);
@@ -131,6 +131,58 @@ serve(async (req: Request) => {
   const pendentes = (linhas ?? [])
     .filter((l) => l.playback_path && l.playback_path !== l.drive_playback_path)
     .slice(0, limite);
+
+  // Numeração na ordem do recital (reunião de 08/10): "B1-03" = bloco 1, 3º número.
+  // Quem toca junto (mesmo grupo_id, em sequência) é UM número — mesma regra de
+  // `agruparEmNumeros` (src/lib/eventos.ts), que a grade e a programação usam.
+  const eventosEmJogo = [...new Set((linhas ?? []).map((l) => l.evento_id).filter((x) => x != null))];
+  const prefixoPorApresentacao = new Map<number, string>();
+  if (eventosEmJogo.length > 0) {
+    const [{ data: blocosEv, error: erroBlocos }, { data: apsEv, error: erroAps }] = await Promise.all([
+      service.from('evento_bloco').select('id, evento_id, ordem').in('evento_id', eventosEmJogo),
+      service.from('evento_apresentacao').select('id, bloco_id, ordem, grupo_id').in('evento_id', eventosEmJogo),
+    ]);
+    // Sem a ordem, o nome sai sem prefixo (como antes) — nunca com número inventado.
+    if (erroBlocos || erroAps) {
+      console.error('recital-drive-sync: sem ordem dos blocos', erroBlocos?.message ?? erroAps?.message);
+    } else {
+      const posBloco = new Map<number, number>();
+      const porEvento = new Map<number, { id: number; ordem: number }[]>();
+      for (const b of blocosEv ?? []) {
+        const l = porEvento.get(b.evento_id) ?? [];
+        l.push(b);
+        porEvento.set(b.evento_id, l);
+      }
+      for (const lista of porEvento.values()) {
+        lista.sort((a, b) => a.ordem - b.ordem || a.id - b.id).forEach((b, i) => posBloco.set(b.id, i + 1));
+      }
+      const porBloco = new Map<number, { id: number; ordem: number; grupo_id: string | null }[]>();
+      for (const a of apsEv ?? []) {
+        const l = porBloco.get(a.bloco_id) ?? [];
+        l.push(a);
+        porBloco.set(a.bloco_id, l);
+      }
+      for (const [blocoId, aps] of porBloco) {
+        const nb = posBloco.get(blocoId);
+        if (!nb) continue;
+        aps.sort((a, b) => a.ordem - b.ordem || a.id - b.id);
+        let numero = 0;
+        let grupoAnterior: string | null = null;
+        for (const a of aps) {
+          const grupo = a.grupo_id ?? null;
+          if (!(numero > 0 && grupo !== null && grupo === grupoAnterior)) numero += 1;
+          grupoAnterior = grupo;
+          prefixoPorApresentacao.set(a.id, `B${nb}-${String(numero).padStart(2, '0')}`);
+        }
+      }
+    }
+  }
+  const nomeDoArquivo = (l: { id: number; aluno: unknown; aluno_id: number | null; curso: unknown }, ext: string) => {
+    const aluno = texto(l.aluno, `Aluno ${l.aluno_id ?? ''}`.trim());
+    const curso = texto(l.curso, 'Curso');
+    const prefixo = prefixoPorApresentacao.get(l.id);
+    return `${prefixo ? `${prefixo} — ` : ''}${aluno} — ${curso}.${ext}`;
+  };
 
   // Professor voltou para "Ao vivo": playback_path zera, mas o arquivo JA esta no
   // Drive. A ponte passou a ter acao 'renomear' — o orfao vira "NÃO USAR — nome"
@@ -191,10 +243,8 @@ serve(async (req: Request) => {
     const unidade = texto(linha.unidade, 'Sem unidade');
     const evento = texto(linha.evento, 'Recital');
     const professor = texto(linha.professor, 'Sem professor');
-    const aluno = texto(linha.aluno, `Aluno ${linha.aluno_id ?? ''}`.trim());
-    const curso = texto(linha.curso, 'Curso');
     const ext = (linha.playback_path.split('.').pop() ?? 'mp3').toLowerCase();
-    const nomeAlvo = `${aluno} — ${curso}.${ext}`;
+    const nomeAlvo = nomeDoArquivo(linha, ext);
 
     // Dedup: o playback do Antonio foi parar no Drive antes de ele ter
     // apresentacao (subido a mao). Se a pasta ja tem o arquivo, reaproveitamos
@@ -212,6 +262,7 @@ serve(async (req: Request) => {
         .update({
           drive_playback_path: linha.playback_path,
           drive_file_id: achado.id,
+          drive_nome: nomeAlvo,
           drive_sincronizado_em: new Date().toISOString(),
           drive_erro: null,
         })
@@ -237,11 +288,32 @@ serve(async (req: Request) => {
       .update({
         drive_playback_path: linha.playback_path,
         drive_file_id: respostaPonte.id ?? null,
+        drive_nome: nomeAlvo,
         drive_sincronizado_em: new Date().toISOString(),
         drive_erro: null,
       })
       .eq('id', linha.id);
   }
 
-  return json(resultado);
+  // Já está no Drive e a posição mudou (cartão arrastado depois do envio, ou enviado
+  // antes da numeração existir): renomeia. Só quem tem o id do arquivo — sem ele não há
+  // o que renomear. Teto por corrida para o cron não virar uma rajada na ponte.
+  const LIMITE_RENOMEAR = 30;
+  const aRenomear = (linhas ?? [])
+    .filter((l) => l.playback_path && l.playback_path === l.drive_playback_path && l.drive_file_id)
+    .map((l) => ({ l, nome: nomeDoArquivo(l, (String(l.playback_path).split('.').pop() ?? 'mp3').toLowerCase()) }))
+    .filter(({ l, nome }) => nome !== l.drive_nome)
+    .slice(0, LIMITE_RENOMEAR);
+  let renomeados = 0;
+  for (const { l, nome } of aRenomear) {
+    const ren = await chamarPonte({ token: BRIDGE_TOKEN, acao: 'renomear', arquivo: l.drive_file_id, nome });
+    if (!ren.ok) {
+      resultado.erros.push({ apresentacao_id: l.id, erro: `renomear:${ren.erro ?? 'sem_ok'}` });
+      continue;
+    }
+    renomeados += 1;
+    await service.from('evento_apresentacao').update({ drive_nome: nome }).eq('id', l.id);
+  }
+
+  return json({ ...resultado, renomeados });
 });

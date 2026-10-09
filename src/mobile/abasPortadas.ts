@@ -74,7 +74,7 @@ export const ABAS_PORTADAS: Readonly<Record<string, readonly string[]>> = {
   '/app/administrativo': ['lancamentos', 'contratos', 'fideliza', 'lojinha', 'farmer', 'caixa_financeiro'],
   // Detalhe do evento (06/10/2026): só a Grade foi adaptada — Alunos, Palco, Bilheteria,
   // Revisão e Check-in seguem com a faixa.
-  '/app/eventos/*': ['alunos', 'grade', 'palco', 'bilheteria', 'revisao', 'checkin'],
+  '/app/eventos/*': ['alunos', 'grade', 'palco', 'bilheteria', 'revisao', 'documentos', 'checkin'],
 };
 
 /** `'/app/eventos/*'` casa `'/app/eventos/21'` (um segmento), nunca `'/app/eventos'`. */

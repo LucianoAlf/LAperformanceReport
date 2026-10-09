@@ -223,9 +223,10 @@ VITE_GEMINI_API_KEY=...  # opcional
 ## Módulo de Eventos — recital (`/app/eventos`, desde 2026-09-18, LAPE-39)
 
 Gestão do recital das 3 unidades, portada do protótipo standalone do Arthur Côrtes (reunião de
-17/09/2026). **Um evento por unidade.** 5 abas: Alunos (participação), Grade (blocos e
-apresentações com drag-and-drop), Palco (rider consolidado), Revisão (pendências + impressão) e
-Check-in (o dia). Detalhe completo em [`docs/sistema/aluno.md`](docs/sistema/aluno.md).
+17/09/2026). **Um evento por unidade.** Abas: Alunos (participação), Blocos (id `grade`; blocos e
+apresentações com drag-and-drop), Palco (rider consolidado), Bilheteria, Revisão (pendências),
+Documentos (programação, folha de palco, planilha e certificados, desde 09/10/2026) e Check-in (o
+dia). Logo do papel por marca (Kids/School, `alunos.classificacao`) e playback numerado no Drive. Detalhe completo em [`docs/sistema/aluno.md`](docs/sistema/aluno.md).
 
 - 🔴 **O módulo é ISOLADO, e isso foi MEDIDO em 19/09/2026** (não deduzido do plano): zero views e
   zero funções de fora leem `evento_participacao`/`_apresentacao`/`_bloco`; as 6 triggers das

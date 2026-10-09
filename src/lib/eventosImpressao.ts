@@ -119,6 +119,48 @@ export interface ApresentacaoParaImprimir {
   grupo_id?: string | null;
   /** Idade de hoje (a mesma da aba Alunos). `null`/ausente = sem data de nascimento. */
   idade?: number | null;
+  /** Kids (LAMK) ou School — decide o logo do papel. Ausente = não sabemos (não conta). */
+  marca?: MarcaDoAluno | null;
+}
+
+/**
+ * Marca do aluno para o papel do recital. LAMK (`alunos.classificacao`) = LA Music Kids;
+ * qualquer outra coisa sai como School.
+ *
+ * ⚠️ `null`/vazio devolve `null`, não School: aluno de outra unidade chega sem a
+ * classificação (a RLS esconde o cadastro), e chutar School pintaria o logo errado num
+ * documento de bebês. Quem não sabe não vota no logo.
+ */
+export type MarcaDoAluno = 'kids' | 'school';
+export function marcaDaClassificacao(classificacao: string | null | undefined): MarcaDoAluno | null {
+  const c = (classificacao ?? '').trim().toUpperCase();
+  if (c === '') return null;
+  return c === 'LAMK' ? 'kids' : 'school';
+}
+
+const LOGO_DA_MARCA: Record<MarcaDoAluno, { arquivo: string; alt: string }> = {
+  // Versões "light" (texto escuro): as logos das telas do app têm texto branco e sumiriam
+  // num documento de fundo branco.
+  school: { arquivo: 'logo-la-music-light-completa.svg', alt: 'LA Music' },
+  kids: { arquivo: 'logo-la-music-kids-light-completa.svg', alt: 'LA Music Kids' },
+};
+
+function imgDaMarca(origem: string, marca: MarcaDoAluno): string {
+  const { arquivo, alt } = LOGO_DA_MARCA[marca];
+  return `<img src="${escapeHtml(origem)}/${arquivo}" alt="${alt}"
+            onerror="this.style.display='none'" />`;
+}
+
+/**
+ * Logos do cabeçalho conforme QUEM está no recorte impresso: só Kids → Kids; só School (ou
+ * ninguém com marca conhecida) → School; os dois → as duas lado a lado. Antes saía sempre o
+ * da School, inclusive na folha de um bloco só de musicalização de bebês.
+ */
+export function marcasDoRecorte(blocos: BlocoParaImprimir[]): MarcaDoAluno[] {
+  const presentes = new Set<MarcaDoAluno>();
+  for (const b of blocos) for (const a of b.apresentacoes) if (a.marca) presentes.add(a.marca);
+  if (presentes.size === 0) return ['school'];
+  return (['school', 'kids'] as const).filter((m) => presentes.has(m));
 }
 
 export interface BlocoParaImprimir {
@@ -226,6 +268,7 @@ const ESTILO = `
   .topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px;
           padding-bottom: 14px; border-bottom: 3px solid var(--marca); }
   .topo img { height: 44px; width: auto; object-fit: contain; }
+  .topo .logos { display: flex; align-items: center; gap: 16px; }
   .topo .doc { text-align: right; font-size: 10.5px; color: var(--suave);
                text-transform: uppercase; letter-spacing: .07em; }
   h1 { font-size: 24px; color: var(--marca-escura); text-align: center; margin: 24px 0 5px;
@@ -287,7 +330,13 @@ const ESTILO = `
  * A barra de acoes vive dentro do proprio documento e some no `@media print` — assim ela nao
  * aparece no papel e nao exige uma tela intermediaria no app.
  */
-function moldura(titulo: string, dados: DadosDaImpressao, corpo: string, rodapeExtra = ''): string {
+function moldura(
+  titulo: string,
+  dados: DadosDaImpressao,
+  corpo: string,
+  rodapeExtra = '',
+  marcas: MarcaDoAluno[] = ['school'],
+): string {
   const { evento } = dados;
   const linhaMeta = [
     evento.unidade_nome ? `<strong>${escapeHtml(evento.unidade_nome)}</strong>` : null,
@@ -298,11 +347,9 @@ function moldura(titulo: string, dados: DadosDaImpressao, corpo: string, rodapeE
     .filter(Boolean)
     .join(' &middot; ');
 
-  // Versao "light" da marca: as logos usadas nas telas do app tem texto branco e sumiriam
-  // num documento de fundo branco.
-  const logo = dados.origem
-    ? `<img src="${escapeHtml(dados.origem)}/logo-la-music-light-completa.svg" alt="LA Music"
-            onerror="this.style.display='none'" />`
+  const origem = dados.origem;
+  const logo = origem
+    ? `<div class="logos">${marcas.map((m) => imgDaMarca(origem, m)).join('')}</div>`
     : '<div></div>';
 
   return `<!DOCTYPE html>
@@ -382,6 +429,8 @@ export function gerarProgramaHtml(dados: DadosDaImpressao, apenasBlocoId?: numbe
       'Programação',
       dados,
       '<p class="vazio">A grade ainda não tem apresentações.</p>',
+      '',
+      marcasDoRecorte(visiveis),
     );
   }
 
@@ -444,6 +493,7 @@ export function gerarProgramaHtml(dados: DadosDaImpressao, apenasBlocoId?: numbe
     dados,
     corpo,
     `${total} ${total === 1 ? 'apresentação' : 'apresentações'}`,
+    marcasDoRecorte(comApresentacao),
   );
 }
 
@@ -535,7 +585,7 @@ export function gerarFolhaDePalcoHtml(dados: DadosDaImpressao, apenasBlocoId?: n
     apenasBlocoId === undefined
       ? 'Folha de palco'
       : `Folha de palco — ${visiveis[0]?.nome ?? 'bloco'}`;
-  return moldura(titulo, dados, corpo, 'uso interno da produção');
+  return moldura(titulo, dados, corpo, 'uso interno da produção', marcasDoRecorte(visiveis));
 }
 
 
@@ -642,6 +692,8 @@ export interface CertificadoParaGerar {
     cursoNome: string | null;
     musica: string | null;
   }[];
+  /** Kids ou School — o logo do certificado é o da marca da PESSOA. Ausente = School. */
+  marca?: MarcaDoAluno | null;
 }
 
 const ESTILO_CERTIFICADO = `
@@ -722,10 +774,11 @@ export function gerarCertificadosHtml(
   pessoas: CertificadoParaGerar[],
 ): string {
   const { evento } = dados;
-  const logo = dados.origem
-    ? `<img src="${escapeHtml(dados.origem)}/logo-la-music-light-completa.svg" alt="LA Music"
-            onerror="this.style.display='none'" />`
-    : '';
+  const origem = dados.origem;
+  // Logo por PESSOA: um lote mistura Kids e School, e o certificado de um bebê com o logo
+  // da School era o defeito apontado na reunião de 08/10.
+  const logoDe = (marca: MarcaDoAluno | null | undefined) =>
+    origem ? imgDaMarca(origem, marca ?? 'school') : '';
 
   // Certificado sem nome e papel inutil — ninguem consegue entregar. Sai da lista, e a
   // contagem no cabecalho da barra reflete o que de fato foi gerado.
@@ -743,12 +796,12 @@ export function gerarCertificadosHtml(
   // prestigiar tambem participou.
   const paginas = validas.flatMap((pessoa) =>
     pessoa.apresentacoes.length > 0
-      ? pessoa.apresentacoes.map((a) => ({ nome: pessoa.nome, apresentacao: a }))
-      : [{ nome: pessoa.nome, apresentacao: null }],
+      ? pessoa.apresentacoes.map((a) => ({ nome: pessoa.nome, marca: pessoa.marca, apresentacao: a }))
+      : [{ nome: pessoa.nome, marca: pessoa.marca, apresentacao: null }],
   );
 
   const folhas = paginas
-    .map(({ nome, apresentacao }) => {
+    .map(({ nome, marca, apresentacao }) => {
       const curso = apresentacao?.cursoNome
         ? `<span class="curso">${escapeHtml(apresentacao.cursoNome)}</span>`
         : '';
@@ -762,7 +815,7 @@ export function gerarCertificadosHtml(
 
       return `  <div class="cert">
     <div class="moldura">
-      ${logo}
+      ${logoDe(marca)}
       <h1 class="titulo">Certificado</h1>
       <p class="subtitulo">de participação</p>
 

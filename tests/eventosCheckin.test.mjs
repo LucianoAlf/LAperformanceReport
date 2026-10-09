@@ -556,7 +556,7 @@ test('selecionar nao muta a lista recebida', () => {
 
 test('a aba Check-in renderiza a tela', () => {
   const pagina = readFileSync('src/components/App/Eventos/EventoDetalhePage.tsx', 'utf8');
-  assert.match(pagina, /tabAtiva === 'checkin' && <CheckinTab/u);
+  assert.match(pagina, /tabAtiva === 'checkin' && \(?\s*<CheckinTab/u);
   assert.match(pagina, /TABS_VALIDAS[^=]*=[^;]*'checkin'/su);
 });
 

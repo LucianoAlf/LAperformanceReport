@@ -4,7 +4,7 @@ import { abaFoiPortada, rotaTemFaixaPorAba } from '../src/mobile/abasPortadas.ts
 
 test('detalhe do evento: as 6 abas foram adaptadas ao celular', () => {
   assert.equal(rotaTemFaixaPorAba('/app/eventos/21'), true);
-  for (const aba of ['alunos', 'grade', 'palco', 'bilheteria', 'revisao', 'checkin']) {
+  for (const aba of ['alunos', 'grade', 'palco', 'bilheteria', 'revisao', 'documentos', 'checkin']) {
     assert.equal(abaFoiPortada('/app/eventos/21', aba), true, aba);
   }
   // Aba nova nasce com a faixa: so sai dela quem for adaptado de proposito.

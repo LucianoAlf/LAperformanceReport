@@ -194,7 +194,7 @@ export function BilheteriaConfig({ evento, dados }: { evento: EventoComResumo; d
             );
           })}
           {blocos.length === 0 && (
-            <p className="text-[12.5px] text-slate-500">Nenhum bloco cadastrado na grade ainda.</p>
+            <p className="text-[12.5px] text-slate-500">Nenhum bloco cadastrado ainda.</p>
           )}
         </div>
       </section>

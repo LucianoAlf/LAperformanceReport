@@ -100,11 +100,14 @@ Planilha operacional (`Retencao/PlanilhaRetencao.tsx`) + dashboard analítico (`
 ## Eventos — recital (`/app/eventos`, `/app/eventos/:eventoId`)
 Gestão do recital das 3 unidades, portada do protótipo standalone que o Arthur Côrtes
 apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **LAPE-39**.
-- **Componentes:** `Eventos/EventosPage.tsx` (lista + criar) e `EventoDetalhePage.tsx` com 5 abas —
-  **Alunos** (`AlunosTab`, participação tri-state), **Grade** (`GradeTab` + `SeletorApresentacao`,
-  blocos e apresentações com `@dnd-kit`), **Palco** (`PalcoTab` + `PalcoApresentacao`, rider
-  consolidado), **Revisão** (`RevisaoTab`, pendências + documentos) e **Check-in** (`CheckinTab`,
-  o dia do recital). `AvisoEmDesenvolvimento` é a fonte única do aviso na lista e no detalhe.
+- **Componentes:** `Eventos/EventosPage.tsx` (lista + criar) e `EventoDetalhePage.tsx` com as abas
+  **Alunos** (`AlunosTab`, participação tri-state), **Blocos** (`GradeTab` + `SeletorApresentacao`,
+  blocos e apresentações com `@dnd-kit`; o id da aba segue `grade` para não quebrar link salvo),
+  **Palco** (`PalcoTab` + `PalcoApresentacao`, rider consolidado), **Bilheteria**, **Revisão**
+  (`RevisaoTab`, pendências), **Documentos** (`DocumentosTab`, desde 09/10/2026: programação, folha
+  de palco, planilha e certificados) e **Check-in** (`CheckinTab`, o dia do recital). Revisão e
+  Documentos montam os dados pelo mesmo hook, `useRevisaoDoEvento`; Check-in e certificados montam a
+  lista do dia por `entradaDaChegada` — não reimplementar em aba nova. `AvisoEmDesenvolvimento` é a fonte única do aviso na lista e no detalhe.
 - **Filtro de curso no seletor da Grade (06/10/2026, pedido do Arthur):** seletor único **"Curso: ▾"** na
 - **Filtro "Família" no seletor da Grade (06/10/2026, pedido do Hugo):** botão **Família** ao lado do "Curso:" mostra só quem tem familiar que também é aluno ativo da unidade, com a família junta na lista e o nome do familiar sob o aluno. Fonte: view **`vw_evento_familia_v1`** (`security_invoker`, RLS de `alunos`), regra = telefone do responsável do aluno é o telefone/WhatsApp de um aluno **adulto** E o primeiro nome do responsável cadastrado é o primeiro nome dele (45 pares nas 3 unidades em 06/10; só telefone dava 143 e misturava irmãos). ⚠️ Pega cônjuge também — por isso "família", nunca "pai e filho". Lida à parte dos candidatos: se falhar, o botão fica desabilitado e o seletor segue funcionando.
   linha da busca — Todos, Só instrumentos, Só musicalização ou um curso (com quantos ainda estão fora
@@ -215,7 +218,17 @@ apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **L
 - **Instrumentos no cartão** (28/09): o rider de cada número aparece no próprio cartão da Grade
   (tracejado = veio do curso). O rodapé "palco do bloco" saiu; o consolidado do bloco e do recital
   continua na aba Palco e na folha de palco.
-- **Impressão** (aba Revisão): programação (público), folha de palco (produção) e planilha CSV —
+- **Logo por marca (09/10/2026):** programação e folha de palco usam o logo da **Kids** quando o recorte
+  impresso é só de alunos LAMK (`alunos.classificacao`), o da **School** quando é só EMLA, e os dois
+  quando mistura; o certificado usa o logo da marca de **cada pessoa**. Regra pura em
+  `marcaDaClassificacao`/`marcasDoRecorte` (`src/lib/eventosImpressao.ts`). ⚠️ Visitante de outra
+  unidade chega sem classificação (a RLS esconde o cadastro) e **não vota** no logo; no certificado
+  cai na School.
+- **Playbacks numerados no Drive (09/10/2026):** `recital-drive-sync` nomeia "B1-03 — Aluno — Curso.mp3"
+  (bloco 1, 3º número; quem toca junto divide o número, regra de `agruparEmNumeros`) e **renomeia** o
+  arquivo quando a posição muda depois do envio — o último nome fica em
+  `evento_apresentacao.drive_nome` (até 30 renomeações por corrida).
+- **Impressão** (aba Documentos, era na Revisão até 09/10/2026): programação (público), folha de palco (produção) e planilha CSV —
   cada uma com recorte opcional por bloco. ⚠️ **O recorte por bloco é de EXIBIÇÃO, aplicado DEPOIS
   do cálculo**: filtrar antes faria o bloco 3 começar às 09:00, e a folha diria a hora errada para
   quem monta o palco. ⚠️ **CSV e não `.xlsx`**: o protótipo embute o SheetJS inteiro (498 KB), e
