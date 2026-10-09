@@ -438,6 +438,13 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
   const [filtroProfessor, setFiltroProfessor] = useState('todos');
   const [filtroCurso, setFiltroCurso] = useState('todos');
   const [soSemAlocar, setSoSemAlocar] = useState(false);
+  /**
+   * Recorte vindo do funil (clique numa etapa ou numa perda). Fica separado dos outros
+   * filtros porque cada um responde exatamente ao número que o funil mostra:
+   * 'em_bloco' = confirmados com algum curso num bloco; 'sem_bloco' = confirmados sem nenhum;
+   * 'nao_confirmados' = indefinidos + não vão.
+   */
+  const [filtroFunil, setFiltroFunil] = useState<'em_bloco' | 'sem_bloco' | 'nao_confirmados' | null>(null);
   const [soRelatorioPronto, setSoRelatorioPronto] = useState(false);
 
   // O quadro do topo manda um "tick": cada clique religa o filtro — mesmo se a
@@ -496,6 +503,9 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
     const termo = normalizarBusca(busca.trim());
     return alunos.filter((a) => {
       if (filtro !== 'todos' && a.status !== filtro) return false;
+      if (filtroFunil === 'em_bloco' && !(a.status === 'participa' && a.cursos_alocados > 0)) return false;
+      if (filtroFunil === 'sem_bloco' && !(a.status === 'participa' && a.cursos_alocados === 0)) return false;
+      if (filtroFunil === 'nao_confirmados' && a.status === 'participa') return false;
       // Professor e curso filtram por CURSO da pessoa: quem faz dois cursos continua na
       // lista quando um dos dois casa — esconder o outro e trabalho do olho, nao do filtro.
       if (filtroProfessor !== 'todos' && !a.cursos.some((c) => String(c.professor_id) === filtroProfessor)) {
@@ -517,7 +527,11 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
       );
       return alvo.includes(termo);
     });
-  }, [alunos, busca, filtro, filtroProfessor, filtroCurso, soSemAlocar, soRelatorioPronto]);
+  }, [alunos, busca, filtro, filtroProfessor, filtroCurso, soSemAlocar, soRelatorioPronto, filtroFunil]);
+
+  // Qual etapa do funil está acesa, derivada dos filtros (uma fonte só da verdade).
+  const etapaDoFunil: 'participa' | 'em_bloco' | 'sem_bloco' | 'nao_confirmados' | null =
+    filtroFunil ?? (filtro === 'participa' && !soSemAlocar ? 'participa' : null);
 
   const paraConfirmar = useMemo(
     () => visiveis.filter((a) => a.status !== 'participa' && avaliarElegibilidade(a).podeParticipar),
@@ -529,7 +543,7 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
   const [pagina, setPagina] = useState(1);
   useEffect(() => {
     setPagina(1);
-  }, [busca, filtro, filtroProfessor, filtroCurso, soSemAlocar, soRelatorioPronto]);
+  }, [busca, filtro, filtroProfessor, filtroCurso, soSemAlocar, soRelatorioPronto, filtroFunil]);
   const totalPaginas = Math.max(1, Math.ceil(visiveis.length / ALUNOS_POR_PAGINA));
   const paginaAtual = Math.min(pagina, totalPaginas);
   const daPagina = visiveis.slice((paginaAtual - 1) * ALUNOS_POR_PAGINA, paginaAtual * ALUNOS_POR_PAGINA);
@@ -701,7 +715,21 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
             .reduce((t, a) => t + (convidadosPorPessoa.get(a.pessoa_chave)?.length ?? 0), 0)}
           cursos={porCurso}
           cursoAtivo={filtroCurso === 'todos' ? null : filtroCurso}
-          onFiltroStatus={(st) => setFiltro((atual) => (atual === st ? 'todos' : st))}
+          onFiltroStatus={(st) => {
+            setFiltroFunil(null);
+            setFiltro((atual) => (atual === st ? 'todos' : st));
+          }}
+          etapaAtiva={etapaDoFunil}
+          onEtapa={(etapa) => {
+            // Clicar na etapa que já está ativa tira o recorte.
+            const limpar = etapa === etapaDoFunil || etapa === 'elegiveis';
+            setSoSemAlocar(false);
+            setFiltroFunil(null);
+            setFiltro('todos');
+            if (limpar) return;
+            if (etapa === 'participa') setFiltro('participa');
+            else setFiltroFunil(etapa);
+          }}
           onSoSemBloco={() => {
             setFiltro('participa');
             setSoSemAlocar(true);
@@ -726,7 +754,10 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
             <button
               key={f.id}
               type="button"
-              onClick={() => setFiltro(f.id)}
+              onClick={() => {
+                setFiltroFunil(null);
+                setFiltro(f.id);
+              }}
               className={cn(
                 'min-h-[44px] flex-auto whitespace-nowrap px-2 py-1.5 text-[13px] transition-colors sm:min-h-0 sm:flex-none sm:px-3 sm:text-[12.5px]',
                 filtro === f.id
@@ -776,7 +807,10 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
               variant={soSemAlocar ? 'default' : 'outline'}
               size="sm"
               className="h-11 flex-1 gap-1.5 sm:h-9 sm:flex-none"
-              onClick={() => setSoSemAlocar((v) => !v)}
+              onClick={() => {
+                setFiltroFunil(null);
+                setSoSemAlocar((v) => !v);
+              }}
             >
               <LayoutList className="h-3.5 w-3.5" />
               Sem alocar

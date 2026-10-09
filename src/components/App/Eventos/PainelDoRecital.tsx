@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { animate, motion, useReducedMotion } from 'framer-motion';
 
 import { cn } from '@/lib/utils';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { MOLA_CURTA } from './ControlesComMovimento';
 
 /**
@@ -271,7 +272,13 @@ export function PainelAlunos({
   onFiltroStatus,
   onSoSemBloco,
   onCurso,
+  etapaAtiva,
+  onEtapa,
 }: {
+  /** Etapa (ou perda) do funil acesa agora — destaca o clique que filtrou a lista. */
+  etapaAtiva?: string | null;
+  /** Clique numa etapa ou perda do funil. */
+  onEtapa?: (etapa: 'elegiveis' | 'participa' | 'em_bloco' | 'sem_bloco' | 'nao_confirmados') => void;
   elegiveis: number;
   participam: number;
   indefinidos: number;
@@ -316,14 +323,14 @@ export function PainelAlunos({
       >
         <FunilFluxo
           etapas={[
-            { chave: 'elegiveis', rotulo: 'Elegíveis', valor: elegiveis, detalhe: 'alunos ativos da unidade' },
+            { chave: 'elegiveis', rotulo: 'Elegíveis', valor: elegiveis, detalhe: 'alunos ativos · limpa o filtro' },
             { chave: 'participa', rotulo: 'Confirmados', valor: participam },
             { chave: 'em_bloco', rotulo: 'Em algum bloco', valor: pessoasEmBloco },
           ]}
-          onEscolher={(c) => {
-            if (c === 'participa') onFiltroStatus?.('participa');
-            if (c === 'em_bloco' && onSoSemBloco) onSoSemBloco();
-          }}
+          perdas={['nao_confirmados', 'sem_bloco']}
+          rotulosDasPerdas={['ainda não confirmaram', 'confirmados sem bloco']}
+          ativa={etapaAtiva}
+          onEscolher={(c) => onEtapa?.(c as 'elegiveis' | 'participa' | 'em_bloco' | 'sem_bloco' | 'nao_confirmados')}
         />
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-800 pt-2 text-[12px] text-slate-400">
           {fatias.slice(1).map((f) => (
@@ -872,9 +879,17 @@ interface Ponto {
  */
 export function FunilFluxo({
   etapas,
+  perdas,
+  rotulosDasPerdas,
+  ativa,
   onEscolher,
 }: {
   etapas: { chave: string; rotulo: string; valor: number; detalhe?: string }[];
+  /** Chave de cada passagem (entre a etapa i e i+1), para a perda também filtrar. */
+  perdas?: string[];
+  /** Texto do tooltip de cada perda (ex.: "ainda não confirmaram"). */
+  rotulosDasPerdas?: string[];
+  ativa?: string | null;
   onEscolher?: (chave: string) => void;
 }) {
   const reduzir = useReducedMotion();
@@ -884,6 +899,12 @@ export function FunilFluxo({
   const seg = LARGURA_FUNIL / Math.max(1, etapas.length);
   const pontosRef = useRef<SVGGElement>(null);
   const chaveValores = valores.join(',');
+  const idClip = useId().replace(/:/g, '');
+  // Foco = etapa sob o mouse; sem mouse, a etapa que está filtrando a lista.
+  const [sobre, setSobre] = useState<number | null>(null);
+  const idxAtiva = etapas.findIndex((e) => e.chave === ativa);
+  const foco = sobre ?? (idxAtiva >= 0 ? idxAtiva : null);
+  const n = Math.max(1, etapas.length);
 
   useEffect(() => {
     if (reduzir || etapas.length < 2) return;
@@ -938,7 +959,21 @@ export function FunilFluxo({
 
   return (
     <div>
-      <div className="grid" style={{ gridTemplateColumns: `repeat(${etapas.length}, minmax(0, 1fr))` }}>
+      <div className="relative" onMouseLeave={() => setSobre(null)}>
+      {/* Coluna de destaque da etapa em foco (cabeçalho + faixa), como no Funnel do uiarc. */}
+      {foco !== null && (
+        <motion.div
+          aria-hidden
+          className={cn(
+            'pointer-events-none absolute inset-y-0 rounded-xl bg-white/[0.045]',
+            idxAtiva === foco && 'ring-1 ring-inset ring-amber-400/40',
+          )}
+          initial={false}
+          animate={{ left: `${(foco / n) * 100}%`, width: `${100 / n}%` }}
+          transition={reduzir ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 36 }}
+        />
+      )}
+      <div className="relative grid" style={{ gridTemplateColumns: `repeat(${etapas.length}, minmax(0, 1fr))` }}>
         {etapas.map((e) => {
           const conteudo = (
             <>
@@ -949,12 +984,19 @@ export function FunilFluxo({
               </span>
             </>
           );
+          const idx = etapas.indexOf(e);
+          const apagada = foco !== null && foco !== idx;
           return onEscolher ? (
             <button
               key={e.chave}
               type="button"
               onClick={() => onEscolher(e.chave)}
-              className="min-w-0 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-slate-800/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
+              onMouseEnter={() => setSobre(idx)}
+              aria-pressed={ativa === e.chave}
+              className={cn(
+                'min-w-0 rounded-lg px-2 py-1 text-left transition-opacity duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60',
+                apagada && 'opacity-45',
+              )}
             >
               {conteudo}
             </button>
@@ -966,6 +1008,7 @@ export function FunilFluxo({
         })}
       </div>
 
+      <div className="relative">
       <svg
         viewBox={`0 0 ${LARGURA_FUNIL} ${ALTURA_FUNIL}`}
         preserveAspectRatio="none"
@@ -978,29 +1021,91 @@ export function FunilFluxo({
             <stop offset="0%" stopColor="rgb(139 92 246 / 0.55)" />
             <stop offset="100%" stopColor="rgb(16 185 129 / 0.45)" />
           </linearGradient>
+          <clipPath id={`funil-foco-${idClip}`}>
+            <motion.rect
+              y={0}
+              height={ALTURA_FUNIL}
+              initial={false}
+              animate={{ x: (foco ?? 0) * seg, width: foco === null ? 0 : seg }}
+              transition={reduzir ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 36 }}
+            />
+          </clipPath>
         </defs>
         <motion.path
           d={caminhoDaFaixa(meias)}
           fill="url(#funil-faixa)"
           initial={reduzir ? false : { opacity: 0 }}
-          animate={{ opacity: 1, d: caminhoDaFaixa(meias) }}
-          transition={reduzir ? { duration: 0 } : { duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+          animate={{ opacity: foco === null ? 1 : 0.55, d: caminhoDaFaixa(meias) }}
+          transition={reduzir ? { duration: 0 } : { duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
         />
+        {/* O trecho em foco acende por inteiro (a mesma faixa, recortada pela etapa). */}
+        <path d={caminhoDaFaixa(meias)} fill="rgb(167 139 250)" clipPath={`url(#funil-foco-${idClip})`} />
         <g ref={pontosRef} />
       </svg>
+      {/* A faixa também é clicável: uma área por etapa, por cima do desenho. */}
+      {onEscolher && (
+        <div className="absolute inset-0 flex">
+          {etapas.map((e, idx) => (
+            <button
+              key={e.chave}
+              type="button"
+              aria-label={`Filtrar: ${e.rotulo}`}
+              onClick={() => onEscolher(e.chave)}
+              onMouseEnter={() => setSobre(idx)}
+              className="h-full flex-1"
+            />
+          ))}
+        </div>
+      )}
+      {/* Cartão da etapa em foco: total e quanto seguiu da anterior. */}
+      {foco !== null && etapas[foco] && (
+        <motion.div
+          key={foco}
+          initial={reduzir ? false : { opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.18 }}
+          className="pointer-events-none absolute top-1/2 z-10 w-52 -translate-y-1/2 rounded-xl border border-slate-700 bg-slate-900/95 px-3 py-2 shadow-2xl shadow-black/50"
+          style={
+            foco < etapas.length - 1
+              ? { left: `calc(${((foco + 1) / n) * 100}% + 8px)` }
+              : { right: `calc(${(1 / n) * 100}% + 8px)` }
+          }
+        >
+          <p className="text-[11.5px] text-slate-400">{etapas[foco].rotulo}</p>
+          <p className="flex items-baseline justify-between text-[13px] text-slate-300">
+            Total <span className="text-[16px] font-semibold tabular-nums text-white">{etapas[foco].valor}</span>
+          </p>
+          <p className="text-[11.5px] text-slate-500">
+            {foco === 0
+              ? 'início do caminho'
+              : `${etapas[foco - 1].valor > 0 ? Math.round((etapas[foco].valor / etapas[foco - 1].valor) * 100) : 0}% seguiram de ${etapas[foco - 1].rotulo.toLowerCase()}`}
+          </p>
+        </motion.div>
+      )}
+      </div>
+      </div>
 
-      <div className="relative mt-1 h-4">
+      <div className="relative mt-1 h-5">
         {etapas.slice(1).map((e, i) => {
           const antes = etapas[i].valor;
           const perda = antes > 0 ? Math.round((1 - e.valor / antes) * 100) : 0;
           return (
-            <span
-              key={e.chave}
-              className="absolute -translate-x-1/2 text-[11.5px] tabular-nums text-slate-500"
-              style={{ left: `${(((i + 1) * seg - seg * TRANSICAO * 0.5) / LARGURA_FUNIL) * 100}%` }}
-              title={`${antes - e.valor} ficaram entre ${etapas[i].rotulo} e ${e.rotulo}`}
+            <span key={e.chave} className="absolute -translate-x-1/2" style={{ left: `${(((i + 1) * seg - seg * TRANSICAO * 0.5) / LARGURA_FUNIL) * 100}%` }}>
+            <Tooltip side="bottom" content={`${antes - e.valor} ${rotulosDasPerdas?.[i] ?? `ficaram entre ${etapas[i].rotulo} e ${e.rotulo}`} — clique para ver quem`}>
+            <button
+              type="button"
+              disabled={!onEscolher || !perdas?.[i]}
+              onClick={() => perdas?.[i] && onEscolher?.(perdas[i])}
+              className={cn(
+                'rounded px-1.5 text-[11.5px] tabular-nums transition-colors',
+                perdas?.[i] && ativa === perdas[i]
+                  ? 'bg-rose-500/15 text-rose-200 ring-1 ring-rose-400/50'
+                  : 'text-slate-500 enabled:hover:bg-slate-800 enabled:hover:text-slate-200',
+              )}
             >
-              ↓ {perda}%
+              ↓ {perda}% · {antes - e.valor}
+            </button>
+            </Tooltip>
             </span>
           );
         })}
