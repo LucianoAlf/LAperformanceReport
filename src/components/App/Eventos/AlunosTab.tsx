@@ -778,17 +778,12 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
           size="sm"
           className="h-11 flex-1 sm:h-9 sm:flex-none"
           disabled={gravando === '__lote__' || visiveis.length === 0}
-          title="Marca como participando todos os alunos do filtro atual (todas as páginas), com confirmação e Desfazer"
           onClick={() => {
             const alvos = visiveis.filter((a) => avaliarElegibilidade(a).podeParticipar);
             if (alvos.length > 0) setLotePendente(alvos);
           }}
         >
-          {/* "Visíveis" enganava com a paginação: o lote pega TODOS do filtro, de todas as páginas. */}
-          <Check className="h-4 w-4" />
-          {filtro === 'todos' && !busca && filtroProfessor === 'todos' && filtroCurso === 'todos' && !soSemAlocar && !soRelatorioPronto
-            ? `Todos participam (${visiveis.length})`
-            : `Marcar os ${visiveis.length} do filtro como participam`}
+          Marcar os {visiveis.length} visíveis
         </Button>
 
         <Button
