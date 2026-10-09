@@ -28,6 +28,7 @@ import {
 } from '@/hooks/useEventos';
 import { ModalAlunoOutraUnidade } from './ModalAlunoOutraUnidade';
 import { ModalConvidadosDoAluno } from './ModalConvidadosDoAluno';
+import { PainelAlunos, type CursoNoPainel } from './PainelDoRecital';
 
 type FiltroStatus = 'todos' | ParticipacaoStatus;
 
@@ -363,6 +364,22 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
   const [lotePendente, setLotePendente] = useState<AlunoElegivel[] | null>(null);
 
   const resumo = useMemo(() => resumirParticipacao(alunos), [alunos]);
+  // Ranking por curso de quem confirmou: previstas × já nos blocos (painel "Por curso").
+  const porCurso = useMemo<CursoNoPainel[]>(() => {
+    const mapa = new Map<string, CursoNoPainel>();
+    for (const a of alunos) {
+      if (a.status !== 'participa') continue;
+      const alocados = new Set(a.alocacoes.map((x) => x.curso_id));
+      for (const c of a.cursos) {
+        const chave = String(c.curso_id);
+        const atual = mapa.get(chave) ?? { cursoId: chave, curso: c.curso_nome ?? 'Curso', previstas: 0, nosBlocos: 0 };
+        atual.previstas += 1;
+        if (alocados.has(c.curso_id)) atual.nosBlocos += 1;
+        mapa.set(chave, atual);
+      }
+    }
+    return [...mapa.values()];
+  }, [alunos]);
   // O botao so aparece quando existe alguem no estado — um filtro que nunca filtra
   // nada e controle morto na barra.
   const temRelatorioPronto = useMemo(() => alunos.some((a) => a.relatorio_falta_alocar), [alunos]);
@@ -560,29 +577,27 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
         ))}
       </div>
 
-      <div className="hidden grid-cols-2 gap-3 sm:grid lg:grid-cols-5">
-        <KPICard size="sm" label="Elegíveis" value={resumo.total} icon={Users} variant="default" />
-        <KPICard size="sm" label="Participam" value={resumo.participam} icon={Check} variant="emerald" />
-        <KPICard size="sm" label="Indefinidos" value={resumo.indefinidos} icon={HelpCircle} variant="amber" />
-        <KPICard
-          size="sm"
-          label="Apresentações previstas"
-          value={resumo.apresentacoesPrevistas}
-          icon={Music}
-          variant="violet"
-          subvalue={
-            resumo.apresentacoesAlocadas > 0
-              ? `${resumo.apresentacoesAlocadas} já nos blocos`
-              : '1 por curso de quem participa'
-          }
-        />
-        <KPICard
-          size="sm"
-          label="Convidados"
-          value={resumo.convidadosTotal}
-          icon={Users}
-          variant="default"
-          subvalue="somando quem participa"
+      <div className="hidden sm:block">
+        <PainelAlunos
+          elegiveis={resumo.total}
+          participam={resumo.participam}
+          indefinidos={resumo.indefinidos}
+          naoParticipam={resumo.naoParticipam}
+          previstas={resumo.apresentacoesPrevistas}
+          nosBlocos={resumo.apresentacoesAlocadas}
+          confirmadosSemBloco={resumo.participamSemAlocacao}
+          convidados={resumo.convidadosTotal}
+          convidadosComNome={alunos
+            .filter((a) => a.status === 'participa')
+            .reduce((t, a) => t + (convidadosPorPessoa.get(a.pessoa_chave)?.length ?? 0), 0)}
+          cursos={porCurso}
+          cursoAtivo={filtroCurso === 'todos' ? null : filtroCurso}
+          onFiltroStatus={(st) => setFiltro((atual) => (atual === st ? 'todos' : st))}
+          onSoSemBloco={() => {
+            setFiltro('participa');
+            setSoSemAlocar(true);
+          }}
+          onCurso={(c) => setFiltroCurso((atual) => (atual === c ? 'todos' : c))}
         />
       </div>
 

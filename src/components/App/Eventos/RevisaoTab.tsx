@@ -18,6 +18,8 @@ import {
   resumirRelatorios,
   rotuloIdade,
   type Pendencia,
+  agruparEmNumeros,
+  calcularHorariosDaGrade,
 } from '@/lib/eventos';
 import {
   RELATORIO_STATUS_LABEL,
@@ -25,6 +27,7 @@ import {
   type RelatorioDoProfessor,
 } from '@/hooks/useEventos';
 import { useRevisaoDoEvento } from './useRevisaoDoEvento';
+import { PainelRevisao, type BlocoNoPainel } from './PainelDoRecital';
 
 type AbaDeDestino = 'alunos' | 'grade' | 'documentos';
 
@@ -48,6 +51,7 @@ export function RevisaoTab({
 }) {
   const {
     blocos,
+    entrada,
     relatorios,
     pendencias,
     resumo,
@@ -68,6 +72,25 @@ export function RevisaoTab({
     [blocos],
   );
 
+  // Linha do recital: uma barra por bloco, com o horário calculado sobre a grade inteira.
+  const blocosNoPainel = useMemo<BlocoNoPainel[]>(() => {
+    const horarios = calcularHorariosDaGrade(entrada.evento, entrada.blocos);
+    return [...blocos]
+      .sort((a, b) => a.ordem - b.ordem)
+      .map((b) => {
+        const h = horarios.find((x) => x.blocoId === b.id);
+        return {
+          id: b.id,
+          nome: b.nome,
+          inicio: h?.inicio ?? '--:--',
+          fim: h?.fim ?? '--:--',
+          duracaoSegundos: h?.duracaoSegundos ?? 0,
+          numeros: agruparEmNumeros(b.apresentacoes).length,
+          conflito: h?.conflitaComAnterior ?? false,
+        };
+      });
+  }, [blocos, entrada]);
+
   if (erro) {
     return (
       <p className="rounded-md border border-rose-500/40 bg-rose-500/10 p-3 text-[13px] text-rose-200">
@@ -84,35 +107,15 @@ export function RevisaoTab({
   return (
     <div className="space-y-4">
       {/* ── resumo ── */}
-      <section className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <Cartao icone={<Users className="h-4 w-4" />} rotulo="Participantes" valor={resumo.participantes} />
-        <Cartao icone={<Music className="h-4 w-4" />} rotulo="Apresentações" valor={resumo.apresentacoes} />
-        <Cartao icone={<LayoutList className="h-4 w-4" />} rotulo="Blocos" valor={resumo.blocos} />
-        <Cartao
-          icone={<Clock className="h-4 w-4" />}
-          rotulo="Duração prevista"
-          valor={resumo.duracaoTotalSegundos > 0 ? formatarDuracao(resumo.duracaoTotalSegundos) : '—'}
-          rodape={
-            resumo.inicio && resumo.terminoPrevisto
-              ? `${resumo.inicio} às ${resumo.terminoPrevisto}`
-              : 'nenhum bloco montado'
-          }
-        />
-      </section>
-
-      {/* ⚠️ A ressalva anda junto do número, nunca num tooltip: hora de término anunciada
-          sem dizer de que ela depende vira promessa para os pais na porta do teatro. */}
-      {resumo.semDuracaoPropria > 0 && resumo.apresentacoes > 0 && (
-        <p className="text-[12px] sm:text-[11.5px] text-slate-500">
-          O término é estimativa:{' '}
-          <strong className="text-slate-400">
-            {resumo.semDuracaoPropria} de {resumo.apresentacoes}
-          </strong>{' '}
-          {resumo.semDuracaoPropria === 1 ? 'apresentação ainda usa' : 'apresentações ainda usam'} a
-          duração padrão de {formatarDuracao(evento.duracao_padrao_segundos)}, em vez de uma
-          duração medida.
-        </p>
-      )}
+      <PainelRevisao
+        participantes={resumo.participantes}
+        apresentacoes={resumo.apresentacoes}
+        inicio={resumo.inicio}
+        termino={resumo.terminoPrevisto}
+        duracaoSegundos={resumo.duracaoTotalSegundos}
+        semDuracaoPropria={resumo.semDuracaoPropria}
+        blocos={blocosNoPainel}
+      />
 
       {/* ── relatórios do LA Teacher ── */}
       <section className="rounded-xl border border-slate-700 bg-slate-800/40 p-3">
