@@ -106,6 +106,11 @@ export interface ApresentacaoParaImprimir {
   aluno_nome: string;
   curso_nome: string | null;
   professor_nome: string | null;
+  /**
+   * Outro professor que sobe ao palco com o aluno (substituto ou acompanhante). Não troca o
+   * professor do aluno: a programação mostra os dois, a folha de palco diz quem sobe.
+   */
+  professor_palco_nome?: string | null;
   musica: string | null;
   musica_artista?: string | null;
   /** Link externo da musica (YouTube/Spotify) — sai na folha de palco e na planilha. */
@@ -449,6 +454,7 @@ export function gerarProgramaHtml(dados: DadosDaImpressao, apenasBlocoId?: numbe
           const musica = numero.find((ap) => (ap.musica ?? '').trim() !== '')?.musica ?? null;
           // Professor sem repetir: dois alunos da mesma turma nao imprimem o nome duas vezes.
           const professores = [...new Set(numero.map((ap) => ap.professor_nome).filter(Boolean))];
+          const noPalco = [...new Set(numero.map((ap) => ap.professor_palco_nome).filter(Boolean))];
           const integrantes = numero
             .map((ap) => {
               const idade = rotuloIdade(ap.idade);
@@ -464,6 +470,7 @@ export function gerarProgramaHtml(dados: DadosDaImpressao, apenasBlocoId?: numbe
               ${integrantes}
               ${musica ? `<div class="musica">${escapeHtml(musica)}</div>` : ''}
               ${professores.length > 0 ? `<div class="prof">Prof. ${professores.map((p) => escapeHtml(p)).join(', ')}</div>` : ''}
+              ${noPalco.length > 0 ? `<div class="prof">No palco: Prof. ${noPalco.map((p) => escapeHtml(p)).join(', ')}</div>` : ''}
             </td>
           </tr>`;
         })
@@ -534,6 +541,8 @@ export function gerarFolhaDePalcoHtml(dados: DadosDaImpressao, apenasBlocoId?: n
       const itens = consolidarItensDoPalco(paraPalco([bloco]));
 
       const playback = bloco.apresentacoes.filter((a) => a.tem_playback);
+      // Quem cuida da entrada no palco precisa saber que é OUTRO professor que sobe.
+      const comProfessorNoPalco = bloco.apresentacoes.filter((a) => (a.professor_palco_nome ?? '').trim() !== '');
       const mapas = bloco.apresentacoes.filter((a) => (a.observacao_mapa ?? '').trim() !== '');
 
       const dataDoBloco =
@@ -550,6 +559,17 @@ export function gerarFolhaDePalcoHtml(dados: DadosDaImpressao, apenasBlocoId?: n
                   const fonte = a.musica_link ?? a.playback_path ?? null;
                   return escapeHtml(a.aluno_nome) + (fonte ? ` — ${escapeHtml(fonte)}` : '');
                 })
+                .join('<br/>')}</p>`
+            : ''
+        }
+        ${
+          comProfessorNoPalco.length > 0
+            ? `<p class="prof"><strong>Professor no palco:</strong> ${comProfessorNoPalco
+                .map(
+                  (a) =>
+                    `${escapeHtml(a.professor_palco_nome)} com ${escapeHtml(a.aluno_nome)}` +
+                    (a.professor_nome ? ` (prof. do aluno: ${escapeHtml(a.professor_nome)})` : ''),
+                )
                 .join('<br/>')}</p>`
             : ''
         }
@@ -627,7 +647,7 @@ export function gerarPlanilhaCsv(dados: DadosDaImpressao, apenasBlocoId?: number
     'Itens de palco', 'Observação de palco',
     // No FIM de proposito: quem ja montou planilha em cima das colunas antigas nao ve nada
     // mudar de lugar.
-    'Idade', 'Sobe junto com',
+    'Idade', 'Sobe junto com', 'Professor no palco',
   ];
 
   const linhas = visiveis.flatMap((bloco) => {
@@ -664,6 +684,7 @@ export function gerarPlanilhaCsv(dados: DadosDaImpressao, apenasBlocoId?: number
           ap.observacao_mapa ?? '',
           ap.idade ?? '',
           juntos,
+          ap.professor_palco_nome ?? '',
         ].map(celulaCsv).join(';');
       }),
     );

@@ -628,7 +628,16 @@ export interface ApresentacaoDaGrade {
   aluno_data_nascimento: string | null;
   /** `alunos.classificacao` (LAMK = Kids, EMLA = School). null = visitante sem cadastro visível. */
   aluno_classificacao: string | null;
+  /** Professor do aluno (dono pedagógico) — cópia do cadastro, segue a troca de professor. */
+  professor_id: number | null;
   professor_nome: string | null;
+  /**
+   * Professor que SOBE ao palco com o aluno neste número, quando não é o do aluno (o do aluno
+   * faltou, está em outro número, ou outro acompanha). Não troca o professor do aluno: o
+   * relatório e a música continuam com o `professor_id`. O LA Teacher mostra o aluno para os dois.
+   */
+  professor_palco_id: number | null;
+  professor_palco_nome: string | null;
   ordem: number;
   /**
    * Mesmo valor = sobem juntas no mesmo numero (um horario, uma musica). `null` = sozinha.
@@ -698,11 +707,13 @@ export function useGradeDoEvento(eventoId: number | null) {
         .from('evento_apresentacao')
         .select(
           'id, bloco_id, aluno_id, pessoa_chave, curso_id, ordem, grupo_id, musica, musica_artista,' +
+            ' professor_id, professor_palco_id,' +
             ' duracao_segundos, tem_playback, musica_link, playback_path, detalhes_origem,' +
             ' professor, professor_em, editado_apos_envio_em,' +
             ' certificado_status, certificado_em,' +
             ' observacao_mapa, alunos(nome, data_nascimento, classificacao), cursos(nome),' +
             ' professores!evento_apresentacao_professor_id_fkey(nome),' +
+            ' palco:professores!evento_apresentacao_professor_palco_id_fkey(nome),' +
             // Itens embutidos em vez de uma segunda leitura: aqui a FK existe
             // (`apresentacao_id -> evento_apresentacao`), entao o PostgREST resolve o embed —
             // ao contrario da participacao, que cruza com uma VIEW e por isso vai separada.
@@ -732,11 +743,18 @@ export function useGradeDoEvento(eventoId: number | null) {
 
     type LinhaAp = Omit<
       ApresentacaoDaGrade,
-      'curso_nome' | 'aluno_nome' | 'aluno_data_nascimento' | 'aluno_classificacao' | 'professor_nome' | 'itens'
+      | 'curso_nome'
+      | 'aluno_nome'
+      | 'aluno_data_nascimento'
+      | 'aluno_classificacao'
+      | 'professor_nome'
+      | 'professor_palco_nome'
+      | 'itens'
     > & {
       alunos: { nome: string; data_nascimento: string | null; classificacao: string | null } | null;
       cursos: { nome: string } | null;
       professores: { nome: string } | null;
+      palco: { nome: string } | null;
       evento_apresentacao_item: ItemDaApresentacao[] | null;
     };
 
@@ -760,6 +778,7 @@ export function useGradeDoEvento(eventoId: number | null) {
         aluno_classificacao: linha.alunos?.classificacao ?? null,
         curso_nome: linha.cursos?.nome ?? null,
         professor_nome: linha.professores?.nome ?? null,
+        professor_palco_nome: linha.palco?.nome ?? null,
         // Ordem explicita por id: o embed do PostgREST nao promete ordem nenhuma, e sem
         // isso a lista de itens trocaria de posicao a cada carregamento.
         itens: [...(linha.evento_apresentacao_item ?? [])].sort((a, b) => a.id - b.id),
@@ -885,6 +904,76 @@ export async function atualizarApresentacao(
     .from('evento_apresentacao')
     .update({ ...campos, updated_at: new Date().toISOString() })
     .eq('id', id);
+}
+
+/**
+ * Escolhe (ou tira, com `null`) o professor que sobe ao palco com o aluno nesta apresentação.
+ *
+ * ⚠️ Confere a linha devolvida: a RLS de `evento_apresentacao` FILTRA em vez de recusar, e sem
+ * isso a tela diria "salvo" sobre um banco intacto.
+ */
+export async function definirProfessorNoPalco(apresentacaoId: number, professorId: number | null) {
+  const { data, error } = await supabase
+    .from('evento_apresentacao')
+    .update({ professor_palco_id: professorId, updated_at: new Date().toISOString() })
+    .eq('id', apresentacaoId)
+    .select('id');
+  if (error) return { error };
+  if ((data ?? []).length !== 1) {
+    return { error: { message: `apresentação ${apresentacaoId}: nada foi salvo — confira a permissão.` } };
+  }
+  return { error: null };
+}
+
+export interface ProfessorDaUnidade {
+  id: number;
+  nome: string;
+}
+
+// Uma leitura por unidade para a tela inteira: cada cartão da grade usa a lista, e 200
+// cartões não podem virar 200 consultas.
+const professoresPorUnidade = new Map<string, Promise<ProfessorDaUnidade[]>>();
+
+function lerProfessoresDaUnidade(unidadeId: string): Promise<ProfessorDaUnidade[]> {
+  const guardado = professoresPorUnidade.get(unidadeId);
+  if (guardado) return guardado;
+  const promessa = (async () => {
+    const { data, error } = await supabase
+      .from('professores_unidades')
+      .select('professor_id, professores!inner(id, nome, ativo)')
+      .eq('unidade_id', unidadeId)
+      .eq('professores.ativo', true);
+    if (error) {
+      // Não guardar a falha: a próxima abertura tenta de novo.
+      professoresPorUnidade.delete(unidadeId);
+      throw new Error(`professores da unidade ${unidadeId}: ${error.message}`);
+    }
+    type Linha = { professores: { id: number; nome: string } | null };
+    return ((data ?? []) as unknown as Linha[])
+      .map((l) => l.professores)
+      .filter((p): p is { id: number; nome: string } => !!p)
+      .map((p) => ({ id: p.id, nome: p.nome }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  })();
+  professoresPorUnidade.set(unidadeId, promessa);
+  return promessa;
+}
+
+/** Professores ativos da unidade do evento — quem pode subir ao palco com um aluno. */
+export function useProfessoresDaUnidade(unidadeId: string | null | undefined) {
+  const [professores, setProfessores] = useState<ProfessorDaUnidade[]>([]);
+  const [erro, setErro] = useState<string | null>(null);
+  useEffect(() => {
+    if (!unidadeId) return;
+    let vivo = true;
+    lerProfessoresDaUnidade(unidadeId)
+      .then((lista) => vivo && setProfessores(lista))
+      .catch((e: Error) => vivo && setErro(e.message));
+    return () => {
+      vivo = false;
+    };
+  }, [unidadeId]);
+  return { professores, erro };
 }
 
 /* ─────────────────────────────── palco ─────────────────────────────── */

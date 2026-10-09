@@ -111,6 +111,7 @@ export function useRevisaoDoEvento(evento: EventoComResumo) {
           aluno_nome: a.aluno_nome,
           curso_nome: a.curso_nome,
           professor_nome: a.professor_nome,
+          professor_palco_nome: a.professor_palco_nome,
           musica: a.musica,
           musica_artista: a.musica_artista,
           musica_link: a.musica_link,

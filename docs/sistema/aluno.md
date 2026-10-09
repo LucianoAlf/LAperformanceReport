@@ -230,6 +230,13 @@ apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **L
   Texto em `ETAPA_DA_FORMATURA` (`src/lib/eventosImpressao.ts`) — genérico, sem dado inventado. Gerar o de
   formatura **não** grava `certificado_status` (essa marca é do de participação, por curso). Os dois têm
   **"Ver prévia"**: o mesmo HTML do papel num iframe reduzido (`PreviaDoDocumento`), sem marcar nada.
+- **Professor no palco (08/10/2026):** em cada integrante da aba Blocos, "professor no palco" escolhe
+  outro professor ativo da unidade para subir com o aluno (substituto ou acompanhante), gravado em
+  `evento_apresentacao.professor_palco_id`. **Não troca o professor do aluno** (`professor_id`, dono do
+  relatório e da música). Sai na programação ("No palco: Prof. X"), na folha de palco (por bloco) e na
+  planilha (última coluna). No LA Teacher o aluno aparece **para os dois** (decisão do Hugo): o do aluno
+  segue com o relatório; o de palco vê "Você sobe ao palco com…" pela função só leitura
+  `app_recital_no_palco()` (repo `la-teacher`, migration `20261008240000`).
 - **Playbacks numerados no Drive (09/10/2026):** `recital-drive-sync` nomeia "B1-03 — Aluno — Curso.mp3"
   (bloco 1, 3º número; quem toca junto divide o número, regra de `agruparEmNumeros`) e **renomeia** o
   arquivo quando a posição muda depois do envio — o último nome fica em

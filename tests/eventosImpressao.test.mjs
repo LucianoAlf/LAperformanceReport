@@ -577,14 +577,39 @@ test('na planilha, quem sobe junto divide a ordem e diz com quem toca', () => {
     ]),
   );
   const [cab, ana, pedro, bia] = csv.trim().split('\r\n').map((l) => l.split(';'));
-  assert.deepEqual(cab.slice(-2), ['Idade', 'Sobe junto com']);
+  assert.deepEqual(cab.slice(-3), ['Idade', 'Sobe junto com', 'Professor no palco']);
   assert.equal(ana[2], '1');
   assert.equal(pedro[2], '1');
   assert.equal(bia[2], '2');
   assert.equal(ana[3], pedro[3], 'mesmo horario');
-  assert.equal(ana.at(-2), '12');
-  assert.equal(ana.at(-1), 'Pedro');
+  assert.equal(ana.at(-3), '12');
+  assert.equal(ana.at(-2), 'Pedro');
+  assert.equal(bia.at(-2), '');
+});
+
+test('professor no palco: programação mostra os dois, folha diz quem sobe, planilha tem a coluna', () => {
+  const grade = dados([
+    bloco('Bloco 1', [
+      ap({ aluno_nome: 'Arthur', professor_nome: 'Israel', professor_palco_nome: 'Matheus' }),
+      ap({ aluno_nome: 'Bia', professor_nome: 'Lohana' }),
+    ]),
+  ]);
+  const programa = gerarProgramaHtml(grade);
+  assert.match(programa, /Prof\. Israel<\/div>\s*<div class="prof">No palco: Prof\. Matheus/u);
+  // Quem não tem substituto não ganha linha de "No palco".
+  assert.equal((programa.match(/No palco:/gu) ?? []).length, 1);
+
+  const folha = gerarFolhaDePalcoHtml(grade);
+  assert.match(folha, /Professor no palco:<\/strong> Matheus com Arthur \(prof\. do aluno: Israel\)/u);
+
+  const [, arthur, bia] = gerarPlanilhaCsv(grade).trim().split('\r\n').map((l) => l.split(';'));
+  assert.equal(arthur.at(-1), 'Matheus');
   assert.equal(bia.at(-1), '');
+});
+
+test('sem professor no palco, a folha não imprime a linha', () => {
+  const folha = gerarFolhaDePalcoHtml(dados([bloco('Bloco 1', [ap({ aluno_nome: 'Bia' })])]));
+  assert.doesNotMatch(folha, /Professor no palco/u);
 });
 
 test('a folha de palco soma quem toca junto: dois violoes no mesmo numero', () => {
