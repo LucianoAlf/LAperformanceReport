@@ -529,3 +529,96 @@ export function PainelRevisao({
     </div>
   );
 }
+
+export interface BlocoNaChegadaDoPainel {
+  id: number;
+  nome: string;
+  inicio: string;
+  pessoas: number;
+  chegaram: number;
+}
+
+/**
+ * Aba Check-in: chegada geral com progresso, apresentações com a pessoa no teatro e o
+ * andamento por bloco — no lugar dos quatro cartões de número solto (Hugo, 09/10).
+ */
+export function PainelCheckin({
+  esperados,
+  chegaram,
+  apresentacoes,
+  apresentacoesSemChegada,
+  blocos,
+}: {
+  esperados: number;
+  chegaram: number;
+  apresentacoes: number;
+  apresentacoesSemChegada: number;
+  blocos: BlocoNaChegadaDoPainel[];
+}) {
+  const faltam = Math.max(0, esperados - chegaram);
+  const prontas = Math.max(0, apresentacoes - apresentacoesSemChegada);
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      <div className="flex flex-col gap-3">
+        <Painel
+          titulo="Chegada"
+          className="flex flex-1 flex-col justify-between p-3"
+          destaque={
+            <span className="text-[12px] text-slate-500">
+              <NumeroAnimado valor={chegaram} className="font-semibold text-emerald-300" /> de{' '}
+              <span className="tabular-nums">{esperados}</span> no teatro
+            </span>
+          }
+        >
+          <Progresso feito={chegaram} total={esperados} cor="bg-emerald-400" />
+          <p className="mt-2 text-[12px] text-slate-400">
+            Faltam <NumeroAnimado valor={faltam} className="text-[16px] font-semibold text-amber-300" />{' '}
+            {faltam === 1 ? 'pessoa' : 'pessoas'}
+          </p>
+        </Painel>
+        <Painel
+          titulo="Quem sobe ao palco"
+          className="flex flex-1 flex-col justify-between p-3"
+          destaque={
+            <span className="text-[12px] text-slate-500">
+              <NumeroAnimado valor={prontas} className="font-semibold text-white" /> de{' '}
+              <span className="tabular-nums">{apresentacoes}</span> apresentações prontas
+            </span>
+          }
+        >
+          <Progresso feito={prontas} total={apresentacoes} cor="bg-violet-500" />
+          <p className="mt-2 text-[12px] text-slate-400">
+            {apresentacoes === 0
+              ? 'Nenhum bloco montado.'
+              : apresentacoesSemChegada > 0
+                ? `${apresentacoesSemChegada} com a pessoa ainda fora do teatro`
+                : 'Todo mundo que sobe ao palco chegou.'}
+          </p>
+        </Painel>
+      </div>
+
+      <Painel
+        titulo="Por bloco"
+        className="h-full p-3"
+        destaque={<span className="text-[11.5px] text-slate-500">cheia = chegaram · clara = esperados</span>}
+      >
+        {blocos.length === 0 ? (
+          <p className="text-[12.5px] text-slate-500">Nenhum bloco montado.</p>
+        ) : (
+          <BarrasCorrida
+            compacta
+            corPadrao="bg-emerald-500"
+            linhas={blocos.map((b) => ({
+              chave: String(b.id),
+              rotulo: b.nome,
+              detalhe: b.inicio,
+              total: Math.max(b.pessoas, 1),
+              feito: b.chegaram,
+              valorTexto: `${b.chegaram}/${b.pessoas}`,
+            }))}
+          />
+        )}
+      </Painel>
+    </div>
+  );
+}
