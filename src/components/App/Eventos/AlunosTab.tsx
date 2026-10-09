@@ -508,6 +508,11 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
     });
   }, [alunos, busca, filtro, filtroProfessor, filtroCurso, soSemAlocar, soRelatorioPronto]);
 
+  const paraConfirmar = useMemo(
+    () => visiveis.filter((a) => a.status !== 'participa' && avaliarElegibilidade(a).podeParticipar),
+    [visiveis],
+  );
+
   // Paginação (pedido do Hugo, 09/10): 400 linhas com seletores de uma vez deixavam a aba
   // pesada e longa. Qualquer filtro novo volta para a 1ª página.
   const [pagina, setPagina] = useState(1);
@@ -773,18 +778,22 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
           </Button>
         )}
 
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-11 flex-1 sm:h-9 sm:flex-none"
-          disabled={gravando === '__lote__' || visiveis.length === 0}
-          onClick={() => {
-            const alvos = visiveis.filter((a) => avaliarElegibilidade(a).podeParticipar);
-            if (alvos.length > 0) setLotePendente(alvos);
-          }}
-        >
-          Marcar os {visiveis.length} visíveis
-        </Button>
+        {/* Confirma em lote quem do filtro (todas as páginas) AINDA não está confirmado e pode
+            participar — o mesmo que o ✓ de cada linha. Antes contava o filtro inteiro e, com
+            "Participam" ligado, oferecia "marcar 251" que já estavam confirmados (Hugo, 09/10). */}
+        {paraConfirmar.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-11 flex-1 sm:h-9 sm:flex-none"
+            disabled={gravando === '__lote__'}
+            title="Confirma a participação de quem do filtro atual ainda não está confirmado (todas as páginas), com confirmação e Desfazer"
+            onClick={() => setLotePendente(paraConfirmar)}
+          >
+            <Check className="h-4 w-4" />
+            Confirmar {paraConfirmar.length} {paraConfirmar.length === 1 ? 'aluno' : 'alunos'}
+          </Button>
+        )}
 
         <Button
           variant="outline"
@@ -866,8 +875,8 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
           setLotePendente(null);
           if (alvos) void marcarLote('participa', alvos);
         }}
-        titulo="Marcar participação em lote"
-        mensagem={`Marcar ${lotePendente?.length ?? 0} ${(lotePendente?.length ?? 0) === 1 ? 'aluno' : 'alunos'} como participando do recital? Depois de gravar, o aviso na tela oferece Desfazer por alguns segundos.`}
+        titulo="Confirmar participação em lote"
+        mensagem={`Confirmar ${lotePendente?.length ?? 0} ${(lotePendente?.length ?? 0) === 1 ? 'aluno' : 'alunos'} como participando do recital? Inclui quem estava como indefinido ou não vai. Depois de gravar, o aviso na tela oferece Desfazer por alguns segundos.`}
         tipo="warning"
         textoConfirmar="Marcar todos"
         carregando={gravando === '__lote__'}
