@@ -150,7 +150,10 @@ export function BarrasCorrida({
   ativa,
   onEscolher,
   corPadrao = 'bg-violet-500',
+  compacta = false,
 }: {
+  /** Barras mais baixas (h-6) — para caber ao lado de painéis curtos. */
+  compacta?: boolean;
   linhas: LinhaDaCorrida[];
   ativa?: string | null;
   onEscolher?: (chave: string) => void;
@@ -159,14 +162,14 @@ export function BarrasCorrida({
   const reduzir = useReducedMotion();
   const maior = Math.max(1, ...linhas.map((l) => l.total));
   return (
-    <ul className="space-y-1.5">
+    <ul className={compacta ? 'space-y-1' : 'space-y-1.5'}>
       {linhas.map((l) => {
         const largura = (l.total / maior) * 100;
         const feito = l.feito ?? null;
         const cor = l.cor ?? corPadrao;
         const conteudo = (
           <>
-            <div className="relative h-7 flex-1 overflow-hidden rounded-md bg-slate-800/60">
+            <div className={cn('relative flex-1 overflow-hidden rounded-md bg-slate-800/60', compacta ? 'h-6' : 'h-7')}>
               <motion.div
                 className={cn('absolute inset-y-0 left-0 rounded-md opacity-30', cor)}
                 initial={reduzir ? false : { width: 0 }}
@@ -287,92 +290,113 @@ export function PainelAlunos({
   const visiveis = todosCursos ? ordenados : ordenados.slice(0, 6);
   const faltam = Math.max(0, previstas - nosBlocos);
 
-  return (
-    <div className="grid gap-3 lg:grid-cols-3">
-      <Painel
-        titulo="Confirmação"
-        destaque={
-          <span className="text-[12px] text-slate-500">
-            <NumeroAnimado valor={elegiveis} className="font-semibold text-slate-300" /> elegíveis
-          </span>
-        }
-      >
-        <BarraEmpilhada
-          fatias={[
-            { chave: 'participa', rotulo: 'Participam', valor: participam, cor: 'bg-emerald-400' },
-            { chave: 'indefinido', rotulo: 'Indefinidos', valor: indefinidos, cor: 'bg-amber-400' },
-            { chave: 'nao', rotulo: 'Não vão', valor: naoParticipam, cor: 'bg-rose-400' },
-          ]}
-          onEscolher={
-            onFiltroStatus ? (c) => onFiltroStatus(c as 'participa' | 'indefinido' | 'nao') : undefined
-          }
-        />
-        <p className="mt-3 border-t border-slate-800 pt-2.5 text-[12px] text-slate-400">
-          Convidados: <span className="font-semibold tabular-nums text-slate-200">{convidados}</span>
-          {convidados > 0 && (
-            <span className={convidadosComNome >= convidados ? 'text-emerald-400' : 'text-amber-400'}>
-              {' '}
-              · {convidadosComNome >= convidados ? 'todos com nome' : `${convidadosComNome} com nome`}
-            </span>
-          )}
-        </p>
-      </Painel>
+  const fatias = [
+    { chave: 'participa' as const, rotulo: 'Participam', valor: participam, cor: 'bg-emerald-400' },
+    { chave: 'indefinido' as const, rotulo: 'Indefinidos', valor: indefinidos, cor: 'bg-amber-400' },
+    { chave: 'nao' as const, rotulo: 'Não vão', valor: naoParticipam, cor: 'bg-rose-400' },
+  ];
+  const totalFatias = participam + indefinidos + naoParticipam;
 
-      <Painel
-        titulo="Montagem dos blocos"
-        destaque={<span className="text-[12px] text-slate-500">1 apresentação por curso</span>}
-      >
-        <div className="flex items-baseline gap-2">
-          <NumeroAnimado valor={nosBlocos} className="text-[30px] font-semibold leading-none text-white" />
-          <span className="text-[13px] text-slate-400">
-            de <span className="tabular-nums">{previstas}</span> apresentações nos blocos
-          </span>
-        </div>
-        <div className="mt-3">
-          <Progresso feito={nosBlocos} total={previstas} cor="bg-violet-500" />
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-800 pt-2.5">
-          <div>
-            <p className="text-[11.5px] text-slate-500">Faltam alocar</p>
-            <NumeroAnimado valor={faltam} className="text-[18px] font-semibold text-amber-300" />
+  // Duas colunas: à esquerda confirmação + montagem empilhadas (compactas), à direita o
+  // ranking — assim as alturas se casam e nenhum painel fica com sobra (Hugo, 09/10).
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      <div className="flex flex-col gap-3">
+        <Painel
+          titulo="Confirmação"
+          className="p-3"
+          destaque={
+            <span className="text-[12px] text-slate-500">
+              <NumeroAnimado valor={elegiveis} className="font-semibold text-slate-300" /> elegíveis
+              {' · '}
+              convidados <span className="font-semibold tabular-nums text-slate-300">{convidados}</span>
+              {convidados > 0 && (
+                <span className={convidadosComNome >= convidados ? 'text-emerald-400' : 'text-amber-400'}>
+                  {' '}({convidadosComNome >= convidados ? 'todos com nome' : `${convidadosComNome} com nome`})
+                </span>
+              )}
+            </span>
+          }
+        >
+          <BarraFina fatias={fatias} total={totalFatias} />
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+            {fatias.map((f) => (
+              <button
+                key={f.chave}
+                type="button"
+                disabled={!onFiltroStatus}
+                onClick={() => onFiltroStatus?.(f.chave)}
+                className="flex items-baseline gap-1.5 rounded-md px-1 py-0.5 text-left transition-colors enabled:hover:bg-slate-800/70"
+              >
+                <span className={cn('h-2 w-2 self-center rounded-full', f.cor)} />
+                <span className="text-[12px] text-slate-400">{f.rotulo}</span>
+                <NumeroAnimado valor={f.valor} className="text-[16px] font-semibold text-white" />
+                <span className="text-[11px] tabular-nums text-slate-500">
+                  {totalFatias ? Math.round((f.valor / totalFatias) * 100) : 0}%
+                </span>
+              </button>
+            ))}
           </div>
-          {onSoSemBloco ? (
-            <button
-              type="button"
-              onClick={onSoSemBloco}
-              className="min-h-[44px] rounded-lg px-1.5 text-left transition-colors hover:bg-slate-800/70"
-              title="Mostrar só quem confirmou e ainda não está em nenhum bloco"
-            >
-              <p className="text-[11.5px] text-slate-500">Confirmados sem bloco →</p>
-              <NumeroAnimado valor={confirmadosSemBloco} className="text-[18px] font-semibold text-slate-200" />
-            </button>
-          ) : (
-            <div>
-              <p className="text-[11.5px] text-slate-500">Confirmados sem bloco</p>
-              <NumeroAnimado valor={confirmadosSemBloco} className="text-[18px] font-semibold text-slate-200" />
-            </div>
-          )}
-        </div>
-      </Painel>
+        </Painel>
+
+        <Painel
+          titulo="Montagem dos blocos"
+          className="p-3"
+          destaque={
+            <span className="text-[12px] text-slate-500">
+              <NumeroAnimado valor={nosBlocos} className="font-semibold text-white" /> de{' '}
+              <span className="tabular-nums">{previstas}</span> nos blocos
+            </span>
+          }
+        >
+          <Progresso feito={nosBlocos} total={previstas} cor="bg-violet-500" />
+          <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[12px] text-slate-400">
+            <span>
+              Faltam alocar <NumeroAnimado valor={faltam} className="text-[16px] font-semibold text-amber-300" />
+            </span>
+            {onSoSemBloco ? (
+              <button
+                type="button"
+                onClick={onSoSemBloco}
+                className="rounded-md px-1 py-0.5 transition-colors hover:bg-slate-800/70"
+                title="Mostrar só quem confirmou e ainda não está em nenhum bloco"
+              >
+                Confirmados sem bloco{' '}
+                <NumeroAnimado valor={confirmadosSemBloco} className="text-[16px] font-semibold text-slate-200" /> →
+              </button>
+            ) : (
+              <span>
+                Confirmados sem bloco{' '}
+                <NumeroAnimado valor={confirmadosSemBloco} className="text-[16px] font-semibold text-slate-200" />
+              </span>
+            )}
+          </div>
+        </Painel>
+      </div>
 
       <Painel
         titulo="Por curso"
+        className="p-3"
         destaque={
-          ordenados.length > 6 ? (
-            <button
-              type="button"
-              onClick={() => setTodosCursos((v) => !v)}
-              className="text-[12px] text-violet-300 hover:text-violet-200"
-            >
-              {todosCursos ? 'só os 6 maiores' : `ver os ${ordenados.length}`}
-            </button>
-          ) : undefined
+          <span className="flex items-center gap-3 text-[11.5px] text-slate-500">
+            <span>cheia = nos blocos · clara = confirmados</span>
+            {ordenados.length > 6 && (
+              <button
+                type="button"
+                onClick={() => setTodosCursos((v) => !v)}
+                className="text-[12px] text-violet-300 hover:text-violet-200"
+              >
+                {todosCursos ? 'só os 6 maiores' : `ver os ${ordenados.length}`}
+              </button>
+            )}
+          </span>
         }
       >
         {visiveis.length === 0 ? (
           <p className="text-[12.5px] text-slate-500">Ninguém confirmou ainda.</p>
         ) : (
           <BarrasCorrida
+            compacta
             linhas={visiveis.map((c) => ({
               chave: c.cursoId,
               rotulo: c.curso,
@@ -383,8 +407,28 @@ export function PainelAlunos({
             onEscolher={onCurso}
           />
         )}
-        <p className="mt-2 text-[11px] text-slate-500">Barra cheia = já nos blocos · clara = confirmados</p>
       </Painel>
+    </div>
+  );
+}
+
+/** Barra empilhada só a faixa, sem legenda (a legenda do painel é compacta, em linha). */
+function BarraFina({ fatias, total }: { fatias: FatiaEmpilhada[]; total: number }) {
+  const reduzir = useReducedMotion();
+  return (
+    <div className="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full bg-slate-800">
+      {fatias.map((f) =>
+        f.valor > 0 ? (
+          <motion.div
+            key={f.chave}
+            className={cn('h-full first:rounded-l-full last:rounded-r-full', f.cor)}
+            initial={reduzir ? false : { width: 0 }}
+            animate={{ width: `${total ? (f.valor / total) * 100 : 0}%` }}
+            transition={reduzir ? { duration: 0 } : MOLA_BARRA}
+            title={`${f.rotulo}: ${f.valor}`}
+          />
+        ) : null,
+      )}
     </div>
   );
 }
@@ -427,11 +471,11 @@ export function PainelRevisao({
 }) {
   return (
     <div className="grid gap-3 lg:grid-cols-3">
-      <Painel titulo="O recital">
+      <Painel titulo="O recital" className="p-3">
         <div className="flex items-baseline gap-2">
-          <span className="text-[30px] font-semibold leading-none tabular-nums text-white">{inicio ?? '--:--'}</span>
+          <span className="text-[24px] font-semibold leading-none tabular-nums text-white">{inicio ?? '--:--'}</span>
           <span className="text-[13px] text-slate-500">→</span>
-          <span className="text-[30px] font-semibold leading-none tabular-nums text-amber-300">
+          <span className="text-[24px] font-semibold leading-none tabular-nums text-amber-300">
             {termino ?? '--:--'}
           </span>
         </div>
@@ -441,14 +485,14 @@ export function PainelRevisao({
             apresentacoes > 0 &&
             ` · término estimado (${semDuracaoPropria} sem duração própria)`}
         </p>
-        <div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-800 pt-3">
+        <div className="mt-2.5 grid grid-cols-3 gap-2 border-t border-slate-800 pt-2">
           {[
             { rotulo: 'participantes', valor: participantes },
             { rotulo: 'apresentações', valor: apresentacoes },
             { rotulo: 'blocos', valor: blocos.length },
           ].map((k) => (
             <div key={k.rotulo}>
-              <NumeroAnimado valor={k.valor} className="text-[20px] font-semibold text-white" />
+              <NumeroAnimado valor={k.valor} className="text-[16px] font-semibold text-white" />
               <p className="text-[11.5px] text-slate-500">{k.rotulo}</p>
             </div>
           ))}
@@ -457,13 +501,14 @@ export function PainelRevisao({
 
       <Painel
         titulo="Linha do recital"
-        className="lg:col-span-2"
+        className="p-3 lg:col-span-2"
         destaque={<span className="text-[12px] text-slate-500">tamanho = duração do bloco</span>}
       >
         {blocos.length === 0 ? (
           <p className="text-[12.5px] text-slate-500">Monte os blocos na aba Blocos.</p>
         ) : (
           <BarrasCorrida
+            compacta
             linhas={blocos.map((b) => ({
               chave: String(b.id),
               rotulo: b.nome,
