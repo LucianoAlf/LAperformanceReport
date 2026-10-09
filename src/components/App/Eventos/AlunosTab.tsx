@@ -439,12 +439,11 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
   const [filtroCurso, setFiltroCurso] = useState('todos');
   const [soSemAlocar, setSoSemAlocar] = useState(false);
   /**
-   * Recorte vindo do funil (clique numa etapa ou numa perda). Fica separado dos outros
-   * filtros porque cada um responde exatamente ao número que o funil mostra:
-   * 'em_bloco' = confirmados com algum curso num bloco; 'sem_bloco' = confirmados sem nenhum;
-   * 'nao_confirmados' = indefinidos + não vão.
+   * Recorte vindo do painel "Montagem dos blocos". Fica separado dos outros filtros porque
+   * responde exatamente ao número do painel: 'em_bloco' = confirmados com algum curso num
+   * bloco; 'sem_bloco' = confirmados sem nenhum.
    */
-  const [filtroFunil, setFiltroFunil] = useState<'em_bloco' | 'sem_bloco' | 'nao_confirmados' | null>(null);
+  const [filtroFunil, setFiltroFunil] = useState<'em_bloco' | 'sem_bloco' | null>(null);
   const [soRelatorioPronto, setSoRelatorioPronto] = useState(false);
 
   // O quadro do topo manda um "tick": cada clique religa o filtro — mesmo se a
@@ -505,7 +504,6 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
       if (filtro !== 'todos' && a.status !== filtro) return false;
       if (filtroFunil === 'em_bloco' && !(a.status === 'participa' && a.cursos_alocados > 0)) return false;
       if (filtroFunil === 'sem_bloco' && !(a.status === 'participa' && a.cursos_alocados === 0)) return false;
-      if (filtroFunil === 'nao_confirmados' && a.status === 'participa') return false;
       // Professor e curso filtram por CURSO da pessoa: quem faz dois cursos continua na
       // lista quando um dos dois casa — esconder o outro e trabalho do olho, nao do filtro.
       if (filtroProfessor !== 'todos' && !a.cursos.some((c) => String(c.professor_id) === filtroProfessor)) {
@@ -528,10 +526,6 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
       return alvo.includes(termo);
     });
   }, [alunos, busca, filtro, filtroProfessor, filtroCurso, soSemAlocar, soRelatorioPronto, filtroFunil]);
-
-  // Qual etapa do funil está acesa, derivada dos filtros (uma fonte só da verdade).
-  const etapaDoFunil: 'participa' | 'em_bloco' | 'sem_bloco' | 'nao_confirmados' | null =
-    filtroFunil ?? (filtro === 'participa' && !soSemAlocar ? 'participa' : null);
 
   const paraConfirmar = useMemo(
     () => visiveis.filter((a) => a.status !== 'participa' && avaliarElegibilidade(a).podeParticipar),
@@ -704,11 +698,6 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
           nosBlocos={resumo.apresentacoesAlocadas}
           confirmadosSemBloco={resumo.participamSemAlocacao}
           pessoasEmBloco={alunos.filter((a) => a.status === 'participa' && a.cursos_alocados > 0).length}
-          pessoasCompletas={
-            alunos.filter(
-              (a) => a.status === 'participa' && a.cursos_no_recital > 0 && a.cursos_alocados >= a.cursos_no_recital,
-            ).length
-          }
           convidados={resumo.convidadosTotal}
           convidadosComNome={alunos
             .filter((a) => a.status === 'participa')
@@ -719,20 +708,12 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
             setFiltroFunil(null);
             setFiltro((atual) => (atual === st ? 'todos' : st));
           }}
-          etapaAtiva={etapaDoFunil}
-          onEtapa={(etapa) => {
-            // Clicar na etapa que já está ativa tira o recorte.
-            const limpar = etapa === etapaDoFunil || etapa === 'elegiveis';
+          statusAtivo={filtroFunil || soSemAlocar || filtro === 'todos' ? null : filtro}
+          recorteAtivo={filtroFunil === 'em_bloco' || filtroFunil === 'sem_bloco' ? filtroFunil : null}
+          onRecorte={(recorte) => {
             setSoSemAlocar(false);
-            setFiltroFunil(null);
             setFiltro('todos');
-            if (limpar) return;
-            if (etapa === 'participa') setFiltro('participa');
-            else setFiltroFunil(etapa);
-          }}
-          onSoSemBloco={() => {
-            setFiltro('participa');
-            setSoSemAlocar(true);
+            setFiltroFunil((atual) => (atual === recorte ? null : recorte));
           }}
           onCurso={(c) => setFiltroCurso((atual) => (atual === c ? 'todos' : c))}
         />

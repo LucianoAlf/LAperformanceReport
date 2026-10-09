@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { animate, motion, useReducedMotion } from 'framer-motion';
 
 import { cn } from '@/lib/utils';
@@ -41,11 +41,14 @@ export function Painel({
   destaque,
   children,
   className,
+  esticar = false,
 }: {
   titulo: string;
   destaque?: ReactNode;
   children: ReactNode;
   className?: string;
+  /** Conteúdo ocupa a altura do painel, com o primeiro filho no topo e o último na base. */
+  esticar?: boolean;
 }) {
   return (
     <section className={cn('rounded-xl border border-slate-800 bg-slate-900/60 p-4', className)}>
@@ -55,7 +58,7 @@ export function Painel({
       </div>
       {/* Um bloco só: com o painel esticado (flex-1 + justify-between), o título fica no topo
           e o conteúdo inteiro desce junto, em vez de se espalhar pela altura. */}
-      <div>{children}</div>
+      <div className={esticar ? 'flex flex-1 flex-col justify-between gap-3' : undefined}>{children}</div>
     </section>
   );
 }
@@ -264,21 +267,22 @@ export function PainelAlunos({
   nosBlocos,
   confirmadosSemBloco,
   pessoasEmBloco,
-  pessoasCompletas,
   convidados,
   convidadosComNome,
   cursos,
   cursoAtivo,
   onFiltroStatus,
-  onSoSemBloco,
   onCurso,
-  etapaAtiva,
-  onEtapa,
+  statusAtivo,
+  recorteAtivo,
+  onRecorte,
 }: {
-  /** Etapa (ou perda) do funil acesa agora — destaca o clique que filtrou a lista. */
-  etapaAtiva?: string | null;
-  /** Clique numa etapa ou perda do funil. */
-  onEtapa?: (etapa: 'elegiveis' | 'participa' | 'em_bloco' | 'sem_bloco' | 'nao_confirmados') => void;
+  /** Status que está filtrando a lista agora (acende o item da Confirmação). */
+  statusAtivo?: 'participa' | 'indefinido' | 'nao' | null;
+  /** Recorte de montagem filtrando a lista agora (acende o item da Montagem). */
+  recorteAtivo?: 'em_bloco' | 'sem_bloco' | null;
+  /** Clique em "Em algum bloco" / "Sem bloco": filtra a lista; de novo, tira. */
+  onRecorte?: (recorte: 'em_bloco' | 'sem_bloco') => void;
   elegiveis: number;
   participam: number;
   indefinidos: number;
@@ -288,14 +292,11 @@ export function PainelAlunos({
   confirmadosSemBloco: number;
   /** Confirmados com ao menos um curso num bloco. */
   pessoasEmBloco: number;
-  /** Confirmados com TODOS os cursos nos blocos. */
-  pessoasCompletas: number;
   convidados: number;
   convidadosComNome: number;
   cursos: CursoNoPainel[];
   cursoAtivo?: string | null;
   onFiltroStatus?: (status: 'participa' | 'indefinido' | 'nao') => void;
-  onSoSemBloco?: () => void;
   onCurso?: (cursoId: string) => void;
 }) {
   const [todosCursos, setTodosCursos] = useState(false);
@@ -316,48 +317,92 @@ export function PainelAlunos({
   // ranking — assim as alturas se casam e nenhum painel fica com sobra (Hugo, 09/10).
   return (
     <div className="grid gap-3 lg:grid-cols-2">
-      <Painel
-        titulo="Caminho até o palco"
-        className="flex h-full flex-col justify-between p-3"
-        destaque={<span className="text-[11.5px] text-slate-500">pessoas · ↓ = quem ficou entre uma etapa e outra</span>}
-      >
-        <FunilFluxo
-          etapas={[
-            { chave: 'elegiveis', rotulo: 'Elegíveis', valor: elegiveis, detalhe: 'alunos ativos · limpa o filtro' },
-            { chave: 'participa', rotulo: 'Confirmados', valor: participam },
-            { chave: 'em_bloco', rotulo: 'Em algum bloco', valor: pessoasEmBloco },
-          ]}
-          perdas={['nao_confirmados', 'sem_bloco']}
-          rotulosDasPerdas={['ainda não confirmaram', 'confirmados sem bloco']}
-          ativa={etapaAtiva}
-          onEscolher={(c) => onEtapa?.(c as 'elegiveis' | 'participa' | 'em_bloco' | 'sem_bloco' | 'nao_confirmados')}
-        />
-        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-800 pt-2 text-[12px] text-slate-400">
-          {fatias.slice(1).map((f) => (
-            <button
-              key={f.chave}
-              type="button"
-              disabled={!onFiltroStatus}
-              onClick={() => onFiltroStatus?.(f.chave)}
-              className="flex items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors enabled:hover:bg-slate-800/70"
+      <div className="flex flex-col gap-3">
+        <Painel
+          titulo="Confirmação"
+          // flex-1: as duas dividem a altura da coluna, que a grade iguala à do ranking.
+          className="flex flex-1 flex-col justify-between p-3"
+          destaque={
+            <span className="text-[12px] text-slate-500">
+              <NumeroAnimado valor={participam} className="font-semibold text-emerald-300" /> de{' '}
+              <span className="tabular-nums text-slate-300">{elegiveis}</span> elegíveis confirmados
+            </span>
+          }
+        >
+          <BarraFina fatias={fatias} total={totalFatias} />
+          <div className="mt-2 grid grid-cols-3 gap-1.5">
+            {fatias.map((f) => (
+              <ItemClicavel
+                key={f.chave}
+                ativo={statusAtivo === f.chave}
+                dica={statusAtivo === f.chave ? 'Clique de novo para ver todos' : `Mostrar só ${f.rotulo.toLowerCase()}`}
+                onClick={onFiltroStatus ? () => onFiltroStatus(f.chave) : undefined}
+              >
+                <span className="flex items-center gap-1.5 text-[11.5px] text-slate-400">
+                  <span className={cn('h-2 w-2 rounded-full', f.cor)} />
+                  {f.rotulo}
+                </span>
+                <span className="flex items-baseline gap-1.5">
+                  <NumeroAnimado valor={f.valor} className="text-[18px] font-semibold text-white" />
+                  <span className="text-[11px] tabular-nums text-slate-500">
+                    {totalFatias ? Math.round((f.valor / totalFatias) * 100) : 0}%
+                  </span>
+                </span>
+              </ItemClicavel>
+            ))}
+          </div>
+        </Painel>
+
+        <Painel
+          titulo="Montagem dos blocos"
+          className="flex flex-1 flex-col justify-between p-3"
+          destaque={
+            <span className="text-[12px] text-slate-500">
+              <NumeroAnimado valor={nosBlocos} className="font-semibold text-violet-300" /> de{' '}
+              <span className="tabular-nums text-slate-300">{previstas}</span> apresentações nos blocos
+            </span>
+          }
+        >
+          <Progresso feito={nosBlocos} total={previstas} cor="bg-violet-500" />
+          <div className="mt-2 grid grid-cols-3 gap-1.5">
+            <ItemClicavel
+              ativo={recorteAtivo === 'em_bloco'}
+              dica={recorteAtivo === 'em_bloco' ? 'Clique de novo para ver todos' : 'Confirmados com ao menos um curso num bloco'}
+              onClick={onRecorte ? () => onRecorte('em_bloco') : undefined}
             >
-              <span className={cn('h-2 w-2 rounded-full', f.cor)} />
-              {f.rotulo} <span className="font-semibold tabular-nums text-slate-200">{f.valor}</span>
-            </button>
-          ))}
-          <span>
-            Faltam alocar <span className="font-semibold tabular-nums text-amber-300">{faltam}</span> apresentações
-          </span>
-          <span>
-            Convidados <span className="font-semibold tabular-nums text-slate-200">{convidados}</span>
-            {convidados > 0 && (
-              <span className={convidadosComNome >= convidados ? 'text-emerald-400' : 'text-amber-400'}>
-                {' '}({convidadosComNome >= convidados ? 'todos com nome' : `${convidadosComNome} com nome`})
+              <span className="text-[11.5px] text-slate-400">Em algum bloco</span>
+              <NumeroAnimado valor={pessoasEmBloco} className="text-[18px] font-semibold text-white" />
+            </ItemClicavel>
+            <ItemClicavel
+              ativo={recorteAtivo === 'sem_bloco'}
+              dica={recorteAtivo === 'sem_bloco' ? 'Clique de novo para ver todos' : 'Confirmaram e ainda não estão em nenhum bloco'}
+              onClick={onRecorte ? () => onRecorte('sem_bloco') : undefined}
+            >
+              <span className="text-[11.5px] text-slate-400">Sem bloco</span>
+              <NumeroAnimado
+                valor={confirmadosSemBloco}
+                className={cn('text-[18px] font-semibold', confirmadosSemBloco > 0 ? 'text-amber-300' : 'text-white')}
+              />
+            </ItemClicavel>
+            <ItemClicavel dica={convidados > 0 ? `${convidadosComNome} de ${convidados} convidados com nome` : 'Nenhum convidado ainda'}>
+              <span className="text-[11.5px] text-slate-400">Convidados</span>
+              <span className="flex items-baseline gap-1.5">
+                <NumeroAnimado valor={convidados} className="text-[18px] font-semibold text-white" />
+                {convidados > 0 && (
+                  <span className={cn('text-[11px]', convidadosComNome >= convidados ? 'text-emerald-400' : 'text-amber-400')}>
+                    {convidadosComNome >= convidados ? 'todos com nome' : `${convidadosComNome} c/ nome`}
+                  </span>
+                )}
               </span>
-            )}
-          </span>
-        </div>
-      </Painel>
+            </ItemClicavel>
+          </div>
+          {faltam > 0 && (
+            <p className="mt-1.5 text-[11.5px] text-slate-500">
+              Faltam alocar <span className="font-semibold tabular-nums text-amber-300">{faltam}</span> apresentações
+            </p>
+          )}
+        </Painel>
+      </div>
 
       <Painel
         titulo="Por curso"
@@ -394,6 +439,37 @@ export function PainelAlunos({
         )}
       </Painel>
     </div>
+  );
+}
+
+/** Número com rótulo; clicável quando filtra a lista, aceso quando o filtro está ligado. */
+function ItemClicavel({
+  ativo = false,
+  dica,
+  onClick,
+  children,
+}: {
+  ativo?: boolean;
+  dica: string;
+  onClick?: () => void;
+  children: ReactNode;
+}) {
+  const classe = cn(
+    'flex min-w-0 flex-col items-start gap-0.5 rounded-lg px-2 py-1.5 text-left ring-1 ring-inset transition-colors',
+    ativo ? 'bg-amber-400/10 ring-amber-400/50' : 'bg-slate-800/40 ring-transparent',
+    onClick && !ativo && 'hover:bg-slate-800 hover:ring-slate-700',
+    onClick && 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60',
+  );
+  return (
+    <Tooltip content={dica} side="bottom">
+      {onClick ? (
+        <button type="button" onClick={onClick} aria-pressed={ativo} className={classe}>
+          {children}
+        </button>
+      ) : (
+        <div className={classe}>{children}</div>
+      )}
+    </Tooltip>
   );
 }
 
@@ -458,23 +534,66 @@ export function PainelRevisao({
   semDuracaoPropria: number;
   blocos: BlocoNoPainel[];
 }) {
+  // Recital de vários dias: uma linha por dia (o "início → término" do topo atravessa dias e
+  // sozinho engana). Um dia só: uma linha por bloco.
+  const dias = [...new Set(blocos.map((b) => b.dia ?? ''))];
+  const linhas =
+    dias.length > 1
+      ? dias.map((dia) => {
+          const doDia = blocos.filter((b) => (b.dia ?? '') === dia);
+          const numeros = doDia.reduce((t, b) => t + b.numeros, 0);
+          return {
+            chave: dia || 'sem-dia',
+            rotulo: dia && rotuloDoDia ? rotuloDoDia(dia) : 'sem dia',
+            inicio: doDia[0]?.inicio ?? '--:--',
+            fim: doDia[doDia.length - 1]?.fim ?? '--:--',
+            detalhe: `${doDia.length} ${doDia.length === 1 ? 'bloco' : 'blocos'} · ${numeros} números`,
+          };
+        })
+      : blocos.map((b) => ({
+          chave: String(b.id),
+          rotulo: b.nome,
+          inicio: b.inicio,
+          fim: b.fim,
+          detalhe: `${b.numeros} números`,
+        }));
   return (
     <div className="grid gap-3 lg:grid-cols-3">
-      <Painel titulo="O recital" className="p-3">
-        <div className="flex items-baseline gap-2">
-          <span className="text-[24px] font-semibold leading-none tabular-nums text-white">{inicio ?? '--:--'}</span>
-          <span className="text-[13px] text-slate-500">→</span>
-          <span className="text-[24px] font-semibold leading-none tabular-nums text-amber-300">
-            {termino ?? '--:--'}
-          </span>
+      <Painel titulo="O recital" className="flex h-full flex-col p-3" esticar>
+        <div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-[24px] font-semibold leading-none tabular-nums text-white">{inicio ?? '--:--'}</span>
+            <span className="text-[13px] text-slate-500">→</span>
+            <span className="text-[24px] font-semibold leading-none tabular-nums text-amber-300">
+              {termino ?? '--:--'}
+            </span>
+          </div>
+          <p className="mt-1 text-[12px] text-slate-500">
+            {duracaoSegundos > 0 ? `${duracaoCurta(duracaoSegundos)} de recital` : 'nenhum bloco montado'}
+            {semDuracaoPropria > 0 &&
+              apresentacoes > 0 &&
+              ` · término estimado (${semDuracaoPropria} sem duração própria)`}
+          </p>
         </div>
-        <p className="mt-1 text-[12px] text-slate-500">
-          {duracaoSegundos > 0 ? `${duracaoCurta(duracaoSegundos)} de recital` : 'nenhum bloco montado'}
-          {semDuracaoPropria > 0 &&
-            apresentacoes > 0 &&
-            ` · término estimado (${semDuracaoPropria} sem duração própria)`}
-        </p>
-        <div className="mt-2.5 grid grid-cols-3 gap-2 border-t border-slate-800 pt-2">
+
+        {linhas.length > 0 && (
+          <ul className="space-y-1">
+            {linhas.map((l) => (
+              <li
+                key={l.chave}
+                className="flex items-baseline justify-between gap-3 rounded-lg bg-slate-800/40 px-2.5 py-1.5 text-[12px]"
+              >
+                <span className="min-w-0 truncate font-medium capitalize text-slate-300">{l.rotulo}</span>
+                <span className="shrink-0 tabular-nums text-slate-400">
+                  <span className="text-slate-200">{l.inicio}–{l.fim}</span>
+                  <span className="text-slate-500"> · {l.detalhe}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="grid grid-cols-3 gap-2 border-t border-slate-800 pt-2">
           {[
             { rotulo: 'participantes', valor: participantes },
             { rotulo: 'apresentações', valor: apresentacoes },
@@ -599,76 +718,6 @@ export function PainelCheckin({
 }
 
 /* ─────────────────────── gráficos alternativos (09/10) ─────────────────────── */
-
-export interface EtapaDoFunil {
-  chave: string;
-  rotulo: string;
-  valor: number;
-  /** Texto curto embaixo do rótulo (ex.: o que a etapa significa). */
-  detalhe?: string;
-}
-
-/**
- * Funil: cada etapa é uma barra centrada, do tamanho proporcional à primeira, com a
- * passagem (%) entre uma e outra. Mostra num olhar onde a fila trava.
- */
-export function Funil({
-  etapas,
-  cores = ['bg-slate-500', 'bg-emerald-500', 'bg-violet-500', 'bg-amber-400'],
-  onEscolher,
-}: {
-  etapas: EtapaDoFunil[];
-  cores?: string[];
-  onEscolher?: (chave: string) => void;
-}) {
-  const reduzir = useReducedMotion();
-  const topo = Math.max(1, etapas[0]?.valor ?? 1);
-  return (
-    <ol className="space-y-1">
-      {etapas.map((e, i) => {
-        const largura = Math.max(8, (e.valor / topo) * 100);
-        const anterior = i > 0 ? etapas[i - 1].valor : null;
-        const passagem = anterior ? Math.round((e.valor / anterior) * 100) : null;
-        const conteudo = (
-          <div className="flex items-center gap-3">
-            <div className="w-36 shrink-0 text-left">
-              <p className="text-[12.5px] font-medium text-slate-200">{e.rotulo}</p>
-              {e.detalhe && <p className="truncate text-[11px] text-slate-500">{e.detalhe}</p>}
-            </div>
-            <div className="flex h-8 flex-1 items-center justify-center">
-              <motion.div
-                className={cn('flex h-full items-center justify-center rounded-md', cores[i % cores.length])}
-                initial={reduzir ? false : { width: 0 }}
-                animate={{ width: `${largura}%` }}
-                transition={reduzir ? { duration: 0 } : { ...MOLA_BARRA, delay: i * 0.06 }}
-              >
-                <NumeroAnimado valor={e.valor} className="text-[13px] font-semibold text-slate-950" />
-              </motion.div>
-            </div>
-            <span className="w-12 shrink-0 text-right text-[11.5px] tabular-nums text-slate-500">
-              {passagem !== null ? `${passagem}%` : ''}
-            </span>
-          </div>
-        );
-        return (
-          <li key={e.chave}>
-            {onEscolher ? (
-              <button
-                type="button"
-                onClick={() => onEscolher(e.chave)}
-                className="w-full rounded-lg p-0.5 transition-colors hover:bg-slate-800/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
-              >
-                {conteudo}
-              </button>
-            ) : (
-              <div className="p-0.5">{conteudo}</div>
-            )}
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
 
 export interface FaixaDaLinha {
   id: number;
@@ -801,314 +850,6 @@ export function Anel({
           {Math.round(pct * 100)}%
         </span>
         {rotulo && <span className="text-[11px] text-slate-500">{rotulo}</span>}
-      </div>
-    </div>
-  );
-}
-
-/* ─────────────── funil afunilado com fluxo (inspirado no Funnel chart do uiarc) ─────────────── */
-
-const LARGURA_FUNIL = 1000;
-const ALTURA_FUNIL = 180;
-const TRANSICAO = 0.32; // fração do segmento usada na curva até a etapa seguinte
-
-/** Meia altura da faixa em cada etapa (px do viewBox), com piso para a última não sumir. */
-function meiasAlturas(valores: number[]) {
-  const topo = Math.max(1, valores[0] ?? 1);
-  return valores.map((v) => Math.max(5, (v / topo) * (ALTURA_FUNIL / 2 - 4)));
-}
-
-/** Meia altura da faixa numa posição x (mesma curva do desenho, para os pontos ficarem dentro). */
-function meiaAlturaEm(x: number, meias: number[]) {
-  const seg = LARGURA_FUNIL / meias.length;
-  const i = Math.min(meias.length - 1, Math.floor(x / seg));
-  const local = x - i * seg;
-  const inicioCurva = seg * (1 - TRANSICAO);
-  if (i === meias.length - 1 || local <= inicioCurva) return meias[i];
-  const t = (local - inicioCurva) / (seg - inicioCurva);
-  const suave = t * t * (3 - 2 * t);
-  return meias[i] + (meias[i + 1] - meias[i]) * suave;
-}
-
-function caminhoDaFaixa(meias: number[]) {
-  const seg = LARGURA_FUNIL / meias.length;
-  const c = ALTURA_FUNIL / 2;
-  let topo = `M 0 ${c - meias[0]}`;
-  meias.forEach((m, i) => {
-    const fimPlano = i * seg + seg * (1 - TRANSICAO);
-    const fim = (i + 1) * seg;
-    topo += ` L ${fimPlano} ${c - m}`;
-    if (i < meias.length - 1) {
-      const prox = meias[i + 1];
-      const meio = (fimPlano + fim) / 2;
-      topo += ` C ${meio} ${c - m}, ${meio} ${c - prox}, ${fim} ${c - prox}`;
-    } else {
-      topo += ` L ${fim} ${c - m}`;
-    }
-  });
-  let base = '';
-  for (let i = meias.length - 1; i >= 0; i--) {
-    const m = meias[i];
-    const inicio = i * seg;
-    const fimPlano = i * seg + seg * (1 - TRANSICAO);
-    if (i === meias.length - 1) base += ` L ${LARGURA_FUNIL} ${c + m} L ${fimPlano} ${c + m}`;
-    else {
-      const prox = meias[i + 1];
-      const fim = (i + 1) * seg;
-      const meio = (fimPlano + fim) / 2;
-      base += ` C ${meio} ${c + prox}, ${meio} ${c + m}, ${fimPlano} ${c + m}`;
-    }
-    if (i > 0) base += ` L ${inicio} ${c + m}`;
-    else base += ` L 0 ${c + m}`;
-  }
-  return `${topo}${base} Z`;
-}
-
-interface Ponto {
-  x: number;
-  r: number; // posição vertical relativa (-1..1) dentro da faixa
-  vel: number;
-  morreEm: number; // índice da passagem em que sai do funil (meias.length = chega ao fim)
-  alfa: number;
-}
-
-/**
- * Funil afunilado: faixa contínua que estreita de etapa em etapa, números em cima, perda
- * embaixo de cada passagem e pontos que correm pela faixa — os que "ficam pelo caminho"
- * apagam na passagem onde a pessoa saiu (proporcional à perda real).
- */
-export function FunilFluxo({
-  etapas,
-  perdas,
-  rotulosDasPerdas,
-  ativa,
-  onEscolher,
-}: {
-  etapas: { chave: string; rotulo: string; valor: number; detalhe?: string }[];
-  /** Chave de cada passagem (entre a etapa i e i+1), para a perda também filtrar. */
-  perdas?: string[];
-  /** Texto do tooltip de cada perda (ex.: "ainda não confirmaram"). */
-  rotulosDasPerdas?: string[];
-  ativa?: string | null;
-  onEscolher?: (chave: string) => void;
-}) {
-  const reduzir = useReducedMotion();
-  const valores = etapas.map((e) => e.valor);
-  const meias = meiasAlturas(valores);
-  const inicio = Math.max(1, valores[0] ?? 1);
-  const seg = LARGURA_FUNIL / Math.max(1, etapas.length);
-  const pontosRef = useRef<SVGGElement>(null);
-  const chaveValores = valores.join(',');
-  const idClip = useId().replace(/:/g, '');
-  // Foco = etapa sob o mouse; sem mouse, a etapa que está filtrando a lista.
-  const [sobre, setSobre] = useState<number | null>(null);
-  const idxAtiva = etapas.findIndex((e) => e.chave === ativa);
-  const foco = sobre ?? (idxAtiva >= 0 ? idxAtiva : null);
-  const n = Math.max(1, etapas.length);
-
-  useEffect(() => {
-    if (reduzir || etapas.length < 2) return;
-    const g = pontosRef.current;
-    if (!g) return;
-    const vals = chaveValores.split(',').map(Number);
-    const mh = meiasAlturas(vals);
-    const sorteiaMorte = () => {
-      // Chance de passar por cada passagem = conversão real daquela etapa.
-      for (let i = 0; i < vals.length - 1; i++) {
-        const passa = vals[i] > 0 ? vals[i + 1] / vals[i] : 0;
-        if (Math.random() > passa) return i;
-      }
-      return vals.length;
-    };
-    const novo = (x = 0): Ponto => ({
-      x,
-      r: (Math.random() * 2 - 1) * 0.8,
-      vel: 0.9 + Math.random() * 0.9,
-      morreEm: sorteiaMorte(),
-      alfa: 1,
-    });
-    const pontos: Ponto[] = Array.from({ length: 46 }, () => novo(Math.random() * LARGURA_FUNIL));
-    const circulos = pontos.map(() => {
-      const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      c.setAttribute('r', '2.6');
-      c.setAttribute('class', 'fill-slate-200');
-      g.appendChild(c);
-      return c;
-    });
-    const segL = LARGURA_FUNIL / vals.length;
-    let quadro = 0;
-    const passo = () => {
-      pontos.forEach((p, i) => {
-        p.x += p.vel;
-        const passagem = (p.morreEm + 1) * segL - segL * TRANSICAO * 0.5;
-        if (p.morreEm < vals.length - 1 && p.x > passagem) p.alfa -= 0.06;
-        if (p.x > LARGURA_FUNIL || p.alfa <= 0) Object.assign(p, novo(0));
-        const y = ALTURA_FUNIL / 2 + p.r * meiaAlturaEm(p.x, mh);
-        circulos[i].setAttribute('cx', p.x.toFixed(1));
-        circulos[i].setAttribute('cy', y.toFixed(1));
-        circulos[i].setAttribute('opacity', String(Math.max(0, p.alfa) * 0.75));
-      });
-      quadro = requestAnimationFrame(passo);
-    };
-    quadro = requestAnimationFrame(passo);
-    return () => {
-      cancelAnimationFrame(quadro);
-      circulos.forEach((c) => c.remove());
-    };
-  }, [reduzir, chaveValores, etapas.length]);
-
-  return (
-    <div>
-      <div className="relative" onMouseLeave={() => setSobre(null)}>
-      {/* Coluna de destaque da etapa em foco (cabeçalho + faixa), como no Funnel do uiarc. */}
-      {foco !== null && (
-        <motion.div
-          aria-hidden
-          className={cn(
-            'pointer-events-none absolute inset-y-0 rounded-xl bg-white/[0.045]',
-            idxAtiva === foco && 'ring-1 ring-inset ring-amber-400/40',
-          )}
-          initial={false}
-          animate={{ left: `${(foco / n) * 100}%`, width: `${100 / n}%` }}
-          transition={reduzir ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 36 }}
-        />
-      )}
-      <div className="relative grid" style={{ gridTemplateColumns: `repeat(${etapas.length}, minmax(0, 1fr))` }}>
-        {etapas.map((e) => {
-          const conteudo = (
-            <>
-              <span className="block truncate text-[12px] text-slate-400">{e.rotulo}</span>
-              <NumeroAnimado valor={e.valor} className="block text-[22px] font-semibold leading-tight text-white" />
-              <span className="block truncate text-[11px] text-slate-500">
-                {e === etapas[0] ? (e.detalhe ?? 'início') : `${Math.round((e.valor / inicio) * 100)}% do início`}
-              </span>
-            </>
-          );
-          const idx = etapas.indexOf(e);
-          const apagada = foco !== null && foco !== idx;
-          return onEscolher ? (
-            <button
-              key={e.chave}
-              type="button"
-              onClick={() => onEscolher(e.chave)}
-              onMouseEnter={() => setSobre(idx)}
-              aria-pressed={ativa === e.chave}
-              className={cn(
-                'min-w-0 rounded-lg px-2 py-1 text-left transition-opacity duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60',
-                apagada && 'opacity-45',
-              )}
-            >
-              {conteudo}
-            </button>
-          ) : (
-            <div key={e.chave} className="min-w-0 px-1.5 py-1">
-              {conteudo}
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="relative">
-      <svg
-        viewBox={`0 0 ${LARGURA_FUNIL} ${ALTURA_FUNIL}`}
-        preserveAspectRatio="none"
-        className="mt-2 h-28 w-full"
-        role="img"
-        aria-label={etapas.map((e) => `${e.rotulo} ${e.valor}`).join(', ')}
-      >
-        <defs>
-          <linearGradient id="funil-faixa" x1="0" x2="1" y1="0" y2="0">
-            <stop offset="0%" stopColor="rgb(139 92 246 / 0.55)" />
-            <stop offset="100%" stopColor="rgb(16 185 129 / 0.45)" />
-          </linearGradient>
-          <clipPath id={`funil-foco-${idClip}`}>
-            <motion.rect
-              y={0}
-              height={ALTURA_FUNIL}
-              initial={false}
-              animate={{ x: (foco ?? 0) * seg, width: foco === null ? 0 : seg }}
-              transition={reduzir ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 36 }}
-            />
-          </clipPath>
-        </defs>
-        <motion.path
-          d={caminhoDaFaixa(meias)}
-          fill="url(#funil-faixa)"
-          initial={reduzir ? false : { opacity: 0 }}
-          animate={{ opacity: foco === null ? 1 : 0.55, d: caminhoDaFaixa(meias) }}
-          transition={reduzir ? { duration: 0 } : { duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-        />
-        {/* O trecho em foco acende por inteiro (a mesma faixa, recortada pela etapa). */}
-        <path d={caminhoDaFaixa(meias)} fill="rgb(167 139 250)" clipPath={`url(#funil-foco-${idClip})`} />
-        <g ref={pontosRef} />
-      </svg>
-      {/* A faixa também é clicável: uma área por etapa, por cima do desenho. */}
-      {onEscolher && (
-        <div className="absolute inset-0 flex">
-          {etapas.map((e, idx) => (
-            <button
-              key={e.chave}
-              type="button"
-              aria-label={`Filtrar: ${e.rotulo}`}
-              onClick={() => onEscolher(e.chave)}
-              onMouseEnter={() => setSobre(idx)}
-              className="h-full flex-1"
-            />
-          ))}
-        </div>
-      )}
-      {/* Cartão da etapa em foco: total e quanto seguiu da anterior. */}
-      {foco !== null && etapas[foco] && (
-        <motion.div
-          key={foco}
-          initial={reduzir ? false : { opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.18 }}
-          className="pointer-events-none absolute top-1/2 z-10 w-52 -translate-y-1/2 rounded-xl border border-slate-700 bg-slate-900/95 px-3 py-2 shadow-2xl shadow-black/50"
-          style={
-            foco < etapas.length - 1
-              ? { left: `calc(${((foco + 1) / n) * 100}% + 8px)` }
-              : { right: `calc(${(1 / n) * 100}% + 8px)` }
-          }
-        >
-          <p className="text-[11.5px] text-slate-400">{etapas[foco].rotulo}</p>
-          <p className="flex items-baseline justify-between text-[13px] text-slate-300">
-            Total <span className="text-[16px] font-semibold tabular-nums text-white">{etapas[foco].valor}</span>
-          </p>
-          <p className="text-[11.5px] text-slate-500">
-            {foco === 0
-              ? 'início do caminho'
-              : `${etapas[foco - 1].valor > 0 ? Math.round((etapas[foco].valor / etapas[foco - 1].valor) * 100) : 0}% seguiram de ${etapas[foco - 1].rotulo.toLowerCase()}`}
-          </p>
-        </motion.div>
-      )}
-      </div>
-      </div>
-
-      <div className="relative mt-1 h-5">
-        {etapas.slice(1).map((e, i) => {
-          const antes = etapas[i].valor;
-          const perda = antes > 0 ? Math.round((1 - e.valor / antes) * 100) : 0;
-          return (
-            <span key={e.chave} className="absolute -translate-x-1/2" style={{ left: `${(((i + 1) * seg - seg * TRANSICAO * 0.5) / LARGURA_FUNIL) * 100}%` }}>
-            <Tooltip side="bottom" content={`${antes - e.valor} ${rotulosDasPerdas?.[i] ?? `ficaram entre ${etapas[i].rotulo} e ${e.rotulo}`} — clique para ver quem`}>
-            <button
-              type="button"
-              disabled={!onEscolher || !perdas?.[i]}
-              onClick={() => perdas?.[i] && onEscolher?.(perdas[i])}
-              className={cn(
-                'rounded px-1.5 text-[11.5px] tabular-nums transition-colors',
-                perdas?.[i] && ativa === perdas[i]
-                  ? 'bg-rose-500/15 text-rose-200 ring-1 ring-rose-400/50'
-                  : 'text-slate-500 enabled:hover:bg-slate-800 enabled:hover:text-slate-200',
-              )}
-            >
-              ↓ {perda}% · {antes - e.valor}
-            </button>
-            </Tooltip>
-            </span>
-          );
-        })}
       </div>
     </div>
   );
