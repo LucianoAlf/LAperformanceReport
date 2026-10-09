@@ -10,6 +10,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { KPICard } from '@/components/ui/KPICard';
+import { SeloTrancado } from './SeloTrancado';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { cn } from '@/lib/utils';
 import { normalizarBusca } from '@/lib/agenda';
@@ -247,6 +248,9 @@ function LinhaAluno({
               de {aluno.unidade_origem_nome}
             </span>
           )}
+          {/* Trancado: entra na lista e entra MARCADO. A decisao de convidar quem parou e da
+              coordenacao — ela so nao pode descobrir depois. */}
+          {aluno.trancado && <SeloTrancado />}
           {aluno.faz_banda && (
             <Badge variant="outline" className="gap-1 text-[12px] sm:text-[10px]">
               <Guitar className="h-2.5 w-2.5" />
@@ -314,6 +318,10 @@ function LinhaAluno({
               <Music className="h-3 w-3 text-slate-600" />
               {c.curso_nome}
               {c.professor_nome && <span className="text-slate-600">· {c.professor_nome}</span>}
+              {/* Quem trancou UM curso e segue ativo no outro nao e "pessoa trancada": o selo
+                  sai aqui, no curso. Com a pessoa toda trancada, o de cima ja disse — repetir
+                  em cada curso seria a mesma frase duas vezes na mesma linha. */}
+              {c.trancado && !aluno.trancado && <SeloTrancado escopo="curso" />}
               {/* Selo por curso so quando ALGUMA apresentacao ja existe: enquanto a grade
                   esta vazia, um "nao alocado" em cada curso e ruido em 100% das linhas. */}
               {alocacao.detalharPorCurso && <SeloBloco alocacao={alocacaoPorCurso.get(c.curso_id)} />}
@@ -880,7 +888,7 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
         ) : visiveis.length === 0 ? (
           <p className="p-8 text-center text-sm text-slate-400">
             {alunos.length === 0
-              ? 'Nenhum aluno ativo nesta unidade.'
+              ? 'Nenhum aluno desta unidade na lista do recital.'
               : 'Nenhum aluno com esse filtro.'}
           </p>
         ) : (

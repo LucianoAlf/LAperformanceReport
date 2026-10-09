@@ -257,6 +257,13 @@ export interface CursoDoAluno {
   curso_nome: string | null;
   professor_id: number | null;
   professor_nome: string | null;
+  /**
+   * Nenhuma matricula ATIVA deste curso — a pessoa trancou justo ele.
+   *
+   * Por CURSO porque trancar e por matricula: quem faz Violao e Canto pode ter trancado
+   * um so, e ai a pessoa nao e "trancada" (`AlunoElegivel.trancado` fica false).
+   */
+  trancado: boolean;
 }
 
 /** Onde um curso da pessoa ja entrou na grade. Ausencia = ainda nao alocado. */
@@ -279,6 +286,14 @@ export interface AlunoElegivel {
   cursos: CursoDoAluno[];
   faz_banda: boolean;
   motivo_sem_curso: MotivoSemCurso;
+  /**
+   * A pessoa nao tem NENHUMA matricula ativa — todas estao trancadas.
+   *
+   * Trancar nao e sair: ela segue sendo aluna, tem professor, e e justamente quem a
+   * coordenacao quer trazer de volta ao palco. Entra na lista por isso, e MARCADA por
+   * isso — convidar quem parou e decisao da coordenacao, que precisa saber que parou.
+   */
+  trancado: boolean;
   /** Vem do cruzamento com evento_participacao; default do banco e 'indefinido'. */
   status: ParticipacaoStatus;
   /** Quantos convidados a pessoa leva. Por PESSOA, como o check-in. 0 = ninguem informou. */
@@ -346,7 +361,7 @@ async function lerVisitantes(eventoId: number) {
   return { visitantes: (data as VisitantesDoEvento | null) ?? vazio, error };
 }
 
-/** Busca por nome (3 letras no minimo) entre os alunos ativos das OUTRAS unidades. */
+/** Busca por nome (3 letras no minimo) entre os candidatos das OUTRAS unidades. */
 export async function buscarAlunoDeOutraUnidade(eventoId: number, termo: string) {
   const { data, error } = await supabase.rpc('evento_buscar_aluno_outra_unidade_v1', {
     p_evento_id: eventoId,
