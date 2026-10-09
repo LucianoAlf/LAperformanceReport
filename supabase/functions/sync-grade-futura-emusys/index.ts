@@ -23,6 +23,7 @@ import {
   reconciliarGradeSnapshotEmusys,
   verificarIntegridadeMapaAulas,
   type ResultadoReconciliacaoGradeSnapshot,
+  aulaEntraNaConferenciaDaGrade,
 } from '../_shared/reconciliacao-grade-snapshot.ts';
 import { prepararExecucaoSyncGrade } from '../_shared/sync-grade-authorization.ts';
 import {
@@ -278,7 +279,7 @@ serve(async (req: Request) => {
 
           const snapshotGrade = montarSnapshotGradeEmusys(
             aulas.filter((aula) =>
-              aula.categoria === 'normal'
+              aulaEntraNaConferenciaDaGrade(aula.categoria)
               && aula.data_hora_inicio.split(' ')[0] >= hoje
               && aula.data_hora_inicio.split(' ')[0] <= dataFim
             ),

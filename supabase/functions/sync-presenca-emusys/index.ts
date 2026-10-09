@@ -20,6 +20,7 @@ import {
   reconciliarGradeSnapshotEmusys,
   verificarIntegridadeMapaAulas,
   type ResultadoReconciliacaoGradeSnapshot,
+  aulaEntraNaConferenciaDaGrade,
 } from '../_shared/reconciliacao-grade-snapshot.ts';
 import {
   buscarTodasAulas,
@@ -438,7 +439,7 @@ async function sincronizarMetadadosAulasNoRun(
     const snapshotGrade = inicioReconciliacao <= dataFim
       ? montarSnapshotGradeEmusys(
           aulas.filter((aula) =>
-            aula.categoria === 'normal'
+            aulaEntraNaConferenciaDaGrade(aula.categoria)
             && aula.data_hora_inicio.split(' ')[0] >= inicioReconciliacao
             && aula.data_hora_inicio.split(' ')[0] <= dataFim
           ),
@@ -2420,7 +2421,7 @@ serve(async (req: Request) => {
         // presenca humana historica.
         const snapshotGrade = montarSnapshotGradeEmusys(
           aulas.filter((aula) =>
-            aula.categoria === 'normal'
+            aulaEntraNaConferenciaDaGrade(aula.categoria)
             && aula.data_hora_inicio.split(' ')[0] === dataAlvo
           ),
           normalizarNome,
