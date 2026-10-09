@@ -694,7 +694,33 @@ export interface CertificadoParaGerar {
   }[];
   /** Kids ou School — o logo do certificado é o da marca da PESSOA. Ausente = School. */
   marca?: MarcaDoAluno | null;
+  /** Selo de formando da pessoa (`evento_participacao.formatura_tipo`). Usado no de formatura. */
+  formatura?: TipoDeFormatura | null;
 }
+
+export type TipoDeFormatura = 'kids' | 'bebes' | 'la';
+
+/**
+ * O que o certificado de formatura afirma, por tipo. O tipo diz PARA ONDE a pessoa passa
+ * (mesmo sentido do selo na aba Alunos).
+ *
+ * ⚠️ Só o que o sistema sabe: etapa concluída e próxima etapa. Nada de carga horária, nota ou
+ * nome de diretor — seria dado inventado num papel que vai para a família.
+ */
+export const ETAPA_DA_FORMATURA: Record<
+  TipoDeFormatura,
+  { concluiu: string; segue: string | null; marca: MarcaDoAluno }
+> = {
+  kids: { concluiu: 'a etapa LA Music Kids', segue: 'LA Music School', marca: 'kids' },
+  bebes: {
+    concluiu: 'a Musicalização para Bebês',
+    segue: 'Musicalização Preparatória',
+    marca: 'kids',
+  },
+  la: { concluiu: 'sua formação na LA Music', segue: null, marca: 'school' },
+};
+
+export type TipoDeCertificado = 'participacao' | 'formatura';
 
 const ESTILO_CERTIFICADO = `
   :root { --marca: #b45309; --marca-escura: #7c2d12; --tinta: #1f2937; --suave: #6b7280; }
@@ -772,7 +798,9 @@ const ESTILO_CERTIFICADO = `
 export function gerarCertificadosHtml(
   dados: DadosDaImpressao,
   pessoas: CertificadoParaGerar[],
+  tipo: TipoDeCertificado = 'participacao',
 ): string {
+  if (tipo === 'formatura') return gerarCertificadosDeFormaturaHtml(dados, pessoas);
   const { evento } = dados;
   const origem = dados.origem;
   // Logo por PESSOA: um lote mistura Kids e School, e o certificado de um bebê com o logo
@@ -859,6 +887,98 @@ export function gerarCertificadosHtml(
       <div class="qual">
         ${paginas.length} ${paginas.length === 1 ? 'certificado' : 'certificados'}
         <span>${escapeHtml(evento.titulo)} — um por curso</span>
+      </div>
+      <button type="button" class="pdf" onclick="window.print()">Salvar em PDF</button>
+      <button type="button" class="imprimir" onclick="window.print()">Imprimir</button>
+      <p class="dica">
+        Um certificado por página, em A4 deitado. Confira a orientação
+        <strong>Paisagem</strong> antes de imprimir.
+      </p>
+    </div>
+  </div>
+
+${corpo}
+</body>
+</html>`;
+}
+
+/**
+ * Certificados de FORMATURA — reunião de 08/10/2026.
+ *
+ * Um por PESSOA (a formatura é da pessoa, não do curso) e só para quem tem selo de formando.
+ * Mesmo papel e mesma moldura do de participação, para os dois saírem iguais da gráfica;
+ * muda o título, o texto e o logo, que segue a etapa (Kids e Bebês saem com o logo da Kids).
+ */
+function gerarCertificadosDeFormaturaHtml(
+  dados: DadosDaImpressao,
+  pessoas: CertificadoParaGerar[],
+): string {
+  const { evento } = dados;
+  const origem = dados.origem;
+  const validas = pessoas.filter((p) => p.nome.trim() !== '' && p.formatura);
+
+  const ondeQuando = [
+    periodoPorExtenso(evento.data_evento, evento.data_fim),
+    evento.local ? escapeHtml(evento.local) : null,
+  ]
+    .filter(Boolean)
+    .join(', ');
+
+  const folhas = validas
+    .map((pessoa) => {
+      const etapa = ETAPA_DA_FORMATURA[pessoa.formatura as TipoDeFormatura];
+      const logo = origem ? imgDaMarca(origem, etapa.marca) : '';
+      return `  <div class="cert">
+    <div class="moldura">
+      ${logo}
+      <h1 class="titulo">Certificado</h1>
+      <p class="subtitulo">de formatura</p>
+
+      <div class="corpo">
+        Certificamos que
+        <strong class="nome">${escapeHtml(pessoa.nome)}</strong>
+        concluiu ${escapeHtml(etapa.concluiu)} e celebrou sua formatura no
+        <strong>${escapeHtml(evento.titulo)}</strong>${ondeQuando ? `, realizado em ${ondeQuando}` : ''}.
+        ${
+          etapa.segue
+            ? `<div class="repertorio"><span class="item">Próxima etapa: <span class="curso">${escapeHtml(
+                etapa.segue,
+              )}</span></span></div>`
+            : ''
+        }
+      </div>
+
+      <div class="assinatura">
+        <div class="linha"></div>
+        <p class="quem">LA Music Escola de Música</p>
+        ${evento.unidade_nome ? `<p class="onde">${escapeHtml(evento.unidade_nome)}</p>` : ''}
+      </div>
+    </div>
+  </div>`;
+    })
+    .join('\n');
+
+  const corpo =
+    validas.length > 0
+      ? folhas
+      : `  <div class="cert"><div class="moldura">
+      <div class="corpo">Nenhum formando selecionado.</div>
+    </div></div>`;
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(evento.titulo)} — Certificados de formatura</title>
+  <style>${ESTILO_CERTIFICADO}</style>
+</head>
+<body>
+  <div class="acoes">
+    <div class="dentro">
+      <div class="qual">
+        ${validas.length} ${validas.length === 1 ? 'certificado de formatura' : 'certificados de formatura'}
+        <span>${escapeHtml(evento.titulo)} — um por formando</span>
       </div>
       <button type="button" class="pdf" onclick="window.print()">Salvar em PDF</button>
       <button type="button" class="imprimir" onclick="window.print()">Imprimir</button>

@@ -965,6 +965,8 @@ export interface ParticipacaoComChegada {
   data_nascimento: string | null;
   /** `alunos.classificacao` (LAMK/EMLA) — o logo do certificado. null = visitante. */
   classificacao: string | null;
+  /** Selo de formando (da pessoa) — quem recebe o certificado de formatura. */
+  formatura_tipo: 'kids' | 'bebes' | 'la' | null;
 }
 
 /**
@@ -992,7 +994,7 @@ export function useCheckinDoEvento(eventoId: number | null) {
     const [{ data, error: erroParticipacao }, { visitantes, error: erroVisitantes }] = await Promise.all([
       supabase
         .from('evento_participacao')
-        .select('pessoa_chave, aluno_id, status, checkin_em, alunos(nome, data_nascimento, classificacao)')
+        .select('pessoa_chave, aluno_id, status, checkin_em, formatura_tipo, alunos(nome, data_nascimento, classificacao)')
         .eq('evento_id', eventoId),
       lerVisitantes(eventoId),
     ]);
@@ -1017,6 +1019,7 @@ export function useCheckinDoEvento(eventoId: number | null) {
           data_nascimento:
             p.alunos?.data_nascimento ?? nomeDeFora[String(p.aluno_id)]?.data_nascimento ?? null,
           classificacao: p.alunos?.classificacao ?? null,
+          formatura_tipo: p.formatura_tipo ?? null,
         })),
       );
     }

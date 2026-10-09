@@ -224,6 +224,12 @@ apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **L
   `marcaDaClassificacao`/`marcasDoRecorte` (`src/lib/eventosImpressao.ts`). ⚠️ Visitante de outra
   unidade chega sem classificação (a RLS esconde o cadastro) e **não vota** no logo; no certificado
   cai na School.
+- **Certificado de formatura + prévia (09/10/2026):** na aba Documentos, um certificado por **formando**
+  (`evento_participacao.formatura_tipo`: `kids` → "concluiu a etapa LA Music Kids · próxima etapa LA Music
+  School"; `bebes` → "Musicalização para Bebês · próxima Musicalização Preparatória"), logo da Kids nos dois.
+  Texto em `ETAPA_DA_FORMATURA` (`src/lib/eventosImpressao.ts`) — genérico, sem dado inventado. Gerar o de
+  formatura **não** grava `certificado_status` (essa marca é do de participação, por curso). Os dois têm
+  **"Ver prévia"**: o mesmo HTML do papel num iframe reduzido (`PreviaDoDocumento`), sem marcar nada.
 - **Playbacks numerados no Drive (09/10/2026):** `recital-drive-sync` nomeia "B1-03 — Aluno — Curso.mp3"
   (bloco 1, 3º número; quem toca junto divide o número, regra de `agruparEmNumeros`) e **renomeia** o
   arquivo quando a posição muda depois do envio — o último nome fica em
