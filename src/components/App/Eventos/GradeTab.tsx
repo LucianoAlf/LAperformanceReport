@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   DndContext,
@@ -10,6 +10,7 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
 import {
@@ -61,6 +62,7 @@ import {
   horaParaSegundos,
   idadeHoje,
   palcoDosNumeros,
+  moverNumero,
   rotuloIdade,
   segundosParaHora,
   type BlocoComHorario,
@@ -469,7 +471,47 @@ function LinhaIntegrante({
  * primeiro deixaria a planilha e o certificado dos outros com a música vazia. Palco e mapa
  * continuam por integrante — é o que cada um pede para tocar.
  */
-function CartaoNumero({
+type PropsDoNumero = {
+  numero: ApresentacaoDaGrade[];
+  horario: { inicio: string; duracaoSegundos: number } | undefined;
+  sugestoes: { instrumento: string[]; equipamento: string[] };
+  eventoId: number;
+  unidadeId: string;
+  blocoId: number;
+  onMudou: () => void;
+};
+
+/**
+ * Casca arrastável do número. Só ela re-renderiza a cada movimento do mouse durante um
+ * arrasto (o dnd-kit atualiza todo `useSortable`); o conteúdo pesado — campos, seletores,
+ * palco — fica em `CorpoDoNumero`, memorizado. Com ~250 cartões, redesenhar o corpo de todos
+ * a cada pixel era a lentidão ao arrastar (reunião de 08/10).
+ */
+function CartaoNumero(props: PropsDoNumero) {
+  const { numero } = props;
+  const emGrupo = numero.length > 1;
+  // A alça move o NÚMERO inteiro: o id arrastável é o do primeiro integrante.
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: numero[0].id,
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        // Celular: cartão de roteiro (16px de raio, superfície mais densa, borda discreta).
+        'rounded-2xl border bg-slate-900/80 p-3 shadow-sm shadow-black/20 sm:rounded-lg sm:bg-slate-900/50 sm:p-2.5 sm:shadow-none',
+        emGrupo ? 'border-violet-500/40' : 'border-slate-800 sm:border-slate-700/60',
+        // O vão de onde o cartão vai cair: tracejado violeta, conteúdo apagado.
+        isDragging && 'border-dashed border-violet-400/70 bg-violet-500/10 [&>*]:opacity-25',
+      )}
+    >
+      <CorpoDoNumero {...props} alca={attributes} alcaEventos={listeners} />
+    </div>
+  );
+}
+
+const CorpoDoNumero = memo(function CorpoDoNumero({
   numero,
   horario,
   sugestoes,
@@ -477,7 +519,13 @@ function CartaoNumero({
   unidadeId,
   blocoId,
   onMudou,
-}: {
+  alca,
+  alcaEventos,
+}: PropsDoNumero & {
+  /** `attributes`/`listeners` do useSortable da casca — vão nas duas alças do cartão. */
+  alca: ReturnType<typeof useSortable>['attributes'];
+  alcaEventos: ReturnType<typeof useSortable>['listeners'];
+} & {
   numero: ApresentacaoDaGrade[];
   horario: { inicio: string; duracaoSegundos: number } | undefined;
   sugestoes: { instrumento: string[]; equipamento: string[] };
@@ -493,10 +541,6 @@ function CartaoNumero({
   );
   const emGrupo = numero.length > 1;
 
-  // A alça move o NÚMERO inteiro: o id arrastável é o do primeiro integrante.
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: principal.id,
-  });
   const [musica, setMusica] = useState(principal.musica ?? '');
   const [musicaLink, setMusicaLink] = useState(principal.musica_link ?? '');
   // O banco muda por fora do campo (sync do LA Teacher, outro integrante do número). Sem
@@ -573,23 +617,13 @@ function CartaoNumero({
   const primeiroNome = (ap: ApresentacaoDaGrade) => ap.aluno_nome.split(' ')[0];
 
   return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn(
-        // Celular: cartão de roteiro (16px de raio, superfície mais densa, borda discreta).
-        'rounded-2xl border bg-slate-900/80 p-3 shadow-sm shadow-black/20 sm:rounded-lg sm:bg-slate-900/50 sm:p-2.5 sm:shadow-none',
-        emGrupo ? 'border-violet-500/40' : 'border-slate-800 sm:border-slate-700/60',
-        isDragging && 'opacity-40',
-      )}
-    >
       <div className="flex items-start gap-2">
         {/* O handle é SÓ a alça: com o listener no cartão inteiro, clicar no campo de música
             iniciaria um arrasto e o input nunca receberia foco. */}
         <button
           type="button"
-          {...attributes}
-          {...listeners}
+          {...alca}
+          {...alcaEventos}
           aria-label={`Mover ${numero.map((a) => a.aluno_nome).join(' e ')}`}
           className="mt-0.5 hidden cursor-grab touch-none text-slate-600 hover:text-slate-400 active:cursor-grabbing sm:block"
         >
@@ -618,8 +652,8 @@ function CartaoNumero({
             </span>
             <button
               type="button"
-              {...attributes}
-              {...listeners}
+              {...alca}
+              {...alcaEventos}
               aria-label={`Mover ${numero.map((a) => a.aluno_nome).join(' e ')} (celular)`}
               className="-mr-2 ml-auto flex h-11 w-11 cursor-grab touch-none items-center justify-center rounded-xl text-slate-500 active:bg-slate-800"
             >
@@ -898,9 +932,8 @@ function CartaoNumero({
           )}
         </div>
       </div>
-    </div>
   );
-}
+});
 
 /* ───────────────────────────── bloco ───────────────────────────── */
 
@@ -1232,7 +1265,15 @@ export function GradeTab({
   const diaDoBloco = (b: { data: string | null }) => b.data ?? evento.data_evento;
   const multiDia = dias.length > 1;
   const diaVisivel = multiDia && dias.includes(diaAtivo) ? diaAtivo : evento.data_evento;
-  const blocosVisiveis = multiDia ? blocos.filter((b) => diaDoBloco(b) === diaVisivel) : blocos;
+  /**
+   * Prévia do arrastar: enquanto um cartão é arrastado, a tela desenha esta cópia, em que o
+   * número já entrou no bloco sobre o qual está — os outros cartões abrem espaço e o vão
+   * tracejado mostra onde ele vai ficar ANTES do drop (pedido do Hugo, 09/10). `null` fora
+   * do arrasto.
+   */
+  const [previa, setPrevia] = useState<BlocoDaGrade[] | null>(null);
+  const blocosTela = previa ?? blocos;
+  const blocosVisiveis = multiDia ? blocosTela.filter((b) => diaDoBloco(b) === diaVisivel) : blocosTela;
 
   /** Releitura manual do canal professor — o automatico ja roda ao abrir a sala. */
   const sincronizar = async () => {
@@ -1287,7 +1328,7 @@ export function GradeTab({
           duracao_padrao_segundos: evento.duracao_padrao_segundos,
           intervalo_entre_blocos_segundos: evento.intervalo_entre_blocos_segundos ?? 2700,
         },
-        blocos.map((b) => ({
+        blocosTela.map((b) => ({
           id: b.id,
           ordem: b.ordem,
           // A data do bloco decide quando o dia vira — sem ela um bloco de domingo
@@ -1303,7 +1344,7 @@ export function GradeTab({
           })),
         })),
       ),
-    [evento, blocos],
+    [evento, blocosTela],
   );
 
   /**
@@ -1335,6 +1376,13 @@ export function GradeTab({
     (s, a) => s + Math.max(0, a.cursos_no_recital - a.cursos_alocados),
     0,
   );
+
+  // Estável de propósito: vai até o corpo memorizado de cada cartão (`CorpoDoNumero`); uma
+  // função nova a cada render desfaria a memorização e a lentidão ao arrastar voltava.
+  const aoMudarBloco = useCallback(() => {
+    recarregar();
+    recarregarAlunos();
+  }, [recarregar, recarregarAlunos]);
 
   const blocoDoItem = (id: number) => blocos.find((b) => b.apresentacoes.some((a) => a.id === id));
 
@@ -1378,7 +1426,12 @@ export function GradeTab({
   const aoSoltar = async (e: DragEndEvent) => {
     setArrastando(null);
     const { active, over } = e;
-    if (!over || active.id === over.id) return;
+    if (!over) {
+      setPrevia(null);
+      return;
+    }
+    // Soltar sobre si mesmo ainda pode ser fim de uma troca de bloco feita pela prévia.
+    if (active.id === over.id && !previa) return;
 
     const blocoArrastado = idDeBloco(active.id);
     if (blocoArrastado !== null) {
@@ -1386,59 +1439,76 @@ export function GradeTab({
       return;
     }
 
-    const origem = blocoDoItem(Number(active.id));
-    if (!origem) return;
+    // A prévia já levou o número para o bloco certo (`aoPassar`). Aqui falta só a posição
+    // DENTRO do bloco onde ele caiu: o índice do alvo na lista completa = arrayMove.
+    const base = previa ?? blocos;
+    setPrevia(null);
+    const idAtivo = Number(active.id);
+    const contem = (id: number) => (b: BlocoDaGrade) => b.apresentacoes.some((a) => a.id === id);
+    const atual = base.find(contem(idAtivo));
+    const alvoBlocoId = idDeBloco(over.id);
+    const alvo =
+      alvoBlocoId !== null ? base.find((b) => b.id === alvoBlocoId) : base.find(contem(Number(over.id)));
+    if (!atual || !alvo) return;
+    let final = base;
+    const numerosAlvo = agruparEmNumeros(alvo.apresentacoes);
+    const naLista = numerosAlvo.findIndex((n) => n.some((a) => a.id === Number(over.id)));
+    if (alvo.id === atual.id) {
+      const de = numerosAlvo.findIndex((n) => n.some((a) => a.id === idAtivo));
+      if (alvoBlocoId === null && naLista >= 0 && naLista !== de) {
+        final = moverNumero(base, idAtivo, atual.id, naLista);
+      }
+    } else {
+      // A prévia não chegou a mover (soltou rápido demais): entra antes do alvo ou no fim.
+      final = moverNumero(base, idAtivo, alvo.id, naLista < 0 ? numerosAlvo.length : naLista);
+    }
 
-    // O alvo pode ser outro número OU o corpo de um bloco vazio.
-    const alvoId = idDeBloco(over.id);
-    const alvoBloco =
-      alvoId !== null ? blocos.find((b) => b.id === alvoId) : blocoDoItem(Number(over.id));
-    if (!alvoBloco) return;
-
-    // O que se arrasta é o NÚMERO: quem sobe junto vai junto, senão a trava do banco recusa
-    // o número partido em dois blocos. A conta é por número e só no fim vira apresentação.
-    const numerosOrigem = agruparEmNumeros(origem.apresentacoes);
-    const movido = numerosOrigem.find((n) => n.some((a) => a.id === Number(active.id)));
-    if (!movido) return;
-    const restantes = numerosOrigem.filter((n) => n !== movido);
-    const destino =
-      alvoBloco.id === origem.id ? restantes : agruparEmNumeros(alvoBloco.apresentacoes);
-
-    // Soltar no corpo do bloco (id com prefixo) põe no fim; soltar sobre um número põe na
-    // posição dele.
-    const posicao =
-      alvoId !== null
-        ? destino.length
-        : destino.findIndex((n) => n.some((a) => a.id === Number(over.id)));
-    destino.splice(posicao < 0 ? destino.length : posicao, 0, movido);
-
-    // Reenumera os DOIS blocos: mover para fora deixa buracos na origem, e a ordem com
-    // buraco funciona até alguém inserir no meio.
-    const itens = [
-      ...destino.flat().map((a, i) => ({ id: a.id, bloco_id: alvoBloco.id, ordem: i + 1 })),
-      ...(alvoBloco.id === origem.id
-        ? []
-        : restantes.flat().map((a, i) => ({ id: a.id, bloco_id: origem.id, ordem: i + 1 }))),
-    ];
+    // Só os blocos tocados vão ao banco, inteiros e renumerados (o RPC espera a ordem cheia).
+    const antes = new Map(blocos.flatMap((b) => b.apresentacoes).map((a) => [a.id, a]));
+    const tocados = new Set<number>();
+    for (const a of final.flatMap((b) => b.apresentacoes)) {
+      const o = antes.get(a.id);
+      if (!o || o.bloco_id !== a.bloco_id || o.ordem !== a.ordem) {
+        tocados.add(a.bloco_id);
+        if (o) tocados.add(o.bloco_id);
+      }
+    }
+    if (tocados.size === 0) return;
+    const itens = final
+      .filter((b) => tocados.has(b.id))
+      .flatMap((b) => b.apresentacoes.map((a) => ({ id: a.id, bloco_id: b.id, ordem: a.ordem })));
 
     // Na tela já, antes do banco (ver `aplicarLocal`). Em erro, o `recarregar` devolve tudo.
-    const novoLugar = new Map(itens.map((it) => [it.id, it]));
-    aplicarLocal((bs) => {
-      const todas = bs.flatMap((b) => b.apresentacoes);
-      return bs.map((b) => ({
-        ...b,
-        apresentacoes: todas
-          .map((a) => {
-            const lugar = novoLugar.get(a.id);
-            return lugar ? { ...a, bloco_id: lugar.bloco_id, ordem: lugar.ordem } : a;
-          })
-          .filter((a) => a.bloco_id === b.id)
-          .sort((x, y) => x.ordem - y.ordem),
-      }));
-    });
+    aplicarLocal(() => final);
     const { error } = await reordenarGrade(evento.id, itens);
     if (error) toast.error(`Não consegui salvar a nova ordem: ${error.message}`);
     recarregar();
+  };
+
+  /**
+   * Durante o arrasto: quando o cartão passa sobre OUTRO bloco, a prévia o leva para lá —
+   * em cima ou embaixo do cartão sob o mouse, conforme a metade. Dentro do mesmo bloco quem
+   * abre espaço é o próprio dnd-kit; aqui não se mexe.
+   */
+  const aoPassar = (e: DragOverEvent) => {
+    const { active, over } = e;
+    if (!previa || !over || idDeBloco(active.id) !== null || active.id === over.id) return;
+    const idAtivo = Number(active.id);
+    const contem = (id: number) => (b: BlocoDaGrade) => b.apresentacoes.some((a) => a.id === id);
+    const atual = previa.find(contem(idAtivo));
+    const alvoBlocoId = idDeBloco(over.id);
+    const alvo =
+      alvoBlocoId !== null ? previa.find((b) => b.id === alvoBlocoId) : previa.find(contem(Number(over.id)));
+    if (!atual || !alvo || alvo.id === atual.id) return;
+    const numerosAlvo = agruparEmNumeros(alvo.apresentacoes);
+    let indice = numerosAlvo.length;
+    if (alvoBlocoId === null) {
+      const i = numerosAlvo.findIndex((n) => n.some((a) => a.id === Number(over.id)));
+      const r = active.rect.current.translated;
+      const abaixo = r !== null && r.top + r.height / 2 > over.rect.top + over.rect.height / 2;
+      indice = i < 0 ? numerosAlvo.length : i + (abaixo ? 1 : 0);
+    }
+    setPrevia(moverNumero(previa, idAtivo, alvo.id, indice));
   };
 
   if (erro) {
@@ -1558,14 +1628,24 @@ export function GradeTab({
           collisionDetection={closestCorners}
           // Remede os alvos durante o arrasto: ao arrastar um BLOCO todos se recolhem (ver
           // `compacto`), e as medidas da hora do clique já não valeriam.
-          measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
-          onDragCancel={() => setArrastando(null)}
+          // Só ao arrastar BLOCO: remedir tudo a cada quadro custa caro com ~250 cartões.
+          measuring={{
+            droppable: {
+              strategy: arrastando?.tipo === 'bloco' ? MeasuringStrategy.Always : MeasuringStrategy.WhileDragging,
+            },
+          }}
+          onDragCancel={() => {
+            setArrastando(null);
+            setPrevia(null);
+          }}
+          onDragOver={aoPassar}
           onDragStart={(e: DragStartEvent) => {
             const blocoId = idDeBloco(e.active.id);
             if (blocoId !== null) {
               setArrastando({ tipo: 'bloco', rotulo: blocos.find((b) => b.id === blocoId)?.nome ?? 'Bloco' });
               return;
             }
+            setPrevia(blocos);
             const bloco = blocoDoItem(Number(e.active.id));
             const numero = bloco
               ? agruparEmNumeros(bloco.apresentacoes).find((n) =>
@@ -1613,10 +1693,7 @@ export function GradeTab({
                     dias={dias}
                     dataEvento={evento.data_evento}
                     compacto={arrastando?.tipo === 'bloco'}
-                    onMudou={() => {
-                      recarregar();
-                      recarregarAlunos();
-                    }}
+                    onMudou={aoMudarBloco}
                   />
                 </div>
               );
@@ -1624,7 +1701,9 @@ export function GradeTab({
           </div>
           </SortableContext>
 
-          <DragOverlay>
+          {/* Sem animação de volta ao soltar: a prévia já pôs o cartão no lugar novo, e os
+              250 ms do fantasma voltando eram a "travada" depois do drop. */}
+          <DragOverlay dropAnimation={null}>
             {arrastando && (
               <div className="flex items-center gap-2 rounded-lg border border-violet-500/60 bg-slate-900 px-3 py-2 shadow-2xl">
                 {arrastando.tipo === 'bloco' ? (

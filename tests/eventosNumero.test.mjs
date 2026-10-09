@@ -24,6 +24,7 @@ const lib = await (async () => {
 
 const {
   agruparEmNumeros,
+  moverNumero,
   calcularHorariosDaGrade,
   consolidarItensDoPalco,
   palcoDosNumeros,
@@ -239,4 +240,34 @@ test('rotulo de idade no singular e vazio sem idade', () => {
   assert.equal(rotuloIdade(1), '1 ano');
   assert.equal(rotuloIdade(12), '12 anos');
   assert.equal(rotuloIdade(null), '');
+});
+
+const blocoT = (id, ...ids) => ({
+  id,
+  apresentacoes: ids.flatMap((x, i) =>
+    (Array.isArray(x) ? x : [x]).map((n) => ({ id: n, ordem: i + 1, bloco_id: id, grupo_id: Array.isArray(x) ? `g${x[0]}` : null })),
+  ),
+});
+const ids = (b) => b.apresentacoes.map((a) => a.id);
+
+test('moverNumero: Miguel volta do bloco 3 para a ÚLTIMA posição do bloco 2', () => {
+  // índice = tamanho da lista de destino → fim (antes ia para a penúltima)
+  const r = moverNumero([blocoT(2, 10, 11, 12), blocoT(3, 20, 99)], 99, 2, 3);
+  assert.deepEqual(ids(r[0]), [10, 11, 12, 99]);
+  assert.deepEqual(r[0].apresentacoes.map((a) => a.ordem), [1, 2, 3, 4]);
+  assert.deepEqual(ids(r[1]), [20]);
+  assert.equal(r[0].apresentacoes[3].bloco_id, 2);
+});
+
+test('moverNumero no mesmo bloco com índice do alvo na lista completa = arrayMove (descer)', () => {
+  const r = moverNumero([blocoT(1, 1, 2, 3)], 1, 1, 1);
+  assert.deepEqual(ids(r[0]), [2, 1, 3]);
+});
+
+test('moverNumero leva o número inteiro e não toca bloco alheio', () => {
+  const blocos = [blocoT(1, [1, 5], 2), blocoT(2, 7), blocoT(3, 9)];
+  const r = moverNumero(blocos, 5, 2, 0);
+  assert.deepEqual(ids(r[1]), [1, 5, 7]);
+  assert.deepEqual(ids(r[0]), [2]);
+  assert.equal(r[2], blocos[2]);
 });

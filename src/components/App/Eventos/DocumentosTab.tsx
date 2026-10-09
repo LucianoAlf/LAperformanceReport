@@ -165,8 +165,25 @@ export function DocumentosTab({ evento }: { evento: EventoComResumo }) {
     return contagem;
   }, [formandos, formaturaPorPessoa]);
 
+  /**
+   * Sem ninguém para receber ainda, a PRÉVIA mostra o modelo com um aluno de exemplo — a
+   * prévia é para ver o papel (pedido do Hugo, 09/10). Gerar continua exigindo gente de verdade.
+   */
+  const semNinguem = (tipo: TipoDeCertificado) => (tipo === 'formatura' ? formandos : recebem).length === 0;
+  const EXEMPLO = [
+    {
+      nome: 'Nome do Aluno (exemplo)',
+      marca: 'school' as MarcaDoAluno,
+      formatura: 'kids' as TipoDeFormatura,
+      apresentacoes: [{ apresentacaoId: 0, cursoNome: 'Violão', musica: 'Asa Branca' }],
+    },
+  ];
+
   const htmlDosCertificados = (tipo: TipoDeCertificado) => {
     const pessoas = tipo === 'formatura' ? formandos : recebem;
+    if (pessoas.length === 0) {
+      return gerarCertificadosHtml({ ...dadosDaImpressao, blocos: [] }, EXEMPLO, tipo);
+    }
     return gerarCertificadosHtml(
       // O certificado não usa a grade para nada além do repertório, que já vem na lista.
       { ...dadosDaImpressao, blocos: [] },
@@ -339,7 +356,7 @@ export function DocumentosTab({ evento }: { evento: EventoComResumo }) {
           <div className="flex flex-wrap items-center gap-2">
             <BotaoComMola
               onClick={() => setPrevia('participacao')}
-              desabilitado={recebem.length === 0}
+              desabilitado={false}
               className="border border-slate-600 text-slate-200 hover:bg-slate-700/60"
             >
               <Eye className="h-4 w-4" />
@@ -410,7 +427,7 @@ export function DocumentosTab({ evento }: { evento: EventoComResumo }) {
           <div className="flex flex-wrap items-center gap-2">
             <BotaoComMola
               onClick={() => setPrevia('formatura')}
-              desabilitado={formandos.length === 0}
+              desabilitado={false}
               className="border border-slate-600 text-slate-200 hover:bg-slate-700/60"
             >
               <Eye className="h-4 w-4" />
@@ -456,13 +473,15 @@ export function DocumentosTab({ evento }: { evento: EventoComResumo }) {
         onFechar={() => setPrevia(null)}
         titulo={previa === 'formatura' ? 'Prévia — certificados de formatura' : 'Prévia — certificados de participação'}
         descricao={
-          previa === 'formatura'
+          previa && semNinguem(previa)
+            ? 'Modelo com um aluno de exemplo — ninguém para receber ainda neste filtro.'
+            : previa === 'formatura'
             ? `${formandos.length} ${formandos.length === 1 ? 'certificado' : 'certificados'}, um por formando.`
             : `${totalCertificados} ${totalCertificados === 1 ? 'certificado' : 'certificados'}, um por curso.`
         }
         html={previa ? htmlDosCertificados(previa) : ''}
         acaoGerar={
-          previa && (
+          previa && !semNinguem(previa) && (
             <BotaoComMola
               onClick={() => gerarCertificados(previa)}
               desabilitado={false}
