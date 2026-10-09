@@ -10,16 +10,13 @@ import {
   montarListaDeChegada,
   ordenarPessoasDaPorta,
   rotuloIdade,
-  selecionarParaCertificado,
   type EntradaDaChegada,
   type LinhaDaChegada,
   type PessoaNaChegada,
-  type PublicoDoCertificado,
 } from '@/lib/eventos';
-import { abrirDocumento, gerarCertificadosHtml, type DadosDaImpressao } from '@/lib/eventosImpressao';
+import { entradaDaChegada } from './entradaDaChegada';
 import {
   marcarChegada,
-  marcarCertificadosEmitidos,
   marcarCheckinConvidado,
   useCheckinDoEvento,
   useConvidadosDoEvento,
@@ -44,7 +41,13 @@ import {
  */
 type Visao = 'porta' | 'palco';
 
-export function CheckinTab({ evento }: { evento: EventoComResumo }) {
+export function CheckinTab({
+  evento,
+  onIrPara,
+}: {
+  evento: EventoComResumo;
+  onIrPara?: (aba: 'documentos') => void;
+}) {
   const { blocos, loading: carregandoGrade, erro: erroGrade } = useGradeDoEvento(evento.id);
   const {
     participacoes,
@@ -60,43 +63,18 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
   const [otimista, setOtimista] = useState<Map<string, string | null>>(new Map());
 
   const entrada = useMemo<EntradaDaChegada>(
-    () => ({
-      evento: {
-        data_evento: evento.data_evento,
-        horario_inicio: evento.horario_inicio,
-        duracao_padrao_segundos: evento.duracao_padrao_segundos,
-        intervalo_entre_blocos_segundos: evento.intervalo_entre_blocos_segundos ?? 2700,
-      },
-      blocos: blocos.map((b) => ({
-        id: b.id,
-        nome: b.nome,
-        ordem: b.ordem,
-        data: b.data,
-        horario_inicial: b.horario_inicial,
-        inicio_manual: b.inicio_manual,
-        apresentacoes: b.apresentacoes.map((a) => ({
-          id: a.id,
-          ordem: a.ordem,
-          duracao_segundos: a.duracao_segundos,
-          pessoa_chave: a.pessoa_chave,
-          aluno_id: a.aluno_id,
-          aluno_nome: a.aluno_nome,
-          curso_nome: a.curso_nome,
-          musica: a.musica,
-          grupo_id: a.grupo_id,
-        })),
-      })),
-      participacoes: participacoes.map((p) => ({
-        pessoa_chave: p.pessoa_chave,
-        nome: p.nome,
-        status: p.status,
+    () =>
+      entradaDaChegada(
+        evento,
+        blocos,
         // O otimista sobrepõe o que veio do banco até a releitura chegar.
-        checkin_em: otimista.has(p.pessoa_chave)
-          ? (otimista.get(p.pessoa_chave) ?? null)
-          : p.checkin_em,
-        aluno_id: p.aluno_id,
-      })),
-    }),
+        participacoes.map((p) => ({
+          ...p,
+          checkin_em: otimista.has(p.pessoa_chave)
+            ? (otimista.get(p.pessoa_chave) ?? null)
+            : p.checkin_em,
+        })),
+      ),
     [evento, blocos, participacoes, otimista],
   );
 
@@ -181,65 +159,6 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
     });
   };
 
-  const [publicoCert, setPublicoCert] = useState<PublicoDoCertificado>('chegou');
-  const recebemCertificado = useMemo(
-    () => selecionarParaCertificado(lista.pessoas, publicoCert),
-    [lista.pessoas, publicoCert],
-  );
-  // Um papel por apresentacao: quem nao subiu conta 1 (o generico), quem subiu conta os
-  // cursos — o numero do botao e o numero de folhas que saem da impressora.
-  const totalCertificados = useMemo(
-    () =>
-      recebemCertificado.reduce((s, p) => s + Math.max(1, p.apresentacoes.length), 0),
-    [recebemCertificado],
-  );
-
-  const abrirCertificados = async () => {
-    const dados: DadosDaImpressao = {
-      evento: {
-        titulo: evento.titulo,
-        data_evento: evento.data_evento,
-        data_fim: evento.data_fim,
-        local: evento.local,
-        unidade_nome: evento.unidade_nome,
-        horario_inicio: evento.horario_inicio,
-        duracao_padrao_segundos: evento.duracao_padrao_segundos,
-        intervalo_entre_blocos_segundos: evento.intervalo_entre_blocos_segundos ?? 2700,
-      },
-      // O certificado não usa a grade para nada além do repertório de cada pessoa, que já
-      // vem resolvido na lista — por isso `blocos` vai vazio em vez de ser remontado.
-      blocos: [],
-      origem: typeof window === 'undefined' ? undefined : window.location.origin,
-    };
-    const html = gerarCertificadosHtml(
-      dados,
-      recebemCertificado.map((p) => ({
-        nome: p.nome,
-        // Um papel por apresentacao (pessoa x curso): o apresentacaoId viaja para o
-        // certificado_status poder ser gravado depois — sem ele, emitir nao deixava
-        // marca nenhuma e a gráfica receberia o mesmo lote duas vezes.
-        apresentacoes: p.apresentacoes.map((a) => ({
-          apresentacaoId: a.apresentacaoId,
-          cursoNome: a.cursoNome,
-          musica: a.musica,
-        })),
-      })),
-    );
-    if (!abrirDocumento(html)) {
-      toast.error('O navegador bloqueou a janela. Permita pop-ups para este site e tente de novo.');
-      return;
-    }
-    // Marca como emitido DEPOIS da janela abrir: marcar antes de o papel existir deixaria
-    // o sistema dizendo "ja saiu" de um certificado que o navegador bloqueou.
-    const ids = recebemCertificado.flatMap((p) =>
-      p.apresentacoes.map((a) => a.apresentacaoId).filter((x): x is number => x !== undefined),
-    );
-    if (ids.length > 0) {
-      const { error } = await marcarCertificadosEmitidos(ids);
-      if (error) toast.error(`Certificados gerados, mas não gravei a marca de emitido: ${error.message}`);
-    }
-  };
-
   const erro = erroGrade ?? erroCheckin;
   if (erro) {
     return (
@@ -281,77 +200,28 @@ export function CheckinTab({ evento }: { evento: EventoComResumo }) {
             resumo.apresentacoesSemChegada > 0
               ? `${resumo.apresentacoesSemChegada} com a pessoa ainda fora`
               : resumo.apresentacoes > 0
-                ? 'todo mundo da grade chegou'
-                : 'grade vazia'
+                ? 'todo mundo que sobe ao palco chegou'
+                : 'nenhum bloco montado'
           }
         />
       </section>
 
       {resumo.esperados === 0 && (
         <p className="rounded-xl border border-slate-700 bg-slate-800/40 p-4 text-[13px] text-slate-400">
-          Ninguém confirmado nem alocado ainda. O check-in lista quem está na grade e quem
+          Ninguém confirmado nem alocado ainda. O check-in lista quem está nos blocos e quem
           confirmou participação na aba Alunos.
         </p>
       )}
 
-      {resumo.esperados > 0 && (
-        <section className="order-last rounded-xl border border-slate-700 bg-slate-800/40 p-3 sm:order-none">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="min-w-0">
-              <h3 className="flex items-center gap-1.5 text-[12px] sm:text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                <Award className="h-3.5 w-3.5" />
-                Certificados
-              </h3>
-              <p className="mt-0.5 text-[12px] text-slate-500">
-                Um certificado por curso, em A4 deitado — quem sobe duas vezes recebe dois.
-                Abre numa aba nova, com botão para salvar em PDF.
-              </p>
-              <div className="mt-2 flex flex-wrap items-center gap-1">
-                <span className="mr-1 text-[12px] sm:text-[11px] text-slate-500">Emitir para:</span>
-                <Chip
-                  rotulo={`quem chegou (${lista.resumo.chegaram})`}
-                  ativo={publicoCert === 'chegou'}
-                  onClick={() => setPublicoCert('chegou')}
-                />
-                <Chip
-                  rotulo="todos os esperados"
-                  ativo={publicoCert === 'todos'}
-                  onClick={() => setPublicoCert('todos')}
-                />
-              </div>
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5"
-              onClick={abrirCertificados}
-              disabled={recebemCertificado.length === 0}
-            >
-              <Award className="h-3.5 w-3.5" />
-              {totalCertificados === 1
-                ? '1 certificado'
-                : `${totalCertificados} certificados`}
-            </Button>
-          </div>
-
-          {/* ⚠️ Diz por que está vazio em vez de só desabilitar o botão: "quem chegou" com
-              zero check-in é o estado normal de quem ainda não usou a aba, e um botão morto
-              sem explicação parece defeito. */}
-          {recebemCertificado.length === 0 && (
-            <p className="mt-2 text-[12px] sm:text-[11.5px] text-amber-200/80">
-              {publicoCert === 'chegou'
-                ? 'Ninguém com check-in ainda. Marque as chegadas abaixo ou emita para todos os esperados.'
-                : 'Ninguém na lista do dia.'}
-            </p>
-          )}
-
-          {/* O formato é provisório e isso não pode ficar só no commit: quem abrir a tela
-              precisa saber que o papel ainda vai mudar. */}
-          <p className="mt-2 text-[12px] sm:text-[11px] text-slate-500">
-            Modelo genérico, sem carga horária nem número de registro — o texto ainda vai ser
-            definido. Quem se apresenta em dois cursos recebe <strong>dois</strong> certificados.
-          </p>
-        </section>
+      {onIrPara && resumo.esperados > 0 && (
+        <button
+          type="button"
+          onClick={() => onIrPara('documentos')}
+          className="order-last flex items-center gap-2 self-start rounded-lg px-2 py-1 text-[12px] text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200 sm:order-none"
+        >
+          <Award className="h-3.5 w-3.5 text-amber-400" />
+          Certificados ficam na aba Documentos →
+        </button>
       )}
 
       {resumo.esperados > 0 && (
@@ -547,7 +417,7 @@ function LinhaPessoa({
           {pessoa.apresentacoes.length === 0 ? (
             // Confirmou e não entrou na grade: vem ao evento, não sobe ao palco. Dizer isso
             // evita que a porta ache que perdeu uma apresentação.
-            <span className="text-slate-500">confirmado · sem apresentação na grade</span>
+            <span className="text-slate-500">confirmado · sem apresentação nos blocos</span>
           ) : (
             pessoa.apresentacoes.map((a) => (
               <span key={a.apresentacaoId}>

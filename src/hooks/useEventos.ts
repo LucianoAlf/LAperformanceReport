@@ -626,6 +626,8 @@ export interface ApresentacaoDaGrade {
   aluno_nome: string;
   /** 'AAAA-MM-DD' do cadastro, pela procedencia (`aluno_id`). A idade se calcula na tela. */
   aluno_data_nascimento: string | null;
+  /** `alunos.classificacao` (LAMK = Kids, EMLA = School). null = visitante sem cadastro visível. */
+  aluno_classificacao: string | null;
   professor_nome: string | null;
   ordem: number;
   /**
@@ -699,7 +701,7 @@ export function useGradeDoEvento(eventoId: number | null) {
             ' duracao_segundos, tem_playback, musica_link, playback_path, detalhes_origem,' +
             ' professor, professor_em, editado_apos_envio_em,' +
             ' certificado_status, certificado_em,' +
-            ' observacao_mapa, alunos(nome, data_nascimento), cursos(nome),' +
+            ' observacao_mapa, alunos(nome, data_nascimento, classificacao), cursos(nome),' +
             ' professores!evento_apresentacao_professor_id_fkey(nome),' +
             // Itens embutidos em vez de uma segunda leitura: aqui a FK existe
             // (`apresentacao_id -> evento_apresentacao`), entao o PostgREST resolve o embed —
@@ -730,9 +732,9 @@ export function useGradeDoEvento(eventoId: number | null) {
 
     type LinhaAp = Omit<
       ApresentacaoDaGrade,
-      'curso_nome' | 'aluno_nome' | 'aluno_data_nascimento' | 'professor_nome' | 'itens'
+      'curso_nome' | 'aluno_nome' | 'aluno_data_nascimento' | 'aluno_classificacao' | 'professor_nome' | 'itens'
     > & {
-      alunos: { nome: string; data_nascimento: string | null } | null;
+      alunos: { nome: string; data_nascimento: string | null; classificacao: string | null } | null;
       cursos: { nome: string } | null;
       professores: { nome: string } | null;
       evento_apresentacao_item: ItemDaApresentacao[] | null;
@@ -755,6 +757,7 @@ export function useGradeDoEvento(eventoId: number | null) {
           linha.alunos?.nome ?? nomeDeFora[String(linha.aluno_id)]?.nome ?? '(aluno removido)',
         aluno_data_nascimento:
           linha.alunos?.data_nascimento ?? nomeDeFora[String(linha.aluno_id)]?.data_nascimento ?? null,
+        aluno_classificacao: linha.alunos?.classificacao ?? null,
         curso_nome: linha.cursos?.nome ?? null,
         professor_nome: linha.professores?.nome ?? null,
         // Ordem explicita por id: o embed do PostgREST nao promete ordem nenhuma, e sem
@@ -960,6 +963,8 @@ export interface ParticipacaoComChegada {
   checkin_em: string | null;
   /** 'AAAA-MM-DD' do cadastro — a porta mostra a idade ao lado do nome. */
   data_nascimento: string | null;
+  /** `alunos.classificacao` (LAMK/EMLA) — o logo do certificado. null = visitante. */
+  classificacao: string | null;
 }
 
 /**
@@ -987,7 +992,7 @@ export function useCheckinDoEvento(eventoId: number | null) {
     const [{ data, error: erroParticipacao }, { visitantes, error: erroVisitantes }] = await Promise.all([
       supabase
         .from('evento_participacao')
-        .select('pessoa_chave, aluno_id, status, checkin_em, alunos(nome, data_nascimento)')
+        .select('pessoa_chave, aluno_id, status, checkin_em, alunos(nome, data_nascimento, classificacao)')
         .eq('evento_id', eventoId),
       lerVisitantes(eventoId),
     ]);
@@ -999,8 +1004,8 @@ export function useCheckinDoEvento(eventoId: number | null) {
       setErro(error.message);
       setParticipacoes([]);
     } else {
-      type Linha = Omit<ParticipacaoComChegada, 'nome' | 'data_nascimento'> & {
-        alunos: { nome: string; data_nascimento: string | null } | null;
+      type Linha = Omit<ParticipacaoComChegada, 'nome' | 'data_nascimento' | 'classificacao'> & {
+        alunos: { nome: string; data_nascimento: string | null; classificacao: string | null } | null;
       };
       setParticipacoes(
         ((data ?? []) as unknown as Linha[]).map((p) => ({
@@ -1011,6 +1016,7 @@ export function useCheckinDoEvento(eventoId: number | null) {
           nome: p.alunos?.nome ?? nomeDeFora[String(p.aluno_id)]?.nome ?? '(aluno removido)',
           data_nascimento:
             p.alunos?.data_nascimento ?? nomeDeFora[String(p.aluno_id)]?.data_nascimento ?? null,
+          classificacao: p.alunos?.classificacao ?? null,
         })),
       );
     }

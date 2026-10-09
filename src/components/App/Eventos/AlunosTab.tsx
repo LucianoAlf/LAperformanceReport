@@ -439,7 +439,7 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
   // Visitante sai por inteiro (apresentacoes + participacao): marcar "nao participa"
   // deixaria na lista da unidade alguem que nem estuda nela.
   const removerVisitante = async (aluno: AlunoElegivel) => {
-    if (!window.confirm(`Tirar ${aluno.nome} (${aluno.unidade_origem_nome}) deste evento? As apresentações dele na grade também saem.`)) {
+    if (!window.confirm(`Tirar ${aluno.nome} (${aluno.unidade_origem_nome}) deste evento? As apresentações dele nos blocos também saem.`)) {
       return;
     }
     setGravando(aluno.pessoa_chave);
@@ -521,7 +521,7 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
           { rotulo: 'participam', valor: resumo.participam, cor: 'text-emerald-300' },
           { rotulo: 'indefinidos', valor: resumo.indefinidos, cor: 'text-amber-300' },
           {
-            rotulo: `apresentações · ${resumo.apresentacoesAlocadas} na grade`,
+            rotulo: `apresentações · ${resumo.apresentacoesAlocadas} nos blocos`,
             valor: resumo.apresentacoesPrevistas,
             cor: 'text-violet-300',
             largo: true,
@@ -547,7 +547,7 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
           variant="violet"
           subvalue={
             resumo.apresentacoesAlocadas > 0
-              ? `${resumo.apresentacoesAlocadas} já na grade`
+              ? `${resumo.apresentacoesAlocadas} já nos blocos`
               : '1 por curso de quem participa'
           }
         />

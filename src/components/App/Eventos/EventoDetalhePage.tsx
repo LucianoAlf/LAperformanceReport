@@ -15,6 +15,7 @@ import {
   UserCheck,
   Pencil,
   Sheet,
+  FileText,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -39,9 +40,11 @@ import { GradeTab } from './GradeTab';
 import { PalcoTab } from './PalcoTab';
 import { RevisaoTab } from './RevisaoTab';
 import { CheckinTab } from './CheckinTab';
+import { DocumentosTab } from './DocumentosTab';
 import { BilheteriaTab } from './BilheteriaTab';
 
-type TabAtiva = 'alunos' | 'grade' | 'palco' | 'bilheteria' | 'revisao' | 'checkin';
+// O id 'grade' fica mesmo com o rótulo "Blocos" (08/10/2026): links salvos com ?tab=grade continuam abrindo.
+type TabAtiva = 'alunos' | 'grade' | 'palco' | 'bilheteria' | 'revisao' | 'documentos' | 'checkin';
 
 const STATUS_VARIANT: Record<EventoStatus, 'default' | 'success' | 'warning' | 'error'> = {
   rascunho: 'warning',
@@ -50,7 +53,7 @@ const STATUS_VARIANT: Record<EventoStatus, 'default' | 'success' | 'warning' | '
   cancelado: 'error',
 };
 
-const TABS_VALIDAS: TabAtiva[] = ['alunos', 'grade', 'palco', 'bilheteria', 'revisao', 'checkin'];
+const TABS_VALIDAS: TabAtiva[] = ['alunos', 'grade', 'palco', 'bilheteria', 'revisao', 'documentos', 'checkin'];
 
 /**
  * Fila de alocacao: quem ja tem trabalho do professor no LA Teacher e nao tem
@@ -84,7 +87,7 @@ function QuadroFaltaAlocar({ eventoId, onAbrir }: { eventoId: number; onAbrir: (
       className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-left sm:px-4 transition-colors hover:bg-amber-500/15"
     >
       <span className="text-[13px] font-medium text-amber-200">
-        {total} aluno{total > 1 ? 's' : ''} com trabalho do professor no LA Teacher ainda sem lugar na grade
+        {total} aluno{total > 1 ? 's' : ''} com trabalho do professor no LA Teacher ainda sem lugar nos blocos
       </span>
       <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px]">
         {faixas.musica > 0 && (
@@ -191,11 +194,13 @@ export function EventoDetalhePage() {
 
   const tabs: PageTab<TabAtiva>[] = [
     { id: 'alunos', label: 'Alunos', shortLabel: 'Alunos', icon: Users },
-    { id: 'grade', label: 'Grade', shortLabel: 'Grade', icon: LayoutList },
+    { id: 'grade', label: 'Blocos', shortLabel: 'Blocos', icon: LayoutList },
     { id: 'palco', label: 'Palco', shortLabel: 'Palco', icon: Speaker },
     // Bilheteria antes da Revisao: a revisao confere o recital inteiro, inclusive vendas
     { id: 'bilheteria', label: 'Bilheteria', shortLabel: 'Bilheteria', icon: Ticket },
     { id: 'revisao', label: 'Revisão', shortLabel: 'Revisão', icon: ClipboardCheck },
+    // Documentos depois da Revisão: confere, depois imprime (reunião de 08/10/2026).
+    { id: 'documentos', label: 'Documentos', shortLabel: 'Documentos', icon: FileText },
     // Ultima aba de proposito: a ordem das abas e a ordem do trabalho, e o check-in so
     // acontece no dia — depois de participacao, grade, palco e revisao estarem prontos.
     { id: 'checkin', label: 'Check-in', shortLabel: 'Check-in', icon: UserCheck },
@@ -287,7 +292,7 @@ export function EventoDetalhePage() {
         }}
       />
 
-      {/* Seis abas não cabem num trilho de 390px sem esconder metade: no celular vira um
+      {/* Sete abas não cabem num trilho de 390px sem esconder metade: no celular vira um
           botão com a aba atual que abre a lista inteira (mesmo padrão da Agenda/Alunos). */}
       {/* Faixa por aba: o shell suprime a dele nesta rota (ROTAS_COM_FAIXA_POR_ABA). */}
       {ehCelular && !abaFoiPortada('/app/eventos/*', tabAtiva) && <AvisoNaoOtimizado />}
@@ -319,7 +324,10 @@ export function EventoDetalhePage() {
       {tabAtiva === 'revisao' && (
         <RevisaoTab key={`revisao-${syncTick}`} evento={evento} onIrPara={alterarTab} />
       )}
-      {tabAtiva === 'checkin' && <CheckinTab key={`checkin-${syncTick}`} evento={evento} />}
+      {tabAtiva === 'documentos' && <DocumentosTab key={`documentos-${syncTick}`} evento={evento} />}
+      {tabAtiva === 'checkin' && (
+        <CheckinTab key={`checkin-${syncTick}`} evento={evento} onIrPara={alterarTab} />
+      )}
     </div>
   );
 }

@@ -423,7 +423,7 @@ export function SeletorApresentacao({
           'Carregando candidatos…'
         ) : (
           <>
-            <span>{foraDaGrade.length} fora da grade</span>
+            <span>{foraDaGrade.length} fora dos blocos</span>
             <span className="flex items-center gap-1 text-emerald-400">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
               {confirmadosFora} {confirmadosFora === 1 ? 'confirmado' : 'confirmados'}
@@ -509,7 +509,7 @@ export function SeletorApresentacao({
                           : o.jaNaGrade && juntarCom
                             ? `Trazer ${o.curso_nome} para este número${o.blocoAtual ? ` (hoje no ${o.blocoAtual})` : ''}`
                             : o.jaNaGrade
-                              ? `${o.curso_nome} já está na grade`
+                              ? `${o.curso_nome} já está nos blocos`
                               : `Adicionar ${o.curso_nome}${o.professor_nome ? ` · Prof. ${o.professor_nome}` : ''}`
                       }
                       className={cn(
@@ -530,7 +530,7 @@ export function SeletorApresentacao({
                       {o.noNumero ? (
                         <span className="text-[12px] sm:text-[10px]">neste número</span>
                       ) : o.jaNaGrade ? (
-                        <span className="text-[12px] sm:text-[10px]">{juntarCom ? `trazer do ${o.blocoAtual ?? 'bloco'}` : 'na grade'}</span>
+                        <span className="text-[12px] sm:text-[10px]">{juntarCom ? `trazer do ${o.blocoAtual ?? 'bloco'}` : 'nos blocos'}</span>
                       ) : null}
                     </button>
                   );

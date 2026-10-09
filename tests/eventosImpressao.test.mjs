@@ -277,6 +277,61 @@ test('a logo entra quando ha origem, e o documento sobrevive sem ela', () => {
   assert.match(semLogo, /<\/html>/u);
 });
 
+/* ───────── logo por marca (Kids × School) — reunião de 08/10/2026 ───────── */
+
+const KIDS = /logo-la-music-kids-light-completa\.svg/u;
+const SCHOOL = /logo-la-music-light-completa\.svg/u;
+const comOrigem = (blocos) => ({ ...dados(blocos), origem: 'https://app.la' });
+
+test('marcaDaClassificacao: LAMK é Kids, EMLA é School, vazio não chuta', () => {
+  assert.equal(lib.marcaDaClassificacao('LAMK'), 'kids');
+  assert.equal(lib.marcaDaClassificacao(' lamk '), 'kids');
+  assert.equal(lib.marcaDaClassificacao('EMLA'), 'school');
+  // Visitante de outra unidade chega sem classificação: não vota no logo.
+  assert.equal(lib.marcaDaClassificacao(null), null);
+  assert.equal(lib.marcaDaClassificacao(''), null);
+});
+
+test('🔴 folha de palco e programação de um bloco só de Kids saem com o logo da Kids', () => {
+  const b = comOrigem([bloco('Bebês', [ap({ marca: 'kids' }), ap({ marca: 'kids' })])]);
+  for (const html of [gerarFolhaDePalcoHtml(b), gerarProgramaHtml(b)]) {
+    assert.match(html, KIDS);
+    assert.doesNotMatch(html, SCHOOL, 'bloco só de Kids não leva o logo da School');
+  }
+});
+
+test('recorte misto leva os dois logos; sem marca conhecida, só a School', () => {
+  const misto = comOrigem([bloco('B', [ap({ marca: 'kids' }), ap({ marca: 'school' })])]);
+  const html = gerarFolhaDePalcoHtml(misto);
+  assert.match(html, KIDS);
+  assert.match(html, SCHOOL);
+
+  const semMarca = gerarProgramaHtml(comOrigem([bloco('B', [ap(), ap({ marca: null })])]));
+  assert.match(semMarca, SCHOOL);
+  assert.doesNotMatch(semMarca, KIDS);
+});
+
+test('o recorte por bloco decide o logo pelo bloco impresso, não pelo recital inteiro', () => {
+  const kids = bloco('Kids', [ap({ marca: 'kids' })], { id: 101, ordem: 1 });
+  const school = bloco('School', [ap({ marca: 'school' })], { id: 102, ordem: 2 });
+  const html = gerarFolhaDePalcoHtml(comOrigem([kids, school]), kids.id);
+  assert.match(html, KIDS);
+  assert.doesNotMatch(html, SCHOOL);
+});
+
+test('🔴 certificado usa o logo da marca de CADA pessoa', () => {
+  const html = gerarCertificadosHtml(comOrigem([]), [
+    { nome: 'Bebê Kids', marca: 'kids', apresentacoes: [] },
+    { nome: 'Aluno School', marca: 'school', apresentacoes: [] },
+    { nome: 'Sem marca', apresentacoes: [] },
+  ]);
+  const folhas = html.split('<div class="cert">').slice(1);
+  assert.equal(folhas.length, 3);
+  assert.match(folhas[0], KIDS);
+  assert.match(folhas[1], SCHOOL);
+  assert.match(folhas[2], SCHOOL, 'sem marca cai na School');
+});
+
 test('o cabecalho declara unidade, data e local nos dois documentos', () => {
   for (const html of [gerarProgramaHtml(dados([bloco('B', [ap()])])), gerarFolhaDePalcoHtml(dados([]))]) {
     assert.match(html, /Recital de Primavera/u);

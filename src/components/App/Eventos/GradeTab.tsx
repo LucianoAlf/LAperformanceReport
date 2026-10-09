@@ -179,7 +179,7 @@ function FilaTocaJunto({ eventoId, onMudou }: { eventoId: number; onMudou: () =>
       // apresentação (ou recusar com motivo). As demais mensagens já vêm prontas do banco.
       const msg =
         error.message === 'TOCA_JUNTO_SEM_APRESENTACAO'
-          ? 'Um dos dois ainda não tem apresentação na grade — adicione antes de aprovar, ou recuse.'
+          ? 'Um dos dois ainda não tem apresentação nos blocos — adicione antes de aprovar, ou recuse.'
           : error.message;
       toast.error(`Não consegui ${aprovar ? 'confirmar' : 'recusar'}: ${msg}`);
       return;
@@ -335,8 +335,8 @@ function LinhaIntegrante({
         <button
           type="button"
           onClick={onRemover}
-          aria-label={`Remover ${apresentacao.aluno_nome} da grade`}
-          title="Remover da grade"
+          aria-label={`Remover ${apresentacao.aluno_nome} dos blocos`}
+          title="Remover dos blocos"
           // 36px de alvo no celular: o X de 16px ao lado do nome era o toque mais facil de errar.
           className="-m-2 flex h-11 w-11 shrink-0 items-center justify-center text-slate-600 transition-colors hover:text-rose-400 sm:m-0 sm:mt-0.5 sm:block sm:h-auto sm:w-auto"
         >
@@ -847,7 +847,7 @@ function CartaoBloco({
     const n = bloco.apresentacoes.length;
     const aviso =
       n > 0
-        ? `Excluir "${bloco.nome}"? As ${n} apresentações dele saem da grade junto.`
+        ? `Excluir "${bloco.nome}"? As ${n} apresentações dele saem junto.`
         : `Excluir "${bloco.nome}"?`;
     if (!window.confirm(aviso)) return;
     const { error } = await excluirBloco(bloco.id);
@@ -1140,7 +1140,7 @@ export function GradeTab({
     toast.success('LA Teacher sincronizado', { description: partes.join(' · ') });
     if (data.nao_casadas.length > 0) {
       toast.warning(
-        `${data.nao_casadas.length} relatório${data.nao_casadas.length === 1 ? '' : 's'} sem apresentação na grade`,
+        `${data.nao_casadas.length} relatório${data.nao_casadas.length === 1 ? '' : 's'} sem apresentação nos blocos`,
         {
           description:
             'O professor lançou para alguém que ainda não está em nenhum bloco — a Revisão lista quem.',
