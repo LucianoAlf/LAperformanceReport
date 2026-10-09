@@ -38,6 +38,7 @@ import {
   Users,
   GraduationCap,
   ArrowRightLeft,
+  Mic2,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -78,6 +79,8 @@ import {
   sincronizarRecital,
   criarUrlDePlayback,
   useTocaJunto,
+  useProfessoresDaUnidade,
+  definirProfessorNoPalco,
   decidirTocaJunto,
   type PedidoTocaJunto,
   type ApresentacaoDaGrade,
@@ -247,17 +250,99 @@ function FilaTocaJunto({ eventoId, onMudou }: { eventoId: number; onMudou: () =>
   );
 }
 
+/** Valor do Select para "ninguém": o Radix proíbe `value=""`. */
+const SEM_PROFESSOR_NO_PALCO = 'sem-professor-no-palco';
+
+/**
+ * Professor que sobe ao palco com o aluno, quando não é o do aluno (pedido da reunião de
+ * 08/10/2026: "professor substituto por apresentação, sem trocar o professor do aluno").
+ *
+ * Fica por INTEGRANTE, não por número: dois alunos que tocam juntos podem ter professores
+ * diferentes, e cada um pode precisar de um substituto diferente. O professor do aluno não
+ * entra na lista — escolhê-lo seria registrar o que já é o padrão.
+ */
+function ProfessorNoPalco({
+  apresentacao,
+  unidadeId,
+  onMudou,
+}: {
+  apresentacao: ApresentacaoDaGrade;
+  unidadeId: string;
+  onMudou: () => void;
+}) {
+  const { professores, erro } = useProfessoresDaUnidade(unidadeId);
+  const [salvando, setSalvando] = useState(false);
+  const opcoes = professores.filter((p) => p.id !== apresentacao.professor_id);
+
+  const salvar = async (professorId: number | null) => {
+    setSalvando(true);
+    const { error } = await definirProfessorNoPalco(apresentacao.id, professorId);
+    setSalvando(false);
+    if (error) toast.error(`Não consegui salvar o professor no palco: ${error.message}`);
+    else onMudou();
+  };
+
+  if (apresentacao.professor_palco_id) {
+    return (
+      <span className="mt-0.5 inline-flex max-w-full items-center gap-1 rounded-md bg-sky-500/10 py-0.5 pl-1.5 pr-0.5 text-[12px] sm:text-[11.5px] text-sky-200 ring-1 ring-inset ring-sky-500/25">
+        <Mic2 className="h-3 w-3 shrink-0 text-sky-300" />
+        <span className="truncate">
+          No palco: <span className="font-medium">Prof. {apresentacao.professor_palco_nome ?? '—'}</span>
+        </span>
+        <button
+          type="button"
+          onClick={() => salvar(null)}
+          disabled={salvando}
+          aria-label="Tirar o professor no palco"
+          title="Tirar — volta a ser o professor do aluno"
+          className="flex h-11 w-11 items-center justify-center rounded text-sky-300/70 transition-colors hover:bg-sky-500/15 hover:text-sky-100 disabled:opacity-50 sm:h-5 sm:w-5"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <Select
+      value={SEM_PROFESSOR_NO_PALCO}
+      onValueChange={(v) => v !== SEM_PROFESSOR_NO_PALCO && salvar(Number(v))}
+      disabled={salvando || (opcoes.length === 0 && !erro)}
+    >
+      <SelectTrigger
+        aria-label={`Professor no palco com ${apresentacao.aluno_nome}`}
+        title={erro ?? 'Outro professor sobe ao palco com este aluno (o professor do aluno não muda)'}
+        className="mt-0.5 h-11 w-auto gap-1 border-dashed border-slate-700 bg-transparent px-2 text-[12px] text-slate-500 hover:border-slate-500 hover:text-slate-300 sm:h-6 sm:text-[11px] [&>svg]:h-3 [&>svg]:w-3"
+      >
+        <Mic2 className="h-3 w-3" />
+        <span>{salvando ? 'salvando…' : erro ? 'professores indisponíveis' : 'professor no palco'}</span>
+      </SelectTrigger>
+      <SelectContent className="max-h-72">
+        {opcoes.map((p) => (
+          <SelectItem key={p.id} value={String(p.id)}>
+            {p.nome}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 /** Nome, idade, curso, professor e selos de UM integrante do número. */
 function LinhaIntegrante({
   apresentacao,
   emGrupo,
+  unidadeId,
   onSeparar,
   onRemover,
+  onMudou,
 }: {
   apresentacao: ApresentacaoDaGrade;
   emGrupo: boolean;
+  unidadeId: string;
   onSeparar: () => void;
   onRemover: () => void;
+  onMudou: () => void;
 }) {
   const idade = rotuloIdade(idadeHoje(apresentacao.aluno_data_nascimento));
   // O que o professor lançou difere do que vale aqui? Só existe quando o ADM tomou posse dos
@@ -319,6 +404,7 @@ function LinhaIntegrante({
             // programação impressa vira dois nomes sem papel declarado.
             <p className="text-[12px] sm:text-[11.5px] text-slate-500">Prof. {apresentacao.professor_nome}</p>
           )}
+          <ProfessorNoPalco apresentacao={apresentacao} unidadeId={unidadeId} onMudou={onMudou} />
         </div>
 
         {emGrupo && (
@@ -541,8 +627,10 @@ function CartaoNumero({
               key={ap.id}
               apresentacao={ap}
               emGrupo={emGrupo}
+              unidadeId={unidadeId}
               onSeparar={() => separar(ap)}
               onRemover={() => remover(ap)}
+              onMudou={onMudou}
             />
           ))}
 
