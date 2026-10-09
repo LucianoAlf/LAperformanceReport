@@ -799,7 +799,17 @@ export function useGradeDoEvento(eventoId: number | null) {
     recarregar();
   }, [recarregar]);
 
-  return { blocos, loading, erro, recarregar };
+  /**
+   * Aplica uma mudança na tela ANTES de o banco responder (arrastar cartão ou bloco). Sem
+   * isso o cartão voltava ao lugar antigo e só pulava para o novo depois da gravação e da
+   * releitura da grade inteira — o "atraso ao arrastar" da reunião de 08/10. Quem chama
+   * recarrega depois: o banco continua sendo a palavra final, e em erro a tela volta.
+   */
+  const aplicarLocal = useCallback((mudar: (atual: BlocoDaGrade[]) => BlocoDaGrade[]) => {
+    setBlocos((atual) => mudar(atual));
+  }, []);
+
+  return { blocos, loading, erro, recarregar, aplicarLocal };
 }
 
 export async function criarBloco(

@@ -4,6 +4,7 @@ import {
   DndContext,
   DragOverlay,
   KeyboardSensor,
+  MeasuringStrategy,
   PointerSensor,
   closestCorners,
   useSensor,
@@ -249,6 +250,15 @@ function FilaTocaJunto({ eventoId, onMudou }: { eventoId: number; onMudou: () =>
     </div>
   );
 }
+
+/**
+ * Botões do rodapé do cartão (palco, observação, tocar junto) no desktop. Eram texto cinza de
+ * 11px sem borda e ninguém os achava na demonstração de 08/10 ("botões mais visíveis no
+ * rodapé do cartão"); agora são pílulas com borda, do mesmo tamanho, lado a lado.
+ */
+const PILULA_RODAPE =
+  'sm:inline-flex sm:h-7 sm:min-h-0 sm:items-center sm:gap-1.5 sm:rounded-md sm:border sm:px-2.5 sm:text-[12px] sm:font-medium sm:transition-colors';
+const PILULA_NEUTRA = 'sm:border-slate-700 sm:bg-slate-800/60 sm:text-slate-300 sm:hover:border-slate-500 sm:hover:text-white';
 
 /** Valor do Select para "ninguém": o Radix proíbe `value=""`. */
 const SEM_PROFESSOR_NO_PALCO = 'sem-professor-no-palco';
@@ -782,7 +792,13 @@ function CartaoNumero({
               type="button"
               onClick={() => setPalcoAberto((v) => !v)}
               aria-expanded={palcoAberto}
-              className="flex min-h-[44px] items-center gap-1.5 rounded-full bg-slate-800/70 px-3.5 py-0.5 text-[12px] text-slate-300 transition-colors hover:bg-slate-800 hover:text-slate-300 sm:min-h-0 sm:gap-1 sm:rounded sm:bg-transparent sm:px-1.5 sm:text-[11.5px] sm:text-slate-500"
+              className={cn(
+                'flex min-h-[44px] items-center gap-1.5 rounded-full bg-slate-800/70 px-3.5 py-0.5 text-[12px] text-slate-300 transition-colors hover:bg-slate-800',
+                PILULA_RODAPE,
+                palcoAberto
+                  ? 'sm:border-amber-500/50 sm:bg-amber-500/10 sm:text-amber-200'
+                  : PILULA_NEUTRA,
+              )}
             >
               <Settings2 className="h-3.5 w-3.5" />
               {palcoAberto ? 'fechar palco' : palco.length > 0 ? 'editar palco' : (
@@ -833,10 +849,10 @@ function CartaoNumero({
                 type="button"
                 onClick={() => setPalcoAberto(true)}
                 // Convite vazio: no celular ocupava uma linha de 36px em cada um dos 24 cartoes.
-                className="hidden items-center gap-1.5 px-1.5 text-[12px] sm:text-[11.5px] text-slate-600 transition-colors hover:text-slate-400 sm:flex"
+                className={cn('hidden w-fit', PILULA_RODAPE, PILULA_NEUTRA)}
               >
                 <MapPin className="h-3.5 w-3.5" />
-                adicionar observação / mapa de palco
+                observação / mapa de palco
               </button>
             ))}
 
@@ -869,11 +885,15 @@ function CartaoNumero({
             <button
               type="button"
               onClick={() => setAdicionando(true)}
-              className="hidden items-center gap-1 rounded px-1.5 py-0.5 text-[11.5px] text-violet-300/80 transition-colors hover:bg-violet-500/10 hover:text-violet-200 sm:flex"
+              className={cn(
+                'hidden w-fit',
+                PILULA_RODAPE,
+                'sm:border-violet-500/40 sm:bg-violet-500/10 sm:text-violet-200 sm:hover:border-violet-400 sm:hover:bg-violet-500/20',
+              )}
               title="Colocar outro aluno para tocar junto neste número"
             >
               <UserPlus className="h-3.5 w-3.5" />
-              adicionar aluno a este número
+              tocar junto (adicionar aluno)
             </button>
           )}
         </div>
@@ -892,6 +912,7 @@ function CartaoBloco({
   sugestoes,
   dias,
   dataEvento,
+  compacto = false,
   onMudou,
 }: {
   bloco: BlocoDaGrade;
@@ -902,6 +923,12 @@ function CartaoBloco({
   /** Todos os dias do recital — vazio/1 dia = o seletor de data nem aparece. */
   dias: string[];
   dataEvento: string;
+  /**
+   * Enquanto um BLOCO é arrastado, todos mostram só o cabeçalho. Com o bloco inteiro aberto,
+   * trocar dois blocos deslocava os outros pela altura de dezenas de cartões e eles saíam da
+   * tela — o "bloco que some" da reunião de 08/10.
+   */
+  compacto?: boolean;
   onMudou: () => void;
 }) {
   const [adicionando, setAdicionando] = useState(false);
@@ -1116,7 +1143,7 @@ function CartaoBloco({
         </div>
       </header>
 
-      <div className="space-y-2.5 py-3 sm:space-y-2 sm:p-3">
+      <div className={cn('space-y-2.5 py-3 sm:space-y-2 sm:p-3', compacto && 'hidden')}>
         {adicionando ? (
           <SeletorApresentacao
             eventoId={eventoId}
@@ -1188,7 +1215,7 @@ export function GradeTab({
   /** Recarrega o evento (tempo padrão mudou) — o horário de toda a grade depende dele. */
   onEventoMudou: () => void;
 }) {
-  const { blocos, loading, erro, recarregar } = useGradeDoEvento(evento.id);
+  const { blocos, loading, erro, recarregar, aplicarLocal } = useGradeDoEvento(evento.id);
   const { alunos, recarregar: recarregarAlunos } = useAlunosDoEvento(evento.id, evento.unidade_id);
   const [sincronizando, setSincronizando] = useState(false);
   // Os dias que um bloco pode ocupar — um evento de uma data so devolve lista de 1 e o
@@ -1334,6 +1361,15 @@ export function GradeTab({
     nova.splice(de, 1);
     nova.splice(para, 0, activeId);
 
+    // Na tela já, antes do banco: a ordem nova vale também para o cálculo do horário.
+    aplicarLocal((bs) =>
+      nova
+        .map((id, i) => {
+          const b = bs.find((x) => x.id === id);
+          return b ? { ...b, ordem: i + 1 } : null;
+        })
+        .filter((b): b is BlocoDaGrade => b !== null),
+    );
     const { error } = await reordenarBlocos_rpc(evento.id, nova);
     if (error) toast.error(`Não consegui salvar a ordem dos blocos: ${error.message}`);
     recarregar();
@@ -1385,6 +1421,21 @@ export function GradeTab({
         : restantes.flat().map((a, i) => ({ id: a.id, bloco_id: origem.id, ordem: i + 1 }))),
     ];
 
+    // Na tela já, antes do banco (ver `aplicarLocal`). Em erro, o `recarregar` devolve tudo.
+    const novoLugar = new Map(itens.map((it) => [it.id, it]));
+    aplicarLocal((bs) => {
+      const todas = bs.flatMap((b) => b.apresentacoes);
+      return bs.map((b) => ({
+        ...b,
+        apresentacoes: todas
+          .map((a) => {
+            const lugar = novoLugar.get(a.id);
+            return lugar ? { ...a, bloco_id: lugar.bloco_id, ordem: lugar.ordem } : a;
+          })
+          .filter((a) => a.bloco_id === b.id)
+          .sort((x, y) => x.ordem - y.ordem),
+      }));
+    });
     const { error } = await reordenarGrade(evento.id, itens);
     if (error) toast.error(`Não consegui salvar a nova ordem: ${error.message}`);
     recarregar();
@@ -1505,6 +1556,10 @@ export function GradeTab({
         <DndContext
           sensors={sensors}
           collisionDetection={closestCorners}
+          // Remede os alvos durante o arrasto: ao arrastar um BLOCO todos se recolhem (ver
+          // `compacto`), e as medidas da hora do clique já não valeriam.
+          measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+          onDragCancel={() => setArrastando(null)}
           onDragStart={(e: DragStartEvent) => {
             const blocoId = idDeBloco(e.active.id);
             if (blocoId !== null) {
@@ -1557,6 +1612,7 @@ export function GradeTab({
                     sugestoes={sugestoesDeItem}
                     dias={dias}
                     dataEvento={evento.data_evento}
+                    compacto={arrastando?.tipo === 'bloco'}
                     onMudou={() => {
                       recarregar();
                       recarregarAlunos();

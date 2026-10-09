@@ -248,6 +248,11 @@ apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **L
   nenhum irmão também o convidou. O "leva N" sobe sozinho até o total de nomes, nunca desce. Os nomes já
   aparecem no Check-in da porta. Em **Documentos**, o cartão **"Convidados por aluno"** imprime a lista
   agrupada por aluno, com caixinha para riscar e "faltam N nomes" (`gerarListaDeConvidadosHtml`).
+- **Arrastar na aba Blocos (09/10/2026, item 9 da reunião):** a nova ordem aparece na hora (`aplicarLocal` de
+  `useGradeDoEvento`) e o banco confirma depois — antes o cartão voltava ao lugar antigo até a releitura da
+  grade inteira. Ao arrastar um **bloco**, todos mostram só o cabeçalho (senão os outros eram empurrados
+  pela altura de dezenas de cartões e saíam da tela). Arrasto cancelado limpa o fantasma. Os botões do
+  rodapé do cartão (palco, observação, tocar junto) viraram pílulas com borda no desktop.
 - **Playbacks numerados no Drive (09/10/2026):** `recital-drive-sync` nomeia "B1-03 — Aluno — Curso.mp3"
   (bloco 1, 3º número; quem toca junto divide o número, regra de `agruparEmNumeros`) e **renomeia** o
   arquivo quando a posição muda depois do envio — o último nome fica em
