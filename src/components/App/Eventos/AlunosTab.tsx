@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { Search, Users, Check, HelpCircle, X, Music, AlertTriangle, Guitar, LayoutList, UserPlus, Trash2, GraduationCap, FileCheck } from 'lucide-react';
 
@@ -10,6 +10,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { KPICard } from '@/components/ui/KPICard';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { cn } from '@/lib/utils';
 import { normalizarBusca } from '@/lib/agenda';
 import { avaliarElegibilidade, resumirParticipacao, resumirAlocacao } from '@/lib/eventos';
@@ -111,6 +112,16 @@ const FORMATURA_ROTULO: Record<string, string> = {
   bebes: 'Bebês → Preparatória',
   la: 'formando',
 };
+
+/** Conteúdo dos tooltips da barra: título curto + uma linha de explicação. */
+function Dica({ titulo, children }: { titulo: string; children: ReactNode }) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-[12.5px] font-semibold text-white">{titulo}</p>
+      <p className="text-[12px] font-normal leading-snug text-slate-300">{children}</p>
+    </div>
+  );
+}
 
 const ALUNOS_POR_PAGINA = 50;
 
@@ -754,56 +765,71 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
         {/* So aparece quando ha grade montada: antes disso ele filtraria a lista inteira
             e nao responderia pergunta nenhuma. */}
         {resumo.apresentacoesAlocadas > 0 && (
-          <Button
-            variant={soSemAlocar ? 'default' : 'outline'}
-            size="sm"
-            className="h-11 flex-1 gap-1.5 sm:h-9 sm:flex-none"
-            onClick={() => setSoSemAlocar((v) => !v)}
-          >
-            <LayoutList className="h-3.5 w-3.5" />
-            Sem alocar
-          </Button>
+          <Tooltip side="bottom" content={<Dica titulo="Sem alocar">Mostra só quem confirmou e ainda não está em nenhum bloco. Clique de novo para tirar o filtro.</Dica>}>
+            <Button
+              variant={soSemAlocar ? 'default' : 'outline'}
+              size="sm"
+              className="h-11 flex-1 gap-1.5 sm:h-9 sm:flex-none"
+              onClick={() => setSoSemAlocar((v) => !v)}
+            >
+              <LayoutList className="h-3.5 w-3.5" />
+              Sem alocar
+            </Button>
+          </Tooltip>
         )}
         {/* Quem o professor ja entregou relatorio e falta cadeira — a fila que a
             coordenacao zera primeiro (Caio do Isaque foi o caso que originou). */}
         {temRelatorioPronto && (
-          <Button
-            variant={soRelatorioPronto ? 'default' : 'outline'}
-            size="sm"
-            className="h-11 flex-1 gap-1.5 sm:h-9 sm:flex-none"
-            onClick={() => setSoRelatorioPronto((v) => !v)}
-          >
-            <FileCheck className="h-3.5 w-3.5" />
-            Relatório pronto
-          </Button>
+          <Tooltip side="bottom" content={<Dica titulo="Relatório pronto">Alunos cujo professor já lançou o trabalho no LA Teacher, mas que ainda não têm lugar nos blocos — os primeiros a alocar.</Dica>}>
+            <Button
+              variant={soRelatorioPronto ? 'default' : 'outline'}
+              size="sm"
+              className="h-11 flex-1 gap-1.5 sm:h-9 sm:flex-none"
+              onClick={() => setSoRelatorioPronto((v) => !v)}
+            >
+              <FileCheck className="h-3.5 w-3.5" />
+              Relatório pronto
+            </Button>
+          </Tooltip>
         )}
 
         {/* Confirma em lote quem do filtro (todas as páginas) AINDA não está confirmado e pode
             participar — o mesmo que o ✓ de cada linha. Antes contava o filtro inteiro e, com
             "Participam" ligado, oferecia "marcar 251" que já estavam confirmados (Hugo, 09/10). */}
         {paraConfirmar.length > 0 && (
+          <Tooltip
+            side="bottom"
+            content={
+              <Dica titulo={`Confirmar ${paraConfirmar.length} de uma vez`}>
+                Põe como &ldquo;participa&rdquo; quem do filtro atual ainda não está confirmado (todas as páginas).
+                Pede confirmação antes e oferece Desfazer.
+              </Dica>
+            }
+          >
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-11 flex-1 sm:h-9 sm:flex-none"
+              disabled={gravando === '__lote__'}
+              onClick={() => setLotePendente(paraConfirmar)}
+            >
+              <Check className="h-4 w-4" />
+              Confirmar {paraConfirmar.length} {paraConfirmar.length === 1 ? 'aluno' : 'alunos'}
+            </Button>
+          </Tooltip>
+        )}
+
+        <Tooltip side="bottom" content={<Dica titulo="Aluno de outra unidade">Coloca no recital um aluno de outra unidade da LA, que vai se apresentar aqui.</Dica>}>
           <Button
             variant="outline"
             size="sm"
-            className="h-11 flex-1 sm:h-9 sm:flex-none"
-            disabled={gravando === '__lote__'}
-            title="Confirma a participação de quem do filtro atual ainda não está confirmado (todas as páginas), com confirmação e Desfazer"
-            onClick={() => setLotePendente(paraConfirmar)}
+            className="h-11 flex-1 gap-1.5 sm:h-9 sm:flex-none"
+            onClick={() => setModalOutraUnidade(true)}
           >
-            <Check className="h-4 w-4" />
-            Confirmar {paraConfirmar.length} {paraConfirmar.length === 1 ? 'aluno' : 'alunos'}
+            <UserPlus className="h-3.5 w-3.5" />
+            Aluno de outra unidade
           </Button>
-        )}
-
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-11 flex-1 gap-1.5 sm:h-9 sm:flex-none"
-          onClick={() => setModalOutraUnidade(true)}
-        >
-          <UserPlus className="h-3.5 w-3.5" />
-          Aluno de outra unidade
-        </Button>
+        </Tooltip>
       </div>
 
       <ModalAlunoOutraUnidade
