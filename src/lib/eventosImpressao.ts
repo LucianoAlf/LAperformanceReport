@@ -1016,6 +1016,90 @@ ${corpo}
 }
 
 /** Nome de arquivo seguro, derivado do evento. */
+/* ─────────────────────── convidados por aluno ─────────────────────── */
+
+export interface ConvidadoParaImprimir {
+  nome: string;
+  tipo: 'cortesia' | 'vendido';
+  bloco_id: number | null;
+}
+
+export interface ConvidadosDoAlunoParaImprimir {
+  aluno: string;
+  /** Quantos a família disse que leva (campo "leva N" da aba Alunos). */
+  leva: number;
+  convidados: ConvidadoParaImprimir[];
+}
+
+/**
+ * Lista de convidados agrupada por ALUNO (item 8 da reunião de 08/10/2026) — antes só existia
+ * a aba Convidados da planilha do Drive, organizada por convidado.
+ *
+ * Uma caixinha por nome, para riscar na porta. "Faltam N nomes" aparece quando a família
+ * disse que leva mais gente do que já tem nome: é o que a equipe ainda precisa perguntar.
+ *
+ * Com recorte por bloco, entra só quem foi credenciado naquele bloco — e quem ainda não tem
+ * bloco (aluno não alocado) só aparece na lista do recital inteiro, para não sumir.
+ */
+export function gerarListaDeConvidadosHtml(
+  dados: DadosDaImpressao,
+  grupos: ConvidadosDoAlunoParaImprimir[],
+  apenasBlocoId?: number,
+): string {
+  const nomeDoBloco = new Map(dados.blocos.map((b) => [b.id, b.nome]));
+  const visiveis = grupos
+    .map((g) => ({
+      ...g,
+      convidados: g.convidados
+        .filter((c) => apenasBlocoId === undefined || c.bloco_id === apenasBlocoId)
+        .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
+    }))
+    .filter((g) => g.convidados.length > 0 || (apenasBlocoId === undefined && g.leva > 0))
+    .sort((a, b) => a.aluno.localeCompare(b.aluno, 'pt-BR'));
+
+  const total = visiveis.reduce((t, g) => t + g.convidados.length, 0);
+  const linhas = visiveis
+    .map((g) => {
+      const faltam = apenasBlocoId === undefined ? Math.max(0, g.leva - g.convidados.length) : 0;
+      const nomes = g.convidados
+        .map((c) => {
+          const bloco = c.bloco_id !== null ? nomeDoBloco.get(c.bloco_id) : null;
+          const detalhes = [
+            c.tipo === 'vendido' ? 'ingresso' : null,
+            apenasBlocoId === undefined ? (bloco ?? 'sem bloco') : null,
+          ].filter(Boolean);
+          return `<div>&#9744; ${escapeHtml(c.nome)}${
+            detalhes.length > 0 ? ` <span class="prof">&middot; ${escapeHtml(detalhes.join(' · '))}</span>` : ''
+          }</div>`;
+        })
+        .join('');
+      return `<tr>
+        <td><span class="aluno">${escapeHtml(g.aluno)}</span>
+          <div class="prof">${g.convidados.length} ${g.convidados.length === 1 ? 'convidado' : 'convidados'}${
+            faltam > 0 ? ` &middot; faltam ${faltam} ${faltam === 1 ? 'nome' : 'nomes'}` : ''
+          }</div></td>
+        <td>${nomes || '<span class="vazio">nenhum nome ainda</span>'}</td>
+      </tr>`;
+    })
+    .join('');
+
+  const corpo =
+    visiveis.length === 0
+      ? '<p class="vazio">Nenhum convidado com nome ainda.</p>'
+      : `<div class="bloco">
+          <h2>${total} ${total === 1 ? 'convidado' : 'convidados'} de ${visiveis.length} ${
+            visiveis.length === 1 ? 'aluno' : 'alunos'
+          }</h2>
+          <table>${linhas}</table>
+        </div>`;
+
+  const titulo =
+    apenasBlocoId === undefined
+      ? 'Convidados por aluno'
+      : `Convidados por aluno — ${nomeDoBloco.get(apenasBlocoId) ?? 'bloco'}`;
+  return moldura(titulo, dados, corpo, 'uso interno da porta', marcasDoRecorte(dados.blocos));
+}
+
 export function nomeDoArquivo(dados: DadosDaImpressao, sufixo: string): string {
   const base = `${dados.evento.data_evento}-${dados.evento.titulo}`
     .normalize('NFD')

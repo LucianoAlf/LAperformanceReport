@@ -1056,6 +1056,8 @@ export interface ParticipacaoComChegada {
   classificacao: string | null;
   /** Selo de formando (da pessoa) — quem recebe o certificado de formatura. */
   formatura_tipo: 'kids' | 'bebes' | 'la' | null;
+  /** Quantos convidados a família disse que leva (o "leva N" da aba Alunos). */
+  convidados: number;
 }
 
 /**
@@ -1083,7 +1085,7 @@ export function useCheckinDoEvento(eventoId: number | null) {
     const [{ data, error: erroParticipacao }, { visitantes, error: erroVisitantes }] = await Promise.all([
       supabase
         .from('evento_participacao')
-        .select('pessoa_chave, aluno_id, status, checkin_em, formatura_tipo, alunos(nome, data_nascimento, classificacao)')
+        .select('pessoa_chave, aluno_id, status, checkin_em, formatura_tipo, convidados, alunos(nome, data_nascimento, classificacao)')
         .eq('evento_id', eventoId),
       lerVisitantes(eventoId),
     ]);
@@ -1109,6 +1111,7 @@ export function useCheckinDoEvento(eventoId: number | null) {
             p.alunos?.data_nascimento ?? nomeDeFora[String(p.aluno_id)]?.data_nascimento ?? null,
           classificacao: p.alunos?.classificacao ?? null,
           formatura_tipo: p.formatura_tipo ?? null,
+          convidados: p.convidados ?? 0,
         })),
       );
     }
@@ -1780,6 +1783,8 @@ export interface ConvidadoDaPorta {
   venda_status: VendaStatus | null;
   checkin_em: string | null;
   alunos: string[];
+  /** Pessoas (pessoa_chave) que convidaram — irmãos dividem o mesmo convidado. */
+  pessoas: string[];
 }
 
 /** Lista nominal da porta: cortesia + vendido, com o bloco credenciado e quem ja entrou. */
@@ -1805,7 +1810,11 @@ export function useConvidadosDoEvento(eventoId: number | null) {
       // quem o convidado veio ver (ponte com participacao → nome do aluno)
       supabase
         .from('evento_convidado_participacao')
-        .select('convidado_id, participacao_id, evento_participacao(aluno_id, alunos(nome))'),
+        .select(
+          'convidado_id, participacao_id,' +
+            ' evento_participacao!inner(evento_id, aluno_id, pessoa_chave, alunos(nome))',
+        )
+        .eq('evento_participacao.evento_id', eventoId),
       supabase
         .from('evento_convidado_checkin')
         .select('convidado_id, checkin_em'),
@@ -1818,7 +1827,10 @@ export function useConvidadosDoEvento(eventoId: number | null) {
       return;
     }
     const alunosPorConv = new Map<number, string[]>();
+    const pessoasPorConv = new Map<number, string[]>();
     for (const p of (rPonte.data ?? []) as any[]) {
+      const chave = p.evento_participacao?.pessoa_chave;
+      if (chave) pessoasPorConv.set(p.convidado_id, [...(pessoasPorConv.get(p.convidado_id) ?? []), chave]);
       const nome = p.evento_participacao?.alunos?.nome;
       if (!nome) continue;
       alunosPorConv.set(p.convidado_id, [...(alunosPorConv.get(p.convidado_id) ?? []), nome]);
@@ -1835,6 +1847,7 @@ export function useConvidadosDoEvento(eventoId: number | null) {
         venda_status: c.evento_ingresso_venda?.status ?? null,
         checkin_em: checkinPorConv.get(c.id) ?? null,
         alunos: alunosPorConv.get(c.id) ?? [],
+        pessoas: pessoasPorConv.get(c.id) ?? [],
       })),
     );
     setLoading(false);
@@ -1848,6 +1861,55 @@ export function useConvidadosDoEvento(eventoId: number | null) {
 }
 
 /** Renomeia o convidado nominal — o placeholder "Convidado N de X" se corrige ate o dia. */
+/**
+ * Cortesia nominal (item 7 da reunião de 08/10): convidado + ponte com o aluno num passo só,
+ * pela RPC. Bloco `null` = primeiro bloco da pessoa. A cota do evento é conferida no banco e
+ * volta como erro legível ("já chegou a cota de N cortesias").
+ */
+export async function adicionarCortesia(
+  eventoId: number,
+  alunoIdReferencia: number,
+  nome: string,
+  blocoId: number | null,
+) {
+  const { data, error } = await supabase.rpc('evento_convidado_cortesia_adicionar_v1', {
+    p_evento_id: eventoId,
+    p_aluno_id: alunoIdReferencia,
+    p_nome: nome,
+    p_bloco_id: blocoId,
+  });
+  if (error) return { error };
+  if (!(data as { convidado_id?: number } | null)?.convidado_id) {
+    return { error: { message: `aluno ${alunoIdReferencia}: o banco não devolveu o convidado criado.` } };
+  }
+  return { error: null };
+}
+
+/** Tira a cortesia do aluno; o convidado só é apagado se nenhum irmão também o convidou. */
+export async function removerCortesia(convidadoId: number, eventoId: number, alunoIdReferencia: number) {
+  const { error } = await supabase.rpc('evento_convidado_cortesia_remover_v1', {
+    p_convidado_id: convidadoId,
+    p_evento_id: eventoId,
+    p_aluno_id: alunoIdReferencia,
+  });
+  return { error };
+}
+
+/** Bloco em que a cortesia entra (aluno que se apresenta em mais de um bloco). */
+export async function trocarBlocoDoConvidado(convidadoId: number, blocoId: number) {
+  const { data, error } = await supabase
+    .from('evento_convidado')
+    .update({ bloco_id: blocoId, updated_at: new Date().toISOString() })
+    .eq('id', convidadoId)
+    .eq('tipo_entrada', 'cortesia')
+    .select('id');
+  if (error) return { error };
+  if ((data ?? []).length === 0) {
+    return { error: { message: `convidado ${convidadoId}: nada foi salvo (vendido ou fora da sua unidade).` } };
+  }
+  return { error: null };
+}
+
 export async function renomearConvidado(convidadoId: number, nome: string) {
   const limpo = nome.trim();
   if (limpo === '') return { error: { message: 'O nome não pode ficar vazio.' } };

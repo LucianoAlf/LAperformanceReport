@@ -17,6 +17,8 @@ import {
   useAlunosDoEvento,
   definirParticipacao,
   definirConvidados,
+  useConvidadosDoEvento,
+  type ConvidadoDaPorta,
   definirParticipacaoEmLote,
   definirFormando,
   removerAlunoDeOutraUnidade,
@@ -25,6 +27,7 @@ import {
   type ParticipacaoStatus,
 } from '@/hooks/useEventos';
 import { ModalAlunoOutraUnidade } from './ModalAlunoOutraUnidade';
+import { ModalConvidadosDoAluno } from './ModalConvidadosDoAluno';
 
 type FiltroStatus = 'todos' | ParticipacaoStatus;
 
@@ -110,14 +113,20 @@ const FORMATURA_ROTULO: Record<string, string> = {
 
 function LinhaAluno({
   aluno,
+  nomeados,
   onEscolher,
   onConvidados,
+  onNomes,
   onFormando,
   onRemover,
 }: {
   aluno: AlunoElegivel;
+  /** Quantos convidados desta pessoa já têm nome (cortesia + vendido). */
+  nomeados: number;
   onEscolher: (s: ParticipacaoStatus) => void;
   onConvidados: (n: number) => void;
+  /** Abre a lista de convidados pelo nome. */
+  onNomes: () => void;
   /** Marca/desmarca formando à mão ('manual' prevalece sobre a rotina). */
   onFormando: () => void;
   /** So para aluno de outra unidade: tira do evento (participacao + apresentacoes). */
@@ -290,6 +299,21 @@ function LinhaAluno({
           />
         </label>
       )}
+      {aluno.status === 'participa' && (
+        <button
+          type="button"
+          onClick={onNomes}
+          title="Cadastrar os convidados pelo nome (cortesia)"
+          className={cn(
+            'flex h-11 shrink-0 items-center gap-1 rounded-lg border px-2 text-[12px] transition-colors sm:h-7 sm:text-[11px]',
+            nomeados > 0
+              ? 'border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20'
+              : 'border-dashed border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300',
+          )}
+        >
+          {nomeados > 0 ? `${nomeados} ${nomeados === 1 ? 'nome' : 'nomes'}` : 'nomes'}
+        </button>
+      )}
 
       <SeletorParticipacao
         valor={aluno.status}
@@ -319,6 +343,16 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
   pedidoFaltaAlocar?: number;
 }) {
   const { alunos, loading, erro, recarregar } = useAlunosDoEvento(eventoId, unidadeId);
+  // Convidados pelo nome, agrupados por PESSOA (irmãos dividem o mesmo convidado).
+  const { convidados, recarregar: recarregarConvidados } = useConvidadosDoEvento(eventoId);
+  const convidadosPorPessoa = useMemo(() => {
+    const mapa = new Map<string, ConvidadoDaPorta[]>();
+    for (const c of convidados) {
+      for (const chave of c.pessoas) mapa.set(chave, [...(mapa.get(chave) ?? []), c]);
+    }
+    return mapa;
+  }, [convidados]);
+  const [convidadosDe, setConvidadosDe] = useState<string | null>(null);
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<FiltroStatus>('todos');
   const [filtroProfessor, setFiltroProfessor] = useState('todos');
@@ -677,6 +711,19 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
         onAdicionado={recarregar}
       />
 
+      <ModalConvidadosDoAluno
+        aberto={convidadosDe !== null}
+        eventoId={eventoId}
+        aluno={alunos.find((x) => x.pessoa_chave === convidadosDe) ?? null}
+        convidados={convidadosDe ? convidadosPorPessoa.get(convidadosDe) ?? [] : []}
+        onFechar={() => setConvidadosDe(null)}
+        // O número "leva N" pode subir junto (o banco o acompanha), então os dois recarregam.
+        onMudou={() => {
+          recarregarConvidados();
+          recarregar();
+        }}
+      />
+
       <div className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800/40">
         {loading && alunos.length === 0 ? (
           <p className="p-8 text-center text-sm text-slate-400">Carregando alunos…</p>
@@ -692,8 +739,10 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
               <LinhaAluno
                 key={a.pessoa_chave}
                 aluno={a}
+                nomeados={convidadosPorPessoa.get(a.pessoa_chave)?.length ?? 0}
                 onEscolher={(s) => escolher(a, s)}
                 onConvidados={(n) => salvarConvidados(a, n)}
+                onNomes={() => setConvidadosDe(a.pessoa_chave)}
                 onFormando={() => alternarFormando(a)}
                 onRemover={a.unidade_origem_nome ? () => removerVisitante(a) : undefined}
               />

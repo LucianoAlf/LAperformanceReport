@@ -237,6 +237,15 @@ apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **L
   planilha (última coluna). No LA Teacher o aluno aparece **para os dois** (decisão do Hugo): o do aluno
   segue com o relatório; o de palco vê "Você sobe ao palco com…" pela função só leitura
   `app_recital_no_palco()` (repo `la-teacher`, migration `20261008240000`).
+- **Convidados pelo nome (09/10/2026, itens 7 e 8 da reunião):** na aba Alunos, quem participa ganha o
+  botão **"nomes"** ao lado do "leva N". A janela cadastra cortesias pelo nome
+  (`evento_convidado_cortesia_adicionar_v1`: convidado + ponte com a participação num passo; bloco =
+  o primeiro bloco do aluno, trocável quando ele está em dois), mostra a cota do evento
+  (`evento.cortesias_por_aluno`, conferida no banco) e lista também os ingressos vendidos ligados ao
+  aluno (só leitura). Tirar (`_remover_v1`) recusa vendido e quem já entrou, e só apaga o convidado se
+  nenhum irmão também o convidou. O "leva N" sobe sozinho até o total de nomes, nunca desce. Os nomes já
+  aparecem no Check-in da porta. Em **Documentos**, o cartão **"Convidados por aluno"** imprime a lista
+  agrupada por aluno, com caixinha para riscar e "faltam N nomes" (`gerarListaDeConvidadosHtml`).
 - **Playbacks numerados no Drive (09/10/2026):** `recital-drive-sync` nomeia "B1-03 — Aluno — Curso.mp3"
   (bloco 1, 3º número; quem toca junto divide o número, regra de `agruparEmNumeros`) e **renomeia** o
   arquivo quando a posição muda depois do envio — o último nome fica em

@@ -33,6 +33,7 @@ const {
   gerarProgramaHtml,
   gerarFolhaDePalcoHtml,
   gerarPlanilhaCsv,
+  gerarListaDeConvidadosHtml,
   gerarCertificadosHtml,
   nomeDoArquivo,
 } = lib;
@@ -622,4 +623,40 @@ test('a folha de palco soma quem toca junto: dois violoes no mesmo numero', () =
     ]),
   );
   assert.match(html, /2&times; Violão/u);
+});
+
+test('convidados por aluno: agrupa, ordena, marca ingresso e diz quantos nomes faltam', () => {
+  const grade = dados([bloco('Bloco 1', [ap()]), bloco('Bloco 2', [ap()])]);
+  const html = gerarListaDeConvidadosHtml(grade, [
+    { aluno: 'Zeca', leva: 1, convidados: [{ nome: 'Pai do Zeca', tipo: 'cortesia', bloco_id: 2 }] },
+    {
+      aluno: 'Ana',
+      leva: 3,
+      convidados: [
+        { nome: 'Vó Maria', tipo: 'cortesia', bloco_id: 1 },
+        { nome: 'Tio Beto', tipo: 'vendido', bloco_id: 1 },
+      ],
+    },
+    { aluno: 'Sem ninguém', leva: 0, convidados: [] },
+  ]);
+  assert.ok(html.indexOf('Ana') < html.indexOf('Zeca'), 'ordem alfabética por aluno');
+  assert.match(html, /3 convidados de 2 alunos/u);
+  assert.match(html, /faltam 1 nome/u);
+  assert.match(html, /Tio Beto <span class="prof">&middot; ingresso · Bloco 1/u);
+  assert.doesNotMatch(html, /Sem ninguém/u);
+});
+
+test('convidados por aluno com recorte: só o bloco escolhido, sem "faltam"', () => {
+  const grade = dados([bloco('Bloco 1', [ap()]), bloco('Bloco 2', [ap()])]);
+  const html = gerarListaDeConvidadosHtml(
+    grade,
+    [
+      { aluno: 'Zeca', leva: 4, convidados: [{ nome: 'Pai do Zeca', tipo: 'cortesia', bloco_id: 2 }] },
+      { aluno: 'Ana', leva: 1, convidados: [{ nome: 'Vó Maria', tipo: 'cortesia', bloco_id: 1 }] },
+    ],
+    2,
+  );
+  assert.match(html, /Convidados por aluno — Bloco 2/u);
+  assert.match(html, /Pai do Zeca/u);
+  assert.doesNotMatch(html, /Vó Maria|faltam/u);
 });
