@@ -115,7 +115,6 @@ function LinhaAluno({
   aluno,
   nomeados,
   onEscolher,
-  onConvidados,
   onNomes,
   onFormando,
   onRemover,
@@ -124,8 +123,7 @@ function LinhaAluno({
   /** Quantos convidados desta pessoa já têm nome (cortesia + vendido). */
   nomeados: number;
   onEscolher: (s: ParticipacaoStatus) => void;
-  onConvidados: (n: number) => void;
-  /** Abre a lista de convidados pelo nome. */
+  /** Abre a janela de convidados (quantos leva + nomes). */
   onNomes: () => void;
   /** Marca/desmarca formando à mão ('manual' prevalece sobre a rotina). */
   onFormando: () => void;
@@ -275,43 +273,36 @@ function LinhaAluno({
         ) : null}
       </div>
 
-      {/* Convidados: so faz sentido perguntar a quem vai — para os demais o campo seria
-          um input morto em toda linha. */}
-      {aluno.status === 'participa' && (
-        <label
-          className="flex shrink-0 items-center gap-1 text-[12px] sm:text-[11px] text-slate-500"
-          title="Quantos convidados essa pessoa leva"
-        >
-          <Users className="h-3 w-3" />
-          <Input
-            type="number"
-            min={0}
-            // defaultValue + key: grava no BLUR, nao a cada tecla — um PATCH por digito
-            // numa lista de 400 alunos e o mesmo defeito que o campo de musica evita.
-            key={aluno.convidados}
-            defaultValue={aluno.convidados}
-            onBlur={(e) => {
-              const n = Math.max(0, Math.floor(Number(e.target.value) || 0));
-              if (n !== aluno.convidados) onConvidados(n);
-            }}
-            className="h-11 w-16 text-[16px] tabular-nums sm:h-7 sm:w-14 sm:text-[12px]"
-            aria-label={`Convidados de ${aluno.nome}`}
-          />
-        </label>
-      )}
+      {/* Convidados: um controle só (pedido do Hugo, 09/10) — quantos a família leva e quem
+          são ficam juntos na janela. Só aparece para quem vai: nos demais seria ruído. */}
       {aluno.status === 'participa' && (
         <button
           type="button"
           onClick={onNomes}
-          title="Cadastrar os convidados pelo nome (cortesia)"
+          title="Quantos convidados a família leva e quem são (para o check-in da porta)"
+          aria-label={`Convidados de ${aluno.nome}`}
           className={cn(
-            'flex h-11 shrink-0 items-center gap-1 rounded-lg border px-2 text-[12px] transition-colors sm:h-7 sm:text-[11px]',
-            nomeados > 0
-              ? 'border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20'
+            'flex h-11 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] tabular-nums transition-colors sm:h-7 sm:text-[11.5px]',
+            aluno.convidados > 0
+              ? 'border-slate-600 bg-slate-800/60 text-slate-200 hover:border-amber-500/50 hover:text-white'
               : 'border-dashed border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300',
           )}
         >
-          {nomeados > 0 ? `${nomeados} ${nomeados === 1 ? 'nome' : 'nomes'}` : 'nomes'}
+          <Users className="h-3.5 w-3.5" />
+          {aluno.convidados > 0 ? (
+            <>
+              <span>Convidados: {aluno.convidados}</span>
+              <span
+                className={cn(
+                  nomeados >= aluno.convidados ? 'text-emerald-400' : 'text-amber-400',
+                )}
+              >
+                · {nomeados >= aluno.convidados ? 'todos com nome' : `${nomeados} com nome`}
+              </span>
+            </>
+          ) : (
+            <span>Convidados</span>
+          )}
         </button>
       )}
 
@@ -716,6 +707,7 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
         eventoId={eventoId}
         aluno={alunos.find((x) => x.pessoa_chave === convidadosDe) ?? null}
         convidados={convidadosDe ? convidadosPorPessoa.get(convidadosDe) ?? [] : []}
+        onLeva={(aluno, n) => salvarConvidados(aluno, n)}
         onFechar={() => setConvidadosDe(null)}
         // O número "leva N" pode subir junto (o banco o acompanha), então os dois recarregam.
         onMudou={() => {
@@ -741,7 +733,6 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
                 aluno={a}
                 nomeados={convidadosPorPessoa.get(a.pessoa_chave)?.length ?? 0}
                 onEscolher={(s) => escolher(a, s)}
-                onConvidados={(n) => salvarConvidados(a, n)}
                 onNomes={() => setConvidadosDe(a.pessoa_chave)}
                 onFormando={() => alternarFormando(a)}
                 onRemover={a.unidade_origem_nome ? () => removerVisitante(a) : undefined}

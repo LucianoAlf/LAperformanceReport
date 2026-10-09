@@ -237,8 +237,10 @@ apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **L
   planilha (última coluna). No LA Teacher o aluno aparece **para os dois** (decisão do Hugo): o do aluno
   segue com o relatório; o de palco vê "Você sobe ao palco com…" pela função só leitura
   `app_recital_no_palco()` (repo `la-teacher`, migration `20261008240000`).
-- **Convidados pelo nome (09/10/2026, itens 7 e 8 da reunião):** na aba Alunos, quem participa ganha o
-  botão **"nomes"** ao lado do "leva N". A janela cadastra cortesias pelo nome
+- **Convidados pelo nome (09/10/2026, itens 7 e 8 da reunião):** na aba Alunos, quem participa tem um
+  botão só, **"Convidados: 3 · 1 com nome"** (o campo numérico solto saiu em 09/10, a pedido do Hugo:
+  dois controles para a mesma coisa confundiam). A janela tem no topo "Leva quantos convidados?" e
+  embaixo os nomes. Ela cadastra cortesias pelo nome
   (`evento_convidado_cortesia_adicionar_v1`: convidado + ponte com a participação num passo; bloco =
   o primeiro bloco do aluno, trocável quando ele está em dois), mostra a cota do evento
   (`evento.cortesias_por_aluno`, conferida no banco) e lista também os ingressos vendidos ligados ao

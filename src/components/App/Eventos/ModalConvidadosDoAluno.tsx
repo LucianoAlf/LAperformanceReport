@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { toast } from 'sonner';
-import { Check, Plus, Ticket, Trash2, Users } from 'lucide-react';
+import { Check, Minus, Plus, Ticket, Trash2, Users } from 'lucide-react';
 
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
@@ -42,6 +42,7 @@ export function ModalConvidadosDoAluno({
   eventoId,
   aluno,
   convidados,
+  onLeva,
   onFechar,
   onMudou,
 }: {
@@ -50,6 +51,8 @@ export function ModalConvidadosDoAluno({
   aluno: AlunoElegivel | null;
   /** Já filtrados para a pessoa (todos os do evento ligados a ela). */
   convidados: ConvidadoDaPorta[];
+  /** Grava quantos convidados a família leva (o número; os nomes vêm abaixo). */
+  onLeva: (aluno: AlunoElegivel, n: number) => void;
   onFechar: () => void;
   onMudou: () => void;
 }) {
@@ -82,6 +85,16 @@ export function ModalConvidadosDoAluno({
   }, [aberto, eventoId, blocos]);
 
   if (!aluno) return null;
+
+  // O número nunca fica abaixo dos nomes (o banco sobe sozinho quando passa); acima é
+  // "família vem com mais gente, ainda sem nome".
+  const minimo = convidados.length;
+  const leva = Math.max(aluno.convidados, minimo);
+  const faltamNomes = leva - convidados.length;
+  const mudarLeva = (n: number) => {
+    const valor = Math.max(minimo, Math.floor(n));
+    if (valor !== aluno.convidados) onLeva(aluno, valor);
+  };
 
   const cortesias = convidados.filter((c) => c.tipo_entrada === 'cortesia');
   const noLimite = cota !== null && cortesias.length >= cota;
@@ -129,15 +142,63 @@ export function ModalConvidadosDoAluno({
             <div className="min-w-0">
               <DialogTitle className="truncate text-[16px] text-white">Convidados de {aluno.nome}</DialogTitle>
               <DialogDescription className="text-[12.5px]">
-                {cota === null
-                  ? 'Cortesias pelo nome — a lista vai para o check-in da porta.'
-                  : `${cortesias.length} de ${cota} cortesias usadas — acima disso é ingresso, na Bilheteria.`}
+                Quantos vêm e quem são — os nomes vão para o check-in da porta.
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5">
+          {/* 1. Quantos — o número que conta cadeira. */}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-[13.5px] font-medium text-white">Leva quantos convidados?</p>
+              <p className={cn('text-[12px]', faltamNomes > 0 ? 'text-amber-300/90' : 'text-slate-500')}>
+                {leva === 0
+                  ? 'Ninguém informado ainda.'
+                  : faltamNomes > 0
+                    ? `${convidados.length} com nome · faltam ${faltamNomes} ${faltamNomes === 1 ? 'nome' : 'nomes'}`
+                    : 'Todos com nome.'}
+              </p>
+            </div>
+            <div className="flex items-center gap-1">
+              <BotaoComMola
+                onClick={() => mudarLeva(leva - 1)}
+                desabilitado={leva <= minimo}
+                className="w-11 border border-slate-700 px-0 text-slate-300 hover:bg-slate-800 sm:w-9"
+              >
+                <Minus className="h-4 w-4" />
+                <span className="sr-only">Um a menos</span>
+              </BotaoComMola>
+              <Input
+                key={leva}
+                type="number"
+                min={minimo}
+                defaultValue={leva}
+                onBlur={(e) => mudarLeva(Number(e.target.value) || 0)}
+                aria-label="Quantos convidados"
+                className="h-11 w-16 rounded-xl border-slate-700 bg-slate-950/60 text-center text-[16px] tabular-nums sm:h-9 sm:text-[14px]"
+              />
+              <BotaoComMola
+                onClick={() => mudarLeva(leva + 1)}
+                desabilitado={false}
+                className="w-11 border border-slate-700 px-0 text-slate-300 hover:bg-slate-800 sm:w-9"
+              >
+                <Plus className="h-4 w-4" />
+                <span className="sr-only">Um a mais</span>
+              </BotaoComMola>
+            </div>
+          </div>
+
+          {/* 2. Quem — os nomes. */}
+          <div className="flex items-baseline justify-between">
+            <p className="text-[12px] font-semibold uppercase tracking-wide text-slate-400">Nomes</p>
+            {cota !== null && (
+              <p className={cn('text-[12px]', noLimite ? 'text-amber-300/90' : 'text-slate-500')}>
+                {cortesias.length} de {cota} cortesias
+              </p>
+            )}
+          </div>
           {cota !== null && (
             <div className="h-1.5 overflow-hidden rounded-full bg-slate-800" aria-hidden="true">
               <motion.div
@@ -151,7 +212,7 @@ export function ModalConvidadosDoAluno({
 
           {convidados.length === 0 ? (
             <p className="rounded-xl border border-dashed border-slate-700 px-4 py-6 text-center text-[13px] text-slate-500">
-              Ninguém com nome ainda. Escreva abaixo quem vem assistir.
+              Nenhum nome ainda. Escreva abaixo quem vem assistir — o número acima sobe junto.
             </p>
           ) : (
             <ul className="space-y-1.5">
