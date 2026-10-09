@@ -332,6 +332,47 @@ test('🔴 certificado usa o logo da marca de CADA pessoa', () => {
   assert.match(folhas[2], SCHOOL, 'sem marca cai na School');
 });
 
+/* ───────── certificado de formatura — reunião de 08/10/2026 ───────── */
+
+test('🔴 formatura: um certificado por FORMANDO, quem não tem selo fica fora', () => {
+  const html = gerarCertificadosHtml(
+    comOrigem([]),
+    [
+      { nome: 'Bebê', formatura: 'bebes', marca: 'kids', apresentacoes: [{ cursoNome: 'Musicalização', musica: null }, { cursoNome: 'Bateria', musica: null }] },
+      { nome: 'Criança Kids', formatura: 'kids', marca: 'kids', apresentacoes: [] },
+      { nome: 'Sem selo', formatura: null, apresentacoes: [] },
+    ],
+    'formatura',
+  );
+  const folhas = html.split('<div class="cert">').slice(1);
+  assert.equal(folhas.length, 2, 'um por pessoa, mesmo com dois cursos; sem selo não entra');
+  assert.match(html, /de formatura/u);
+  assert.doesNotMatch(html, /Sem selo/u);
+});
+
+test('formatura: o texto diz a etapa concluída e a próxima, e o logo segue a etapa', () => {
+  const html = gerarCertificadosHtml(
+    comOrigem([]),
+    [
+      { nome: 'Kids', formatura: 'kids', marca: 'school', apresentacoes: [] },
+      { nome: 'Bebe', formatura: 'bebes', apresentacoes: [] },
+    ],
+    'formatura',
+  );
+  const [kids, bebe] = html.split('<div class="cert">').slice(1);
+  assert.match(kids, /a etapa LA Music Kids/u);
+  assert.match(kids, /LA Music School/u);
+  assert.match(kids, KIDS, 'formando Kids sai com o logo da Kids mesmo com marca School no cadastro');
+  assert.match(bebe, /Musicalização para Bebês/u);
+  assert.match(bebe, /Musicalização Preparatória/u);
+});
+
+test('o padrão continua sendo o certificado de participação', () => {
+  const html = gerarCertificadosHtml(comOrigem([]), [{ nome: 'A', formatura: 'kids', apresentacoes: [] }]);
+  assert.match(html, /de participação/u);
+  assert.doesNotMatch(html, /de formatura/u);
+});
+
 test('o cabecalho declara unidade, data e local nos dois documentos', () => {
   for (const html of [gerarProgramaHtml(dados([bloco('B', [ap()])])), gerarFolhaDePalcoHtml(dados([]))]) {
     assert.match(html, /Recital de Primavera/u);

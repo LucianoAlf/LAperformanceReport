@@ -1,20 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { Trash2 } from 'lucide-react';
+import { Mic2, Trash2 } from 'lucide-react';
 
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
 import { TimePicker24h } from '@/components/ui/time-picker-24h';
+import { cn } from '@/lib/utils';
 import {
   atualizarEvento,
   excluirEvento,
@@ -22,6 +21,7 @@ import {
   type EventoComResumo,
   type EventoStatus,
 } from '@/hooks/useEventos';
+import { BotaoComMola, Segmentado } from './ControlesComMovimento';
 
 // ISO 'YYYY-MM-DD' → Date LOCAL — `new Date(iso)` interpreta UTC e devolve o dia
 // anterior no Brasil (mesma armadilha do modulo de impressao).
@@ -46,6 +46,10 @@ interface Props {
  * duracao padrao, intervalo entre blocos, status e observacoes. A exclusao tambem e daqui:
  * evento apaga blocos, apresentacoes e participacoes em cascata, entao o botao pede o
  * titulo digitado — confirmar com um clique apaga recital inteiro por engano.
+ *
+ * Redesenho de 09/10/2026 (Hugo: "visivelmente horrível"): seções com título, unidade "min"
+ * dentro do campo, status como segmentado com a cor de cada estado, exclusão recolhida e
+ * rodapé fixo. Movimento inspirado em uiarc.dev, em `ControlesComMovimento`.
  */
 export function ModalEditarEvento({ aberto, evento, onFechar, onSalvo }: Props) {
   const navigate = useNavigate();
@@ -59,7 +63,9 @@ export function ModalEditarEvento({ aberto, evento, onFechar, onSalvo }: Props) 
   const [intervaloMin, setIntervaloMin] = useState('45');
   const [observacoes, setObservacoes] = useState('');
   const [confirmacaoExcluir, setConfirmacaoExcluir] = useState('');
+  const [excluindoAberto, setExcluindoAberto] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const reduzir = useReducedMotion();
 
   useEffect(() => {
     if (aberto && evento) {
@@ -73,6 +79,7 @@ export function ModalEditarEvento({ aberto, evento, onFechar, onSalvo }: Props) 
       setIntervaloMin(String(Math.round((evento.intervalo_entre_blocos_segundos ?? 2700) / 60)));
       setObservacoes(evento.observacoes ?? '');
       setConfirmacaoExcluir('');
+      setExcluindoAberto(false);
     }
   }, [aberto, evento]);
 
@@ -140,156 +147,264 @@ export function ModalEditarEvento({ aberto, evento, onFechar, onSalvo }: Props) 
   return (
     <Dialog open={aberto} onOpenChange={(v) => !v && onFechar()}>
       <DialogContent
-        className="sm:max-w-lg"
+        // Cabeçalho e rodapé fixos, só o meio rola: em tela baixa o "Salvar" nunca some.
+        className="flex max-h-[calc(100dvh-1rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl"
         // No celular o foco automatico no titulo sobe o teclado e cobre metade do formulario
         // antes de a pessoa escolher o que vai editar.
         onOpenAutoFocus={(e) => {
           if (window.matchMedia('(max-width: 639px)').matches) e.preventDefault();
         }}
       >
-        <DialogHeader>
-          <DialogTitle>Editar evento</DialogTitle>
+        <DialogHeader className="space-y-0 border-b border-slate-800 px-5 pb-4 pt-5 text-left">
+          <div className="flex items-center gap-3 pr-6">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 text-white">
+              <Mic2 className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <DialogTitle className="text-[16px] text-white">Editar evento</DialogTitle>
+              <DialogDescription className="text-[12.5px]">
+                {evento?.unidade_nome ? `${evento.unidade_nome} · ` : ''}o que muda aqui vale para
+                blocos, horários e documentos.
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="edit-titulo">Título</Label>
-            <Input
-              id="edit-titulo"
-              value={titulo}
-              onChange={(e) => setTitulo(e.target.value)}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label>Primeiro dia</Label>
-              <DatePicker
-                date={isoParaDate(data)}
-                onDateChange={(d) => setData(d ? format(d, 'yyyy-MM-dd') : '')}
-                placeholder="Primeiro dia"
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-5">
+          {/* ── evento ── */}
+          <Secao titulo="Evento">
+            <Campo rotulo="Título" htmlFor="edit-titulo">
+              <Input id="edit-titulo" value={titulo} onChange={(e) => setTitulo(e.target.value)} />
+            </Campo>
+            <Campo rotulo="Status">
+              <Segmentado<EventoStatus>
+                rotulo="Status"
+                ocultarRotulo
+                opcoes={(Object.keys(EVENTO_STATUS_LABEL) as EventoStatus[]).map((s) => ({
+                  valor: s,
+                  rotulo: EVENTO_STATUS_LABEL[s],
+                  marcador: <span className={cn('h-1.5 w-1.5 rounded-full', COR_DO_STATUS[s])} />,
+                }))}
+                valor={status}
+                onMudar={setStatus}
               />
-            </div>
-            <div className="space-y-2">
-              <Label>Último dia (opcional)</Label>
-              <DatePicker
-                date={isoParaDate(dataFim)}
-                onDateChange={(d) => setDataFim(d ? format(d, 'yyyy-MM-dd') : '')}
-                minDate={isoParaDate(data)}
-                placeholder="Um dia só"
-              />
-              <p className="text-[11.5px] text-slate-500">
-                Preencha só quando o recital ocupa mais de uma data. O dia de cada bloco se
-                escolhe na Grade.
-              </p>
-            </div>
-          </div>
+            </Campo>
+          </Secao>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Abertura da casa</Label>
-              <TimePicker24h value={horario} onChange={setHorario} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-local">Local</Label>
-              <Input
-                id="edit-local"
-                value={local}
-                onChange={(e) => setLocal(e.target.value)}
-                placeholder="Ex.: Teatro da unidade"
-              />
-            </div>
-          </div>
-
-          {/* Celular: tempo e intervalo lado a lado, status na linha de baixo — em 3 colunas os
-              rotulos quebravam em tres linhas e o select cortava "Rascunho". */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <div className="space-y-2">
-              <Label htmlFor="edit-duracao">
-                <span className="sm:hidden">Tempo por número</span>
-                <span className="hidden sm:inline">Tempo padrão por apresentação</span>
-              </Label>
-              <div className="flex items-center gap-1.5">
-                <Input
-                  id="edit-duracao"
-                  type="number"
-                  min={1}
-                  value={duracaoMin}
-                  onChange={(e) => setDuracaoMin(e.target.value)}
+          {/* ── quando e onde ── */}
+          <Secao
+            titulo="Quando e onde"
+            ajuda="Último dia só quando o recital ocupa mais de uma data — o dia de cada bloco se escolhe em Blocos."
+          >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Campo rotulo="Primeiro dia">
+                <DatePicker
+                  date={isoParaDate(data)}
+                  onDateChange={(d) => setData(d ? format(d, 'yyyy-MM-dd') : '')}
+                  placeholder="Primeiro dia"
                 />
-                <span className="text-[11.5px] text-slate-500">min</span>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-intervalo">Intervalo entre blocos</Label>
-              <div className="flex items-center gap-1.5">
-                <Input
-                  id="edit-intervalo"
-                  type="number"
-                  min={0}
-                  value={intervaloMin}
-                  onChange={(e) => setIntervaloMin(e.target.value)}
+              </Campo>
+              <Campo rotulo="Último dia" opcional>
+                <DatePicker
+                  date={isoParaDate(dataFim)}
+                  onDateChange={(d) => setDataFim(d ? format(d, 'yyyy-MM-dd') : '')}
+                  minDate={isoParaDate(data)}
+                  placeholder="Um dia só"
                 />
-                <span className="text-[11.5px] text-slate-500">min</span>
-              </div>
+              </Campo>
+              <Campo rotulo="Abertura da casa">
+                <TimePicker24h value={horario} onChange={setHorario} />
+              </Campo>
+              <Campo rotulo="Local" htmlFor="edit-local">
+                <Input
+                  id="edit-local"
+                  value={local}
+                  onChange={(e) => setLocal(e.target.value)}
+                  placeholder="Ex.: Teatro da unidade"
+                />
+              </Campo>
             </div>
-            <div className="col-span-2 space-y-2 sm:col-span-1">
-              <Label htmlFor="edit-status">Status</Label>
-              <Select value={status} onValueChange={(v) => setStatus(v as EventoStatus)}>
-                <SelectTrigger id="edit-status"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {(Object.keys(EVENTO_STATUS_LABEL) as EventoStatus[]).map((s) => (
-                    <SelectItem key={s} value={s}>{EVENTO_STATUS_LABEL[s]}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          </Secao>
 
-          <div className="space-y-2">
-            <Label htmlFor="edit-obs">Observações</Label>
-            <Input
+          {/* ── ritmo ── */}
+          <Secao
+            titulo="Ritmo do recital"
+            ajuda="Vale para as apresentações sem tempo próprio. Mudar recalcula os horários dos blocos."
+          >
+            <div className="grid grid-cols-2 gap-3">
+              <Campo rotulo="Tempo por apresentação" htmlFor="edit-duracao">
+                <CampoMinutos id="edit-duracao" min={1} valor={duracaoMin} onMudar={setDuracaoMin} />
+              </Campo>
+              <Campo rotulo="Intervalo entre blocos" htmlFor="edit-intervalo">
+                <CampoMinutos id="edit-intervalo" min={0} valor={intervaloMin} onMudar={setIntervaloMin} />
+              </Campo>
+            </div>
+          </Secao>
+
+          {/* ── observações ── */}
+          <Secao titulo="Observações">
+            <Textarea
               id="edit-obs"
+              aria-label="Observações"
               value={observacoes}
               onChange={(e) => setObservacoes(e.target.value)}
               placeholder="Bilheteria, ensaio geral, o que a equipe precisa saber…"
+              rows={3}
+              className="resize-none"
             />
-          </div>
+          </Secao>
 
-          <div className="rounded-lg border border-rose-500/30 bg-rose-500/5 p-3">
-            <p className="text-[12px] font-medium text-rose-200">
-              Excluir o evento apaga blocos, grade e confirmações junto.
-            </p>
-            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Input
-                value={confirmacaoExcluir}
-                onChange={(e) => setConfirmacaoExcluir(e.target.value)}
-                placeholder={`Digite "${evento?.titulo ?? ''}" para confirmar`}
-                className="h-9 flex-1 text-[16px] sm:h-8 sm:text-[12.5px]"
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5 border-rose-500/40 text-rose-300 hover:bg-rose-500/10"
-                disabled={!podeExcluir || salvando}
-                onClick={excluir}
+          {/* ── excluir: recolhido. Aberto o tempo todo, competia com o formulário. ── */}
+          <div className="border-t border-slate-800 pt-4">
+            {!excluindoAberto && (
+              <button
+                type="button"
+                onClick={() => setExcluindoAberto(true)}
+                className="flex min-h-[40px] items-center gap-1.5 rounded-lg px-1 text-[12.5px] text-slate-500 transition-colors hover:text-rose-300 sm:min-h-0 sm:py-1"
               >
                 <Trash2 className="h-3.5 w-3.5" />
-                Excluir
-              </Button>
-            </div>
+                Excluir este evento…
+              </button>
+            )}
+            <AnimatePresence initial={false}>
+              {excluindoAberto && (
+                <motion.div
+                  key="excluir"
+                  initial={reduzir ? { opacity: 0 } : { opacity: 0, height: 0 }}
+                  animate={reduzir ? { opacity: 1 } : { opacity: 1, height: 'auto' }}
+                  exit={reduzir ? { opacity: 0 } : { opacity: 0, height: 0 }}
+                  transition={{ type: 'spring', stiffness: 420, damping: 38 }}
+                  className="overflow-hidden"
+                >
+                  <div className="space-y-2.5 rounded-xl border border-rose-500/30 bg-rose-500/[0.06] p-3">
+                    <p className="text-[12.5px] text-rose-200">
+                      Apaga blocos, apresentações e confirmações junto. Para confirmar, digite{' '}
+                      <strong className="font-semibold text-rose-100">{evento?.titulo}</strong>.
+                    </p>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Input
+                        value={confirmacaoExcluir}
+                        onChange={(e) => setConfirmacaoExcluir(e.target.value)}
+                        placeholder={evento?.titulo ?? ''}
+                        aria-label="Título do evento para confirmar a exclusão"
+                        className="h-10 flex-1 border-rose-500/30 text-[16px] sm:h-9 sm:text-[13px]"
+                      />
+                      <div className="flex gap-2">
+                        <BotaoComMola
+                          onClick={() => {
+                            setExcluindoAberto(false);
+                            setConfirmacaoExcluir('');
+                          }}
+                          desabilitado={salvando}
+                          className="border border-slate-700 font-medium text-slate-300 hover:bg-slate-800"
+                        >
+                          Voltar
+                        </BotaoComMola>
+                        <BotaoComMola
+                          onClick={excluir}
+                          desabilitado={!podeExcluir || salvando}
+                          className="bg-rose-500 text-white hover:bg-rose-400"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Excluir
+                        </BotaoComMola>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onFechar} disabled={salvando}>
+        <div className="flex items-center justify-end gap-2 border-t border-slate-800 bg-slate-900/95 px-5 py-3">
+          <BotaoComMola
+            onClick={onFechar}
+            desabilitado={salvando}
+            className="border border-slate-700 font-medium text-slate-300 hover:bg-slate-800 hover:text-white"
+          >
             Cancelar
-          </Button>
-          <Button onClick={salvar} disabled={salvando}>
+          </BotaoComMola>
+          <BotaoComMola
+            onClick={salvar}
+            desabilitado={salvando}
+            className="bg-emerald-500 text-white hover:bg-emerald-400"
+          >
             {salvando ? 'Salvando…' : 'Salvar'}
-          </Button>
-        </DialogFooter>
+          </BotaoComMola>
+        </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+const COR_DO_STATUS: Record<EventoStatus, string> = {
+  rascunho: 'bg-amber-400',
+  publicado: 'bg-sky-400',
+  realizado: 'bg-emerald-400',
+  cancelado: 'bg-rose-400',
+};
+
+function Secao({ titulo, ajuda, children }: { titulo: string; ajuda?: string; children: ReactNode }) {
+  return (
+    <section className="space-y-3">
+      <div>
+        <h3 className="text-[11.5px] font-semibold uppercase tracking-[0.08em] text-slate-500">{titulo}</h3>
+        {ajuda && <p className="mt-0.5 text-[12px] leading-snug text-slate-500">{ajuda}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Campo({
+  rotulo,
+  htmlFor,
+  opcional,
+  children,
+}: {
+  rotulo: string;
+  htmlFor?: string;
+  opcional?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={htmlFor} className="flex items-baseline gap-1.5 text-[13px] text-slate-300">
+        {rotulo}
+        {opcional && <span className="text-[11.5px] font-normal text-slate-500">opcional</span>}
+      </Label>
+      {children}
+    </div>
+  );
+}
+
+/** Número em minutos com a unidade DENTRO do campo — solta ao lado, desalinhava a linha. */
+function CampoMinutos({
+  id,
+  min,
+  valor,
+  onMudar,
+}: {
+  id: string;
+  min: number;
+  valor: string;
+  onMudar: (v: string) => void;
+}) {
+  return (
+    <div className="relative">
+      <Input
+        id={id}
+        type="number"
+        inputMode="numeric"
+        min={min}
+        value={valor}
+        onChange={(e) => onMudar(e.target.value)}
+        className="pr-12 tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+      />
+      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-slate-500">
+        min
+      </span>
+    </div>
   );
 }

@@ -1,7 +1,7 @@
-import { useId, useMemo, useState, type ReactNode } from 'react';
-import { motion, useReducedMotion, LayoutGroup } from 'framer-motion';
+import { useMemo, useState, type ReactNode } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { toast } from 'sonner';
-import { AlertTriangle, ArrowRight, Award, FileText, Speaker, Table2 } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Award, Eye, FileText, GraduationCap, Speaker, Table2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import {
@@ -20,7 +20,10 @@ import {
   gerarProgramaHtml,
   marcaDaClassificacao,
   nomeDoArquivo,
+  ETAPA_DA_FORMATURA,
   type MarcaDoAluno,
+  type TipoDeCertificado,
+  type TipoDeFormatura,
 } from '@/lib/eventosImpressao';
 import {
   marcarCertificadosEmitidos,
@@ -29,6 +32,8 @@ import {
 } from '@/hooks/useEventos';
 import { useRevisaoDoEvento } from './useRevisaoDoEvento';
 import { entradaDaChegada } from './entradaDaChegada';
+import { PreviaDoDocumento } from './PreviaDoDocumento';
+import { BotaoComMola, MOLA_CURTA, Segmentado } from './ControlesComMovimento';
 
 /**
  * Documentos do recital — reunião de 08/10/2026 (Recreio + Barra).
@@ -105,13 +110,37 @@ export function DocumentosTab({ evento }: { evento: EventoComResumo }) {
     [recebem],
   );
 
-  const abrirCertificados = async () => {
-    const html = gerarCertificadosHtml(
+  /* ── formatura: um certificado por formando ── */
+  const formaturaPorPessoa = useMemo(
+    () => new Map(participacoes.map((p) => [p.pessoa_chave, p.formatura_tipo] as const)),
+    [participacoes],
+  );
+  const [publicoFormatura, setPublicoFormatura] = useState<PublicoDoCertificado>('todos');
+  const formandos = useMemo(
+    () =>
+      selecionarParaCertificado(lista.pessoas, publicoFormatura).filter((p) =>
+        Boolean(formaturaPorPessoa.get(p.pessoaChave)),
+      ),
+    [lista.pessoas, publicoFormatura, formaturaPorPessoa],
+  );
+  const formandosPorEtapa = useMemo(() => {
+    const contagem: Partial<Record<TipoDeFormatura, number>> = {};
+    for (const p of formandos) {
+      const etapa = formaturaPorPessoa.get(p.pessoaChave);
+      if (etapa) contagem[etapa] = (contagem[etapa] ?? 0) + 1;
+    }
+    return contagem;
+  }, [formandos, formaturaPorPessoa]);
+
+  const htmlDosCertificados = (tipo: TipoDeCertificado) => {
+    const pessoas = tipo === 'formatura' ? formandos : recebem;
+    return gerarCertificadosHtml(
       // O certificado não usa a grade para nada além do repertório, que já vem na lista.
       { ...dadosDaImpressao, blocos: [] },
-      recebem.map((p) => ({
+      pessoas.map((p) => ({
         nome: p.nome,
         marca: marcaPorPessoa.get(p.pessoaChave) ?? null,
+        formatura: formaturaPorPessoa.get(p.pessoaChave) ?? null,
         // O apresentacaoId viaja para o certificado_status poder ser gravado depois — sem ele,
         // emitir não deixava marca e a gráfica receberia o mesmo lote duas vezes.
         apresentacoes: p.apresentacoes.map((a) => ({
@@ -120,11 +149,22 @@ export function DocumentosTab({ evento }: { evento: EventoComResumo }) {
           musica: a.musica,
         })),
       })),
+      tipo,
     );
-    if (!abrirDocumento(html)) {
+  };
+
+  /** Qual prévia está aberta. A prévia nunca marca nada como emitido. */
+  const [previa, setPrevia] = useState<TipoDeCertificado | null>(null);
+
+  const gerarCertificados = async (tipo: TipoDeCertificado) => {
+    if (!abrirDocumento(htmlDosCertificados(tipo))) {
       toast.error('O navegador bloqueou a janela. Permita pop-ups para este site e tente de novo.');
       return;
     }
+    setPrevia(null);
+    // A marca de emitido é do certificado de PARTICIPAÇÃO (por curso, `certificado_status`).
+    // O de formatura não tem coluna própria — gerá-lo não toca nessa marca.
+    if (tipo !== 'participacao') return;
     // Marca como emitido DEPOIS da janela abrir: marcar antes de o papel existir deixaria o
     // sistema dizendo "já saiu" de um certificado que o navegador bloqueou.
     const ids = recebem.flatMap((p) =>
@@ -249,14 +289,24 @@ export function DocumentosTab({ evento }: { evento: EventoComResumo }) {
               o logo da Kids; os demais, com o da School.
             </p>
           </div>
-          <BotaoComMola
-            onClick={abrirCertificados}
-            desabilitado={recebem.length === 0}
-            className="bg-amber-500 text-slate-950 hover:bg-amber-400"
-          >
-            <Award className="h-4 w-4" />
-            {totalCertificados === 1 ? '1 certificado' : `${totalCertificados} certificados`}
-          </BotaoComMola>
+          <div className="flex flex-wrap items-center gap-2">
+            <BotaoComMola
+              onClick={() => setPrevia('participacao')}
+              desabilitado={recebem.length === 0}
+              className="border border-slate-600 text-slate-200 hover:bg-slate-700/60"
+            >
+              <Eye className="h-4 w-4" />
+              Ver prévia
+            </BotaoComMola>
+            <BotaoComMola
+              onClick={() => gerarCertificados('participacao')}
+              desabilitado={recebem.length === 0}
+              className="bg-amber-500 text-slate-950 hover:bg-amber-400"
+            >
+              <Award className="h-4 w-4" />
+              {totalCertificados === 1 ? 'Gerar 1 certificado' : `Gerar ${totalCertificados} certificados`}
+            </BotaoComMola>
+          </div>
         </div>
 
         <Segmentado<PublicoDoCertificado>
@@ -284,13 +334,108 @@ export function DocumentosTab({ evento }: { evento: EventoComResumo }) {
           definido.
         </p>
       </section>
+
+      {/* ── certificados de formatura ── */}
+      <section className="space-y-3 rounded-2xl border border-violet-500/25 bg-violet-500/[0.04] p-3 sm:p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-slate-400 sm:text-[11px]">
+              <GraduationCap className="h-3.5 w-3.5 text-violet-300" />
+              Certificados de formatura
+            </h3>
+            <p className="mt-0.5 max-w-xl text-[12px] text-slate-500">
+              Só para quem tem o selo de formando (aba Alunos). Um por pessoa, com a etapa que ela
+              concluiu e a próxima.
+            </p>
+            {formandos.length > 0 && (
+              <p className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[12px] text-slate-400">
+                {(Object.keys(ETAPA_DA_FORMATURA) as TipoDeFormatura[])
+                  .filter((etapa) => formandosPorEtapa[etapa])
+                  .map((etapa) => (
+                    <span key={etapa}>
+                      <strong className="tabular-nums text-violet-200">{formandosPorEtapa[etapa]}</strong>{' '}
+                      {etapa === 'kids' ? 'Kids → School' : etapa === 'bebes' ? 'Bebês → Preparatória' : 'formandos'}
+                    </span>
+                  ))}
+              </p>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <BotaoComMola
+              onClick={() => setPrevia('formatura')}
+              desabilitado={formandos.length === 0}
+              className="border border-slate-600 text-slate-200 hover:bg-slate-700/60"
+            >
+              <Eye className="h-4 w-4" />
+              Ver prévia
+            </BotaoComMola>
+            <BotaoComMola
+              onClick={() => gerarCertificados('formatura')}
+              desabilitado={formandos.length === 0}
+              className="bg-violet-500 text-white hover:bg-violet-400"
+            >
+              <GraduationCap className="h-4 w-4" />
+              {formandos.length === 1 ? 'Gerar 1 certificado' : `Gerar ${formandos.length} certificados`}
+            </BotaoComMola>
+          </div>
+        </div>
+
+        <Segmentado<PublicoDoCertificado>
+          rotulo="Emitir para"
+          opcoes={[
+            { valor: 'todos' as PublicoDoCertificado, rotulo: 'Todos os formandos' },
+            { valor: 'chegou' as PublicoDoCertificado, rotulo: 'Formandos que chegaram' },
+          ]}
+          valor={publicoFormatura}
+          onMudar={setPublicoFormatura}
+        />
+
+        {formandos.length === 0 && (
+          <p className="text-[12px] text-amber-200/80 sm:text-[11.5px]">
+            {publicoFormatura === 'chegou'
+              ? 'Nenhum formando com check-in ainda.'
+              : 'Nenhum formando marcado neste recital. O selo fica na aba Alunos.'}
+          </p>
+        )}
+
+        <p className="text-[12px] text-slate-500 sm:text-[11px]">
+          Modelo genérico: título, etapa concluída e próxima etapa. O texto final ainda vai ser
+          definido.
+        </p>
+      </section>
+
+      <PreviaDoDocumento
+        aberto={previa !== null}
+        onFechar={() => setPrevia(null)}
+        titulo={previa === 'formatura' ? 'Prévia — certificados de formatura' : 'Prévia — certificados de participação'}
+        descricao={
+          previa === 'formatura'
+            ? `${formandos.length} ${formandos.length === 1 ? 'certificado' : 'certificados'}, um por formando.`
+            : `${totalCertificados} ${totalCertificados === 1 ? 'certificado' : 'certificados'}, um por curso.`
+        }
+        html={previa ? htmlDosCertificados(previa) : ''}
+        acaoGerar={
+          previa && (
+            <BotaoComMola
+              onClick={() => gerarCertificados(previa)}
+              desabilitado={false}
+              className={
+                previa === 'formatura'
+                  ? 'bg-violet-500 text-white hover:bg-violet-400'
+                  : 'bg-amber-500 text-slate-950 hover:bg-amber-400'
+              }
+            >
+              {previa === 'formatura' ? <GraduationCap className="h-4 w-4" /> : <Award className="h-4 w-4" />}
+              Gerar e abrir para imprimir
+            </BotaoComMola>
+          )
+        }
+      />
     </div>
   );
 }
 
 /* ─────────────── peças com movimento ─────────────── */
-
-const MOLA_CURTA = { type: 'spring', stiffness: 600, damping: 34, mass: 0.6 } as const;
 
 const TONS = {
   amber: { tile: 'bg-amber-500/15 text-amber-300', borda: 'hover:border-amber-500/40' },
@@ -356,95 +501,5 @@ function CartaoDocumento({
         />
       </span>
     </motion.button>
-  );
-}
-
-function BotaoComMola({
-  children,
-  onClick,
-  desabilitado,
-  className,
-}: {
-  children: ReactNode;
-  onClick: () => void;
-  desabilitado: boolean;
-  className?: string;
-}) {
-  const reduzir = useReducedMotion();
-  return (
-    <motion.button
-      type="button"
-      onClick={onClick}
-      disabled={desabilitado}
-      whileTap={reduzir || desabilitado ? undefined : { scale: 0.97 }}
-      transition={MOLA_CURTA}
-      className={cn(
-        'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl px-4 text-[13px] font-semibold sm:min-h-[36px]',
-        'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
-        'disabled:cursor-not-allowed disabled:opacity-45',
-        className,
-      )}
-    >
-      {children}
-    </motion.button>
-  );
-}
-
-/**
- * Controle segmentado com a pílula que desliza até a opção escolhida (padrão das abas do
- * uiarc). O `LayoutGroup` com id próprio isola a pílula: dois segmentados na mesma tela não
- * puxam a pílula um do outro.
- */
-function Segmentado<T extends string | number | null>({
-  rotulo,
-  opcoes,
-  valor,
-  onMudar,
-}: {
-  rotulo: string;
-  opcoes: { valor: T; rotulo: string }[];
-  valor: T;
-  onMudar: (v: T) => void;
-}) {
-  const id = useId();
-  const reduzir = useReducedMotion();
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-[12px] text-slate-500 sm:text-[11px]">{rotulo}:</span>
-      <LayoutGroup id={id}>
-        <div
-          role="radiogroup"
-          aria-label={rotulo}
-          className="flex max-w-full flex-wrap gap-0.5 rounded-xl border border-slate-700 bg-slate-900/60 p-0.5"
-        >
-          {opcoes.map((o) => {
-            const ativo = o.valor === valor;
-            return (
-              <button
-                key={String(o.valor)}
-                type="button"
-                role="radio"
-                aria-checked={ativo}
-                onClick={() => onMudar(o.valor)}
-                className={cn(
-                  'relative min-h-[40px] rounded-lg px-3 text-[12.5px] transition-colors sm:min-h-[30px] sm:text-[12px]',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/70',
-                  ativo ? 'text-amber-100' : 'text-slate-400 hover:text-slate-200',
-                )}
-              >
-                {ativo && (
-                  <motion.span
-                    layoutId="pilula"
-                    transition={reduzir ? { duration: 0 } : { type: 'spring', stiffness: 500, damping: 38 }}
-                    className="absolute inset-0 rounded-lg bg-amber-500/20 ring-1 ring-amber-500/40"
-                  />
-                )}
-                <span className="relative">{o.rotulo}</span>
-              </button>
-            );
-          })}
-        </div>
-      </LayoutGroup>
-    </div>
   );
 }
