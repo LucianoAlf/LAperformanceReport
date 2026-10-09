@@ -309,6 +309,8 @@ export function EventoDetalhePage() {
       {tabAtiva === 'alunos' && (
         <AlunosTab
           key={`alunos-${syncTick}`}
+          evento={evento}
+          onEventoMudou={() => recarregar({ silencioso: true })}
           eventoId={evento.id}
           unidadeId={evento.unidade_id}
           pedidoFaltaAlocar={pedidoFaltaAlocar}
