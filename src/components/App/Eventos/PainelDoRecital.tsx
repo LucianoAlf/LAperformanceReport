@@ -312,18 +312,17 @@ export function PainelAlunos({
       <Painel
         titulo="Caminho até o palco"
         className="flex h-full flex-col justify-between p-3"
-        destaque={<span className="text-[11.5px] text-slate-500">pessoas · % = passagem da etapa anterior</span>}
+        destaque={<span className="text-[11.5px] text-slate-500">pessoas · ↓ = quem ficou entre uma etapa e outra</span>}
       >
-        <Funil
+        <FunilFluxo
           etapas={[
             { chave: 'elegiveis', rotulo: 'Elegíveis', valor: elegiveis, detalhe: 'alunos ativos da unidade' },
-            { chave: 'participa', rotulo: 'Confirmados', valor: participam, detalhe: 'vão se apresentar' },
-            { chave: 'em_bloco', rotulo: 'Em algum bloco', valor: pessoasEmBloco, detalhe: 'já têm horário' },
-            { chave: 'completos', rotulo: 'Todos os cursos', valor: pessoasCompletas, detalhe: 'nada falta alocar' },
+            { chave: 'participa', rotulo: 'Confirmados', valor: participam },
+            { chave: 'em_bloco', rotulo: 'Em algum bloco', valor: pessoasEmBloco },
           ]}
           onEscolher={(c) => {
             if (c === 'participa') onFiltroStatus?.('participa');
-            if ((c === 'em_bloco' || c === 'completos') && onSoSemBloco) onSoSemBloco();
+            if (c === 'em_bloco' && onSoSemBloco) onSoSemBloco();
           }}
         />
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-800 pt-2 text-[12px] text-slate-400">
@@ -795,6 +794,216 @@ export function Anel({
           {Math.round(pct * 100)}%
         </span>
         {rotulo && <span className="text-[11px] text-slate-500">{rotulo}</span>}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────── funil afunilado com fluxo (inspirado no Funnel chart do uiarc) ─────────────── */
+
+const LARGURA_FUNIL = 1000;
+const ALTURA_FUNIL = 180;
+const TRANSICAO = 0.32; // fração do segmento usada na curva até a etapa seguinte
+
+/** Meia altura da faixa em cada etapa (px do viewBox), com piso para a última não sumir. */
+function meiasAlturas(valores: number[]) {
+  const topo = Math.max(1, valores[0] ?? 1);
+  return valores.map((v) => Math.max(5, (v / topo) * (ALTURA_FUNIL / 2 - 4)));
+}
+
+/** Meia altura da faixa numa posição x (mesma curva do desenho, para os pontos ficarem dentro). */
+function meiaAlturaEm(x: number, meias: number[]) {
+  const seg = LARGURA_FUNIL / meias.length;
+  const i = Math.min(meias.length - 1, Math.floor(x / seg));
+  const local = x - i * seg;
+  const inicioCurva = seg * (1 - TRANSICAO);
+  if (i === meias.length - 1 || local <= inicioCurva) return meias[i];
+  const t = (local - inicioCurva) / (seg - inicioCurva);
+  const suave = t * t * (3 - 2 * t);
+  return meias[i] + (meias[i + 1] - meias[i]) * suave;
+}
+
+function caminhoDaFaixa(meias: number[]) {
+  const seg = LARGURA_FUNIL / meias.length;
+  const c = ALTURA_FUNIL / 2;
+  let topo = `M 0 ${c - meias[0]}`;
+  meias.forEach((m, i) => {
+    const fimPlano = i * seg + seg * (1 - TRANSICAO);
+    const fim = (i + 1) * seg;
+    topo += ` L ${fimPlano} ${c - m}`;
+    if (i < meias.length - 1) {
+      const prox = meias[i + 1];
+      const meio = (fimPlano + fim) / 2;
+      topo += ` C ${meio} ${c - m}, ${meio} ${c - prox}, ${fim} ${c - prox}`;
+    } else {
+      topo += ` L ${fim} ${c - m}`;
+    }
+  });
+  let base = '';
+  for (let i = meias.length - 1; i >= 0; i--) {
+    const m = meias[i];
+    const inicio = i * seg;
+    const fimPlano = i * seg + seg * (1 - TRANSICAO);
+    if (i === meias.length - 1) base += ` L ${LARGURA_FUNIL} ${c + m} L ${fimPlano} ${c + m}`;
+    else {
+      const prox = meias[i + 1];
+      const fim = (i + 1) * seg;
+      const meio = (fimPlano + fim) / 2;
+      base += ` C ${meio} ${c + prox}, ${meio} ${c + m}, ${fimPlano} ${c + m}`;
+    }
+    if (i > 0) base += ` L ${inicio} ${c + m}`;
+    else base += ` L 0 ${c + m}`;
+  }
+  return `${topo}${base} Z`;
+}
+
+interface Ponto {
+  x: number;
+  r: number; // posição vertical relativa (-1..1) dentro da faixa
+  vel: number;
+  morreEm: number; // índice da passagem em que sai do funil (meias.length = chega ao fim)
+  alfa: number;
+}
+
+/**
+ * Funil afunilado: faixa contínua que estreita de etapa em etapa, números em cima, perda
+ * embaixo de cada passagem e pontos que correm pela faixa — os que "ficam pelo caminho"
+ * apagam na passagem onde a pessoa saiu (proporcional à perda real).
+ */
+export function FunilFluxo({
+  etapas,
+  onEscolher,
+}: {
+  etapas: { chave: string; rotulo: string; valor: number; detalhe?: string }[];
+  onEscolher?: (chave: string) => void;
+}) {
+  const reduzir = useReducedMotion();
+  const valores = etapas.map((e) => e.valor);
+  const meias = meiasAlturas(valores);
+  const inicio = Math.max(1, valores[0] ?? 1);
+  const seg = LARGURA_FUNIL / Math.max(1, etapas.length);
+  const pontosRef = useRef<SVGGElement>(null);
+  const chaveValores = valores.join(',');
+
+  useEffect(() => {
+    if (reduzir || etapas.length < 2) return;
+    const g = pontosRef.current;
+    if (!g) return;
+    const vals = chaveValores.split(',').map(Number);
+    const mh = meiasAlturas(vals);
+    const sorteiaMorte = () => {
+      // Chance de passar por cada passagem = conversão real daquela etapa.
+      for (let i = 0; i < vals.length - 1; i++) {
+        const passa = vals[i] > 0 ? vals[i + 1] / vals[i] : 0;
+        if (Math.random() > passa) return i;
+      }
+      return vals.length;
+    };
+    const novo = (x = 0): Ponto => ({
+      x,
+      r: (Math.random() * 2 - 1) * 0.8,
+      vel: 0.9 + Math.random() * 0.9,
+      morreEm: sorteiaMorte(),
+      alfa: 1,
+    });
+    const pontos: Ponto[] = Array.from({ length: 46 }, () => novo(Math.random() * LARGURA_FUNIL));
+    const circulos = pontos.map(() => {
+      const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      c.setAttribute('r', '2.6');
+      c.setAttribute('class', 'fill-slate-200');
+      g.appendChild(c);
+      return c;
+    });
+    const segL = LARGURA_FUNIL / vals.length;
+    let quadro = 0;
+    const passo = () => {
+      pontos.forEach((p, i) => {
+        p.x += p.vel;
+        const passagem = (p.morreEm + 1) * segL - segL * TRANSICAO * 0.5;
+        if (p.morreEm < vals.length - 1 && p.x > passagem) p.alfa -= 0.06;
+        if (p.x > LARGURA_FUNIL || p.alfa <= 0) Object.assign(p, novo(0));
+        const y = ALTURA_FUNIL / 2 + p.r * meiaAlturaEm(p.x, mh);
+        circulos[i].setAttribute('cx', p.x.toFixed(1));
+        circulos[i].setAttribute('cy', y.toFixed(1));
+        circulos[i].setAttribute('opacity', String(Math.max(0, p.alfa) * 0.75));
+      });
+      quadro = requestAnimationFrame(passo);
+    };
+    quadro = requestAnimationFrame(passo);
+    return () => {
+      cancelAnimationFrame(quadro);
+      circulos.forEach((c) => c.remove());
+    };
+  }, [reduzir, chaveValores, etapas.length]);
+
+  return (
+    <div>
+      <div className="grid" style={{ gridTemplateColumns: `repeat(${etapas.length}, minmax(0, 1fr))` }}>
+        {etapas.map((e) => {
+          const conteudo = (
+            <>
+              <span className="block truncate text-[12px] text-slate-400">{e.rotulo}</span>
+              <NumeroAnimado valor={e.valor} className="block text-[22px] font-semibold leading-tight text-white" />
+              <span className="block truncate text-[11px] text-slate-500">
+                {e === etapas[0] ? (e.detalhe ?? 'início') : `${Math.round((e.valor / inicio) * 100)}% do início`}
+              </span>
+            </>
+          );
+          return onEscolher ? (
+            <button
+              key={e.chave}
+              type="button"
+              onClick={() => onEscolher(e.chave)}
+              className="min-w-0 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-slate-800/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
+            >
+              {conteudo}
+            </button>
+          ) : (
+            <div key={e.chave} className="min-w-0 px-1.5 py-1">
+              {conteudo}
+            </div>
+          );
+        })}
+      </div>
+
+      <svg
+        viewBox={`0 0 ${LARGURA_FUNIL} ${ALTURA_FUNIL}`}
+        preserveAspectRatio="none"
+        className="mt-2 h-28 w-full"
+        role="img"
+        aria-label={etapas.map((e) => `${e.rotulo} ${e.valor}`).join(', ')}
+      >
+        <defs>
+          <linearGradient id="funil-faixa" x1="0" x2="1" y1="0" y2="0">
+            <stop offset="0%" stopColor="rgb(139 92 246 / 0.55)" />
+            <stop offset="100%" stopColor="rgb(16 185 129 / 0.45)" />
+          </linearGradient>
+        </defs>
+        <motion.path
+          d={caminhoDaFaixa(meias)}
+          fill="url(#funil-faixa)"
+          initial={reduzir ? false : { opacity: 0 }}
+          animate={{ opacity: 1, d: caminhoDaFaixa(meias) }}
+          transition={reduzir ? { duration: 0 } : { duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+        />
+        <g ref={pontosRef} />
+      </svg>
+
+      <div className="relative mt-1 h-4">
+        {etapas.slice(1).map((e, i) => {
+          const antes = etapas[i].valor;
+          const perda = antes > 0 ? Math.round((1 - e.valor / antes) * 100) : 0;
+          return (
+            <span
+              key={e.chave}
+              className="absolute -translate-x-1/2 text-[11.5px] tabular-nums text-slate-500"
+              style={{ left: `${(((i + 1) * seg - seg * TRANSICAO * 0.5) / LARGURA_FUNIL) * 100}%` }}
+              title={`${antes - e.valor} ficaram entre ${etapas[i].rotulo} e ${e.rotulo}`}
+            >
+              ↓ {perda}%
+            </span>
+          );
+        })}
       </div>
     </div>
   );
