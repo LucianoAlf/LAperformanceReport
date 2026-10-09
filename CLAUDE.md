@@ -251,6 +251,7 @@ Check-in (o dia). Detalhe completo em [`docs/sistema/aluno.md`](docs/sistema/alu
   `.select('id')` e confere o retorno — sem isso a tela pinta "chegou" sobre um banco intacto. Vale
   para qualquer escrita nova nessas tabelas. ⚠️ Nenhuma RPC da grade cria linha de participação, e é
   o INSERT seguinte que separa "não existe linha" de "a policy escondeu".
+- **O professor da apresentação acompanha a troca do cadastro (08/10/2026, `20261008233000`).** Ele é copiado de `alunos.professor_atual_id` quando o aluno entra no bloco; o gatilho `trg_evento_apresentacao_segue_professor` repassa a troca para as apresentações da mesma pessoa e curso, em evento não encerrado, **só se estavam com o professor antigo** (escolha diferente feita na grade é preservada). `professor_palco_id`/`professor_apoio_id` nunca são tocados. Carimbo em `automacao_log` (`evento='evento_recital'`).
 - **Check-in é da PESSOA, nunca da apresentação** (`checkin_em` em `evento_participacao`): quem faz 2
   cursos sobe 2 vezes e chega 1. A contagem por bloco **não** é um pedaço do total — quem toca em 2
   blocos conta nos 2.
