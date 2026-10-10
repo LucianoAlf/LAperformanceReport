@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — aluno
 
-167 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+169 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## aluno_acoes
 
@@ -2363,7 +2363,7 @@
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
 | `id` | uuid | não | gen_random_uuid() |  |
-| `pesquisa_id` | uuid | sim |  | pesquisa_evasao_analises.pesquisa_id |
+| `pesquisa_id` | uuid | sim |  | pesquisa_evasao.id |
 | `caixa_id` | integer | não |  | whatsapp_caixas.id |
 | `direcao` | text | não |  |  |
 | `provider_message_id` | text | sim |  |  |
@@ -2799,6 +2799,23 @@
 **Triggers:**
 - `trg_radar_guarda_elegibilidade → radar_guarda_elegibilidade()`
 
+## radio_aviso_grupo
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `estacao_id` | bigint | sim |  | radio_estacao.id |
+| `texto` | text | não |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `enviado_em` | timestamp with time zone | sim |  |  |
+| `tentativas` | integer | não | 0 |  |
+| `erro` | text | sim |  |  |
+| `chave` | text | sim |  |  |
+
+**Únicos:**
+- `radio_aviso_grupo_chave`
+- `radio_aviso_grupo_pkey`
+
 ## radio_ficha
 
 | Coluna | Tipo | Nulo | Default | Referência |
@@ -2822,6 +2839,19 @@
 
 **Únicos:**
 - `radio_ficha_pkey`
+
+## radio_recepcao_evento
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `estacao_id` | bigint | não |  | radio_estacao.id |
+| `acao` | text | não |  |  |
+| `detalhe` | jsonb | sim |  |  |
+| `em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `radio_recepcao_evento_pkey`
 
 ## renovacoes_legado
 

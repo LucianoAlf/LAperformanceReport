@@ -4,7 +4,18 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — outros
 
-15 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+24 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+
+## app_parabens_visto
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `colaborador_id` | integer | não |  | colaboradores.id |
+| `aniversario` | date | não |  |  |
+| `visto_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `app_parabens_visto_pkey`
 
 ## cache_dependencias
 
@@ -88,10 +99,46 @@
 | `player_aberto_desde` | timestamp with time zone | sim |  |  |
 | `player_info` | jsonb | sim |  |  |
 | `la_tocando_ate` | timestamp with time zone | sim |  |  |
+| `recepcao_pausada_desde` | timestamp with time zone | sim |  |  |
+| `recepcao_mudo` | boolean | não | false |  |
+| `recepcao_volume` | smallint | sim |  |  |
+| `recepcao_aviso_em` | timestamp with time zone | sim |  |  |
 
 **Únicos:**
 - `radio_estacao_nome_key`
 - `radio_estacao_pkey`
+
+## radio_fala
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `hash` | text | não |  |  |
+| `texto` | text | não |  |  |
+| `voz_id` | bigint | não |  | radio_voz.id |
+| `arquivo` | text | não |  |  |
+| `duracao_ms` | integer | sim |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `radio_fala_pkey`
+
+## radio_momento_config
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | boolean | não | true |  |
+| `aniv_semana` | boolean | não | true |  |
+| `aniv_semana_horarios` | text[] | não | '{10:30,16:30}'::text[] |  |
+| `aniv_aula` | boolean | não | true |  |
+| `datas` | boolean | não | true |  |
+| `datas_horarios` | text[] | não | '{10:00,15:00,19:00}'::text[] |  |
+| `contagem` | boolean | não | true |  |
+| `contagem_cada_horas` | smallint | não | 2 |  |
+| `contagem_dias_antes` | smallint | não | 60 |  |
+| `voz_id` | bigint | não | 1 | radio_voz.id |
+
+**Únicos:**
+- `radio_momento_config_pkey`
 
 ## radio_musico
 
@@ -115,9 +162,23 @@
 | `buscada_em` | timestamp with time zone | sim |  |  |
 | `editada_por_usuario_id` | integer | sim |  | usuarios.id |
 | `editada_em` | timestamp with time zone | sim |  |  |
+| `discos` | jsonb | sim |  |  |
+| `discos_em` | timestamp with time zone | sim |  |  |
 
 **Únicos:**
 - `radio_musico_pkey`
+
+## radio_nao_anunciar
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `aluno_id` | integer | não |  | alunos.id |
+| `motivo` | text | sim |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `criado_por_usuario_id` | integer | sim |  | usuarios.id |
+
+**Únicos:**
+- `radio_nao_anunciar_pkey`
 
 ## radio_playlist
 
@@ -167,6 +228,30 @@
 **Únicos:**
 - `radio_playlist_spotify_pkey`
 
+## radio_qr
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `codigo` | text | não |  |  |
+| `estacao_id` | bigint | não |  | radio_estacao.id |
+| `album_id` | text | não |  |  |
+| `faixa_titulo` | text | não |  |  |
+| `musica` | text | não |  |  |
+| `artistas` | text | sim |  |  |
+| `capa` | text | sim |  |  |
+| `disco` | text | sim |  |  |
+| `ano` | integer | sim |  |  |
+| `musico_nome` | text | sim |  |  |
+| `musico_discogs` | integer | sim |  |  |
+| `musico_papel` | text | sim |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `lido_em` | timestamp with time zone | sim |  |  |
+| `leituras` | integer | não | 0 |  |
+
+**Únicos:**
+- `radio_qr_mesma_historia`
+- `radio_qr_pkey`
+
 ## radio_sugestao
 
 | Coluna | Tipo | Nulo | Default | Referência |
@@ -190,6 +275,8 @@
 | `decidido_em` | timestamp with time zone | sim |  |  |
 | `motivo` | text | sim |  |  |
 | `playlist_id` | bigint | sim |  | radio_playlist.id |
+| `comentario` | text | sim |  |  |
+| `estacao_id` | bigint | sim |  | radio_estacao.id |
 
 **Únicos:**
 - `radio_sugestao_pkey`
@@ -210,6 +297,7 @@
 | `tipo` | text | não | 'spotify'::text |  |
 | `audio_id` | bigint | sim |  | radio_audio_la.id |
 | `vinheta_id` | bigint | sim |  | radio_vinheta.id |
+| `momento` | text | sim |  |  |
 
 **Únicos:**
 - `radio_tocou_pkey`
@@ -303,4 +391,79 @@
 | `dep_id` | uuid | sim |  |  |
 | `cands` | bigint | sim |  |  |
 | `via_b` | bigint | sim |  |  |
+
+## tv_pareamento
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `codigo` | text | não |  |  |
+| `nonce_hash` | text | não |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `expira_em` | timestamp with time zone | não | (now() + '00:10:00'::interval) |  |
+| `tela_id` | bigint | sim |  | tv_tela.id |
+| `ligado_por_usuario_id` | integer | sim |  | usuarios.id |
+| `ligado_em` | timestamp with time zone | sim |  |  |
+| `entregue_em` | timestamp with time zone | sim |  |  |
+
+**Únicos:**
+- `tv_pareamento_pkey`
+
+## tv_peca
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `tipo` | text | não |  |  |
+| `titulo` | text | não |  |  |
+| `arquivo` | text | sim |  |  |
+| `campanha` | jsonb | sim |  |  |
+| `duracao_s` | smallint | não | 10 |  |
+| `unidades` | uuid[] | não | '{}'::uuid[] |  |
+| `inicio` | date | não | ((now() AT TIME ZONE 'America/Sao_Paulo'::text))::date |  |
+| `fim` | date | sim |  |  |
+| `ativa` | boolean | não | true |  |
+| `ordem` | integer | não | 0 |  |
+| `criada_por_usuario_id` | integer | sim |  | usuarios.id |
+| `criada_em` | timestamp with time zone | não | now() |  |
+| `atualizada_em` | timestamp with time zone | não | now() |  |
+| `alunos` | integer[] | não | '{}'::integer[] |  |
+| `legenda` | text | sim |  |  |
+
+**Únicos:**
+- `tv_peca_pkey`
+
+## tv_sem_imagem
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `aluno_id` | integer | não |  | alunos.id |
+| `motivo` | text | sim |  |  |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `criado_por_usuario_id` | integer | sim |  | usuarios.id |
+
+**Únicos:**
+- `tv_sem_imagem_pkey`
+
+## tv_tela
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `nome` | text | não |  |  |
+| `unidade_id` | uuid | sim |  | unidades.id |
+| `estacao_id` | bigint | sim |  | radio_estacao.id |
+| `dias` | smallint[] | não | '{1,2,3,4,5,6}'::smallint[] |  |
+| `de` | time without time zone | não | '08:00:00'::time without time zone |  |
+| `ate` | time without time zone | não | '21:00:00'::time without time zone |  |
+| `token_hash` | text | sim |  |  |
+| `link_gerado_em` | timestamp with time zone | sim |  |  |
+| `visto_em` | timestamp with time zone | sim |  |  |
+| `aberta_desde` | timestamp with time zone | sim |  |  |
+| `info` | jsonb | sim |  |  |
+| `ativa` | boolean | não | true |  |
+| `ordem` | integer | não | 0 |  |
+
+**Únicos:**
+- `tv_tela_nome_key`
+- `tv_tela_pkey`
 

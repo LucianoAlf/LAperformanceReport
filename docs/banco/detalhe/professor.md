@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — professor
 
-164 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+165 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## anotacoes
 
@@ -1506,8 +1506,8 @@
 | `snapshot_metrica_id` | uuid | não |  | health_score_professor_v3_snapshot_metricas.id |
 | `config_meta_segmento_id` | uuid | sim |  | health_score_professor_v3_config_metas_curso_modalidade.id |
 | `unidade_id` | uuid | não |  | health_score_professor_v3_config_metas_curso_modalidade.unidade_id |
-| `curso_id` | integer | não |  | cursos.id |
-| `modalidade` | text | não |  | professor_unidade_curso_modalidade.modalidade |
+| `curso_id` | integer | não |  | health_score_professor_v3_config_metas_curso_modalidade.curso_id |
+| `modalidade` | text | não |  | health_score_professor_v3_config_metas_curso_modalidade.modalidade |
 | `pessoas_unicas` | integer | não | 0 |  |
 | `vinculos_ativos` | integer | não | 0 |  |
 | `turmas_elegiveis` | integer | não | 0 |  |
@@ -1672,6 +1672,17 @@
 
 **Únicos:**
 - `la_teacher_coordenacao_pkey`
+
+## la_teacher_marketing
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `usuario_id` | integer | não |  | usuarios.id |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `criado_por_usuario_id` | integer | sim |  | usuarios.id |
+
+**Únicos:**
+- `la_teacher_marketing_pkey`
 
 ## porteiro_rota_professor
 

@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-08 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-10 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — plataforma
 
-28 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+29 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## _auditoria_chave_natural_20260809
 
@@ -245,6 +245,26 @@
 
 **Únicos:**
 - `porteiro_recusa_pkey`
+
+## radio_data_comemorativa
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `origem_sm_id` | uuid | sim |  |  |
+| `nome` | text | não |  |  |
+| `dia` | smallint | não |  |  |
+| `mes` | smallint | não |  |  |
+| `categoria` | text | sim |  |  |
+| `marca` | text | sim |  |  |
+| `texto_radio` | text | sim |  |  |
+| `texto_tv` | text | sim |  |  |
+| `ativa` | boolean | não | true |  |
+| `atualizada_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `radio_data_comemorativa_origem_sm_id_key`
+- `radio_data_comemorativa_pkey`
 
 ## rbac_piloto_usuarios
 
