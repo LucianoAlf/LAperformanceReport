@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-08 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-10 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — professor
 
-162 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+163 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## anotacoes
 
@@ -1507,7 +1507,7 @@
 | `config_meta_segmento_id` | uuid | sim |  | health_score_professor_v3_config_metas_curso_modalidade.id |
 | `unidade_id` | uuid | não |  | health_score_professor_v3_config_metas_curso_modalidade.unidade_id |
 | `curso_id` | integer | não |  | cursos.id |
-| `modalidade` | text | não |  | health_score_professor_v3_config_metas_curso_modalidade.modalidade |
+| `modalidade` | text | não |  | professor_unidade_curso_modalidade.modalidade |
 | `pessoas_unicas` | integer | não | 0 |  |
 | `vinculos_ativos` | integer | não | 0 |  |
 | `turmas_elegiveis` | integer | não | 0 |  |
@@ -2907,6 +2907,21 @@
 
 **Únicos:**
 - `programa_matriculador_penalidades_pkey`
+
+## radio_grade
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `estacao_id` | bigint | não |  | radio_estacao.id |
+| `dia_semana` | smallint | não |  |  |
+| `hora_inicio` | time without time zone | não |  |  |
+| `hora_fim` | time without time zone | não |  |  |
+| `playlist_id` | bigint | não |  | radio_playlist.id |
+| `volume` | integer | não | 40 |  |
+
+**Únicos:**
+- `radio_grade_pkey`
 
 ## tmp_emusys_registro_45d
 

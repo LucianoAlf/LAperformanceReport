@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-08 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-10 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — operacao
 
-45 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+47 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## calendario_escolar
 
@@ -45,6 +45,36 @@
 
 **Únicos:**
 - `catalogo_treinamentos_pkey`
+
+## colaborador_carreira
+
+> Bloco "Minha carreira na música" da Ficha Técnica (departamento Professores). A pessoa é dona do conteúdo e edita quando quiser pelo mesmo link da ficha; histórico em colaborador_carreira_versoes.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('colaborador_carreira_id_seq'::regclass) |  |
+| `colaborador_id` | integer | não |  | colaboradores.id |
+| `respostas` | jsonb | não | '{}'::jsonb |  |
+| `versao` | integer | não | 1 |  |
+| `preenchido_em` | timestamp with time zone | sim |  |  |
+| `updated_at` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `colaborador_carreira_colaborador_id_key`
+- `colaborador_carreira_pkey`
+
+## colaborador_carreira_versoes
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não | nextval('colaborador_carreira_versoes_id_seq'::regclass) |  |
+| `colaborador_id` | integer | não |  | colaboradores.id |
+| `versao` | integer | não |  |  |
+| `respostas` | jsonb | não |  |  |
+| `registrado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `colaborador_carreira_versoes_pkey`
 
 ## colaborador_rider
 

@@ -32,6 +32,8 @@ export interface FichaColaborador extends Colaborador {
   concluido_em: string | null;
   rider_respostas: Record<string, string> | null;
   rider_updated_at: string | null;
+  carreira_respostas: Record<string, string> | null;
+  carreira_updated_at: string | null;
   ficha_token: FichaTokenStatus | null;
 }
 

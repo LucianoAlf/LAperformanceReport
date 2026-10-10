@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-08 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-10 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — aluno
 
-165 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+167 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## aluno_acoes
 
@@ -186,6 +186,7 @@
 - `trg_eventos_operacionais_experimental_convertida_update → trg_eventos_operacionais_experimental_convertida()`
 - `trg_eventos_operacionais_jornada_matricula → trg_eventos_operacionais_jornada_matricula()`
 - `trg_jornada_ciclo_sucedido → fn_jornada_marca_ciclo_sucedido()`
+- `trg_jornada_encerra_linha_sumida → fn_jornada_encerra_linha_sumida()`
 - `trg_materializar_projecao_jornada → trg_materializar_projecao_jornada()`
 - `trg_resolver_jornada_curso_grade_atual_v1 → fn_aplicar_jornada_curso_grade_atual_v1()`
 
@@ -564,6 +565,7 @@
 - `trg_cache_versao → cache_versao_registrar_trg()`
 - `trg_costura_vincular_conversa → fn_costura_vincular_conversa_numero()`
 - `trg_enqueue_sync_student_studio → enqueue_sync_student_studio()`
+- `trg_evento_apresentacao_segue_professor → fn_evento_apresentacao_segue_professor()`
 - `trg_sync_aluno_contatos → sync_aluno_contatos_from_legacy()`
 - `trg_vincular_anamnese_na_matricula → fn_vincular_anamnese_pendente()`
 - `trigger_sync_aluno_to_leads → sync_aluno_to_leads()`
@@ -1156,6 +1158,7 @@
 | `cortesias_por_aluno` | integer | sim |  |  |
 | `provedor_pagamento` | text | sim |  |  |
 | `provedor_conta` | text | sim |  |  |
+| `convite_texto` | text | sim |  |  |
 
 **Únicos:**
 - `evento_pkey`
@@ -1205,6 +1208,7 @@
 | `professor_palco_id` | integer | sim |  | professores.id |
 | `professor_apoio_id` | integer | sim |  | professores.id |
 | `editado_apos_envio_em` | timestamp with time zone | sim |  |  |
+| `drive_nome` | text | sim |  |  |
 
 **Únicos:**
 - `evento_apresentacao_pessoa_curso_unica`
@@ -1279,9 +1283,21 @@
 | `enviado_em` | timestamp with time zone | não | now() |  |
 | `enviado_por` | uuid | sim |  |  |
 | `origem` | text | sim |  |  |
+| `tipo` | text | não | 'convite'::text |  |
+| `status` | text | sim |  |  |
+| `destino_tipo` | text | sim |  |  |
+| `destino_nome` | text | sim |  |  |
+| `destino_telefone` | text | sim |  |  |
+| `erro` | text | sim |  |  |
+| `chatwoot_inbox_id` | integer | sim |  |  |
+| `chatwoot_conversa_id` | integer | sim |  |  |
+| `chatwoot_mensagem_id` | bigint | sim |  |  |
+| `reenvio` | boolean | não | false |  |
+| `concluido_em` | timestamp with time zone | sim |  |  |
 
 **Únicos:**
 - `evento_comunicacao_pkey`
+- `uq_evento_comunicacao_convite_enviando`
 
 **Triggers:**
 - `trg_audit_evento_comunicacao → fn_evento_audit_log()`
@@ -1428,6 +1444,24 @@
 - `trg_evento_ingresso_venda_deriva → fn_evento_ingresso_venda_deriva()`
 - `trg_evento_ingresso_venda_touch → fn_evento_touch()`
 
+## evento_motivo_ausencia
+
+> Motivos de o aluno não ir ao recital, cadastrados pela equipe de cada unidade. Não se apaga: desativa (ativo=false), para o histórico continuar legível.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `unidade_id` | uuid | não |  | unidades.id |
+| `nome` | text | não |  |  |
+| `ativo` | boolean | não | true |  |
+| `ordem` | integer | não | 0 |  |
+| `created_at` | timestamp with time zone | não | now() |  |
+| `created_by` | uuid | sim | auth.uid() |  |
+
+**Únicos:**
+- `evento_motivo_ausencia_pkey`
+- `uq_evento_motivo_ausencia_nome`
+
 ## evento_participacao
 
 > Quem entra no evento, por PESSOA (nao por matricula). Check-in e certificado moram aqui: quem toca em 2 cursos faz UM check-in.
@@ -1451,6 +1485,8 @@
 | `formatura` | boolean | não | false |  |
 | `formatura_tipo` | text | sim |  |  |
 | `formatura_origem` | text | sim |  |  |
+| `motivo_ausencia_id` | bigint | sim |  | evento_motivo_ausencia.id |
+| `motivo_ausencia_obs` | text | sim |  |  |
 
 **Únicos:**
 - `evento_participacao_pessoa_unica`
@@ -1460,6 +1496,7 @@
 - `trg_audit_evento_participacao → fn_evento_audit_log()`
 - `trg_evento_participacao_confirmado_em → fn_evento_participacao_confirmado_em()`
 - `trg_evento_participacao_deriva → fn_evento_participacao_deriva()`
+- `trg_evento_participacao_motivo_ausencia → fn_evento_participacao_motivo_ausencia()`
 - `trg_evento_participacao_touch → fn_evento_touch()`
 
 ## evento_sheets_corrida
@@ -2326,7 +2363,7 @@
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
 | `id` | uuid | não | gen_random_uuid() |  |
-| `pesquisa_id` | uuid | sim |  | pesquisa_evasao.id |
+| `pesquisa_id` | uuid | sim |  | pesquisa_evasao_analises.pesquisa_id |
 | `caixa_id` | integer | não |  | whatsapp_caixas.id |
 | `direcao` | text | não |  |  |
 | `provider_message_id` | text | sim |  |  |
@@ -2761,6 +2798,30 @@
 
 **Triggers:**
 - `trg_radar_guarda_elegibilidade → radar_guarda_elegibilidade()`
+
+## radio_ficha
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `album_id` | text | não |  |  |
+| `album` | text | não |  |  |
+| `artista` | text | não |  |  |
+| `ano` | integer | sim |  |  |
+| `status` | text | não |  |  |
+| `fonte` | text | sim |  |  |
+| `fonte_url` | text | sim |  |  |
+| `creditos` | jsonb | não | '[]'::jsonb |  |
+| `faixas` | jsonb | não | '[]'::jsonb |  |
+| `buscada_em` | timestamp with time zone | sim |  |  |
+| `editada_por_usuario_id` | integer | sim |  | usuarios.id |
+| `editada_em` | timestamp with time zone | sim |  |  |
+| `master_id` | integer | sim |  |  |
+| `historia` | jsonb | sim |  |  |
+| `historia_status` | text | sim |  |  |
+| `historia_buscada_em` | timestamp with time zone | sim |  |  |
+
+**Únicos:**
+- `radio_ficha_pkey`
 
 ## renovacoes_legado
 
@@ -3354,7 +3415,7 @@
 
 ## vw_evento_aluno_elegivel_v1
 
-> Candidatos ao recital por PESSOA (unidade_id, pessoa_chave), derivada de alunos ativos. Banda filtra CURSO, nunca pessoa, e nunca e a matricula de referencia quando ha outra. motivo_sem_curso separa a regra (so_atividade_extra) do defeito (curso_nao_cadastrado). security_invoker: herda a RLS de alunos.
+> Candidatos ao recital por PESSOA (unidade_id, pessoa_chave): matricula ATIVA ou TRANCADA. trancado (pessoa) = nenhuma matricula ativa; cursos[].trancado = aquele curso sem matricula ativa. Trancar nao e sair: o recital e convite, nao KPI — mas entra marcado, nunca em silencio. Banda filtra CURSO, nunca pessoa, e nunca e a matricula de referencia quando ha outra. cursos tem grao (pessoa, curso): duas matriculas do mesmo curso sao um curso so. motivo_sem_curso separa a regra (so_atividade_extra) do defeito (curso_nao_cadastrado). security_invoker: herda a RLS de alunos.
 
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|
@@ -3368,6 +3429,7 @@
 | `cursos` | jsonb | sim |  |  |
 | `faz_banda` | boolean | sim |  |  |
 | `motivo_sem_curso` | text | sim |  |  |
+| `trancado` | boolean | sim |  |  |
 
 ## vw_evento_bloco_lotacao
 
@@ -3385,7 +3447,7 @@
 
 ## vw_evento_familia_v1
 
-> Alunos ativos com familiar também aluno ativo na mesma unidade (telefone do responsável = telefone do adulto E primeiro nome bate). Uma linha por (pessoa, familiar), nos dois sentidos. familiar_papel: responsavel = o familiar é o responsável cadastrado desta pessoa; dependente = esta pessoa é a responsável do familiar. Inclui cônjuge: rótulo é família.
+> Candidatos ao recital (matricula ativa ou trancada) com familiar tambem candidato na mesma unidade: telefone do responsavel = telefone do adulto E primeiro nome bate. Uma linha por (pessoa, familiar), nos dois sentidos. familiar_papel: responsavel = o familiar e o responsavel cadastrado desta pessoa; dependente = esta pessoa e a responsavel do familiar. Inclui conjuge: o rotulo e familia.
 
 | Coluna | Tipo | Nulo | Default | Referência |
 |---|---|---|---|---|

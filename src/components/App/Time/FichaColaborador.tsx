@@ -3,7 +3,11 @@ import { ArrowLeft, Check, Copy, Link2, Loader2, MessageCircle } from 'lucide-re
 import { useFichaColaborador } from '@/hooks/useFichaColaborador';
 import { copyTextToClipboard } from '@/lib/clipboard';
 import { normalizarTelefone } from '@/lib/normalizarTelefone';
-import { formatarDataGeracaoFicha, montarLinkWhatsAppFicha } from '@/lib/fichaLink';
+import {
+  formatarDataGeracaoFicha,
+  montarLinkWhatsAppFicha,
+  montarLinkWhatsAppFichaCarreira,
+} from '@/lib/fichaLink';
 import {
   PERFIS_TEXTOS,
   VALORIZACAO_TEXTOS,
@@ -13,6 +17,8 @@ import {
   VALORIZACAO_NOMES,
   PERFIL_CORES,
   RIDER_CAMPOS,
+  CARREIRA_CAMPOS,
+  rotuloTopaVideoAudio,
   FALLBACK_PERFIL,
   FALLBACK_VALORIZACAO,
   FALLBACK_EVITE,
@@ -149,6 +155,35 @@ function FichaConteudo({
     ? differenceInDays(new Date(), new Date(ficha.rider_updated_at))
     : null;
 
+  // Carreira musical — mesmos critérios do Rider, agrupada por grupo.
+  // Bloco exclusivo do departamento Professores (mesma régua da edge ficha-tecnica).
+  const ehProfessor = (ficha.departamento ?? '').trim().toLowerCase() === 'professores';
+  const carreiraRespostas = ficha.carreira_respostas || {};
+  const carreiraGrupos: { grupo: string; campos: { id: string; label: string; valor: string }[] }[] = [];
+  const carreiraGrupoMap: Record<string, number> = {};
+  for (const campo of CARREIRA_CAMPOS) {
+    let bruto = carreiraRespostas[campo.id];
+    if (campo.tipo === 'escolha') {
+      bruto = rotuloTopaVideoAudio(bruto) ?? undefined;
+    }
+    const valor = bruto?.trim();
+    if (valor && valor.length >= 3) {
+      if (!(campo.grupo in carreiraGrupoMap)) {
+        carreiraGrupoMap[campo.grupo] = carreiraGrupos.length;
+        carreiraGrupos.push({ grupo: campo.grupo, campos: [] });
+      }
+      carreiraGrupos[carreiraGrupoMap[campo.grupo]].campos.push({
+        id: campo.id,
+        label: campo.label,
+        valor,
+      });
+    }
+  }
+  const temCarreira = carreiraGrupos.length > 0;
+  const carreiraDias = ficha.carreira_updated_at
+    ? differenceInDays(new Date(), new Date(ficha.carreira_updated_at))
+    : null;
+
   return (
     <div
       className="max-w-[1080px] mx-auto"
@@ -277,6 +312,17 @@ function FichaConteudo({
               riderDias={riderDias}
               nome={nome}
             />
+
+            {/* MINHA CARREIRA NA MÚSICA — bloco de professores */}
+            {ehProfessor && (
+              <CarreiraCard
+                cor={cor}
+                grupos={carreiraGrupos}
+                temCarreira={temCarreira}
+                carreiraDias={carreiraDias}
+                nome={nome}
+              />
+            )}
           </div>
 
           {/* Coluna direita */}
@@ -349,8 +395,11 @@ function FichaLinkAcoes({
   const [erroCopia, setErroCopia] = useState<string | null>(null);
   const status = ficha.ficha_token;
   const telefone = normalizarTelefone(ficha.whatsapp);
+  const jaRespondeu = Boolean(status?.ja_respondeu);
   const linkWhatsApp = status?.link
-    ? montarLinkWhatsAppFicha(nome.split(' ')[0], telefone, status.link)
+    ? jaRespondeu
+      ? montarLinkWhatsAppFichaCarreira(nome.split(' ')[0], telefone, status.link)
+      : montarLinkWhatsAppFicha(nome.split(' ')[0], telefone, status.link)
     : null;
   const dataGeracao = formatarDataGeracaoFicha(status?.gerado_em ?? null);
 
@@ -381,10 +430,51 @@ function FichaLinkAcoes({
     );
   }
 
-  if (status.ja_respondeu) {
+  if (jaRespondeu) {
     return (
-      <div className="mt-5 pt-5 border-t border-slate-800">
+      <div className="mt-5 pt-5 border-t border-slate-800 text-left">
         <p className="text-sm text-emerald-300">Esta pessoa já respondeu à Ficha Técnica.</p>
+        {status.link ? (
+          <>
+            <p className="mt-1 text-xs text-slate-500 mb-2">
+              O mesmo link abre o bloco novo <strong className="text-slate-400">Minha carreira na música</strong> (professores), com o teste já salvo.
+            </p>
+            <a
+              href={status.link}
+              target="_blank"
+              rel="noreferrer"
+              className="block break-all rounded-lg border border-slate-700 bg-slate-800/70 px-3 py-2 text-sm font-mono text-cyan-300 hover:text-cyan-200"
+            >
+              {status.link}
+            </a>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void copiarLink()}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200 hover:bg-slate-700"
+              >
+                {copiado ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
+                {copiado ? 'Copiado!' : 'Copiar link'}
+              </button>
+              <button
+                type="button"
+                onClick={() => linkWhatsApp && window.open(linkWhatsApp, '_blank', 'noopener,noreferrer')}
+                disabled={!linkWhatsApp}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-emerald-700/60 bg-emerald-900/30 px-3 py-2 text-sm text-emerald-200 hover:bg-emerald-900/50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <MessageCircle className="w-4 h-4" />
+                Reenviar no WhatsApp
+              </button>
+            </div>
+            {dataGeracao && <p className="mt-2 text-xs text-slate-500">Gerado em {dataGeracao}</p>}
+            {!telefone && <p className="mt-2 text-xs text-slate-500">WhatsApp não cadastrado — botão desabilitado.</p>}
+            {erroCopia && <p className="mt-2 text-xs text-rose-300" role="alert">{erroCopia}</p>}
+          </>
+        ) : (
+          <p className="mt-1 text-xs text-slate-500">
+            Não há link ativo. Quem respondeu mantém o mesmo link enquanto ele ficar ativo.
+          </p>
+        )}
       </div>
     );
   }
@@ -596,6 +686,71 @@ function RiderCard({
           </p>
           <p className="text-slate-500 text-xs mt-1">
             Quando preencher, aparece aqui como citação.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// MINHA CARREIRA NA MÚSICA — bloco de professores
+// ---------------------------------------------------------------------------
+function CarreiraCard({
+  cor,
+  grupos,
+  temCarreira,
+  carreiraDias,
+  nome,
+}: {
+  cor: string;
+  grupos: { grupo: string; campos: { id: string; label: string; valor: string }[] }[];
+  temCarreira: boolean;
+  carreiraDias: number | null;
+  nome: string;
+}) {
+  return (
+    <div className="rounded-2xl p-5 bg-slate-900/60 border border-slate-800">
+      <div className="text-[.7rem] font-bold uppercase tracking-[.18em] text-slate-500 flex items-center gap-2.5 mb-4">
+        Minha carreira na música · escrito por {nome}
+        <span className="flex-1 h-px bg-slate-800" />
+      </div>
+
+      {temCarreira ? (
+        <>
+          {grupos.map((g, gi) => (
+            <div key={g.grupo} className={gi > 0 ? 'mt-5 pt-4.5 border-t border-slate-800' : ''}>
+              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-[.12em] mb-3">
+                {g.grupo}
+              </h4>
+              {g.campos.map((c) => (
+                <div key={c.id} className="mb-3.5">
+                  <div className="text-sm text-slate-400 mb-1">{c.label}</div>
+                  <div
+                    className="pl-3.5 text-slate-200 text-[.94rem]"
+                    style={{ borderLeft: `2px solid ${cor}8c` }}
+                  >
+                    {c.valor}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+
+          <div className="mt-4.5 flex items-center gap-2 text-xs text-slate-500">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-none" />
+            {carreiraDias !== null
+              ? `Atualizado por ${nome.split(' ')[0].toLowerCase()} ${formatarDiasRider(carreiraDias)} · sempre editável`
+              : 'Sempre editável'}
+          </div>
+        </>
+      ) : (
+        <div className="py-8 text-center">
+          <p className="text-slate-400 text-sm">
+            {nome} ainda não preencheu a carreira na música.
+          </p>
+          <p className="text-slate-500 text-xs mt-1">
+            O mesmo link da Ficha abre esse bloco direto, com o teste já salvo.
           </p>
         </div>
       )}

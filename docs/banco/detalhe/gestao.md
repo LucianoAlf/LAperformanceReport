@@ -1,10 +1,10 @@
 <!-- GERADO POR scripts/gerar-mapa-banco.mjs — NÃO EDITE À MÃO.
-     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-08 -->
+     Banco: ouqwbbermlzqqvtqwlul · Gerado em: 2026-10-10 -->
 
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — gestao
 
-56 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+57 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## bi_agent_config_lamusic
 
@@ -731,6 +731,25 @@
 | `definido_por_usuario_id` | integer | sim |  |  |
 | `definido_em` | timestamp with time zone | sim |  |  |
 
+## relatorio_anual_revisor_do_curso
+
+> Revisor próprio de UM curso do professor (multi-instrumentista, Alf 09/10/2026). Vence o revisor do professor; curso_chave = fn_curso_base. Gravado pela Divisão.
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `professor_id` | integer | não |  | professores.id |
+| `curso_chave` | text | não |  |  |
+| `revisor_usuario_id` | integer | sim |  | usuarios.id |
+| `revisor_professor_id` | integer | sim |  | professores.id |
+| `definido_por_usuario_id` | integer | sim |  | usuarios.id |
+| `definido_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `relatorio_anual_revisor_do_curso_pkey`
+
+**Triggers:**
+- `trg_relatorio_anual_revisor_valida → fn_relatorio_anual_revisor_valida()`
+
 ## relatorio_anual_revisor_do_professor
 
 > Quem revisa os relatórios do recital de cada professor — vale para TODOS os recitais (Alf, 30/09). Gravado pela Divisão (app_relatorio_anual_salvar_divisao).
@@ -745,6 +764,9 @@
 
 **Únicos:**
 - `relatorio_anual_revisor_do_professor_pkey`
+
+**Triggers:**
+- `trg_relatorio_anual_revisor_valida → fn_relatorio_anual_revisor_valida()`
 
 ## relatorio_anual_revisor_por_recital_ate_20260930
 
