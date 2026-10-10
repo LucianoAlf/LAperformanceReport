@@ -446,6 +446,22 @@ async function tratarPedidoDiretoFechamento(event, { grupo, sendFn, log = () => 
     log({ acao: 'fechamento_preview_erro_abertura', erro: String(e.message || e).slice(0, 200) });
     return true;
   }
+  // 10/10 (Barra): a equipe esqueceu de fechar o caixa de 09/10. A Sol recusava
+  // abrir o de hoje ("feche o de ontem") e recusava fechar ("não está aberto"),
+  // porque só olhava o caixa de HOJE. Sem caixa aberto hoje, procura um aberto
+  // nos últimos 3 dias e fecha esse (a RPC de fechar já aceita a data).
+  let dataAlvo = null;
+  if (!d || !d.ja_aberto || !d.caixa_id_aberto) {
+    const hoje = new Date(Date.now() - 3 * 3600 * 1000);
+    for (let k = 1; k <= 3 && !dataAlvo; k++) {
+      const iso = new Date(hoje.getTime() - k * 86400 * 1000).toISOString().slice(0, 10);
+      try {
+        const d2 = await rpcFn('sol_caixa_dados_abertura', { p_unidade_id: grupo.unidade_id, p_data: iso });
+        if (d2 && d2.ja_aberto && d2.caixa_id_aberto) { d = d2; dataAlvo = iso; }
+      } catch (e) { /* segue procurando */ }
+    }
+    if (dataAlvo) log({ acao: 'fechamento_caixa_dia_anterior', data: dataAlvo });
+  }
   if (!d || !d.ja_aberto || !d.caixa_id_aberto) {
     await sendFn(chatId, '⚠️ Não fechei: o caixa não está aberto.');
     log({ acao: 'fechamento_preview_recusado', motivo: 'caixa_nao_aberto' });
@@ -461,7 +477,7 @@ async function tratarPedidoDiretoFechamento(event, { grupo, sendFn, log = () => 
   }
   const texto = montarTextoFechamento(dados) + '\n\n*Posso fechar agora?* Se estiver tudo certo, responde *pode* que eu fecho. Se ainda não for pra fechar, responde *não*.';
   const previewId = await sendFn(chatId, texto);
-  await rpcFn('sol_caixa_pendencia_criar', { p_payload: { unidade_id: grupo.unidade_id, chat_id: chatId, tipo: 'fechar', preview_message_id: previewId } }).catch(() => {});
+  await rpcFn('sol_caixa_pendencia_criar', { p_payload: { unidade_id: grupo.unidade_id, chat_id: chatId, tipo: 'fechar', preview_message_id: previewId, ...(dataAlvo ? { data: dataAlvo } : {}) } }).catch(() => {});
   await governanceFn(event, 'preview_sent', { preview_ref: previewId, action: 'fechar', outcome: 'ok' });
   log({ acao: 'fechamento_preview_direto_enviado', previewId });
   return true;
