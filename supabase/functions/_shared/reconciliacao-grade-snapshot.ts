@@ -122,6 +122,20 @@ export function verificarIntegridadeMapaAulas(
 }
 
 /**
+ * Quais aulas entram na conferência da grade (a que liga `ativo_operacional`).
+ *
+ * 09/10/2026 (LA Teacher, prof. Léo): era só `categoria === 'normal'`. Aula EXTRA
+ * (e reposição/avulsa) nunca era conferida, e o aluno dela ficava para sempre
+ * `ativo_operacional = false`: a chamada voltava `roster_nao_confirmado` e o
+ * Fábio recebia a aula "sem aluno" e recusava o áudio. Medido: as 11 extras dos
+ * últimos 30 dias, todas sem conferência. A experimental continua de fora: ela
+ * tem caminho próprio (lead), não roster de aluno.
+ */
+export function aulaEntraNaConferenciaDaGrade(categoria: string | null | undefined): boolean {
+  return categoria !== 'experimental';
+}
+
+/**
  * O Emusys pode devolver uma linha da mesma turma por participante. A
  * reconciliação precisa de uma fotografia por aula, não de uma linha crua.
  */

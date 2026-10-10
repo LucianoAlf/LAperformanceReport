@@ -2,6 +2,7 @@
 
 import { assertEquals, assertRejects, assertThrows } from "jsr:@std/assert@1";
 import {
+  aulaEntraNaConferenciaDaGrade,
   montarSnapshotGradeEmusys,
   reconciliarGradeSnapshotEmusys,
   reconciliarGradeSnapshotEmusysV1,
@@ -382,4 +383,12 @@ Deno.test("validacao autorizacao timeout assinatura e rede nunca acionam fallbac
     "rede indisponivel",
   );
   assertEquals(chamadasRede, ["reconciliar_grade_snapshot_emusys_v2"]);
+});
+
+Deno.test("aula extra, reposição e avulsa entram na conferência da grade; experimental não (09/10)", () => {
+  assertEquals(aulaEntraNaConferenciaDaGrade("normal"), true);
+  assertEquals(aulaEntraNaConferenciaDaGrade("extra"), true);
+  assertEquals(aulaEntraNaConferenciaDaGrade("reposicao"), true);
+  assertEquals(aulaEntraNaConferenciaDaGrade("avulsa"), true);
+  assertEquals(aulaEntraNaConferenciaDaGrade("experimental"), false);
 });
