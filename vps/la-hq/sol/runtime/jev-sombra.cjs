@@ -20,7 +20,8 @@ const URL = 'https://openrouter.ai/api/alpha/decisions';
 const MODELO = 'typesafe/jev-1.13';
 
 const CRITERIOS = {
-  aprovar: 'Autoriza a Sol a lançar/confirmar o card dela: "pode", "pode lançar", "ok pode", inclusive com erro de digitação ("Ppde", "Lode").',
+  // 10/10 (Alf: "ensina o caminho pra ele perder o medo"): o Jev dava 0,65-0,78 no "pode" por não ver o card.
+  aprovar: 'Autoriza a Sol a lançar/confirmar o card dela. Quando a Sol mandou um card que termina pedindo "Responde *pode*" (ou há card da Sol esperando aprovação), respostas curtas como "pode", "pode sim", "pode lançar", "ok pode", "pode, pix", "pode, R$ 300", "pode, é outro pagamento", "pode abrir", "pode fechar", inclusive com erro de digitação ("Ppde", "Lode", "poed"), SÃO aprovação: é o fluxo normal, pode decidir com segurança (o banco ainda confere antes de gravar). Não é aprovação: "pode" no meio de outra frase ("pode ser que não", "pode me mandar o relatório?", "não pode", "pode deixar que eu vejo"), ou "pode" falando com um colega.',
   correcao: 'Corrige ou completa um card/lote da Sol: diz o aluno certo, a parcela/mês, o curso, a divisão entre alunos, o valor ou a forma, ou a quem pertence um cheque.',
   explicacao: 'Explica por que o valor pago é diferente da fatura (desconto autorizado, sem juros, acordo, última parcela), para a Sol registrar o motivo.',
   registro_novo: 'Descreve um pagamento novo para lançar (ex.: "PG pix parcela 10/2026 aluna Fulana - R$ 387,00"), sem responder a um card.',
@@ -32,12 +33,17 @@ const CRITERIOS = {
 const FONE = /(\+?55\s?)?\(?\b\d{2}\)?\s?9?\d{4}[-\s]?\d{4}\b/g;
 const limpa = (s, n) => String(s || '').replace(FONE, '[tel]').replace(/@\d{6,}/g, '@[tel]').slice(0, n);
 
-function estado(fala, citada, unidade, ultimaSol = null) {
+function estado(fala, citada, unidade, ultimaSol = null, { cardAberto = false, citaCardDaSol = false } = {}) {
   let s = `Mensagem no grupo financeiro${unidade ? ` da unidade ${unidade}` : ''} da LA Music, onde a Sol (assistente do caixa) monta cards de lançamento: "${limpa(fala, 1200)}"`;
   if (citada) s += `\nA mensagem está respondendo a: "${limpa(citada, 600)}"`;
-  s += ultimaSol && ultimaSol.texto
-    ? `\nContexto: há ${ultimaSol.min} min a Sol mandou neste grupo: "${limpa(ultimaSol.texto, 300)}"`
-    : '\nContexto: a Sol não mandou nada neste grupo nos últimos 15 minutos.';
+  if (citaCardDaSol) s += '\nEla está citando um card da Sol que espera o "pode" para lançar.';
+  else if (cardAberto) s += '\nNeste grupo há um card da Sol esperando o "pode" para lançar.';
+  if (ultimaSol && ultimaSol.texto) {
+    // 10/10: o pedido "Responde *pode*" fica no FIM do card; antes só o começo (300) chegava ao Jev.
+    const t = String(ultimaSol.texto);
+    const trecho = t.length > 700 ? `${limpa(t.slice(0, 350), 350)} […] ${limpa(t.slice(-300), 300)}` : limpa(t, 700);
+    s += `\nContexto: há ${ultimaSol.min} min a Sol mandou neste grupo: "${trecho}"`;
+  } else s += '\nContexto: a Sol não mandou nada neste grupo nos últimos 15 minutos.';
   return s;
 }
 
@@ -83,7 +89,7 @@ function criarJevSombra({ dir, fetchImpl = fetch, agora = () => Date.now(), time
   function gravar(linha) {
     try { fs.appendFileSync(arquivo, JSON.stringify(linha) + '\n', { mode: 0o600 }); } catch (_) { /* melhor esforço */ }
   }
-  async function decidir({ fala, citada, unidade, ultimaSol }) {
+  async function decidir({ fala, citada, unidade, ultimaSol, cardAberto = false, citaCardDaSol = false }) {
     const chave = lerChave(dir);
     if (!chave) return { erro: 'sem_chave' };
     const controle = new AbortController();
@@ -94,7 +100,7 @@ function criarJevSombra({ dir, fetchImpl = fetch, agora = () => Date.now(), time
         method: 'POST', signal: controle.signal,
         // X-Title separa o gasto da Sol e da Maria na tela de uso (a chave é a mesma).
         headers: { authorization: `Bearer ${chave}`, 'content-type': 'application/json', 'X-Title': 'Sol', 'HTTP-Referer': 'https://lamusic.com.br/sol' },
-        body: JSON.stringify({ model: MODELO, state: estado(fala, citada, unidade, ultimaSol),
+        body: JSON.stringify({ model: MODELO, state: estado(fala, citada, unidade, ultimaSol, { cardAberto, citaCardDaSol }),
           questions: { intencao: { type: 'choice', instructions: 'O que esta mensagem é, do ponto de vista da Sol?', criteria: CRITERIOS } } }),
       });
       const ms = agora() - t0;
@@ -122,7 +128,7 @@ function criarJevSombra({ dir, fetchImpl = fetch, agora = () => Date.now(), time
       if (conversaDeColega(fala, citaCardDaSol)) {
         linha = { ...base, via: 'filtro', escolha: 'conversa', final: 'conversa' };
       } else {
-        const r = await decidir({ fala, citada: event.quotedPreview || '', unidade, ultimaSol });
+        const r = await decidir({ fala, citada: event.quotedPreview || '', unidade, ultimaSol, cardAberto, citaCardDaSol });
         const final = r.escolha ? aplicarTrava(fala, r.escolha, { citaCardDaSol, cardAberto }) : null;
         linha = { ...base, via: 'jev', ...r, final, trava: !!(final && final !== r.escolha) };
       }

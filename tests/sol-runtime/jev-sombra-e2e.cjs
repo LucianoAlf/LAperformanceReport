@@ -38,6 +38,13 @@ const fetchOk = async (_u, o) => { corpos.push(JSON.parse(o.body)); cabecalhos.p
   checar((await j429.observar({ event: ev })).erro === 'http_429', '429 deveria virar linha de erro');
   fs.unlinkSync(path.join(dir, '.jev.env'));
   checar((await j.observar({ event: ev })).erro === 'sem_chave', 'sem chave deveria registrar sem_chave');
+  // 10/10: o fim do card ("Responde *pode*") e o aviso de card aberto chegam ao Jev.
+  const card = 'x'.repeat(900) + ' 👉 *Posso lançar no caixa de hoje?* Responde *pode*';
+  const sc = _estado('pode', '', 'CG', { min: 1, texto: card }, { cardAberto: true });
+  checar(/Responde \*pode\*/.test(sc), 'estado deveria levar o fim do card da Sol');
+  checar(/há um card da Sol esperando o "pode"/.test(sc), 'estado deveria avisar card aberto');
+  checar(/citando um card da Sol/.test(_estado('pode', '', 'CG', null, { citaCardDaSol: true })), 'estado deveria avisar citação de card');
+  checar(!/esperando o "pode"/.test(_estado('pode', '', 'CG', null)), 'sem card, sem aviso');
   if (falhas.length) { console.error('FALHAS:\n- ' + falhas.join('\n- ')); process.exit(1); }
   console.log('OK jev-sombra');
 })().catch((e) => { console.error(e); process.exit(1); });
