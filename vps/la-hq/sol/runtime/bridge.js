@@ -1482,8 +1482,17 @@ async function caixaAbf() {
               // aviso) é falar com ela, mesmo sem o nome (CG 03/10: "Pode abrir sol"
               // citando "Não lancei: o caixa de hoje ainda não está aberto" ficou mudo).
               const _citouSol = !!(event.quotedMessageId && recentlySentIds.has(event.quotedMessageId));
+              // 10/10 (CG, Jhon): "@Luciano Alf ... como faço na Sol?" é pergunta PRO
+              // Alf, não pra Sol. Mensagem que marca alguém e não marca a Sol nem cita
+              // card dela não é falar com a Sol, mesmo citando o nome dela no texto.
+              const _idsSol = new Set([(sock.user?.id || ''), (sock.user?.lid || '')]
+                .map(v => String(v).replace(/:.*@/, '@').replace(/@.*/, '')).filter(Boolean));
+              const _menc = event.mentionedIds || [];
+              const _marcouOutro = Array.isArray(_menc) && _menc.length > 0
+                && !_menc.some(m => _idsSol.has(String(m).replace(/:.*@/, '@').replace(/@.*/, '')));
               const _pareceProSol = _citouSol
-                || !!(groupEngagement.pareceChamarSol && groupEngagement.pareceChamarSol(body));
+                || (!_marcouOutro && !!(groupEngagement.pareceChamarSol && groupEngagement.pareceChamarSol(body)));
+              if (_marcouOutro && !_citouSol) _caixaLog({ step: 'marcou_outra_pessoa_nao_e_pra_sol', chatId: chatId });
               // Citar o comprovante de uma pessoa nao e falar com a Sol. So uma
               // mensagem que a propria Sol enviou (card/continuacao) aciona esta
               // guarda; a relacao ampla com a origem segue disponivel ao handler
