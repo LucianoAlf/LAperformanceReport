@@ -383,14 +383,19 @@ export function calcularRetencaoOperacionalCanonica({
       const key = chavePessoaMovimentacao(mov);
       if (!key) return;
 
-      if (mov.tipo === 'evasao') evasoesMap.set(key, mov);
-      if (mov.tipo === 'nao_renovacao') naoRenovacoesMap.set(key, mov);
-
+      // Transferencia nao e evasao (regra do banco: movimentacao_saida_e_transferencia_v1):
+      // conta so em `transferencias`, nunca no total, no MRR perdido, nos motivos nem no
+      // professor. Antes entrava no total e so a taxa descontava — o card dizia
+      // "15 evasoes" com o Arthur/CG (Sonoramente) dentro (10/10/2026).
       const tipoEvasao = String(mov.tipo_evasao || '').toLowerCase();
       const motivo = motivoSaida(mov);
       if (isSaidaTransferencia(tipoEvasao, motivo)) {
         transferenciasMap.set(key, mov);
+        return;
       }
+
+      if (mov.tipo === 'evasao') evasoesMap.set(key, mov);
+      if (mov.tipo === 'nao_renovacao') naoRenovacoesMap.set(key, mov);
 
       increment(motivosMap, motivo);
       increment(professoresMap, professorSaida(mov));
@@ -417,7 +422,7 @@ export function calcularRetencaoOperacionalCanonica({
       evasoes_interrompidas: evasoesInterrompidas,
       avisos_previos: avisosPrevios.size,
       transferencias,
-      taxa_evasao: basePagantes > 0 ? ((totalEvasoes - transferencias) / basePagantes) * 100 : 0,
+      taxa_evasao: basePagantes > 0 ? (totalEvasoes / basePagantes) * 100 : 0,
       mrr_perdido: mrrPerdido,
       renovacoes_previstas: renovacoesPrevistas,
       renovacoes_realizadas: renovacoesRealizadas,
@@ -473,7 +478,7 @@ export function consolidarRetencaoOperacional(
     evasoes_interrompidas: rows.reduce((acc, row) => acc + row.evasoes_interrompidas, 0),
     avisos_previos: rows.reduce((acc, row) => acc + row.avisos_previos, 0),
     transferencias,
-    taxa_evasao: base > 0 ? ((totalEvasoes - transferencias) / base) * 100 : 0,
+    taxa_evasao: base > 0 ? (totalEvasoes / base) * 100 : 0,
     mrr_perdido: rows.reduce((acc, row) => acc + row.mrr_perdido, 0),
     renovacoes_previstas: renovacoesPrevistas,
     renovacoes_realizadas: renovacoesRealizadas,
