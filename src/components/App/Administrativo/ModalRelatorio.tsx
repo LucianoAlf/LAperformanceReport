@@ -1122,7 +1122,10 @@ export function ModalRelatorio({
       return acc;
     }, {} as Record<string, number>);
 
-    const mrrPerdido = evasoesRelatorio.reduce((acc, e) => acc + valorPerdidoRelatorioMensal(e), 0);
+    // Transferencia (Sonoramente ou entre unidades) aparece no detalhe por tipo, mas nao
+    // entra no total nem no MRR perdido.
+    const evasoesQueContam = evasoesRelatorio.filter(e => classificarTipoEvasaoMovimentacao(e) !== 'transferencia');
+    const mrrPerdido = evasoesQueContam.reduce((acc, e) => acc + valorPerdidoRelatorioMensal(e), 0);
 
     let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `🚪 *RELATÓRIO DE EVASÕES*\n`;
@@ -1131,7 +1134,7 @@ export function ModalRelatorio({
 
     texto += `📊 *RESUMO*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `Total: *${evasoesRelatorio.length} evasões*\n`;
+    texto += `Total: *${evasoesQueContam.length} evasões*\n`;
     if (mrrPerdido > 0) {
       texto += `MRR Perdido: *R$ ${mrrPerdido.toFixed(2)}/mês*\n`;
     }

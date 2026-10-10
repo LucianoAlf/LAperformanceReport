@@ -15,6 +15,7 @@ import {
   isTipoMatriculaForaNovaComercial,
 } from '@/lib/comercialMatriculasCanonicas';
 import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
+import { isSaidaTransferencia } from '@/lib/administrativoTransferencias';
 import { calcularTicketMedioCanonico } from '@/lib/ticketMedioCanonico';
 import { anexarCursosMovimentacoesAdmin } from '@/lib/movimentacoesAdminCursos';
 import { buscarResumoDashboardProfessoresCanonico } from '@/lib/dashboardProfessoresResumoCanonico';
@@ -316,7 +317,7 @@ export function useDashboardDados(): DashboardDados {
       let query = supabase
         .from('movimentacoes_admin')
         .select(`
-          aluno_nome, data, motivo, tipo, curso_id,
+          aluno_nome, data, motivo, tipo, tipo_evasao, curso_id,
           unidades:unidade_id!inner(nome)
         `)
         .in('tipo', ['evasao', 'nao_renovacao'])
@@ -330,7 +331,8 @@ export function useDashboardDados(): DashboardDados {
 
       const { data } = await query;
       const dataComCursos = await anexarCursosMovimentacoesAdmin(data || []);
-      setDadosModalEvasoes(filtrarRetencaoCanonica(dataComCursos).map((m: any) => ({
+      // Transferencia (Sonoramente ou entre unidades) nao e evasao.
+      setDadosModalEvasoes(filtrarRetencaoCanonica(dataComCursos).filter((m: any) => !isSaidaTransferencia(m.tipo_evasao, m.motivo)).map((m: any) => ({
         nome: m.aluno_nome || '—',
         unidade: m.unidades?.nome || '—',
         data_evasao: m.data ? new Date(m.data + 'T12:00:00').toLocaleDateString('pt-BR') : '—',

@@ -27,6 +27,7 @@ import {
   unidadesFromKPIsCanonicos,
 } from '@/lib/retencaoOperacionalCanonica';
 import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
+import { isSaidaTransferencia } from '@/lib/administrativoTransferencias';
 import {
   calcularTicketMedioCanonico,
   obterDenominadorTicketCanonico,
@@ -538,7 +539,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
 
           let evasoesQuery = supabase
             .from('movimentacoes_admin')
-            .select('tipo, valor_parcela_evasao, valor_parcela_anterior, data, unidade_id')
+            .select('tipo, tipo_evasao, motivo, valor_parcela_evasao, valor_parcela_anterior, data, unidade_id')
             .in('tipo', ['evasao', 'nao_renovacao', 'aviso_previo'])
             .gte('data', startDate)
             .lte('data', endDate);
@@ -547,7 +548,9 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             evasoesQuery = evasoesQuery.eq('unidade_id', unidade);
           }
 
-          const { data: evasoesHistorico } = await evasoesQuery;
+          const { data: evasoesHistoricoCru } = await evasoesQuery;
+          // Transferencia (Sonoramente ou entre unidades) nao e evasao nem MRR perdido.
+          const evasoesHistorico = (evasoesHistoricoCru || []).filter(e => !isSaidaTransferencia(e.tipo_evasao, e.motivo));
 
           // Consolidar dados de evasões por tipo
           const cancelamentos = evasoesHistorico?.filter(e => e.tipo === 'evasao').length || 0;
