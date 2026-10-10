@@ -16,8 +16,9 @@
 //   2. acha o clique pelo codigo (so os ainda 'aguardando' e dos ultimos 3 dias);
 //   3. grava telefone, conversa e o atraso clique->mensagem no clique, e tenta achar o lead.
 //
-// NAO altera `leads` (canal, origem). So registra a ligacao clique -> telefone -> lead; aplicar
-// no lead e passo separado, depois de conferir o casamento com dado real.
+// NAO altera `leads` direto. Registra a ligacao clique -> telefone -> lead e, quando o clique tem
+// gclid e o casamento e seguro (codigo/atraso), entrega a `google_ads_cliques` (`repassarGoogleAds`):
+// quem grava gclid/canal/campanha no lead e o pipeline que ja existia (registrar-atribuicao-google-ads).
 //
 // ⚠️ O lead pode nascer DEPOIS do evento (a mensagem chega ~1-4s antes de o lead existir, ver
 // registrar-atribuicao-google-ads). Por isso o lead_id e resolvido tambem pelo modo `varrer`.
@@ -422,6 +423,51 @@ async function casarPeloChatwoot(supabase: SupabaseClient, janelaMin = JANELA_CH
   return resumo;
 }
 
+/**
+ * Entrega ao pipeline do Google Ads (`registrar-atribuicao-google-ads`) os cliques com gclid que
+ * casaram com SEGURANCA (codigo ou atraso exato). Substitui o webhook da onpromedia: a linha entra
+ * em `google_ads_cliques` como `pendente` e a varredura de la (a cada 10 min) grava o gclid no lead,
+ * aplica a regra de canal (lead nascido depois do clique => Google; lead antigo => preserva) e
+ * resolve a campanha. Nada daquela logica e duplicada aqui.
+ *
+ * Casamento por `janela` NAO entra: e provavel, nao certo, e um gclid trocado de lead poria o canal
+ * Google em quem nao veio do anuncio. Uma linha por gclid; o que ja existe nao e tocado.
+ */
+async function repassarGoogleAds(supabase: SupabaseClient): Promise<{ repassados: number }> {
+  const corte = new Date(Date.now() - JANELA_LEAD_DIAS * 86400_000).toISOString();
+  const { data: cliques, error } = await supabase
+    .from('rastreio_cliques')
+    .select('id, gclid, gbraid, wbraid, telefone_lead, page_url_origem, created_at')
+    .eq('situacao', 'casado')
+    .in('metodo_casamento', ['codigo', 'atraso'])
+    .not('gclid', 'is', null)
+    .not('telefone_lead', 'is', null)
+    .gte('casado_em', corte)
+    .limit(200);
+  if (error) throw error;
+  if (!cliques || cliques.length === 0) return { repassados: 0 };
+
+  const linhas = cliques.map((c) => ({
+    gclid: c.gclid,
+    gbraid: c.gbraid,
+    wbraid: c.wbraid,
+    telefone: c.telefone_lead,
+    origem: 'google',
+    page_url_origem: c.page_url_origem,
+    cqc_event: 'rastreador',
+    // O lead nasce DEPOIS do clique; a regra de canal do Google compara com este instante.
+    conversa_criada_em: c.created_at,
+    situacao: 'pendente',
+    payload: { fonte: 'rastreador', rastreio_clique_id: c.id },
+  }));
+  const { data: novos, error: upErr } = await supabase
+    .from('google_ads_cliques')
+    .upsert(linhas, { onConflict: 'gclid', ignoreDuplicates: true })
+    .select('id');
+  if (upErr) throw upErr;
+  return { repassados: novos?.length ?? 0 };
+}
+
 async function varrer(supabase: SupabaseClient, body: Record<string, any> = {}) {
   const resumo: Record<string, unknown> & { leads_resolvidos: number; ainda_sem_lead: number; sem_conversa: number; erros: number } =
     { leads_resolvidos: 0, ainda_sem_lead: 0, sem_conversa: 0, erros: 0 };
@@ -462,6 +508,14 @@ async function varrer(supabase: SupabaseClient, body: Record<string, any> = {}) 
       resumo.erros++;
       console.error('[rastreador-casar/varrer] clique', c.id, e instanceof Error ? e.message : e);
     }
+  }
+
+  // Cliques do Google Ads casados com seguranca vao para o pipeline que ja grava gclid/canal no lead.
+  try {
+    resumo.google_ads = await repassarGoogleAds(supabase);
+  } catch (e) {
+    resumo.erros++;
+    console.error('[rastreador-casar/varrer] google ads:', e instanceof Error ? e.message : e);
   }
 
   // Clique que nunca virou mensagem: pessoa que abriu o WhatsApp e nao enviou. E o normal.

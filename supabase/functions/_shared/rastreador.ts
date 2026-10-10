@@ -4,7 +4,7 @@
 // 4 caracteres de largura zero = 1 digito base-4. 10 digitos = ~1 milhao de codigos. Basta:
 // o casamento so olha cliques recentes e ainda nao casados.
 
-export const ZW = ['​', '‌', '‍', '⁠'] as const;
+export const ZW = ['\u200B', '\u200C', '\u200D', '\u2060'] as const; // largura zero
 export const TAMANHO_CODIGO = 10;
 const REPETICOES = 3; // o texto pode ser cortado/editado; o codigo vai 3x para sobreviver a isso
 
