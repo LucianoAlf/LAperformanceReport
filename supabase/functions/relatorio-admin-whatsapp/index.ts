@@ -635,8 +635,17 @@ async function gerarRelatorioDiario(
   const renovacoesAntecipadas = renovacoesMovTodas
     .filter((m: any) => m.data >= primeiroDiaMes && m.data <= hoje)
     .filter((m: any) => isRenovacaoAntecipada(m) && competenciaReferenciaMovimento(m) > ultimoDiaMes);
-  const naoRenovacoesMov = movimentacoes.filter((m: any) => m.tipo === 'nao_renovacao');
-  const evasoesMov = movimentacoes.filter((m: any) => m.tipo === 'evasao');
+  // Transferencia (entre unidades ou para o Sonoramente) nao e evasao: sai do total e dos
+  // "Interrompido" e aparece em linha propria. Espelho de movimentacao_saida_e_transferencia_v1.
+  // Caso que revelou: Arthur Braga/CG, 09/10/2026, contado como "Interrompido".
+  const ehSaidaTransferencia = (m: any) => {
+    const tipo = String(m?.tipo_evasao || '').toLowerCase();
+    const motivo = String(m?.motivo || '').toLowerCase();
+    return tipo.includes('transfer') || motivo.includes('transfer') || motivo.includes('troca de unidade');
+  };
+  const naoRenovacoesMov = movimentacoes.filter((m: any) => m.tipo === 'nao_renovacao' && !ehSaidaTransferencia(m));
+  const evasoesMov = movimentacoes.filter((m: any) => m.tipo === 'evasao' && !ehSaidaTransferencia(m));
+  const transferenciasSaida = movimentacoes.filter((m: any) => m.tipo === 'evasao' && ehSaidaTransferencia(m));
   const trancamentosMov = movimentacoes.filter((m: any) => m.tipo === 'trancamento');
   const trancamentosPeriodo = trancamentosMov.length;
 
@@ -945,7 +954,7 @@ async function gerarRelatorioDiario(
   texto += `• Interrompido Bolsista: *${evasoes.filter((e: any) => getTipoEvasao(e) === 'interrompido_bolsista').length}*\n`;
   texto += `• Interrompido Banda: *${evasoes.filter((e: any) => getTipoEvasao(e) === 'interrompido_banda').length}*\n`;
   texto += `• Não Renovou: *${naoRenovacoes.length}*\n`;
-  texto += `• Transferência: *${evasoes.filter((e: any) => getTipoEvasao(e) === 'transferencia').length}*\n\n`;
+  texto += `• Transferência (não entra no total): *${transferenciasSaida.length}*\n\n`;
 
   if (evasoesHoje.length > 0) {
     texto += `Evasões do dia: *${evasoesHoje.length}*\n\n`;

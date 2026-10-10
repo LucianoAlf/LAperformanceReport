@@ -78,6 +78,7 @@ import {
   isAlunoNovoForaComercial,
   isAlunoNovoPaganteAdministrativo,
   isAlunoTransferenciaAdministrativa,
+  isSaidaTransferencia,
   transferenciaPertenceAUnidade,
   transferenciaRecebidaNaUnidade,
 } from '@/lib/administrativoTransferencias';
@@ -1404,8 +1405,11 @@ export function AdministrativoPage() {
   // saída de banda lançada — até agosto/26, quando as ADMs encerraram os ciclos de
   // banda em lote (15 saídas de banda no mês, contra 0-6 nos meses anteriores) e o
   // Jhon (ADM CG) viu banda e bolsista dentro da lista de evasões.
-  const evasoes = movimentacoesCanonicas.filter(m => m.tipo === 'evasao');
-  const naoRenovacoes = movimentacoesCanonicas.filter(m => m.tipo === 'nao_renovacao');
+  // Transferência (entre unidades ou para o Sonoramente) não é evasão: fica só na aba
+  // Transferências. Antes aparecia nas duas (Ana/CG, 10/10/2026, Arthur Braga).
+  const naoETransferencia = (m: MovimentacaoAdmin) => !isSaidaTransferencia(m.tipo_evasao, m.motivo);
+  const evasoes = movimentacoesCanonicas.filter(m => m.tipo === 'evasao').filter(naoETransferencia);
+  const naoRenovacoes = movimentacoesCanonicas.filter(m => m.tipo === 'nao_renovacao').filter(naoETransferencia);
   const trancamentos = movimentacoes.filter(m => m.tipo === 'trancamento');
   const transferencias = transferenciasAdministrativas;
   const transferenciasRecebidas = unidade === 'todos'
