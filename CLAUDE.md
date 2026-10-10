@@ -236,6 +236,17 @@ dia). Logo do papel por marca (Kids/School, `alunos.classificacao`) e playback n
   health score, score de professor, `aluno_presenca` ou `movimentacoes_admin`** — testar em produção
   é seguro. ⚠️ Ao acrescentar consumidor novo, essa propriedade deixa de valer sozinha: ela é
   consequência de ninguém ler as tabelas, não de uma trava.
+- 🔴 **Aluno TRANCADO é elegível ao recital, e entra MARCADO (09/10/2026, pedido da Fernanda).**
+  `vw_evento_aluno_elegivel_v1` e `evento_apresentacao_adicionar_v1` eram os **dois únicos** filtros
+  de `alunos.status` no módulo e exigiam `'ativo'`; hoje aceitam `'ativo'` ou `'trancado'`. **Trancar
+  não é sair** — trancado segue fora dos KPIs (§3), e o recital é convite, não KPI. Medido: 20
+  matrículas = **19 pessoas**, lista 994 → 1013, 0 pessoa perdida, 0 divergência nas colunas antigas.
+  ⚠️ **Entra marcado**: coluna `trancado` (pessoa) + `cursos[].trancado`, com o rótulo em fonte única
+  (`SeloTrancado.tsx`); o front **não deriva** "pessoa trancada" da lista de cursos. ⚠️ `cursos` passou
+  a agregar por **(pessoa, curso)** — com a flag dentro do objeto, o `jsonb_agg(distinct)` antigo
+  duplicaria o curso de quem o tem ativo e trancado. ⚠️ A **ativa manda** sobre a trancada na matrícula
+  que a apresentação grava. ⚠️ `vw_evento_familia_v1` acompanhou (88 → 94), senão o irmão trancado não
+  casa com o ativo. Detalhe e armadilhas em [`docs/sistema/aluno.md`](docs/sistema/aluno.md).
 - **A `UNIQUE (evento_id, pessoa_chave, curso_id)` é o coração do schema**: implementa "2 cursos = 2
   apresentações, 2 matrículas do mesmo curso = 1" sem nenhum `if`. `pessoa_chave` é derivada por
   trigger de `fn_pessoa_chave_aluno`, **nunca escrita à mão**; `aluno_id` é PROCEDÊNCIA (padrão da
@@ -255,6 +266,8 @@ dia). Logo do papel por marca (Kids/School, `alunos.classificacao`) e playback n
   o INSERT seguinte que separa "não existe linha" de "a policy escondeu".
 - **O professor da apresentação acompanha a troca do cadastro (08/10/2026, `20261008233000`).** Ele é copiado de `alunos.professor_atual_id` quando o aluno entra no bloco; o gatilho `trg_evento_apresentacao_segue_professor` repassa a troca para as apresentações da mesma pessoa e curso, em evento não encerrado, **só se estavam com o professor antigo** (escolha diferente feita na grade é preservada). `professor_palco_id`/`professor_apoio_id` nunca são tocados. Carimbo em `automacao_log` (`evento='evento_recital'`).
 - **Cortesia pelo nome (09/10/2026, `20261009010000`).** Criar e tirar cortesia passa pelas RPCs `evento_convidado_cortesia_adicionar_v1`/`_remover_v1` (SECURITY INVOKER, a RLS de sempre): convidado e ponte nascem juntos, senão sobraria convidado sem aluno na porta. O bloco vai explícito (1º bloco da pessoa pela `evento_bloco.ordem`) porque o gatilho antigo `fn_evento_convidado_herda_bloco` ordena só pela posição DENTRO do bloco.
+- **Convite por WhatsApp (09/10/2026, `20261009190000`).** Prévia + Enviar na aba Alunos (`ModalConviteRecital`); sai pela caixa da **secretaria da unidade no Chatwoot** pela edge `evento-enviar-convite`. O texto é montado só em `src/lib/eventoConvite.ts` e a edge envia exatamente esse texto; o **número** ela resolve do cadastro (responsável, senão aluno), nunca da tela. Cada envio é uma linha em `evento_comunicacao` (reserva `enviando` com índice único antes do Chatwoot; desfecho `enviado`/`erro` gravado pela edge). Texto do modelo por recital em `evento.convite_texto`.
+- **Motivo obrigatório no "Não vai" (09/10/2026, `20261009200000`).** Motivos cadastrados pela equipe de cada unidade em `evento_motivo_ausencia` (sem apagar, só esconder); `evento_participacao.motivo_ausencia_id/_obs`. O gatilho `trg_evento_participacao_motivo_ausencia` recusa "nao" sem motivo vindo da tela (`motivo_obrigatorio`) e limpa o motivo fora de "nao"; família/LA Teacher/sistema passam. Gravar "não vai" só por `marcarNaoVai`.
 - **Professor no palco ≠ professor do aluno (08/10/2026).** `professor_palco_id` é escolhido por integrante na aba Blocos e sai nos três documentos; o relatório e a música seguem do `professor_id`. No LA Teacher o de palco vê o aluno só pela função de leitura `app_recital_no_palco()` — **não** pela lista do relatório, senão o aluno teria dois donos pedagógicos.
 - **Check-in é da PESSOA, nunca da apresentação** (`checkin_em` em `evento_participacao`): quem faz 2
   cursos sobe 2 vezes e chega 1. A contagem por bloco **não** é um pedaço do total — quem toca em 2

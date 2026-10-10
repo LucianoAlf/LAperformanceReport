@@ -253,6 +253,29 @@ apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **L
   grade inteira. Ao arrastar um **bloco**, todos mostram só o cabeçalho (senão os outros eram empurrados
   pela altura de dezenas de cartões e saíam da tela). Arrasto cancelado limpa o fantasma. Os botões do
   rodapé do cartão (palco, observação, tocar junto) viraram pílulas com borda no desktop.
+- **Convite por WhatsApp (09/10/2026, item 10 da reunião):** na aba Alunos, quem participa tem o botão
+  **Convite** (selo "Convite enviado" ou "Convite: erro"). A janela (`ModalConviteRecital`) mostra para quem
+  vai — responsável quando cadastrado, senão o aluno; o número sai do **cadastro**, nunca da tela — e a
+  prévia num balão de WhatsApp. **Só envia ao clicar em Enviar**, pela caixa da **secretaria da unidade no
+  Chatwoot** (Barra 179, CG 180, Recreio 168; a resposta da família cai lá). O texto-base é o da Fernanda
+  (Recreio) e é **por recital** (`evento.convite_texto`, NULL = padrão), editável na própria janela, com os
+  campos `{saudacao} {responsavel} {aluno} {bloco} {data} {dia_semana} {horario}`. Montagem em
+  `src/lib/eventoConvite.ts` (fonte única: a edge manda o texto que a pessoa viu); o horário é o do bloco,
+  calculado (`calcularHorariosDaGrade`). Envio pela edge **`evento-enviar-convite`** (login obrigatório; o
+  escopo é a RLS de quem clicou), que reserva a linha em `evento_comunicacao` (`status='enviando'`, índice
+  único impede duplo envio) antes de chamar o Chatwoot e grava `enviado`/`erro` com o motivo e os ids da
+  conversa e da mensagem. Reenviar pede segundo clique. ⚠️ O "enviado" é o Chatwoot aceitar sem marcar falha
+  em ~4 s; entrega lida depois disso não volta para a tela. Conferir: `select status, erro, destino_nome,
+  enviado_em from evento_comunicacao where tipo='convite' order by id desc limit 20;`
+- **Motivo obrigatório no "Não vai" (09/10/2026, item 11 da reunião):** escolher "Não vai" abre
+  `ModalMotivoAusencia` em vez de gravar; só grava com um motivo (+ observação opcional) e a linha mostra
+  "Não vai · Viagem". Os motivos são **da própria equipe de cada unidade** (`evento_motivo_ausencia`),
+  criados, renomeados e escondidos em "Gerenciar motivos" na mesma janela — **não se apagam**, para o "não vai"
+  antigo continuar legível. Começou com 5 provisórios por unidade (Viagem, Compromisso no dia, Não quer se
+  apresentar, Saúde, Outro). A regra também está no **banco** (`trg_evento_participacao_motivo_ausencia`):
+  "não vai" marcado pela tela sem motivo é recusado (`motivo_obrigatorio`); família, LA Teacher e sistema
+  seguem livres; voltar para "participa" limpa o motivo. As **58** linhas "não vai" anteriores aparecem como
+  "Não vai · sem motivo", clicáveis para preencher.
 - **Playbacks numerados no Drive (09/10/2026):** `recital-drive-sync` nomeia "B1-03 — Aluno — Curso.mp3"
   (bloco 1, 3º número; quem toca junto divide o número, regra de `agruparEmNumeros`) e **renomeia** o
   arquivo quando a posição muda depois do envio — o último nome fica em
@@ -263,6 +286,38 @@ apresentou em 17/09/2026. **Um evento por unidade**, com data própria. Lume **L
   quem monta o palco. ⚠️ **CSV e não `.xlsx`**: o protótipo embute o SheetJS inteiro (498 KB), e
   trazer a lib somaria ~800 KB ao bundle do app inteiro por um botão que roda algumas vezes por
   semestre. ⚠️ Os documentos **abrem para VER** — nenhum dispara `window.print()` sozinho.
+- 🔴 **Aluno TRANCADO é elegível, e entra MARCADO (09/10/2026, pedido da Fernanda).** Ela relatou que
+  "no recital não aparecem os alunos trancados para escolher" — não apareciam por desenho:
+  `vw_evento_aluno_elegivel_v1` nasceu com `where a.status = 'ativo'` e
+  `evento_apresentacao_adicionar_v1` exigia matrícula **ativa daquele curso** para gravar. Eram os
+  **dois únicos** filtros de `alunos.status` no módulo (conferido em `pg_get_functiondef` das 33
+  funções de evento): participação, check-in, grade, palco e relatórios nunca olharam status.
+  **Trancar não é sair** — trancado segue fora dos KPIs (`REGRAS-DE-NEGOCIO` §3), e o recital não é
+  KPI: é convite. Mesma distinção que o caixa teve de fazer em 25/09 (`sol_caixa_aluno_pode_pagar_v1`).
+  **Medido em 09/10:** 20 matrículas trancadas = **19 pessoas** (Barra 2, CG 10, Recreio 7); lista
+  **994 → 1013**; as 19 todas com curso que vai ao palco; **0 pessoa desaparece**, 0 divergência nas
+  colunas antigas e no conjunto (curso, professor) de `cursos`. ⚠️ **Entra marcado, nunca em
+  silêncio**: a coluna nova `trancado` (pessoa = nenhuma matrícula ativa) e o campo `trancado` de
+  cada item de `cursos` existem porque convidar quem parou é decisão da coordenação, e cobrança de
+  ingresso e aviso ao professor sairiam como se o aluno estivesse em aula. O rótulo mora em **fonte
+  única**, [`SeloTrancado.tsx`](src/components/App/Eventos/SeloTrancado.tsx) (aba Alunos, seletor da
+  Grade e busca de outra unidade), e o front **não deriva** "pessoa trancada" da lista de cursos — a
+  resposta é a do banco. ⚠️ **O grão de `cursos` passou a ser (pessoa, curso)**, agregado antes do
+  jsonb: com `trancado` dentro do objeto, o `jsonb_agg(distinct)` antigo devolveria o MESMO curso
+  duas vezes para quem o tem ativo e trancado — hoje não existe esse caso (0 pessoas), e é por isso
+  que passaria sem ninguém ver. ⚠️ **A ativa manda sobre a trancada** na matrícula que a apresentação
+  grava (senão `id desc` pegaria a trancada mais nova e o professor sairia dela) e na referência da
+  pessoa. ⚠️ `vw_evento_familia_v1` acompanhou (88 → 94 linhas): mantida em "ativo", o irmão trancado
+  entraria na lista e **não casaria** com o irmão ativo no agrupamento por família. ⚠️ `trancado` é a
+  **última coluna** da view — `create or replace view` não insere coluna no meio; `evento_visitantes_v1`
+  faz `to_jsonb(el)` e ganhou o campo sozinho. ⚠️ A RPC foi corrigida por **patch guardado sobre a
+  definição viva** (4 âncoras com contagem declarada, prova pós-patch de que `fn_evento_pode_ver` e a
+  trava do visitante sobreviveram): o corpo vivo tem travas que a migration do repo não tem.
+  Migration `20261009160248`, travado por `tests/eventosTrancado.test.mjs`.
+  🔴 **Os 3 testes que reprovaram primeiro eram do TESTE, não do código**: o cabeçalho da migration
+  explica o defeito citando o padrão antigo, e o assert negativo o encontrava no comentário; e
+  proibir `cursos.some(...)` barrava os filtros legítimos de professor e curso. Predicado ancora em
+  forma, nunca em vocabulário.
 - **Aluno de outra unidade** (28/09, pedido do Arthur): botão "Aluno de outra unidade" na aba Alunos
   (`ModalAlunoOutraUnidade`), busca por `evento_buscar_aluno_outra_unidade_v1` e grava participação
   `participa`; a lista mostra o selo da unidade de origem e a lixeira (`removerAlunoDeOutraUnidade`,

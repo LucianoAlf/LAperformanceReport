@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
-import { Search, Users, Check, HelpCircle, X, Music, AlertTriangle, Guitar, LayoutList, UserPlus, Trash2, GraduationCap, FileCheck } from 'lucide-react';
+import { Search, Users, Check, HelpCircle, X, Music, AlertTriangle, Guitar, LayoutList, UserPlus, Trash2, GraduationCap, FileCheck, MessageCircle, CheckCheck } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { KPICard } from '@/components/ui/KPICard';
+import { SeloTrancado } from './SeloTrancado';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { cn } from '@/lib/utils';
 import { normalizarBusca } from '@/lib/agenda';
@@ -26,9 +27,15 @@ import {
   type AlocacaoDoCurso,
   type AlunoElegivel,
   type ParticipacaoStatus,
+  useConvitesDoEvento,
+  useMotivosAusencia,
+  type ConviteRegistrado,
+  type Evento,
 } from '@/hooks/useEventos';
 import { ModalAlunoOutraUnidade } from './ModalAlunoOutraUnidade';
 import { ModalConvidadosDoAluno } from './ModalConvidadosDoAluno';
+import { ModalConviteRecital } from './ModalConviteRecital';
+import { ModalMotivoAusencia } from './ModalMotivoAusencia';
 import { PainelAlunos, type CursoNoPainel } from './PainelDoRecital';
 
 type FiltroStatus = 'todos' | ParticipacaoStatus;
@@ -207,8 +214,20 @@ function LinhaAluno({
   onNomes,
   onFormando,
   onRemover,
+  convite,
+  onConvite,
+  motivoNome,
+  onMotivo,
 }: {
   aluno: AlunoElegivel;
+  /** Nome do motivo de não ir (só com status 'nao'); null = não registrado. */
+  motivoNome: string | null;
+  /** Abre a escolha do motivo (para preencher ou trocar). */
+  onMotivo: () => void;
+  /** Último convite de WhatsApp desta pessoa (null = nunca enviado). */
+  convite: ConviteRegistrado | null;
+  /** Abre a prévia do convite. */
+  onConvite: () => void;
   /** Quantos convidados desta pessoa já têm nome (cortesia + vendido). */
   nomeados: number;
   onEscolher: (s: ParticipacaoStatus) => void;
@@ -246,6 +265,25 @@ function LinhaAluno({
             >
               de {aluno.unidade_origem_nome}
             </span>
+          )}
+          {/* Trancado: entra na lista e entra MARCADO. A decisao de convidar quem parou e da
+              coordenacao — ela so nao pode descobrir depois. */}
+          {aluno.trancado && <SeloTrancado />}
+          {/* Item 11 da reunião de 08/10: "não vai" sempre diz por quê. Os antigos sem
+              motivo aparecem como pendência, clicável para preencher. */}
+          {aluno.status === 'nao' && (
+            <button
+              type="button"
+              onClick={onMotivo}
+              className={cn(
+                'rounded px-1.5 py-px text-[12px] font-medium sm:text-[10.5px]',
+                motivoNome
+                  ? 'bg-rose-500/15 text-rose-300 hover:bg-rose-500/25'
+                  : 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25',
+              )}
+            >
+              {motivoNome ? `Não vai · ${motivoNome}` : 'Não vai · sem motivo'}
+            </button>
           )}
           {aluno.faz_banda && (
             <Badge variant="outline" className="gap-1 text-[12px] sm:text-[10px]">
@@ -314,6 +352,10 @@ function LinhaAluno({
               <Music className="h-3 w-3 text-slate-600" />
               {c.curso_nome}
               {c.professor_nome && <span className="text-slate-600">· {c.professor_nome}</span>}
+              {/* Quem trancou UM curso e segue ativo no outro nao e "pessoa trancada": o selo
+                  sai aqui, no curso. Com a pessoa toda trancada, o de cima ja disse — repetir
+                  em cada curso seria a mesma frase duas vezes na mesma linha. */}
+              {c.trancado && !aluno.trancado && <SeloTrancado escopo="curso" />}
               {/* Selo por curso so quando ALGUMA apresentacao ja existe: enquanto a grade
                   esta vazia, um "nao alocado" em cada curso e ruido em 100% das linhas. */}
               {alocacao.detalharPorCurso && <SeloBloco alocacao={alocacaoPorCurso.get(c.curso_id)} />}
@@ -395,6 +437,39 @@ function LinhaAluno({
         </button>
       )}
 
+      {/* Convite por WhatsApp (item 10 da reunião de 08/10): prévia e envio na janela. */}
+      {aluno.status === 'participa' && (
+        <Tooltip
+          side="bottom"
+          content={
+            <Dica titulo="Convite por WhatsApp">
+              {convite?.status === 'enviado'
+                ? `Enviado em ${new Date(convite.enviado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}${convite.destino_nome ? ` para ${convite.destino_nome}` : ''}. Clique para ver ou reenviar.`
+                : convite?.status === 'erro'
+                  ? `Não foi entregue: ${convite.erro ?? 'erro no envio'}. Clique para tentar de novo.`
+                  : 'Abre a prévia do convite do recital e envia pelo WhatsApp da secretaria.'}
+            </Dica>
+          }
+        >
+          <button
+            type="button"
+            onClick={onConvite}
+            aria-label={`Convite de ${aluno.nome}`}
+            className={cn(
+              'flex h-11 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] transition-colors sm:h-7 sm:text-[11.5px]',
+              convite?.status === 'enviado'
+                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:border-emerald-400/70'
+                : convite?.status === 'erro'
+                  ? 'border-rose-500/40 bg-rose-500/10 text-rose-300 hover:border-rose-400/70'
+                  : 'border-dashed border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300',
+            )}
+          >
+            {convite?.status === 'enviado' ? <CheckCheck className="h-3.5 w-3.5" /> : <MessageCircle className="h-3.5 w-3.5" />}
+            {convite?.status === 'enviado' ? 'Convite enviado' : convite?.status === 'erro' ? 'Convite: erro' : 'Convite'}
+          </button>
+        </Tooltip>
+      )}
+
       <SeletorParticipacao
         valor={aluno.status}
         desabilitado={!avaliacao.podeParticipar}
@@ -416,9 +491,13 @@ function LinhaAluno({
   );
 }
 
-export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
+export function AlunosTab({ evento, eventoId, unidadeId, pedidoFaltaAlocar, onEventoMudou }: {
+  /** Para o convite: datas, horário de início e o texto do modelo deste recital. */
+  evento: Evento;
   eventoId: number;
   unidadeId: string;
+  /** Relê o evento depois de salvar o texto do convite. */
+  onEventoMudou?: () => void;
   /** Sobe a cada clique no quadro do topo: abre a aba ja com o filtro "falta alocar". */
   pedidoFaltaAlocar?: number;
 }) {
@@ -433,6 +512,11 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
     return mapa;
   }, [convidados]);
   const [convidadosDe, setConvidadosDe] = useState<string | null>(null);
+  const { porPessoa: convites, recarregar: recarregarConvites } = useConvitesDoEvento(eventoId);
+  const [conviteDe, setConviteDe] = useState<string | null>(null);
+  const [motivoDe, setMotivoDe] = useState<string | null>(null);
+  const { motivos } = useMotivosAusencia(unidadeId);
+  const nomeDoMotivo = useMemo(() => new Map(motivos.map((m) => [m.id, m.nome])), [motivos]);
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<FiltroStatus>('todos');
   const [filtroProfessor, setFiltroProfessor] = useState('todos');
@@ -543,6 +627,11 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
   const daPagina = visiveis.slice((paginaAtual - 1) * ALUNOS_POR_PAGINA, paginaAtual * ALUNOS_POR_PAGINA);
 
   const escolher = async (aluno: AlunoElegivel, status: ParticipacaoStatus) => {
+    // "Não vai" exige motivo (o banco também recusa sem): abre a escolha em vez de gravar.
+    if (status === 'nao') {
+      setMotivoDe(aluno.pessoa_chave);
+      return;
+    }
     setGravando(aluno.pessoa_chave);
     const { error } = await definirParticipacao(eventoId, aluno.aluno_id_referencia, status);
     setGravando(null);
@@ -874,13 +963,31 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
         }}
       />
 
+      <ModalMotivoAusencia
+        aberto={motivoDe !== null}
+        eventoId={eventoId}
+        unidadeId={unidadeId}
+        aluno={alunos.find((x) => x.pessoa_chave === motivoDe) ?? null}
+        onFechar={() => setMotivoDe(null)}
+        onGravado={recarregar}
+      />
+
+      <ModalConviteRecital
+        aberto={conviteDe !== null}
+        evento={evento}
+        aluno={alunos.find((x) => x.pessoa_chave === conviteDe) ?? null}
+        onFechar={() => setConviteDe(null)}
+        onEnviado={recarregarConvites}
+        onTextoSalvo={() => onEventoMudou?.()}
+      />
+
       <div className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800/40">
         {loading && alunos.length === 0 ? (
           <p className="p-8 text-center text-sm text-slate-400">Carregando alunos…</p>
         ) : visiveis.length === 0 ? (
           <p className="p-8 text-center text-sm text-slate-400">
             {alunos.length === 0
-              ? 'Nenhum aluno ativo nesta unidade.'
+              ? 'Nenhum aluno desta unidade na lista do recital.'
               : 'Nenhum aluno com esse filtro.'}
           </p>
         ) : (
@@ -894,6 +1001,10 @@ export function AlunosTab({ eventoId, unidadeId, pedidoFaltaAlocar }: {
                 onNomes={() => setConvidadosDe(a.pessoa_chave)}
                 onFormando={() => alternarFormando(a)}
                 onRemover={a.unidade_origem_nome ? () => removerVisitante(a) : undefined}
+                convite={convites.get(a.pessoa_chave) ?? null}
+                onConvite={() => setConviteDe(a.pessoa_chave)}
+                motivoNome={a.motivo_ausencia_id ? nomeDoMotivo.get(a.motivo_ausencia_id) ?? null : null}
+                onMotivo={() => setMotivoDe(a.pessoa_chave)}
               />
             ))}
           </div>

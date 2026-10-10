@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { SeloTrancado } from './SeloTrancado';
 import { supabase } from '@/lib/supabase';
 import { normalizarBusca } from '@/lib/agenda';
 import { ehMusicalizacao } from '@/lib/eventos';
@@ -24,7 +25,7 @@ import {
   type AlunoElegivel,
 } from '@/hooks/useEventos';
 
-/** Familiar que também é aluno ativo da unidade — vem de `vw_evento_familia_v1`. */
+/** Familiar que também é candidato ao recital na unidade — vem de `vw_evento_familia_v1`. */
 interface Familiar {
   chave: string;
   nome: string;
@@ -460,6 +461,9 @@ export function SeletorApresentacao({
                       {p.aluno.idade_anos} anos
                     </span>
                   )}
+                  {/* Mesmo selo da aba Alunos: quem monta a grade precisa saber que a
+                      matricula esta pausada ANTES de dar a cadeira. */}
+                  {p.aluno.trancado && <SeloTrancado />}
                 </span>
                 {/* Os dois estados marcados, nunca só o negativo: sem o selo verde, quem
                     confirmou fica igual a quem ninguém perguntou ainda. */}
