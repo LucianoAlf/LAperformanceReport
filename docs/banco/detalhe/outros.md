@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — outros
 
-12 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+15 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## cache_dependencias
 
@@ -18,6 +18,17 @@
 
 **Únicos:**
 - `cache_dependencias_pkey`
+
+## radio_config
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | integer | não | 1 |  |
+| `prata_cada` | integer | não | 6 |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `radio_config_pkey`
 
 ## radio_credencial
 
@@ -76,6 +87,7 @@
 | `player_visto_em` | timestamp with time zone | sim |  |  |
 | `player_aberto_desde` | timestamp with time zone | sim |  |  |
 | `player_info` | jsonb | sim |  |  |
+| `la_tocando_ate` | timestamp with time zone | sim |  |  |
 
 **Únicos:**
 - `radio_estacao_nome_key`
@@ -195,9 +207,54 @@
 | `contexto_uri` | text | sim |  |  |
 | `playlist_id` | bigint | sim |  | radio_playlist.id |
 | `fora_da_grade` | boolean | não | false |  |
+| `tipo` | text | não | 'spotify'::text |  |
+| `audio_id` | bigint | sim |  | radio_audio_la.id |
+| `vinheta_id` | bigint | sim |  | radio_vinheta.id |
 
 **Únicos:**
 - `radio_tocou_pkey`
+
+## radio_vinheta
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `nome` | text | não |  |  |
+| `texto` | text | não |  |  |
+| `voz_id` | bigint | não |  | radio_voz.id |
+| `arquivo` | text | não |  |  |
+| `duracao_ms` | integer | sim |  |  |
+| `quando` | text | não |  |  |
+| `horarios` | text[] | não | '{}'::text[] |  |
+| `intervalo_horas` | integer | sim |  |  |
+| `dias` | integer[] | não | '{1,2,3,4,5,6}'::integer[] |  |
+| `estacoes` | bigint[] | não |  |  |
+| `inicio` | date | não | ((now() AT TIME ZONE 'America/Sao_Paulo'::text))::date |  |
+| `fim` | date | sim |  |  |
+| `ativa` | boolean | não | true |  |
+| `tocou` | integer | não | 0 |  |
+| `criado_por_usuario_id` | integer | sim |  | usuarios.id |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `radio_vinheta_pkey`
+
+## radio_voz
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `nome` | text | não |  |  |
+| `descricao` | text | sim |  |  |
+| `elevenlabs_voice_id` | text | não |  |  |
+| `genero` | text | não |  |  |
+| `ativa` | boolean | não | true |  |
+| `ordem` | integer | não | 0 |  |
+
+**Únicos:**
+- `radio_voz_elevenlabs_voice_id_key`
+- `radio_voz_pkey`
 
 ## rastreio_cliques
 

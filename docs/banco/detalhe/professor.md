@@ -4,7 +4,7 @@
 <!-- fim do cabecalho gerado -->
 # Detalhe do banco — professor
 
-163 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
+164 objetos. Resumo de todos os domínios em `../TABELAS.gerado.md`.
 
 ## anotacoes
 
@@ -2907,6 +2907,30 @@
 
 **Únicos:**
 - `programa_matriculador_penalidades_pkey`
+
+## radio_audio_la
+
+| Coluna | Tipo | Nulo | Default | Referência |
+|---|---|---|---|---|
+| `id` | bigint | não |  |  |
+| `titulo` | text | não |  |  |
+| `original` | text | sim |  |  |
+| `quem_tipo` | text | não |  |  |
+| `quem_nome` | text | não |  |  |
+| `instrumento` | text | sim |  |  |
+| `unidade` | text | não |  |  |
+| `arquivo` | text | não |  |  |
+| `duracao_ms` | integer | sim |  |  |
+| `autorizada` | boolean | não |  |  |
+| `ativa` | boolean | não | true |  |
+| `tocou` | integer | não | 0 |  |
+| `ultima_vez` | timestamp with time zone | sim |  |  |
+| `criado_por_usuario_id` | integer | sim |  | usuarios.id |
+| `criado_em` | timestamp with time zone | não | now() |  |
+| `atualizado_em` | timestamp with time zone | não | now() |  |
+
+**Únicos:**
+- `radio_audio_la_pkey`
 
 ## radio_grade
 
