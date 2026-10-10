@@ -96,6 +96,13 @@ export function useFichaColaborador(colaboradorId: number | null): UseFichaColab
         .limit(1)
         .maybeSingle();
 
+      // 4. Minha carreira na música (colaborador_carreira — bloco de professores)
+      const { data: carreira } = await supabase
+        .from('colaborador_carreira')
+        .select('respostas, updated_at')
+        .eq('colaborador_id', colaboradorId)
+        .maybeSingle();
+
       setFicha({
         ...colab,
         unidade_nome: unidadeNome,
@@ -107,6 +114,8 @@ export function useFichaColaborador(colaboradorId: number | null): UseFichaColab
         concluido_em: teste?.concluido_em ?? null,
         rider_respostas: rider?.respostas ?? null,
         rider_updated_at: rider?.updated_at ?? null,
+        carreira_respostas: carreira?.respostas ?? null,
+        carreira_updated_at: carreira?.updated_at ?? null,
         ficha_token: statusError ? null : mapearTokenStatus(tokenData),
       });
     } catch (err) {

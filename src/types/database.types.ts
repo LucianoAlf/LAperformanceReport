@@ -10903,6 +10903,73 @@ export type Database = {
         }
         Relationships: []
       }
+      colaborador_carreira: {
+        Row: {
+          colaborador_id: number
+          id: number
+          preenchido_em: string | null
+          respostas: Json
+          updated_at: string
+          versao: number
+        }
+        Insert: {
+          colaborador_id: number
+          id?: number
+          preenchido_em?: string | null
+          respostas?: Json
+          updated_at?: string
+          versao?: number
+        }
+        Update: {
+          colaborador_id?: number
+          id?: number
+          preenchido_em?: string | null
+          respostas?: Json
+          updated_at?: string
+          versao?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "colaborador_carreira_colaborador_id_fkey"
+            columns: ["colaborador_id"]
+            isOneToOne: true
+            referencedRelation: "colaboradores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      colaborador_carreira_versoes: {
+        Row: {
+          colaborador_id: number
+          id: number
+          registrado_em: string
+          respostas: Json
+          versao: number
+        }
+        Insert: {
+          colaborador_id: number
+          id?: number
+          registrado_em?: string
+          respostas?: Json
+          versao: number
+        }
+        Update: {
+          colaborador_id?: number
+          id?: number
+          registrado_em?: string
+          respostas?: Json
+          versao?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "colaborador_carreira_versoes_colaborador_id_fkey"
+            columns: ["colaborador_id"]
+            isOneToOne: false
+            referencedRelation: "colaboradores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       colaborador_rider: {
         Row: {
           colaborador_id: number

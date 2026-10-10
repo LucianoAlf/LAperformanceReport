@@ -186,6 +186,52 @@ export const RIDER_CAMPOS = [
 ] as const;
 
 // ---------------------------------------------------------------------------
+// CARREIRA CAMPOS — cópia da edge function ficha-tecnica (CARREIRA_CAMPOS)
+// Bloco "Minha carreira na música" (departamento Professores). Mesma régua do
+// Rider: mantido idêntico para que os rótulos não divergirem entre formulário
+// e ficha.
+// ---------------------------------------------------------------------------
+export interface CampoCarreira {
+  id: string;
+  grupo: string;
+  label: string;
+  tipo: 'texto' | 'escolha';
+  opcoes?: { id: string; label: string }[];
+}
+
+export const CARREIRA_CAMPOS: CampoCarreira[] = [
+  { id: 'bio_curta',          grupo: 'Você como músico(a)', tipo: 'texto', label: 'Sua bio curta — 2 ou 3 frases que te apresentem como músico(a)' },
+  { id: 'instrumentos_nivel', grupo: 'Você como músico(a)', tipo: 'texto', label: 'Instrumentos que você toca e seu nível em cada um' },
+  { id: 'estilos',             grupo: 'Você como músico(a)', tipo: 'texto', label: 'Estilos musicais que você mais toca ou curte' },
+  { id: 'referencias',         grupo: 'Você como músico(a)', tipo: 'texto', label: 'Suas referências musicais (artistas, bandas, quem te inspira)' },
+  { id: 'trajetoria',          grupo: 'Você como músico(a)', tipo: 'texto', label: 'Sua trajetória na música — como começou e por onde já passou' },
+  { id: 'formacao',            grupo: 'Você como músico(a)', tipo: 'texto', label: 'Sua formação musical (cursos, faculdade, autodidata...)' },
+  { id: 'gosta_ensinar',       grupo: 'Você como músico(a)', tipo: 'texto', label: 'O que você mais gosta de ensinar' },
+  { id: 'dica_mestre_1',       grupo: 'Dica do Mestre',      tipo: 'texto', label: 'Tema 1 pra Dica do Mestre' },
+  { id: 'dica_mestre_2',       grupo: 'Dica do Mestre',      tipo: 'texto', label: 'Tema 2 pra Dica do Mestre' },
+  { id: 'dica_mestre_3',       grupo: 'Dica do Mestre',      tipo: 'texto', label: 'Tema 3 pra Dica do Mestre' },
+  { id: 'instagram',           grupo: 'Redes sociais e mídias', tipo: 'texto', label: 'Seu Instagram (@)' },
+  { id: 'youtube',             grupo: 'Redes sociais e mídias', tipo: 'texto', label: 'Seu YouTube (canal ou link)' },
+  { id: 'outra_rede',          grupo: 'Redes sociais e mídias', tipo: 'texto', label: 'Outra rede ou portfólio (link ou @)' },
+  { id: 'topa_video_audio',    grupo: 'Redes sociais e mídias', tipo: 'escolha', label: 'Você toparia gravar vídeo e/ou áudio pra conteúdos da escola?',
+    opcoes: [
+      { id: 'sim_video_audio', label: 'Sim — vídeo e áudio' },
+      { id: 'so_video',       label: 'Só vídeo' },
+      { id: 'so_audio',       label: 'Só áudio' },
+      { id: 'nao_topa',       label: 'Prefiro não gravar' },
+    ] },
+];
+
+/** Traduz o id canônico do consentimento (topa_video_audio) para o rótulo legível. */
+export function rotuloTopaVideoAudio(valor: string | null | undefined): string | null {
+  if (!valor) return null;
+  const opcao = CARREIRA_CAMPOS
+    .find((campo) => campo.id === 'topa_video_audio')
+    ?.opcoes?.find((opcao) => opcao.id === valor);
+  return opcao?.label ?? null;
+}
+
+// ---------------------------------------------------------------------------
 // HELPERS
 // ---------------------------------------------------------------------------
 

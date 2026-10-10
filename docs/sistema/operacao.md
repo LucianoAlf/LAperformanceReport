@@ -38,10 +38,14 @@ Formulários de lançamento manual (React Hook Form + Zod). Escrevem direto nas 
 
 Cadastro de colaboradores e ficha de pessoa.
 
-- **Componentes:** `TimePage.tsx`, `FichaColaborador.tsx`, `ModalAdicionarPessoa.tsx`
+- **Componentes:** `TimePage.tsx`, `FichaColaborador.tsx` (inclui o bloco "Minha carreira na música" para o departamento Professores), `ModalAdicionarPessoa.tsx`
 - **RPCs:** `criar_ficha_pessoa`
+- **Edge functions:** `ficha-tecnica` (ficha pública por token: diagnóstico + Rider + carreira), `ficha-emitir-token` (emite/consulta o link da ficha)
 - **Tabelas:** `colaboradores`, `colaborador_rider`, `colaborador_rider_versoes`,
+  `colaborador_carreira`, `colaborador_carreira_versoes`,
   `staff_unidade`
+- **Leitura externa:** `mike_professores_carreira_v1` (agente Mike — sem telefone, sem e-mail e sem o perfil comportamental)
+- **Bloco "Minha carreira na música" (2026-10-09):** só para o cargo PROFESSOR; quem já respondeu a ficha abre o mesmo link de token direto no bloco novo (`resolver` devolve `mostra_carreira`), quem não respondeu recebe a ficha inteira. A ficha no app reexibe o link para reenvio quando a pessoa já respondeu.
 
 ## Planilha editável (componente compartilhado)
 

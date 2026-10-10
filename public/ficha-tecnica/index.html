@@ -221,6 +221,27 @@
   }
   .rider-status.err{color:var(--la);}
 
+  /* ---------- Minha carreira na música ---------- */
+  #screen-carreira{align-items:stretch;}
+  .carreira-intro{margin-bottom:20px;}
+  .carreira-intro p{color:var(--muted); line-height:1.6; margin-bottom:14px;}
+  .carreira-intro .destaque{
+    background:var(--amber-bg); border-radius:12px; padding:14px 16px;
+    color:var(--ink); font-size:.95rem;
+  }
+  .choice{display:flex; flex-direction:column; gap:10px; margin-bottom:6px;}
+  .choice-opt{display:flex; cursor:pointer;}
+  .choice-opt input{position:absolute; opacity:0; width:1px; height:1px;}
+  .choice-opt span{
+    display:flex; align-items:center; width:100%; padding:14px 16px;
+    border:1.5px solid var(--line); border-radius:14px; background:var(--surface);
+    color:var(--ink); font-size:.95rem; line-height:1.45; box-shadow:var(--shadow);
+    transition:border-color .18s, background .35s;
+  }
+  .choice-opt input:checked + span{border-color:var(--teal); background:var(--surface2); font-weight:600;}
+  .choice-opt input:focus-visible + span{outline:2px solid var(--teal); outline-offset:2px;}
+  @media (hover:hover){ .choice-opt:hover span{border-color:var(--teal);} }
+
   /* ---------- Loading / Erro ---------- */
   #screen-loading{align-items:center; justify-content:center; text-align:center;}
   .spinner{
@@ -272,7 +293,8 @@
       <h1>Vamos te conhecer melhor</h1>
       <div class="intro-text">
         <p>Essa ficha existe pra gente saber como você funciona e trabalhar melhor com você.</p>
-        <p>São duas partes. A primeira traz situações do dia a dia da escola — não existe resposta certa nem errada, e nenhuma opção é melhor que a outra. Responda o que você realmente faria, não o que parece mais bonito. Leva uns 20 minutos.</p>
+        <p id="welcomePartes">São duas partes. A primeira traz situações do dia a dia da escola — não existe resposta certa nem errada, e nenhuma opção é melhor que a outra. Responda o que você realmente faria, não o que parece mais bonito. Leva uns 20 minutos.</p>
+        <p id="welcomeCarreira" hidden>E tem um bloco novo no fim: <strong>Minha carreira na música</strong> — sua história como músico(a), pra gente celebrar seu trabalho.</p>
         <p>A segunda é sua: você conta como prefere ser tratado, o que te ajuda e o que te atrapalha. Essa parte fica sempre aberta pra editar quando quiser.</p>
         <p class="destaque">O resultado entra no seu cadastro e é usado pela liderança e pelo RH pra te dar o suporte certo. <strong>Não é avaliação de desempenho e não vale nota.</strong></p>
       </div>
@@ -349,6 +371,22 @@
     </div>
   </section>
 
+  <!-- MINHA CARREIRA NA MÚSICA -->
+  <section class="screen" id="screen-carreira">
+    <div>
+      <p class="eyebrow" id="carreiraEyebrow">Parte 3</p>
+      <h1>Minha carreira na música</h1>
+      <div class="carreira-intro">
+        <p>A LA quer celebrar a história dos professores dela. O que você escrever aqui pode virar conteúdo da escola — site, redes sociais e a <strong>Dica do Mestre</strong>.</p>
+        <p class="destaque">Só escreva o que você toparia ver publicado. E nada aqui é obrigatório — preenche o que fizer sentido pra você.</p>
+        <p class="rider-note">Pode voltar e editar quando quiser, sempre. Essa parte nunca fecha.</p>
+      </div>
+      <div id="carreiraFields"></div>
+      <button class="btn" id="btnSaveCarreira" onclick="saveCarreira()">Salvar</button>
+      <p class="rider-status" id="carreiraStatus"></p>
+    </div>
+  </section>
+
   <!-- FIM (conclusão) -->
   <section class="screen" id="screen-fim">
     <div style="display:flex;flex-direction:column;align-items:center;width:100%;">
@@ -358,6 +396,7 @@
       <p class="lead" style="text-align:center; margin-bottom:16px;" id="fimText"></p>
       <p class="fineprint" style="text-align:center; margin-bottom:24px;" id="fimNote"></p>
       <button class="btn btn-ghost" id="btnEditarRider" onclick="irParaRider()" style="max-width:280px;">Editar meu Rider</button>
+      <button class="btn btn-ghost" id="btnEditarCarreira" onclick="irParaCarreira()" style="max-width:280px; display:none;">Editar minha carreira na música</button>
     </div>
   </section>
 </main>
@@ -415,9 +454,11 @@ async function init(){
     dados = await res.json();
     colaboradorNome = dados.colaborador?.nome || "";
 
-    // Se já fez o diagnóstico, vai direto pra tela de conclusão
+    // Se já fez o diagnóstico, o mesmo link abre o bloco novo da carreira
+    // (professor) ou a tela de conclusão (demais cargos).
     if(dados.diagnostico_feito){
-      showFim();
+      if(dados.mostra_carreira) irParaCarreira();
+      else showFim();
       return;
     }
 
@@ -434,6 +475,10 @@ async function init(){
     respostasD = new Array(perguntas.length - blocoASize - blocoBSize);
 
     // Abertura
+    if(dados.mostra_carreira){
+      document.getElementById("welcomePartes").textContent = "São três partes. A primeira traz situações do dia a dia da escola — não existe resposta certa nem errada, e nenhuma opção é melhor que a outra. Responda o que você realmente faria, não o que parece mais bonito. Leva uns 20 minutos.";
+      document.getElementById("welcomeCarreira").hidden = false;
+    }
     document.getElementById("welcomeHello").textContent = colaboradorNome ? `E aí, ${colaboradorNome}!` : "E aí!";
     go("screen-welcome");
   }catch(e){
@@ -744,6 +789,129 @@ async function saveRider(){
       dados.rider_versao = data.versao;
       // Atualiza respostas em memória para se a pessoa voltar a editar
       dados.rider_respostas = { ...dados.rider_respostas, ...respostas };
+      // Professor ainda tem o bloco da carreira; demais cargos encerram
+      if(dados.mostra_carreira) irParaCarreira();
+      else showFim();
+    }
+  }catch(e){
+    status.className = "rider-status err";
+    status.textContent = "Erro de conexão. Tente de novo.";
+    btn.disabled = false;
+    btn.textContent = "Salvar";
+  }
+}
+
+/* =============== MINHA CARREIRA NA MÚSICA =============== */
+function irParaCarreira(){
+  // Quem já respondeu a ficha chega aqui direto pelo mesmo link — o bloco é
+  // apresentado como novidade, não como "parte 3" de um fluxo que não rolou.
+  document.getElementById("carreiraEyebrow").textContent = dados?.diagnostico_feito ? "Novo bloco" : "Parte 3";
+  renderCarreira();
+  go("screen-carreira");
+}
+
+function renderCarreira(){
+  const campos = dados?.carreira_campos || [];
+  const respostas = dados?.carreira_respostas || {};
+  const container = document.getElementById("carreiraFields");
+  container.innerHTML = "";
+
+  // Agrupa por grupo, preservando a ordem recebida (mesmo desenho do Rider)
+  const grupos = [];
+  const grupoMap = {};
+  campos.forEach(c => {
+    if(!grupoMap[c.grupo]){
+      grupoMap[c.grupo] = [];
+      grupos.push(c.grupo);
+    }
+    grupoMap[c.grupo].push(c);
+  });
+
+  grupos.forEach(grupo => {
+    const g = document.createElement("div");
+    g.className = "rider-group";
+    const title = document.createElement("div");
+    title.className = "rider-group-title";
+    title.textContent = grupo;
+    g.appendChild(title);
+
+    grupoMap[grupo].forEach(campo => {
+      const f = document.createElement("div");
+      f.className = "rider-field";
+      const lbl = document.createElement("label");
+      lbl.textContent = campo.label;
+      lbl.htmlFor = `carreira-${campo.id}`;
+
+      if(campo.tipo === "escolha"){
+        // Escolha única em pills — o id canônico é o que vai pro servidor
+        const box = document.createElement("div");
+        box.className = "choice";
+        box.setAttribute("role", "radiogroup");
+        (campo.opcoes || []).forEach((opt, oi) => {
+          const lab = document.createElement("label");
+          lab.className = "choice-opt";
+          const input = document.createElement("input");
+          input.type = "radio";
+          input.name = campo.id;
+          input.id = `carreira-${campo.id}-${oi}`;
+          input.value = opt.id;
+          input.checked = respostas[campo.id] === opt.id;
+          const span = document.createElement("span");
+          span.textContent = opt.label;
+          lab.appendChild(input);
+          lab.appendChild(span);
+          box.appendChild(lab);
+        });
+        lbl.htmlFor = `carreira-${campo.id}-0`;
+        f.appendChild(lbl);
+        f.appendChild(box);
+      }else{
+        const ta = document.createElement("textarea");
+        ta.id = `carreira-${campo.id}`;
+        ta.dataset.field = campo.id;
+        ta.placeholder = "Escreva aqui…";
+        ta.maxLength = 2000;
+        ta.value = respostas[campo.id] || "";
+        f.appendChild(lbl);
+        f.appendChild(ta);
+      }
+      g.appendChild(f);
+    });
+    container.appendChild(g);
+  });
+}
+
+async function saveCarreira(){
+  const status = document.getElementById("carreiraStatus");
+  const btn = document.getElementById("btnSaveCarreira");
+  status.className = "rider-status";
+  status.textContent = "Salvando…";
+  btn.disabled = true;
+  btn.textContent = "Salvando…";
+
+  const respostas = {};
+  document.querySelectorAll("#carreiraFields textarea").forEach(ta => {
+    respostas[ta.dataset.field] = ta.value;
+  });
+  document.querySelectorAll("#carreiraFields input[type=radio]:checked").forEach(input => {
+    respostas[input.name] = input.value;
+  });
+
+  try{
+    const res = await fetch(`${API}?action=carreira&token=${encodeURIComponent(TOKEN)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ respostas })
+    });
+    const data = await res.json();
+    if(!res.ok || data.error){
+      status.className = "rider-status err";
+      status.textContent = data.error || "Não salvou. Tente de novo.";
+      btn.disabled = false;
+      btn.textContent = "Salvar";
+    }else{
+      dados.carreira_versao = data.versao;
+      dados.carreira_respostas = { ...dados.carreira_respostas, ...respostas };
       showFim();
     }
   }catch(e){
@@ -772,7 +940,11 @@ function showFim(){
     ? `Pronto, ${colaboradorNome}. Sua ficha está completa.`
     : "Pronto. Sua ficha está completa.";
   document.getElementById("fimText").textContent = "Obrigado por dedicar esse tempo. O que você escreveu ajuda a gente a trabalhar melhor com você.";
-  document.getElementById("fimNote").textContent = "Seu Rider fica sempre aberto. É só voltar por este mesmo link quando quiser mudar alguma coisa.";
+  document.getElementById("fimNote").textContent = dados?.mostra_carreira
+    ? "Seu Rider e sua carreira na música ficam sempre abertos. É só voltar por este mesmo link quando quiser mudar alguma coisa."
+    : "Seu Rider fica sempre aberto. É só voltar por este mesmo link quando quiser mudar alguma coisa.";
+
+  document.getElementById("btnEditarCarreira").style.display = dados?.mostra_carreira ? "" : "none";
 
   go("screen-fim");
 }

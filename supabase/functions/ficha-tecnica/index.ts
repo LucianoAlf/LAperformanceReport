@@ -1,8 +1,10 @@
-// Ficha Tecnica LA — Edge Function (v2)
+// Ficha Tecnica LA — Edge Function (v3)
 //
 // GET  ?action=resolver&token=...  -> quem e a pessoa + o que falta + perguntas
 // POST ?action=submit&token=...    -> grava Bloco A + B + D, calcula no servidor
 // POST ?action=rider&token=...     -> salva/atualiza o Rider (sempre editavel)
+// POST ?action=carreira&token=...  -> salva/atualiza "Minha carreira na musica"
+//                                     (so cargo PROFESSOR, sempre editavel)
 //
 // O banco de perguntas mora aqui. O cliente recebe as opcoes ja embaralhadas
 // com um id opaco e devolve so o id escolhido. O gabarito nunca sai daqui.
@@ -307,6 +309,42 @@ const RIDER_CAMPOS = [
 ];
 
 // ---------------------------------------------------------------------------
+// BLOCO C2 — Minha carreira na musica (so cargo PROFESSOR).
+// Texto livre + 1 escolha de consentimento, tudo opcional, sempre editavel.
+// Quem ja respondeu a ficha chega aqui direto pelo mesmo link.
+// ---------------------------------------------------------------------------
+type CampoCarreira = {
+  id: string;
+  grupo: string;
+  label: string;
+  tipo: 'texto' | 'escolha';
+  opcoes?: { id: string; label: string }[];
+};
+
+const CARREIRA_CAMPOS: CampoCarreira[] = [
+  { id: 'bio_curta',          grupo: 'Você como músico(a)', tipo: 'texto', label: 'Sua bio curta — 2 ou 3 frases que te apresentem como músico(a)' },
+  { id: 'instrumentos_nivel', grupo: 'Você como músico(a)', tipo: 'texto', label: 'Instrumentos que você toca e seu nível em cada um' },
+  { id: 'estilos',             grupo: 'Você como músico(a)', tipo: 'texto', label: 'Estilos musicais que você mais toca ou curte' },
+  { id: 'referencias',         grupo: 'Você como músico(a)', tipo: 'texto', label: 'Suas referências musicais (artistas, bandas, quem te inspira)' },
+  { id: 'trajetoria',          grupo: 'Você como músico(a)', tipo: 'texto', label: 'Sua trajetória na música — como começou e por onde já passou' },
+  { id: 'formacao',            grupo: 'Você como músico(a)', tipo: 'texto', label: 'Sua formação musical (cursos, faculdade, autodidata...)' },
+  { id: 'gosta_ensinar',       grupo: 'Você como músico(a)', tipo: 'texto', label: 'O que você mais gosta de ensinar' },
+  { id: 'dica_mestre_1',       grupo: 'Dica do Mestre',      tipo: 'texto', label: 'Tema 1 pra Dica do Mestre' },
+  { id: 'dica_mestre_2',       grupo: 'Dica do Mestre',      tipo: 'texto', label: 'Tema 2 pra Dica do Mestre' },
+  { id: 'dica_mestre_3',       grupo: 'Dica do Mestre',      tipo: 'texto', label: 'Tema 3 pra Dica do Mestre' },
+  { id: 'instagram',           grupo: 'Redes sociais e mídias', tipo: 'texto', label: 'Seu Instagram (@)' },
+  { id: 'youtube',             grupo: 'Redes sociais e mídias', tipo: 'texto', label: 'Seu YouTube (canal ou link)' },
+  { id: 'outra_rede',          grupo: 'Redes sociais e mídias', tipo: 'texto', label: 'Outra rede ou portfólio (link ou @)' },
+  { id: 'topa_video_audio',    grupo: 'Redes sociais e mídias', tipo: 'escolha', label: 'Você toparia gravar vídeo e/ou áudio pra conteúdos da escola?',
+    opcoes: [
+      { id: 'sim_video_audio', label: 'Sim — vídeo e áudio' },
+      { id: 'so_video',       label: 'Só vídeo' },
+      { id: 'so_audio',       label: 'Só áudio' },
+      { id: 'nao_topa',       label: 'Prefiro não gravar' },
+    ] },
+];
+
+// ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
 function embaralhar<T>(arr: T[]): T[] {
@@ -414,6 +452,17 @@ Deno.serve(async (req) => {
         .eq('colaborador_id', tk.colaborador_id)
         .maybeSingle();
 
+      const mostraCarreira = cargo === 'PROFESSOR';
+      let carreira: { respostas: Record<string, string>; versao: number } | null = null;
+      if (mostraCarreira) {
+        const { data: carreiraDados } = await sb
+          .from('colaborador_carreira')
+          .select('respostas, versao')
+          .eq('colaborador_id', tk.colaborador_id)
+          .maybeSingle();
+        carreira = carreiraDados ?? null;
+      }
+
       const diagnosticoFeito = !!tk.usado_em;
 
       const cenarios = [...fixos, ...desempates];
@@ -457,6 +506,10 @@ Deno.serve(async (req) => {
         rider_campos: RIDER_CAMPOS,
         rider_respostas: rider?.respostas ?? {},
         rider_versao: rider?.versao ?? 0,
+        mostra_carreira: mostraCarreira,
+        carreira_campos: mostraCarreira ? CARREIRA_CAMPOS : [],
+        carreira_respostas: carreira?.respostas ?? {},
+        carreira_versao: carreira?.versao ?? 0,
       });
     }
 
@@ -597,6 +650,47 @@ Deno.serve(async (req) => {
       if (e1) return json({ error: e1.message }, 500);
 
       await sb.from('colaborador_rider_versoes').insert({
+        colaborador_id: tk.colaborador_id, versao, respostas: limpo,
+      });
+
+      return json({ ok: true, versao });
+    }
+
+    // -----------------------------------------------------------------
+    if (action === 'carreira' && req.method === 'POST') {
+      if (cargo !== 'PROFESSOR') return json({ error: 'carreira disponível apenas para professores' }, 400);
+
+      const body = await req.json();
+      const respostas = body.respostas ?? {};
+      const limpo: Record<string, string> = {};
+      for (const campo of CARREIRA_CAMPOS) {
+        const valor = respostas[campo.id];
+        if (typeof valor !== 'string') continue;
+        if (campo.tipo === 'escolha') {
+          // escolha só entra com um dos ids canônicos; qualquer outra coisa é descartada
+          if ((campo.opcoes ?? []).some((o) => o.id === valor)) limpo[campo.id] = valor;
+        } else {
+          limpo[campo.id] = valor.slice(0, 2000);
+        }
+      }
+
+      const { data: atual } = await sb
+        .from('colaborador_carreira')
+        .select('versao')
+        .eq('colaborador_id', tk.colaborador_id)
+        .maybeSingle();
+      const versao = (atual?.versao ?? 0) + 1;
+
+      const { error: e1 } = await sb.from('colaborador_carreira').upsert({
+        colaborador_id: tk.colaborador_id,
+        respostas: limpo,
+        versao,
+        preenchido_em: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'colaborador_id' });
+      if (e1) return json({ error: e1.message }, 500);
+
+      await sb.from('colaborador_carreira_versoes').insert({
         colaborador_id: tk.colaborador_id, versao, respostas: limpo,
       });
 

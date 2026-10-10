@@ -9,6 +9,14 @@ export function montarMensagemFicha(primeiroNome: string, link: string): string 
 }
 
 /**
+ * Mensagem para quem JÁ respondeu a ficha: o mesmo link volta com o bloco novo
+ * "Minha carreira na música" aberto, sem repetir o teste.
+ */
+export function montarMensagemFichaCarreira(primeiroNome: string, link: string): string {
+  return `Oi, ${primeiroNome}! Tudo bem? A Ficha Técnica ganhou um bloco novo: Minha carreira na música — sua história como músico(a), pra gente celebrar seu trabalho no site, nas redes sociais e na Dica do Mestre. É o mesmo link de antes, já com a sua ficha salva: ${link}`;
+}
+
+/**
  * Recebe o telefone já normalizado para DDI+DDD+numero.
  * A normalização de entrada fica em normalizarTelefone.ts, que é compartilhada
  * com os demais fluxos de WhatsApp do painel.
@@ -20,6 +28,17 @@ export function montarLinkWhatsAppFicha(
 ): string | null {
   if (!telefoneNormalizado) return null;
   const mensagem = montarMensagemFicha(primeiroNome, link);
+  return `https://wa.me/${telefoneNormalizado}?text=${encodeURIComponent(mensagem)}`;
+}
+
+/** Variante de reenvio para quem já respondeu (bloco Minha carreira na música). */
+export function montarLinkWhatsAppFichaCarreira(
+  primeiroNome: string,
+  telefoneNormalizado: string | null,
+  link: string,
+): string | null {
+  if (!telefoneNormalizado) return null;
+  const mensagem = montarMensagemFichaCarreira(primeiroNome, link);
   return `https://wa.me/${telefoneNormalizado}?text=${encodeURIComponent(mensagem)}`;
 }
 
